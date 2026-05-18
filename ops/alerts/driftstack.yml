@@ -1,0 +1,125 @@
+# Arc 4 Wave 2.B sub-slice 8.21 (v2-#8) — Prometheus alert rules.
+#
+# Consumed by Prometheus / VictoriaMetrics via the configured
+# alertmanager. The rule file is mounted at the scrape target on
+# deploy (deploy bridge: scripts/deploy-bridge.sh follows up with the
+# alertmanager wire as a separate slice when the first production
+# alertmanager lands).
+#
+# Format: standard Prometheus alerting rules
+# (https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/).
+#
+# Severity convention:
+#   - critical: customer-impacting failure or imminent breakage; pages
+#               oncall immediately (PagerDuty / Opsgenie routing).
+#   - warning:  customer-visible degradation or signal worth a Slack
+#               nudge; not a page.
+#   - info:     trend signals routed to the team channel only.
+#
+# Drift guard: ops/alerts/__tests__/alert-rules.test.ts pins these
+# rule names + metric references against the MetricsRegistry catalog
+# (METRIC_NAMES) so renaming a counter breaks CI before the alert
+# silently stops firing in prod.
+
+groups:
+  - name: driftstack-pair-mode
+    rules:
+      - alert: PairModeHighTakeoverFailureRate
+        # When >25% of pair-mode takeover requests in the last 10
+        # minutes are failing into invalid-transition territory, the
+        # state machine is misaligned with the dashboard's
+        # expectations. Page on this.
+        expr: |
+          (
+            sum(rate(driftstack_pair_mode_transition_total{to=~"takeover-queued"}[10m]))
+            /
+            sum(rate(driftstack_pair_mode_transition_total{to=~"takeover-pending|takeover-queued"}[10m]))
+          ) > 0.25
+        for: 10m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'Pair-mode takeover queue depth exceeds 25%'
+          description: |
+            More than 25% of takeover requests in the last 10 minutes
+            are being queued (decompose in-flight). Sustained high
+            queue depth suggests AgentRuntime decompose latency is
+            hurting interactive takeover responsiveness.
+
+      - alert: PairModeHeartbeatTimeoutSpike
+        # Auto-handback events should be rare. A spike means clients
+        # are dropping mid-pair-mode — network issue or dashboard bug.
+        expr: |
+          sum(rate(driftstack_pair_mode_transition_total{to="ai-driving",from!="ai-driving"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'Pair-mode heartbeat-timeout auto-handback rate > 0.1/s'
+          description: |
+            Heartbeat-timeout sweeps are firing at a sustained rate
+            > 0.1/s over the last 5m. Investigate dashboard client
+            connectivity or websocket plumbing.
+
+  - name: driftstack-bundled-llm
+    rules:
+      - alert: BundledLlmBudgetExhaustedSpike
+        # Customers hitting their soft cap is a normal occurrence,
+        # but a sudden spike (5+ events in 5m) suggests either:
+        #   - a wave of new customers adopted bundled-LLM with low
+        #     caps + are hitting them simultaneously, OR
+        #   - cost-estimator drift caused us to over-bill against
+        #     a reasonable cap.
+        # Either way the team should look.
+        expr: |
+          sum(increase(driftstack_bundled_llm_error_total{kind="budget_exhausted"}[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: driftstack-billing
+        annotations:
+          summary: 'Bundled-LLM budget-exhausted spike (>5 in 5m)'
+          description: |
+            More than 5 customers hit their bundled-LLM monthly cap in
+            the last 5 minutes. Check cost-estimator output for drift
+            and verify recent decompose pricing hasn't regressed.
+
+      - alert: BundledLlmConsentMissingSurge
+        # consent_missing fires when a customer attempts to use
+        # bundled-LLM without ticking the consent box first. A surge
+        # suggests the dashboard CTA is broken — customers expecting
+        # bundled-LLM aren't getting it.
+        expr: |
+          sum(increase(driftstack_bundled_llm_error_total{kind="consent_missing"}[15m])) > 10
+        for: 15m
+        labels:
+          severity: warning
+          team: driftstack-dashboard
+        annotations:
+          summary: 'Bundled-LLM consent_missing surge (>10 in 15m)'
+          description: |
+            More than 10 customers hit the consent_missing error in
+            the last 15 minutes. Check the bundled-LLM enablement CTA
+            on the customer dashboard — the consent flow may be
+            broken.
+
+      - alert: BundledLlmRequestRateZero
+        # If consent + cap are wired but bundled_llm_request_total
+        # has been zero for 30 minutes, something is breaking the
+        # leg before it can resolve a key. Likely deployment fallback
+        # key got unset or rotated wrong.
+        expr: |
+          sum(rate(driftstack_bundled_llm_request_total{outcome="ok"}[30m])) == 0
+        for: 30m
+        labels:
+          severity: critical
+          team: driftstack-runtime
+        annotations:
+          summary: 'No bundled-LLM resolutions in 30 minutes'
+          description: |
+            The driftstack_bundled_llm_request_total{outcome="ok"}
+            counter has stopped advancing for 30 minutes. Check
+            whether the deployment Anthropic fallback key got
+            unwired or expired.
