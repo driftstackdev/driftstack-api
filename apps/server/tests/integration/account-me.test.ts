@@ -170,6 +170,63 @@ describe('PATCH /v1/account/me (V-352)', () => {
     expect(body.timezone).toBeNull();
   });
 
+  // ── End-to-end shape pin: PATCH 200 returns the FULL AccountMeResponse,
+  // matching GET /me + the OpenAPI claim + every SDK type. Previously the
+  // route returned only the 8 written/persisted fields, leaving the other
+  // 7 (avatar_url / mfa_enrolled / concurrent_session_* / profile_* /
+  // teams) undefined on the SDK consumer — a type-vs-runtime mismatch
+  // that all three SDK type checkers happily compiled. Test pins the
+  // full shape so a future "trim the PATCH response" optimisation can't
+  // silently break SDK consumers again.
+  it('200 returns the full 15-field AccountMeResponse shape — matches GET /me', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: 'Shape Pin' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+
+    // Identity + persisted-update fields (the 8 fields the previous
+    // implementation returned).
+    expect(body.id).toBe(`acc_${fx.accountId}`);
+    expect(typeof body.email).toBe('string');
+    expect(body.name).toBe('Shape Pin');
+    expect(body.tier).toBe('api_builder');
+    expect(body.status).toBe('active');
+    // timezone may be string or null on a fresh account; just assert
+    // the field is present (not undefined) on the response.
+    expect(body).toHaveProperty('timezone');
+    expect(body).toHaveProperty('slug');
+    expect(body).toHaveProperty('region');
+
+    // The 7 derived fields that were missing before the fix.
+    expect(body).toHaveProperty('avatar_url'); // string | null
+    expect(typeof body.mfa_enrolled).toBe('boolean');
+    expect(typeof body.concurrent_session_cap).toBe('number');
+    expect(body.concurrent_session_cap as number).toBeGreaterThan(0);
+    expect(typeof body.concurrent_session_active).toBe('number');
+    expect(body).toHaveProperty('profile_cap'); // number | null
+    expect(typeof body.profile_count).toBe('number');
+    expect(Array.isArray(body.teams)).toBe(true);
+
+    // Shape parity with GET /me — fetch and assert every key appears
+    // in both responses. This is the load-bearing assertion: if the
+    // PATCH handler ever trims a field back out, this check fails.
+    const me = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me',
+      headers: auth(fx),
+    });
+    expect(me.statusCode).toBe(200);
+    const meBody = me.json<Record<string, unknown>>();
+    const patchKeys = Object.keys(body).sort();
+    const getKeys = Object.keys(meBody).sort();
+    expect(patchKeys).toEqual(getKeys);
+  });
+
   it('400 when body has no fields', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
