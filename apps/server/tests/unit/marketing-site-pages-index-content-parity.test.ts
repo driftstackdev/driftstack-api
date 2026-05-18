@@ -76,13 +76,20 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).not.toMatch(/Why not Browserless\?/);
   });
 
-  it('Code example contract: archetype + wireguard proxy + navigate/waitForChallenge/interact/destroy', () => {
+  it("Code example contract — REAL SDK usage. The previous pin asserted a fictional API (proxy in CreateSessionRequest + session.waitForChallenge / instance-method form) which doesn't exist; customers landing on the front door would copy code that doesn't compile. Now pins the actual resource-method pattern matching the TS quickstart: client.sessions.create({ label }) + sessions.navigate(id, ...) + sessions.capture(id, { kind }) + sessions.getState(id) + sessions.destroy(id). NO proxy field (egress is shipped as 503-stub per the egress card contradiction).", () => {
     expect(body).toMatch(/archetype: 'iphone16pro_ios18_7_safari26_4',/);
-    expect(body).toMatch(/proxy: \{ type: 'wireguard', config: '\.\.\.' \},/);
-    expect(body).toMatch(/await session\.navigate\(\{ url: 'https:\/\/target\.example' \}\);/);
-    expect(body).toMatch(/const challenge = await session\.waitForChallenge\(\);/);
-    expect(body).toMatch(/await session\.interact\(\{ tap: '#submit' \}\);/);
-    expect(body).toMatch(/await session\.destroy\(\);/);
+    expect(body).toMatch(/label: 'target-flow',/);
+    // Real resource-method pattern: ds.sessions.<method>(session.id, ...).
+    expect(body).toMatch(
+      /await ds\.sessions\.navigate\(session\.id, \{ url: 'https:\/\/target\.example' \}\);/,
+    );
+    expect(body).toMatch(/await ds\.sessions\.capture\(session\.id, \{ kind: 'screenshot' \}\);/);
+    expect(body).toMatch(/const state = await ds\.sessions\.getState\(session\.id\);/);
+    expect(body).toMatch(/await ds\.sessions\.destroy\(session\.id\);/);
+    // The fictional shapes must not return.
+    expect(body).not.toMatch(/proxy: \{ type: 'wireguard'/);
+    expect(body).not.toMatch(/session\.waitForChallenge\(\)/);
+    expect(body).not.toMatch(/session\.navigate\(\{ url:/);
   });
 
   it('R12 Concurrent metering framing pinned: "One metric. Concurrent sessions. That\'s it." headline + per-line anti-pattern callouts (No per-call markup. No per-element fees. No hourly metering...) + 200-pages-on-one-session concrete example — replaces the prior "Pay per concurrent session, not per call." copy', () => {

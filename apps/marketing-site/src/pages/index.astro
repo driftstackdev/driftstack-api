@@ -58,15 +58,17 @@ const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 
 const session = await ds.sessions.create({
   archetype: 'iphone16pro_ios18_7_safari26_4',
-  proxy: { type: 'wireguard', config: '...' },
+  label: 'target-flow',
 });
 
-await session.navigate({ url: 'https://target.example' });
-const challenge = await session.waitForChallenge();
-await session.interact({ tap: '#submit' });
-
-const state = await session.getState();
-await session.destroy();`}</code></pre>
+try {
+  await ds.sessions.navigate(session.id, { url: 'https://target.example' });
+  await ds.sessions.capture(session.id, { kind: 'screenshot' });
+  const state = await ds.sessions.getState(session.id);
+  console.log(state.url, state.title);
+} finally {
+  await ds.sessions.destroy(session.id);
+}`}</code></pre>
           <!-- Horizontal-scroll affordance: fade on the right edge so
                readers know the code preview can be panned on mobile. -->
           <div class="pointer-events-none absolute inset-y-12 right-0 w-8 bg-gradient-to-l from-surface-base/80 to-transparent sm:hidden"></div>
