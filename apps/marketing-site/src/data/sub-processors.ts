@@ -71,7 +71,7 @@ export const SUB_PROCESSORS: SubProcessor[] = [
     name: 'Anthropic',
     region: 'United States',
     purpose:
-      'Bundled large language model for the optional AI agent feature. Opt-in only; processes session data only when customers explicitly enable bundled-LLM billing.',
+      "Large language model for the optional AI agent feature. Engaged in two modes: (1) BYOK proxy — when the customer has supplied their own Anthropic API key, Driftstack forwards the request and the customer's Anthropic account is the contractual counter-party; Driftstack acts only as a transient proxy. (2) Bundled-LLM rail — opt-in only; Driftstack uses a deployment-managed key and bills the customer at a markup. Session data flows to Anthropic only when one of these two modes is engaged on a given turn.",
     transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
   {
