@@ -123,6 +123,31 @@ describe('v2-#24 cross-SDK PROBLEM_TYPES → error class parity', () => {
     }
   });
 
+  it('v2-#34 CRITICAL every TypeScript error subclass defined in errors.ts is re-exported from index.ts — drift means customers cannot `import { XError } from "@driftstack/sdk"` despite the class existing', () => {
+    const TS_INDEX = resolve(REPO_ROOT, 'packages/sdk-typescript/src/index.ts');
+    const errorsBody = read(TS_ERRORS);
+    const indexBody = read(TS_INDEX);
+
+    // Match every `export class XError extends …` declaration.
+    const CLASS_RE = /^export class ([A-Z][A-Za-z]+Error)\s+extends/gm;
+    const classes = new Set<string>();
+    let m: RegExpExecArray | null;
+    while ((m = CLASS_RE.exec(errorsBody)) !== null) {
+      if (m[1]) classes.add(m[1]);
+    }
+
+    for (const name of classes) {
+      // The re-export block must mention the class name. The block
+      // is `export { … } from './errors.js';` so a substring check
+      // is sufficient — class names are unique enough that a false
+      // positive isn't realistic.
+      expect(
+        indexBody.includes(name),
+        `index.ts is missing re-export of ${name} — customers cannot import via @driftstack/sdk top-level`,
+      ).toBe(true);
+    }
+  });
+
   it('CRITICAL every Go *Error struct in errors.go has a corresponding Err* sentinel — drift means errors.Is(err, driftstack.ErrFoo) returns false for typed errors customers expect to be able to category-match', () => {
     const GO_ERRORS = resolve(REPO_ROOT, 'packages/sdk-go/errors.go');
     const body = read(GO_ERRORS);
