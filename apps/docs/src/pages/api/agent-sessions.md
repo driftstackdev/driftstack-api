@@ -234,8 +234,19 @@ Event types emitted:
 - `transcript.entry` — fires for each transcript append. The
   `id:` SSE field is the entry's monotonic index; the `data:`
   field is JSON with `{ index, entry }` where `entry` has the
-  same shape as the elements of `Session.transcript` (role +
-  body + at + optional `intents` for plan-executed agent turns).
+  same shape as the elements of `AgentSession.transcript`:
+  - `role` — one of `'user'` (customer-supplied message), `'agent'`
+    (decomposer output: plan-executed, clarify, or refuse), or
+    `'operator'` (manual-mode pass-through — the customer's
+    own UI/script logging directly without invoking the
+    decomposer; Arc 2 sub-slice 8.6).
+  - `body` — free-text for user / operator turns; serialised
+    `DecomposeResult` JSON for agent turns.
+  - `at` — ISO 8601 timestamp.
+  - `intents?` — present only on `role: 'agent'` + plan-executed
+    turns; carries the structured intent list the runtime
+    executed (the recipes route flatMaps these into
+    `intent_log` snapshots).
 
 Resume semantics (RFC 6202 + EventSource spec):
 
