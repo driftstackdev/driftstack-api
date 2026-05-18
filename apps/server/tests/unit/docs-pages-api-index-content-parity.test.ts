@@ -40,7 +40,7 @@ describe('W760 docs /api index page content parity', () => {
     expect(p).toMatch(/cycles per the policy below\./);
   });
 
-  it('CRITICAL 13-section sub-TOC pinned. Drift to dropping any link would hide that API surface. Order: auth/account/api-keys/sessions/agent-sessions/profiles/usage/audit-log/mfa/billing/team/versioning + 2 webhook subsections.', () => {
+  it('CRITICAL 14-section sub-TOC pinned. Drift to dropping any link would hide that API surface. Order: auth/account/api-keys/sessions/agent-sessions/recipes/profiles/usage/audit-log/mfa/billing/team/versioning + 2 webhook subsections.', () => {
     const p = read(PAGE);
 
     for (const href of [
@@ -49,6 +49,7 @@ describe('W760 docs /api index page content parity', () => {
       '/api/api-keys/',
       '/api/sessions/',
       '/api/agent-sessions/',
+      '/api/recipes/',
       '/api/profiles/',
       '/api/usage/',
       '/api/audit-log/',
