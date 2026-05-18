@@ -96,3 +96,83 @@ func TestInteractActionConstructors(t *testing.T) {
 		})
 	}
 }
+
+// Arc 5 EGRESS eg.1.g.2 — Session unmarshalling round-trips the
+// new egress_capability_report field. Pins that the raw payload
+// survives the JSON wire boundary as a typed map[string]any so
+// customer code can branch on harness-emitted fields the SDK
+// schema doesn't formally know about.
+func TestSessionUnmarshallingEgressCapabilityReport(t *testing.T) {
+	body := []byte(`{
+		"id": "ses_00000000-0000-0000-0000-000000000001",
+		"account_id": "acc_00000000-0000-0000-0000-000000000002",
+		"api_key_id": "key_00000000-0000-0000-0000-000000000003",
+		"status": "ready",
+		"archetype": "iphone16pro_ios18_7_safari26_4",
+		"purpose": "production_customer",
+		"label": null,
+		"metadata": null,
+		"egress_capabilities": {
+			"udp_associate": true,
+			"quic_route": "proxy",
+			"dns_remote_resolve": false,
+			"warnings": []
+		},
+		"egress_capability_report": {
+			"udp_associate": true,
+			"harness_diagnostic": {"rtt_ms": 12, "hop_count": 3}
+		},
+		"created_at": "2026-05-18T12:00:00Z",
+		"updated_at": "2026-05-18T12:00:00Z",
+		"last_state_at": null,
+		"destroyed_at": null
+	}`)
+	var s Session
+	if err := json.Unmarshal(body, &s); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if s.EgressCapabilityReport == nil {
+		t.Fatal("expected EgressCapabilityReport to be non-nil")
+	}
+	if got, ok := s.EgressCapabilityReport["udp_associate"].(bool); !ok || !got {
+		t.Errorf("expected EgressCapabilityReport[\"udp_associate\"] == true, got %v", s.EgressCapabilityReport["udp_associate"])
+	}
+	diag, ok := s.EgressCapabilityReport["harness_diagnostic"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected harness_diagnostic to be map[string]any, got %T", s.EgressCapabilityReport["harness_diagnostic"])
+	}
+	if got := diag["rtt_ms"]; got != float64(12) {
+		t.Errorf("expected rtt_ms == 12, got %v (%T)", got, got)
+	}
+}
+
+// Defensive: a Session without egress_capability_report (e.g.
+// pre-migration row, non-SOCKS5 session, or harness hasn't emitted
+// yet) unmarshals with the field as nil — NOT an empty map. This
+// lets customer code use `if sess.EgressCapabilityReport != nil`
+// as the gating check.
+func TestSessionUnmarshallingEgressCapabilityReportNull(t *testing.T) {
+	body := []byte(`{
+		"id": "ses_00000000-0000-0000-0000-000000000001",
+		"account_id": "acc_00000000-0000-0000-0000-000000000002",
+		"api_key_id": "key_00000000-0000-0000-0000-000000000003",
+		"status": "ready",
+		"archetype": "iphone16pro_ios18_7_safari26_4",
+		"purpose": "production_customer",
+		"label": null,
+		"metadata": null,
+		"egress_capabilities": null,
+		"egress_capability_report": null,
+		"created_at": "2026-05-18T12:00:00Z",
+		"updated_at": "2026-05-18T12:00:00Z",
+		"last_state_at": null,
+		"destroyed_at": null
+	}`)
+	var s Session
+	if err := json.Unmarshal(body, &s); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if s.EgressCapabilityReport != nil {
+		t.Errorf("expected EgressCapabilityReport to be nil for null wire value, got %v", s.EgressCapabilityReport)
+	}
+}
