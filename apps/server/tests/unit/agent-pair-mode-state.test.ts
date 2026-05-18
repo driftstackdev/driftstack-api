@@ -270,6 +270,59 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
     ).toEqual({ kind: 'ai-driving' });
   });
 
+  // Arc 4 Wave 2.A sub-slice 8.15 (v2-#8) — exhaustive invalid-
+  // transition coverage. 409-not-silent-noop is binding: every
+  // semantically-wrong transition MUST throw so the route surface
+  // returns a typed PairModeStateInvalidTransition 409 instead of
+  // silently swallowing.
+  it('v2-#8 sub-slice 8.15 takeover-request from human-driving is invalid (already human-driven)', () => {
+    expect(() =>
+      applyPairModeTransition(
+        { kind: 'human-driving', clientId: 'cli_a', sinceAt: AT },
+        { kind: 'takeover-request', clientId: 'cli_b', at: AT2 },
+      ),
+    ).toThrow(PairModeStateInvalidTransitionError);
+  });
+
+  it('v2-#8 sub-slice 8.15 takeover-grant from ai-driving is invalid (no pending request to grant)', () => {
+    expect(() =>
+      applyPairModeTransition({ kind: 'ai-driving' }, { kind: 'takeover-grant', at: AT }),
+    ).toThrow(PairModeStateInvalidTransitionError);
+  });
+
+  it('v2-#8 sub-slice 8.15 handback-request from takeover-pending is invalid (no human-driving yet)', () => {
+    expect(() =>
+      applyPairModeTransition(
+        { kind: 'takeover-pending', requestedByClientId: 'cli_a', requestedAt: AT },
+        { kind: 'handback-request', at: AT2 },
+      ),
+    ).toThrow(PairModeStateInvalidTransitionError);
+  });
+
+  it('v2-#8 sub-slice 8.15 handback-cancel from non-handback states is invalid', () => {
+    expect(() =>
+      applyPairModeTransition({ kind: 'ai-driving' }, { kind: 'handback-cancel' }),
+    ).toThrow(PairModeStateInvalidTransitionError);
+    expect(() =>
+      applyPairModeTransition(
+        { kind: 'human-driving', clientId: 'cli_a', sinceAt: AT },
+        { kind: 'handback-cancel' },
+      ),
+    ).toThrow(PairModeStateInvalidTransitionError);
+  });
+
+  it('v2-#8 sub-slice 8.15 takeover-decline from non-takeover states is invalid', () => {
+    expect(() =>
+      applyPairModeTransition({ kind: 'ai-driving' }, { kind: 'takeover-decline' }),
+    ).toThrow(PairModeStateInvalidTransitionError);
+    expect(() =>
+      applyPairModeTransition(
+        { kind: 'human-driving', clientId: 'cli_a', sinceAt: AT },
+        { kind: 'takeover-decline' },
+      ),
+    ).toThrow(PairModeStateInvalidTransitionError);
+  });
+
   it('error carries diagnostic fields (from + transition)', () => {
     try {
       applyPairModeTransition({ kind: 'ai-driving' }, { kind: 'takeover-grant', at: AT });
