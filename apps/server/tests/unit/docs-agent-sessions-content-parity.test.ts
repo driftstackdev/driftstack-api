@@ -138,4 +138,34 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     expect(body).toMatch(/Last-Event-ID/);
     expect(body).toMatch(/replay is exclusive/);
   });
+
+  // LK arc — Live video (LiveKit) surface documented.
+  it('documents the LK.3 token-mint endpoint + 24h TTL + per-Mac signing flow', () => {
+    expect(body).toMatch(/POST \/v1\/agent-sessions\/\{id\}\/livekit-token/);
+    expect(body).toMatch(/24 hours/);
+    expect(body).toMatch(/per-Mac/);
+  });
+
+  it('documents the 5 LiveKit join fields (ws_url + room + token + participant_identity + expires_at)', () => {
+    expect(body).toMatch(/"ws_url":/);
+    expect(body).toMatch(/"room":/);
+    expect(body).toMatch(/"token":/);
+    expect(body).toMatch(/"participant_identity":/);
+    expect(body).toMatch(/"expires_at":/);
+  });
+
+  it('documents the LK.4 auto-populate-on-session-create callout', () => {
+    expect(body).toMatch(/Auto-populated on session-create/);
+    expect(body).toMatch(/`livekit` shape inline/);
+  });
+
+  it('documents the LK 503 error paths (no Mac yet / secret unreadable)', () => {
+    expect(body).toMatch(/no Mac has registered LiveKit credentials/i);
+    expect(body).toMatch(/stored Mac secret is unreadable/i);
+  });
+
+  it('documents the canSubscribe=true / canPublish=false subscriber grant set', () => {
+    expect(body).toMatch(/canSubscribe:\s*true/);
+    expect(body).toMatch(/canPublish:\s*false/);
+  });
 });
