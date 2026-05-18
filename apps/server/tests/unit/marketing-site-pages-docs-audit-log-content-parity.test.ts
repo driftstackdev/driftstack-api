@@ -39,7 +39,7 @@ function read(p: string): string {
 describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-697 framing pinned: 'customer audit log developer docs.' — pinned so the V-697 anchor survives", () => {
+  it("V-697 framing pinned: 'customer audit log developer docs.' — pinned so the V-697 anchor survives", () => {
     expect(body).toMatch(/\/\/ V-697 — customer audit log developer docs\./);
   });
 
@@ -126,16 +126,18 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
     );
   });
 
-  it.skip("Pagination + V-330b effectiveAccountId team-RBAC framing pinned: 'Standard cursor pagination — see /docs/pagination. Sort order is timestamp DESC with id DESC tiebreaker, so newest entries appear first.' + V-330b effectiveAccountId behaviour + 'both member and admin team roles are read-allowed on this surface' + '/v1/account/audit-log/export effective-account header gate applies too' — pinned so the timestamp-DESC + id-DESC-tiebreaker + V-330b-effectiveAccountId + member-AND-admin-can-read + export-also-gated commitments survive", () => {
+  it("Pagination + effectiveAccountId team-RBAC framing pinned: 'Standard cursor pagination — see /docs/pagination. Sort order is timestamp DESC with id DESC tiebreaker, so newest entries appear first.' + effectiveAccountId behaviour + 'both member and admin team roles are read-allowed on this surface' + '/v1/account/audit-log/export effective-account header gate applies too' — pinned so the timestamp-DESC + id-DESC-tiebreaker + effectiveAccountId + member-AND-admin-can-read + export-also-gated commitments survive. The previous skip pinned an inline `(V-330b` anchor that was removed from the customer-facing copy (internal V-labels should not bleed into marketing pages); the structural framing survives without it.", () => {
     expect(body).toMatch(
       /Standard cursor pagination — see <a href="\/docs\/pagination">\/docs\/pagination<\/a>\.\s*\n?\s*Sort order is <code>timestamp DESC<\/code> with <code>id DESC<\/code>\s*\n?\s*tiebreaker, so newest entries appear first\./,
     );
     expect(body).toMatch(
-      /<code>X-Driftstack-Account: acc_&lt;owner-uuid&gt;<\/code>\s*\n?\s*header, the server returns the <strong>owner's<\/strong> audit\s*\n?\s*log — both <code>member<\/code> and <code>admin<\/code> team\s*\n?\s*roles are read-allowed on this surface \(V-330b\s*\n?\s*<code>effectiveAccountId<\/code> behaviour\)/,
+      /<code>X-Driftstack-Account: acc_&lt;owner-uuid&gt;<\/code>\s*\n?\s*header, the server returns the <strong>owner's<\/strong> audit\s*\n?\s*log — both <code>member<\/code> and <code>admin<\/code> team\s*\n?\s*roles are read-allowed on this surface \(\s*\n?\s*<code>effectiveAccountId<\/code> behaviour\)/,
     );
     expect(body).toMatch(
       /The same effective-account header gate applies to\s*\n?\s*<code>\/v1\/account\/audit-log\/export<\/code>\./,
     );
+    // Internal V-anchors must NOT bleed into customer-facing copy.
+    expect(body).not.toMatch(/\(V-330b\s/);
   });
 
   it("5-tier retention table pinned: Trial Pack 30 days + Solo / API Starter 90 days + Team / API Builder 1 year + Agency / API Scale 3 years + Enterprise Custom (default 7 years for compliance) + 'Past the retention window, entries are pruned by a nightly sweep.' + SIEM-cron pattern framing — pinned so the 5-tier retention + nightly-prune + daily-cron-into-SIEM canonical-pattern survives (drift to a different retention window would create marketing↔billing-tier-feature divergence)", () => {
