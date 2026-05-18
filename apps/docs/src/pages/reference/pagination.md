@@ -60,7 +60,7 @@ async function listAllAuditEntries(client: Driftstack): Promise<unknown[]> {
   const all: unknown[] = [];
   let cursor: string | undefined;
   for (;;) {
-    const page = await client.account.auditLog.list({ limit: 100, cursor });
+    const page = await client.auditLog.list({ limit: 100, cursor });
     all.push(...page.data);
     if (!page.next_cursor) break;
     cursor = page.next_cursor;
@@ -77,7 +77,7 @@ from driftstack import Driftstack
 def list_all_audit_entries(client: Driftstack) -> list:
     out, cursor = [], None
     while True:
-        page = client.account.audit_log.list(limit=100, cursor=cursor)
+        page = client.audit_log.list(limit=100, cursor=cursor)
         out.extend(page.data)
         if not page.next_cursor:
             break
@@ -92,7 +92,7 @@ func ListAllAuditEntries(ctx context.Context, c *driftstack.Client) ([]any, erro
     var out []any
     var cursor string
     for {
-        page, err := c.Account.AuditLog.List(ctx, driftstack.ListAuditOpts{
+        page, err := c.AuditLog.List(ctx, driftstack.ListAuditOpts{
             Limit:  100,
             Cursor: cursor,
         })
