@@ -19,6 +19,12 @@ const ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-18',
     category: 'launch',
+    title: 'Live video for agent sessions (LiveKit WebRTC)',
+    body: 'Every Mac in the Driftstack fleet now runs its own LiveKit server; agent sessions publish their browser video stream into a per-session room. POST /v1/agent-sessions/{id}/livekit-token mints a 24-hour subscriber JWT; session-create auto-populates the same join info inline on the response so clients connect immediately. The desktop GUI client gains AgentSessionPanel (livekit-client subscriber) + LivekitConnectionBadge (live/reconnecting/error state) + DataChannel input forwarding (keyboard + mouse → Quartz CGEvents on the Mac) + dev-mode RTT measurement. Full reference at docs.driftstack.dev/api/agent-sessions.',
+  },
+  {
+    date: '2026-05-18',
+    category: 'launch',
     title: 'Agent sessions: natural-language automation with AI / manual / pair modes',
     body: 'Layer a chat-style decompose-and-execute loop on top of any driver session. Send a user message ("open https://example.com and capture a screenshot"); the server\'s decomposer translates it into structured intents (navigate, interact, wait, capture); the runtime executes them. Three operational modes: AI (default — every message goes through decompose), manual (pass-through for clients driving via their own UI), and pair (interactive takeover state machine — AI drives by default, the customer can take over and hand back). Live transcript via Server-Sent Events on /v1/agent-sessions/{id}/transcript with Last-Event-ID resume. Full reference at docs.driftstack.dev/api/agent-sessions.',
   },
