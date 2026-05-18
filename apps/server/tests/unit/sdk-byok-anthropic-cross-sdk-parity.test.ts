@@ -73,6 +73,24 @@ describe('cross-SDK BYOK Anthropic header invariant', () => {
     expect(routes).toMatch(/BYOK[\s\S]{0,100}Tier-3 LOCKED 2026-05-16/);
   });
 
+  it('all 3 SDKs skip the BYOK header when the customer-supplied key is empty (cross-SDK parity per slice 106). Sending an empty header wastes bytes + would have triggered the slice 105 server-side empty-string normalisation that exists as a safety net', () => {
+    // Go's shape was always correct: `opts != nil && opts.ByokAPIKey != ""`.
+    // TS + Python initially diverged (only-undefined / only-None
+    // checks); slice 106 aligned them. Pin all 3 to lock the parity.
+    const ts = read(TS);
+    const py = read(PY);
+    const go = read(GO);
+    // TS: `opts?.byokApiKey !== undefined && opts.byokApiKey.length > 0`
+    expect(ts).toMatch(/opts\?\.byokApiKey !== undefined && opts\.byokApiKey\.length > 0/);
+    // Python: truthy check (None + '' both fall to None header path)
+    expect(py).toMatch(/\{"x-byok-anthropic-api-key": byok_api_key\} if byok_api_key else None/);
+    // Go: explicit non-nil + non-empty
+    expect(go).toMatch(/opts != nil && opts\.ByokAPIKey != ""/);
+    // Drift-guards on the previous laxer forms (TS undefined-only check + Python None-only check).
+    expect(ts).not.toMatch(/^\s*\.\.\.\(opts\?\.byokApiKey !== undefined$\s*\?/m);
+    expect(py).not.toMatch(/if byok_api_key is not None else None/);
+  });
+
   it(`OpenAPI spec documents the ${HEADER_NAME} request header on /v1/agent-sessions/{id}/message — SDK code generators that read the OpenAPI surface must learn about the BYOK header, not just the 3 hand-written SDKs in this repo`, () => {
     const openapi = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
     // The /v1/agent-sessions/{id}/message route entry must list the
