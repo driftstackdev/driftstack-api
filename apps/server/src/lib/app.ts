@@ -36,6 +36,8 @@ import type { AccountAuditService } from '../services/account-audit.js';
 import type { AccountLifecycleService } from '../services/account-lifecycle.js';
 import type { ScheduledJobsService } from '../services/scheduled-jobs.js';
 import { registerAccountAuditRoutes } from '../routes/account-audit.js';
+import type { MetricsRegistry } from '../services/metrics-registry.js';
+import { registerMetricsRoutes } from '../routes/metrics.js';
 import type { ValidationHarnessService } from '../services/validation-harness.js';
 import { registerAdminValidationHarnessRoutes } from '../routes/admin-validation-harness.js';
 import { registerAccountRateLimitsRoutes } from '../routes/account-rate-limits.js';
@@ -195,6 +197,20 @@ export interface AppDeps {
   emailPreferencesService: EmailPreferencesService;
   /** V-216: customer-facing audit log. */
   accountAuditService: AccountAuditService;
+  /**
+   * Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics registry.
+   * Optional: when wired, the /metrics route exposes the rendered text
+   * format + agent-sessions + bundled-llm routes emit counters into it.
+   * Omit to skip both — /metrics returns 404 + counters are silently
+   * dropped at the call site.
+   */
+  metricsRegistry?: MetricsRegistry;
+  /**
+   * Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — bearer token for /metrics
+   * scrape auth. Required when metricsRegistry is wired (the registry
+   * is exposed publicly + the token gates access).
+   */
+  metricsScrapeToken?: string;
   /** V-218: continuous validation harness. */
   validationHarnessService: ValidationHarnessService;
   /**
@@ -713,6 +729,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     readinessChecks: deps.readinessChecks ?? [],
     ...(deps.incidentsService ? { incidentsService: deps.incidentsService } : {}),
   });
+
+  // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus /metrics scrape.
+  // Registers only when the registry is wired (deps.metricsRegistry).
+  // The route lives at /metrics (no /v1 prefix — scrape conventions
+  // expect the well-known path). Bearer-token gated via
+  // METRICS_SCRAPE_TOKEN env var; the token is forwarded through
+  // deps.metricsScrapeToken at bootstrap.
+  if (deps.metricsRegistry !== undefined) {
+    registerMetricsRoutes(app, {
+      registry: deps.metricsRegistry,
+      scrapeToken: deps.metricsScrapeToken ?? null,
+    });
+  }
   if (deps.authFlowsService !== undefined) {
     registerAuthRoutes(app, {
       service: deps.authFlowsService,
@@ -912,6 +941,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.sentry !== undefined ? { sentry: deps.sentry } : {}),
       // Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — customer audit log.
       ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
+      // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics.
+      ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);

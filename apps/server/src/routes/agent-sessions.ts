@@ -34,6 +34,8 @@ import {
 import type { PairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
 import type { SentryClient } from '../lib/sentry.js';
 import type { AccountAuditService } from '../services/account-audit.js';
+import type { MetricsRegistry } from '../services/metrics-registry.js';
+import { METRIC_NAMES } from '../services/metrics-registry.js';
 import {
   decryptGuiControlKey,
   encryptGuiControlKey,
@@ -191,6 +193,14 @@ export interface AgentSessionsRoutesDeps {
    * history. Best-effort: audit failures don't break the transition.
    */
   accountAudit?: AccountAuditService;
+  /**
+   * Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics registry.
+   * Increments `driftstack_pair_mode_transition_total{from,to}` on every
+   * successful state-machine transition. Omit to skip counter emission
+   * (route still functional; metrics surface just doesn't reflect the
+   * transition).
+   */
+  metrics?: MetricsRegistry;
 }
 
 export function registerAgentSessionsRoutes(
@@ -213,6 +223,7 @@ export function registerAgentSessionsRoutes(
     pairModeLock,
     sentry,
     accountAudit,
+    metrics,
   } = deps;
 
   app.post(
@@ -495,6 +506,18 @@ export function registerAgentSessionsRoutes(
           } catch {
             /* swallow */
           }
+          // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus counter.
+          // Best-effort: a registry inc never throws under normal
+          // operation (counters validated at registration), but wrap
+          // anyway so a stray bug doesn't break the transition.
+          try {
+            metrics?.inc(METRIC_NAMES.pairModeTransitionTotal, {
+              from: currentState.kind,
+              to: nextState.kind,
+            });
+          } catch {
+            /* swallow */
+          }
           return reply.code(200).send({ pair_mode_state: nextState });
         } catch (err) {
           if (err instanceof PairModeStateInvalidTransitionError) {
@@ -554,6 +577,15 @@ export function registerAgentSessionsRoutes(
               action: 'agent_session.pair_mode.handback',
               targetResourceId: `agent_session_${req.params.id}`,
               payload: { from: currentState.kind, to: nextState.kind },
+            });
+          } catch {
+            /* swallow */
+          }
+          // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus counter.
+          try {
+            metrics?.inc(METRIC_NAMES.pairModeTransitionTotal, {
+              from: currentState.kind,
+              to: nextState.kind,
             });
           } catch {
             /* swallow */

@@ -25,6 +25,7 @@ import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.
 import { BundledLlmService, InMemoryBundledLlmRepo } from '../../../src/services/bundled-llm.js';
 import { AgentSessionEventBus } from '../../../src/services/agent-session-event-bus.js';
 import { InMemoryPairModeTakeoverLock } from '../../../src/services/agent-pair-mode-lock.js';
+import { MetricsRegistry, METRIC_NAMES } from '../../../src/services/metrics-registry.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
@@ -332,6 +333,9 @@ export interface TestAppFixture {
   adminAuditRepo: InMemoryAdminAuditLogRepo;
   /** V-281 — exposed so tests can assert customer-audit rows post admin action. */
   accountAuditRepo: InMemoryAccountAuditRepo;
+  /** Arc 4 Wave 2.B 8.18/8.19 — exposed so tests can scrape /metrics
+   *  + read counter values directly via registry.getValue(). */
+  metricsRegistry: MetricsRegistry;
   /** V-295a — exposed so tests can assert incident state. */
   incidentsRepo: InMemoryIncidentsRepo;
   /** V-295c3 — exposed so tests can assert subscriber state. */
@@ -638,6 +642,26 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const agentSessionEventBus = new AgentSessionEventBus();
   // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock for tests.
   const pairModeLock = new InMemoryPairModeTakeoverLock();
+  // Arc 4 Wave 2.B sub-slice 8.18/8.19 (v2-#8) — Prometheus metrics
+  // registry. Pre-registers the pair-mode + bundled-LLM counters so
+  // call sites can inc() blindly without first checking registration.
+  // The same registration block lives in bootstrap.ts (prod).
+  const metricsRegistry = new MetricsRegistry();
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.pairModeTransitionTotal,
+    'Pair-mode state-machine transitions, labelled by from + to states.',
+    ['from', 'to'],
+  );
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.bundledLlmRequestTotal,
+    'Bundled-LLM decompose requests, labelled by outcome.',
+    ['outcome'],
+  );
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.bundledLlmErrorTotal,
+    'Bundled-LLM decompose errors, labelled by error kind.',
+    ['kind'],
+  );
 
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
   // smoke. Always declared (even when captureAgentDecomposerUsage is
@@ -1107,6 +1131,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock; always
     // wired so the takeover/handback routes register for tests.
     pairModeLock,
+    // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
+    // registry + scrape token. Always wired in tests so the /metrics
+    // route registers + pair-mode + bundled-llm counters can be
+    // asserted.
+    metricsRegistry,
+    metricsScrapeToken: 'test-scrape-token',
     // Stub deployment fallback key — only used when a test seeds
     // opts.enableBundledLlm with consent=true so the bundled-LLM leg
     // can actually resolve. Otherwise harmless; default-fallback
@@ -1142,6 +1172,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     webhooksService,
     adminAuditRepo,
     accountAuditRepo,
+    metricsRegistry,
     incidentsRepo,
     statusSubscribersRepo,
     statusSubscribersService,
