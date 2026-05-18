@@ -155,6 +155,76 @@ describe('Arc 2 v2-#8 sub-slice 8.7 pair-mode state machine', () => {
     ).toThrow(PairModeStateInvalidTransitionError);
   });
 
+  // Arc 4 Wave 2.A sub-slice 8.12 (v2-#8) — symmetric handback queue.
+  it('v2-#8 sub-slice 8.12 handback-request-queued from human-driving → handback-queued', () => {
+    const s = applyPairModeTransition(
+      { kind: 'human-driving', clientId: 'cli_a', sinceAt: AT },
+      { kind: 'handback-request-queued', clientId: 'cli_a', at: AT2 },
+    );
+    expect(s.kind).toBe('handback-queued');
+    if (s.kind === 'handback-queued') {
+      expect(s.queuedByClientId).toBe('cli_a');
+      expect(s.queuedAt).toBe(AT2);
+    }
+  });
+
+  it('v2-#8 sub-slice 8.12 handback-queued → handback-pending on decompose-settled', () => {
+    let s: PairModeState = {
+      kind: 'handback-queued',
+      queuedByClientId: 'cli_a',
+      queuedAt: AT,
+    };
+    s = applyPairModeTransition(s, { kind: 'decompose-settled', at: AT2 });
+    expect(s.kind).toBe('handback-pending');
+    if (s.kind === 'handback-pending') {
+      expect(s.requestedAt).toBe(AT2);
+    }
+  });
+
+  it('v2-#8 sub-slice 8.12 handback-queued rollback via handback-cancel → human-driving (preserves clientId from queue)', () => {
+    let s: PairModeState = {
+      kind: 'handback-queued',
+      queuedByClientId: 'cli_a',
+      queuedAt: AT,
+    };
+    s = applyPairModeTransition(s, { kind: 'handback-cancel' });
+    expect(s.kind).toBe('human-driving');
+    if (s.kind === 'human-driving') {
+      expect(s.clientId).toBe('cli_a');
+    }
+  });
+
+  it('v2-#8 sub-slice 8.12 invalid transitions from handback-queued still throw with diagnostics (e.g. takeover-request)', () => {
+    expect(() =>
+      applyPairModeTransition(
+        { kind: 'handback-queued', queuedByClientId: 'cli_a', queuedAt: AT },
+        { kind: 'takeover-request', clientId: 'cli_b', at: AT2 },
+      ),
+    ).toThrow(PairModeStateInvalidTransitionError);
+  });
+
+  it('v2-#8 sub-slice 8.12 handback-request-queued is invalid from ai-driving / takeover-pending / handback-pending', () => {
+    // Only human-driving accepts the queued handback request.
+    expect(() =>
+      applyPairModeTransition(
+        { kind: 'ai-driving' },
+        { kind: 'handback-request-queued', clientId: 'cli_a', at: AT },
+      ),
+    ).toThrow(PairModeStateInvalidTransitionError);
+    expect(() =>
+      applyPairModeTransition(
+        { kind: 'takeover-pending', requestedByClientId: 'cli_a', requestedAt: AT },
+        { kind: 'handback-request-queued', clientId: 'cli_a', at: AT2 },
+      ),
+    ).toThrow(PairModeStateInvalidTransitionError);
+    expect(() =>
+      applyPairModeTransition(
+        { kind: 'handback-pending', requestedAt: AT },
+        { kind: 'handback-request-queued', clientId: 'cli_a', at: AT2 },
+      ),
+    ).toThrow(PairModeStateInvalidTransitionError);
+  });
+
   it('error carries diagnostic fields (from + transition)', () => {
     try {
       applyPairModeTransition({ kind: 'ai-driving' }, { kind: 'takeover-grant', at: AT });

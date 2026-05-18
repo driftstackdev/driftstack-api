@@ -40,7 +40,18 @@ export type PairModeState =
    * `body: 'takeover queued'` so the dashboard shows context even
    * without subscribing to the state-only event stream.
    */
-  | { kind: 'takeover-queued'; requestedByClientId: string; queuedAt: string };
+  | { kind: 'takeover-queued'; requestedByClientId: string; queuedAt: string }
+  /**
+   * Arc 4 Wave 2.A sub-slice 8.12 (v2-#8) — symmetric to 8.11's
+   * takeover-queued. When a handback request arrives while a
+   * decompose is mid-flight (e.g. the brief window after takeover-grant
+   * where lingering AI bookkeeping is still resolving), the route
+   * fires `handback-request-queued` and the machine holds here until
+   * the runtime fires `decompose-settled`. Same queue semantics:
+   * SSE subscribers see the queued discriminator + dashboard renders
+   * a "handback queued" hint.
+   */
+  | { kind: 'handback-queued'; queuedByClientId: string; queuedAt: string };
 
 export type PairModeTransition =
   | { kind: 'takeover-request'; clientId: string; at: string }
@@ -62,7 +73,13 @@ export type PairModeTransition =
    * runtime-error / transient-retry-fallback). Promotes a queued
    * takeover to takeover-pending.
    */
-  | { kind: 'decompose-settled'; at: string };
+  | { kind: 'decompose-settled'; at: string }
+  /**
+   * Arc 4 Wave 2.A sub-slice 8.12 — symmetric handback-while-mid-
+   * decompose deferral. Route fires this when decompose_in_flight=true
+   * AND the active state is human-driving.
+   */
+  | { kind: 'handback-request-queued'; clientId: string; at: string };
 
 export class PairModeStateInvalidTransitionError extends Error {
   constructor(
@@ -147,7 +164,32 @@ export function applyPairModeTransition(
       if (transition.kind === 'handback-request') {
         return { kind: 'handback-pending', requestedAt: transition.at };
       }
+      if (transition.kind === 'handback-request-queued') {
+        // Arc 4 Wave 2.A 8.12 — defer until decompose-settled fires.
+        return {
+          kind: 'handback-queued',
+          queuedByClientId: transition.clientId,
+          queuedAt: transition.at,
+        };
+      }
       if (transition.kind === 'decompose-settled') return state;
+      throw new PairModeStateInvalidTransitionError(state.kind, transition.kind);
+
+    case 'handback-queued':
+      if (transition.kind === 'decompose-settled') {
+        return { kind: 'handback-pending', requestedAt: transition.at };
+      }
+      if (transition.kind === 'handback-cancel') {
+        // Rollback to human-driving. We track the queue's clientId
+        // so we can restore it (the original sinceAt is lost since
+        // the handback transitioned through here, so we use queuedAt
+        // as the sinceAt approximation).
+        return {
+          kind: 'human-driving',
+          clientId: state.queuedByClientId,
+          sinceAt: state.queuedAt,
+        };
+      }
       throw new PairModeStateInvalidTransitionError(state.kind, transition.kind);
 
     case 'handback-pending':
