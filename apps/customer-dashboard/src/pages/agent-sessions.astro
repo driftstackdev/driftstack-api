@@ -1,0 +1,197 @@
+---
+import DashboardLayout from '../layouts/DashboardLayout.astro';
+
+// v2-#8 Wave 2.C sub-slice 8.24 — agent-sessions page scaffold.
+//
+// Customer-facing surface for the AI chat + manual side-by-side
+// feature. Reads from POST/GET /v1/agent-sessions; sub-slices 8.25
+// through 8.28 will fill in the ModeSelector / TakeoverHandbackButtons
+// / TranscriptStream / BundledLlmStatusPanel / MessageComposer
+// inline blocks below.
+//
+// Activation gate: same pattern as v2-#8 sub-slice 8.20.h — the
+// page renders the empty state + "Feature not enabled" banner when
+// POST /v1/agent-sessions returns 503 FeatureUnavailable.
+
+const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+---
+
+<DashboardLayout title="Agent sessions">
+  <div class="mx-auto max-w-6xl px-6 py-10" data-page="agent-sessions">
+    <header class="mb-8">
+      <p class="text-sm text-ink-muted">AI chat + manual side-by-side</p>
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Agent sessions</h1>
+      <p class="mt-2 max-w-prose text-sm text-ink-muted">
+        Pair an AI agent with your manual control. AI drives by default; take over with one
+        click when you need precision, hand back when the AI should resume.
+      </p>
+    </header>
+
+    <div
+      data-banner-feature-unavailable
+      class="mb-6 hidden rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+      role="status"
+    >
+      <strong>Feature not enabled in this deployment.</strong>
+      The AI agent layer requires an LLM key path (BYOK or bundled) to be configured.
+      Contact your Driftstack admin to enable it.
+    </div>
+
+    <div
+      data-banner-unauthenticated
+      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
+      role="status"
+    >
+      Sign in to start an agent session.
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-3">
+      <!-- Main panel (sub-slices 8.25 + 8.26 + 8.27 + 8.28.b live here). -->
+      <section class="lg:col-span-2 space-y-6">
+        <!-- 8.25 ModeSelector -->
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-5" data-section="mode-selector">
+          <h2 class="text-sm font-semibold uppercase tracking-widest text-ink-muted">Mode</h2>
+          <form data-form="create-session" class="mt-3 space-y-3">
+            <label class="flex items-start gap-3">
+              <input type="radio" name="mode" value="ai" class="mt-0.5 text-glow-red" />
+              <span>
+                <span class="block text-sm font-medium text-ink-primary">AI</span>
+                <span class="block text-xs text-ink-muted">Driftstack writes a plan + executes it.</span>
+              </span>
+            </label>
+            <label class="flex items-start gap-3">
+              <input type="radio" name="mode" value="manual" class="mt-0.5 text-glow-red" />
+              <span>
+                <span class="block text-sm font-medium text-ink-primary">Manual</span>
+                <span class="block text-xs text-ink-muted">You drive every action via the GUI.</span>
+              </span>
+            </label>
+            <label class="flex items-start gap-3">
+              <input type="radio" name="mode" value="pair" class="mt-0.5 text-glow-red" checked />
+              <span>
+                <span class="block text-sm font-medium text-ink-primary">Pair</span>
+                <span class="block text-xs text-ink-muted">AI by default; take over with one click.</span>
+              </span>
+            </label>
+            <button
+              type="submit"
+              class="mt-2 rounded-md bg-glow-red px-4 py-2 text-sm font-medium text-white hover:bg-glow-red/90"
+            >
+              Start agent session
+            </button>
+          </form>
+        </div>
+
+        <!-- 8.26 TakeoverHandbackButtons + 8.27 TranscriptStream slots; populated
+             when the dashboard creates / selects a session. -->
+        <div
+          data-section="active-session"
+          class="hidden rounded-lg border border-white/10 bg-surface-raised p-5"
+        >
+          <div class="flex items-center justify-between gap-4">
+            <p class="font-mono text-xs text-ink-secondary" data-field="active-session-id">—</p>
+            <span
+              data-field="pair-mode-state"
+              class="inline-flex rounded-full bg-white/5 px-2 py-0.5 text-xs font-medium text-ink-secondary"
+            ></span>
+          </div>
+
+          <!-- 8.26 TakeoverHandbackButtons slot -->
+          <div class="mt-4 flex gap-2" data-section="takeover-handback">
+            <button
+              data-action="takeover"
+              type="button"
+              class="hidden rounded-md border border-glow-red/30 bg-glow-red/10 px-4 py-2 text-sm font-medium text-glow-red hover:bg-glow-red/20"
+            >
+              Take over
+            </button>
+            <button
+              data-action="handback"
+              type="button"
+              class="hidden rounded-md border border-white/10 bg-surface-base px-4 py-2 text-sm font-medium text-ink-primary hover:bg-surface-raised"
+            >
+              Hand back
+            </button>
+          </div>
+
+          <!-- 8.27 TranscriptStream slot -->
+          <ul
+            data-list="transcript"
+            class="mt-4 max-h-96 space-y-2 overflow-y-auto rounded border border-white/10 bg-surface-base p-3"
+          >
+            <li class="text-xs italic text-ink-muted">Transcript will appear here…</li>
+          </ul>
+
+          <!-- 8.28.b MessageComposer slot -->
+          <form data-form="message" class="mt-4 flex gap-2">
+            <input
+              type="text"
+              name="user_message"
+              placeholder="Tell the AI what to do…"
+              class="flex-1 rounded-md border border-white/10 bg-surface-base px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            />
+            <button
+              type="submit"
+              class="rounded-md bg-glow-red px-4 py-2 text-sm font-medium text-white hover:bg-glow-red/90"
+            >
+              Send
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- 8.28 BundledLlmStatusPanel slot (right rail) -->
+      <aside class="space-y-4" data-section="bundled-llm-status">
+        <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
+          <h2 class="text-sm font-semibold uppercase tracking-widest text-ink-muted">
+            Bundled LLM status
+          </h2>
+          <dl class="mt-3 space-y-2 text-sm">
+            <div class="flex items-center justify-between">
+              <dt class="text-ink-muted">Consent</dt>
+              <dd data-field="consent" class="font-mono text-xs text-ink-secondary">—</dd>
+            </div>
+            <div class="flex items-center justify-between">
+              <dt class="text-ink-muted">Monthly cap</dt>
+              <dd data-field="cap" class="font-mono text-xs text-ink-secondary">—</dd>
+            </div>
+            <div class="flex items-center justify-between">
+              <dt class="text-ink-muted">Used this month</dt>
+              <dd data-field="used" class="font-mono text-xs text-ink-secondary">—</dd>
+            </div>
+          </dl>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="agent-sessions"]');
+      if (!root) return;
+      const featureBanner = root.querySelector('[data-banner-feature-unavailable]');
+      const authBanner = root.querySelector('[data-banner-unauthenticated]');
+      const token = localStorage.getItem('ds_web_session_token');
+      if (!token) {
+        if (authBanner) authBanner.classList.remove('hidden');
+        return;
+      }
+
+      // Best-effort probe: hit the create-session disabled-stub via OPTIONS
+      // semantics replacement — actually just attempt to read the
+      // bundled-llm-status endpoint, which surfaces 503 in the same
+      // posture when the activation gate is off.
+      fetch(apiBaseUrl + '/v1/account/me/bundled-llm-status', {
+        headers: { authorization: 'Bearer ' + token },
+      })
+        .then((res) => {
+          if (res.status === 503) {
+            if (featureBanner) featureBanner.classList.remove('hidden');
+          }
+        })
+        .catch(() => {
+          /* swallow — network issues handled separately */
+        });
+    })();
+  </script>
+</DashboardLayout>
