@@ -275,6 +275,15 @@ export interface TestAppOptions {
    * (matches prod posture until founder flips the LLM key path on).
    */
   enableAgentRuntime?: boolean;
+  /**
+   * v2-#18 — when `true` AND `enableAgentRuntime` is also `true`,
+   * AgentRuntime is wired with a capturing usage recorder that
+   * appends each `.record()` call into the fixture's
+   * `agentDecomposerUsageRecords` array. Lets the end-to-end smoke
+   * test assert the decomposer → runtime → recorder chain fires
+   * through the HTTP layer without needing the Drizzle path.
+   */
+  captureAgentDecomposerUsage?: boolean;
 }
 
 export interface SeedAdditionalOpts {
@@ -316,6 +325,21 @@ export interface TestAppFixture {
   statusSubscribersService: StatusSubscribersService;
   /** V-295d — recorded outbound broadcast HTTP calls (URL + parsed JSON body). */
   broadcastFetchCalls: ReadonlyArray<{ url: string; body: unknown }>;
+  /**
+   * v2-#18 — recorded AgentDecomposerUsageRecorder.record() calls.
+   * Populated only when the fixture is built with both
+   * `enableAgentRuntime: true` AND `captureAgentDecomposerUsage: true`.
+   * Otherwise stays empty.
+   */
+  agentDecomposerUsageRecords: ReadonlyArray<{
+    accountId: string;
+    driftstackSessionId: string | null;
+    agentSessionId: string;
+    decomposeResultKind: 'plan' | 'clarify' | 'refuse';
+    usage: { decomposerKind: 'claude' | 'deterministic'; [key: string]: unknown };
+    tokensConsumed: number;
+    now: Date;
+  }>;
   /** V-295e — exposed for direct event-bus subscription in tests. */
   incidentEventBus: IncidentEventBus;
   /** V-295e — exposed so tests can seed probe history before calling SLA. */
@@ -574,6 +598,19 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const probesRepo = new InMemoryProbesRepo();
   const slaReportingService = new SlaReportingService(probesRepo);
   const incidentEventBus = new IncidentEventBus();
+
+  // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
+  // smoke. Always declared (even when captureAgentDecomposerUsage is
+  // off) so the fixture shape is stable.
+  const agentDecomposerUsageRecords: Array<{
+    accountId: string;
+    driftstackSessionId: string | null;
+    agentSessionId: string;
+    decomposeResultKind: 'plan' | 'clarify' | 'refuse';
+    usage: { decomposerKind: 'claude' | 'deterministic'; [key: string]: unknown };
+    tokensConsumed: number;
+    now: Date;
+  }> = [];
 
   // V-295d — outbound incident broadcasts. Recording fetcher captures
   // POST calls so tests can assert payloads without real HTTP.
@@ -990,11 +1027,28 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(opts.enableAgentRuntime === true
       ? (() => {
           const agentSessionsRepo = new InMemoryAgentSessionsRepo();
+          // v2-#18 — optional capturing usage recorder. When the test
+          // passes `captureAgentDecomposerUsage: true`, AgentRuntime
+          // wires a recorder that appends each .record() call into the
+          // fixture's `agentDecomposerUsageRecords` array. Lets the
+          // end-to-end smoke test assert the decomposer→runtime→recorder
+          // chain fires correctly through the HTTP layer without
+          // needing the Drizzle path.
           const agentRuntime = new AgentRuntime({
             decomposer: new DeterministicAgentDecomposer(),
             executor: new StubAgentExecutor(),
             sessions: agentSessionsRepo,
             archetype: 'iphone16pro_ios18_7_safari26_4',
+            ...(opts.captureAgentDecomposerUsage === true
+              ? {
+                  usageRecorder: {
+                    record: async (recordArgs) => {
+                      agentDecomposerUsageRecords.push(recordArgs);
+                      return Promise.resolve();
+                    },
+                  },
+                }
+              : {}),
           });
           return { agentRuntime, agentSessionsRepo };
         })()
@@ -1031,6 +1085,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     statusSubscribersRepo,
     statusSubscribersService,
     broadcastFetchCalls,
+    agentDecomposerUsageRecords,
     incidentEventBus,
     probesRepo,
     teamMembersRepo,
