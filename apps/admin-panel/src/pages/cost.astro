@@ -228,7 +228,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       const body = await res.json();
       renderRateCard(body.rates ?? {});
-      renderTierThresholds(body.tiers ?? {});
+      // GET /v1/admin/cost/config returns `{ rates, tierThresholds }`
+      // per CostMonitoringService.getConfig(). Reading `body.tiers`
+      // (the previous field-name guess) always resolved to undefined,
+      // so the "No tier thresholds configured" empty-state rendered
+      // every time — masking the actual per-tier table from
+      // admin/ops visibility. Same field-drift class as the
+      // softWarningCents → softCents fix.
+      renderTierThresholds(body.tierThresholds ?? body.tiers ?? {});
     } catch (err) {
       const msg = err && err.message ? err.message : 'network error';
       showBanner('Could not load cost config (' + msg + ').');
