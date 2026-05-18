@@ -41,9 +41,24 @@ Three operational modes:
   "created_by_user_id": "<user-uuid> | null",
   "mode": "ai | manual | pair",
   "created_at": "<ISO-8601>",
-  "updated_at": "<ISO-8601>"
+  "updated_at": "<ISO-8601>",
+  "livekit": {
+    "ws_url": "wss://mac-NNN.driftstack.dev:8443",
+    "room": "agt_<uuid>",
+    "token": "<HS256 JWT>",
+    "participant_identity": "customer-<account-uuid>",
+    "expires_at": "<ISO-8601>"
+  }
 }
 ```
+
+The `livekit` field is **optional** — auto-populated on the
+session-create response (LK.4) when the deployment has at least
+one Mac with registered LiveKit credentials, and absent otherwise
+(pre-LK deployment, OR no Mac has called
+`POST /v1/mac-nodes/register` yet). Clients that need a token in
+the absent case use the explicit endpoint at
+[Live video (LiveKit)](#live-video-livekit) below.
 
 ## Create
 
