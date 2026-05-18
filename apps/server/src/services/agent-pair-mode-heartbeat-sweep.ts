@@ -75,6 +75,16 @@ export class PairModeHeartbeatSweep {
         this.deps.tracker.forget(sessionId);
         continue;
       }
+      // Closed session: the customer's pair-mode session is done.
+      // No point firing a heartbeat-timeout transition (closed
+      // sessions can't transition state anyway, and the audit row
+      // would be misleading — "auto-handback after 30s" on a row
+      // that's been closed for hours). Forget the tracker entry +
+      // continue.
+      if (rec.status === 'closed') {
+        this.deps.tracker.forget(sessionId);
+        continue;
+      }
       const currentState = (rec.pairModeState as PairModeState | null) ?? initialPairModeState();
       // The heartbeat-timeout transition is idempotent on ai-driving
       // (silent no-op). The state machine accepts it from every state

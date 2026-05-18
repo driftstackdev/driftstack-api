@@ -158,6 +158,28 @@ describe('Arc 4 Wave 2.B sub-slice 8.13c PairModeHeartbeatSweep', () => {
     ).toEqual([ids[2]]);
   });
 
+  // Arc 4 Wave 2.B sub-slice 8.13c.2 — closed-session defensive
+  // guard. A session that closed BEFORE the heartbeat went stale
+  // should NOT emit an `agent_session.pair_mode.timeout` audit row
+  // — closed sessions can't transition state and the row would be
+  // misleading ("auto-handback after 30s" on a row that has been
+  // closed for hours).
+  it('closed session → no-op tick, no audit row, tracker forgets the entry', async () => {
+    const tracker = new InMemoryPairModeHeartbeatTracker();
+    const { sessions, sessionId } = await setupPairSession({ state: 'human-driving' });
+    // Close the session before the sweep runs.
+    await sessions.closeWithReason(sessionId, 'customer ended');
+    tracker.recordHeartbeat({ sessionId, at: T0 });
+    const auditRepo = new InMemoryAccountAuditRepo();
+    const accountAudit = new AccountAuditService(auditRepo);
+    const sweep = new PairModeHeartbeatSweep({ tracker, sessions, accountAudit });
+    const res = await sweep.tickOnce(T_PLUS_31S);
+    expect(res.inspected).toBe(1);
+    expect(res.transitioned).toBe(0);
+    expect(auditRepo.getAll()).toEqual([]);
+    expect(tracker.getLastHeartbeatAt(sessionId)).toBeNull();
+  });
+
   it('custom ttlMs overrides the 30s default', async () => {
     const tracker = new InMemoryPairModeHeartbeatTracker();
     const { sessions, sessionId } = await setupPairSession({ state: 'human-driving' });
