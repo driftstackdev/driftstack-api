@@ -90,6 +90,21 @@ describe('byok-anthropic disabled-stub 503 detail — customer-facing, no intern
   });
 });
 
+describe('recipes disabled-stub 503 detail — customer-facing, no internal-handoff-doc reference', () => {
+  const body = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/recipes.ts'), 'utf8');
+
+  it('carries the customer-facing docs URL (docs.driftstack.dev/api/recipes)', () => {
+    expect(body).toMatch(/https:\/\/docs\.driftstack\.dev\/api\/recipes/);
+  });
+
+  it('does NOT reference internal "2026-05-17-q-queue-loop-handoff" doc in the customer-facing 503 detail', () => {
+    const fnIdx = body.indexOf('registerRecipesDisabledRoutes');
+    expect(fnIdx).toBeGreaterThan(-1);
+    const tail = body.slice(fnIdx);
+    expect(tail).not.toMatch(/docs\/internal\/2026-05-17-q-queue-loop-handoff/);
+  });
+});
+
 describe('saved-proxies + session-proxy disabled-stub 503 detail — no internal "planning file 133" jargon', () => {
   const SAVED = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/saved-proxies.ts'), 'utf8');
   const SESSION = readFileSync(

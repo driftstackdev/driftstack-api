@@ -100,10 +100,15 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
 // session-egress. Surfaces 503 FeatureUnavailable so SDK + dashboard
 // get a machine-readable signal vs 404.
 export function registerRecipesDisabledRoutes(app: FastifyInstance): void {
+  // Customer-facing detail. Lands verbatim in the SDK's 503 problem
+  // body. Same fix shape as agent-sessions / byok-anthropic /
+  // proxy disabled-stubs (slices 87 + 88): point at customer-facing
+  // docs URL, NOT the internal handoff/design doc.
   const detail =
-    'Recipes are not yet enabled on this deployment. The recipe library ' +
-    'requires the agent layer + recipes table to be wired; see ' +
-    'docs/internal/2026-05-17-q-queue-loop-handoff.md.';
+    'Recipes are not yet enabled on this deployment. Once the operator ' +
+    'configures the recipe library + agent layer, customers can snapshot ' +
+    'a finished agent-session via POST /v1/recipes. See ' +
+    'https://docs.driftstack.dev/api/recipes for the full flow.';
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };
