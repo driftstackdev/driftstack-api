@@ -30,8 +30,8 @@ Three operational modes:
 ```json
 {
   "id": "agt_<uuid>",
-  "account_id": "<account-uuid>",
-  "driftstack_session_id": "ses_<uuid> | null",
+  "account_id": "<uuid>",
+  "driftstack_session_id": "<uuid> | null",
   "status": "active | paused | closed",
   "closed_reason": "<string> | null",
   "closed_at": "<ISO-8601> | null",
@@ -59,6 +59,17 @@ one Mac with registered LiveKit credentials, and absent otherwise
 `POST /v1/mac-nodes/register` yet). Clients that need a token in
 the absent case use the explicit endpoint at
 [Live video (LiveKit)](#live-video-livekit) below.
+
+> **ID-format note.** The agent-sessions resource emits
+> `account_id` and `driftstack_session_id` as **bare UUIDs** (no
+> `acc_` / `ses_` prefix), unlike `GET /v1/account/me` and
+> `GET /v1/account/audit-log` which emit `acc_<uuid>`, and the
+> `GET /v1/sessions/:id` resource which emits prefixed `ses_/acc_/
+key_` IDs. Customer code comparing `agentSession.account_id`
+> against `accountMe.id` must strip the `acc_` prefix from the
+> latter first. (The session's own `id` field IS prefixed —
+> `agt_<uuid>` — because the agent-session row id is minted with
+> the prefix baked in.)
 
 ## Create
 
