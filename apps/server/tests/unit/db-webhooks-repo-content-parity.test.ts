@@ -56,12 +56,16 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ Drizzle-backed implementation of WebhooksRepo\./);
   });
 
-  it('imports: and/desc/eq/isNull/lt/sql from drizzle-orm; 9 service types; Database; webhookDeliveries + webhookEndpoints schemas', () => {
-    expect(body).toMatch(/import \{ and, desc, eq, isNull, lt, sql \} from 'drizzle-orm';/);
+  it('imports: and/desc/eq/isNotNull/isNull/lt/sql from drizzle-orm; 9 service types; Database; accounts + webhookDeliveries + webhookEndpoints schemas', () => {
+    expect(body).toMatch(
+      /import \{ and, desc, eq, isNotNull, isNull, lt, sql \} from 'drizzle-orm';/,
+    );
     expect(body).toMatch(
       /import type \{\s*\n?\s*EndpointDeliveryCounts,\s*\n?\s*ListDeliveriesPage,\s*\n?\s*NewWebhookDeliveryInput,\s*\n?\s*NewWebhookEndpointInput,\s*\n?\s*WebhookDeliveryRow,\s*\n?\s*WebhookDeliveryStatus,\s*\n?\s*WebhookEndpointRow,\s*\n?\s*WebhookEventType,\s*\n?\s*WebhooksRepo,\s*\n?\s*\} from '\.\.\/services\/webhooks\.js';/,
     );
-    expect(body).toMatch(/import \{ webhookDeliveries, webhookEndpoints \} from '\.\/schema\.js';/);
+    expect(body).toMatch(
+      /import \{ accounts, webhookDeliveries, webhookEndpoints \} from '\.\/schema\.js';/,
+    );
   });
 
   it("insertEndpoint: 6-field values (accountId + url + secret + secretPrefix + events + description); throws 'insertEndpoint returned no row'", () => {
@@ -174,9 +178,9 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     );
   });
 
-  it('toEndpointRow: 18-field WebhookEndpointRow (id + accountId + url + secret + secretPrefix + secretPrev + secretPrevExpiresAt + secretCreatedAt + lastReminderSentAt + events + description + active + consecutiveFailures + lastSuccessAt + lastFailureAt + disabledAt + 2 timestamps; secretCreatedAt + lastReminderSentAt added in v2-#10 migration 0048)', () => {
+  it('toEndpointRow: 20-field WebhookEndpointRow (id + accountId + url + secret + secretPrefix + secretPrev + secretPrevExpiresAt + secretCreatedAt + lastReminderSentAt + graceWindowEndsAt + forceRotatedAt + events + description + active + consecutiveFailures + lastSuccessAt + lastFailureAt + disabledAt + 2 timestamps; secretCreatedAt + lastReminderSentAt added in v2-#10 migration 0048; graceWindowEndsAt + forceRotatedAt added in v2-#28 force-rotation slice)', () => {
     expect(body).toMatch(
-      /function toEndpointRow\(r: typeof webhookEndpoints\.\$inferSelect\): WebhookEndpointRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*url: r\.url,\s*\n?\s*secret: r\.secret,\s*\n?\s*secretPrefix: r\.secretPrefix,\s*\n?\s*secretPrev: r\.secretPrev,\s*\n?\s*secretPrevExpiresAt: r\.secretPrevExpiresAt,\s*\n?\s*secretCreatedAt: r\.secretCreatedAt,\s*\n?\s*lastReminderSentAt: r\.lastReminderSentAt,\s*\n?\s*events: r\.events,\s*\n?\s*description: r\.description,\s*\n?\s*active: r\.active,\s*\n?\s*consecutiveFailures: r\.consecutiveFailures,\s*\n?\s*lastSuccessAt: r\.lastSuccessAt,\s*\n?\s*lastFailureAt: r\.lastFailureAt,\s*\n?\s*disabledAt: r\.disabledAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toEndpointRow\(r: typeof webhookEndpoints\.\$inferSelect\): WebhookEndpointRow \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*url: r\.url,\s*\n?\s*secret: r\.secret,\s*\n?\s*secretPrefix: r\.secretPrefix,\s*\n?\s*secretPrev: r\.secretPrev,\s*\n?\s*secretPrevExpiresAt: r\.secretPrevExpiresAt,\s*\n?\s*secretCreatedAt: r\.secretCreatedAt,\s*\n?\s*lastReminderSentAt: r\.lastReminderSentAt,[\s\S]*?graceWindowEndsAt: r\.graceWindowEndsAt,\s*\n?\s*forceRotatedAt: r\.forceRotatedAt,\s*\n?\s*events: r\.events,\s*\n?\s*description: r\.description,\s*\n?\s*active: r\.active,\s*\n?\s*consecutiveFailures: r\.consecutiveFailures,\s*\n?\s*lastSuccessAt: r\.lastSuccessAt,\s*\n?\s*lastFailureAt: r\.lastFailureAt,\s*\n?\s*disabledAt: r\.disabledAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
     );
   });
 
