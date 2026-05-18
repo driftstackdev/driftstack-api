@@ -253,7 +253,7 @@ The HTTP API and the SDKs version independently. SDKs at any version stay compat
 | Capability        | TS  | Python | Go  | Notes                                                             |
 | ----------------- | --- | ------ | --- | ----------------------------------------------------------------- |
 | Sessions          | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait/capture/getState               |
-| Agent sessions    | ✅  | ✅     | ✅  | create/get/message/close/takeover/handback/livekitToken (LK.3)    |
+| Agent sessions    | ✅  | ✅     | ✅  | create/get/message/close/takeover/handback/livekitToken           |
 | Recipes           | ✅  | ✅     | ✅  | Write-only at v1.0; read/list/execute/delete land at v1.1         |
 | Profiles          | ✅  | ✅     | ✅  | Create, list, get, delete                                         |
 | Profile snapshots | ✅  | ✅     | ✅  | capture/list/restore/delete                                       |

@@ -53,7 +53,7 @@ Three operational modes:
 ```
 
 The `livekit` field is **optional** — auto-populated on the
-session-create response (LK.4) when the deployment has at least
+session-create response when the deployment has at least
 one Mac with registered LiveKit credentials, and absent otherwise
 (pre-LK deployment, OR no Mac has called
 `POST /v1/mac-nodes/register` yet). Clients that need a token in
