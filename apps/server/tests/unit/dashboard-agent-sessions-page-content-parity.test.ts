@@ -151,6 +151,22 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
     expect(body).toMatch(/ring-2.*ring-amber-500\/50/);
   });
 
+  it('message form 402 also fires a typed warn toast with body.detail (the ring alone reads as visual noise — toast names the BundledLlmBudgetExhausted / BundledLlmConsentRequired reason)', () => {
+    // The 402 branch reads body.detail (problem+json) and falls back
+    // to a generic copy when the body doesn't carry a string detail.
+    expect(body).toMatch(/typeof body\.detail === 'string'/);
+    expect(body).toMatch(/'Bundled-LLM budget required — see right rail\.'/);
+    expect(body).toMatch(/showToast\('warn', detail\)/);
+  });
+
+  it('message form non-402 4xx → showToast error with HTTP status surfaced (consistent with takeover/handback)', () => {
+    expect(body).toMatch(/'Message failed \(HTTP ' \+ status \+ '\)\.'/);
+  });
+
+  it('message form network-error (fetch rejection) → showToast error (consistent with takeover/handback)', () => {
+    expect(body).toMatch(/'Message failed — network error\.'/);
+  });
+
   // v2-#8 Wave 2.C sub-slice 8.26.b — toast surface for typed 409 errors.
   it('showToast() helper + ensureToastContainer() create a bottom-right toast stack', () => {
     expect(body).toMatch(/function showToast\(/);

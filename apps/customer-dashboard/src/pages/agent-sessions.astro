@@ -606,22 +606,31 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
             body: JSON.stringify({ user_message: userMessage }),
           })
             .then((r) => r.json().then((body) => ({ status: r.status, body })))
-            .then(({ status }) => {
+            .then(({ status, body }) => {
               if (status === 402) {
                 // BundledLlmBudgetExhausted / BundledLlmConsentRequired
                 // — highlight the right-rail panel so the customer
-                // sees the recovery CTA there.
+                // sees the recovery CTA there + show a toast naming
+                // the specific reason (the ring alone reads as visual
+                // noise without context).
                 const aside = root.querySelector('[data-section="bundled-llm-status"]');
                 if (aside) {
                   aside.classList.add('ring-2', 'ring-amber-500/50');
                 }
+                const detail =
+                  body && typeof body.detail === 'string'
+                    ? body.detail
+                    : 'Bundled-LLM budget required — see right rail.';
+                showToast('warn', detail);
+              } else if (status >= 400) {
+                showToast('error', 'Message failed (HTTP ' + status + ').');
               }
               // Clear input on every settled state — the SSE stream
               // publishes the next entry.
               msgForm.reset();
             })
             .catch(() => {
-              /* swallow */
+              showToast('error', 'Message failed — network error.');
             });
         });
       }
