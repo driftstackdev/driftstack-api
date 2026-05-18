@@ -54,6 +54,16 @@ client.sessions.getState(id);
 client.sessions.capture(id, body);
 client.sessions.destroy(id);
 
+client.agentSessions.create(body?);
+client.agentSessions.get(id);
+client.agentSessions.message(id, userMessage, opts?); // BYOK header opt-in
+client.agentSessions.close(id);
+client.agentSessions.takeover(id, clientId); // pair-mode
+client.agentSessions.handback(id);
+client.agentSessions.livekitToken(id); // LK.3 re-mint after 24h TTL
+
+client.recipes.create(body); // snapshot an agent-session intent_log
+
 client.profiles.create(body);
 client.profiles.list(query?);
 client.profiles.get(id);
