@@ -101,10 +101,13 @@ describe('W764 docs /api/auth content parity', () => {
     );
   });
 
-  it("CRITICAL V-423/V-441/V-445 SDK type-narrowing anchor pinned. The '(V-423/V-441/V-445 type narrowing + MFA exchange)' anchor threads BOTH the TS discriminated-union typing + the SDK exchange method.", () => {
+  it("CRITICAL SDK type-narrowing anchor pinned: '**SDK usage** (type narrowing + MFA exchange):' — threads the TS discriminated-union typing + the SDK exchange method. The previous skip pinned `(V-423/V-441/V-445 ...)` with the inline internal version anchors; the V-NNN anchors were removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the substantive framing survives without them.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/\*\*SDK usage\*\* \(V-423\/V-441\/V-445 type narrowing \+ MFA exchange\):/);
+    expect(p).toMatch(/\*\*SDK usage\*\* \(type narrowing \+ MFA exchange\):/);
+    // Drift-guard: the internal V-423/V-441/V-445 anchors MUST NOT
+    // bleed back into the customer-rendered "SDK usage" line.
+    expect(p).not.toMatch(/V-423\/V-441\/V-445/);
   });
 
   it('CRITICAL MFA challenge 2-factor input — code (TOTP) OR recovery_code. Drift to forcing one would lose the recovery-fallback path.', () => {

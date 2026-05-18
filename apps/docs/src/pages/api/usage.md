@@ -122,7 +122,7 @@ Empty days return zeros for every counter (not omitted from the
 response) so the dashboard can render an empty-state without
 client-side date-fill logic.
 
-**SDK usage** (V-452):
+**SDK usage:**
 
 ```ts
 const series = await client.usage.series({ days: 30 });

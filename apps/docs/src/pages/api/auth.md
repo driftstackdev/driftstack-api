@@ -90,7 +90,7 @@ Branch on the `mfa_required` literal. When it's present + true, do
 not store anything — wait for the customer to enter their TOTP
 code and call the challenge endpoint below.
 
-**SDK usage** (V-423/V-441/V-445 type narrowing + MFA exchange):
+**SDK usage** (type narrowing + MFA exchange):
 
 ```ts
 // TypeScript — discriminated-union return type narrows automatically.

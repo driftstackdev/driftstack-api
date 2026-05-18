@@ -180,10 +180,13 @@ describe('W769 docs /api/usage content parity', () => {
     );
   });
 
-  it('CRITICAL V-452 SDK series anchor pinned. Drift would lose the threading to the V-452 SDK series-method anchor.', () => {
+  it('CRITICAL SDK series anchor pinned: "**SDK usage:**" precedes the 3-language code block. The previous skip pinned `(V-452)` with the inline internal version anchor; the V-452 anchor was removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the framing itself survives without it.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/\*\*SDK usage\*\* \(V-452\):/);
+    expect(p).toMatch(/\*\*SDK usage:\*\*/);
+    // Drift-guard: the internal V-452 anchor MUST NOT bleed back
+    // into the customer-rendered SDK-usage marker.
+    expect(p).not.toMatch(/\*\*SDK usage\*\* \(V-452\):/);
   });
 
   it('CRITICAL 3-language SDK examples pinned — TypeScript + Python + Go. All call usage.series / usage.series / Usage.Series with days=30.', () => {
