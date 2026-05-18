@@ -266,6 +266,18 @@ class BundledLlmConsentRequiredError(DriftstackError):
     me/bundled-llm-settings with {"consent": true} OR PUT a BYOK key."""
 
 
+class PairModeConflictError(DriftstackError):
+    """Arc 2 sub-slice 8.10 (v2-#8) — pair-mode takeover lost the
+    SET-NX-EX lock race. HTTP 409. The `winner_client_id` extension
+    on the wire identifies who currently holds the takeover."""
+
+
+class PairModeStateInvalidTransitionError(DriftstackError):
+    """Arc 2 sub-slice 8.10 (v2-#8) — invalid pair-mode transition.
+    HTTP 409. Extensions: `from` (current state) + `transition`
+    (the rejected action)."""
+
+
 class ByokAnthropicRequiredError(DriftstackError):
     """v2-#24 — Q.1.d (2026-05-17) — agent-sessions message turn cannot
     resolve an Anthropic API key. BYOK-for-v1.0 Tier-3 verdict means
@@ -313,6 +325,9 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     # Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM 402 paths.
     "https://errors.driftstack.dev/bundled-llm-budget-exhausted": BundledLlmBudgetExhaustedError,
     "https://errors.driftstack.dev/bundled-llm-consent-required": BundledLlmConsentRequiredError,
+    # Arc 2 sub-slice 8.10 (v2-#8) — pair-mode 409 paths.
+    "https://errors.driftstack.dev/pair-mode-conflict": PairModeConflictError,
+    "https://errors.driftstack.dev/pair-mode-invalid-transition": PairModeStateInvalidTransitionError,
 }
 
 

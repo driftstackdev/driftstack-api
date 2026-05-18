@@ -287,6 +287,36 @@ export class ByokAnthropicRequiredError extends ApiError {
   }
 }
 
+// Arc 2 sub-slice 8.10 (v2-#8) — pair-mode takeover lost the
+// SET-NX-EX race. Body carries `winner_client_id`.
+export class PairModeConflictError extends ApiError {
+  constructor(winnerClientId: string) {
+    super({
+      type: PROBLEM_TYPES.PairModeConflict,
+      title: 'Pair-mode takeover already in flight',
+      status: 409,
+      detail: `Another client (${winnerClientId}) is currently taking over this agent session.`,
+      extensions: { winner_client_id: winnerClientId },
+    });
+    this.name = 'PairModeConflictError';
+  }
+}
+
+// Arc 2 sub-slice 8.10 (v2-#8) — invalid pair-mode transition.
+// Extensions carry from + transition for dashboard diagnostics.
+export class PairModeStateInvalidTransitionRouteError extends ApiError {
+  constructor(args: { from: string; transition: string }) {
+    super({
+      type: PROBLEM_TYPES.PairModeStateInvalidTransition,
+      title: 'Invalid pair-mode transition',
+      status: 409,
+      detail: `Transition '${args.transition}' is not allowed from state '${args.from}'.`,
+      extensions: { from: args.from, transition: args.transition },
+    });
+    this.name = 'PairModeStateInvalidTransitionRouteError';
+  }
+}
+
 // Arc 1 sub-slice 6.8 (v2-#6). Fires when the deployment IS wired for
 // bundled-LLM (service + fallback key both present) AND no BYOK key
 // resolved AND the customer's consent flag is false. Distinct from

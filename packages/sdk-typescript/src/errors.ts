@@ -342,6 +342,31 @@ export class BundledLlmConsentRequiredError extends DriftstackError {
   }
 }
 
+// Arc 2 sub-slice 8.10 (v2-#8) — pair-mode takeover lost the lock
+// race. The body's `winner_client_id` is surfaced as a typed property
+// so the dashboard can render "user X is taking over".
+export class PairModeConflictError extends DriftstackError {
+  readonly winnerClientId: string;
+  constructor(p: Problem) {
+    super(toOpts('bad_request', p));
+    this.name = 'PairModeConflictError';
+    this.winnerClientId = String((p as { winner_client_id?: string }).winner_client_id ?? '');
+  }
+}
+
+// Arc 2 sub-slice 8.10 (v2-#8) — invalid pair-mode transition.
+// `from` + `transition` carry the state-machine context.
+export class PairModeStateInvalidTransitionError extends DriftstackError {
+  readonly from: string;
+  readonly transition: string;
+  constructor(p: Problem) {
+    super(toOpts('bad_request', p));
+    this.name = 'PairModeStateInvalidTransitionError';
+    this.from = String((p as { from?: string }).from ?? '');
+    this.transition = String((p as { transition?: string }).transition ?? '');
+  }
+}
+
 export class ByokAnthropicRequiredError extends DriftstackError {
   constructor(p: Problem) {
     super(toOpts('byok_anthropic_required', p));
@@ -401,6 +426,10 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
     new BundledLlmBudgetExhaustedError(p),
   'https://errors.driftstack.dev/bundled-llm-consent-required': (p) =>
     new BundledLlmConsentRequiredError(p),
+  // Arc 2 sub-slice 8.10 (v2-#8) — pair-mode 409s.
+  'https://errors.driftstack.dev/pair-mode-conflict': (p) => new PairModeConflictError(p),
+  'https://errors.driftstack.dev/pair-mode-invalid-transition': (p) =>
+    new PairModeStateInvalidTransitionError(p),
 };
 
 /**

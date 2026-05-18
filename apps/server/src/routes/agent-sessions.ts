@@ -44,6 +44,8 @@ import {
   ConflictError,
   FeatureUnavailableError,
   NotFoundError,
+  PairModeConflictError,
+  PairModeStateInvalidTransitionRouteError,
   ValidationError,
 } from '../lib/errors.js';
 
@@ -429,13 +431,7 @@ export function registerAgentSessionsRoutes(
           clientId: parsed.data.client_id,
         });
         if (!lockResult.acquired) {
-          return reply.code(409).send({
-            type: 'https://errors.driftstack.dev/conflict',
-            title: 'Pair-mode takeover already in flight',
-            status: 409,
-            detail: `Another client (${lockResult.winnerClientId}) is currently taking over this agent session.`,
-            winner_client_id: lockResult.winnerClientId,
-          });
+          throw new PairModeConflictError(lockResult.winnerClientId);
         }
         try {
           const currentState =
@@ -449,7 +445,7 @@ export function registerAgentSessionsRoutes(
           return reply.code(200).send({ pair_mode_state: nextState });
         } catch (err) {
           if (err instanceof PairModeStateInvalidTransitionError) {
-            throw new ConflictError(err.message, {
+            throw new PairModeStateInvalidTransitionRouteError({
               from: err.from,
               transition: err.transition,
             });
@@ -489,7 +485,7 @@ export function registerAgentSessionsRoutes(
           return reply.code(200).send({ pair_mode_state: nextState });
         } catch (err) {
           if (err instanceof PairModeStateInvalidTransitionError) {
-            throw new ConflictError(err.message, {
+            throw new PairModeStateInvalidTransitionRouteError({
               from: err.from,
               transition: err.transition,
             });

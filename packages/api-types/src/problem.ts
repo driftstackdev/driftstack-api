@@ -77,6 +77,15 @@ export const PROBLEM_TYPES = {
   // "enable bundled-LLM" call-to-action that hits
   // PATCH /v1/account/me/bundled-llm-settings.
   BundledLlmConsentRequired: 'https://errors.driftstack.dev/bundled-llm-consent-required',
+  // Arc 2 sub-slice 8.10 (v2-#8) — pair-mode takeover lost the
+  // SET-NX-EX race. Body carries `winner_client_id` so the loser
+  // dashboard can render "user X is taking over". 409 Conflict.
+  PairModeConflict: 'https://errors.driftstack.dev/pair-mode-conflict',
+  // Arc 2 sub-slice 8.10 (v2-#8) — the requested pair-mode
+  // transition isn't valid from the current state (e.g. a handback
+  // request before any takeover-grant). 409 Conflict + `from` +
+  // `transition` extensions for dashboard diagnostics.
+  PairModeStateInvalidTransition: 'https://errors.driftstack.dev/pair-mode-invalid-transition',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];

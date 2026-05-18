@@ -37,6 +37,8 @@ from driftstack.errors import (
     LegalAcceptanceRequiredError,
     MfaStepUpRequiredError,
     NotFoundError,
+    PairModeConflictError,
+    PairModeStateInvalidTransitionError,
     QuotaExceededError,
     RateLimitError,
     RevokedKeyError,
@@ -81,6 +83,8 @@ __all__ = [
     "ByokAnthropicRequiredError",
     "BundledLlmBudgetExhaustedError",
     "BundledLlmConsentRequiredError",
+    "PairModeConflictError",
+    "PairModeStateInvalidTransitionError",
     "is_retryable",
     "verify_webhook_signature",
 ]

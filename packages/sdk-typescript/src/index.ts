@@ -71,6 +71,8 @@ export {
   LegalAcceptanceRequiredError,
   MfaStepUpRequiredError,
   NotFoundError,
+  PairModeConflictError,
+  PairModeStateInvalidTransitionError,
   RateLimitError,
   RevokedKeyError,
   SessionDestroyedError,

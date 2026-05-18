@@ -77,6 +77,9 @@ var (
 	// Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM 402 paths.
 	ErrBundledLlmBudgetExhausted = errors.New("bundled-llm monthly cap reached")
 	ErrBundledLlmConsentRequired = errors.New("bundled-llm consent required")
+	// Arc 2 sub-slice 8.10 (v2-#8) — pair-mode 409 paths.
+	ErrPairModeConflict                = errors.New("pair-mode takeover already in flight")
+	ErrPairModeStateInvalidTransition  = errors.New("invalid pair-mode transition")
 )
 
 // AuthError covers any of the auth-related problem types. Use the
@@ -298,6 +301,27 @@ type BundledLlmConsentRequiredError struct{ apiError }
 
 func (e *BundledLlmConsentRequiredError) Is(target error) bool {
 	return target == ErrBundledLlmConsentRequired
+}
+
+// Arc 2 sub-slice 8.10 (v2-#8) — pair-mode takeover lock contention.
+// WinnerClientID surfaces the holder; loser can show "X is taking over".
+type PairModeConflictError struct {
+	apiError
+	WinnerClientID string
+}
+
+func (e *PairModeConflictError) Is(target error) bool { return target == ErrPairModeConflict }
+
+// Arc 2 sub-slice 8.10 (v2-#8) — invalid pair-mode transition.
+// From + Transition carry the state-machine diagnostic context.
+type PairModeStateInvalidTransitionError struct {
+	apiError
+	From       string
+	Transition string
+}
+
+func (e *PairModeStateInvalidTransitionError) Is(target error) bool {
+	return target == ErrPairModeStateInvalidTransition
 }
 
 // V-491 — public retry predicate. Mirrors the V-489 TS / V-490

@@ -44,6 +44,9 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	// Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM 402 paths.
 	"https://errors.driftstack.dev/bundled-llm-budget-exhausted": buildBundledLlmBudgetExhausted,
 	"https://errors.driftstack.dev/bundled-llm-consent-required": buildBundledLlmConsentRequired,
+	// Arc 2 sub-slice 8.10 (v2-#8) — pair-mode 409 paths.
+	"https://errors.driftstack.dev/pair-mode-conflict":           buildPairModeConflict,
+	"https://errors.driftstack.dev/pair-mode-invalid-transition": buildPairModeInvalidTransition,
 }
 
 // errorFromResponse parses an HTTP response body as RFC 7807
@@ -278,6 +281,26 @@ func buildBundledLlmConsentRequired(base apiError, _ map[string]any, _ string) e
 	return &BundledLlmConsentRequiredError{apiError: base}
 }
 
+func buildPairModeConflict(base apiError, problem map[string]any, _ string) error {
+	winner := ""
+	if v, ok := problem["winner_client_id"].(string); ok {
+		winner = v
+	}
+	return &PairModeConflictError{apiError: base, WinnerClientID: winner}
+}
+
+func buildPairModeInvalidTransition(base apiError, problem map[string]any, _ string) error {
+	from := ""
+	transition := ""
+	if v, ok := problem["from"].(string); ok {
+		from = v
+	}
+	if v, ok := problem["transition"].(string); ok {
+		transition = v
+	}
+	return &PairModeStateInvalidTransitionError{apiError: base, From: from, Transition: transition}
+}
+
 // Compile-time sanity that the error types implement error.
 var (
 	_ error = (*apiError)(nil)
@@ -292,6 +315,8 @@ var (
 	_ error = (*ByokAnthropicRequiredError)(nil)
 	_ error = (*BundledLlmBudgetExhaustedError)(nil)
 	_ error = (*BundledLlmConsentRequiredError)(nil)
+	_ error = (*PairModeConflictError)(nil)
+	_ error = (*PairModeStateInvalidTransitionError)(nil)
 	_ error = (*RateLimitError)(nil)
 	_ error = (*ConcurrencyLimitError)(nil)
 	_ error = (*QuotaExceededError)(nil)
