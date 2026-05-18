@@ -183,11 +183,15 @@ export function registerAccountByokAnthropicRoutes(
  *  when MFA_ENCRYPTION_KEY is unset (the BYOK service can't be
  *  constructed without it). Mirrors the 5 other gated features. */
 export function registerAccountByokAnthropicDisabledRoutes(app: FastifyInstance): void {
+  // Customer-facing detail. Lands verbatim in the SDK's 503 problem
+  // body — point at the customer-facing docs URL, NOT the internal
+  // design doc. Same fix shape as agent-sessions disabled-stub
+  // (slice 87 / 6efc0a34).
   const detail =
     'BYOK Anthropic key management is not yet enabled on this deployment. ' +
-    'MFA_ENCRYPTION_KEY env var must be configured (the BYOK key store reuses ' +
-    'the MFA encryption key per Q1 verdict 2026-05-17). See ' +
-    'docs/internal/byok-anthropic-key-storage-design.md.';
+    'Once the operator configures the deployment, customers can store their ' +
+    'own Anthropic key via PUT /v1/account/me/byok-anthropic-key. See ' +
+    'https://docs.driftstack.dev/api/byok-anthropic for the full flow.';
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };

@@ -82,9 +82,14 @@ export function registerSavedProxiesRoutes(
 // FeatureUnavailable on POST + DELETE; GET returns 200 + empty list
 // for the same dashboard-rendering reason described above.
 export function registerSavedProxiesDisabledRoutes(app: FastifyInstance): void {
+  // Customer-facing detail. "planning file 133" is internal
+  // nomenclature; customers don't have access. Drop the internal
+  // reference and surface the Phase 1 SOCKS5 roadmap framing in
+  // customer-readable terms.
   const detail =
-    'Customer-configurable egress (SOCKS5 / OpenVPN / WireGuard) is not yet shipped. ' +
-    'See planning file 133 for the Phase 1 SOCKS5 roadmap.';
+    'Customer-configurable egress (SOCKS5 / OpenVPN / WireGuard) is not yet ' +
+    'shipped. Phase 1 SOCKS5 support is on the roadmap; until then sessions ' +
+    "route through Driftstack's default egress.";
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };

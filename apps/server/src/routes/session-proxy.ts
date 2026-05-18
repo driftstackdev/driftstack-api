@@ -108,9 +108,15 @@ export function registerSessionProxyRoutes(
 // 404. The detail explains the activation gate so customers know it's
 // a deployment state, not a typo.
 export function registerSessionProxyDisabledRoutes(app: FastifyInstance): void {
+  // Customer-facing detail. "planning file 133" is internal
+  // nomenclature; customers don't have access. Drop the internal
+  // reference and surface the Phase 1 SOCKS5 roadmap framing in
+  // customer-readable terms. Matches the symmetric saved-proxies
+  // disabled-stub detail.
   const detail =
-    'Customer-configurable egress (SOCKS5 / OpenVPN / WireGuard) is not yet shipped. ' +
-    'See planning file 133 for the Phase 1 SOCKS5 roadmap.';
+    'Customer-configurable egress (SOCKS5 / OpenVPN / WireGuard) is not yet ' +
+    'shipped. Phase 1 SOCKS5 support is on the roadmap; until then sessions ' +
+    "route through Driftstack's default egress.";
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };

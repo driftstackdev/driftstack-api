@@ -1,8 +1,8 @@
-// Drift-guard for the AI-chat agent-sessions 503 FeatureUnavailable
-// detail string. The detail lands in the problem+json body that the
-// SDK surfaces verbatim — a customer hitting POST /v1/agent-sessions
-// from the SDK before the deployment activates the LLM-key path sees
-// this text as their entire actionable error message.
+// Drift-guard for the customer-facing 503 FeatureUnavailable detail
+// strings on activation-gated routes. The detail lands in the
+// problem+json body that the SDK surfaces verbatim — a customer
+// hitting a 503 from the SDK before the deployment activates the
+// feature sees this text as their entire actionable error message.
 //
 // Previously the detail said
 //
@@ -67,5 +67,63 @@ describe('agent-sessions disabled-stub 503 detail — customer-facing self-serve
     // 503 detail should use parallel language so customers seeing
     // both surfaces get a coherent message.
     expect(body).toMatch(/Two self-serve options/);
+  });
+});
+
+describe('byok-anthropic disabled-stub 503 detail — customer-facing, no internal-docs reference', () => {
+  const body = readFileSync(
+    resolve(REPO_ROOT, 'apps/server/src/routes/account-byok-anthropic.ts'),
+    'utf8',
+  );
+
+  it('carries the customer-facing docs URL (docs.driftstack.dev/api/byok-anthropic)', () => {
+    expect(body).toMatch(/https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic/);
+  });
+
+  it('does NOT reference internal "docs/internal/byok-anthropic-key-storage-design" doc', () => {
+    const fnIdx = body.indexOf('registerAccountByokAnthropicDisabledRoutes');
+    expect(fnIdx).toBeGreaterThan(-1);
+    const tail = body.slice(fnIdx);
+    const fnEnd = tail.indexOf('export function', 10);
+    const fnBody = fnEnd > 0 ? tail.slice(0, fnEnd) : tail;
+    expect(fnBody).not.toMatch(/docs\/internal\/byok-anthropic-key-storage-design/);
+  });
+});
+
+describe('saved-proxies + session-proxy disabled-stub 503 detail — no internal "planning file 133" jargon', () => {
+  const SAVED = readFileSync(resolve(REPO_ROOT, 'apps/server/src/routes/saved-proxies.ts'), 'utf8');
+  const SESSION = readFileSync(
+    resolve(REPO_ROOT, 'apps/server/src/routes/session-proxy.ts'),
+    'utf8',
+  );
+
+  it('saved-proxies does NOT reference internal "planning file 133" in the customer-facing 503 detail', () => {
+    const fnIdx = SAVED.indexOf('registerSavedProxiesDisabledRoutes');
+    expect(fnIdx).toBeGreaterThan(-1);
+    const tail = SAVED.slice(fnIdx);
+    const fnEnd = tail.indexOf('export function', 10);
+    const fnBody = fnEnd > 0 ? tail.slice(0, fnEnd) : tail;
+    expect(fnBody).not.toMatch(/planning file 133/);
+  });
+
+  it('session-proxy does NOT reference internal "planning file 133" in the customer-facing 503 detail', () => {
+    const fnIdx = SESSION.indexOf('registerSessionProxyDisabledRoutes');
+    expect(fnIdx).toBeGreaterThan(-1);
+    const tail = SESSION.slice(fnIdx);
+    const fnEnd = tail.indexOf('export function', 10);
+    const fnBody = fnEnd > 0 ? tail.slice(0, fnEnd) : tail;
+    expect(fnBody).not.toMatch(/planning file 133/);
+  });
+
+  it('both proxy disabled-stubs surface the same customer-readable "Phase 1 SOCKS5 on the roadmap" framing', () => {
+    expect(SAVED).toMatch(/Phase 1 SOCKS5 support is on the roadmap/);
+    expect(SESSION).toMatch(/Phase 1 SOCKS5 support is on the roadmap/);
+  });
+
+  it("both proxy disabled-stubs tell customers that sessions route through Driftstack's default egress until activation", () => {
+    // Customers reading the 503 need to know the impact: their
+    // sessions still work, just not via their custom proxy yet.
+    expect(SAVED).toMatch(/route through Driftstack's default egress/);
+    expect(SESSION).toMatch(/route through Driftstack's default egress/);
   });
 });
