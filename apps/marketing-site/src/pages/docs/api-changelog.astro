@@ -44,7 +44,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         API secret is encrypted at rest under the existing
         <code>MFA_ENCRYPTION_KEY</code> (same envelope as BYOK Anthropic
         + gui_control_key + MFA TOTP); plaintext is decrypted in-memory
-        only at JWT-mint time.
+        only at JWT-mint time. Every successful registration writes a
+        <code>mac_node.livekit_registered</code> row to the admin audit
+        log attributing the operator + recording the
+        <code>mac_node_id</code> + <code>ws_url</code> — the audit
+        payload deliberately omits the api_key + api_secret so secret
+        material never leaks via audit replay.
       </li>
       <li>
         <strong>SDKs — <code>LiveKitInfo</code> type across TS / Python / Go.</strong>
