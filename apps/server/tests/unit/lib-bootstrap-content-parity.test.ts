@@ -216,6 +216,14 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
+  it('v2-#27 bootstrap-complete log line surfaces rotationReminders state alongside the other activation flags so ops can confirm the v2-#17 daily sweeps are live', () => {
+    // The log line carries `rotationReminders: !rotationRemindersDisabled`
+    // — pinned as a substring match because the surrounding object
+    // literal already has its shape pinned by the activation-flag
+    // tests.
+    expect(body).toMatch(/rotationReminders:\s*!rotationRemindersDisabled/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

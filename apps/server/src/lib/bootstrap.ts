@@ -1170,6 +1170,11 @@ export async function createProductionDeps(
       email: email.isConfigured,
       livekit: livekitActive,
       oauthClient: oauthClientActive,
+      // v2-#27 — rotation-reminder activation state. ops uses this
+      // line to confirm the v2-#17 daily sweeps are running in
+      // production. `true` when neither timer was opt-out-disabled
+      // via DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1.
+      rotationReminders: !rotationRemindersDisabled,
       driver: config.driver,
       env: config.nodeEnv,
     },
