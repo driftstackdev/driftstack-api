@@ -1261,24 +1261,29 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   // Bundled LLM (v2-#6).
-  const BundledLlmSettingsOpenApi = z.object({
-    consent: z.boolean(),
-    monthly_cap_usd_cents: z.number().int().min(0).max(1_000_000),
-  });
+  const BundledLlmSettingsOpenApi = z
+    .object({
+      consent: z.boolean(),
+      monthly_cap_usd_cents: z.number().int().min(0).max(1_000_000),
+    })
+    .openapi('BundledLlmSettings');
   const PatchBundledLlmRequestOpenApi = z
     .object({
       consent: z.boolean().optional(),
       monthly_cap_usd_cents: z.number().int().min(0).max(1_000_000).optional(),
     })
-    .describe('At least one of consent / monthly_cap_usd_cents must be present.');
-  const BundledLlmStatusOpenApi = z.object({
-    consent: z.boolean(),
-    cap_cents: z.number().int().min(0),
-    used_this_month_cents: z.number().int().min(0),
-    remaining_cents: z.number().int().min(0),
-    refused_count_this_month: z.number().int().min(0),
-    month_started_at: z.string(),
-  });
+    .describe('At least one of consent / monthly_cap_usd_cents must be present.')
+    .openapi('PatchBundledLlmRequest');
+  const BundledLlmStatusOpenApi = z
+    .object({
+      consent: z.boolean(),
+      cap_cents: z.number().int().min(0),
+      used_this_month_cents: z.number().int().min(0),
+      remaining_cents: z.number().int().min(0),
+      refused_count_this_month: z.number().int().min(0),
+      month_started_at: z.string(),
+    })
+    .openapi('BundledLlmStatus');
   registerRoute(r, {
     method: 'get',
     path: '/v1/account/me/bundled-llm-settings',

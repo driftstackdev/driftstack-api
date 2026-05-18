@@ -300,6 +300,45 @@ describe('OpenAPI spec generation', () => {
   // `RegisterMacNodeRequestRequest`) which makes the operator-facing
   // Python regen harder to consume. Pin both as `RegisterMacNodeRequest`
   // and `RegisterMacNodeResponse`.
+  // v2-#6 — Bundled-LLM settings + status schemas. These are
+  // customer-facing dashboard read/write surfaces. Naming them lets
+  // pydantic regen produce `BundledLlmSettings` + `BundledLlmStatus`
+  // + `PatchBundledLlmRequest` classes instead of anonymous types,
+  // matching the TS dashboard component prop shape.
+  it('v2-#6 — Bundled-LLM settings + status + patch-request are named component schemas', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const schemas = spec.components?.schemas as Record<string, unknown> | undefined;
+    expect(schemas).toBeDefined();
+    const names = Object.keys(schemas ?? {});
+    expect(names).toContain('BundledLlmSettings');
+    expect(names).toContain('PatchBundledLlmRequest');
+    expect(names).toContain('BundledLlmStatus');
+
+    const settings = schemas?.BundledLlmSettings as
+      | { type?: string; properties?: Record<string, unknown> }
+      | undefined;
+    expect(settings?.type).toBe('object');
+    expect(Object.keys(settings?.properties ?? {}).sort()).toEqual(
+      ['consent', 'monthly_cap_usd_cents'].sort(),
+    );
+
+    const status = schemas?.BundledLlmStatus as
+      | { type?: string; properties?: Record<string, unknown> }
+      | undefined;
+    expect(status?.type).toBe('object');
+    expect(Object.keys(status?.properties ?? {}).sort()).toEqual(
+      [
+        'cap_cents',
+        'consent',
+        'month_started_at',
+        'refused_count_this_month',
+        'remaining_cents',
+        'used_this_month_cents',
+      ].sort(),
+    );
+  });
+
   it('LK.2 — RegisterMacNodeRequest + RegisterMacNodeResponse are named component schemas', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();
