@@ -400,6 +400,13 @@
       "when": 1778176806000,
       "tag": "0056_fleet_nodes_livekit_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1778176807000,
+      "tag": "0057_admin_audit_mac_node_livekit_registered",
+      "breakpoints": true
     }
   ]
 }

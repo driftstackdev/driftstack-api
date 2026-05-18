@@ -122,7 +122,13 @@ describe('W936 D-025 admin-audit cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-audit.ts'));
     expect(p).toMatch(/\/\/ V-295c3-tombstone: status-page email subscriber admin actions\./);
     expect(p).toMatch(/\| 'status_subscriber\.force_unsubscribed'/);
-    expect(p).toMatch(/\| 'status_subscriber\.purged';/);
+    expect(p).toMatch(/\| 'status_subscriber\.purged'/);
+  });
+
+  it("CRITICAL LK.2 anchor — 'LK.2: per-Mac LiveKit credential registration (migration 0057)' + mac_node.livekit_registered. The 1-action LK.2 group covers operator provisioning of per-Mac LiveKit credentials via POST /v1/mac-nodes/register.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-audit.ts'));
+    expect(p).toMatch(/\/\/ LK\.2: per-Mac LiveKit credential registration \(migration 0057\)\./);
+    expect(p).toMatch(/\| 'mac_node\.livekit_registered';/);
   });
 
   // ─── AdminAuditLogRow 10-field shape ─────────────────────────

@@ -17,11 +17,12 @@
 // fleet_nodes (LK.1's note explains the alignment). The route
 // validates the mac_node_id against the existing fleet_nodes row.
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { encryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import { BadRequestError, NotFoundError, ValidationError } from '../lib/errors.js';
+import type { AdminAuditService } from '../services/admin-audit.js';
 
 const RegisterBodySchema = z.object({
   mac_node_id: z.string().uuid('mac_node_id must be a UUID matching an existing fleet_nodes row.'),
@@ -40,6 +41,13 @@ export interface RegisterMacNodesRoutesDeps {
   encryptionKey: string;
   /** Now-provider (test-injectable). Defaults to `new Date()`. */
   now?: () => Date;
+  /** Optional admin-audit emitter. When wired, every successful
+   *  registration writes an `mac_node.livekit_registered` row
+   *  attributing the operator. Secret material (api_key + api_secret)
+   *  is NEVER payloaded into the audit row — only mac_node_id +
+   *  ws_url, which are non-sensitive. Failures are swallowed so a
+   *  metric/db hiccup doesn't break credential persistence. */
+  adminAudit?: AdminAuditService;
 }
 
 export function registerMacNodesRoutes(
@@ -90,6 +98,31 @@ export function registerMacNodesRoutes(
         );
       }
 
+      // LK.2 audit emission — operators provisioning Macs is exactly
+      // the kind of event the admin audit log exists to capture.
+      // Best-effort: a failure here cannot revert the persisted
+      // credentials, so swallow + carry on. The audit payload carries
+      // ONLY non-sensitive metadata (ws_url + mac_node_id); the
+      // api_key + api_secret never leave the encrypt scope above.
+      if (deps.adminAudit !== undefined) {
+        const ctx = req.account;
+        if (ctx) {
+          try {
+            await deps.adminAudit.record({
+              adminAccountId: ctx.account.id,
+              adminKeyId: ctx.apiKey.id,
+              action: 'mac_node.livekit_registered',
+              targetResourceId: `mac_node_${body.mac_node_id}`,
+              inputPayload: { ws_url: body.livekit.ws_url },
+              result: 'success',
+              ipAddress: clientIp(req),
+            });
+          } catch {
+            // Swallow — best-effort. Credentials are already persisted.
+          }
+        }
+      }
+
       // Response is intentionally minimal — never echoes the api_key
       // (treated as secret-equivalent per the orchestrator brief)
       // and obviously never echoes the api_secret.
@@ -100,4 +133,8 @@ export function registerMacNodesRoutes(
       });
     },
   );
+}
+
+function clientIp(request: FastifyRequest): string | null {
+  return request.ip ?? null;
 }

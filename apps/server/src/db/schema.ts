@@ -170,6 +170,8 @@ export const adminAuditAction = pgEnum('admin_audit_action', [
   // V-295c3-tombstone: status-page email subscriber admin actions.
   'status_subscriber.force_unsubscribed',
   'status_subscriber.purged',
+  // LK.2: per-Mac LiveKit credential registration (migration 0057).
+  'mac_node.livekit_registered',
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────
