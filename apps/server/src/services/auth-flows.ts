@@ -90,6 +90,11 @@ export interface AuthFlowsRepo {
     name: string | null;
     passwordHash: string;
     initialTier: AccountTier;
+    // Arc 1 sub-slice 6.2 (v2-#6) — bundled-LLM opt-in captured at
+    // signup; both flow through to migration 0050's column defaults
+    // when omitted (consent=false, cap=$20).
+    bundledLlmConsent?: boolean;
+    bundledLlmMonthlyCapUsdCents?: number;
   }): Promise<AuthFlowAccountRow>;
   /** Update password_hash. */
   setPassword(accountId: string, passwordHash: string): Promise<void>;
@@ -197,6 +202,14 @@ export interface SignupArgs {
   password: string;
   name?: string;
   requestedFromIp: string | null;
+  /**
+   * Arc 1 sub-slice 6.2 (v2-#6) — bundled-LLM opt-in captured at
+   * signup. Both default through to the migration 0050 column defaults
+   * (consent=false, cap=$20). The route layer validates the cap range;
+   * the service forwards verbatim to the repo's createAccount call.
+   */
+  bundledLlmConsent?: boolean;
+  bundledLlmMonthlyCapUsdCents?: number;
 }
 
 export interface SignupResult {
@@ -406,6 +419,12 @@ export class AuthFlowsService {
       name: args.name ?? null,
       passwordHash,
       initialTier: this.config.initialTier ?? 'trial_pack',
+      ...(args.bundledLlmConsent !== undefined
+        ? { bundledLlmConsent: args.bundledLlmConsent }
+        : {}),
+      ...(args.bundledLlmMonthlyCapUsdCents !== undefined
+        ? { bundledLlmMonthlyCapUsdCents: args.bundledLlmMonthlyCapUsdCents }
+        : {}),
     });
 
     const plaintext = generateAuthToken();

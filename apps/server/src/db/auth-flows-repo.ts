@@ -99,6 +99,9 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
     name: string | null;
     passwordHash: string;
     initialTier: AccountTier;
+    // Arc 1 sub-slice 6.2 (v2-#6) — optional bundled-LLM opt-in.
+    bundledLlmConsent?: boolean;
+    bundledLlmMonthlyCapUsdCents?: number;
   }): Promise<AuthFlowAccountRow> {
     const [row] = await this.database.db
       .insert(accounts)
@@ -107,6 +110,12 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
         name: args.name,
         passwordHash: args.passwordHash,
         tier: args.initialTier,
+        ...(args.bundledLlmConsent !== undefined
+          ? { bundledLlmConsent: args.bundledLlmConsent }
+          : {}),
+        ...(args.bundledLlmMonthlyCapUsdCents !== undefined
+          ? { bundledLlmMonthlyCapUsdCents: args.bundledLlmMonthlyCapUsdCents }
+          : {}),
       })
       .returning();
     if (!row) throw new Error('createAccount: insert returned no row');

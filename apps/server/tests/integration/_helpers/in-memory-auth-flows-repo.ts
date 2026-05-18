@@ -57,6 +57,13 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     name: string | null;
     passwordHash: string;
     initialTier: AuthFlowAccountRow['tier'];
+    // Arc 1 sub-slice 6.2 (v2-#6) — bundled-LLM opt-in. The
+    // in-memory row doesn't surface these on AuthFlowAccountRow
+    // today (the type stays narrow); accepting them as no-ops
+    // preserves caller parity with the Drizzle path so tests can
+    // exercise the signup wire without TS errors.
+    bundledLlmConsent?: boolean;
+    bundledLlmMonthlyCapUsdCents?: number;
   }): Promise<AuthFlowAccountRow> {
     const now = new Date();
     const row: AuthFlowAccountRow = {

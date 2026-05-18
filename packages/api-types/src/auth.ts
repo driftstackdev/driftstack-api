@@ -47,6 +47,16 @@ export const SignupRequestSchema = z.object({
   password: AuthPasswordSchema,
   // Optional display name. Server stores untrimmed-but-bounded.
   name: z.string().min(1).max(120).optional(),
+  /**
+   * Arc 1 sub-slice 6.2 (v2-#6) — bundled-LLM opt-in collected at
+   * signup time. Defaults to false; the customer must explicitly tick
+   * the dashboard checkbox to enable. Pairs with `bundled_llm_monthly_cap_usd_cents`
+   * which sets a soft-cap on per-month spend (default $20, range
+   * [$0, $10,000] enforced server-side). Both fields land on the
+   * `accounts` row via migration 0050.
+   */
+  bundled_llm_consent: z.boolean().optional(),
+  bundled_llm_monthly_cap_usd_cents: z.number().int().min(0).max(1_000_000).optional(),
 });
 export type SignupRequest = z.infer<typeof SignupRequestSchema>;
 

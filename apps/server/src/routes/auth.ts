@@ -155,6 +155,15 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
         password: parsed.data.password,
         name: parsed.data.name,
         requestedFromIp: clientIp(req),
+        // Arc 1 sub-slice 6.2 (v2-#6) — opt-in bundled-LLM capture.
+        // Both fields optional; column defaults from migration 0050
+        // are consent=false + cap=2000 ($20) when omitted.
+        ...(parsed.data.bundled_llm_consent !== undefined
+          ? { bundledLlmConsent: parsed.data.bundled_llm_consent }
+          : {}),
+        ...(parsed.data.bundled_llm_monthly_cap_usd_cents !== undefined
+          ? { bundledLlmMonthlyCapUsdCents: parsed.data.bundled_llm_monthly_cap_usd_cents }
+          : {}),
       });
       return {
         verification_email_expires_at: result.verifyExpiresAt.toISOString(),

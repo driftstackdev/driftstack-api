@@ -85,13 +85,13 @@ describe('W900 Signup flow cross-source invariant', () => {
 
   // ─── 3-field SignupRequest cardinality ───────────────────────
 
-  it('CRITICAL SignupRequest = EXACTLY 3 fields — email + password + name (optional). The 3-field shape intentionally avoids signup-time CAPTCHA / phone-number / source / referral_code fields — those are post-verify enhancements, not signup requirements.', () => {
+  it('CRITICAL SignupRequest = EXACTLY 5 fields — email + password + name (optional) + bundled_llm_consent (Arc 1 sub-slice 6.2 v2-#6) + bundled_llm_monthly_cap_usd_cents. The 5-field shape intentionally avoids signup-time CAPTCHA / phone-number / source / referral_code fields — those are post-verify enhancements, not signup requirements.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
     const m = p.match(/SignupRequestSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();
     const body = m![1] ?? '';
     const fieldCount = (body.match(/^\s*[a-z_]+:/gm) || []).length;
-    expect(fieldCount).toBe(3);
+    expect(fieldCount).toBe(5);
   });
 
   // ─── No forbidden signup fields ──────────────────────────────
