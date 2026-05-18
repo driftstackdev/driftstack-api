@@ -1,7 +1,7 @@
-// Cross-source invariant — activation-gate pattern is now used 6 times
+// Cross-source invariant — activation-gate pattern is now used 7 times
 // (billing / session-proxy / saved-proxies / agent-sessions /
-// fleet-events / byok-anthropic) and the pattern is structurally
-// identical across all 6:
+// fleet-events / byok-anthropic / recipes) and the pattern is
+// structurally identical across all 7:
 //
 //   1. Each route file exports BOTH `registerXxxRoutes(app, deps)`
 //      AND `registerXxxDisabledRoutes(app)`.
