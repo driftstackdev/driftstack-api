@@ -356,6 +356,22 @@ describe('OpenAPI spec generation', () => {
     );
   });
 
+  it('endpoint descriptions do NOT reference internal-docs paths (customers consume the OpenAPI spec via Scalar UI; internal paths confuse + leak repo structure)', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const json = JSON.stringify(spec);
+    // The fleet-events 503 description previously listed two internal
+    // design docs by path. Customers reading the Scalar-rendered spec
+    // would see internal-only repo structure they have no access to.
+    // Drift-guard pins the clean shape.
+    expect(json).not.toMatch(/docs\/internal\/fleet-nodes-sql-migration-design/);
+    expect(json).not.toMatch(/docs\/internal\/cross-agent-control-plane-contract/);
+    // The fleet-events 503 description still carries the load-bearing
+    // operator-only framing so customer API-key holders know it's not
+    // for them.
+    expect(json).toMatch(/operator-only \(fleet nodes auth via mTLS\)/);
+  });
+
   it('LK.2 — RegisterMacNodeRequest + RegisterMacNodeResponse are named component schemas', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();

@@ -2894,7 +2894,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       503: {
         description:
-          'Fleet events stream not yet implemented. Both the AppDeps-wired path and the activation-gate-off path return 503 in this slice — the WebSocket handler + Cloudflare AOP + fleet_nodes SQL migration are pending (see docs/internal/fleet-nodes-sql-migration-design.md + docs/internal/cross-agent-control-plane-contract.md).',
+          'Fleet events stream not yet implemented. Both the AppDeps-wired path and the activation-gate-off path return 503 — the WebSocket handler + Cloudflare AOP + fleet_nodes SQL migration are pending. This endpoint is operator-only (fleet nodes auth via mTLS); customer API keys have no role here.',
         content: problemContent,
       },
     },
