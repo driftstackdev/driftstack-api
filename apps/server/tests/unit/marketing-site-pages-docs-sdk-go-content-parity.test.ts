@@ -78,12 +78,14 @@ describe('W514.A apps/marketing-site/src/pages/docs/sdk-go.astro content parity'
     expect(body).toMatch(/\/\/ Idempotent\./);
   });
 
-  it("Wait kind='time' + Capture kind='screenshot' + Destroy framing pinned + 'For batch workloads, prefer webhooks over polling.' — pinned so the Wait/Capture/Destroy snippets + webhooks-over-polling commitment survive (drift to dropping the prefer-webhooks framing would let batch-workload customers default to polling)", () => {
-    expect(body).toMatch(/Kind:\s+"time"/);
-    expect(body).toMatch(/DurationMs: 1000/);
+  it("Wait kind='time' + Capture kind='screenshot' + Destroy framing pinned + 'For batch workloads, prefer webhooks over polling.' — pinned so the Wait/Capture/Destroy snippets + webhooks-over-polling commitment survive (drift to dropping the prefer-webhooks framing would let batch-workload customers default to polling). Wait uses the canonical NewTimeCondition() constructor — the previous pin asserted `Kind: \"time\"` + `DurationMs: 1000` directly on WaitRequest, but the actual SDK shape is `Condition: WaitCondition{Kind, MS}` per packages/sdk-go/types.go:393 (the WaitRequest wraps a WaitCondition; the time-variant uses MS not DurationMs). Customer Go code copy-pasting from the previous shape would not compile.", () => {
+    expect(body).toMatch(/Condition:\s+driftstack\.NewTimeCondition\(1000\)/);
     expect(body).toMatch(/Kind: "screenshot"/);
     expect(body).toMatch(/shot\.ByteSize/);
     expect(body).toMatch(/client\.Sessions\.Destroy\(ctx, session\.ID\)/);
+    // The previous (wrong) flat shape must NOT return.
+    expect(body).not.toMatch(/Kind:\s+"time"/);
+    expect(body).not.toMatch(/DurationMs: 1000/);
     expect(body).toMatch(
       /For batch workloads, prefer\s*\n?\s*<a href="\/docs\/webhooks">webhooks<\/a> over polling\./,
     );

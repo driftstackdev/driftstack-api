@@ -93,8 +93,7 @@ log.Println(session.ID, session.Status, session.Archetype)`}</code></pre>
 if err != nil { return err }
 
 _, err = client.Sessions.Wait(ctx, session.ID, &driftstack.WaitRequest{
-    Kind:       "time",
-    DurationMs: 1000,
+    Condition: driftstack.NewTimeCondition(1000),
 })
 if err != nil { return err }
 
