@@ -81,6 +81,12 @@ The current counter catalogue (all `driftstack_*` namespaced):
 | `driftstack_account_audit_emit_total` | `prefix`, `actor_type` | Customer-facing audit log emissions, namespace-bucketed      |
 | `driftstack_admin_audit_emit_total`   | `prefix`               | Admin (/v1/admin/\*) audit log emissions, namespace-bucketed |
 
+### Live-preview (LiveKit)
+
+| Metric                                | Labels            | What it tracks                                                                                      |
+| ------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------- |
+| `driftstack_livekit_token_mint_total` | `role`, `outcome` | LiveKit token mint requests (role: publisher/subscriber/unknown × outcome: ok/not_found/validation) |
+
 ## Suggested alerts
 
 Reasonable starting alerts (translate to your alert-manager rules
