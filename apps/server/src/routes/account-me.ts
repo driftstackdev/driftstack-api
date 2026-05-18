@@ -184,15 +184,40 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           /* swallow */
         }
       }
+      // Return the same full-shape response as GET /me — the OpenAPI
+      // spec + every SDK type claim AccountMeResponse (15 fields).
+      // Previously the route returned only the 8 written/persisted
+      // fields, causing a type-vs-runtime mismatch on every SDK
+      // consumer (avatar_url / mfa_enrolled / concurrent_session_*
+      // / profile_* / teams[] all undefined under types claiming
+      // string|null / boolean / number / array).
+      const tier = updated.tier;
+      const [activeSessions, profileCount, avatarUrl, mfaStatus] = await Promise.all([
+        sessionRepo.countActiveSessions(updated.id),
+        profilesRepo.countByAccount(updated.id),
+        presignAvatar(updated.avatarR2Key),
+        mfaService ? mfaService.getStatus(updated.id) : Promise.resolve(null),
+      ]);
       return {
         id: `acc_${updated.id}`,
         email: updated.email,
         name: updated.name,
-        tier: updated.tier,
+        tier,
         status: updated.status,
         timezone: updated.timezone,
         slug: updated.slug,
         region: updated.region,
+        avatar_url: avatarUrl,
+        mfa_enrolled: mfaStatus !== null && mfaStatus.enrolled,
+        concurrent_session_cap: TIER_CONCURRENT_SESSION_LIMITS[tier],
+        concurrent_session_active: activeSessions,
+        profile_cap: profileCapFor(tier),
+        profile_count: profileCount,
+        teams: ctx.teams.map((t) => ({
+          owner_account_id: `acc_${t.ownerAccountId}`,
+          role: t.role,
+          membership_id: `mem_${t.membershipId}`,
+        })),
       };
     },
   );
