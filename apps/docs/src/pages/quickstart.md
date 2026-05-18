@@ -126,6 +126,9 @@ func main() {
 
 - **[Profile management](/guides/profile-management/)** — persistent profiles let a session resume cookies, storage, and trust signals across runs.
 - **[Session lifecycle](/guides/session-lifecycle/)** — full lifecycle reference (states, idle timeout, recovery on reconnect).
+- **[Agent sessions](/api/agent-sessions/)** — natural-language decompose-and-execute on top of any driver session. Three operational modes: AI (default), manual (pass-through), pair (interactive takeover state machine). Live transcript stream via Server-Sent Events.
+- **[Bundled LLM](/api/bundled-llm/)** and **[BYOK Anthropic](/api/byok-anthropic/)** — the two LLM rails agent sessions can use. BYOK encrypts your Anthropic key at rest + decrypts in-memory only at execution; the bundled rail uses a deployment-managed budget for accounts that don't want to manage their own key.
+- **[Idempotency keys](/reference/idempotency/)** — send an `Idempotency-Key` header on create-style POSTs so a network retry replays the original response instead of minting a duplicate session.
 - **[Webhook event catalog](/webhooks/events/)** — push notifications when sessions transition state, billing events fire, etc.
 - **[API versioning policy](/api/versioning/)** — what changes are additive, what triggers `/v2/*`, deprecation cycles.
 
