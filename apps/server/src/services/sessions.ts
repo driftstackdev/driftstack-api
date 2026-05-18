@@ -76,6 +76,14 @@ export interface SessionRecord {
     dns_remote_resolve: boolean;
     warnings: string[];
   } | null;
+  /**
+   * Arc 5 EGRESS eg.1 — RAW harness-emitted event payload (migration
+   * 0054). Stored alongside the derived `egressCapabilities` view
+   * for forensics + schema-evolution safety. Opaque JSON; consumers
+   * MUST prefer `egressCapabilities` for typed access. Null until
+   * the harness emits.
+   */
+  egressCapabilityReport: Record<string, unknown> | null;
   createdAt: Date;
   updatedAt: Date;
   lastStateAt: Date | null;
@@ -143,6 +151,28 @@ export interface SessionRepo {
     accountId?: string;
   }): Promise<SessionListPage>;
   recordEvent(input: SessionEventInput): Promise<void>;
+  /**
+   * Arc 5 EGRESS eg.1/eg.2 — persist the harness-emitted
+   * `egress.capability_report` event. Stores BOTH the raw payload
+   * (egress_capability_report column, migration 0054) for forensics
+   * + the derived view (egress_capabilities column, migration 0045)
+   * for SDK + dashboard consumption.
+   *
+   * Idempotent — repeat reports overwrite (the harness may emit
+   * multiple times during a session's lifetime; we keep the latest).
+   * Returns null when no session matches the id (the harness might
+   * race ahead of the session-create on faulty deployments).
+   */
+  setEgressCapabilityReport(args: {
+    sessionId: string;
+    derived: {
+      udp_associate: boolean;
+      quic_route: 'proxy' | 'direct' | 'disabled';
+      dns_remote_resolve: boolean;
+      warnings: string[];
+    };
+    raw: Record<string, unknown>;
+  }): Promise<SessionRecord | null>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

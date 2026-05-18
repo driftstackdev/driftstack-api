@@ -110,6 +110,28 @@ export class DrizzleSessionRepo implements SessionRepo {
     });
   }
 
+  async setEgressCapabilityReport(args: {
+    sessionId: string;
+    derived: {
+      udp_associate: boolean;
+      quic_route: 'proxy' | 'direct' | 'disabled';
+      dns_remote_resolve: boolean;
+      warnings: string[];
+    };
+    raw: Record<string, unknown>;
+  }): Promise<SessionRecord | null> {
+    const [row] = await this.database.db
+      .update(sessions)
+      .set({
+        egressCapabilities: args.derived,
+        egressCapabilityReport: args.raw,
+        updatedAt: new Date(),
+      })
+      .where(eq(sessions.id, args.sessionId))
+      .returning();
+    return row ? toSessionRecord(row) : null;
+  }
+
   async listAllSessions(opts: {
     limit: number;
     cursor?: string;
@@ -152,6 +174,7 @@ function toSessionRecord(r: typeof sessions.$inferSelect): SessionRecord {
     label: r.label,
     metadata: r.metadata ?? null,
     egressCapabilities: r.egressCapabilities ?? null,
+    egressCapabilityReport: r.egressCapabilityReport ?? null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     lastStateAt: r.lastStateAt,

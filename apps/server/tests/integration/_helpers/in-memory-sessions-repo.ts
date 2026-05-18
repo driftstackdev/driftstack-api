@@ -31,6 +31,7 @@ export class InMemorySessionsRepo implements SessionRepo {
       label: input.label,
       metadata: input.metadata,
       egressCapabilities: null,
+      egressCapabilityReport: null,
       createdAt: now,
       updatedAt: now,
       lastStateAt: null,
@@ -123,6 +124,28 @@ export class InMemorySessionsRepo implements SessionRepo {
       createdAt: new Date(),
     });
     return Promise.resolve();
+  }
+
+  setEgressCapabilityReport(args: {
+    sessionId: string;
+    derived: {
+      udp_associate: boolean;
+      quic_route: 'proxy' | 'direct' | 'disabled';
+      dns_remote_resolve: boolean;
+      warnings: string[];
+    };
+    raw: Record<string, unknown>;
+  }): Promise<SessionRecord | null> {
+    const s = this.sessions.get(args.sessionId);
+    if (!s) return Promise.resolve(null);
+    const updated: SessionRecord = {
+      ...s,
+      egressCapabilities: args.derived,
+      egressCapabilityReport: args.raw,
+      updatedAt: new Date(),
+    };
+    this.sessions.set(args.sessionId, updated);
+    return Promise.resolve(updated);
   }
 
   /** Test helper: read all events ever recorded. */
