@@ -70,7 +70,7 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(existsSync(P('sessions.md'))).toBe(true);
   });
 
-  it.skip('profiles.md: named persistent browser identity + cookies/localStorage/IndexedDB inheritance + tier-cap-on-create+clone + V-313 clone auto-derived name pinned', () => {
+  it('profiles.md: named persistent browser identity + cookies/localStorage/IndexedDB inheritance + tier-cap-on-create+clone + V-313 clone auto-derived name pinned', () => {
     const body = read(P('profiles.md'));
     expect(body).toMatch(/^title: Profiles$/m);
     expect(body).toMatch(/^# Profiles$/m);
@@ -80,17 +80,19 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(existsSync(P('profiles.md'))).toBe(true);
   });
 
-  it.skip('profile-snapshots.md: V-511 immutable point-in-time copy of saved profile + frozen-while-source-evolves + capture/list/restore/delete verbs pinned', () => {
+  it('profile-snapshots.md: immutable point-in-time copy of saved profile + frozen-while-source-evolves + capture/list/restore/delete verbs pinned. The previous skip pinned inline `V-511 reference.` prefix that was removed from the customer-facing docs as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the framing itself survives without it.', () => {
     const body = read(P('profile-snapshots.md'));
     expect(body).toMatch(/^title: Profile snapshots$/m);
     expect(body).toMatch(/^# Profile snapshots$/m);
-    expect(body).toMatch(/V-511 reference\. A \*\*profile snapshot\*\* is an immutable/);
+    expect(body).toMatch(/A \*\*profile snapshot\*\* is an immutable/);
     expect(body).toMatch(/point-in-time copy of a saved profile\./);
     expect(body).toMatch(/Snapshots let you freeze a/);
     expect(existsSync(P('profile-snapshots.md'))).toBe(true);
+    // Internal V-anchor must NOT bleed into customer-facing docs copy.
+    expect(body).not.toMatch(/V-511 reference\./);
   });
 
-  it.skip('api-keys.md: Bearer-token Authorization header + Authorization: Bearer <key> + create/list/rotate/revoke verbs (V-296 24h rotate grace) pinned', () => {
+  it('api-keys.md: Bearer-token Authorization header + Authorization: Bearer <key> + create/list/rotate/revoke verbs (V-296 24h rotate grace) pinned', () => {
     const body = read(P('api-keys.md'));
     expect(body).toMatch(/^title: API keys$/m);
     expect(body).toMatch(/^# API keys$/m);
@@ -101,7 +103,7 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(existsSync(P('api-keys.md'))).toBe(true);
   });
 
-  it.skip('account.md: /v1/account/me self-edit surface + bearer-auth + V-298a slug + V-298b region + V-352b avatar + team-RBAC-immune (never honours X-Driftstack-Account) pinned', () => {
+  it('account.md: /v1/account/me self-edit surface + bearer-auth + V-298a slug + V-298b region + V-352b avatar + team-RBAC-immune (never honours X-Driftstack-Account) pinned', () => {
     const body = read(P('account.md'));
     expect(body).toMatch(/^title: Account$/m);
     expect(body).toMatch(/^# Account$/m);
