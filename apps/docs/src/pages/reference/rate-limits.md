@@ -77,15 +77,48 @@ config for your account, including any overrides:
 ```json
 {
   "tier": "api_builder",
-  "buckets": {
-    "global": { "capacity": 1800, "refill_per_second": 30 },
-    "sessions:create": { "capacity": 60, "refill_per_second": 1 }
-  }
+  "buckets": [
+    {
+      "bucket_key": "global",
+      "capacity": 1800,
+      "refill_per_second": 30,
+      "source": "tier_default",
+      "override_expires_at": null
+    },
+    {
+      "bucket_key": "sessions:create",
+      "capacity": 60,
+      "refill_per_second": 1,
+      "source": "tier_default",
+      "override_expires_at": null
+    }
+  ]
 }
 ```
 
+`source` is `"tier_default"` or `"override"`; when an override is
+active, `override_expires_at` carries the auto-revert timestamp.
+Full read-endpoint docs at
+[/api/account-rate-limits](/api/account-rate-limits/).
+
 The customer dashboard at `/usage` surfaces the same data
 visually.
+
+## Response headers
+
+Every authenticated `/v1/*` response carries four `x-ratelimit-*`
+headers reflecting the bucket consumed:
+
+| Header                  | Meaning                                                                     |
+| ----------------------- | --------------------------------------------------------------------------- |
+| `x-ratelimit-bucket`    | Which bucket the call drained (`global` or `sessions:create`).              |
+| `x-ratelimit-limit`     | Bucket capacity (matches the `capacity` row from the read endpoint).        |
+| `x-ratelimit-remaining` | Tokens left in the bucket _after_ this call (integer, floor of fractional). |
+| `x-ratelimit-reset`     | Unix-seconds timestamp when the bucket refills to full capacity.            |
+
+The headers are emitted on every status code (including `429`), so
+retry loops can read them without an extra round-trip — combine
+`x-ratelimit-remaining=0` with `Retry-After` to drive a back-off.
 
 ## Source of truth
 

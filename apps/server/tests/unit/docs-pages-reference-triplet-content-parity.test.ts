@@ -203,14 +203,30 @@ describe('W786 docs reference/ triplet content parity', () => {
     );
   });
 
-  it('CRITICAL GET /v1/account/rate-limits read-your-cap framing pinned. Matches W770 /api/account rate-limits SDK accessor.', () => {
+  it('CRITICAL GET /v1/account/rate-limits read-your-cap framing pinned. Matches W770 /api/account rate-limits SDK accessor. Shape: buckets is an ARRAY of {bucket_key, capacity, refill_per_second, source, override_expires_at} — matches the actual server response in apps/server/src/routes/account-rate-limits.ts (the previous "buckets is object" pin was source-of-truth-divergent).', () => {
     const p = read(RL);
 
     expect(p).toMatch(
       /`GET \/v1\/account\/rate-limits` returns the effective per-bucket\s*\n?config for your account, including any overrides:/,
     );
     expect(p).toMatch(/"tier": "api_builder",/);
-    expect(p).toMatch(/"global": \{ "capacity": 1800, "refill_per_second": 30 \}/);
+    // Array shape — same as /api/account-rate-limits canonical docs.
+    expect(p).toMatch(/"buckets": \[/);
+    expect(p).toMatch(/"bucket_key": "global"/);
+    expect(p).toMatch(/"bucket_key": "sessions:create"/);
+    expect(p).toMatch(/"source": "tier_default"/);
+    expect(p).toMatch(/"override_expires_at": null/);
+  });
+
+  it('CRITICAL x-ratelimit-* response headers documented on the reference page (same 4-header surface as /api/account-rate-limits). Drift would orphan SDK consumers from the per-response capacity/remaining/reset signal.', () => {
+    const p = read(RL);
+
+    expect(p).toMatch(/`x-ratelimit-bucket`/);
+    expect(p).toMatch(/`x-ratelimit-limit`/);
+    expect(p).toMatch(/`x-ratelimit-remaining`/);
+    expect(p).toMatch(/`x-ratelimit-reset`/);
+    expect(p).toMatch(/emitted on every status code/);
+    expect(p).toMatch(/`x-ratelimit-remaining=0` with `Retry-After`/);
   });
 
   it('CRITICAL TIER_RATE_LIMIT_DEFAULTS source-of-truth pinned. Mirror sites: packages/api-types + apps/server/src/services/rate-limit.ts bucketConfigFor().', () => {
