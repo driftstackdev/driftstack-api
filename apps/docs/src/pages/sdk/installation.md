@@ -187,6 +187,8 @@ asyncio.run(main())
 | Accessor                   | Methods                                                                                                                                       |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy`                                                    |
+| `client.agent_sessions`    | `create`, `get`, `message`, `close`, `takeover`, `handback`, `livekit_token` (sync + async)                                                   |
+| `client.recipes`           | `create` (write-only at v1.0; read/list/execute/delete at v1.1)                                                                               |
 | `client.profiles`          | `create`, `list`, `get`, `delete`                                                                                                             |
 | `client.api_keys`          | `create`, `list`, `rotate` , `revoke`                                                                                                         |
 | `client.usage`             | `current_period`                                                                                                                              |
