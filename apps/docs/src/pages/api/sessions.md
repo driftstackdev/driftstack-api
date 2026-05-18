@@ -168,17 +168,29 @@ Supported discriminator values on `action.kind`:
 
 `POST /v1/sessions/:id/wait`
 
+The body wraps the typed condition under `condition` plus an
+optional top-level `timeout_ms` (100ms – 120s):
+
 ```json
 {
-  "kind": "selector",
-  "selector": "div.results",
+  "condition": {
+    "kind": "selector",
+    "selector": "div.results"
+  },
   "timeout_ms": 5000
 }
 ```
 
-`kind`: `'selector'` (DOM appears), `'navigation'` (next nav
-completes), or `'duration'` (just sleep). The `duration` form
-counts toward your minute-meter.
+Supported `condition.kind` values per the WaitCondition
+discriminated union in `packages/api-types/src/sessions.ts`:
+
+- `selector` — wait for `selector` to appear in the DOM.
+- `selector_hidden` — wait for `selector` to disappear from the
+  DOM (or to be `display:none` / `visibility:hidden` / detached).
+- `url_matches` — wait for the navigation URL to match the regex
+  `pattern` (anchored at `^` is recommended).
+- `time` — sleep for `ms` milliseconds (max 60,000). The
+  `time` form counts toward your minute-meter.
 
 ## Get state
 
@@ -197,8 +209,11 @@ Useful for checkpoint-like reads without a full screenshot.
 }
 ```
 
-`kind`: `'screenshot'` (PNG, base64-encoded in response) or
-`'pdf'`. Screenshots cap at 4 MiB; PDFs at 8 MiB.
+`kind` is one of: `'screenshot'` (PNG, base64-encoded in
+response), `'dom_snapshot'` (the serialised DOM as raw text), or
+`'pdf'`. Screenshots cap at 4 MiB; PDFs at 8 MiB. The response
+carries `encoding`: `'base64'` for screenshot+pdf, `'utf8'` for
+`dom_snapshot`.
 
 ## Destroy
 

@@ -300,7 +300,7 @@ fmt.Println(session.ID)
 curl -X POST $URL/navigate \\
   -d '{"url":"https://example.com"}' ...
 curl -X POST $URL/interact \\
-  -d '{"action":{"kind":"tap_at","x":50,"y":120}}' ...
+  -d '{"action":{"kind":"tap","selector":"button.cta"}}' ...
 curl -X POST $URL/wait \\
   -d '{"condition":{"kind":"selector","selector":"main"}}' ...
 `}</code></pre>
@@ -308,7 +308,7 @@ curl -X POST $URL/wait \\
             class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 await client.sessions.navigate(session.id, { url: "https://example.com" });
 await client.sessions.interact(session.id, {
-  action: { kind: "tap_at", x: 50, y: 120 },
+  action: { kind: "tap", selector: "button.cta" },
 });
 await client.sessions.wait(session.id, {
   condition: { kind: "selector", selector: "main" },
@@ -319,7 +319,7 @@ await client.sessions.wait(session.id, {
             class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 client.sessions.navigate(session.id, url="https://example.com")
 client.sessions.interact(session.id, action={
-    "kind": "tap_at", "x": 50, "y": 120,
+    "kind": "tap", "selector": "button.cta",
 })
 client.sessions.wait(session.id, condition={
     "kind": "selector", "selector": "main",
@@ -331,7 +331,7 @@ _, err = client.Sessions.Navigate(ctx, session.ID, &driftstack.NavigateParams{
     URL: "https://example.com",
 })
 _, err = client.Sessions.Interact(ctx, session.ID, &driftstack.InteractParams{
-    Action: driftstack.TapAt{X: 50, Y: 120},
+    Action: driftstack.Tap{Selector: "button.cta"},
 })
 `}</code></pre>
         </div>

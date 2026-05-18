@@ -70,7 +70,7 @@ print(session["id"], session["status"], session["archetype"])`}</code></pre>
       blocks on a server-side condition (selector, URL, time):
     </p>
     <pre><code>{`client.sessions.navigate(session["id"], {"url": "https://example.com"})
-client.sessions.wait(session["id"], {"kind": "time", "duration_ms": 1000})
+client.sessions.wait(session["id"], {"condition": {"kind": "time", "ms": 1000}})
 shot = client.sessions.capture(session["id"], {"kind": "screenshot"})
 print("captured", shot["byte_size"], "bytes")
 client.sessions.destroy(session["id"])  # idempotent`}</code></pre>

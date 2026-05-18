@@ -200,7 +200,10 @@ await client.sessions.interact(session.id, {
 await client.sessions.interact(session.id, {
   action: { kind: 'tap', selector: 'button[type=submit]' },
 });
-await client.sessions.wait(session.id, { kind: 'selector', selector: '#dashboard', timeout_ms: 10000 });
+await client.sessions.wait(session.id, {
+  condition: { kind: 'selector', selector: '#dashboard' },
+  timeout_ms: 10000,
+});
 const state = await client.sessions.getState(session.id);
 await client.sessions.destroy(session.id);`}</code></pre>
 

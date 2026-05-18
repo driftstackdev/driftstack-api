@@ -84,7 +84,9 @@ console.log(session.id, session.status, session.archetype);`}</code></pre>
     </p>
     <pre><code>{`// Drive the session.
 await client.sessions.navigate(session.id, { url: 'https://example.com' });
-await client.sessions.wait(session.id, { kind: 'time', duration_ms: 1000 });
+await client.sessions.wait(session.id, {
+  condition: { kind: 'time', ms: 1000 },
+});
 const png = await client.sessions.capture(session.id, { kind: 'screenshot' });
 console.log('Captured', png.byte_size, 'bytes');
 
