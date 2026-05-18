@@ -1,0 +1,96 @@
+{
+  "annotations": { "list": [] },
+  "description": "Arc 4 Wave 2.B sub-slice 8.22 — bundled-LLM resolution observability. Counters: driftstack_bundled_llm_request_total{outcome}, driftstack_bundled_llm_error_total{kind}.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "options": { "legend": { "displayMode": "table", "placement": "right" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (outcome) (rate(driftstack_bundled_llm_request_total[5m]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Bundled-LLM successful resolutions per second",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "options": { "legend": { "displayMode": "table", "placement": "right" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (kind) (rate(driftstack_bundled_llm_error_total[5m]))",
+          "legendFormat": "{{kind}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Bundled-LLM errors per second (by kind)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "id": 3,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(driftstack_bundled_llm_error_total{kind=\"consent_missing\"}[15m])) / (sum(rate(driftstack_bundled_llm_request_total{outcome=\"ok\"}[15m])) + sum(rate(driftstack_bundled_llm_error_total[15m])))",
+          "legendFormat": "consent_missing ratio",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(driftstack_bundled_llm_error_total{kind=\"budget_exhausted\"}[15m])) / (sum(rate(driftstack_bundled_llm_request_total{outcome=\"ok\"}[15m])) + sum(rate(driftstack_bundled_llm_error_total[15m])))",
+          "legendFormat": "budget_exhausted ratio",
+          "refId": "B"
+        }
+      ],
+      "title": "Bundled-LLM error ratios (15m windows)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "tags": ["driftstack", "bundled-llm", "v2-#6", "v2-#8"],
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "multi": false,
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "queryValue": "",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "Driftstack — Bundled-LLM resolutions",
+  "uid": "driftstack-bundled-llm",
+  "version": 1,
+  "weekStart": "monday"
+}
