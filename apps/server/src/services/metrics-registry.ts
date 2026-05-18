@@ -230,4 +230,15 @@ export const METRIC_NAMES = {
   // set). A spike in 'postmark_pending_approval' = the approval is
   // still blocking transactional traffic; ops priority bump.
   emailSendTotal: 'driftstack_email_send_total',
+  // Arc 7 obs.14 — outbound webhook delivery counters. The dispatcher
+  // emits TWO counters per delivery:
+  //   - attempt_total{outcome} — every HTTP attempt (success /
+  //     http_error / timeout / transport_error). Spike in
+  //     transport_error or timeout fingerprints a customer endpoint
+  //     outage.
+  //   - terminal_total{terminal_state} — only on terminal state
+  //     transitions (delivered | dlq). dlq counter tracks customers
+  //     whose endpoints have been unreachable for the full retry curve.
+  webhookDeliveryAttemptTotal: 'driftstack_webhook_delivery_attempt_total',
+  webhookDeliveryTerminalTotal: 'driftstack_webhook_delivery_terminal_total',
 } as const;

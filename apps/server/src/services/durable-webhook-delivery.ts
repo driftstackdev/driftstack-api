@@ -42,6 +42,7 @@ import type {
 } from '@driftstack/webhook-delivery';
 import type { Database } from '../db/client.js';
 import { webhookDeliveries, webhookDeliveryAttempts, webhookEndpoints } from '../db/schema.js';
+import { METRIC_NAMES } from './metrics-registry.js';
 
 /** Backoff schedule mirroring V-164 InMemoryWebhookDelivery. */
 export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = {
@@ -61,6 +62,11 @@ export interface DurableWebhookDeliveryDeps {
   fetch?: typeof fetch;
   /** Test seam — defaults to () => Date.now(). */
   now?: () => number;
+  /** Arc 7 obs.14 — optional metrics registry. When wired, the
+   *  worker emits attempt + terminal-state counters per delivery. */
+  metrics?: {
+    inc: (name: string, labels?: Readonly<Record<string, string>>, delta?: number) => void;
+  };
 }
 
 export interface ProcessTickResult {
@@ -98,7 +104,7 @@ export function createDurableWebhookDelivery(
 
   const deliveries = new DurableWebhookDeliveryService(deps.database, now);
   const dlq = new DurableDlqManager(deps.database, now);
-  const worker = new DurableWebhookWorker(deps.database, fetchFn, now);
+  const worker = new DurableWebhookWorker(deps.database, fetchFn, now, deps.metrics);
 
   return {
     deliveries,
@@ -300,6 +306,9 @@ export class DurableWebhookWorker {
     private readonly database: Database,
     private readonly fetchFn: typeof fetch,
     private readonly now: () => number,
+    private readonly metrics?: {
+      inc: (name: string, labels?: Readonly<Record<string, string>>, delta?: number) => void;
+    },
   ) {}
 
   /**
@@ -447,6 +456,13 @@ export class DurableWebhookWorker {
       errorMessage: attempt.errorMessage,
     });
 
+    // Arc 7 obs.14 — per-attempt outcome counter. Best-effort.
+    try {
+      this.metrics?.inc(METRIC_NAMES.webhookDeliveryAttemptTotal, { outcome: attempt.outcome });
+    } catch {
+      // Swallow.
+    }
+
     if (attempt.outcome === 'success') {
       await this.database.db
         .update(webhookDeliveries)
@@ -460,6 +476,13 @@ export class DurableWebhookWorker {
           lastError: null,
         })
         .where(eq(webhookDeliveries.id, delivery.id));
+      try {
+        this.metrics?.inc(METRIC_NAMES.webhookDeliveryTerminalTotal, {
+          terminal_state: 'delivered',
+        });
+      } catch {
+        // Swallow.
+      }
       return 'delivered';
     }
 
@@ -474,6 +497,11 @@ export class DurableWebhookWorker {
           lastError: attempt.errorMessage,
         })
         .where(eq(webhookDeliveries.id, delivery.id));
+      try {
+        this.metrics?.inc(METRIC_NAMES.webhookDeliveryTerminalTotal, { terminal_state: 'dlq' });
+      } catch {
+        // Swallow.
+      }
       return 'dlqed';
     }
 

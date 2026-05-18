@@ -639,6 +639,17 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Outbound email sends, labelled by template + outcome (ok + classifyEmailError categories).',
     ['template', 'outcome'],
   );
+  // Arc 7 obs.14 — outbound webhook delivery counters.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.webhookDeliveryAttemptTotal,
+    'Outbound webhook delivery attempts, labelled by outcome (success / http_error / timeout / transport_error).',
+    ['outcome'],
+  );
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.webhookDeliveryTerminalTotal,
+    'Outbound webhook delivery terminal state transitions, labelled by terminal_state (delivered | dlq).',
+    ['terminal_state'],
+  );
 
   // V-216 — customer-facing audit; constructed early so all
   // emit-on-event services (webhooks, sessions, api-keys, profiles)
