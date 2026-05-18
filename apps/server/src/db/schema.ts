@@ -1750,6 +1750,19 @@ export const agentSessions = pgTable(
     // transcript append). Null for active sessions; set once at
     // transition out of `active` status.
     closedAt: timestamp('closed_at', { withTimezone: true }),
+    // Arc 2 sub-slice 8.1 (v2-#8) — AI chat + manual side-by-side.
+    // Founder verdicts 2026-05-18:
+    //   Q2=C — 24h-TTL short-lived gui_control_key per session.
+    //   Q3=A — pair_mode_state stored as JSONB so the state-machine
+    //          (sub-slice 8.7) can evolve without further migrations.
+    // Existing rows pick up mode='ai' from the CHECK default; SDK
+    // surfaces the choice at create-time via mode='manual'|'ai'|'pair'.
+    pairModeState: jsonb('pair_mode_state'),
+    guiControlKeyExpiresAt: timestamp('gui_control_key_expires_at', { withTimezone: true }),
+    guiControlKeyCiphertext: customType<{ data: Buffer; driverData: Buffer }>({
+      dataType: () => 'bytea',
+    })('gui_control_key_ciphertext'),
+    mode: text('mode').notNull().default('ai'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
