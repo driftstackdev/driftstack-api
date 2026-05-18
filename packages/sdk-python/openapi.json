@@ -328,6 +328,10 @@
             },
             "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
           },
+          "egress_capability_report": {
+            "type": ["object", "null"],
+            "additionalProperties": {}
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -359,6 +363,7 @@
           "label",
           "metadata",
           "egress_capabilities",
+          "egress_capability_report",
           "created_at",
           "updated_at",
           "last_state_at",
@@ -606,6 +611,10 @@
             },
             "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
           },
+          "egress_capability_report": {
+            "type": ["object", "null"],
+            "additionalProperties": {}
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -637,6 +646,7 @@
           "label",
           "metadata",
           "egress_capabilities",
+          "egress_capability_report",
           "created_at",
           "updated_at",
           "last_state_at",
@@ -1066,6 +1076,7 @@
                 "quota.warning_80pct",
                 "quota.exceeded",
                 "api_key.revoked",
+                "session.egress_capability_changed",
                 "test.ping"
               ]
             }
@@ -1152,7 +1163,8 @@
                 "session.failed",
                 "quota.warning_80pct",
                 "quota.exceeded",
-                "api_key.revoked"
+                "api_key.revoked",
+                "session.egress_capability_changed"
               ]
             },
             "minItems": 1,
@@ -1197,6 +1209,7 @@
                 "quota.warning_80pct",
                 "quota.exceeded",
                 "api_key.revoked",
+                "session.egress_capability_changed",
                 "test.ping"
               ]
             }
@@ -1295,6 +1308,7 @@
               "quota.warning_80pct",
               "quota.exceeded",
               "api_key.revoked",
+              "session.egress_capability_changed",
               "test.ping"
             ]
           },
@@ -1806,6 +1820,10 @@
                       },
                       "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
                     },
+                    "egress_capability_report": {
+                      "type": ["object", "null"],
+                      "additionalProperties": {}
+                    },
                     "created_at": {
                       "type": "string",
                       "format": "date-time",
@@ -1837,6 +1855,7 @@
                     "label",
                     "metadata",
                     "egress_capabilities",
+                    "egress_capability_report",
                     "created_at",
                     "updated_at",
                     "last_state_at",
@@ -1990,6 +2009,10 @@
                             },
                             "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
                           },
+                          "egress_capability_report": {
+                            "type": ["object", "null"],
+                            "additionalProperties": {}
+                          },
                           "created_at": {
                             "type": "string",
                             "format": "date-time",
@@ -2021,6 +2044,7 @@
                           "label",
                           "metadata",
                           "egress_capabilities",
+                          "egress_capability_report",
                           "created_at",
                           "updated_at",
                           "last_state_at",
@@ -2691,6 +2715,10 @@
                       },
                       "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
                     },
+                    "egress_capability_report": {
+                      "type": ["object", "null"],
+                      "additionalProperties": {}
+                    },
                     "created_at": {
                       "type": "string",
                       "format": "date-time",
@@ -2722,6 +2750,7 @@
                     "label",
                     "metadata",
                     "egress_capabilities",
+                    "egress_capability_report",
                     "created_at",
                     "updated_at",
                     "last_state_at",
@@ -5180,6 +5209,7 @@
                         "quota.warning_80pct",
                         "quota.exceeded",
                         "api_key.revoked",
+                        "session.egress_capability_changed",
                         "test.ping"
                       ]
                     },
@@ -5334,6 +5364,7 @@
                         "quota.warning_80pct",
                         "quota.exceeded",
                         "api_key.revoked",
+                        "session.egress_capability_changed",
                         "test.ping"
                       ]
                     },
@@ -5514,6 +5545,7 @@
                               "quota.warning_80pct",
                               "quota.exceeded",
                               "api_key.revoked",
+                              "session.egress_capability_changed",
                               "test.ping"
                             ]
                           },
@@ -5665,6 +5697,7 @@
                         "quota.warning_80pct",
                         "quota.exceeded",
                         "api_key.revoked",
+                        "session.egress_capability_changed",
                         "test.ping"
                       ]
                     },
@@ -5831,6 +5864,7 @@
                         "quota.warning_80pct",
                         "quota.exceeded",
                         "api_key.revoked",
+                        "session.egress_capability_changed",
                         "test.ping"
                       ]
                     },
@@ -8247,6 +8281,10 @@
                             },
                             "required": ["udp_associate", "quic_route", "dns_remote_resolve"]
                           },
+                          "egress_capability_report": {
+                            "type": ["object", "null"],
+                            "additionalProperties": {}
+                          },
                           "created_at": {
                             "type": "string",
                             "format": "date-time",
@@ -8278,6 +8316,7 @@
                           "label",
                           "metadata",
                           "egress_capabilities",
+                          "egress_capability_report",
                           "created_at",
                           "updated_at",
                           "last_state_at",
@@ -17309,7 +17348,8 @@
                         "session.failed",
                         "quota.warning_80pct",
                         "quota.exceeded",
-                        "api_key.revoked"
+                        "api_key.revoked",
+                        "session.egress_capability_changed"
                       ]
                     },
                     "minItems": 1,
@@ -17362,6 +17402,7 @@
                           "quota.warning_80pct",
                           "quota.exceeded",
                           "api_key.revoked",
+                          "session.egress_capability_changed",
                           "test.ping"
                         ]
                       }
@@ -17532,6 +17573,7 @@
                                 "quota.warning_80pct",
                                 "quota.exceeded",
                                 "api_key.revoked",
+                                "session.egress_capability_changed",
                                 "test.ping"
                               ]
                             }
@@ -17708,6 +17750,7 @@
                           "quota.warning_80pct",
                           "quota.exceeded",
                           "api_key.revoked",
+                          "session.egress_capability_changed",
                           "test.ping"
                         ]
                       }
@@ -17860,7 +17903,8 @@
                         "session.failed",
                         "quota.warning_80pct",
                         "quota.exceeded",
-                        "api_key.revoked"
+                        "api_key.revoked",
+                        "session.egress_capability_changed"
                       ]
                     },
                     "minItems": 1,
@@ -17915,6 +17959,7 @@
                           "quota.warning_80pct",
                           "quota.exceeded",
                           "api_key.revoked",
+                          "session.egress_capability_changed",
                           "test.ping"
                         ]
                       }
@@ -18174,6 +18219,7 @@
                               "quota.warning_80pct",
                               "quota.exceeded",
                               "api_key.revoked",
+                              "session.egress_capability_changed",
                               "test.ping"
                             ]
                           },
