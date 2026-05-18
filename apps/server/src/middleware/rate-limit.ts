@@ -7,6 +7,7 @@ import fp from 'fastify-plugin';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { rateLimitConsume, type RateLimitStore } from '../services/rate-limit.js';
 import { RateLimitedError, UnauthorizedError } from '../lib/errors.js';
+import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -19,6 +20,10 @@ declare module 'fastify' {
 
 export interface RateLimitPluginOptions {
   store: RateLimitStore;
+  /** Arc 7 obs.5 — optional metrics registry. When wired, the
+   *  plugin increments `driftstack_rate_limit_total{bucket,outcome}`
+   *  on every consume. outcome ∈ { allowed | exceeded }. */
+  metrics?: MetricsRegistry;
 }
 
 function rateLimitPlugin(
@@ -79,6 +84,16 @@ function rateLimitPlugin(
         allowed: result.allowed,
         retry_after_ms: result.retryAfterMs,
       };
+
+      // Arc 7 obs.5 — bucket-labelled consume counter. Best-effort.
+      try {
+        opts.metrics?.inc(METRIC_NAMES.rateLimitTotal, {
+          bucket: bucketKey,
+          outcome: result.allowed ? 'allowed' : 'exceeded',
+        });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
 
       if (!result.allowed) {
         request.log.warn(logFields, 'rate-limit exceeded');

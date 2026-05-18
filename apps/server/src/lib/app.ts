@@ -613,7 +613,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // MFA is disabled in this deploy (gate becomes a no-op).
     mfaService: deps.mfaService ?? null,
   });
-  await app.register(rateLimitPlugin, { store: deps.rateLimitStore });
+  await app.register(rateLimitPlugin, {
+    store: deps.rateLimitStore,
+    ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
+  });
 
   registerErrorHandler(app);
 

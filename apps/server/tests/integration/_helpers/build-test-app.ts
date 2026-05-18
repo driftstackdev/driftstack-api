@@ -705,6 +705,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'BYOK Anthropic /test endpoint outcomes (ok / invalid / quota_exceeded / not_set / not_wired / unknown).',
     ['outcome'],
   );
+  // Arc 7 obs.5 — rate-limit consume counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.rateLimitTotal,
+    'Rate-limit consume counter, labelled by bucket + outcome (allowed | exceeded).',
+    ['bucket', 'outcome'],
+  );
 
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
   // smoke. Always declared (even when captureAgentDecomposerUsage is

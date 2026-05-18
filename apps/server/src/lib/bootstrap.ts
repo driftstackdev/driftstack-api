@@ -625,6 +625,12 @@ export async function createProductionDeps(
             'BYOK Anthropic /test endpoint outcomes (ok / invalid / quota_exceeded / not_set / not_wired / unknown).',
             ['outcome'],
           );
+          // Arc 7 obs.5 — rate-limit consume counter.
+          r.registerCounter(
+            METRIC_NAMES.rateLimitTotal,
+            'Rate-limit consume counter, labelled by bucket + outcome (allowed | exceeded).',
+            ['bucket', 'outcome'],
+          );
           return r;
         })()
       : undefined;

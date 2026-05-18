@@ -167,4 +167,11 @@ export const METRIC_NAMES = {
   // tells us their Anthropic account is throttling; not_wired
   // means the deployment hasn't shipped the AI-B1.b real tester).
   byokAnthropicTestTotal: 'driftstack_byok_anthropic_test_total',
+  // Arc 7 obs.5 — rate-limit consume counter. Labelled by bucket
+  // (e.g. 'global', 'sessions:create') + outcome (allowed | exceeded).
+  // Bucket cardinality is fixed by the call sites that register
+  // rateLimit('<bucket>'); not customer-id-cardinality. Visible as a
+  // capacity-planning signal (which buckets saturate first under load)
+  // and a security signal (which clients are hitting limits hard).
+  rateLimitTotal: 'driftstack_rate_limit_total',
 } as const;
