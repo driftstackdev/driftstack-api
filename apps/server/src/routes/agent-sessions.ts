@@ -33,6 +33,7 @@ import {
 } from '../services/agent-pair-mode-state.js';
 import type { PairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
 import type { SentryClient } from '../lib/sentry.js';
+import type { AccountAuditService } from '../services/account-audit.js';
 import {
   decryptGuiControlKey,
   encryptGuiControlKey,
@@ -182,6 +183,14 @@ export interface AgentSessionsRoutesDeps {
    * Omit to skip the instrumentation (route still functional).
    */
   sentry?: SentryClient;
+  /**
+   * Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — customer audit log emitter.
+   * When wired, takeover + handback transitions land
+   * `agent_session.pair_mode.takeover|handback` rows on the customer
+   * audit log so the customer can review the full state-machine
+   * history. Best-effort: audit failures don't break the transition.
+   */
+  accountAudit?: AccountAuditService;
 }
 
 export function registerAgentSessionsRoutes(
@@ -203,6 +212,7 @@ export function registerAgentSessionsRoutes(
     guiControlKeyTtlMs = 24 * 60 * 60 * 1000,
     pairModeLock,
     sentry,
+    accountAudit,
   } = deps;
 
   app.post(
@@ -467,6 +477,24 @@ export function registerAgentSessionsRoutes(
               actor: parsed.data.client_id,
             },
           });
+          // Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — customer audit log
+          // entry. Best-effort emit; audit failures don't break the
+          // transition (matches the v2-#5 Q.1.f decompose-audit pattern).
+          try {
+            await accountAudit?.record({
+              accountId: ctx.account.id,
+              actorType: 'customer',
+              action: 'agent_session.pair_mode.takeover',
+              targetResourceId: `agent_session_${req.params.id}`,
+              payload: {
+                from: currentState.kind,
+                to: nextState.kind,
+                client_id: parsed.data.client_id,
+              },
+            });
+          } catch {
+            /* swallow */
+          }
           return reply.code(200).send({ pair_mode_state: nextState });
         } catch (err) {
           if (err instanceof PairModeStateInvalidTransitionError) {
@@ -519,6 +547,17 @@ export function registerAgentSessionsRoutes(
               to: nextState.kind,
             },
           });
+          try {
+            await accountAudit?.record({
+              accountId: ctx.account.id,
+              actorType: 'customer',
+              action: 'agent_session.pair_mode.handback',
+              targetResourceId: `agent_session_${req.params.id}`,
+              payload: { from: currentState.kind, to: nextState.kind },
+            });
+          } catch {
+            /* swallow */
+          }
           return reply.code(200).send({ pair_mode_state: nextState });
         } catch (err) {
           if (err instanceof PairModeStateInvalidTransitionError) {

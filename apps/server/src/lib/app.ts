@@ -910,6 +910,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.pairModeLock !== undefined ? { pairModeLock: deps.pairModeLock } : {}),
       // Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb sink.
       ...(deps.sentry !== undefined ? { sentry: deps.sentry } : {}),
+      // Arc 4 Wave 2.B sub-slice 8.20 (v2-#8) — customer audit log.
+      ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);
