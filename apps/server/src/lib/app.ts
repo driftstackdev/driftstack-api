@@ -908,6 +908,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // Arc 2 sub-slice 8.8/8.9 (v2-#8) — pair-mode takeover/handback
       // routes register only when the lock is wired (prod gates on env).
       ...(deps.pairModeLock !== undefined ? { pairModeLock: deps.pairModeLock } : {}),
+      // Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb sink.
+      ...(deps.sentry !== undefined ? { sentry: deps.sentry } : {}),
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);

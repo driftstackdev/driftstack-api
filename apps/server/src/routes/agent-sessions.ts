@@ -32,6 +32,7 @@ import {
   type PairModeState,
 } from '../services/agent-pair-mode-state.js';
 import type { PairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
+import type { SentryClient } from '../lib/sentry.js';
 import {
   decryptGuiControlKey,
   encryptGuiControlKey,
@@ -173,6 +174,14 @@ export interface AgentSessionsRoutesDeps {
    * omitting it skips route registration entirely.
    */
   pairModeLock?: PairModeTakeoverLock;
+  /**
+   * Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb sink.
+   * When wired, every pair-mode transition logs a breadcrumb tagged
+   * with mode + session_id + transition + actor so an exception
+   * caught later in the request carries the state-machine context.
+   * Omit to skip the instrumentation (route still functional).
+   */
+  sentry?: SentryClient;
 }
 
 export function registerAgentSessionsRoutes(
@@ -193,6 +202,7 @@ export function registerAgentSessionsRoutes(
     guiControlKeyEncryptionKey,
     guiControlKeyTtlMs = 24 * 60 * 60 * 1000,
     pairModeLock,
+    sentry,
   } = deps;
 
   app.post(
@@ -442,6 +452,21 @@ export function registerAgentSessionsRoutes(
             at: new Date().toISOString(),
           });
           await sessions.setPairModeState(req.params.id, nextState);
+          // Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb.
+          // Attaches state-machine context so any later exception in
+          // this request carries the transition trail.
+          sentry?.addBreadcrumb({
+            category: 'agent-session.pair-mode',
+            message: `takeover-request → ${nextState.kind}`,
+            data: {
+              session_id: req.params.id,
+              account_id: ctx.account.id,
+              mode: rec.mode,
+              from: currentState.kind,
+              to: nextState.kind,
+              actor: parsed.data.client_id,
+            },
+          });
           return reply.code(200).send({ pair_mode_state: nextState });
         } catch (err) {
           if (err instanceof PairModeStateInvalidTransitionError) {
@@ -482,6 +507,18 @@ export function registerAgentSessionsRoutes(
             at: new Date().toISOString(),
           });
           await sessions.setPairModeState(req.params.id, nextState);
+          // Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb.
+          sentry?.addBreadcrumb({
+            category: 'agent-session.pair-mode',
+            message: `handback-request → ${nextState.kind}`,
+            data: {
+              session_id: req.params.id,
+              account_id: ctx.account.id,
+              mode: rec.mode,
+              from: currentState.kind,
+              to: nextState.kind,
+            },
+          });
           return reply.code(200).send({ pair_mode_state: nextState });
         } catch (err) {
           if (err instanceof PairModeStateInvalidTransitionError) {
