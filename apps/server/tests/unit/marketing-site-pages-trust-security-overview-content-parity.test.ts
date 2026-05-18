@@ -135,7 +135,7 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     );
   });
 
-  it.skip("Chaos engineering claim pinned: 'Chaos engineering rehearsal harness' + 'Sub-processor outages, DB failover, Redis-down, webhook-signature failures' + 'scripts/chaos/' code-path + 'docs/internal/v547-chaos-engineering-scenarios.md' V-547 anchor + 'Drills run dry-run by default; execute mode requires explicit operator opt-in.' — pinned so the V-547 chaos-rehearsal commitment + the 4-scenario scope + the dry-run-default safety survive (drift to dropping 'dry-run by default' would let chaos drills land destructively in prod by accident)", () => {
+  it("Chaos engineering claim pinned: 'Chaos engineering rehearsal harness' + 'Sub-processor outages, DB failover, Redis-down, webhook-signature failures' + 'scripts/chaos/' code-path + 'Drills run dry-run by default; execute mode requires explicit operator opt-in.' — pinned so the V-547 chaos-rehearsal commitment + the 4-scenario scope + the dry-run-default safety survive (drift to dropping 'dry-run by default' would let chaos drills land destructively in prod by accident). The previous skip pinned `· docs/internal/v547-chaos-engineering-scenarios.md` as a meta-line, but that internal-docs path was exposing internal repo structure on a customer-facing trust page — removed in the same slice that revives this assertion.", () => {
     expect(body).toMatch(/Chaos engineering rehearsal harness/);
     expect(body).toMatch(
       /Sub-processor outages, DB failover, Redis-down,\s*\n?\s*webhook-signature failures — all covered by scripted\s*\n?\s*drills in <code class="font-mono">scripts\/chaos\/<\/code>\./,
@@ -143,7 +143,10 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     expect(body).toMatch(
       /Drills run dry-run by default; execute mode requires\s*\n?\s*explicit operator opt-in\./,
     );
-    expect(body).toMatch(/scripts\/chaos\/ · docs\/internal\/v547-chaos-engineering-scenarios\.md/);
+    // Drift-guard: the internal-docs reference MUST NOT bleed back
+    // into the customer-facing trust page. The bare `scripts/chaos/`
+    // meta-line stays (that path is public-repo-public).
+    expect(body).not.toMatch(/docs\/internal\/v547-chaos-engineering-scenarios/);
   });
 
   it("Cross-link to /security + /trust/compliance pinned: 'The architecture deep-dive at /security walks the five-pillar surface in detail. For pen-test evidence or compliance certifications, see /trust/compliance.' — pinned so the 3-page navigation (security-overview → security deep-dive → compliance) survives (drift to dropping either cross-link would orphan that page from the security-evaluation walk)", () => {
