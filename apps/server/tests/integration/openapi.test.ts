@@ -74,6 +74,20 @@ describe('OpenAPI spec generation', () => {
         '/v1/account/mfa/recovery-codes/regenerate',
         '/v1/account/mfa/verify',
         '/v1/account/rate-limits',
+        // Arc 7 docs.openapi — BYOK Anthropic + Bundled LLM (v2-#6/8)
+        '/v1/account/me/billing-portal',
+        '/v1/account/me/bundled-llm-settings',
+        '/v1/account/me/bundled-llm-status',
+        '/v1/account/me/byok-anthropic-key',
+        '/v1/account/me/byok-anthropic-key/test',
+        // Arc 7 docs.openapi — OAuth-client IDP signin (V-667.C)
+        '/v1/auth/oauth-client/start',
+        '/v1/auth/oauth-client/confirm-merge',
+        // Arc 7 docs.openapi — OAuth 2.0 public dance (V-667)
+        '/v1/oauth/authorize',
+        '/v1/oauth/introspect',
+        '/v1/oauth/revoke',
+        '/v1/oauth/token',
         // V-355 web-session list / revoke
         '/v1/account/web-sessions',
         '/v1/account/web-sessions/{id}',
@@ -225,6 +239,11 @@ describe('OpenAPI spec generation', () => {
       // not customer-API Bearer. Operator-only surface; not
       // customer-facing.
       if (path.startsWith('/v1/fleet/')) continue;
+      // V-667 — /v1/oauth/* is the public OAuth 2.0 dance. PKCE +
+      // client_secret IS the auth on /token; /authorize and
+      // /introspect / /revoke also don't carry BearerAuth (they're
+      // mint/validate/revoke endpoints).
+      if (path.startsWith('/v1/oauth/')) continue;
       const ops = methods as Record<string, { security?: unknown[] }>;
       for (const [method, op] of Object.entries(ops)) {
         if (!['get', 'post', 'delete', 'put', 'patch'].includes(method)) continue;
