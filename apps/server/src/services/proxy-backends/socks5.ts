@@ -89,7 +89,7 @@ export class SocksProxyBackend implements SessionEgressService {
       );
     }
 
-    const { host, port, username, password, udp_associate } = proxy.socks5;
+    const { host, port, username, password, udp_associate, require_remote_dns } = proxy.socks5;
     if (host.trim().length === 0) {
       throw new Error('socks5.host must be non-empty');
     }
@@ -126,6 +126,15 @@ export class SocksProxyBackend implements SessionEgressService {
       DRIFTSTACK_SOCKS5_PROXY_HOST: host,
       DRIFTSTACK_SOCKS5_PROXY_PORT: String(port),
       DRIFTSTACK_SOCKS5_UDP_ASSOCIATE: udp_associate ? '1' : '0',
+      // EG-WK-1.9 (founder verdict 2026-05-17 ~20:15 UTC) — when
+      // `require_remote_dns` is true, the WebKit fork uses SOCKS5
+      // ATYP DOMAINNAME (0x03) so DNS lookups resolve through the
+      // proxy's resolver rather than the host's. Without propagating
+      // the schema flag through here, the WebKit fork has no way of
+      // knowing the customer asked for remote DNS — silent fallback
+      // to local resolution would leak the host's resolver behind
+      // the proxy.
+      DRIFTSTACK_SOCKS5_REQUIRE_REMOTE_DNS: require_remote_dns ? '1' : '0',
     };
     if (username !== undefined && password !== undefined) {
       envOverrides.DRIFTSTACK_SOCKS5_PROXY_USERNAME = username;

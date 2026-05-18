@@ -40,6 +40,7 @@ function socks5Config(
     username?: string;
     password?: string;
     udp_associate?: boolean;
+    require_remote_dns?: boolean;
   }> = {},
 ): SessionEgressConfig {
   return {
@@ -50,6 +51,7 @@ function socks5Config(
         host: overrides.host ?? 'p.example.com',
         port: overrides.port ?? 1080,
         udp_associate: overrides.udp_associate ?? true,
+        require_remote_dns: overrides.require_remote_dns ?? false,
         ...(overrides.username !== undefined ? { username: overrides.username } : {}),
         ...(overrides.password !== undefined ? { password: overrides.password } : {}),
       },
@@ -68,7 +70,30 @@ describe('EG-API-1.6 SocksProxyBackend', () => {
       DRIFTSTACK_SOCKS5_PROXY_HOST: 'p.example.com',
       DRIFTSTACK_SOCKS5_PROXY_PORT: '1080',
       DRIFTSTACK_SOCKS5_UDP_ASSOCIATE: '1',
+      DRIFTSTACK_SOCKS5_REQUIRE_REMOTE_DNS: '0',
     });
+  });
+
+  // EG-WK-1.9 propagation regression: schema accepts
+  // `require_remote_dns` (founder verdict 2026-05-17) but the backend
+  // wasn't passing it through to envOverrides — silent fallback to
+  // local DNS would leak the host's resolver behind the proxy. This
+  // test pins the propagation both ways so a future refactor can't
+  // re-drop the flag.
+  it('require_remote_dns=true propagates as DRIFTSTACK_SOCKS5_REQUIRE_REMOTE_DNS=1', async () => {
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
+    const handle = await backend.applyToSession({
+      config: socks5Config({ require_remote_dns: true }),
+    });
+    expect(handle.cleanup.envOverrides?.DRIFTSTACK_SOCKS5_REQUIRE_REMOTE_DNS).toBe('1');
+  });
+
+  it('require_remote_dns=false (default) propagates as DRIFTSTACK_SOCKS5_REQUIRE_REMOTE_DNS=0', async () => {
+    const backend = new SocksProxyBackend({ tcpProbe: probeOk });
+    const handle = await backend.applyToSession({
+      config: socks5Config({ require_remote_dns: false }),
+    });
+    expect(handle.cleanup.envOverrides?.DRIFTSTACK_SOCKS5_REQUIRE_REMOTE_DNS).toBe('0');
   });
 
   it('UDP_ASSOCIATE defaults true (QUIC + HTTP/3 work end-to-end)', async () => {
