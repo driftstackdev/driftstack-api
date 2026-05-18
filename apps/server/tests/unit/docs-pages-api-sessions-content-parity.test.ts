@@ -110,12 +110,14 @@ describe('W761 docs /api/sessions content parity', () => {
     );
   });
 
-  it('CRITICAL 3-wait_for-strategy enum pinned — load/domcontentloaded/networkidle. Drift to dropping a strategy would silently break SDK consumers using it.', () => {
+  it('CRITICAL 3-wait_until-strategy enum pinned — load/domcontentloaded/networkidle. The previous pin used `wait_for` which is fictional; the actual NavigateRequest schema at packages/api-types/src/sessions.ts:116 uses `wait_until`. Drift to dropping a strategy would silently break SDK consumers using it.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`wait_for`: `'load'` \(default\), `'domcontentloaded'`, or\s*\n?`'networkidle'`/,
+      /`wait_until`: `'load'` \(default\), `'domcontentloaded'`, or\s*\n?`'networkidle'`/,
     );
+    // Fictional name must NOT return.
+    expect(p).not.toMatch(/`wait_for`:/);
   });
 
   it('CRITICAL 4-interact-kind enum pinned — tap/type/scroll/press, with the correct discriminator name (kind) and request-body wrapper (action). The previous pin used "Supported types" + a flat top-level shape, but the schema in packages/api-types/src/sessions.ts:140 is a discriminatedUnion on `kind` wrapped inside `action`. The route accepts { action: { kind, ... }, timeout_ms? } per InteractRequestSchema at sessions.ts:166. Drift would force customers to copy the wrong shape and 4xx at the schema layer.', () => {
@@ -134,21 +136,32 @@ describe('W761 docs /api/sessions content parity', () => {
     expect(p).not.toMatch(/^Supported types: `tap`/m);
   });
 
-  it("CRITICAL 3-wait-kind enum pinned — selector/navigation/duration. The 'duration form counts toward your minute-meter' clause is the load-bearing billing-meter framing.", () => {
+  it("CRITICAL 4-wait-kind enum pinned — selector/selector_hidden/url_matches/time. The previous pin (selector/navigation/duration) was fictional; WaitCondition at packages/api-types/src/sessions.ts:184 is a discriminatedUnion on `kind` with: selector, selector_hidden, url_matches, time. Body wraps the condition under `condition` key. The 'time form counts toward your minute-meter' clause is the load-bearing billing-meter framing.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /`kind`: `'selector'` \(DOM appears\), `'navigation'` \(next nav\s*\n?completes\), or `'duration'` \(just sleep\)/,
-    );
-    expect(p).toMatch(/The `duration` form\s*\n?counts toward your minute-meter\./);
+    // The 4 real kinds.
+    expect(p).toMatch(/- `selector`/);
+    expect(p).toMatch(/- `selector_hidden`/);
+    expect(p).toMatch(/- `url_matches`/);
+    expect(p).toMatch(/- `time`/);
+    // The `condition` wrapper is the load-bearing shape.
+    expect(p).toMatch(/"condition":\s*\{/);
+    // Billing-meter framing on `time` (not `duration`).
+    expect(p).toMatch(/`time` form counts toward your minute-meter/);
+    // Fictional kinds must NOT return.
+    expect(p).not.toMatch(/`'navigation'`/);
+    expect(p).not.toMatch(/`'duration'` \(just sleep\)/);
   });
 
-  it('CRITICAL 2-capture-kind enum pinned — screenshot (PNG base64) + pdf, with 4 MiB screenshot + 8 MiB PDF caps. Drift to dropping the size cap would let API consumers DoS themselves.', () => {
+  it('CRITICAL 3-capture-kind enum pinned — screenshot (PNG base64) + dom_snapshot (utf8) + pdf, with 4 MiB screenshot + 8 MiB PDF caps. The previous pin omitted dom_snapshot which is on the CaptureKindSchema enum at packages/api-types/src/sessions.ts:227. Drift to dropping the size cap would let API consumers DoS themselves.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /`kind`: `'screenshot'` \(PNG, base64-encoded in response\) or\s*\n?`'pdf'`\. Screenshots cap at 4 MiB; PDFs at 8 MiB\./,
-    );
+    expect(p).toMatch(/`'screenshot'` \(PNG, base64-encoded in\s*\n?response\)/);
+    expect(p).toMatch(/`'dom_snapshot'` \(the serialised DOM as raw text\)/);
+    expect(p).toMatch(/`'pdf'`/);
+    expect(p).toMatch(/Screenshots cap at 4 MiB; PDFs at 8 MiB\./);
+    // Encoding hint.
+    expect(p).toMatch(/`'base64'` for screenshot\+pdf, `'utf8'` for\s*\n?`dom_snapshot`/);
   });
 
   it('CRITICAL DELETE returns 204 + idempotent + frees-slot + webhook-fires framing pinned. The 4-claim contract is what tells SDK consumers about destroy semantics.', () => {

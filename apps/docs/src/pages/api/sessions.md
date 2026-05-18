@@ -127,12 +127,14 @@ for the response shape.
 ```json
 {
   "url": "https://example.com/page",
-  "wait_for": "load"
+  "wait_until": "load"
 }
 ```
 
-`wait_for`: `'load'` (default), `'domcontentloaded'`, or
-`'networkidle'`. Returns `{ status, current_url, title }` on success.
+`wait_until`: `'load'` (default), `'domcontentloaded'`, or
+`'networkidle'`. Returns `{ url, status, final_url, duration_ms }`
+on success — `url` is the originally requested URL, `final_url`
+reflects any HTTP redirects.
 
 `502 DriverError` for navigation-time failures (DNS, TLS, network);
 the session itself stays `ready` for a retry.
