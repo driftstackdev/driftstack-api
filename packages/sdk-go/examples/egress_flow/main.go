@@ -47,8 +47,16 @@ func main() {
 
 	proxy := map[string]any{
 		"type": "socks5",
-		// Required for WebRTC routing per planning 133.
-		"socks5": map[string]any{"host": proxyHost, "port": proxyPort, "udp_associate": true},
+		// udp_associate: required for WebRTC routing per planning 133.
+		// require_remote_dns: EG-WK-1.9 (2026-05-17) — leave false to keep
+		// DNS resolution local-side; set true to route DNS through the
+		// proxy via SOCKS5 ATYP DOMAINNAME (0x03).
+		"socks5": map[string]any{
+			"host":               proxyHost,
+			"port":               proxyPort,
+			"udp_associate":      true,
+			"require_remote_dns": false,
+		},
 	}
 
 	// 1. Save the proxy config.
