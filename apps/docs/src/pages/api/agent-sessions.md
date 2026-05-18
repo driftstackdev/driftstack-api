@@ -147,6 +147,60 @@ customer is on the bundled-LLM rail.
 
 Sets `status='closed'` with `closed_at` stamped. Idempotent.
 
+## Live video (LiveKit)
+
+`POST /v1/agent-sessions/{id}/livekit-token`
+
+Mint a per-Mac LiveKit JWT for a WebRTC consumer (the customer
+dashboard, the desktop GUI client, or any other LiveKit-aware
+SDK) to subscribe to the room hosting this session's video
+stream. Each Mac in the fleet runs its own LiveKit server; the
+server-side mint path looks up the assigned Mac's credentials,
+signs a JWT scoped to the session id, and returns the join info.
+
+Response (`200`):
+
+```json
+{
+  "ws_url": "wss://mac-NNN.driftstack.dev:8443",
+  "room": "agt_<uuid>",
+  "token": "<HS256 JWT>",
+  "participant_identity": "customer-<account-uuid>",
+  "expires_at": "<ISO-8601>"
+}
+```
+
+Token TTL is **24 hours** (matches the `gui_control_key` TTL).
+The room name is always the agent session id; the participant
+identity is `customer-<account-uuid>` so the SFU deduplicates
+joins from the same account.
+
+Customer-side grants on the minted token:
+
+- `canSubscribe: true` — receive the published video stream
+- `canPublish: false` — the Mac-side capture process is the
+  publisher; the customer is subscriber-only
+- `canPublishData: true` (implicit in the room join grant) —
+  used for the `gui-client` input-forwarding DataChannel
+
+> **Auto-populated on session-create.** When the deployment has at
+> least one Mac with registered LiveKit credentials, `POST
+/v1/agent-sessions` returns the same `livekit` shape inline on
+> the 201 response. Clients can connect to the room immediately
+> after create without the explicit round-trip to this endpoint.
+> Pre-LK deployments (no Mac registered) ship the create response
+> without the `livekit` field; the explicit endpoint is the
+> fallback.
+
+Errors:
+
+| Status | Type                | When                                                             |
+| -----: | ------------------- | ---------------------------------------------------------------- |
+|    404 | not-found           | session id unknown OR caller doesn't own it (anti-enumeration)   |
+|    403 | forbidden           | session is closed (cannot mint a token for a non-active session) |
+|    503 | feature-unavailable | no Mac has registered LiveKit credentials yet                    |
+|    503 | feature-unavailable | stored Mac secret is unreadable (ops-actionable; rotate key)     |
+
 ## Live transcript stream (SSE)
 
 `GET /v1/agent-sessions/{id}/transcript`
