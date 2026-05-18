@@ -589,6 +589,39 @@ export async function createProductionDeps(
   // audit emit. Routes call tracker.recordHeartbeat on takeover /
   // handback / message so customer activity counts as a heartbeat.
   const pairModeHeartbeatTracker = new InMemoryPairModeHeartbeatTracker();
+  // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
+  // registry (constructed eagerly so AgentRuntime can take a
+  // reference; the `/metrics` route registration is gated on
+  // metricsScrapeToken being present, below, so an unwired
+  // deployment never exposes the registry).
+  const metricsRegistry =
+    config.metricsScrapeToken !== undefined
+      ? (() => {
+          const r = new MetricsRegistry();
+          r.registerCounter(
+            METRIC_NAMES.pairModeTransitionTotal,
+            'Pair-mode state-machine transitions, labelled by from + to states.',
+            ['from', 'to'],
+          );
+          r.registerCounter(
+            METRIC_NAMES.bundledLlmRequestTotal,
+            'Bundled-LLM decompose requests, labelled by outcome.',
+            ['outcome'],
+          );
+          r.registerCounter(
+            METRIC_NAMES.bundledLlmErrorTotal,
+            'Bundled-LLM decompose errors, labelled by error kind.',
+            ['kind'],
+          );
+          // Arc 7 obs.3 — agent decompose result-kind counter.
+          r.registerCounter(
+            METRIC_NAMES.agentDecomposeTotal,
+            'Agent decompose() call counter, labelled by result kind (plan / clarify / refuse).',
+            ['result_kind'],
+          );
+          return r;
+        })()
+      : undefined;
   const agentRuntime = new AgentRuntime({
     decomposer: agentDecomposer,
     executor: agentExecutor,
@@ -596,6 +629,7 @@ export async function createProductionDeps(
     archetype: 'iphone16pro_ios18_7_safari26_4',
     usageRecorder: agentDecomposerUsageRecorder,
     eventBus: agentSessionEventBus,
+    ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
   });
   // Q.1.c — per-session BYOK key cache. Pure in-memory; wired
   // unconditionally so the route can stash decrypted plaintexts
@@ -860,28 +894,12 @@ export async function createProductionDeps(
     // emit counters into it + /metrics returns the rendered text.
     // Without the token, the registry is omitted and counter call
     // sites silently no-op (the optional chain `metrics?.inc(...)`
-    // matters here).
-    ...(config.metricsScrapeToken !== undefined
+    // matters here). The registry itself is constructed earlier (so
+    // AgentRuntime can take a reference for obs.3); the `/metrics`
+    // route registration is what this branch gates.
+    ...(metricsRegistry !== undefined && config.metricsScrapeToken !== undefined
       ? {
-          metricsRegistry: (() => {
-            const r = new MetricsRegistry();
-            r.registerCounter(
-              METRIC_NAMES.pairModeTransitionTotal,
-              'Pair-mode state-machine transitions, labelled by from + to states.',
-              ['from', 'to'],
-            );
-            r.registerCounter(
-              METRIC_NAMES.bundledLlmRequestTotal,
-              'Bundled-LLM decompose requests, labelled by outcome.',
-              ['outcome'],
-            );
-            r.registerCounter(
-              METRIC_NAMES.bundledLlmErrorTotal,
-              'Bundled-LLM decompose errors, labelled by error kind.',
-              ['kind'],
-            );
-            return r;
-          })(),
+          metricsRegistry,
           metricsScrapeToken: config.metricsScrapeToken,
         }
       : {}),

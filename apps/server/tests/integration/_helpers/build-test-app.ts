@@ -693,6 +693,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Bundled-LLM decompose errors, labelled by error kind.',
     ['kind'],
   );
+  // Arc 7 obs.3 — agent decompose result-kind counter.
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.agentDecomposeTotal,
+    'Agent decompose() call counter, labelled by result kind (plan / clarify / refuse).',
+    ['result_kind'],
+  );
 
   // v2-#18 — capturing usage recorder for the AgentRuntime end-to-end
   // smoke. Always declared (even when captureAgentDecomposerUsage is
@@ -1136,6 +1142,10 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
             sessions: agentSessionsRepo,
             archetype: 'iphone16pro_ios18_7_safari26_4',
             eventBus: agentSessionEventBus,
+            // Arc 7 obs.3 — wire the metrics registry so the
+            // driftstack_agent_decompose_total counter ticks under
+            // the integration smoke.
+            metrics: metricsRegistry,
             ...(opts.captureAgentDecomposerUsage === true
               ? {
                   usageRecorder: {

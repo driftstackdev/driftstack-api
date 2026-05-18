@@ -16,6 +16,7 @@ import type { AgentExecutor, ExecutorRunResult } from './agent-executor.js';
 import { runResultToTranscriptEntry } from './agent-executor.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from './agent-sessions.js';
 import type { AgentSessionEventBus } from './agent-session-event-bus.js';
+import { METRIC_NAMES } from './metrics-registry.js';
 
 export interface RunTurnArgs {
   agentSessionId: string;
@@ -127,6 +128,18 @@ export interface AgentRuntimeDeps {
    * still writes to the repo).
    */
   eventBus?: AgentSessionEventBus;
+  /**
+   * Arc 7 obs.3 — optional metrics registry. When wired, the
+   * runtime increments `driftstack_agent_decompose_total{kind}` on
+   * every decompose() call (kind = plan / clarify / refuse) so the
+   * Grafana dashboard can ratio useful turns against no-op kinds.
+   * Best-effort: a registry inc never throws under normal operation
+   * (counters validated at registration) but the call site wraps
+   * in try/swallow so a stray bug can't break the turn.
+   */
+  metrics?: {
+    inc: (name: string, labels?: Readonly<Record<string, string>>, delta?: number) => void;
+  };
 }
 
 export class AgentRuntime {
@@ -250,6 +263,16 @@ export class AgentRuntime {
       } catch {
         // Swallow; see comment above.
       }
+    }
+
+    // Arc 7 obs.3 — bump the driftstack_agent_decompose_total counter
+    // labelled by result-kind. Best-effort: a stray bug here must not
+    // break the turn. (See METRIC_NAMES.agentDecomposeTotal for the
+    // catalog entry.)
+    try {
+      this.deps.metrics?.inc(METRIC_NAMES.agentDecomposeTotal, { result_kind: decomposed.kind });
+    } catch {
+      // Swallow; metrics are best-effort.
     }
 
     // Q.3 — atomic session close on budget exhaustion. Two paths trip:

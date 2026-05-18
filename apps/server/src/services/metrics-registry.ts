@@ -153,4 +153,11 @@ export const METRIC_NAMES = {
   pairModeTransitionTotal: 'driftstack_pair_mode_transition_total',
   bundledLlmRequestTotal: 'driftstack_bundled_llm_request_total',
   bundledLlmErrorTotal: 'driftstack_bundled_llm_error_total',
+  // Arc 7 obs.3 — agent decompose call counter. Labelled by
+  // result-kind (plan / clarify / refuse) so the dashboard can
+  // ratio "useful decomposes" (plan) against the no-op kinds
+  // (clarify + refuse). Mirrors the agent.decompose.* audit-log
+  // surface but at metrics-cardinality (bounded) rather than
+  // per-call audit rows.
+  agentDecomposeTotal: 'driftstack_agent_decompose_total',
 } as const;
