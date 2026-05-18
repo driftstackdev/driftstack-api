@@ -56,6 +56,7 @@ import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.
 import type { FleetNodeAuth } from '../services/fleet-node-auth.js';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { registerMacNodesRoutes } from '../routes/mac-nodes-register.js';
+import { registerAgentSessionsLivekitTokenRoute } from '../routes/agent-sessions-livekit-token.js';
 import type { FleetNonceCache } from '../services/fleet-nonce-cache.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
@@ -1058,6 +1059,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   if (deps.drizzleFleetNodesRepo !== undefined && deps.livekitSecretEncryptionKey !== undefined) {
     registerMacNodesRoutes(app, {
       repo: deps.drizzleFleetNodesRepo,
+      encryptionKey: deps.livekitSecretEncryptionKey,
+    });
+  }
+  // LK.3 — per-Mac LiveKit JWT mint endpoint. Same gate as LK.2 plus
+  // the agent-sessions repo (the route looks up the session before
+  // minting a token for it).
+  if (
+    deps.drizzleFleetNodesRepo !== undefined &&
+    deps.livekitSecretEncryptionKey !== undefined &&
+    deps.agentSessionsRepo !== undefined
+  ) {
+    registerAgentSessionsLivekitTokenRoute(app, {
+      fleetNodesRepo: deps.drizzleFleetNodesRepo,
+      agentSessionsRepo: deps.agentSessionsRepo,
       encryptionKey: deps.livekitSecretEncryptionKey,
     });
   }

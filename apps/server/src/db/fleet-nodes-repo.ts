@@ -11,7 +11,7 @@
 // InMemory variant to grow too; the operator routes only run against
 // the Drizzle path so this asymmetry is intentional.
 
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { fleetNodes } from './schema.js';
 import type { FleetNodePublicKey, FleetNodesRepo } from '../services/fleet-node-auth.js';
@@ -135,6 +135,29 @@ export class DrizzleFleetNodesRepo implements FleetNodesRepo {
       .select()
       .from(fleetNodes)
       .where(eq(fleetNodes.id, nodeId))
+      .limit(1);
+    const row = rows[0];
+    return row ? rowToDetail(row) : null;
+  }
+
+  /** LK.3 — pick any non-revoked Mac that has LiveKit credentials
+   *  registered. v1.0 returns the most-recently-LiveKit-registered
+   *  match; per-session Mac assignment is a follow-up slice. Returns
+   *  null when no Mac in the fleet has registered LiveKit yet
+   *  (caller surfaces 503). */
+  async findAnyWithLivekit(): Promise<FleetNodeDetail | null> {
+    const rows = await this.database.db
+      .select()
+      .from(fleetNodes)
+      .where(
+        and(
+          isNull(fleetNodes.revokedAt),
+          // `IS NOT NULL` predicate on the api_key column — drizzle
+          // doesn't have a direct helper, so we use a sql template.
+          sql`${fleetNodes.livekitApiKey} IS NOT NULL`,
+        ),
+      )
+      .orderBy(desc(fleetNodes.livekitRegisteredAt))
       .limit(1);
     const row = rows[0];
     return row ? rowToDetail(row) : null;
