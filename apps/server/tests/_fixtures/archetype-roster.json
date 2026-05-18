@@ -1,0 +1,13 @@
+{
+  "$schema_comment": "v2-#22 — single source-of-truth for the customer-visible archetype roster. Add a new archetype here FIRST; the cross-SDK parity test then enforces that every supported language (api-types, Go SDK, TypeScript SDK, Python SDK, server runtime) references the same canonical id + display label. Drift on any SDK (e.g. iPhone 17 in TS while Python still has iPhone 16 Pro) fails the test at CI time.",
+  "version": 1,
+  "locked_id": "iphone16pro_ios18_7_safari26_4",
+  "archetypes": [
+    {
+      "id": "iphone16pro_ios18_7_safari26_4",
+      "display_label": "iPhone 16 Pro / iOS 18.7 / Safari 26.4",
+      "status": "locked",
+      "notes": "v1.0 launch archetype; LOCKED 2026-05-16 (file 133 EGRESS verdicts)."
+    }
+  ]
+}
