@@ -19,6 +19,7 @@ from driftstack.errors import (
     InvalidCredentialsError,
     InvalidKeyError,
     NotFoundError,
+    PairModeStateInvalidTransitionError,
     QuotaExceededError,
     RateLimitError,
     RevokedKeyError,
@@ -131,6 +132,40 @@ def test_quota_exceeded_extracts_fields() -> None:
     assert err.current == 1000
     assert err.limit == 1000
     assert err.record_type == "navigate"
+
+
+def test_pair_mode_state_invalid_transition_extracts_from_and_transition() -> None:
+    """Arc 4 Wave 2.B sub-slice 8.20.k (v2-#8) — Python SDK parity with TS+Go
+    on the typed extension fields of the 409 pair-mode error. TS exposes
+    ``err.from`` + ``err.transition``; Go exposes ``err.From`` +
+    ``err.Transition``; Python (this slice) exposes ``err.from_`` +
+    ``err.transition`` (``from_`` because ``from`` is a reserved word).
+    """
+    body = (
+        '{"type":"https://errors.driftstack.dev/pair-mode-invalid-transition",'
+        '"title":"Invalid transition","status":409,'
+        '"detail":"Invalid pair-mode transition: takeover-request not allowed from takeover-pending",'
+        '"from":"takeover-pending","transition":"takeover-request"}'
+    )
+    err = _error_from_response_data(status=409, text=body, retry_after_header=None)
+    assert isinstance(err, PairModeStateInvalidTransitionError)
+    assert err.from_ == "takeover-pending"
+    assert err.transition == "takeover-request"
+    assert err.status == 409
+
+
+def test_pair_mode_state_invalid_transition_missing_fields_default_to_empty_string() -> None:
+    """Defensive: if the server somehow omits from + transition, we
+    surface empty strings instead of raising on construction.
+    """
+    body = (
+        '{"type":"https://errors.driftstack.dev/pair-mode-invalid-transition",'
+        '"title":"Invalid transition","status":409,"detail":"…"}'
+    )
+    err = _error_from_response_data(status=409, text=body, retry_after_header=None)
+    assert isinstance(err, PairModeStateInvalidTransitionError)
+    assert err.from_ == ""
+    assert err.transition == ""
 
 
 def test_session_timeout_extracts_timeout_ms() -> None:

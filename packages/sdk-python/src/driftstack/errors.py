@@ -274,8 +274,29 @@ class PairModeConflictError(DriftstackError):
 
 class PairModeStateInvalidTransitionError(DriftstackError):
     """Arc 2 sub-slice 8.10 (v2-#8) — invalid pair-mode transition.
-    HTTP 409. Extensions: `from` (current state) + `transition`
-    (the rejected action)."""
+    HTTP 409. Extensions: ``from_`` (current state, named ``from_``
+    because ``from`` is a reserved word in Python) + ``transition``
+    (the rejected action).
+
+    Cross-SDK parity: TS exposes ``err.from`` + ``err.transition``;
+    Go exposes ``err.From`` + ``err.Transition``. Python parity-fix
+    parses the same fields off the problem-json envelope at
+    construction time so customers can branch on the typed error
+    without re-reading the raw problem dict.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = 409,
+        problem_type: str | None = None,
+        problem: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, status=status, problem_type=problem_type, problem=problem)
+        p = problem or {}
+        self.from_: str = str(p.get("from", ""))
+        self.transition: str = str(p.get("transition", ""))
 
 
 class ByokAnthropicRequiredError(DriftstackError):
