@@ -81,6 +81,26 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             </p>
           </div>
         </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-ink-primary">BYOK Anthropic keys + gui_control_keys: AES-256-GCM at rest</p>
+            <p class="mt-1 text-sm text-ink-secondary">
+              Customer-supplied Anthropic API keys (when used as the BYOK
+              LLM rail for agent sessions) and per-session
+              gui_control_keys (HMAC keys for the gui_control plane)
+              live in AES-256-GCM ciphertext under the same
+              host-resident encryption key as MFA TOTP secrets.
+              Decrypted in-memory only at execution time; never logged;
+              never echoed in responses. Pino-redact + Sentry-scrub
+              guard against accidental leak across both log + error
+              paths.
+            </p>
+            <p class="mt-1 text-xs font-mono text-ink-muted">
+              apps/server/src/services/byok-anthropic.ts · apps/server/src/lib/byok-anthropic-encryption.ts
+            </p>
+          </div>
+        </li>
       </ul>
     </div>
   </section>
