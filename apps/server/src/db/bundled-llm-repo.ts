@@ -38,6 +38,24 @@ export class DrizzleBundledLlmRepo implements BundledLlmRepo {
     };
   }
 
+  async updateSettings(args: {
+    accountId: string;
+    consent?: boolean;
+    monthlyCapUsdCents?: number;
+  }): Promise<BundledLlmSettings | null> {
+    // PATCH semantics — only touch the columns that were supplied.
+    // No-op when neither field is set; returns current state for echo.
+    const set: Record<string, unknown> = {};
+    if (args.consent !== undefined) set.bundledLlmConsent = args.consent;
+    if (args.monthlyCapUsdCents !== undefined) {
+      set.bundledLlmMonthlyCapUsdCents = args.monthlyCapUsdCents;
+    }
+    if (Object.keys(set).length > 0) {
+      await this.database.db.update(accounts).set(set).where(eq(accounts.id, args.accountId));
+    }
+    return this.findSettings(args.accountId);
+  }
+
   async sumMonthlySpendCents(args: { accountId: string; now: Date }): Promise<number> {
     const start = startOfCalendarMonthUtc(args.now);
     // SUM is over JSONB metadata.cost_usd_cents — the recorder writes

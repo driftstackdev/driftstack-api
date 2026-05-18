@@ -1084,15 +1084,18 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
           return { agentRuntime, agentSessionsRepo };
         })()
       : {}),
-    // Arc 1 sub-slice 6.5 (v2-#6) — wire bundled-LLM service into
-    // AppDeps when the test opted in. Also wire a stub deployment
-    // fallback key so the route's resolution chain has something to
-    // hand out when consent=true + cap not exhausted.
+    // Arc 1 sub-slice 6.5 (v2-#6) — bundled-LLM service is always
+    // wired (matches the prod bootstrap which constructs it
+    // unconditionally). The route layer separately gates the bundled
+    // leg on deploymentFallbackKey being set; sub-slice 6.6 GET +
+    // PATCH need the service regardless.
+    bundledLlmService,
+    // Stub deployment fallback key — only used when a test seeds
+    // opts.enableBundledLlm with consent=true so the bundled-LLM leg
+    // can actually resolve. Otherwise harmless; default-fallback
+    // posture stays gated by allowFallbackForUnconfiguredCustomers.
     ...(opts.enableBundledLlm !== undefined
-      ? {
-          bundledLlmService,
-          agentDecomposerFallbackKey: 'sk-ant-test-deployment-fallback',
-        }
+      ? { agentDecomposerFallbackKey: 'sk-ant-test-deployment-fallback' }
       : {}),
     costMonitoringService,
     cryptoOrdersService,

@@ -34,6 +34,17 @@ export interface BundledLlmRepo {
    * Used by the route's pre-turn soft-cap check.
    */
   sumMonthlySpendCents(args: { accountId: string; now: Date }): Promise<number>;
+  /**
+   * Arc 1 sub-slice 6.6 (v2-#6) — partial update on the customer's
+   * settings. Either field may be omitted (PATCH semantics). When
+   * both omitted, this is a no-op. Returns the post-update settings
+   * so the route can echo back what the customer set.
+   */
+  updateSettings(args: {
+    accountId: string;
+    consent?: boolean;
+    monthlyCapUsdCents?: number;
+  }): Promise<BundledLlmSettings | null>;
 }
 
 /** Start-of-calendar-month boundary (UTC) for the supplied date.
@@ -58,6 +69,15 @@ export class BundledLlmService {
    *  dashboard status read. */
   async sumMonthlySpendCents(args: { accountId: string; now: Date }): Promise<number> {
     return this.repo.sumMonthlySpendCents(args);
+  }
+
+  /** Sub-slice 6.6 (v2-#6) — partial update + return post-state. */
+  async updateSettings(args: {
+    accountId: string;
+    consent?: boolean;
+    monthlyCapUsdCents?: number;
+  }): Promise<BundledLlmSettings | null> {
+    return this.repo.updateSettings(args);
   }
 }
 
@@ -91,5 +111,19 @@ export class InMemoryBundledLlmRepo implements BundledLlmRepo {
       if (r.at >= start) total += r.cents;
     }
     return Promise.resolve(total);
+  }
+
+  updateSettings(args: {
+    accountId: string;
+    consent?: boolean;
+    monthlyCapUsdCents?: number;
+  }): Promise<BundledLlmSettings | null> {
+    const existing = this.rows.get(args.accountId) ?? { consent: false, monthlyCapUsdCents: 2000 };
+    const next: BundledLlmSettings = {
+      consent: args.consent ?? existing.consent,
+      monthlyCapUsdCents: args.monthlyCapUsdCents ?? existing.monthlyCapUsdCents,
+    };
+    this.rows.set(args.accountId, next);
+    return Promise.resolve(next);
   }
 }

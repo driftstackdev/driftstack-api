@@ -61,6 +61,7 @@ import {
   registerAccountByokAnthropicDisabledRoutes,
   registerAccountByokAnthropicRoutes,
 } from '../routes/account-byok-anthropic.js';
+import { registerAccountBundledLlmRoutes } from '../routes/account-bundled-llm.js';
 import type { ApiKeysRepo } from '../services/api-keys.js';
 import type { Driver } from '../drivers/types.js';
 import type { R2 } from './r2.js';
@@ -718,6 +719,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAccountByokAnthropicRoutes(app, { service: deps.byokAnthropicService });
   } else {
     registerAccountByokAnthropicDisabledRoutes(app);
+  }
+  // Arc 1 sub-slice 6.6 (v2-#6) — bundled-LLM self-service routes.
+  // No 503 stub: bundledLlmService is always wired by bootstrap;
+  // a deploy missing the deployment fallback key still lets customers
+  // PATCH their consent flag (the resolution-time gate handles
+  // the no-fallback case).
+  if (deps.bundledLlmService !== undefined) {
+    registerAccountBundledLlmRoutes(app, { service: deps.bundledLlmService });
   }
   if (deps.cliAuthorizeService !== undefined) {
     registerAuthCliRoutes(app, {
