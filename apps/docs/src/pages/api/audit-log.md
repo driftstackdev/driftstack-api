@@ -186,7 +186,7 @@ the following shapes:
 { "name": "...", "archetype": "...", "cloned_from": "profile_<uuid>" } // clone
 { "name": "...", "archetype": "...", "restored_from_snapshot": "psnap_<uuid>" } // restore
 
-// webhook_endpoint.secret_rotated (V-359)
+// webhook_endpoint.secret_rotated
 {
   "new_secret_prefix": "whsec_<first-12>",
   "old_secret_prefix": "whsec_<first-12>",

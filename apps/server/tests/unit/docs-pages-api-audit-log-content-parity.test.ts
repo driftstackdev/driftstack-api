@@ -183,7 +183,10 @@ describe('W768 docs /api/audit-log content parity', () => {
     expect(p).toMatch(/\/\/ account\.login/);
     expect(p).toMatch(/\/\/ account\.recovery_code_used/);
     expect(p).toMatch(/\/\/ profile\.created — three creation paths/);
-    expect(p).toMatch(/\/\/ webhook_endpoint\.secret_rotated \(V-359\)/);
+    expect(p).toMatch(/\/\/ webhook_endpoint\.secret_rotated/);
+    // Drift-guard: the internal V-359 anchor MUST NOT bleed back
+    // into the customer-rendered code-comment example.
+    expect(p).not.toMatch(/\/\/ webhook_endpoint\.secret_rotated \(V-359\)/);
     expect(p).toMatch(/\/\/ team\.member_invited/);
     expect(p).toMatch(/\/\/ subscription\.tier_changed/);
     expect(p).toMatch(/\/\/ api_key\.minted/);
