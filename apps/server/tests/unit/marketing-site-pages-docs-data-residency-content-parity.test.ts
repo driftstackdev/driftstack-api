@@ -39,7 +39,7 @@ function read(p: string): string {
 describe('W519.B apps/marketing-site/src/pages/docs/data-residency.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-698 + V-298b framing pinned: 'data-residency docs page. Covers where customer data physically lives, what counts as customer data, and the region-preference field on accounts (V-298b).' — pinned so the V-698 + V-298b anchors survive (drift to dropping V-298b would orphan the region-preference field from its engineering anchor)", () => {
+  it("V-698 + V-298b framing pinned: 'data-residency docs page. Covers where customer data physically lives, what counts as customer data, and the region-preference field on accounts (V-298b).' — pinned so the V-698 + V-298b anchors survive (drift to dropping V-298b would orphan the region-preference field from its engineering anchor). Note: the V-anchors live in the page-header doc-comment (internal-facing), not in customer-rendered copy, so they're allowed here.", () => {
     expect(body).toMatch(
       /\/\/ V-698 — data-residency docs page\. Covers where customer data\s*\n?\s*\/\/ physically lives, what counts as customer data, and the region-\s*\n?\s*\/\/ preference field on accounts \(V-298b\)\./,
     );
@@ -115,8 +115,8 @@ describe('W519.B apps/marketing-site/src/pages/docs/data-residency.astro content
     );
   });
 
-  it.skip("V-298b region account preference framing pinned: PATCH /v1/account/me with {region: 'eu'} + 'Accepted values: us, eu, apac, or null (unset).' + 'Today: the field is informational. We surface it on the account-me response and use it as a tag in our observability stack so we can prioritise where to add PoPs.' + 'Roadmap: once additional PoPs exist (planned for US + APAC in 2026), API routing will land sessions for region: us accounts on US infrastructure, and region: apac on APAC. The account row will still live in the EU primary; sessions + recordings will live in the preferred region.' — pinned so the V-298b 4-value-enum (us/eu/apac/null) + informational-today + observability-tag + 2026-PoP-roadmap + account-row-stays-EU-primary commitment survives", () => {
-    expect(body).toMatch(/<h2>The <code>region<\/code> account preference \(V-298b\)<\/h2>/);
+  it("V-298b region account preference framing pinned: PATCH /v1/account/me with {region: 'eu'} + 'Accepted values: us, eu, apac, or null (unset).' + 'Today: the field is informational. We surface it on the account-me response and use it as a tag in our observability stack so we can prioritise where to add PoPs.' + 'Roadmap: once additional PoPs exist (planned for US + APAC in 2026), API routing will land sessions for region: us accounts on US infrastructure, and region: apac on APAC. The account row will still live in the EU primary; sessions + recordings will live in the preferred region.' — pinned so the V-298b 4-value-enum (us/eu/apac/null) + informational-today + observability-tag + 2026-PoP-roadmap + account-row-stays-EU-primary commitment survives. The previous skip pinned `<h2>...account preference (V-298b)</h2>` with the inline anchor that was removed from the customer-facing copy as a UX cleanup (internal V-anchors should not bleed into marketing-rendered headings); the framing itself survives without it.", () => {
+    expect(body).toMatch(/<h2>The <code>region<\/code> account preference\s*<\/h2>/);
     expect(body).toMatch(/PATCH \/v1\/account\/me/);
     expect(body).toMatch(/\{ "region": "eu" \}/);
     expect(body).toMatch(
@@ -128,6 +128,8 @@ describe('W519.B apps/marketing-site/src/pages/docs/data-residency.astro content
     expect(body).toMatch(
       /<strong>Roadmap:<\/strong> once additional PoPs exist \(planned\s*\n?\s*for US \+ APAC in 2026\), API routing will land sessions for\s*\n?\s*<code>region: us<\/code> accounts on US infrastructure, and\s*\n?\s*<code>region: apac<\/code> on APAC\. The account row will still\s*\n?\s*live in the EU primary; sessions \+ recordings will live in the\s*\n?\s*preferred region\./,
     );
+    // Internal V-anchor must NOT bleed into customer-facing <h2> copy.
+    expect(body).not.toMatch(/<h2>[^<]*\(V-298b\)[^<]*<\/h2>/);
   });
 
   it("GDPR / DSAR / right-to-erasure 30-day-grace framing pinned: 'Customer accounts can be deleted on request. We hold a 30-day grace period for accidental delete recovery, after which the account row + all linked resources (sessions, profiles, recordings, audit log, webhook deliveries) are purged. Stripe + NowPayments customer references are removed from our side; their own retention policies govern what they keep beyond that.' + privacy@driftstack.dev DSAR channel — pinned so the 30-day-grace + 5-resource-purge (sessions/profiles/recordings/audit/webhooks) + Stripe-NowPayments-own-retention-policy + privacy@-DSAR commitments survive", () => {
