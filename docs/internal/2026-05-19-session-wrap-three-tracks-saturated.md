@@ -118,7 +118,7 @@ decision:
 
 The session's last reasonable autonomous output is **this report**.
 
-## Verification (added wave 27)
+## Verification (added waves 27-28)
 
 All 25 integration test files shipped in waves 19-23 verified
 passing on wave 27:
@@ -129,11 +129,22 @@ Test Files  25 passed (25)
   Duration  17.79s
 ```
 
-All new test files type-check clean under `tsc --noEmit -p apps/
-server/tsconfig.test.json` (verified wave 25; only pre-existing
-older tests in `tests/unit/` have type errors — none introduced
-by this session). Lint-staged hooks ran on every commit; no lint
-failures landed in the committed history.
+All 25 cross-source-of-truth invariant files shipped in waves
+13-17 verified passing on wave 28:
+
+```
+Test Files  25 passed (25)
+     Tests  134 passed (134)
+  Duration  2.62s
+```
+
+Combined: **236 tests across 50 files** on the two pivot tracks
+verified green end-to-end. All new test files type-check clean
+under `tsc --noEmit -p apps/server/tsconfig.test.json` (verified
+wave 25; only pre-existing older tests in `tests/unit/` have type
+errors — none introduced by this session). Lint-staged hooks ran
+on every commit; no lint failures landed in the committed
+history.
 
 ## Numbers (cumulative through wave 23)
 
