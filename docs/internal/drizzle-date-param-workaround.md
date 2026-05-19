@@ -1,10 +1,21 @@
-# drizzle-orm 0.38.4 — silent Date-param crash in raw `sql` templates
+# drizzle-orm — silent Date-param crash in raw `sql` templates
 
-**Status:** workaround documented, upstream issue pending (Slice D of the
-2026-05-19 scheduled-jobs incident remediation).
-**Driver versions affected:** drizzle-orm 0.38.4 + postgres-js 3.4.9
-(verified). Likely older + newer versions in the same minor range —
-re-verify before assuming a fix.
+**Status:** workaround landed (commit `1b2001c8`); bug PERSISTS upstream
+through latest stable. ISO-string workaround required indefinitely
+until drizzle changes the transparentParser swap behavior.
+
+**Driver versions affected (verified 2026-05-19):**
+
+| drizzle-orm version    | Released   | Has the bug? | Notes                                                                                                       |
+| ---------------------- | ---------- | ------------ | ----------------------------------------------------------------------------------------------------------- |
+| 0.38.4                 | (current)  | YES          | Our installed version.                                                                                      |
+| 0.45.2 (latest stable) | 2026-03-27 | YES — STILL  | Same `transparentParser` swap, expanded to MORE OIDs (1182, 1185, 1115, 1231 — date/time/timestamp arrays). |
+
+Verified via `curl https://unpkg.com/drizzle-orm@0.45.2/postgres-js/driver.js`.
+The swap is in the same `construct(client, config)` entry point and now
+covers 10 OIDs instead of 6. **Version bump will NOT fix this** —
+likely a deliberate design choice by drizzle to let users handle Date
+serialization themselves, not an unintentional regression.
 
 ## What happens
 
@@ -123,10 +134,17 @@ test.ts`) MUST run against real Postgres in CI's build-test job —
 
 ## Upstream
 
+Verified bug persists in latest stable (0.45.2 as of 2026-05-19) — same
+`transparentParser` swap, expanded to 10 OIDs (timestamptz/date/time/
+timestamp + their array variants 1182/1185/1115/1231 + json variants
+114/3802). Filing upstream issue is the path forward; until merged,
+the ISO-string call-site discipline below stays the only workaround.
+
 File issue at `github.com/drizzle-team/drizzle-orm`. Suggested title:
 "postgres-js driver: transparentParser swap of OID 1184 serializer
-crashes on Date params in raw sql template". Re-verify on the latest
-release before filing — if 0.39+ fixed this, version-bump instead.
+crashes on Date params in raw sql template". Include the empirical
+repro: `db.execute(sql\`SELECT $1::timestamptz\`, [new Date()])`→`TypeError: Buffer.byteLength(date)`. Workaround: pre-call
+`.toISOString()` on every Date at the template call site.
 
 ## Quick check for new code
 
