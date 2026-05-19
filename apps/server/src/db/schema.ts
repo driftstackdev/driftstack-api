@@ -1912,13 +1912,32 @@ export const atlasPriorityEvents = pgTable(
     opSeqBytesB64: text('op_seq_bytes_b64').notNull(),
     canvasW: integer('canvas_w').notNull(),
     canvasH: integer('canvas_h').notNull(),
-    mime: text('mime').notNull(),
+    // mime nullable post-migration 0059 — getImageData / readPixels
+    // emit raw pixel buffers with no MIME type. §2 toBlob path still
+    // populates it.
+    mime: text('mime'),
     archetypeId: text('archetype_id').notNull(),
     lastFillText: text('last_fill_text'),
     macLen: integer('mac_len'),
     sessionId: text('session_id').notNull(),
     customerId: text('customer_id').notNull(),
     pageUrl: text('page_url').notNull(),
+    // §10 forward-compat discriminator — 8 canvas-readback APIs,
+    // CHECK-constrained at the DB per migration 0059. Defaults to
+    // 'toBlob' so existing rows + §2 callers stay valid.
+    api: text('api')
+      .notNull()
+      .default('toBlob')
+      .$type<
+        | 'toDataURL'
+        | 'toBlob'
+        | 'convertToBlob'
+        | 'getImageData'
+        | 'readPixels'
+        | 'transferToImageBitmap'
+        | 'captureStream'
+        | 'webgpuReadback'
+      >(),
     status: text('status')
       .notNull()
       .$type<
@@ -1962,3 +1981,12 @@ export type AtlasPriorityEventStatus =
   | 'bs_failed'
   | 'atlas_appended'
   | 'atlas_failed';
+export type AtlasPriorityEventApi =
+  | 'toDataURL'
+  | 'toBlob'
+  | 'convertToBlob'
+  | 'getImageData'
+  | 'readPixels'
+  | 'transferToImageBitmap'
+  | 'captureStream'
+  | 'webgpuReadback';

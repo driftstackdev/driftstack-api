@@ -414,6 +414,13 @@
       "when": 1779031200000,
       "tag": "0058_atlas_priority_events",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1779033600000,
+      "tag": "0059_atlas_priority_events_api_column",
+      "breakpoints": true
     }
   ]
 }

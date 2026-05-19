@@ -45,18 +45,34 @@ const STATUS_VALUES = [
 ] as const;
 const statusEnum = z.enum(STATUS_VALUES);
 
+const API_VALUES = [
+  'toDataURL',
+  'toBlob',
+  'convertToBlob',
+  'getImageData',
+  'readPixels',
+  'transferToImageBitmap',
+  'captureStream',
+  'webgpuReadback',
+] as const;
+const apiEnum = z.enum(API_VALUES);
+
 const probeSignatureBodySchema = z.object({
   op_seq_sha: z.string().min(1),
   op_seq_bytes_b64: z.string().min(1),
   canvas_w: z.number().int().positive(),
   canvas_h: z.number().int().positive(),
-  mime: z.string().min(1),
+  // mime nullable post-§10 — getImageData / readPixels have no MIME.
+  mime: z.string().min(1).nullable().optional(),
   archetype_id: z.string().min(1),
   last_fill_text: z.string().nullable().optional(),
   mac_len: z.number().int().nullable().optional(),
   session_id: z.string().min(1),
   customer_id: z.string().min(1),
   page_url: z.string().min(1),
+  // §10 forward-compat — 8 canvas-readback API discriminator. When
+  // omitted, repo defaults to 'toBlob' (§2 starting hook).
+  api: apiEnum.optional(),
 });
 
 const eventStatusBodySchema = z.object({
@@ -109,13 +125,14 @@ export function registerInternalAtlasPriorityRoutes(
         opSeqBytesB64: body.op_seq_bytes_b64,
         canvasW: body.canvas_w,
         canvasH: body.canvas_h,
-        mime: body.mime,
+        mime: body.mime ?? null,
         archetypeId: body.archetype_id,
         lastFillText: body.last_fill_text ?? null,
         macLen: body.mac_len ?? null,
         sessionId: body.session_id,
         customerId: body.customer_id,
         pageUrl: body.page_url,
+        ...(body.api !== undefined ? { api: body.api } : {}),
         now,
       };
       const result = await deps.repo.insertEmittedWithDedup(args);
@@ -221,6 +238,8 @@ function serializeEvent(row: {
   customerId: string;
   pageUrl: string;
   status: string;
+  api: string;
+  mime: string | null;
   emittedAt: Date;
   bsAutomateSessionId: string | null;
   bsStartedAt: Date | null;
@@ -240,6 +259,8 @@ function serializeEvent(row: {
     customer_id: row.customerId,
     page_url: row.pageUrl,
     status: row.status,
+    api: row.api,
+    mime: row.mime,
     emitted_at: row.emittedAt.toISOString(),
     bs_automate_session_id: row.bsAutomateSessionId,
     bs_started_at: row.bsStartedAt?.toISOString() ?? null,

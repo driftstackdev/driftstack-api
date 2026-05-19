@@ -27,6 +27,7 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import {
   atlasPriorityEvents,
+  type AtlasPriorityEventApi,
   type AtlasPriorityEventRow,
   type AtlasPriorityEventStatus,
 } from './schema.js';
@@ -66,13 +67,20 @@ export interface InsertEmittedArgs {
   opSeqBytesB64: string;
   canvasW: number;
   canvasH: number;
-  mime: string;
+  /** Nullable post-migration 0059 — raw-pixel readback APIs
+   *  (getImageData / readPixels) have no MIME. §2 toBlob path still
+   *  populates it. */
+  mime: string | null;
   archetypeId: string;
   lastFillText: string | null;
   macLen: number | null;
   sessionId: string;
   customerId: string;
   pageUrl: string;
+  /** §10 forward-compat — discriminates the 8 canvas-readback APIs.
+   *  Defaults to 'toBlob' (§2 starting hook) when omitted by the
+   *  caller; harvester pre-§10 callers don't need to populate. */
+  api?: AtlasPriorityEventApi;
   now: Date;
   /** 5-minute soft dedup window. If an existing event with the same
    *  (opSeqSha, archetypeId) was emitted within this window, return its
@@ -159,6 +167,7 @@ export class DrizzleAtlasPriorityEventsRepo {
         sessionId: args.sessionId,
         customerId: args.customerId,
         pageUrl: args.pageUrl,
+        api: args.api ?? 'toBlob',
         status: 'emitted',
         emittedAt: args.now,
         updatedAt: args.now,
