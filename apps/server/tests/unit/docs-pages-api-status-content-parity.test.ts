@@ -1,0 +1,76 @@
+// Drift guard for apps/docs/src/pages/api/status.md. Pins the
+// public-unauthenticated status API — 3-status-state machine
+// (operational/degraded/major_outage) + aggregation rules + 30s CDN
+// cache + 30-day incident feed + distinct-from-/health-/healthz-/ready.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/docs/src/pages/api/status.md');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('docs/pages/api/status content parity', () => {
+  const body = read(LIB);
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+
+  it("Public-unauthenticated framing pinned: 'The /v1/status/* surface backs the public Driftstack status site. It is intentionally unauthenticated — visitors don't have accounts — and IP-rate-limited at the edge. Cache-Control headers are set so a CDN (Cloudflare Pages in front of status.driftstack.dev) can coalesce concurrent viewers onto one origin call.' — pinned so the public-unauthenticated + IP-rate-limited-at-edge + Cloudflare-Pages-CDN-coalesce contract all stay documented", () => {
+    expect(body).toMatch(
+      /The `\/v1\/status\/\*` surface backs the public Driftstack status site\. It\s*\n?\s*is intentionally \*\*unauthenticated\*\* — visitors don't have accounts —\s*\n?\s*and IP-rate-limited at the edge\./,
+    );
+    expect(body).toMatch(
+      /Cache-Control headers are set so a\s*\n?\s*CDN \(Cloudflare Pages in front of `status\.driftstack\.dev`\) can coalesce\s*\n?\s*concurrent viewers onto one origin call\./,
+    );
+  });
+
+  it("Distinct-from-health-probes framing pinned: 'Distinct from /health, /healthz, and /ready, which are infrastructure-facing liveness / readiness probes consumed by the orchestrator. /v1/status is what HUMANS see.' — pinned so the 3-infra-probe-roster + humans-vs-infra split contract stays documented (drift to merging the surfaces would expose infra liveness signals to public visitors)", () => {
+    expect(body).toMatch(
+      /Distinct from `\/health`, `\/healthz`, and `\/ready`, which are\s*\n?\s*infrastructure-facing liveness \/ readiness probes consumed by the\s*\n?\s*orchestrator\. `\/v1\/status` is what HUMANS see\./,
+    );
+  });
+
+  it("3-status-state machine pinned: operational (probe succeeded within timeout) + degraded (probe failed transient/timeout) + major_outage (reserved for future use by incidents service when severity=critical spans multiple components). + aggregation rules: 'any major_outage → overall major_outage; otherwise any degraded → overall degraded; otherwise operational.' — pinned so the 3-state machine + per-component aggregation contract all stay documented", () => {
+    expect(body).toMatch(/- `operational` — probe succeeded within timeout/);
+    expect(body).toMatch(/- `degraded` — probe failed \(transient error or timeout\)/);
+    expect(body).toMatch(
+      /- `major_outage` — currently reserved for future use by the\s*\n?\s*incidents service when an incident's `severity` is `critical` and\s*\n?\s*it spans multiple components/,
+    );
+    expect(body).toMatch(
+      /Aggregation: any `major_outage` → overall `major_outage`; otherwise\s*\n?\s*any `degraded` → overall `degraded`; otherwise `operational`\./,
+    );
+  });
+
+  it("30s-CDN-cache framing pinned: 'Cache-Control: public, max-age=30 — the snapshot is recomputed on every request, but the CDN coalesces requests within the 30s window.' — pinned so the public-max-age=30 + CDN-coalesce-within-window contract stays documented (drift to a longer max-age would delay outage detection by customers)", () => {
+    expect(body).toMatch(
+      /`Cache-Control: public, max-age=30` — the snapshot is recomputed\s*\n?\s*on every request, but the CDN coalesces requests within the 30s\s*\n?\s*window\./,
+    );
+  });
+
+  it("Snapshot 3-section response shape pinned: overall_status + components[]{name, status, last_checked_at} + recent_incidents[]{id, title, severity, status, started_at, resolved_at}. + 3-component-roster (postgres + redis + r2) + 'last 5 public incidents from the past 30 days'. — pinned so the snapshot shape + 3-component roster + 5-incidents-30-days contract all stay documented", () => {
+    expect(body).toMatch(
+      /\{ "name": "postgres", "status": "operational", "last_checked_at": "<ISO-8601>" \},\s*\n?\s*\{ "name": "redis", "status": "operational", "last_checked_at": "<ISO-8601>" \},\s*\n?\s*\{ "name": "r2", "status": "operational", "last_checked_at": "<ISO-8601>" \}/,
+    );
+    expect(body).toMatch(
+      /Returns the current health snapshot — overall status, per-component\s*\n?\s*breakdown, and the last 5 public incidents from the past 30 days\./,
+    );
+  });
+
+  it("Incident feed query parameters pinned: since (ISO-8601 cutoff; defaults to 30 days ago) + limit (1-200; defaults to 50). + 'Lists public incidents from the last 30 days (default), most-recent first.' — pinned so the since/limit defaults + most-recent-first ordering contract all stay documented", () => {
+    expect(body).toMatch(
+      /\|\s*`since`\s+\|\s+optional \|\s+ISO-8601 cutoff; defaults to 30 days ago\s*\|/,
+    );
+    expect(body).toMatch(/\|\s*`limit`\s+\|\s+optional \|\s+1–200; defaults to 50/);
+    expect(body).toMatch(
+      /Lists public incidents from the last 30 days \(default\), most-recent\s*\n?\s*first\./,
+    );
+  });
+});
