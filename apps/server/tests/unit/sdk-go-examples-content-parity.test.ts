@@ -260,4 +260,25 @@ describe('W621 sdk-go/examples content parity', () => {
     expect(body).toMatch(/func\(o driftstack\.CryptoOrderEnvelope\) bool \{/);
     expect(existsSync(E('crypto_checkout/main.go'))).toBe(true);
   });
+
+  it('agent_chat/main.go: AgentSessions.Create + Message multi-turn (plan-executed/clarify/refuse switch) + DRIFTSTACK_BYOK_ANTHROPIC_API_KEY env-gate building MessageOptions{ByokAPIKey: byokKey} only when non-empty + ErrFeatureUnavailable activation-gate exit code 2 + Get final state + Close idempotent — pinned so slice 138\'s BYOK demo survives + so a future refactor that drops the `if byokKey != ""` guard (which would send an empty x-byok-anthropic-api-key header) trips the test (cross-SDK parity contract from slices 126-128)', () => {
+    const body = read(E('agent_chat/main.go'));
+    expect(body).toMatch(/DRIFTSTACK_API_KEY=ds_live_\.\.\. go run \.\/examples\/agent_chat/);
+    expect(body).toMatch(/DRIFTSTACK_BYOK_ANTHROPIC_API_KEY=sk-ant-\.\.\./);
+    expect(body).toMatch(/byokKey := os\.Getenv\("DRIFTSTACK_BYOK_ANTHROPIC_API_KEY"\)/);
+    expect(body).toMatch(/var msgOpts \*driftstack\.MessageOptions/);
+    expect(body).toMatch(/if byokKey != "" \{/);
+    expect(body).toMatch(/msgOpts = &driftstack\.MessageOptions\{ByokAPIKey: byokKey\}/);
+    expect(body).toMatch(
+      /resp, err := client\.AgentSessions\.Message\(ctx, session\.ID, prompt, msgOpts\)/,
+    );
+    expect(body).toMatch(/case "plan-executed":/);
+    expect(body).toMatch(/case "clarify":/);
+    expect(body).toMatch(/case "refuse":/);
+    expect(body).toMatch(/errors\.Is\(err, driftstack\.ErrFeatureUnavailable\)/);
+    expect(body).toMatch(/os\.Exit\(2\)/);
+    expect(body).toMatch(/client\.AgentSessions\.Get\(ctx, session\.ID\)/);
+    expect(body).toMatch(/client\.AgentSessions\.Close\(ctx, session\.ID\)/);
+    expect(existsSync(E('agent_chat/main.go'))).toBe(true);
+  });
 });

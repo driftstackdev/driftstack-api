@@ -208,4 +208,26 @@ describe('W619 sdk-typescript/examples content parity', () => {
     expect(body).toMatch(/created_after: since,/);
     expect(existsSync(E('crypto-checkout.ts'))).toBe(true);
   });
+
+  it("agent-chat.ts: tsx invocation + DRIFTSTACK_API_KEY env-gate + DRIFTSTACK_BYOK_ANTHROPIC_API_KEY optional env demo + agentSessions.create + message multi-turn (plan-executed/clarify/refuse) + FeatureUnavailableError activation-gate exit-code-2 + byokApiKey.length > 0 guard building opts only when non-empty + close — pinned so slice 139's BYOK demo survives + so a future refactor that drops the empty-string skip-guard trips the test (cross-SDK parity contract from slices 126-128)", () => {
+    const body = read(E('agent-chat.ts'));
+    expect(body).toMatch(/DRIFTSTACK_API_KEY=ds_live_\.\.\. npx tsx examples\/agent-chat\.ts/);
+    expect(body).toMatch(/DRIFTSTACK_BYOK_ANTHROPIC_API_KEY=sk-ant-\.\.\./);
+    expect(body).toMatch(
+      /const byokKey = process\.env\.DRIFTSTACK_BYOK_ANTHROPIC_API_KEY \?\? '';/,
+    );
+    expect(body).toMatch(
+      /const msgOpts = byokKey\.length > 0 \? \{ byokApiKey: byokKey \} : undefined;/,
+    );
+    expect(body).toMatch(
+      /const resp = await client\.agentSessions\.message\(session\.id, prompt, msgOpts\);/,
+    );
+    expect(body).toMatch(/case 'plan-executed':/);
+    expect(body).toMatch(/case 'clarify':/);
+    expect(body).toMatch(/case 'refuse':/);
+    expect(body).toMatch(/err instanceof FeatureUnavailableError/);
+    expect(body).toMatch(/process\.exit\(2\)/);
+    expect(body).toMatch(/await client\.agentSessions\.close\(session\.id\)/);
+    expect(existsSync(E('agent-chat.ts'))).toBe(true);
+  });
 });

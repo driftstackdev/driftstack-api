@@ -239,4 +239,23 @@ describe('W620 sdk-python/examples content parity', () => {
     );
     expect(existsSync(E('crypto_checkout.py'))).toBe(true);
   });
+
+  it("agent_chat.py: python invocation + DRIFTSTACK_API_KEY env-gate + DRIFTSTACK_BYOK_ANTHROPIC_API_KEY optional env demo + agent_sessions.create + message multi-turn (plan-executed/clarify/refuse) + FeatureUnavailableError activation-gate exit-code-2 + `os.environ.get(...) or None` empty-string falsy-coalesce — pinned so slice 139's BYOK demo survives + so a future refactor that drops the `or None` collapse (which Python SDK's `if byok_api_key` guard relies on for the cross-SDK empty-string-skip contract from slices 126-128) trips the test", () => {
+    const body = read(E('agent_chat.py'));
+    expect(body).toMatch(/DRIFTSTACK_API_KEY=ds_live_… python examples\/agent_chat\.py/);
+    expect(body).toMatch(/DRIFTSTACK_BYOK_ANTHROPIC_API_KEY=sk-ant-…/);
+    expect(body).toMatch(
+      /byok_key = os\.environ\.get\("DRIFTSTACK_BYOK_ANTHROPIC_API_KEY"\) or None/,
+    );
+    expect(body).toMatch(
+      /resp = client\.agent_sessions\.message\(session\["id"\], prompt, byok_api_key=byok_key\)/,
+    );
+    expect(body).toMatch(/kind == "plan-executed"/);
+    expect(body).toMatch(/kind == "clarify"/);
+    expect(body).toMatch(/kind == "refuse"/);
+    expect(body).toMatch(/except FeatureUnavailableError as e:/);
+    expect(body).toMatch(/return 2/);
+    expect(body).toMatch(/client\.agent_sessions\.close\(session\["id"\]\)/);
+    expect(existsSync(E('agent_chat.py'))).toBe(true);
+  });
 });
