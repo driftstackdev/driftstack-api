@@ -133,7 +133,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'What\'s the BYOK markup?',
-        a: 'Per-token pricing for the bundled rate is announced at launch. BYOK incurs no Driftstack markup — your Anthropic API key, your bill, your control. Toggle BYOK ↔ bundled per-account in the dashboard.',
+        a: 'Per-token pricing for the bundled rate is announced at launch. BYOK incurs no Driftstack markup — your Anthropic API key, your bill, your control. Set a stored BYOK key via <span class="font-mono">PUT /v1/account/me/byok-anthropic-key</span> or override per-request via the <span class="font-mono">x-byok-anthropic-api-key</span> header; opt into bundled-LLM consent via <span class="font-mono">PATCH /v1/account/me/bundled-llm-settings</span>. The dashboard form for both lands at v1.1; the read-only bundled-LLM status panel is already on <span class="font-mono">/agent-sessions</span>.',
       },
       {
         q: 'Is BYOK secret-handling secure?',
