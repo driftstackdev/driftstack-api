@@ -88,7 +88,7 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/kind: 'logged-manual';/);
   });
 
-  it('AgentSessionsResource 8-method surface: create + get + message + close + setMode + takeover + handback + livekitToken. Drift to dropping a method would break dashboard + e2e tests that compile against it; drift to changing signature would silently break the wire contract', () => {
+  it('AgentSessionsResource 9-method surface: create + get + message + close + setMode + sendInputEvent + takeover + handback + livekitToken. Drift to dropping a method would break dashboard + e2e tests that compile against it; drift to changing signature would silently break the wire contract', () => {
     expect(body).toMatch(/export class AgentSessionsResource \{/);
     expect(body).toMatch(/create\(\s*\n?\s*body: CreateAgentSessionRequest = \{\},/);
     expect(body).toMatch(/get\(id: string\): Promise<AgentSession>/);
@@ -98,6 +98,9 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/close\(id: string\): Promise<void>/);
     expect(body).toMatch(
       /setMode\(id: string, mode: 'manual' \| 'ai' \| 'pair'\): Promise<AgentSession>/,
+    );
+    expect(body).toMatch(
+      /sendInputEvent\(id: string, event: InputEvent\): Promise<SendInputEventResponse>/,
     );
     expect(body).toMatch(/takeover\(\s*\n?\s*id: string,\s*\n?\s*clientId: string,\s*\n?\s*\)/);
     expect(body).toMatch(/handback\(id: string\)/);
@@ -146,10 +149,11 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     );
   });
 
-  it('HTTP path-segment encodeURIComponent pinned on all id-bearing routes (get/message/close/setMode/takeover/handback/livekitToken). Drift to dropping encodeURIComponent would break customers whose session ids contain reserved URI chars (rare but real — esp. on legacy ids before the prefix-normalization)', () => {
+  it('HTTP path-segment encodeURIComponent pinned on all id-bearing routes (get/message/close/setMode/sendInputEvent/takeover/handback/livekitToken). Drift to dropping encodeURIComponent would break customers whose session ids contain reserved URI chars (rare but real — esp. on legacy ids before the prefix-normalization)', () => {
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}`/);
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/message`/);
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/mode`/);
+    expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/input-event`/);
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/takeover`/);
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/handback`/);
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/livekit-token`/);

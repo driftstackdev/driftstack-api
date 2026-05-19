@@ -141,6 +141,35 @@ class AgentSessionsResource:
             json_body=coerce_body({"mode": mode}),
         )
 
+    def send_input_event(self, agent_session_id: str, event: dict[str, Any]) -> dict[str, Any]:
+        """Slice 4 (Wave 29-NNN ARC 3) — forward raw LK.6 InputEvent to the harness.
+
+        ``event`` must be one of the 7 discriminated variants:
+
+        - ``{"type": "mouseMove", "x": int, "y": int}``
+        - ``{"type": "mouseDown", "x": int, "y": int, "button": 0|1|2}``
+        - ``{"type": "mouseUp", "x": int, "y": int, "button": 0|1|2}``
+        - ``{"type": "keyDown", "key": str, "modifiers": list[str] | None}``
+        - ``{"type": "keyUp", "key": str, "modifiers": list[str] | None}``
+        - ``{"type": "wheel", "x": int, "y": int, "deltaX": int, "deltaY": int}``
+        - ``{"type": "ping", "timestamp": int}``
+
+        Pre-harness (today): server returns 503 FeatureUnavailable
+        — the Mac fleet harness Swift work is on the Agent 1 roadmap
+        post §10/§11+EG-WK close (6-9 weeks dedicated per the Tier-3
+        Option A verdict 2026-05-19). SDK surface ships so consumers
+        compile against the stable contract.
+
+        Raises ``ConflictError`` (409) if the session is not ``'active'``
+        OR is in mode='ai' (input-event requires manual or pair mode).
+        Raises ``FeatureUnavailableError`` (503) pre-harness.
+        """
+        return self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/input-event",
+            json_body=coerce_body({"event": event}),
+        )
+
     def takeover(self, agent_session_id: str, client_id: str) -> dict[str, Any]:
         """Arc 2 sub-slice 8.9 (v2-#8) — request human takeover on a pair-mode session.
 
@@ -271,6 +300,16 @@ class AsyncAgentSessionsResource:
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/mode",
             json_body=coerce_body({"mode": mode}),
+        )
+
+    async def send_input_event(
+        self, agent_session_id: str, event: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Async mirror — same Slice 4 input-event semantics as sync."""
+        return await self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/input-event",
+            json_body=coerce_body({"event": event}),
         )
 
     async def takeover(self, agent_session_id: str, client_id: str) -> dict[str, Any]:

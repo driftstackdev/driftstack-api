@@ -19,6 +19,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { SendInputEventRequestSchema } from '@driftstack/api-types';
 import type { AgentRuntime } from '../services/agent-runtime.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
@@ -565,6 +566,73 @@ export function registerAgentSessionsRoutes(
     );
   }
 
+  // Slice 4 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/input-event.
+  // Customer-dashboard ManualControlOverlay raw screen-coord forwarder.
+  // Wire shape: { event: <LK.6 InputEvent discriminated union> } per
+  // packages/api-types/src/agent-input-event.ts.
+  //
+  // Server-side dispatch is harness-gated: until Agent 1's Swift
+  // harness end-to-end lands (Tier-3 verdict 2026-05-19 Option A;
+  // 6-9 weeks post §10/§11+EG-WK), no transport exists to forward
+  // events to the harness. Route returns 503 FeatureUnavailable in
+  // that pre-harness window. The route layer still validates auth +
+  // mode + status so the dashboard's wire-error UX path is exercised
+  // end-to-end before harness work lands.
+  //
+  // Pair-mode interaction: an input-event arriving in mode='pair'
+  // while pair_mode_state.kind === 'ai-driving' is a takeover
+  // trigger — the route fires the same `takeover-request` (OR
+  // `takeover-request-queued` if decompose in flight) transition the
+  // POST /:id/takeover route uses, so the state machine drives one
+  // path. AI-only mode rejects with a typed 409.
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    '/v1/agent-sessions/:id/input-event',
+    {
+      preHandler: [
+        app.requireAuth,
+        // Dedicated bucket — separate from the generic 'global' so
+        // a customer's 120Hz input stream doesn't burn through their
+        // generic-API quota. Tier-derived burst when B3 ships; today
+        // every account shares the static cap defined in
+        // TIER_RATE_LIMIT_DEFAULTS.
+        app.rateLimit('agent_sessions:input_event'),
+      ],
+    },
+    async (req, reply) => {
+      const ctx = requireCtx(req);
+      const parsed = SendInputEventRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      const rec = await sessions.get(req.params.id);
+      if (rec === null || rec.accountId !== ctx.account.id) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      if (rec.status !== 'active') {
+        throw new ConflictError(
+          `AgentSession ${req.params.id} is ${rec.status}; input-event requires an active session.`,
+        );
+      }
+      if (rec.mode === 'ai') {
+        throw new ConflictError(
+          `AgentSession ${req.params.id} is in mode='ai'; input-event requires mode='manual' or 'pair'.`,
+        );
+      }
+      // Pre-harness: no transport to forward events. Documented 503
+      // until Tier-3 Option A harness work lands. Mode + status +
+      // auth were validated above so dashboard wire-test paths
+      // exercise the full route surface.
+      throw new FeatureUnavailableError(
+        'Live input forwarding requires a Mac fleet node with harness end-to-end ' +
+          'enabled. Pre-launch this endpoint is wire-only; full activation lands ' +
+          'with the v1.0 harness Swift work (Agent 1 lane, 6-9 weeks post §10/§11+EG-WK close). ' +
+          'See https://docs.driftstack.dev/agent-sessions/manual-mode for activation status.',
+      );
+      // Unreachable today, but kept here to document the post-harness
+      // shape the dispatcher will return.
+
+      return reply.code(200).send({ ok: true, duration_ms: 0 });
+    },
+  );
+
   // Slice 3 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/mode.
   // Top-level mode setter for the AI-chat / manual / pair toggle on
   // the per-session workbench page. Atomic dual-column write of
@@ -1064,4 +1132,6 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   app.post('/v1/agent-sessions/:id/handback', stub);
   // Slice 3 (Wave 29-NNN ARC 3) — POST /:id/mode also gated.
   app.post('/v1/agent-sessions/:id/mode', stub);
+  // Slice 4 (Wave 29-NNN ARC 3) — POST /:id/input-event also gated.
+  app.post('/v1/agent-sessions/:id/input-event', stub);
 }

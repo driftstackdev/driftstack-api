@@ -102,6 +102,18 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     expect(res.statusCode).toBe(503);
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
   });
+
+  it('Slice 4 (Wave 29-NNN ARC 3) POST /v1/agent-sessions/:id/input-event → 503 FeatureUnavailable when runtime not wired', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions/agt_xxx/input-event',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { event: { type: 'mouseMove', x: 10, y: 20 } },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
+  });
 });
 
 describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
@@ -666,6 +678,98 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
       url: '/v1/agent-sessions/agt_inmem_99999999/mode',
       headers: { authorization: `Bearer ${fx.plaintext}` },
       payload: { mode: 'pair' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('Slice 4 (Wave 29-NNN ARC 3) POST /:id/input-event with mode=manual → 503 FeatureUnavailable (pre-harness; Mac fleet Swift work pending per Tier-3 Option A 2026-05-19)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'manual' },
+    });
+    const id = create.json<{ id: string }>().id;
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { event: { type: 'mouseMove', x: 100, y: 200 } },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
+  });
+
+  it('Slice 4 POST /:id/input-event on mode=ai session returns 409 ConflictError (mode-rejects-input-event)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+    // Default mode is 'ai'; sending input-event should reject with 409
+    // BEFORE the FeatureUnavailable 503 (mode guard fires first).
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { event: { type: 'mouseMove', x: 100, y: 200 } },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('Slice 4 POST /:id/input-event on closed session returns 409 Conflict (status guard fires before mode guard)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'manual' },
+    });
+    const id = create.json<{ id: string }>().id;
+    await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { event: { type: 'mouseMove', x: 100, y: 200 } },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('Slice 4 POST /:id/input-event with malformed event body returns 400 ValidationFailed', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'manual' },
+    });
+    const id = create.json<{ id: string }>().id;
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { event: { type: 'mouseDown', x: 100, y: 200, button: 5 } }, // button 5 not in [0,1,2]
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.ValidationFailed);
+  });
+
+  it('Slice 4 POST /:id/input-event cross-account / unknown id → 404', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions/agt_inmem_99999999/input-event',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { event: { type: 'mouseMove', x: 0, y: 0 } },
     });
     expect(res.statusCode).toBe(404);
   });

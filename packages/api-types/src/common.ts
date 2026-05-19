@@ -185,7 +185,10 @@ export interface BucketLimitConfig {
 
 export const TIER_RATE_LIMIT_DEFAULTS: Record<
   AccountTier,
-  Record<'global' | 'sessions:create' | 'agent_sessions:message', BucketLimitConfig>
+  Record<
+    'global' | 'sessions:create' | 'agent_sessions:message' | 'agent_sessions:input_event',
+    BucketLimitConfig
+  >
 > = {
   trial_pack: {
     global: { capacity: 60, refill_per_second: 1 },
@@ -195,41 +198,55 @@ export const TIER_RATE_LIMIT_DEFAULTS: Record<
     // human typing speed but rejects machine-loops". 20 turn burst
     // + 1 / 5s refill is comfortable conversational.
     'agent_sessions:message': { capacity: 20, refill_per_second: 1 / 5 },
+    // Slice 4 (Wave 29-NNN ARC 3) — ManualControlOverlay raw screen-
+    // coord stream from the customer dashboard. Client-side 120Hz
+    // cap; server-side burst of ~2 seconds of un-throttled mousemove
+    // + sustained 60Hz refill. Trial tier gets a deliberately tight
+    // budget — trial customers shouldn't be running pair-mode
+    // sessions at scale.
+    'agent_sessions:input_event': { capacity: 240, refill_per_second: 60 },
   },
   solo_manual: {
     global: { capacity: 120, refill_per_second: 2 },
     'sessions:create': { capacity: 10, refill_per_second: 1 / 30 },
     'agent_sessions:message': { capacity: 40, refill_per_second: 1 / 3 },
+    'agent_sessions:input_event': { capacity: 360, refill_per_second: 90 },
   },
   team_manual: {
     global: { capacity: 360, refill_per_second: 6 },
     'sessions:create': { capacity: 20, refill_per_second: 1 / 10 },
     'agent_sessions:message': { capacity: 100, refill_per_second: 1 },
+    'agent_sessions:input_event': { capacity: 480, refill_per_second: 120 },
   },
   agency_manual: {
     global: { capacity: 1_800, refill_per_second: 30 },
     'sessions:create': { capacity: 60, refill_per_second: 1 },
     'agent_sessions:message': { capacity: 300, refill_per_second: 3 },
+    'agent_sessions:input_event': { capacity: 600, refill_per_second: 150 },
   },
   api_starter: {
     global: { capacity: 240, refill_per_second: 4 },
     'sessions:create': { capacity: 15, refill_per_second: 1 / 20 },
     'agent_sessions:message': { capacity: 60, refill_per_second: 1 / 2 },
+    'agent_sessions:input_event': { capacity: 360, refill_per_second: 90 },
   },
   api_builder: {
     global: { capacity: 1_800, refill_per_second: 30 },
     'sessions:create': { capacity: 60, refill_per_second: 1 },
     'agent_sessions:message': { capacity: 300, refill_per_second: 3 },
+    'agent_sessions:input_event': { capacity: 600, refill_per_second: 150 },
   },
   api_scale: {
     global: { capacity: 6_000, refill_per_second: 100 },
     'sessions:create': { capacity: 120, refill_per_second: 2 },
     'agent_sessions:message': { capacity: 1_000, refill_per_second: 10 },
+    'agent_sessions:input_event': { capacity: 1_200, refill_per_second: 300 },
   },
   enterprise: {
     global: { capacity: 60_000, refill_per_second: 1_000 },
     'sessions:create': { capacity: 600, refill_per_second: 10 },
     'agent_sessions:message': { capacity: 10_000, refill_per_second: 100 },
+    'agent_sessions:input_event': { capacity: 12_000, refill_per_second: 3_000 },
   },
 };
 

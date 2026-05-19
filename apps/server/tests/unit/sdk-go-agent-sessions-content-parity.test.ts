@@ -85,7 +85,7 @@ describe('sdk-go agent_sessions content parity', () => {
     );
   });
 
-  it('AgentSessionsResource 8-method surface: Create + Get + Message + Close + SetMode + Takeover + Handback + LivekitToken. Drift to dropping a method would break the cross-SDK uniformity (TS + Python have the same 8); drift to changing signature would break Go consumers using context.Context-first idiom', () => {
+  it('AgentSessionsResource 9-method surface: Create + Get + Message + Close + SetMode + SendInputEvent + Takeover + Handback + LivekitToken. Drift to dropping a method would break the cross-SDK uniformity (TS + Python have the same 9); drift to changing signature would break Go consumers using context.Context-first idiom', () => {
     expect(body).toMatch(
       /func \(r \*AgentSessionsResource\) Create\(ctx context\.Context, body \*CreateAgentSessionRequest, opts \*CreateOptions\) \(\*AgentSession, error\)/,
     );
@@ -100,6 +100,9 @@ describe('sdk-go agent_sessions content parity', () => {
     );
     expect(body).toMatch(
       /func \(r \*AgentSessionsResource\) SetMode\(ctx context\.Context, agentSessionID, mode string\) \(\*AgentSession, error\)/,
+    );
+    expect(body).toMatch(
+      /func \(r \*AgentSessionsResource\) SendInputEvent\(ctx context\.Context, agentSessionID string, event map\[string\]any\) \(\*SendInputEventResponse, error\)/,
     );
     expect(body).toMatch(
       /func \(r \*AgentSessionsResource\) Takeover\(ctx context\.Context, agentSessionID, clientID string\) \(\*PairModeStateEnvelope, error\)/,
@@ -136,13 +139,16 @@ describe('sdk-go agent_sessions content parity', () => {
     );
   });
 
-  it('url.PathEscape on all id-bearing routes pinned (Get/Message/Close/SetMode/Takeover/Handback/LivekitToken). Drift to dropping url.PathEscape would break Go consumers whose session ids contain reserved URI chars + diverge from TS encodeURIComponent + Python quote(...,safe="") parity', () => {
+  it('url.PathEscape on all id-bearing routes pinned (Get/Message/Close/SetMode/SendInputEvent/Takeover/Handback/LivekitToken). Drift to dropping url.PathEscape would break Go consumers whose session ids contain reserved URI chars + diverge from TS encodeURIComponent + Python quote(...,safe="") parity', () => {
     expect(body).toMatch(/"\/v1\/agent-sessions\/" \+ url\.PathEscape\(agentSessionID\)/);
     expect(body).toMatch(
       /"\/v1\/agent-sessions\/" \+ url\.PathEscape\(agentSessionID\) \+ "\/message"/,
     );
     expect(body).toMatch(
       /"\/v1\/agent-sessions\/" \+ url\.PathEscape\(agentSessionID\) \+ "\/mode"/,
+    );
+    expect(body).toMatch(
+      /"\/v1\/agent-sessions\/" \+ url\.PathEscape\(agentSessionID\) \+ "\/input-event"/,
     );
     expect(body).toMatch(
       /"\/v1\/agent-sessions\/" \+ url\.PathEscape\(agentSessionID\) \+ "\/takeover"/,

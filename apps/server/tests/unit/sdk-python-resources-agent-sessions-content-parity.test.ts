@@ -54,7 +54,7 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     );
   });
 
-  it('Sync AgentSessionsResource 8-method surface: create + get + message + close + set_mode + takeover + handback + livekit_token. Drift would diverge from the TS + Go SDK surfaces', () => {
+  it('Sync AgentSessionsResource 9-method surface: create + get + message + close + set_mode + send_input_event + takeover + handback + livekit_token. Drift would diverge from the TS + Go SDK surfaces', () => {
     expect(body).toMatch(/class AgentSessionsResource:/);
     expect(body).toMatch(
       /def create\(\s*\n?\s*self,\s*\n?\s*body: dict\[str, Any\] \| None = None,\s*\n?\s*\*,\s*\n?\s*idempotency_key: str \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
@@ -68,19 +68,23 @@ describe('sdk-python resources/agent_sessions content parity', () => {
       /def set_mode\(self, agent_session_id: str, mode: str\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(
+      /def send_input_event\(self, agent_session_id: str, event: dict\[str, Any\]\) -> dict\[str, Any\]:/,
+    );
+    expect(body).toMatch(
       /def takeover\(self, agent_session_id: str, client_id: str\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(/def handback\(self, agent_session_id: str\) -> dict\[str, Any\]:/);
     expect(body).toMatch(/def livekit_token\(self, agent_session_id: str\) -> LiveKitInfo:/);
   });
 
-  it('Async AsyncAgentSessionsResource 8-method mirror pinned. Drift would break asyncio + FastAPI consumers OR break the sync/async parity contract', () => {
+  it('Async AsyncAgentSessionsResource 9-method mirror pinned. Drift would break asyncio + FastAPI consumers OR break the sync/async parity contract', () => {
     expect(body).toMatch(/class AsyncAgentSessionsResource:/);
     expect(body).toMatch(/async def create\(/);
     expect(body).toMatch(/async def get\(/);
     expect(body).toMatch(/async def message\(/);
     expect(body).toMatch(/async def close\(self, agent_session_id: str\) -> None:/);
     expect(body).toMatch(/async def set_mode\(/);
+    expect(body).toMatch(/async def send_input_event\(/);
     expect(body).toMatch(/async def takeover\(/);
     expect(body).toMatch(/async def handback\(/);
     expect(body).toMatch(/async def livekit_token\(/);
@@ -128,12 +132,15 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     );
   });
 
-  it("quote(agent_session_id, safe='') on all id-bearing paths (get/message/close/set_mode/takeover/handback/livekit_token) for BOTH sync + async. Parity with TS encodeURIComponent + Go url.PathEscape. Drift would break Python consumers whose session ids contain reserved URI chars", () => {
+  it("quote(agent_session_id, safe='') on all id-bearing paths (get/message/close/set_mode/send_input_event/takeover/handback/livekit_token) for BOTH sync + async. Parity with TS encodeURIComponent + Go url.PathEscape. Drift would break Python consumers whose session ids contain reserved URI chars", () => {
     expect(body).toMatch(/f"\/v1\/agent-sessions\/\{quote\(agent_session_id, safe=''\)\}"/);
     expect(body).toMatch(
       /f"\/v1\/agent-sessions\/\{quote\(agent_session_id, safe=''\)\}\/message"/,
     );
     expect(body).toMatch(/f"\/v1\/agent-sessions\/\{quote\(agent_session_id, safe=''\)\}\/mode"/);
+    expect(body).toMatch(
+      /f"\/v1\/agent-sessions\/\{quote\(agent_session_id, safe=''\)\}\/input-event"/,
+    );
     expect(body).toMatch(
       /f"\/v1\/agent-sessions\/\{quote\(agent_session_id, safe=''\)\}\/takeover"/,
     );

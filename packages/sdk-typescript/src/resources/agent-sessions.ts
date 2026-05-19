@@ -15,6 +15,27 @@
 import type { HttpClient } from '../http.js';
 
 /**
+ * Slice 4 (Wave 29-NNN ARC 3) — LK.6 InputEvent wire shape mirrored
+ * from `@driftstack/api-types` InputEventSchema. The 7 variants map
+ * 1:1 onto the Mac harness's CGEvent dispatch.
+ */
+export type InputEvent =
+  | { type: 'mouseMove'; x: number; y: number }
+  | { type: 'mouseDown'; x: number; y: number; button: 0 | 1 | 2 }
+  | { type: 'mouseUp'; x: number; y: number; button: 0 | 1 | 2 }
+  | { type: 'keyDown'; key: string; modifiers?: readonly string[] }
+  | { type: 'keyUp'; key: string; modifiers?: readonly string[] }
+  | { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
+  | { type: 'ping'; timestamp: number };
+
+/** Slice 4 response envelope for POST /v1/agent-sessions/:id/input-event. */
+export interface SendInputEventResponse {
+  ok: true;
+  /** Server-side dispatch latency in ms (NOT round-trip to harness). */
+  duration_ms: number;
+}
+
+/**
  * LK.5 — LiveKit join info, optionally returned on session-create
  * + always returned by POST /v1/agent-sessions/:id/livekit-token.
  * Use these fields with `livekit-client`'s `Room.connect(ws_url,
@@ -214,6 +235,30 @@ export class AgentSessionsResource {
       method: 'POST',
       path: `/v1/agent-sessions/${encodeURIComponent(id)}/mode`,
       body: { mode },
+    });
+  }
+
+  /**
+   * Slice 4 (Wave 29-NNN ARC 3) — forward a raw LK.6 InputEvent to
+   * the harness. ManualControlOverlay in the customer dashboard
+   * uses this to stream mouse + keyboard + wheel events from a
+   * customer's live-preview interaction.
+   *
+   * Pre-harness (today): server returns 503 FeatureUnavailable
+   * — the Mac fleet harness Swift work is on the Agent 1 roadmap
+   * post §10/§11+EG-WK close (6-9 weeks dedicated per the Tier-3
+   * Option A verdict 2026-05-19). The SDK surface ships so dashboard
+   * + e2e tests compile against the stable contract.
+   *
+   * Throws `ConflictError` (409) if the session is not 'active' OR
+   * is in mode='ai' (input-event requires manual or pair mode).
+   * Throws `FeatureUnavailableError` (503) pre-harness.
+   */
+  sendInputEvent(id: string, event: InputEvent): Promise<SendInputEventResponse> {
+    return this.http.request<SendInputEventResponse>({
+      method: 'POST',
+      path: `/v1/agent-sessions/${encodeURIComponent(id)}/input-event`,
+      body: { event },
     });
   }
 

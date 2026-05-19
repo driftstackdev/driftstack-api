@@ -201,6 +201,43 @@ func (r *AgentSessionsResource) SetMode(ctx context.Context, agentSessionID, mod
 	return &out, nil
 }
 
+// SendInputEventResponse is the envelope POST /:id/input-event
+// returns (Slice 4, Wave 29-NNN ARC 3). Mirrors the /gui-input
+// route's response shape (ok + duration_ms).
+type SendInputEventResponse struct {
+	OK         bool `json:"ok"`
+	DurationMS int  `json:"duration_ms"`
+}
+
+// SendInputEvent forwards a raw LK.6 InputEvent to the harness
+// (Slice 4, Wave 29-NNN ARC 3). The event map must be one of the
+// 7 discriminated-union variants (mouseMove / mouseDown / mouseUp
+// / keyDown / keyUp / wheel / ping); see packages/api-types/src/
+// agent-input-event.ts for the canonical Zod schema.
+//
+// Pre-harness (today): server returns 503 FeatureUnavailable —
+// the Mac fleet harness Swift work is on the Agent 1 roadmap
+// post §10/§11+EG-WK close (6-9 weeks dedicated per the Tier-3
+// Option A verdict 2026-05-19). SDK surface ships so consumers
+// compile against the stable contract.
+//
+// Returns 409 ConflictError if the session is not active OR is
+// in mode="ai" (input-event requires manual or pair mode).
+// Returns 503 FeatureUnavailableError pre-harness.
+func (r *AgentSessionsResource) SendInputEvent(ctx context.Context, agentSessionID string, event map[string]any) (*SendInputEventResponse, error) {
+	var out SendInputEventResponse
+	req := requestOptions{
+		method: "POST",
+		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/input-event",
+		body:   map[string]any{"event": event},
+		out:    &out,
+	}
+	if err := r.client.do(ctx, req); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // PairModeStateEnvelope is the response shape for Takeover + Handback.
 // The pair_mode_state field carries the post-transition state
 // discriminator (takeover-pending / takeover-queued / handback-pending
