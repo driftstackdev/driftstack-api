@@ -7,12 +7,12 @@ description: Bring-your-own Anthropic API key management — set, rotate, clear,
 # BYOK Anthropic key
 
 The **BYOK Anthropic key** surface lets customers store their own
-Anthropic API key against their Driftstack account so the agent
-session decomposer runs against the customer's Anthropic billing
-rail instead of Driftstack's bundled-LLM. BYOK always wins over
-bundled-LLM in the resolution chain — per founder verdict
-Q4=A (2026-05-16), BYOK is the v1.0 primary path; bundled-LLM is
-the no-BYOK fallback.
+Anthropic API key against their Driftstack account so the
+[agent session](/api/agent-sessions/) decomposer runs against the
+customer's Anthropic billing rail instead of Driftstack's
+[bundled-LLM](/api/bundled-llm/). BYOK always wins over bundled-LLM
+in the resolution chain — per founder verdict Q4=A (2026-05-16),
+BYOK is the v1.0 primary path; bundled-LLM is the no-BYOK fallback.
 
 ## Resource shape
 

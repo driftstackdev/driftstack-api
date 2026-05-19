@@ -6,15 +6,16 @@ description: Customer-facing API for the bundled-LLM agent layer — opt-in cons
 
 # Bundled LLM
 
-Driftstack's **bundled LLM** rail lets customers run AI-driven agent
-sessions without supplying their own Anthropic API key. Driftstack
-hosts the decomposer + bills usage against a customer-controlled
-monthly soft cap (default $20).
+Driftstack's **bundled LLM** rail lets customers run AI-driven
+[agent sessions](/api/agent-sessions/) without supplying their own
+Anthropic API key. Driftstack hosts the decomposer + bills usage
+against a customer-controlled monthly soft cap (default $20).
 
 Opt-in is explicit (`consent: true`) and revocable; the soft cap is
 customer-configurable up to a $10,000/month ceiling. The agent
-session route's resolution chain prefers BYOK (per-request header
-or stored) over bundled-LLM — bundled-LLM is the no-BYOK fallback.
+session route's resolution chain prefers [BYOK](/api/byok-anthropic/)
+(per-request header or stored) over bundled-LLM — bundled-LLM is
+the no-BYOK fallback.
 
 Activation: routes return `503 FeatureUnavailable` when the
 deployment hasn't wired a `BundledLlmService` (typical pre-launch

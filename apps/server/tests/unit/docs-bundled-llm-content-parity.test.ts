@@ -23,10 +23,12 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
     expect(body).toMatch(/description: .+monthly soft cap/);
   });
 
-  it('explains the opt-in consent + BYOK-wins resolution chain', () => {
+  it('explains the opt-in consent + BYOK-wins resolution chain (slice 151 added markdown link to /api/byok-anthropic/; regex tolerates both bare-BYOK and [BYOK](...) forms and the post-reflow whitespace shape)', () => {
     expect(body).toMatch(/Opt-in is explicit/);
-    expect(body).toMatch(/prefers BYOK/);
-    expect(body).toMatch(/bundled-LLM is the no-BYOK fallback/);
+    // Match either `prefers BYOK` or `prefers [BYOK](/api/byok-anthropic/)`.
+    expect(body).toMatch(/prefers \[?BYOK\]?/);
+    // Allow newline between "is" and "the" (post-link prose-reflow).
+    expect(body).toMatch(/bundled-LLM is\s+the no-BYOK fallback/);
   });
 
   it('documents all three customer endpoints', () => {
