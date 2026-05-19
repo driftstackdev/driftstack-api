@@ -242,3 +242,51 @@ shipped + tested + documented": ~3-4 hours.
 - Q.5.d archetype-enum parity precedent: the existing
   `LOCKED_ARCHETYPE_ID = 'iphone16pro_ios18_7_safari26_4'`
   constant in the comparison-page parity test.
+
+## 2026-05-20 status update — Agent 1 progress
+
+Quick check on Agent 1's `/Users/john/code/driftstack` repo
+since this design was staged 2026-05-17:
+
+- Wave 29-402 §11 (commit `27e080da`) — **iPhone 17 archetype
+  data LOCKED + BS capture PASS**. The third archetype's data
+  pack is live + BrowserStack validation green; the data shape
+  the SDK union needs is now stable.
+- Wave 29-399 §6.A + §6.B + §7 — auto-learn pipeline closed
+  end-to-end; not directly multi-archetype but unblocks the
+  shared atlas-priority storage all 3 archetypes will share.
+
+What's still pending fork-side before the SDK union ships
+(items 2-5 referenced above):
+
+- iPhone 17 archetype WebKit-fork integration (env-route +
+  JSC patch parameter pass).
+- iPhone 16 Pro iOS 18.6 / Safari 18.6 archetype (Family A
+  reference) WebKit-fork integration.
+- Per-archetype canvas atlas v3 / v4 build pipeline (running
+  for archetype B; needs replication for archetype A + iPhone
+  17 archetype).
+- Driver env-var per-archetype routing (`DRIFTSTACK_ARCHETYPE`
+  branch in MockDriver + WebKitDriver).
+
+When Agent 1 lands all of those, this SDK union slice fires
+without further coordination — the design doc above is the
+complete spec.
+
+Agent 2 side already in place:
+
+- api-types `archetype` field type stub ready to extend with
+  the 3-value union literal.
+- SessionsService accepts an arbitrary archetype ID today (no
+  Zod enum gate yet — gate lands with the SDK union).
+- Dashboard archetype selector UI placeholder slots into the
+  /agent-sessions/[id].astro mode toggle's neighbouring header
+  (sub-slice 8.5 already wires `mode: 'manual'|'ai'|'pair'`
+  with the same shape).
+- Marketing copy multi-archetype framing already shipped
+  (M.6 Path A, commit `df0883fe`).
+
+Coordination memory updated:
+`project_multi_archetype_coordination_queued.md` reflects the
+2026-05-20 status — Agent 1 ~50-70% through items 2-5; SDK
+slice still gated.
