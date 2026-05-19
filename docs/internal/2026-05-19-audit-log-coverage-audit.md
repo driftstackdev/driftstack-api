@@ -122,3 +122,35 @@ total.
 
 **Post-launch acceptable:** Email-preferences audit + any
 additional polish.
+
+## 2026-05-20 status — ALL 4 enumerated emissions LANDED
+
+- **BYOK Anthropic (Tier 1 #1)** — CLOSED in `b92d42d6`. The 3
+  enum values + emit calls + dashboard labels + bootstrap wire
+  all shipped. PUT/DELETE/POST-test now write
+  `account.byok_anthropic_key_{set,cleared,tested}` audit rows.
+
+- **Saved-proxies (Tier 1 #2)** — CLOSED in `0d94ab09`. The 2
+  enum values + dashboard labels shipped; emit point pre-
+  positioned in the saved-proxies route handler (commented out
+  pending the EG-API-1.6 storage-backend wire — when the
+  backend lands, only the emit-call needs uncommenting; schema
+  - dashboard label already in place).
+
+- **Bundled-LLM consent (Tier 2 #3)** — CLOSED in `0d94ab09`.
+  PATCH `/v1/account/me/bundled-llm-settings` now audits
+  `account.bundled_llm_consent_changed` when the consent
+  boolean actually flips (prior vs next compared via
+  `findSettings`). Cap-only PATCHes don't audit (separate
+  enum value if needed later).
+
+- **Email-preferences (post-launch acceptable)** — CLOSED in
+  `a52c5b83`. PUT `/v1/account/email-preferences` emits
+  `account.email_preferences_changed` with `{event_type,
+opted_in}` payload. Team-target case routes to the OWNER's
+  audit log (effective-account scoping).
+
+**Verdict status:** every gap enumerated in this audit is now
+closed. The `proxy.created` / `proxy.deleted` emit calls remain
+commented in the route handler until EG-API-1.6 wires the
+storage backend; everything else fires today.
