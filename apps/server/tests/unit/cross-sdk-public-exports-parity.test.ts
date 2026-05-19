@@ -141,6 +141,38 @@ describe('W707 cross-SDK public-exports surface parity', () => {
     expect(py).toMatch(/\bis_retryable\b/);
   });
 
+  it('CRITICAL customer-facing return-type re-exports parity — TS + Python both re-export the resource-level types used as method-return shapes (slices 112 + 113). Customers writing typed handlers MUST be able to `import { TeamMember } from "@driftstack/sdk"` and `from driftstack import TeamMember` without deep-importing from resources/*. Drift to either SDK dropping these re-exports would break customer code that annotates handlers explicitly.', () => {
+    const ts = read(TS_INDEX);
+    const py = read(PY_INIT);
+
+    // 9 customer-facing types added in slices 112 + 113 (team-5 +
+    // webhooks-2 + api-keys-1 + sessions-1, with the TS side also
+    // re-exporting 2 crypto-orders option types).
+    const sharedTypes = [
+      'TeamMember',
+      'TeamInvite',
+      'TeamMembersList',
+      'TeamInvitesList',
+      'AcceptInviteResponse',
+      'ApiKeyList',
+      'SessionsListPage',
+      'WebhookEndpointList',
+      'WebhookDeliveryListPage',
+    ];
+
+    for (const t of sharedTypes) {
+      expect(ts, `sdk-typescript re-export ${t}`).toMatch(new RegExp(`\\b${t}\\b`));
+      expect(py, `sdk-python __all__ entry "${t}"`).toMatch(new RegExp(`"${t}",`));
+    }
+
+    // TS-only types (Python uses kwargs/dicts instead of typed
+    // Options classes — language-idiomatic difference).
+    expect(ts).toMatch(/RotateApiKeyOptions/);
+    expect(ts).toMatch(/RotateApiKeyResponse/);
+    expect(ts).toMatch(/CreateCryptoCheckoutOptions/);
+    expect(ts).toMatch(/ListCryptoOrdersOptions/);
+  });
+
   it('CRITICAL iteratePaginated + CursorPage helper exported in sdk-typescript. The standalone helper lets customers walk arbitrary cursor-paginated endpoints; drift to dropping would force customers to hand-write cursor handoff logic.', () => {
     const ts = read(TS_INDEX);
     expect(ts).toMatch(/export \{ iteratePaginated, type CursorPage \} from '\.\/pagination\.js'/);
