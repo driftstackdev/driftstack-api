@@ -8,6 +8,12 @@
 //
 //     DRIFTSTACK_API_KEY=ds_live_... go run ./examples/agent_chat
 //
+// Optional BYOK Anthropic key (skip the bundled-LLM rail):
+//
+//     DRIFTSTACK_API_KEY=ds_live_... \
+//     DRIFTSTACK_BYOK_ANTHROPIC_API_KEY=sk-ant-... \
+//     go run ./examples/agent_chat
+//
 // The server activation-gates this surface — until the LLM key path
 // is enabled on the deployment, calls reject with FeatureUnavailableError.
 
@@ -34,6 +40,14 @@ func main() {
 	if apiKey == "" {
 		log.Fatal("DRIFTSTACK_API_KEY not set")
 	}
+	// Optional BYOK Anthropic key. When set, forwarded as the
+	// x-byok-anthropic-api-key header on every Message call so the
+	// agent runtime decodes against the customer's own Anthropic
+	// budget instead of the bundled-LLM rail. Empty string is treated
+	// as "no BYOK" — matches the Go SDK's `opts.ByokAPIKey != ""`
+	// guard at agent_sessions.go:155 (the cross-SDK parity contract
+	// pinned by slices 126-128).
+	byokKey := os.Getenv("DRIFTSTACK_BYOK_ANTHROPIC_API_KEY")
 	client := driftstack.New(apiKey)
 	ctx := context.Background()
 
@@ -49,9 +63,19 @@ func main() {
 	}
 	fmt.Printf("Created agent session %s (budget=%d)\n", session.ID, session.TokenBudgetTotal)
 
+	// Build MessageOptions once. Reusing for every turn so the BYOK
+	// key (when set) is forwarded on each Message call. Passing nil
+	// when no BYOK key is set produces the same wire-shape as before
+	// — the runtime falls back to the bundled-LLM rail if the
+	// deployment has it wired AND the customer has consented.
+	var msgOpts *driftstack.MessageOptions
+	if byokKey != "" {
+		msgOpts = &driftstack.MessageOptions{ByokAPIKey: byokKey}
+	}
+
 	for _, prompt := range prompts {
 		fmt.Printf("\n→ user: %s\n", prompt)
-		resp, err := client.AgentSessions.Message(ctx, session.ID, prompt, nil)
+		resp, err := client.AgentSessions.Message(ctx, session.ID, prompt, msgOpts)
 		if err != nil {
 			log.Fatalf("Message: %v", err)
 		}
