@@ -225,6 +225,16 @@ class AsyncAgentSessionsResource:
         *,
         byok_api_key: str | None = None,
     ) -> dict[str, Any]:
+        """Async counterpart to AgentSessionsResource.message.
+
+        Returns a discriminated body keyed by ``kind``. Closed sessions
+        return 409 Conflict — start a new session.
+
+        ``byok_api_key`` (optional, BYOK Tier-3 LOCKED 2026-05-16) is
+        forwarded as the ``x-byok-anthropic-api-key`` request header so
+        callers don't have to construct it by hand. NEVER logged by
+        the SDK; arrives over TLS to the control plane.
+        """
         # Skip the header when byok_api_key is None OR empty. Empty
         # would send `x-byok-anthropic-api-key:` on the wire — the
         # server normalises that to absent (slice 105 fix), but skipping

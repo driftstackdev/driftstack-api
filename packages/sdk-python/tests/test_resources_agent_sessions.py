@@ -291,3 +291,44 @@ async def test_async_message_clarify_response() -> None:
             out = await client.agent_sessions.message("agt_1", "do stuff")
         assert out["kind"] == "clarify"
         assert "clarifying_question" in out
+
+
+@pytest.mark.asyncio
+async def test_async_message_byok_api_key_sets_header() -> None:
+    """Async parity with test_sync_message_byok_api_key_sets_header.
+    Confirms the AsyncAgentSessionsResource.message path also forwards
+    the x-byok-anthropic-api-key header — the production code at
+    agent_sessions.py:233 uses the same `if byok_api_key` guard as the
+    sync variant, so a future refactor that touches one variant but
+    not the other would now trip a test."""
+    reply = {"kind": "clarify", "session": SESSION_ENVELOPE, "clarifying_question": "?"}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt_1/message").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            await client.agent_sessions.message(
+                "agt_1", "hi", byok_api_key="sk-ant-test-byok"
+            )
+        assert route.called
+        sent_headers = route.calls.last.request.headers
+        assert sent_headers["x-byok-anthropic-api-key"] == "sk-ant-test-byok"
+
+
+@pytest.mark.asyncio
+async def test_async_message_empty_byok_omits_header() -> None:
+    """Async parity with test_sync_message_empty_byok_omits_header
+    (slice 127). The async variant carries the same `if byok_api_key`
+    guard — empty string is falsy in Python so the header is skipped.
+    Test pins the behaviour so the async path doesn't drift from the
+    sync path independently."""
+    reply = {"kind": "clarify", "session": SESSION_ENVELOPE, "clarifying_question": "?"}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt_1/message").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
+            await client.agent_sessions.message("agt_1", "hi", byok_api_key="")
+        assert route.called
+        sent_headers = route.calls.last.request.headers
+        assert "x-byok-anthropic-api-key" not in sent_headers
