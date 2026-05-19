@@ -11,31 +11,37 @@ limits on every authenticated `/v1/*` call. The limits are
 intentional anti-abuse caps (runaway scripts, accidental DoS),
 not the pricing meter. Pricing is concurrent-only per ADR-004.
 
-## Two bucket keys
+## Three bucket keys
 
-Every authenticated request consumes from one or both buckets:
+Every authenticated request consumes from one or more buckets:
 
 - **`global`** — every authenticated `/v1/*` call.
 - **`sessions:create`** — `POST /v1/sessions` only. Lower cap
   because session creation is the most expensive op in the
   system (driver allocation, archetype hydration, fingerprint
   pinning).
+- **`agent_sessions:message`** —
+  `POST /v1/agent-sessions/:id/messages` only. Isolated from
+  `global` so an LLM-driven message loop can't drain the
+  global cap (v2-#8 sub-slice 8.20).
 
 A `POST /v1/sessions` consumes from BOTH `global` and
-`sessions:create` — hitting either cap returns 429.
+`sessions:create`. A `POST /v1/agent-sessions/:id/messages`
+consumes from `agent_sessions:message` only — hitting any cap
+returns 429.
 
 ## Per-tier defaults
 
-| Tier            | global capacity | global refill (rps) | sessions:create capacity | sessions:create refill (rps) |
-| --------------- | --------------- | ------------------- | ------------------------ | ---------------------------- |
-| `trial_pack`    | 60              | 1                   | 5                        | 1/60 (1 per minute)          |
-| `solo_manual`   | 120             | 2                   | 10                       | 1/30 (2 per minute)          |
-| `team_manual`   | 360             | 6                   | 20                       | 1/10 (6 per minute)          |
-| `agency_manual` | 1,800           | 30                  | 60                       | 1                            |
-| `api_starter`   | 240             | 4                   | 15                       | 1/20 (3 per minute)          |
-| `api_builder`   | 1,800           | 30                  | 60                       | 1                            |
-| `api_scale`     | 6,000           | 100                 | 120                      | 2                            |
-| `enterprise`    | 60,000          | 1,000               | 600                      | 10                           |
+| Tier            | global capacity | global refill (rps) | sessions:create capacity | sessions:create refill (rps) | agent_sessions:message capacity | agent_sessions:message refill (rps) |
+| --------------- | --------------- | ------------------- | ------------------------ | ---------------------------- | ------------------------------- | ----------------------------------- |
+| `trial_pack`    | 60              | 1                   | 5                        | 1/60 (1 per minute)          | 20                              | 1/5 (12 per minute)                 |
+| `solo_manual`   | 120             | 2                   | 10                       | 1/30 (2 per minute)          | 40                              | 1/3 (20 per minute)                 |
+| `team_manual`   | 360             | 6                   | 20                       | 1/10 (6 per minute)          | 100                             | 1                                   |
+| `agency_manual` | 1,800           | 30                  | 60                       | 1                            | 300                             | 3                                   |
+| `api_starter`   | 240             | 4                   | 15                       | 1/20 (3 per minute)          | 60                              | 1/2 (30 per minute)                 |
+| `api_builder`   | 1,800           | 30                  | 60                       | 1                            | 300                             | 3                                   |
+| `api_scale`     | 6,000           | 100                 | 120                      | 2                            | 1,000                           | 10                                  |
+| `enterprise`    | 60,000          | 1,000               | 600                      | 10                           | 10,000                          | 100                                 |
 
 Capacity = max burst size before the next refill kicks in.
 Refill = sustained rate (tokens per second). Effective sustained

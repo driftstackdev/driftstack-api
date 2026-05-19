@@ -45,18 +45,20 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(existsSync(ERR)).toBe(true);
   });
 
-  it('reference/rate-limits.md: token-bucket anti-abuse-not-pricing-meter (concurrent-only per ADR-004) + 2 bucket keys (global + sessions:create) + 8-tier defaults pinned. Re-enabled by slice 306 — the V-505 anchor was R4-scrubbed; the doc now leads with the bare "reference." sentence', () => {
+  it('reference/rate-limits.md: token-bucket anti-abuse-not-pricing-meter (concurrent-only per ADR-004) + 3 bucket keys (global + sessions:create + agent_sessions:message) + 8-tier defaults pinned. Re-enabled by slice 306 — the V-505 anchor was R4-scrubbed; the doc now leads with the bare "reference." sentence. v2-#8 sub-slice 8.20 added the agent_sessions:message bucket so LLM-driven message loops can\'t drain global.', () => {
     const body = read(RL);
     expect(body).toMatch(/^title: Rate limits$/m);
     expect(body).toMatch(/^reference\. Driftstack enforces per-tier token-bucket rate$/m);
     expect(body).toMatch(/Driftstack enforces per-tier token-bucket rate/);
     expect(body).toMatch(/intentional anti-abuse caps \(runaway scripts, accidental DoS\),/);
     expect(body).toMatch(/not the pricing meter\. Pricing is concurrent-only per ADR-004\./);
-    expect(body).toMatch(/^## Two bucket keys$/m);
+    expect(body).toMatch(/^## Three bucket keys$/m);
     expect(body).toMatch(/- \*\*`global`\*\* — every authenticated `\/v1\/\*` call\./);
     expect(body).toMatch(/- \*\*`sessions:create`\*\* — `POST \/v1\/sessions` only\./);
+    expect(body).toMatch(
+      /- \*\*`agent_sessions:message`\*\* —\s*\n?\s*`POST \/v1\/agent-sessions\/:id\/messages` only/,
+    );
     expect(body).toMatch(/A `POST \/v1\/sessions` consumes from BOTH `global` and/);
-    expect(body).toMatch(/`sessions:create` — hitting either cap returns 429\./);
     expect(body).toMatch(/\| `trial_pack`\s+\| 60\s+\| 1\s+\|/);
     expect(body).toMatch(/\| `api_starter`\s+\| 240\s+\| 4\s+\|/);
     expect(body).toMatch(/\| `api_builder`\s+\| 1,800\s+\| 30\s+\|/);

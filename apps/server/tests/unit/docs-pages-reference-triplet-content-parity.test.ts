@@ -148,13 +148,17 @@ describe('W786 docs reference/ triplet content parity', () => {
     );
   });
 
-  it("CRITICAL 2 bucket-key framing pinned — global + sessions:create. The 'A POST /v1/sessions consumes from BOTH global and sessions:create — hitting either cap returns 429' wording explains the dual-bucket model.", () => {
+  it("CRITICAL 3 bucket-key framing pinned — global + sessions:create + agent_sessions:message. The 'A POST /v1/sessions consumes from BOTH global and sessions:create. A POST /v1/agent-sessions/:id/messages consumes from agent_sessions:message only — hitting any cap returns 429' wording explains the triple-bucket model. v2-#8 sub-slice 8.20 added the agent_sessions:message bucket.", () => {
     const p = read(RL);
 
     expect(p).toMatch(/\*\*`global`\*\* — every authenticated `\/v1\/\*` call\./);
     expect(p).toMatch(/\*\*`sessions:create`\*\* — `POST \/v1\/sessions` only\./);
     expect(p).toMatch(
-      /A `POST \/v1\/sessions` consumes from BOTH `global` and\s*\n?`sessions:create` — hitting either cap returns 429\./,
+      /\*\*`agent_sessions:message`\*\* —\s*\n?\s*`POST \/v1\/agent-sessions\/:id\/messages` only/,
+    );
+    expect(p).toMatch(/A `POST \/v1\/sessions` consumes from BOTH `global` and/);
+    expect(p).toMatch(
+      /A `POST \/v1\/agent-sessions\/:id\/messages`\s*\n?consumes from `agent_sessions:message` only — hitting any cap\s*\n?returns 429\./,
     );
   });
 
