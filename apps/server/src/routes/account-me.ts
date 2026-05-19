@@ -54,6 +54,14 @@ export interface AccountMeRoutesOptions {
    *  without a second roundtrip. Null = MFA not wired (flag always
    *  false on the response). */
   mfaService?: MfaService | null;
+  /** 2026-05-19 — when set, /v1/account/me falls back to the OAuth
+   *  link's `provider_avatar_url` for `avatar_url` whenever the
+   *  account has no R2-uploaded avatar set. Lets Gmail/GitHub
+   *  sign-ins show their IDP profile picture without going through
+   *  an upload flow. Null/omitted → no fallback (legacy behaviour). */
+  oauthLinksRepo?: {
+    listForAccount(accountId: string): Promise<readonly { providerAvatarUrl: string | null }[]>;
+  };
 }
 
 /**
@@ -72,6 +80,25 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   const authCache = opts.authCache ?? null;
   const r2Public = opts.r2Public ?? null;
   const mfaService = opts.mfaService ?? null;
+  const oauthLinksRepo = opts.oauthLinksRepo ?? null;
+
+  // 2026-05-19 — first non-null providerAvatarUrl from the
+  // account's OAuth links, used as fallback when avatar_r2_key is
+  // null. Swallows errors (best-effort enrichment; a stale /me
+  // read should never 500 because oauth_links hiccuped).
+  async function oauthAvatarFallback(accountId: string): Promise<string | null> {
+    if (!oauthLinksRepo) return null;
+    try {
+      const links = await oauthLinksRepo.listForAccount(accountId);
+      for (const link of links) {
+        if (link.providerAvatarUrl) return link.providerAvatarUrl;
+      }
+      return null;
+    } catch (err) {
+      app.log.warn({ err, accountId }, 'oauth avatar fallback lookup failed');
+      return null;
+    }
+  }
 
   // V-352b — best-effort presigned GET URL for the avatar. Returns null
   // when no avatar is set, when the public R2 bucket is not configured,
@@ -103,12 +130,17 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
 
       // Parallel fan-out: counts + tier-derived caps + avatar presign + MFA.
       // Tier caps come from in-memory constants so they cost nothing.
-      const [activeSessions, profileCount, avatarUrl, mfaStatus] = await Promise.all([
-        sessionRepo.countActiveSessions(accountId),
-        profilesRepo.countByAccount(accountId),
-        presignAvatar(ctx.account.avatarR2Key),
-        mfaService ? mfaService.getStatus(accountId) : Promise.resolve(null),
-      ]);
+      const [activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback] =
+        await Promise.all([
+          sessionRepo.countActiveSessions(accountId),
+          profilesRepo.countByAccount(accountId),
+          presignAvatar(ctx.account.avatarR2Key),
+          mfaService ? mfaService.getStatus(accountId) : Promise.resolve(null),
+          ctx.account.avatarR2Key ? Promise.resolve(null) : oauthAvatarFallback(accountId),
+        ]);
+      // R2-uploaded avatar wins; OAuth IDP avatar is the fallback
+      // (matches account_avatar_source enum priority: user > idp).
+      const avatarUrl = r2AvatarUrl ?? oauthFallback;
 
       return {
         id: `acc_${accountId}`,
@@ -192,12 +224,15 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // / profile_* / teams[] all undefined under types claiming
       // string|null / boolean / number / array).
       const tier = updated.tier;
-      const [activeSessions, profileCount, avatarUrl, mfaStatus] = await Promise.all([
-        sessionRepo.countActiveSessions(updated.id),
-        profilesRepo.countByAccount(updated.id),
-        presignAvatar(updated.avatarR2Key),
-        mfaService ? mfaService.getStatus(updated.id) : Promise.resolve(null),
-      ]);
+      const [activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback] =
+        await Promise.all([
+          sessionRepo.countActiveSessions(updated.id),
+          profilesRepo.countByAccount(updated.id),
+          presignAvatar(updated.avatarR2Key),
+          mfaService ? mfaService.getStatus(updated.id) : Promise.resolve(null),
+          updated.avatarR2Key ? Promise.resolve(null) : oauthAvatarFallback(updated.id),
+        ]);
+      const avatarUrl = r2AvatarUrl ?? oauthFallback;
       return {
         id: `acc_${updated.id}`,
         email: updated.email,

@@ -815,6 +815,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       authCache: deps.authCache,
       r2Public: deps.r2Public ?? null,
       mfaService: deps.mfaService ?? null,
+      // 2026-05-19 — OAuth-IDP avatar fallback for the avatar_url
+      // response field. When the account has no R2-uploaded avatar
+      // BUT has an OAuth link with a provider_avatar_url, return that
+      // URL so Gmail/GitHub sign-ins show their IDP profile pic.
+      ...(deps.oauthLinksRepo !== undefined ? { oauthLinksRepo: deps.oauthLinksRepo } : {}),
     });
   }
   // V-176 — public-facing status endpoint. Reuses the readinessChecks

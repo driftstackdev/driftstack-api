@@ -1103,10 +1103,50 @@ const EMAIL_EVENTS = [
           if (webSessionsStatus) webSessionsStatus.textContent = '';
           return;
         }
-        webSessionsList.innerHTML = sessions
-          .map((s) => {
+
+        // 2026-05-19 — collapse multiple sessions from the same
+        // (os, browser) into a single row. Each browser-tab login
+        // mints a fresh web_sessions row (one token per login), so
+        // signing in twice from the same Mac shows two rows. The
+        // server-side token rows stay distinct (each has its own
+        // revoke + expiry); the UI presents them as ONE device with
+        // a (+N older) indicator. Revoking the row revokes the most-
+        // recent token; "Revoke all others" still hits every non-
+        // current row server-side.
+        const groups = new Map();
+        for (const s of sessions) {
+          const key = (s.os || 'Unknown OS') + ' ' + (s.browser || 'Unknown browser');
+          const existing = groups.get(key);
+          if (!existing) {
+            groups.set(key, { primary: s, hiddenIds: [], count: 1 });
+          } else {
+            existing.count += 1;
+            // Prefer the "current" one as primary; otherwise the
+            // most-recently-used.
+            const primary = existing.primary;
+            const sNewer =
+              new Date(s.last_used_at || s.created_at || 0).getTime() >
+              new Date(primary.last_used_at || primary.created_at || 0).getTime();
+            if (s.current || (!primary.current && sNewer)) {
+              existing.hiddenIds.push(primary.id);
+              existing.primary = s;
+            } else {
+              existing.hiddenIds.push(s.id);
+            }
+          }
+        }
+        const collapsed = Array.from(groups.values());
+
+        webSessionsList.innerHTML = collapsed
+          .map((g) => {
+            const s = g.primary;
+            const dupNote = g.count > 1 ? ' (+' + (g.count - 1).toString() + ' older)' : '';
             const label =
-              escapeHtml(s.os) + ' · ' + escapeHtml(s.browser) + (s.current ? ' · current' : '');
+              escapeHtml(s.os) +
+              ' · ' +
+              escapeHtml(s.browser) +
+              (s.current ? ' · current' : '') +
+              escapeHtml(dupNote);
             const meta =
               'Last used ' +
               escapeHtml(fmtRelative(s.last_used_at)) +
@@ -1133,7 +1173,12 @@ const EMAIL_EVENTS = [
         if (webSessionsRevokeAllBtn) webSessionsRevokeAllBtn.hidden = others === 0;
         if (webSessionsStatus)
           webSessionsStatus.textContent =
-            sessions.length + (sessions.length === 1 ? ' active session' : ' active sessions');
+            collapsed.length +
+            (collapsed.length === 1 ? ' device' : ' devices') +
+            ' · ' +
+            sessions.length +
+            ' active session' +
+            (sessions.length === 1 ? '' : 's');
       }
 
       function loadWebSessions() {

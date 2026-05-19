@@ -140,6 +140,37 @@ const navItems = [
                   class="mt-1 w-full rounded-md border border-white/10 bg-surface-inset px-2 py-1.5 text-sm text-ink-primary focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
                 ></select>
               </div>
+              {/* 2026-05-19 — signed-in identity badge. Avatar (from R2
+                  upload OR OAuth IDP fallback per /account/me) +
+                  display name above the nav. Hidden until JS hydrates
+                  /account/me to avoid empty-state flash. */}
+              <div
+                data-signed-in-as
+                class="hidden border-b border-white/10 px-4 py-4"
+              >
+                <div class="flex items-center gap-3">
+                  <div
+                    data-signed-in-avatar
+                    class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-surface-raised text-[11px] text-ink-muted"
+                  >
+                    —
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p
+                      data-signed-in-name
+                      class="truncate text-sm font-medium text-ink-primary"
+                    >
+                      —
+                    </p>
+                    <a
+                      href="/settings"
+                      class="text-[11px] text-ink-muted hover:text-ink-primary"
+                    >
+                      Account settings
+                    </a>
+                  </div>
+                </div>
+              </div>
               <nav class="px-4 py-6">
                 <ul class="space-y-1">
                   {navItems.map((item) => (
@@ -257,7 +288,43 @@ const navItems = [
               return r.ok ? r.json() : null;
             })
             .then(function (me) {
-              if (!me || !Array.isArray(me.teams) || me.teams.length === 0) return;
+              if (!me) return;
+
+              // 2026-05-19 — populate the signed-in-as identity badge
+              // above the nav. Avatar from /account/me (R2 upload OR
+              // OAuth IDP fallback); name → email → id as label
+              // priority. Initials shown when no avatar URL.
+              const sa = document.querySelector('[data-signed-in-as]');
+              const saName = document.querySelector('[data-signed-in-name]');
+              const saAvatar = document.querySelector('[data-signed-in-avatar]');
+              if (sa && saName && saAvatar) {
+                const displayName = me.name || me.email || me.id;
+                saName.textContent = displayName;
+                if (me.avatar_url) {
+                  const img = document.createElement('img');
+                  img.src = me.avatar_url;
+                  img.alt = '';
+                  img.referrerPolicy = 'no-referrer';
+                  img.className = 'h-full w-full object-cover';
+                  saAvatar.innerHTML = '';
+                  saAvatar.appendChild(img);
+                } else {
+                  // Compute initials from the display label.
+                  const parts = String(displayName)
+                    .split(/[^A-Za-z0-9]+/)
+                    .filter(Boolean);
+                  const initials =
+                    parts.length >= 2
+                      ? (parts[0][0] + parts[1][0]).toUpperCase()
+                      : (parts[0] || '?').slice(0, 2).toUpperCase();
+                  saAvatar.textContent = initials;
+                  saAvatar.className =
+                    'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-glow-red/10 text-xs font-medium text-glow-red';
+                }
+                sa.classList.remove('hidden');
+              }
+
+              if (!Array.isArray(me.teams) || me.teams.length === 0) return;
               // Build options: Self + each team owner.
               const options = [{ value: '', label: 'Self (' + (me.email || me.id) + ')' }];
               for (const t of me.teams) {
