@@ -354,23 +354,52 @@ const apiBaseUrl = resolveApiBaseUrl();
       return out.length > 0 ? out : undefined;
     }
 
+    // 2026-05-19 Slice 5 — pair-mode takeover trigger requires
+    // a stable per-tab client_id. Generated once per page load.
+    const dashboardClientId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? 'dash_' + crypto.randomUUID()
+        : 'dash_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+
     async function sendInputEvent(event) {
       if (harnessOffline) return;
       try {
+        const body = { event };
+        // Always send client_id; server only consults it on the
+        // pair-mode-ai-driving takeover-trigger path (Slice 5).
+        body.client_id = dashboardClientId;
         const res = await fetch(
           apiBaseUrl + '/v1/agent-sessions/' + encodeURIComponent(sessionId) + '/input-event',
           {
             method: 'POST',
             headers: { 'content-type': 'application/json', ...authHeaders() },
-            body: JSON.stringify({ event }),
+            body: JSON.stringify(body),
           },
         );
-        if (res.status === 503) {
-          // Pre-harness: drop silently, suppress further sends.
+        if (res.status === 200) {
+          // Slice 5 — check for the takeover-fired discriminator; if
+          // so, refresh the displayed pair_mode_state. The mode toggle
+          // doesn't change (mode stays 'pair') but the inner state
+          // does, which downstream code reads to decide what to show.
+          try {
+            const reply = await res.clone().json();
+            if (reply && reply.kind === 'pair-mode-takeover-fired') {
+              pairModeState = reply.pair_mode_state;
+            }
+          } catch {
+            // Non-JSON success is unexpected but not fatal.
+          }
+        } else if (res.status === 503) {
+          // Pre-harness forward path: drop silently, suppress
+          // further sends. The Slice 5 takeover-trigger path
+          // returns 200, not 503.
           harnessOffline = true;
           if (statusPill) {
-            statusPill.title = 'Live input requires harness end-to-end (pending)';
+            statusPill.title = 'Live input forwarding pending harness end-to-end';
           }
+        } else if (res.status === 409) {
+          // 409 = pair-mode mid-transition (takeover-pending etc.);
+          // wait + retry on next event. Don't latch offline.
         } else if (!res.ok) {
           paintError('POST /input-event returned ' + res.status.toString());
         }

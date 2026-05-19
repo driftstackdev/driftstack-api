@@ -28,12 +28,29 @@ export type InputEvent =
   | { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
   | { type: 'ping'; timestamp: number };
 
-/** Slice 4 response envelope for POST /v1/agent-sessions/:id/input-event. */
-export interface SendInputEventResponse {
-  ok: true;
-  /** Server-side dispatch latency in ms (NOT round-trip to harness). */
-  duration_ms: number;
-}
+/** Slice 4 + Slice 5 response envelope for POST /v1/agent-sessions/
+ *  :id/input-event. Discriminated union — callers MUST branch on
+ *  `kind`:
+ *
+ *  - `'pair-mode-takeover-fired'` — first input-event in a pair-mode
+ *    `ai-driving` session triggered the takeover-request transition.
+ *    `pair_mode_state` carries the new state machine kind (typically
+ *    `takeover-pending` or `takeover-queued`).
+ *  - `'forwarded'` — event dispatched directly to the harness
+ *    (manual mode OR pair-mode after takeover-grant). Pre-harness,
+ *    this path returns 503; once Agent 1's Swift work lands the
+ *    handler will return this shape with `duration_ms`.
+ */
+export type SendInputEventResponse =
+  | {
+      kind: 'pair-mode-takeover-fired';
+      pair_mode_state: { kind: string; [k: string]: unknown };
+    }
+  | {
+      kind: 'forwarded';
+      /** Server-side dispatch latency in ms (NOT round-trip). */
+      duration_ms: number;
+    };
 
 /**
  * LK.5 — LiveKit join info, optionally returned on session-create
@@ -254,11 +271,15 @@ export class AgentSessionsResource {
    * is in mode='ai' (input-event requires manual or pair mode).
    * Throws `FeatureUnavailableError` (503) pre-harness.
    */
-  sendInputEvent(id: string, event: InputEvent): Promise<SendInputEventResponse> {
+  sendInputEvent(
+    id: string,
+    event: InputEvent,
+    opts?: { clientId?: string },
+  ): Promise<SendInputEventResponse> {
     return this.http.request<SendInputEventResponse>({
       method: 'POST',
       path: `/v1/agent-sessions/${encodeURIComponent(id)}/input-event`,
-      body: { event },
+      body: opts?.clientId !== undefined ? { event, client_id: opts.clientId } : { event },
     });
   }
 

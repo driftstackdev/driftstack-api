@@ -88,25 +88,27 @@ describe('Slice 4 — InputEvent cross-surface parity', () => {
     }
   });
 
-  it('sdk-typescript sendInputEvent method exists with InputEvent parameter', () => {
+  it('sdk-typescript sendInputEvent method exists with InputEvent + optional clientId opts (Slice 5 takeover-trigger needs client_id)', () => {
     const body = read(SDK_TS);
     expect(body).toMatch(
-      /sendInputEvent\(id: string, event: InputEvent\): Promise<SendInputEventResponse>/,
+      /sendInputEvent\(\s*\n?\s*id: string,\s*\n?\s*event: InputEvent,\s*\n?\s*opts\?: \{ clientId\?: string \},\s*\n?\s*\): Promise<SendInputEventResponse>/,
     );
   });
 
-  it('sdk-go SendInputEvent method exists with map[string]any event parameter', () => {
+  it('sdk-go SendInputEvent method exists with SendInputEventOptions param (Slice 5 takeover-trigger client_id)', () => {
     const body = read(SDK_GO);
     expect(body).toMatch(
-      /func \(r \*AgentSessionsResource\) SendInputEvent\(ctx context\.Context, agentSessionID string, event map\[string\]any\) \(\*SendInputEventResponse, error\)/,
+      /func \(r \*AgentSessionsResource\) SendInputEvent\(ctx context\.Context, agentSessionID string, event map\[string\]any, opts \*SendInputEventOptions\) \(\*SendInputEventResponse, error\)/,
     );
+    expect(body).toMatch(/type SendInputEventOptions struct \{/);
   });
 
-  it('sdk-go SendInputEventResponse struct pinned to {ok, duration_ms}', () => {
+  it('sdk-go SendInputEventResponse struct pinned to discriminated-union shape {Kind, PairModeState?, DurationMS?} for Slice 4 + Slice 5', () => {
     const body = read(SDK_GO);
     expect(body).toMatch(/type SendInputEventResponse struct \{/);
-    expect(body).toMatch(/OK\s+bool\s+`json:"ok"`/);
-    expect(body).toMatch(/DurationMS int\s+`json:"duration_ms"`/);
+    expect(body).toMatch(/Kind\s+string\s+`json:"kind"`/);
+    expect(body).toMatch(/PairModeState map\[string\]any `json:"pair_mode_state,omitempty"`/);
+    expect(body).toMatch(/DurationMS\s+int\s+`json:"duration_ms,omitempty"`/);
   });
 
   it('all 4 surfaces include the LK.6 wire-contract reference comment', () => {

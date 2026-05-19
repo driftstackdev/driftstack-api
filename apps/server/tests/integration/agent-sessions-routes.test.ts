@@ -763,6 +763,95 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.ValidationFailed);
   });
 
+  it('Slice 5 (Wave 29-NNN ARC 3) POST /:id/input-event on mode=pair + ai-driving fires takeover-request transition → 200 with kind:"pair-mode-takeover-fired" + pair_mode_state', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair' },
+    });
+    expect(create.statusCode).toBe(201);
+    const id = create.json<{ id: string; pair_mode_state: { kind: string } | null }>().id;
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        event: { type: 'mouseDown', x: 100, y: 200, button: 0 },
+        client_id: 'cli_tab_a',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      kind: string;
+      pair_mode_state: { kind: string; requestedByClientId?: string };
+    }>();
+    expect(body.kind).toBe('pair-mode-takeover-fired');
+    expect(body.pair_mode_state.kind).toBe('takeover-pending');
+    expect(body.pair_mode_state.requestedByClientId).toBe('cli_tab_a');
+    // GET /:id should reflect the new pair_mode_state.
+    const read = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(read.json<{ pair_mode_state: { kind: string } }>().pair_mode_state.kind).toBe(
+      'takeover-pending',
+    );
+  });
+
+  it('Slice 5 POST /:id/input-event on mode=pair + ai-driving WITHOUT client_id → 400 ValidationFailed (client_id required for takeover-trigger)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair' },
+    });
+    const id = create.json<{ id: string }>().id;
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { event: { type: 'mouseMove', x: 100, y: 200 } },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.ValidationFailed);
+  });
+
+  it('Slice 5 POST /:id/input-event on mode=pair + takeover-pending → 409 Conflict (mid-transition; wait for settle)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair' },
+    });
+    const id = create.json<{ id: string }>().id;
+    // First input-event fires takeover; second one in takeover-pending
+    // is rejected.
+    await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        event: { type: 'mouseDown', x: 50, y: 50, button: 0 },
+        client_id: 'cli_tab_a',
+      },
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/input-event`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        event: { type: 'mouseMove', x: 60, y: 60 },
+        client_id: 'cli_tab_a',
+      },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
   it('Slice 4 POST /:id/input-event cross-account / unknown id → 404', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const res = await fx.app.inject({

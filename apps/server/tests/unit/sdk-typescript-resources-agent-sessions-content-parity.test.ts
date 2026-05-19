@@ -100,7 +100,7 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
       /setMode\(id: string, mode: 'manual' \| 'ai' \| 'pair'\): Promise<AgentSession>/,
     );
     expect(body).toMatch(
-      /sendInputEvent\(id: string, event: InputEvent\): Promise<SendInputEventResponse>/,
+      /sendInputEvent\(\s*\n?\s*id: string,\s*\n?\s*event: InputEvent,\s*\n?\s*opts\?: \{ clientId\?: string \},\s*\n?\s*\): Promise<SendInputEventResponse>/,
     );
     expect(body).toMatch(/takeover\(\s*\n?\s*id: string,\s*\n?\s*clientId: string,\s*\n?\s*\)/);
     expect(body).toMatch(/handback\(id: string\)/);

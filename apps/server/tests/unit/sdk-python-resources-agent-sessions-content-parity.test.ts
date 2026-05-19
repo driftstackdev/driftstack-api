@@ -68,7 +68,7 @@ describe('sdk-python resources/agent_sessions content parity', () => {
       /def set_mode\(self, agent_session_id: str, mode: str\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(
-      /def send_input_event\(self, agent_session_id: str, event: dict\[str, Any\]\) -> dict\[str, Any\]:/,
+      /def send_input_event\(\s*\n?\s*self,\s*\n?\s*agent_session_id: str,\s*\n?\s*event: dict\[str, Any\],\s*\n?\s*\*,\s*\n?\s*client_id: str \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(
       /def takeover\(self, agent_session_id: str, client_id: str\) -> dict\[str, Any\]:/,

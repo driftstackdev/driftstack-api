@@ -141,8 +141,14 @@ class AgentSessionsResource:
             json_body=coerce_body({"mode": mode}),
         )
 
-    def send_input_event(self, agent_session_id: str, event: dict[str, Any]) -> dict[str, Any]:
-        """Slice 4 (Wave 29-NNN ARC 3) — forward raw LK.6 InputEvent to the harness.
+    def send_input_event(
+        self,
+        agent_session_id: str,
+        event: dict[str, Any],
+        *,
+        client_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Slice 4 + Slice 5 (Wave 29-NNN ARC 3) — forward raw LK.6 InputEvent.
 
         ``event`` must be one of the 7 discriminated variants:
 
@@ -154,20 +160,35 @@ class AgentSessionsResource:
         - ``{"type": "wheel", "x": int, "y": int, "deltaX": int, "deltaY": int}``
         - ``{"type": "ping", "timestamp": int}``
 
-        Pre-harness (today): server returns 503 FeatureUnavailable
-        — the Mac fleet harness Swift work is on the Agent 1 roadmap
-        post §10/§11+EG-WK close (6-9 weeks dedicated per the Tier-3
-        Option A verdict 2026-05-19). SDK surface ships so consumers
-        compile against the stable contract.
+        ``client_id`` is REQUIRED when the session is in mode='pair'
+        AND the current pair_mode_state.kind is ``ai-driving`` — the
+        first input-event in this configuration fires the
+        takeover-request transition (Slice 5); ``client_id``
+        identifies which browser tab / window initiated. Optional
+        in all other shapes.
 
-        Raises ``ConflictError`` (409) if the session is not ``'active'``
-        OR is in mode='ai' (input-event requires manual or pair mode).
-        Raises ``FeatureUnavailableError`` (503) pre-harness.
+        Response is a discriminated union — branch on ``["kind"]``:
+
+        - ``pair-mode-takeover-fired`` (Slice 5 takeover-trigger) —
+          ``pair_mode_state`` populated with the new state kind.
+        - ``forwarded`` (Slice 4 forward-to-harness) — ``duration_ms``
+          populated; pre-harness this path returns 503 instead.
+
+        Raises ``ConflictError`` (409) if the session is not active OR
+        is in mode='ai' (input-event requires manual or pair mode), OR
+        the pair_mode_state is mid-transition.
+        Raises ``ValidationError`` (400) when pair-mode ai-driving
+        path is taken without ``client_id``.
+        Raises ``FeatureUnavailableError`` (503) on the harness-forward
+        path pre-harness.
         """
+        body: dict[str, Any] = {"event": event}
+        if client_id is not None:
+            body["client_id"] = client_id
         return self._http.request(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/input-event",
-            json_body=coerce_body({"event": event}),
+            json_body=coerce_body(body),
         )
 
     def takeover(self, agent_session_id: str, client_id: str) -> dict[str, Any]:
@@ -303,13 +324,20 @@ class AsyncAgentSessionsResource:
         )
 
     async def send_input_event(
-        self, agent_session_id: str, event: dict[str, Any]
+        self,
+        agent_session_id: str,
+        event: dict[str, Any],
+        *,
+        client_id: str | None = None,
     ) -> dict[str, Any]:
-        """Async mirror — same Slice 4 input-event semantics as sync."""
+        """Async mirror — same Slice 4 + Slice 5 input-event semantics as sync."""
+        body: dict[str, Any] = {"event": event}
+        if client_id is not None:
+            body["client_id"] = client_id
         return await self._http.request(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/input-event",
-            json_body=coerce_body({"event": event}),
+            json_body=coerce_body(body),
         )
 
     async def takeover(self, agent_session_id: str, client_id: str) -> dict[str, Any]:

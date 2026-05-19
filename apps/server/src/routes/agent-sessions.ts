@@ -616,20 +616,130 @@ export function registerAgentSessionsRoutes(
           `AgentSession ${req.params.id} is in mode='ai'; input-event requires mode='manual' or 'pair'.`,
         );
       }
-      // Pre-harness: no transport to forward events. Documented 503
-      // until Tier-3 Option A harness work lands. Mode + status +
-      // auth were validated above so dashboard wire-test paths
-      // exercise the full route surface.
+
+      // Slice 5 (Wave 29-NNN ARC 3) — pair-mode takeover-trigger
+      // wire. The first input-event in a pair-mode session whose
+      // pair_mode_state.kind === 'ai-driving' fires the
+      // takeover-request transition (same path the explicit POST
+      // /:id/takeover route uses). Subsequent input-events in
+      // human-driving forward to the harness; pending / queued
+      // transition states reject with 409 (mid-transition, retry
+      // after the state settles).
+      if (rec.mode === 'pair') {
+        const currentState = (rec.pairModeState as PairModeState | null) ?? initialPairModeState();
+        if (currentState.kind === 'ai-driving') {
+          // Takeover-trigger path. Requires client_id so the
+          // pair-mode lock can scope contention to one tab.
+          if (!parsed.data.client_id) {
+            throw new ValidationError({
+              formErrors: [],
+              fieldErrors: {
+                client_id: [
+                  'client_id is required when the first input-event in pair mode fires the takeover-request transition',
+                ],
+              },
+            });
+          }
+          if (pairModeLock === undefined) {
+            throw new FeatureUnavailableError(
+              'Pair-mode takeover-via-input-event requires the Redis pair-mode lock to be wired on this deployment.',
+            );
+          }
+          const lockResult = await pairModeLock.tryAcquire({
+            sessionId: req.params.id,
+            clientId: parsed.data.client_id,
+          });
+          if (!lockResult.acquired) {
+            throw new PairModeConflictError(lockResult.winnerClientId);
+          }
+          try {
+            const nextState = applyPairModeTransition(currentState, {
+              kind: 'takeover-request',
+              clientId: parsed.data.client_id,
+              at: new Date().toISOString(),
+            });
+            await sessions.setPairModeState(req.params.id, nextState);
+            sentry?.addBreadcrumb({
+              category: 'agent-session.pair-mode',
+              message: `input-event → takeover-request → ${nextState.kind}`,
+              data: {
+                session_id: req.params.id,
+                account_id: ctx.account.id,
+                event_type: parsed.data.event.type,
+                from: currentState.kind,
+                to: nextState.kind,
+                actor: parsed.data.client_id,
+              },
+            });
+            try {
+              await accountAudit?.record({
+                accountId: ctx.account.id,
+                actorType: 'customer',
+                action: 'agent_session.pair_mode.takeover',
+                targetResourceId: `agent_session_${req.params.id}`,
+                payload: {
+                  from: currentState.kind,
+                  to: nextState.kind,
+                  client_id: parsed.data.client_id,
+                  triggered_by: 'input_event',
+                  event_type: parsed.data.event.type,
+                },
+                ipAddress: readClientIp(req),
+              });
+            } catch {
+              /* swallow */
+            }
+            try {
+              metrics?.inc(METRIC_NAMES.pairModeTransitionTotal, {
+                from: currentState.kind,
+                to: nextState.kind,
+              });
+            } catch {
+              /* swallow */
+            }
+            return reply.code(200).send({
+              kind: 'pair-mode-takeover-fired' as const,
+              pair_mode_state: nextState,
+            });
+          } catch (err) {
+            if (err instanceof PairModeStateInvalidTransitionError) {
+              throw new PairModeStateInvalidTransitionRouteError({
+                from: err.from,
+                transition: err.transition,
+              });
+            }
+            throw err;
+          }
+        }
+        // Pending / queued mid-transition states reject — a click
+        // landing during takeover-pending or handback-queued is
+        // ambiguous; the dashboard polls pair_mode_state to know
+        // when the transition has settled.
+        if (
+          currentState.kind === 'takeover-pending' ||
+          currentState.kind === 'takeover-queued' ||
+          currentState.kind === 'handback-pending' ||
+          currentState.kind === 'handback-queued'
+        ) {
+          throw new ConflictError(
+            `AgentSession ${req.params.id} pair-mode state is ${currentState.kind}; wait for the transition to settle before forwarding input-events.`,
+          );
+        }
+        // currentState.kind === 'human-driving' falls through to
+        // the harness-forward path below.
+      }
+
+      // Manual mode OR pair-mode + human-driving: forward to the
+      // harness. Pre-harness: no transport exists; return 503 with
+      // FeatureUnavailable. Once Agent 1's Swift harness end-to-end
+      // lands, the dispatcher publishes the event via LiveKit
+      // DataChannel + returns { kind: 'forwarded', duration_ms }.
       throw new FeatureUnavailableError(
         'Live input forwarding requires a Mac fleet node with harness end-to-end ' +
-          'enabled. Pre-launch this endpoint is wire-only; full activation lands ' +
-          'with the v1.0 harness Swift work (Agent 1 lane, 6-9 weeks post §10/§11+EG-WK close). ' +
+          'enabled. Pre-launch this endpoint forwards mode=manual + pair-mode-after-takeover ' +
+          'events to a stub; full activation lands with the v1.0 harness Swift work. ' +
           'See https://docs.driftstack.dev/agent-sessions/manual-mode for activation status.',
       );
-      // Unreachable today, but kept here to document the post-harness
-      // shape the dispatcher will return.
-
-      return reply.code(200).send({ ok: true, duration_ms: 0 });
     },
   );
 

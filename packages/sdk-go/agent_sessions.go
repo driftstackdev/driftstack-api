@@ -202,11 +202,17 @@ func (r *AgentSessionsResource) SetMode(ctx context.Context, agentSessionID, mod
 }
 
 // SendInputEventResponse is the envelope POST /:id/input-event
-// returns (Slice 4, Wave 29-NNN ARC 3). Mirrors the /gui-input
-// route's response shape (ok + duration_ms).
+// returns (Slice 4 + Slice 5, Wave 29-NNN ARC 3). Discriminated
+// union via `Kind`:
+//   - "pair-mode-takeover-fired" → PairModeState populated; the
+//     first input-event in a pair-mode ai-driving session fired the
+//     takeover-request transition.
+//   - "forwarded" → DurationMS populated; the event was dispatched
+//     to the harness (post-harness path).
 type SendInputEventResponse struct {
-	OK         bool `json:"ok"`
-	DurationMS int  `json:"duration_ms"`
+	Kind          string         `json:"kind"`
+	PairModeState map[string]any `json:"pair_mode_state,omitempty"`
+	DurationMS    int            `json:"duration_ms,omitempty"`
 }
 
 // SendInputEvent forwards a raw LK.6 InputEvent to the harness
@@ -224,12 +230,23 @@ type SendInputEventResponse struct {
 // Returns 409 ConflictError if the session is not active OR is
 // in mode="ai" (input-event requires manual or pair mode).
 // Returns 503 FeatureUnavailableError pre-harness.
-func (r *AgentSessionsResource) SendInputEvent(ctx context.Context, agentSessionID string, event map[string]any) (*SendInputEventResponse, error) {
+// SendInputEventOptions carries the optional client_id required
+// when the first input-event in a pair-mode ai-driving session
+// fires the takeover-request transition (Slice 5).
+type SendInputEventOptions struct {
+	ClientID string
+}
+
+func (r *AgentSessionsResource) SendInputEvent(ctx context.Context, agentSessionID string, event map[string]any, opts *SendInputEventOptions) (*SendInputEventResponse, error) {
 	var out SendInputEventResponse
+	body := map[string]any{"event": event}
+	if opts != nil && opts.ClientID != "" {
+		body["client_id"] = opts.ClientID
+	}
 	req := requestOptions{
 		method: "POST",
 		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/input-event",
-		body:   map[string]any{"event": event},
+		body:   body,
 		out:    &out,
 	}
 	if err := r.client.do(ctx, req); err != nil {

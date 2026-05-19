@@ -102,7 +102,7 @@ describe('sdk-go agent_sessions content parity', () => {
       /func \(r \*AgentSessionsResource\) SetMode\(ctx context\.Context, agentSessionID, mode string\) \(\*AgentSession, error\)/,
     );
     expect(body).toMatch(
-      /func \(r \*AgentSessionsResource\) SendInputEvent\(ctx context\.Context, agentSessionID string, event map\[string\]any\) \(\*SendInputEventResponse, error\)/,
+      /func \(r \*AgentSessionsResource\) SendInputEvent\(ctx context\.Context, agentSessionID string, event map\[string\]any, opts \*SendInputEventOptions\) \(\*SendInputEventResponse, error\)/,
     );
     expect(body).toMatch(
       /func \(r \*AgentSessionsResource\) Takeover\(ctx context\.Context, agentSessionID, clientID string\) \(\*PairModeStateEnvelope, error\)/,

@@ -79,15 +79,47 @@ export type InputEvent = z.infer<typeof InputEventSchema>;
 /** POST /v1/agent-sessions/:id/input-event request body. */
 export const SendInputEventRequestSchema = z.object({
   event: InputEventSchema,
+  /**
+   * Slice 5 (Wave 29-NNN ARC 3) — pair-mode takeover-trigger
+   * attribution. Required when the session is in mode='pair' AND
+   * the current pair_mode_state.kind === 'ai-driving' (the first
+   * customer-side input in this configuration fires the
+   * takeover-request transition; client_id identifies which
+   * browser tab / window initiated). Optional in all other shapes
+   * (manual mode + already-human-driving pair mode just forward
+   * the event to the harness without consulting client_id).
+   * UUID-shape is typical; 128 cap matches the OAuth client_id
+   * cap.
+   */
+  client_id: z.string().min(1).max(128).optional(),
 });
 export type SendInputEventRequest = z.infer<typeof SendInputEventRequestSchema>;
 
-/** POST /v1/agent-sessions/:id/input-event response body. Mirrors
- *  the /gui-input route response shape (ok + duration_ms) so callers
- *  can branch on the same success discriminator. */
-export const SendInputEventResponseSchema = z.object({
-  ok: z.literal(true),
-  /** Server-side dispatch latency in ms (NOT round-trip to harness). */
-  duration_ms: z.number().int().nonnegative(),
-});
+/** POST /v1/agent-sessions/:id/input-event response body — two
+ *  shapes via a `kind` discriminator. */
+export const SendInputEventResponseSchema = z.discriminatedUnion('kind', [
+  /**
+   * Slice 5 (Wave 29-NNN ARC 3) — pair-mode takeover-trigger
+   * outcome. Returned when the first input-event in a pair-mode
+   * `ai-driving` session fires the takeover-request transition.
+   * The dashboard reads pair_mode_state to render the takeover
+   * status (takeover-pending vs takeover-queued, etc.).
+   */
+  z.object({
+    kind: z.literal('pair-mode-takeover-fired'),
+    pair_mode_state: z.object({ kind: z.string() }).passthrough(),
+  }),
+  /**
+   * Slice 4 (Wave 29-NNN ARC 3) — straight forward-to-harness
+   * outcome. Returned when the event is dispatched directly to
+   * the harness (manual mode OR pair mode after takeover-grant).
+   * Today the harness end-to-end is gated; route returns 503 on
+   * this path until Agent 1's Swift work lands.
+   */
+  z.object({
+    kind: z.literal('forwarded'),
+    /** Server-side dispatch latency in ms (NOT round-trip). */
+    duration_ms: z.number().int().nonnegative(),
+  }),
+]);
 export type SendInputEventResponse = z.infer<typeof SendInputEventResponseSchema>;
