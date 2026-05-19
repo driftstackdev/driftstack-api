@@ -83,7 +83,7 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
     );
   });
 
-  it.skip("V-359 rotation 24h grace framing pinned: 'Rotate signing secret for <id>?\\n\\nThe new secret is shown ONCE. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries.' + rotation_grace_expires_at endpoint card indicator — pinned so the 24h dual-validity window + the inline 'rotating · ends <date>' badge survive (drift to dropping grace would create a zero-downtime-impossible secret swap; drift to dropping the in-flight indicator would hide rotation state from the customer)", () => {
+  it('V-359 rotation 24h grace framing pinned. Re-enabled by slice 229 after verifying both halves still exist (confirm prompt at webhooks.astro:1253-1255 + rotation-in-flight indicator comment at webhooks.astro:659-662)', () => {
     expect(body).toMatch(
       /'Rotate signing secret for ' \+\s*\n?\s*id \+\s*\n?\s*'\?\\n\\nThe new secret is shown ONCE\. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries\.',/,
     );
