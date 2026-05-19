@@ -69,7 +69,7 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
       /\| `session\.created`\s+\| \[PLANNED\]\s+\| Session transitions `creating` → `ready`\s+\|/,
     );
     expect(body).toMatch(
-      /\| `session\.destroyed`\s+\| \[PLANNED\]\s+\| Distinct from `session\.completed` \(no semantic shift\) \|/,
+      /\| `session\.destroyed`\s+\| \[PLANNED\]\s+\| Distinct from `session\.completed` \(no semantic shift\)\s+\|/,
     );
     expect(body).toMatch(/\| `profile\.created`\s+\| \[PLANNED\]\s+\| New profile created\s+\|/);
     expect(body).toMatch(/\| `profile\.deleted`\s+\| \[PLANNED\]\s+\| Profile deleted\s+\|/);
@@ -87,10 +87,10 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
       /\| `trial_pack\.expired`\s+\| \[PLANNED\]\s+\| Trial pack expired \(14-day window closed\)\s+\|/,
     );
     expect(body).toMatch(
-      /\| `webhook_endpoint\.created` \| \[PLANNED\]\s+\| New webhook endpoint registered\s+\|/,
+      /\| `webhook_endpoint\.created`\s+\| \[PLANNED\]\s+\| New webhook endpoint registered\s+\|/,
     );
     expect(body).toMatch(
-      /\| `webhook_endpoint\.deleted` \| \[PLANNED\]\s+\| Webhook endpoint deleted\s+\|/,
+      /\| `webhook_endpoint\.deleted`\s+\| \[PLANNED\]\s+\| Webhook endpoint deleted\s+\|/,
     );
   });
 

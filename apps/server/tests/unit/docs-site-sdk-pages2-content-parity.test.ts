@@ -62,7 +62,7 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(/The HTTP API and the SDKs version independently\./);
     expect(body).toMatch(/^## What ships$/m);
     expect(body).toMatch(
-      /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\s+\|/,
+      /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\/capture\/getState\s+\|/,
     );
     expect(body).toMatch(
       /\| API keys\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Includes `rotate` with 24h grace\s+\|/,

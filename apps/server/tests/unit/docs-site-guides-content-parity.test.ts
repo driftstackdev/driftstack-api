@@ -94,7 +94,7 @@ describe('W603 apps/docs/guides pages content parity', () => {
     expect(existsSync(TEAM)).toBe(true);
   });
 
-  it('session-lifecycle.md: ready/active/destroyed state diagram + concurrent caps (Trial 1 / Solo 1 / Team 3 / Agency 8 / Starter 2 / Builder 8 / Scale 24) + idle_timeout + 429 Retry-After on cap-exceeded + concurrent-caps-only-metering (no hour caps no overage) pinned', () => {
+  it('session-lifecycle.md: creating/ready/busy/destroyed/errored state diagram + concurrent caps (Trial 1 / Solo 1 / Team 3 / Agency 8 / Starter 2 / Builder 8 / Scale 24) + idle_timeout + 429 Retry-After on cap-exceeded + concurrent-caps-only-metering (no hour caps no overage) pinned', () => {
     const body = read(SESSION);
     expect(body).toMatch(/^title: Session lifecycle$/m);
     expect(body).toMatch(/^# Session lifecycle$/m);
@@ -105,12 +105,16 @@ describe('W603 apps/docs/guides pages content parity', () => {
       /Every session occupies one of your account's concurrent slots from creation until destruction/,
     );
     expect(body).toMatch(/^## States$/m);
+    // The wire-level SessionStatusSchema is 5 values: creating /
+    // ready / busy / destroyed / errored (matches
+    // packages/api-types/src/sessions.ts).
+    expect(body).toMatch(/│ creating │/);
     expect(body).toMatch(/│ ready │/);
-    expect(body).toMatch(/│ active │/);
-    expect(body).toMatch(/│ destroyed│/);
+    expect(body).toMatch(/│ busy │/);
+    expect(body).toMatch(/│ destroyed │/);
+    expect(body).toMatch(/`errored`/);
     expect(body).toMatch(/destroy/);
-    expect(body).toMatch(/or idle ≥ idle_timeout/);
-    expect(body).toMatch(/In practice you don't observe `ready` separately/);
+    expect(body).toMatch(/In practice you don't observe `creating` separately/);
     expect(body).toMatch(/^## Concurrency$/m);
     expect(body).toMatch(
       /`429 Too Many Requests` on `sessions\.create\(\)`, with a `Retry-After` header/,

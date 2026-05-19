@@ -87,7 +87,7 @@ describe('W572.A /docs/progress/v278-final-state.md content parity', () => {
     expect(body).toMatch(/dash\.cloudflare\.com → My Profile → API Tokens → API Keys →/);
     expect(body).toMatch(/"Origin CA Key" → View\)\./);
     expect(body).toMatch(/Even with `Account:SSL and Certificates:Edit`/);
-    expect(body).toMatch(/on the cfut\\_ token, `\/v4\/certificates` returns/);
+    expect(body).toMatch(/on the `cfut_` token, `\/v4\/certificates` returns/);
     expect(body).toMatch(/`code 1016 User is not authorized`\. Pivoted to Let's Encrypt;/);
     expect(body).toMatch(/functionally equivalent posture \(publicly-trusted CA, auto-renewed\),/);
     expect(body).toMatch(/just a different CA\./);

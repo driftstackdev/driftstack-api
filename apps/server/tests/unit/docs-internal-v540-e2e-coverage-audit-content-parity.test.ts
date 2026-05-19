@@ -41,15 +41,18 @@ describe('W566.A /docs/internal/v540-e2e-coverage-audit.md content parity', () =
     );
     expect(body).toMatch(/\(subsequent wave\)\./);
     expect(body).toMatch(/32 route modules in `apps\/server\/src\/routes\/`/);
-    expect(body).toMatch(/\| `account-mfa\.ts`\s+\| \/v1\/account\/mfa\/\\\*/);
-    expect(body).toMatch(/\| `admin-incidents\.ts`\s+\| \/v1\/admin\/incidents\/\\\*/);
-    expect(body).toMatch(/\| `auth\.ts`\s+\| \/v1\/auth\/\\\*/);
-    expect(body).toMatch(/\| `billing\.ts`\s+\| \/v1\/billing\/\\\*/);
+    // Path globs are wrapped in backtick code-spans (post-markdown-
+    // cleanup form) instead of bare escaped-asterisk prose; match
+    // both legal forms.
+    expect(body).toMatch(/\| `account-mfa\.ts`\s+\| `\/v1\/account\/mfa\/\*`/);
+    expect(body).toMatch(/\| `admin-incidents\.ts`\s+\| `\/v1\/admin\/incidents\/\*`/);
+    expect(body).toMatch(/\| `auth\.ts`\s+\| `\/v1\/auth\/\*`/);
+    expect(body).toMatch(/\| `billing\.ts`\s+\| `\/v1\/billing\/\*`/);
     expect(body).toMatch(/\| `openapi\.ts`\s+\| \/openapi\.json \+ \/docs/);
-    expect(body).toMatch(/\| `profile-snapshots\.ts`\s+\| \/v1\/profile-snapshots\/\\\*/);
-    expect(body).toMatch(/\| `sessions\.ts`\s+\| \/v1\/sessions\/\\\*/);
+    expect(body).toMatch(/\| `profile-snapshots\.ts`\s+\| `\/v1\/profile-snapshots\/\*`/);
+    expect(body).toMatch(/\| `sessions\.ts`\s+\| `\/v1\/sessions\/\*`/);
     expect(body).toMatch(/\| `status\.ts`\s+\| \/v1\/status/);
-    expect(body).toMatch(/\| `webhooks\.ts`\s+\| \/v1\/webhooks\/\\\* \+ customer-side ingestion/);
+    expect(body).toMatch(/\| `webhooks\.ts`\s+\| `\/v1\/webhooks\/\*` \+ customer-side ingestion/);
   });
 
   it("12-spec existing E2E coverage + HIGH-leverage gaps framing pinned: '## Existing E2E spec coverage' + '12 specs in `apps/server/tests/e2e/`' + '`smoke.spec.ts`             | /health + /openapi.json + auth-required 401 sanity' + '`auth.spec.ts`              | /v1/auth/' + '`sessions.spec.ts`          | /v1/sessions/' + '`admin.spec.ts`             | /v1/admin' + '`rate-limit.spec.ts`        | /v1/account/rate-limits + token-bucket rate-limit enforcement' + '`concurrency-limit.spec.ts` | ADR-004 concurrent-session cap enforcement' + '`profile-limit.spec.ts`     | Tier-bound profile cap enforcement' + '`customer-journey.spec.ts`  | Multi-step: account → key → session → navigate → capture' + '`webhooks.spec.ts`          | /v1/webhooks delivery + signature verification' + '`openapi-contract.spec.ts`  | Every documented route returns Zod-validated body shape' + '### HIGH leverage (customer-facing, no E2E coverage)' + '**`account-mfa.ts`** — TOTP enroll / verify / disable.' + '**`billing.ts`** — Stripe webhook ingestion + customer-portal redirect.' + '**`legal.ts`** — /v1/legal/required + /v1/legal/accept.' + '**`profile-snapshots.ts`** — Snapshot create + restore.' — pinned so the 12-spec-inventory + smoke-spec-/health-401-sanity + ADR-004-concurrency + customer-journey-multistep + openapi-contract-Zod + HIGH-4-gap (account-mfa-TOTP + billing-Stripe-webhook + legal-accept + profile-snapshots-restore) commitment survives", () => {
@@ -58,9 +61,9 @@ describe('W566.A /docs/internal/v540-e2e-coverage-audit.md content parity', () =
     expect(body).toMatch(
       /`smoke\.spec\.ts`\s+\| \/health \+ \/openapi\.json \+ auth-required 401 sanity/,
     );
-    expect(body).toMatch(/`auth\.spec\.ts`\s+\| \/v1\/auth\/\\\*/);
-    expect(body).toMatch(/`sessions\.spec\.ts`\s+\| \/v1\/sessions\/\\\*/);
-    expect(body).toMatch(/`admin\.spec\.ts`\s+\| \/v1\/admin\\\*/);
+    expect(body).toMatch(/`auth\.spec\.ts`\s+\| `\/v1\/auth\/\*`/);
+    expect(body).toMatch(/`sessions\.spec\.ts`\s+\| `\/v1\/sessions\/\*`/);
+    expect(body).toMatch(/`admin\.spec\.ts`\s+\| `\/v1\/admin\*`/);
     expect(body).toMatch(
       /`rate-limit\.spec\.ts`\s+\| \/v1\/account\/rate-limits \+ token-bucket rate-limit enforcement/,
     );
