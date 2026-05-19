@@ -8,19 +8,12 @@
 // is read-only on writes); 'member' role gets 403. No header (or
 // own-account header) keeps pre-V-330d behavior.
 
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { SetEmailPreferenceRequestSchema } from '@driftstack/api-types';
 import type { EmailPreferencesService } from '../services/email-preferences.js';
 import { BadRequestError, ForbiddenError } from '../lib/errors.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
-
-const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
-
-function readEffectiveAccountHeader(request: FastifyRequest): string | undefined {
-  const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];
-  if (Array.isArray(raw)) return raw[0];
-  return raw;
-}
+import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 
 export interface EmailPreferencesRoutesOptions {
   emailPreferences: EmailPreferencesService;

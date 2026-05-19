@@ -9,14 +9,7 @@ import type { ApiKeysService } from '../services/api-keys.js';
 import type { UsageService, UsageSummary } from '../services/usage.js';
 import { BadRequestError, ForbiddenError } from '../lib/errors.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
-
-const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
-
-function readEffectiveAccountHeader(request: FastifyRequest): string | undefined {
-  const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];
-  if (Array.isArray(raw)) return raw[0];
-  return raw;
-}
+import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 

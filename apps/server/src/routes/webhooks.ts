@@ -14,14 +14,7 @@ import type {
   WebhooksService,
 } from '../services/webhooks.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
-
-const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
-
-function readEffectiveAccountHeader(request: FastifyRequest): string | undefined {
-  const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];
-  if (Array.isArray(raw)) return raw[0];
-  return raw;
-}
+import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 
 /**
  * V-326e5 — admin-only gate for webhook write operations on team

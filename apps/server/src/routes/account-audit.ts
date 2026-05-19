@@ -9,20 +9,13 @@
 // to avoid pathological cases. Pagination via subsequent
 // `?since=<timestamp>` calls if more is needed (rare in practice).
 
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { ListAccountAuditLogQuerySchema } from '@driftstack/api-types';
 import type { AccountAuditEntryRow, AccountAuditService } from '../services/account-audit.js';
 import { BadRequestError } from '../lib/errors.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
+import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { z } from 'zod';
-
-const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';
-
-function readEffectiveAccountHeader(request: FastifyRequest): string | undefined {
-  const raw = request.headers[EFFECTIVE_ACCOUNT_HEADER];
-  if (Array.isArray(raw)) return raw[0];
-  return raw;
-}
 
 function publicEntry(row: AccountAuditEntryRow): Record<string, unknown> {
   return {
