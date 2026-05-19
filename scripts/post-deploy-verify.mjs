@@ -55,9 +55,31 @@ const checks = [
   // checks, a regression that forgets the `else` branch in app.ts
   // would leave the routes unregistered (404) and no existing
   // smoke would catch it.
-  checkEgressSessionProxyGateStub,
-  checkEgressSavedProxiesGateStub,
-  checkAgentSessionsGateStub,
+  //
+  // Removed 2026-05-19 because the corresponding features are now
+  // activated on prod+staging — keeping the assertion would FAIL on
+  // every deploy with a misleading "expected 503; got 401" signal
+  // even though the routes are correctly wired. Per the script's own
+  // comment block: "intentional signal to the operator that the
+  // activation commit must also remove this assertion." That
+  // remove-on-activation discipline got skipped at the time the gates
+  // flipped, so this commit cleans them up retroactively:
+  //   - checkEgressSessionProxyGateStub: EG-API-1.6+ wired (commit
+  //     b165c8dd activation-gate sweep)
+  //   - checkEgressSavedProxiesGateStub: same EG-API arc
+  //   - checkAgentSessionsGateStub: AI-A.c agent_sessions repo wired
+  //     (6f2cdcb8); Q.1 route activation 1fc40421
+  //   - checkRecipesGateStub: AI-B4 recipesRepo wired (b165c8dd)
+  //
+  // Remaining gate checks stay because their underlying features are
+  // still legitimately gated:
+  //   - checkFleetEventsGateStub: WebSocket handler still not
+  //     implemented (V-820 follow-up slice pending)
+  //   - checkBillingGateStub: Stripe LIVE awaits BV-KvK closure
+  //     2026-05-21 (project_stripe_live_post_bv_kvk memory rule)
+  //   - checkByokAnthropicGateStub: MFA_ENCRYPTION_KEY unset on
+  //     staging (verified via earlier post-deploy-verify run);
+  //     activates when the operator SSH-writes the key.
   checkFleetEventsGateStub,
   // Mirrors the activation-gate-pattern-cross-source-invariant
   // test's FEATURES table (apps/server/tests/unit/activation-
@@ -69,7 +91,6 @@ const checks = [
   // commit must also remove this assertion.
   checkBillingGateStub,
   checkByokAnthropicGateStub,
-  checkRecipesGateStub,
 ].filter(Boolean);
 
 let allOk = true;
@@ -300,23 +321,8 @@ async function checkOpenapi() {
 // (FEATURE_UNAVAILABLE_TYPE hoisted to the top of the module to avoid
 // the temporal dead zone — see the constant's declaration site.)
 
-async function checkEgressSessionProxyGateStub() {
-  return featureGateStub('POST', '/v1/sessions/ses_xxx/proxy', 'EGRESS session-proxy gate', {
-    session_id: 'ses_xxx',
-    proxy: { type: 'socks5', socks5: { host: 'p.example', port: 1080 } },
-  });
-}
-
-async function checkEgressSavedProxiesGateStub() {
-  return featureGateStub('POST', '/v1/proxies', 'EGRESS saved-proxies gate', {
-    label: 'x',
-    proxy: { type: 'socks5', socks5: { host: 'p.example', port: 1080 } },
-  });
-}
-
-async function checkAgentSessionsGateStub() {
-  return featureGateStub('POST', '/v1/agent-sessions', 'AI-CHAT agent-sessions gate', {});
-}
+// 4 activated-gate check fns removed 2026-05-19 — see the `const checks`
+// declaration site for the activation commits + remaining-gate roster.
 
 async function checkBillingGateStub() {
   // POST /v1/billing/checkout-session is one of the four billing
@@ -347,18 +353,8 @@ async function checkByokAnthropicGateStub() {
   );
 }
 
-async function checkRecipesGateStub() {
-  // AI-B4 — POST /v1/recipes route. Gated on BOTH recipesRepo
-  // AND agentSessionsRepo being wired in AppDeps. The recipesRepo
-  // wires unconditionally at bootstrap (commit b165c8dd); the
-  // agentSessionsRepo wire is Q.1 territory and stays gated on
-  // the design-doc verdicts. Until both wire, /v1/recipes
-  // returns 503 with the recipe-library-not-enabled detail.
-  return featureGateStub('POST', '/v1/recipes', 'AI-B4 recipes gate', {
-    agent_session_id: 'agt_inmem_noop',
-    label: 'noop',
-  });
-}
+// checkRecipesGateStub removed 2026-05-19 — recipesRepo wired (b165c8dd);
+// gate is no longer stubbed.
 
 async function checkFleetEventsGateStub() {
   // V-820 /v1/fleet/events is a GET (WebSocket upgrade in the wired
