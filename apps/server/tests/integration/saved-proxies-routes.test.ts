@@ -25,7 +25,7 @@ describe('EG-API-1.3 — /v1/proxies (no backend wired)', () => {
     if (fx) await fx.cleanup();
   });
 
-  it('POST → 503 FeatureUnavailable with planning-133 pointer', async () => {
+  it('POST → 503 FeatureUnavailable with customer-facing egress disclosure (no internal planning-file jargon)', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'POST',
@@ -39,7 +39,15 @@ describe('EG-API-1.3 — /v1/proxies (no backend wired)', () => {
     expect(res.statusCode).toBe(503);
     const body = res.json<{ type: string; detail: string }>();
     expect(body.type).toBe(PROBLEM_TYPES.FeatureUnavailable);
-    expect(body.detail).toMatch(/planning file 133/);
+    // Customer-trust contract: no internal V-NNN / planning-file /
+    // handoff jargon in the customer-facing 503 body (slice 87+88
+    // / 6efc0a34). Pin the customer disclosure shape instead —
+    // capability name, posture, and what currently happens.
+    expect(body.detail).toMatch(/Customer-configurable egress \(SOCKS5 \/ OpenVPN \/ WireGuard\)/);
+    expect(body.detail).toMatch(/not yet shipped/);
+    expect(body.detail).toMatch(/Driftstack's default egress/);
+    expect(body.detail).not.toMatch(/planning file/i);
+    expect(body.detail).not.toMatch(/V-\d{3,}/);
   });
 
   it('GET → 200 { data: [] } (empty list across postures so the dashboard empty state renders identically wired vs unwired)', async () => {
