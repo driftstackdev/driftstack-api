@@ -34,7 +34,7 @@ function read(p: string): string {
 describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-711 framing pinned: 'SLA policy for the public API + dashboard. Companion to /docs/incident-policy (operational response) and /docs/api-versioning (deprecation timelines). Pitched at procurement / customer security review.' — pinned so the V-711 anchor + 2-companion-doc cross-references + target-audience framing survive (drift to dropping the companion docs would orphan this from the procurement-ready cluster)", () => {
+  it('V-711 framing pinned. Re-enabled by slice 203 after verifying the V-711 comment exists at sla-policy.astro:4-7 with the matching shape', () => {
     expect(body).toMatch(
       /\/\/ V-711 — SLA policy for the public API \+ dashboard\. Companion to\s*\n?\s*\/\/ \/docs\/incident-policy \(operational response\) and \/docs\/api-versioning\s*\n?\s*\/\/ \(deprecation timelines\)\. Pitched at procurement \/ customer security\s*\n?\s*\/\/ review\./,
     );
