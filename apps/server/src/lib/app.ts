@@ -134,6 +134,12 @@ import {
   registerFleetEventsDisabledRoutes,
   registerFleetEventsRoutes,
 } from '../routes/fleet-events.js';
+import {
+  registerInternalAtlasPriorityDisabledRoutes,
+  registerInternalAtlasPriorityRoutes,
+} from '../routes/internal-atlas-priority.js';
+import type { DrizzleAtlasPriorityEventsRepo } from '../db/atlas-priority-events-repo.js';
+import type { InternalFleetAuth } from './internal-fleet-auth.js';
 import { registerAdminForceActionRoutes } from '../routes/admin-force-actions.js';
 import {
   wireSentryErrorHandler,
@@ -408,6 +414,16 @@ export interface AppDeps {
    */
   drizzleFleetNodesRepo?: DrizzleFleetNodesRepo;
   livekitSecretEncryptionKey?: string;
+  /**
+   * Wave 29-400 §8.5 — atlas-priority observability surface. The repo
+   * is always Drizzle-backed (constructed in bootstrap.ts); the
+   * activation gate is `internalFleetAuth.isEnabled()` driven by the
+   * DRIFTSTACK_FLEET_INTERNAL_TOKEN env var. When the auth is enabled
+   * the 4 internal routes register; otherwise the disabled variant
+   * 503s on every path.
+   */
+  atlasPriorityEventsRepo?: DrizzleAtlasPriorityEventsRepo;
+  internalFleetAuth?: InternalFleetAuth;
   /**
    * V-100: admin force-action route deps. Routes register only when
    * all four are provided (sessionRepo / apiKeysRepo / driver / audit
@@ -1061,6 +1077,26 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   } else {
     registerFleetEventsDisabledRoutes(app);
+  }
+
+  // Wave 29-400 §8.5 — /v1/internal/atlas-priority/* observability
+  // endpoints. Activation gate: BOTH the Drizzle-backed repo
+  // (always wired in bootstrap.ts when DB is up) AND the InternalFleet
+  // Auth being enabled (DRIFTSTACK_FLEET_INTERNAL_TOKEN env var set).
+  // When the token is unset the disabled variant 503s on every path
+  // even if the repo is wired — keeps secret-required surfaces dark
+  // by default.
+  if (
+    deps.atlasPriorityEventsRepo !== undefined &&
+    deps.internalFleetAuth !== undefined &&
+    deps.internalFleetAuth.isEnabled()
+  ) {
+    registerInternalAtlasPriorityRoutes(app, {
+      repo: deps.atlasPriorityEventsRepo,
+      auth: deps.internalFleetAuth,
+    });
+  } else {
+    registerInternalAtlasPriorityDisabledRoutes(app);
   }
   // LK.2 — Mac-side LiveKit credentials registration. Gated on both
   // the Drizzle repo (in-memory test fixtures skip it; prod wires

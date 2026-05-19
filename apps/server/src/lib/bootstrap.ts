@@ -25,6 +25,8 @@ import { resolve } from 'node:path';
 import { createDb, type Database } from '../db/client.js';
 import { DrizzleAccountAuthRepo } from '../db/auth-repo.js';
 import { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
+import { DrizzleAtlasPriorityEventsRepo } from '../db/atlas-priority-events-repo.js';
+import { InternalFleetAuth } from './internal-fleet-auth.js';
 import { DrizzleSessionRepo } from '../db/sessions-repo.js';
 import { DrizzleApiKeysRepo } from '../db/api-keys-repo.js';
 import { DrizzleUsageRepo } from '../db/usage-repo.js';
@@ -964,6 +966,16 @@ export async function createProductionDeps(
     // unconditionally when the env vars permit; app.ts gates the
     // route registration on both being non-undefined here.
     drizzleFleetNodesRepo: new DrizzleFleetNodesRepo(dbHandle),
+    // Wave 29-400 §8.5 — atlas-priority observability surface. Repo
+    // is always constructed (Drizzle path against the migrated
+    // atlas_priority_events table); the InternalFleetAuth activation
+    // flag is what gates route registration in app.ts. When the env
+    // var is unset, registerInternalAtlasPriorityDisabledRoutes runs
+    // and every internal route 503s.
+    atlasPriorityEventsRepo: new DrizzleAtlasPriorityEventsRepo(dbHandle),
+    internalFleetAuth: new InternalFleetAuth({
+      internalToken: config.fleetInternalToken ?? null,
+    }),
     ...(config.mfaEncryptionKey !== undefined
       ? { livekitSecretEncryptionKey: config.mfaEncryptionKey }
       : {}),

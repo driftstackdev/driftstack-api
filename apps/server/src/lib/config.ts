@@ -191,6 +191,18 @@ const ConfigSchema = z.object({
    */
   metricsScrapeToken: z.string().min(16).optional(),
   /**
+   * Wave 29-400 §8.5 — internal fleet bearer token. Gates the
+   * /v1/internal/atlas-priority/* observability endpoints called by
+   * Agent 1's harvester + bs-atlas-priority.sh + atlas-priority-
+   * append.py callbacks. NOT customer-facing. When unset, those
+   * routes return 503 (registerInternalAtlasPriorityDisabledRoutes
+   * path); when set, the routes activate with constant-time bearer
+   * comparison (lib/internal-fleet-auth.ts). Same env-var-only
+   * provisioning convention as the other shared secrets — SSH-write
+   * to /etc/driftstack/api.env, never commit, never echo.
+   */
+  fleetInternalToken: z.string().min(16).optional(),
+  /**
    * V-487 — NowPayments crypto-rail scaffold. Conditional, opt-in
    * sub-processor (Estonia EEA-internal per the V-308a legal
    * scaffolding). When `apiKey` + `ipnSecret` are unset, the
@@ -514,6 +526,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,
     metricsScrapeToken: env.METRICS_SCRAPE_TOKEN,
+    fleetInternalToken: env.DRIFTSTACK_FLEET_INTERNAL_TOKEN,
     // V-487 — NowPayments scaffold. All fields optional; presence of
     // BOTH apiKey + ipnSecret is what the route registration checks.
     nowpayments:
