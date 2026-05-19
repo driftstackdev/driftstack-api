@@ -55,7 +55,7 @@ const NOW: RoadmapItem[] = [
   },
   {
     title: 'Agent sessions — natural-language automation with AI / manual / pair modes',
-    body: 'Layer a chat-style decompose-and-execute loop on top of any driver session. AI mode (default) translates a user message into structured intents (navigate / interact / wait / capture) and the runtime executes them; manual mode is pass-through for clients driving their own UI; pair mode lets the customer take over from the AI and hand back. Live transcript via Server-Sent Events with Last-Event-ID resume. Bundled LLM is opt-in (deployment-managed Anthropic budget); BYOK Anthropic ships from /settings → BYOK Anthropic.',
+    body: 'Layer a chat-style decompose-and-execute loop on top of any driver session. AI mode (default) translates a user message into structured intents (navigate / interact / wait / capture) and the runtime executes them; manual mode is pass-through for clients driving their own UI; pair mode lets the customer take over from the AI and hand back. Live transcript via Server-Sent Events with Last-Event-ID resume. Bundled LLM is opt-in (deployment-managed Anthropic budget); BYOK Anthropic via PUT /v1/account/me/byok-anthropic-key (the dashboard surface lands at v1.1; the server route is live today and your stored key is forwarded to the agent runtime automatically).',
   },
 ];
 

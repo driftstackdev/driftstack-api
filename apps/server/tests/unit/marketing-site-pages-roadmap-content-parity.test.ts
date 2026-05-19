@@ -118,12 +118,19 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
     expect(laterBlock).not.toMatch(/the agent layer itself is the work/);
   });
 
-  it('Agent sessions body framing in NOW pins the 3 operational modes (AI / manual / pair) + SSE transcript + bundled/BYOK billing — drift to dropping any mode would understate the v1.0 surface; drift to dropping the SSE transcript or BYOK mention would mismatch the changelog 2026-05-18 entry that customers will read alongside the roadmap', () => {
+  it("Agent sessions body framing in NOW pins the 3 operational modes (AI / manual / pair) + SSE transcript + bundled/BYOK billing — drift to dropping any mode would understate the v1.0 surface; drift to dropping the SSE transcript or BYOK mention would mismatch the changelog 2026-05-18 entry that customers will read alongside the roadmap. Slice 131 corrected the BYOK framing from the aspirational '/settings → BYOK Anthropic' shape (no such dashboard UI ships at v1.0) to the honest 'via PUT /v1/account/me/byok-anthropic-key, dashboard at v1.1' shape", () => {
     expect(body).toMatch(/AI \/ manual \/ pair modes/);
     expect(body).toMatch(/AI mode \(default\)/);
     expect(body).toMatch(/Server-Sent Events with Last-Event-ID resume/);
     expect(body).toMatch(/Bundled LLM is opt-in/);
-    expect(body).toMatch(/BYOK Anthropic ships from \/settings → BYOK Anthropic/);
+    expect(body).toMatch(/BYOK Anthropic via PUT \/v1\/account\/me\/byok-anthropic-key/);
+    expect(body).toMatch(/the dashboard surface lands at v1\.1/);
+    // Drift sentinel — the pre-slice-131 aspirational claim about a
+    // dashboard "/settings → BYOK Anthropic" surface must NOT come
+    // back until that UI actually ships. Pinning the regex prevents
+    // future copy-edits from accidentally re-introducing the
+    // marketing-vs-reality drift.
+    expect(body).not.toMatch(/BYOK Anthropic ships from \/settings → BYOK Anthropic/);
   });
 
   it("3-section header taxonomy: Now (emerald, 'Live and supported today.') + Next (oxblood, 'In active engineering.') + Later (slate, 'On the deck.') — pinned so the 3-bucket visual hierarchy (green = shipped / oxblood = active / slate = on deck) survives (drift to flattening the visual color would lose the at-a-glance 'this is live, this is coming, this is later' signal)", () => {

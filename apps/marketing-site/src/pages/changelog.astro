@@ -32,7 +32,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-18',
     category: 'launch',
     title: 'BYOK Anthropic API keys + bundled-LLM rail for agent sessions',
-    body: 'Two ways to power the agent-session decomposer. BYOK — bring your own Anthropic key from /settings → BYOK Anthropic (AES-256-GCM at rest; never echoed in responses; rotate / clear / test connection without leaving the dashboard). Bundled LLM — opt in from /settings → Bundled LLM and the decomposer falls back to a deployment-managed Anthropic budget (monthly soft cap surfaced in the dashboard as used / remaining / refused). Per-request override via x-byok-anthropic-api-key on /v1/agent-sessions/{id}/message. Full references at docs.driftstack.dev/api/byok-anthropic and docs.driftstack.dev/api/bundled-llm.',
+    body: 'Two ways to power the agent-session decomposer. BYOK — bring your own Anthropic key via PUT /v1/account/me/byok-anthropic-key (AES-256-GCM at rest; never echoed in responses; rotate / clear / test-connection endpoints all live; the dashboard form lands at v1.1). Bundled LLM — opt in via PATCH /v1/account/me/bundled-llm-settings and the decomposer falls back to a deployment-managed Anthropic budget (monthly soft cap surfaced in the dashboard read-only as used / remaining / refused; the opt-in toggle lands at v1.1). Per-request override via x-byok-anthropic-api-key on /v1/agent-sessions/{id}/message. Full references at docs.driftstack.dev/api/byok-anthropic and docs.driftstack.dev/api/bundled-llm.',
   },
   {
     date: '2026-05-18',
