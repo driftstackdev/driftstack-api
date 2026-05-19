@@ -159,6 +159,18 @@ describe('AgentSessionsResource', () => {
     expect(calls[0]?.headers).toBeUndefined();
   });
 
+  it('message with opts.byokApiKey === "" (empty string) omits the byok header — cross-SDK parity with the Go SDK\'s `opts != nil && opts.ByokAPIKey != ""` shape and the Python SDK\'s same-shape guard (closes the slice 105/106 round-trip skip)', async () => {
+    // Without the `byokApiKey.length > 0` guard at agent-sessions.ts:186,
+    // an empty-string opts payload would send `x-byok-anthropic-api-key:`
+    // on the wire. The server's slice 105 fix normalises that to absent
+    // — but skipping client-side saves the round-trip header AND keeps
+    // the three SDKs (TS / Python / Go) wire-identical for this case.
+    const { http, calls } = makeFakeHttp({});
+    const res = new AgentSessionsResource(http);
+    await res.message('agt_1', 'hi', { byokApiKey: '' });
+    expect(calls[0]?.headers).toBeUndefined();
+  });
+
   it('close DELETEs /v1/agent-sessions/{id} (URL-encoded)', async () => {
     const { http, calls } = makeFakeHttp(undefined as unknown as void);
     const res = new AgentSessionsResource(http);

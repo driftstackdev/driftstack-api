@@ -121,6 +121,25 @@ def test_sync_message_no_byok_omits_header() -> None:
         assert "x-byok-anthropic-api-key" not in sent_headers
 
 
+def test_sync_message_empty_byok_omits_header() -> None:
+    """Passing ``byok_api_key=""`` (empty string) sends NO byok header
+    — cross-SDK parity with the Go SDK's ``opts.ByokAPIKey != ""`` guard
+    and the TS SDK's ``byokApiKey.length > 0`` guard. Closes the slice
+    105 / 106 round-trip skip: an empty client-side value used to send
+    ``x-byok-anthropic-api-key:`` on the wire, which the server then
+    normalised to absent — wasted round-trip header bytes."""
+    reply = {"kind": "clarify", "session": SESSION_ENVELOPE, "clarifying_question": "?"}
+    with respx.mock(base_url=BASE) as mock:
+        route = mock.post("/v1/agent-sessions/agt_1/message").mock(
+            return_value=httpx.Response(200, json=reply),
+        )
+        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
+            client.agent_sessions.message("agt_1", "hi", byok_api_key="")
+        assert route.called
+        sent_headers = route.calls.last.request.headers
+        assert "x-byok-anthropic-api-key" not in sent_headers
+
+
 def test_sync_create_idempotency_key_sets_header() -> None:
     """v2-#19 — passing ``idempotency_key`` forwards the
     ``Idempotency-Key`` request header so server-side dedupe collapses
