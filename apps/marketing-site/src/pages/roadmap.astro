@@ -53,6 +53,10 @@ const NOW: RoadmapItem[] = [
     title: 'Recipe library (write-only at v1.0)',
     body: 'Snapshot a finished agent-session into a replayable recipe — capture the structured intent_log + transcript without re-paying decompose cost. Read / list / execute / delete surfaces land at v1.1.',
   },
+  {
+    title: 'Agent sessions — natural-language automation with AI / manual / pair modes',
+    body: 'Layer a chat-style decompose-and-execute loop on top of any driver session. AI mode (default) translates a user message into structured intents (navigate / interact / wait / capture) and the runtime executes them; manual mode is pass-through for clients driving their own UI; pair mode lets the customer take over from the AI and hand back. Live transcript via Server-Sent Events with Last-Event-ID resume. Bundled LLM is opt-in (deployment-managed Anthropic budget); BYOK Anthropic ships from /settings → BYOK Anthropic.',
+  },
 ];
 
 const NEXT: RoadmapItem[] = [
@@ -91,16 +95,12 @@ const LATER: RoadmapItem[] = [
     title: 'Self-hosted parity polish',
     body: 'Same control plane as the SaaS — admin UI, dashboard, status surface — runnable inside a single VPC with zero outbound traffic to driftstack.dev.',
   },
-  {
-    title: 'AI agent layer',
-    body: 'Optional bundled-or-BYOK LLM-driven session execution: describe a goal in natural language, the agent navigates the session against your target. The plumbing for both bundled and BYOK billing is already in tier configuration; the agent layer itself is the work.',
-  },
 ];
 ---
 
 <BaseLayout
   title="Roadmap"
-  description="What's live now, what's landing next, and what's further out for Driftstack. iPhone Safari fingerprint platform — additional archetypes, GUI streaming, recipe library, AI agent layer."
+  description="What's live now, what's landing next, and what's further out for Driftstack. iPhone Safari fingerprint platform — agent sessions (AI / manual / pair), additional archetypes, GUI streaming, recipe library."
 >
   <!-- Hero -->
   <section class="bg-gradient-to-b from-surface-base to-surface-raised">
