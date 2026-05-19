@@ -53,11 +53,11 @@ describe('Arc 7 obs.10 — account_audit_emit_total counter', () => {
     service = new AccountAuditService(new FakeAuditRepo(), metrics);
   });
 
-  it('increments prefix="api_key", actor_type="customer" on api_key.created', async () => {
+  it('increments prefix="api_key", actor_type="customer" on api_key.minted', async () => {
     await service.record({
       accountId: 'acc_1',
       actorType: 'customer',
-      action: 'api_key.created',
+      action: 'api_key.minted',
     });
     expect(
       metrics.getValue(METRIC_NAMES.accountAuditEmitTotal, {
@@ -89,25 +89,30 @@ describe('Arc 7 obs.10 — account_audit_emit_total counter', () => {
   });
 
   it('separates the staff actor_type from customer in the label set', async () => {
+    // Picks actions from two different prefixes that exist in the
+    // current AccountAuditActionSchema: subscription.* (customer side)
+    // and admin.* (staff side). Earlier this test used billing.* names
+    // that were dropped/never-merged; CI typecheck flagged the
+    // discrepancy 2026-05-19.
     await service.record({
       accountId: 'acc_1',
       actorType: 'customer',
-      action: 'billing.checkout_session.created',
+      action: 'subscription.tier_changed',
     });
     await service.record({
       accountId: 'acc_1',
       actorType: 'staff',
-      action: 'billing.subscription.refunded',
+      action: 'admin.refund_recorded',
     });
     expect(
       metrics.getValue(METRIC_NAMES.accountAuditEmitTotal, {
-        prefix: 'billing',
+        prefix: 'subscription',
         actor_type: 'customer',
       }),
     ).toBe(1);
     expect(
       metrics.getValue(METRIC_NAMES.accountAuditEmitTotal, {
-        prefix: 'billing',
+        prefix: 'admin',
         actor_type: 'staff',
       }),
     ).toBe(1);
@@ -119,7 +124,7 @@ describe('Arc 7 obs.10 — account_audit_emit_total counter', () => {
       bare.record({
         accountId: 'acc_1',
         actorType: 'customer',
-        action: 'api_key.created',
+        action: 'api_key.minted',
       }),
     ).resolves.toBeDefined();
   });
@@ -138,7 +143,7 @@ describe('Arc 7 obs.10 — account_audit_emit_total counter', () => {
   });
 
   it('auditActionPrefix helper extracts the top-level namespace', () => {
-    expect(auditActionPrefix('api_key.created')).toBe('api_key');
+    expect(auditActionPrefix('api_key.minted')).toBe('api_key');
     expect(auditActionPrefix('agent_session.pair_mode.takeover')).toBe('agent_session');
     expect(auditActionPrefix('session')).toBe('session'); // no dot — return as-is
     expect(auditActionPrefix('')).toBe(''); // edge case: empty string

@@ -294,6 +294,13 @@ export function classifyEmailError(err: unknown): {
   return { category: 'unknown', postmarkCode: code };
 }
 
+// Display-cased OAuth provider name for customer-facing strings. Internal
+// representation is lowercase ('google'/'github') to match the IDP schema;
+// emails address the customer in title case (Google/GitHub).
+function oauthProviderDisplay(provider: 'google' | 'github'): string {
+  return provider === 'google' ? 'Google' : 'GitHub';
+}
+
 const TEMPLATES = {
   'signup-verification': {
     subject: 'Verify your Driftstack account',
@@ -423,9 +430,9 @@ const TEMPLATES = {
   'oauth-pending-verification': {
     subject: 'Driftstack — confirm a new sign-in method on your account',
     text: (v) =>
-      `Someone — probably you — just tried to sign in to your Driftstack account using ${v.provider}.\n\nIf that was you, confirm the new sign-in method by clicking the link below. It expires at ${v.expiresAt} (UTC) and works once.\n\n${v.confirmLink}\n\nIf that wasn't you, ignore this email — no change is made until the link is clicked. Your password (if any) still works.\n\n— Driftstack`,
+      `Someone — probably you — just tried to sign in to your Driftstack account using ${oauthProviderDisplay(v.provider)}.\n\nIf that was you, confirm the new sign-in method by clicking the link below. It expires at ${v.expiresAt} (UTC) and works once.\n\n${v.confirmLink}\n\nIf that wasn't you, ignore this email — no change is made until the link is clicked. Your password (if any) still works.\n\n— Driftstack`,
     html: (v) =>
-      `<p>Someone — probably you — just tried to sign in to your Driftstack account using <strong>${v.provider}</strong>.</p><p>If that was you, confirm the new sign-in method by clicking the link below. It expires at <strong>${v.expiresAt}</strong> (UTC) and works once.</p><p><a href="${v.confirmLink}">${v.confirmLink}</a></p><p>If that wasn't you, ignore this email — no change is made until the link is clicked. Your password (if any) still works.</p><p>— Driftstack</p>`,
+      `<p>Someone — probably you — just tried to sign in to your Driftstack account using <strong>${oauthProviderDisplay(v.provider)}</strong>.</p><p>If that was you, confirm the new sign-in method by clicking the link below. It expires at <strong>${v.expiresAt}</strong> (UTC) and works once.</p><p><a href="${v.confirmLink}">${v.confirmLink}</a></p><p>If that wasn't you, ignore this email — no change is made until the link is clicked. Your password (if any) still works.</p><p>— Driftstack</p>`,
   },
   // v2-#11.5 — BYOK Anthropic key rotation nag. Subject explicit
   // about provider name (Anthropic) so the customer immediately

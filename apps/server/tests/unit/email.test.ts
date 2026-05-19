@@ -419,7 +419,7 @@ describe('createEmailService — configured', () => {
     const svc = createEmailService({ config, logger, client });
     await svc.sendOauthPendingLinkVerification({
       to: 'user@example.com',
-      provider: 'Google',
+      provider: 'google',
       confirmLink: 'https://app.driftstack.dev/oauth/confirm/tok_pending_abc',
       expiresAt: new Date('2026-05-18T12:00:00Z'),
     });
