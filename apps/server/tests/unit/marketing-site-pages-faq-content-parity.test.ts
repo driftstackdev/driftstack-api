@@ -71,17 +71,17 @@ describe('W500.A apps/marketing-site/src/pages/faq.astro content parity', () => 
     expect(body).toMatch(/Enterprise is custom — from \$4,000\/mo on annual contracts only\./);
   });
 
-  it("Support SLA 5-tier ladder pinned: '48h Starter, 24h Solo, 12h Builder + Slack Connect, 4h Scale + Slack Connect, 1h Enterprise + dedicated CSM' — pinned so the support-response-time ladder stays consistent (drift to dropping Slack Connect on Builder/Scale would change the support-channel commitment; drift to dropping CSM on Enterprise would lose a key Enterprise upsell)", () => {
+  it("Support response framing pinned: single 48h business-time target across all tiers, no tiered SLA ladder, Slack Connect on request post-subscription — pinned per founder 2026-05-19 verdict that a tiered support ladder reads as theatre for a small operation; replaces the prior 5-tier '48h/24h/12h+Slack/4h+Slack/1h+CSM' ladder", () => {
+    expect(body).toMatch(/Reply target is 48h business-time across every tier/);
     expect(body).toMatch(
-      /48h Starter, 24h Solo, 12h Builder \+ Slack Connect, 4h Scale \+ Slack Connect, 1h Enterprise \+ dedicated CSM\./,
+      /Slack Connect is available on request once a paid subscription is active/,
     );
   });
 
-  it("Uptime SLA 3-bucket pinned: '99% Starter / Solo, 99.5% Builder / Scale, 99.9% Enterprise' + 'SLA credits applied automatically against the next invoice' — pinned so the per-tier uptime commitment + the auto-credit-against-next-invoice mechanic both survive (drift to dropping auto-credit would force customers through a credit-request workflow)", () => {
-    expect(body).toMatch(
-      /Uptime SLA scales with tier: 99% Starter \/ Solo, 99\.5% Builder \/ Scale, 99\.9% Enterprise\./,
-    );
-    expect(body).toMatch(/SLA credits applied automatically against the next invoice\./);
+  it('Uptime target framing pinned: single best-effort 99.5% across all tiers, no tiered SLA ladder, no auto-credit theatre — pinned per founder 2026-05-19 verdict that tiered uptime + auto-credit is theatre rather than an obligation a small operation can stand behind; status page + good-faith credit on real impact replaces the prior 3-bucket SLA ladder', () => {
+    expect(body).toMatch(/Best-effort 99\.5% across all tiers/);
+    expect(body).toMatch(/There is no formal SLA with credits/);
+    expect(body).toMatch(/status\.driftstack\.dev/);
   });
 
   it("Annual contract framing: 'billed up front for 12 months at 20% off the monthly equivalent' + 'Annual contracts auto-renew unless cancelled at least 30 days before renewal' — pinned so the 20% discount + 30-day-notice cancellation policy stay consistent with the Stripe customer portal behavior (drift to a different notice period would create a Stripe↔marketing-page mismatch)", () => {
@@ -99,8 +99,8 @@ describe('W500.A apps/marketing-site/src/pages/faq.astro content parity', () => 
     );
   });
 
-  it("Crypto-via-NowPayments framing: 'Yes — via NowPayments on tiers where the founder has enabled it.' + 'Crypto payments are non-refundable' — pinned so the NowPayments crypto rail + non-refundability stay explicit (drift to claiming refundable crypto would let customers expect impossible chargebacks; drift to dropping NowPayments would orphan customers from the canonical processor)", () => {
-    expect(body).toMatch(/Yes — via NowPayments on tiers where the founder has enabled it\./);
+  it("Crypto-via-NowPayments framing: 'Yes — via NowPayments on tiers where crypto checkout is enabled.' + 'Crypto payments are non-refundable' — pinned so the NowPayments crypto rail + non-refundability stay explicit (drift to claiming refundable crypto would let customers expect impossible chargebacks; drift to dropping NowPayments would orphan customers from the canonical processor)", () => {
+    expect(body).toMatch(/Yes — via NowPayments on tiers where crypto checkout is enabled\./);
     expect(body).toMatch(/<strong>Crypto payments are non-refundable<\/strong>/);
   });
 

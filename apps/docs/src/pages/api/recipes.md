@@ -92,5 +92,5 @@ recipe is still useful as a transcript-only snapshot.
 - `DELETE /v1/recipes/{id}` — delete (with the same audit log
   pattern as the rest of the customer surface)
 
-These ship in the v1.1 D2/D3 scope per the founder verdict on
-the v2-#37 queue.
+These ship in the v1.1 D2/D3 scope per the Driftstack design
+verdict on the v2-#37 queue.

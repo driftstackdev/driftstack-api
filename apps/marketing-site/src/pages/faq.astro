@@ -83,7 +83,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'How does Enterprise pricing work?',
-        a: 'Enterprise is custom — from $4,000/mo on annual contracts only. The "from" reflects baseline; actual pricing depends on concurrent capacity, profile count, archetype customisation, SLA tier, dedicated CSM coverage, BYOK + bundled-LLM mix, and any compliance requirements (SOC 2 timeline, custom DPA terms). Email <a href="mailto:sales@driftstack.dev" class="text-glow-red underline">sales@driftstack.dev</a> with workload shape and team context.',
+        a: 'Enterprise is custom — from $4,000/mo on annual contracts only. Actual pricing depends on concurrent capacity, profile count, archetype customisation, BYOK + bundled-LLM mix, and any compliance requirements (custom DPA terms, data-handling addendums). Email <a href="mailto:sales@driftstack.dev" class="text-glow-red underline">sales@driftstack.dev</a> with workload shape and team context.',
       },
     ],
   },
@@ -104,7 +104,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'Can I pay in crypto?',
-        a: 'Yes — via NowPayments on tiers where the founder has enabled it. Open the crypto checkout from the billing dashboard, send the displayed amount in the displayed currency, and the order moves through pending → confirming → paid as on-chain confirmations land. The webhook contract is documented in our <a href="/docs/cost-monitoring" class="text-glow-red underline">cost-monitoring docs</a>. <strong>Crypto payments are non-refundable</strong> — you can cancel anytime, which stops future billing, but the current period is not refunded (see <a href="/legal/refunds" class="text-glow-red underline">refund policy</a>). Most customers use Stripe; crypto is a fallback for jurisdictions where card payments are awkward.',
+        a: 'Yes — via NowPayments on tiers where crypto checkout is enabled. Open the crypto checkout from the billing dashboard, send the displayed amount in the displayed currency, and the order moves through pending → confirming → paid as on-chain confirmations land. The webhook contract is documented in our <a href="/docs/cost-monitoring" class="text-glow-red underline">cost-monitoring docs</a>. <strong>Crypto payments are non-refundable</strong> — you can cancel anytime, which stops future billing, but the current period is not refunded (see <a href="/legal/refunds" class="text-glow-red underline">refund policy</a>). Most customers use Stripe; crypto is a fallback for jurisdictions where card payments are awkward.',
       },
       {
         q: 'How can I tell how much I\'ve spent this month?',
@@ -178,7 +178,7 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'Are these real iPhones or emulated?',
-        a: 'Neither, exactly. Driftstack runs a fork of the WebKit + Safari source code (the same C++ that ships on iOS) on Linux fleet hardware. The browser engine is identical to what runs on a physical iPhone — same JavaScriptCore, same WebCore, same fingerprint primitives. What\'s different is the OS the engine runs on (Linux instead of iOS) and the hardware below it (data-center x86 instead of Apple Silicon). The fingerprints surfaces that real-iPhone detectors check (canvas, WebGL, audio, navigator, prototype chain, error stacks) match a real iPhone bit-for-bit because they\'re produced by the same code. The surfaces that detectors <em>can\'t</em> check from JavaScript (kernel timings, GPU silicon counters) are the ones we don\'t emulate, and detection methods that target those are vanishingly rare in practice.',
+        a: 'Neither, exactly. Driftstack runs a fork of the WebKit + Safari source code (the same C++ that ships on iOS) on macOS Apple Silicon fleet hardware (M-series Macs). The browser engine is identical to what runs on a physical iPhone — same JavaScriptCore, same WebCore, same fingerprint primitives, and crucially the same GPU silicon family. The fingerprint surfaces that real-iPhone detectors check (canvas, WebGL, audio, navigator, prototype chain, error stacks) match a real iPhone bit-for-bit because they\'re produced by the same code on the same chip family. The surfaces detectors <em>can\'t</em> check from JavaScript (kernel timings deep below the API) are the only ones that diverge, and detection methods that target those are vanishingly rare in practice.',
       },
       {
         q: 'Does Driftstack work with Playwright / Selenium / Puppeteer?',
@@ -228,15 +228,15 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'How do I contact support?',
-        a: 'Email <a href="mailto:support@driftstack.dev" class="text-glow-red underline">support@driftstack.dev</a>. Response SLA depends on tier: 48h Starter, 24h Solo, 12h Builder + Slack Connect, 4h Scale + Slack Connect, 1h Enterprise + dedicated CSM.',
+        a: 'Email <a href="mailto:support@driftstack.dev" class="text-glow-red underline">support@driftstack.dev</a>. Reply target is 48h business-time across every tier — replies are written, not template-blasted, so they take honest time. Slack Connect is available on request once a paid subscription is active.',
       },
       {
         q: 'What if a session fails?',
-        a: 'Session lifecycle is observable end-to-end via the SDK and the dashboard. Failed sessions return structured error responses (RFC 7807 problem-types); recordings + state captures up to the failure point are still available. Sessions that fail in the orchestration layer (driver crashes, fleet unavailability, etc.) do not consume your concurrent slot — the slot frees immediately on failure detection. Trial-pack credit is also unaffected by orchestration-layer failures.',
+        a: 'Session lifecycle is observable end-to-end via the SDK and the dashboard. Failed sessions return structured error responses (RFC 7807 problem-types); recordings + state captures up to the failure point stay available. Sessions that fail in the orchestration layer (driver crashes, fleet unavailability, etc.) do not consume your concurrent slot — the slot frees immediately on failure detection. Trial-pack credit is also unaffected by orchestration-layer failures.',
       },
       {
-        q: 'What\'s the uptime SLA?',
-        a: 'Uptime SLA scales with tier: 99% Starter / Solo, 99.5% Builder / Scale, 99.9% Enterprise. Status page coming alongside first paying customer onboarding. SLA credits applied automatically against the next invoice.',
+        q: 'What\'s the uptime target?',
+        a: 'Best-effort 99.5% across all tiers. There is no formal SLA with credits — Driftstack is a small operation and a tiered uptime ladder would be theatre rather than a real obligation we can stand behind. The <a href="https://status.driftstack.dev" class="text-glow-red underline">status page</a> publishes incidents with timestamps + RCAs. If an incident hurts your workload meaningfully, email <a href="mailto:support@driftstack.dev" class="text-glow-red underline">support@driftstack.dev</a> with concrete impact and we will work out a credit in good faith.',
       },
     ],
   },

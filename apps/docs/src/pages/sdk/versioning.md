@@ -51,7 +51,7 @@ the difference is only that we haven't promised long-term stability.
 1. Driftstack has its first paying customer.
 2. The SDK has been in production use at that customer for ≥ 30 days
    without breaking changes.
-3. Founder explicitly approves the 1.0 cut.
+3. Driftstack explicitly approves the 1.0 cut.
 
 Until then, customers integrating an SDK should pin a specific
 version (e.g., `^0.1.5`) and read CHANGELOG before bumping.
@@ -153,10 +153,10 @@ Each SDK's release process:
 5. GitHub release post with the CHANGELOG-entry copy + migration
    guide if breaking.
 
-Publish steps are gated on founder approval at the current scale.
+Publish steps are gated on Driftstack approval at the current scale.
 Once the customer base + release cadence justify it, MINOR + PATCH
 publishes will run autonomously while MAJOR publishes continue to
-require explicit founder approval.
+require explicit Driftstack approval.
 
 ## Cross-references
 

@@ -116,14 +116,20 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toMatch(/sneaker bots \/ ticket bots/);
   });
 
-  it('support SLA ladder pinned: 48h Starter → 24h Solo → 12h Builder → 4h Scale → 1h Enterprise', () => {
-    expect(body).toMatch(
-      /48h Starter, 24h Solo, 12h Builder \+ Slack Connect, 4h Scale \+ Slack Connect, 1h Enterprise \+ dedicated CSM/,
-    );
+  it('support response framing pinned: single 48h business-time target, no tiered ladder (founder 2026-05-19 verdict)', () => {
+    expect(body).toMatch(/Reply target is 48h business-time across every tier/);
+    expect(body).toMatch(/Slack Connect is available on request/);
   });
 
-  it('uptime SLA ladder pinned: 99% Starter/Solo → 99.5% Builder/Scale → 99.9% Enterprise', () => {
-    expect(body).toMatch(/99% Starter \/ Solo, 99\.5% Builder \/ Scale, 99\.9% Enterprise/);
+  it('uptime target framing pinned: best-effort 99.5% across all tiers, no tiered SLA (founder 2026-05-19 verdict)', () => {
+    expect(body).toMatch(/Best-effort 99\.5% across all tiers/);
+    expect(body).toMatch(/There is no formal SLA with credits/);
+  });
+
+  it('hardware framing pinned: macOS Apple Silicon (M-series Macs); not Linux + x86 — founder 2026-05-19 correction', () => {
+    expect(body).toMatch(/macOS Apple Silicon fleet hardware \(M-series Macs\)/);
+    expect(body).not.toMatch(/Linux fleet hardware/);
+    expect(body).not.toMatch(/data-center x86/);
   });
 
   it('BYOK secret-handling claim pinned (envelope encryption + in-memory at exec)', () => {

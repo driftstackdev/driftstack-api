@@ -126,9 +126,9 @@ When `/v2/*` does ship, expect:
 - **`/v1/billing/*`** — Stripe-driven; subscription/trial-pack
   state shapes are stable across `/v1/*`'s lifetime. Mid-major
   changes here are extremely unlikely.
-- **`/v1/admin/*`** — internal-staff surface; staff = founder pre-
-  launch. Breaking changes don't trigger external deprecation
-  cycle; staff updates the panel + the docs in lock-step.
+- **`/v1/admin/*`** — internal-staff surface. Breaking changes
+  don't trigger external deprecation cycle; staff updates the
+  panel + the docs in lock-step.
 - **`/v1/account/*`** — customer self-serve account data
   (audit-log, email-preferences, rate-limits per the /
   . Same external-facing breaking-change discipline as
