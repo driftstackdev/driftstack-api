@@ -59,12 +59,17 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     );
   });
 
-  it('PaginationQuery framing pinned: opaque cursor strings; servers may swap encoding later without breaking clients; limit coerce 1..100 default 50 + cursor optional', () => {
+  it('PaginationQuery framing pinned: opaque cursor strings; servers may swap encoding later without breaking clients; limit coerce 1..100 default 50 + cursor min-1 max-512 optional (slice 148 cap)', () => {
     expect(body).toMatch(
       /\/\/ Cursor pagination — opaque cursor strings; servers may swap encoding later\s*\n?\s*\/\/ without breaking clients\./,
     );
+    // Slice 148 added `.min(1).max(512)` to cursor — caps base64url-
+    // encoded {ts, uuid} pagination tokens at 512 chars so a single
+    // schema-level cap flows into all 3 customer-facing list routes
+    // (profiles / profile-snapshots / sessions) instead of requiring
+    // 3 separate route-level edits.
     expect(body).toMatch(
-      /export const PaginationQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n?\s*cursor: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const PaginationQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n?\s*cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 
