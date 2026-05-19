@@ -120,7 +120,7 @@ Core groups (see env-vars.md for the full list):
 - **Stripe** (optional): `STRIPE_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY`, `DRIFTSTACK_TIER_PRICE_IDS`, `STRIPE_TRIAL_PACK_PRICE_ID`.
 - **Auth-flow links**: `AUTH_VERIFY_EMAIL_URL`, `AUTH_MAGIC_LINK_URL`, `AUTH_PASSWORD_RESET_URL`.
 
-Routes register conditionally — when a vendor isn't configured, its routes don't register and the rest of the API stays up. /v1/billing/\* needs Stripe configured; /v1/webhooks/stripe needs `STRIPE_WEBHOOK_SECRET`; /v1/auth/\* needs the auth-flow URLs.
+Routes register conditionally — when a vendor isn't configured, its routes don't register and the rest of the API stays up. `/v1/billing/*` needs Stripe configured; `/v1/webhooks/stripe` needs `STRIPE_WEBHOOK_SECRET`; `/v1/auth/*` needs the auth-flow URLs.
 
 ## Authentication
 

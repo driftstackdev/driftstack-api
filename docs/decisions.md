@@ -353,7 +353,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
 - **Decision:** the GUI client (`apps/gui-client`) ships via GitHub Releases (binary delivery) + Tauri Updater (auto-update with public-key signature verification). CI workflow at `.github/workflows/gui-release.yml` triggers on `gui-v*` tags, builds three platform binaries in parallel (macOS universal `.dmg`, Windows `.exe` via NSIS, Linux `.AppImage` + `.deb`), signs each with the Tauri Updater private key, uploads to a GitHub Release, and exposes `gui-latest.json` as the manifest.
 
-  **OS-level binary code signing DEFERRED post-launch.** Customers see "unknown publisher" / Gatekeeper warnings on first install (normal for indie apps). Subsequent updates ARE signed via the Tauri Updater public-key embedded in the original install — that protects update integrity even without OS-level publisher trust. Per-platform signing certs become individual D-\* entries when the founder enrolls in the relevant program:
+  **OS-level binary code signing DEFERRED post-launch.** Customers see "unknown publisher" / Gatekeeper warnings on first install (normal for indie apps). Subsequent updates ARE signed via the Tauri Updater public-key embedded in the original install — that protects update integrity even without OS-level publisher trust. Per-platform signing certs become individual `D-*` entries when the founder enrolls in the relevant program:
   - **D-2026-05-06-03a (deferred):** Apple Developer cert (~$99/yr) for macOS Gatekeeper trust + notarization. Blocked on founder Apple Developer enrollment.
   - **D-2026-05-06-03b (deferred):** Windows code signing cert (~$200+/yr; EV cert preferred for SmartScreen reputation). Blocked on founder cert purchase.
   - **D-2026-05-06-03c (deferred):** Linux package signing (.AppImage / .deb / .rpm). Free per-distro; deferred post-launch — customers running on Linux are technical enough to handle unsigned `.AppImage` execution.
@@ -373,7 +373,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 
 ---
 
-## D-2026-05-07-01 — Public DRAFT exposure for /legal/\* pages (banner + noindex over counsel-review-blocker)
+## D-2026-05-07-01 — Public DRAFT exposure for `/legal/*` pages (banner + noindex over counsel-review-blocker)
 
 - **Decision:** Ship `apps/marketing-site/src/pages/legal/{privacy,terms,dpa,aup}.md` publicly with a prominent DRAFT banner + `noindex,nofollow`, instead of holding all four routes as 404 until counsel review.
 

@@ -103,7 +103,7 @@ All P2s are operational/documentation rather than architectural. None blocking l
 
 - V-247: implement V-246-P0-001 fix (key-version cache invalidation).
 - V-248: implement V-246-P1-001 fix (Stripe URL allowlist).
-- V-NNN post-launch: V-246-P1-002 (ops runbook docs), V-246-P1-003 (scope refactor), V-246-P1-004 (IP rate limiting), V-246-P2-\* (operational docs + ops procedures).
+- V-NNN post-launch: V-246-P1-002 (ops runbook docs), V-246-P1-003 (scope refactor), V-246-P1-004 (IP rate limiting), `V-246-P2-*` (operational docs and ops procedures).
 
 Audit is the load-bearing artifact; fixes are mechanical from here. Founder reviews this doc on wake to validate the prioritization (e.g. agree V-246-P1-003 is genuinely deferrable given Cloudflare Access mitigation).
 
