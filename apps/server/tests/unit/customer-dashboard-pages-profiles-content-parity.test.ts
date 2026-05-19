@@ -33,7 +33,7 @@ function read(p: string): string {
 describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip('V-136 framing pinned + PROFILES_PER_TIER + archetypeDisplayLabel + AccountTier imports from @driftstack/api-types — pinned so the canonical tier-cap source + the display-label helper stay sourced from the shared package (drift to hardcoded numbers / inline labels would diverge from server enforcement and the marketing-site tier descriptions)', () => {
+  it('V-136 framing + canonical-package imports pinned. Re-enabled by slice 219 after verifying V-136 framing at profiles.astro:10-11 + 3-symbol import block at profiles.astro:4-8', () => {
     expect(body).toMatch(
       /\/\/ V-136 — uses the locked PROFILES_PER_TIER constant from\s*\n?\s*\/\/ @driftstack\/api-types as single source of truth\./,
     );
@@ -42,7 +42,7 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
     );
   });
 
-  it.skip("V-284 framing pinned: 'progressive-enhancement wiring. Reads ds_web_session_token, fetches /v1/profiles + /v1/account/me to compute live count vs tier cap, wires create + delete actions. Falls back to mock-rendered list when token absent or fetch fails (consistent with sessions.astro, billing.astro etc).' — pinned so the dual-fetch live-count + the SSG-mock fallback pattern + the cross-page consistency reference all survive", () => {
+  it('V-284 framing pinned. Re-enabled by slice 219 after verifying V-284 framing at profiles.astro:13-16', () => {
     expect(body).toMatch(
       /\/\/ V-284 — progressive-enhancement wiring\. Reads ds_web_session_token,\s*\n?\s*\/\/ fetches \/v1\/profiles \+ \/v1\/account\/me to compute live count vs tier\s*\n?\s*\/\/ cap, wires create \+ delete actions\./,
     );
@@ -69,7 +69,7 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
     );
   });
 
-  it.skip('4-button row per profile: Clone (oxblood) / Export (oxblood) / Snapshot (oxblood) / Delete (rose) — pinned so the per-profile action vocabulary stays 4-button (drift to dropping Snapshot would orphan the V-312 capture flow; drift to dropping Export would break the GDPR Article 20 portability path; drift to dropping Clone would lose the V-313 copy-with-derived-name UX)', () => {
+  it('4-button row per profile pinned. Re-enabled by slice 219 after verifying Clone/Export/Snapshot/Delete data-attrs all exist at profiles.astro:415-434', () => {
     expect(body).toMatch(
       /data-clone-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-glow-red hover:underline">Clone<\/button>'/,
     );
@@ -119,7 +119,7 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
     );
   });
 
-  it.skip("V-331b act-as header propagation in authedFetch + profile_cap null → 'Custom' rendering — pinned so the team-scoped flow covers all profile actions AND the enterprise/custom-cap account renders 'Custom' instead of 'null' (drift to dropping ?? 'Custom' would surface literal 'null' to enterprise customers)", () => {
+  it("V-331b act-as header + 'Custom' cap rendering pinned. Re-enabled by slice 219 after verifying V-331b framing at profiles.astro:446-450 + 'Custom' fallback at profiles.astro:551", () => {
     expect(body).toMatch(
       /\/\/ V-331b — propagate the active "act as" team-owner\s*\n?\s*\/\/ selection so reads \+ writes scope to the chosen owner\.\s*\n?\s*\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\n?\s*\? window\.driftstackActAsHeaders\(\)\s*\n?\s*: \{\}\),/,
     );
