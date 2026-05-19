@@ -63,7 +63,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         </tr>
         <tr>
           <td>Stealth plugin / fingerprint flags</td>
- <td>Profile archetypes + per-account fingerprint
+          <td>Profile archetypes (V-281) + per-account fingerprint
             state.</td>
         </tr>
       </tbody>
@@ -109,7 +109,7 @@ console.log(title);`}</code></pre>
     <h2>Profile persistence: the differentiator</h2>
     <p>
       Browserless gives you a fresh browser per request unless you
- manage your own cookie jar. Driftstack profiles 
+      manage your own cookie jar. Driftstack profiles (V-312)
       persist cookies / localStorage / IndexedDB on the server in
       the WebKit driver layer. Mint a profile via the Profiles API
       and pin its archetype; future sessions can share its state via
@@ -142,7 +142,7 @@ await client.profileSnapshots.capture(profile.id, {
     <p>
       Browserless gives you a one-frame PDF or PNG. Driftstack
       session recordings are on the
- <a href="/docs/recordings">roadmap</a> but not shipped
+      <a href="/docs/recordings">roadmap</a> (V-540) but not shipped
       today. Until they land, drive observation with per-step
       <code>capture</code> calls.
     </p>

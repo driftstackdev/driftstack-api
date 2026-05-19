@@ -56,7 +56,7 @@ describe('W521.B apps/marketing-site/src/pages/docs/migration-from-browserless.a
     );
   });
 
-  it.skip("5-row surface-comparison framing pinned: CDP-WS (wss://chrome.browserless.io?token=…) → POST /v1/sessions + action endpoints + 'No CDP passthrough.' + /function → 'No direct equivalent. Express the steps as discrete actions; if you need a richer extraction primitive, email us.' + /screenshot + /pdf → POST /v1/sessions/:id/capture with kind=screenshot/dom_snapshot/pdf (inline base64, no presigned URL) + Concurrency-limit token (manual) → tier-driven concurrency-cap 429 + concurrency-limit RFC 7807 type + Stealth plugin → Profile archetypes (V-281) + per-account fingerprint state — pinned so the 5-row + V-281 archetype + concurrency-limit-RFC-7807-type + 3-kind-capture (screenshot/dom_snapshot/pdf) commitment survives", () => {
+  it('5-row surface-comparison framing pinned. Re-enabled by slice 249 after restoring the (V-281) anchor on the Stealth-plugin row at migration-from-browserless.astro:66', () => {
     expect(body).toMatch(
       /Connect to <code>wss:\/\/chrome\.browserless\.io\?token=…<\/code> \+ run Puppeteer\/Playwright over CDP/,
     );
@@ -119,7 +119,7 @@ describe('W521.B apps/marketing-site/src/pages/docs/migration-from-browserless.a
     expect(body).toMatch(/label: 'logged-in-baseline',/);
   });
 
-  it.skip("Recordings-V-540-roadmap framing pinned: 'Browserless gives you a one-frame PDF or PNG. Driftstack session recordings are on the roadmap (V-540) but not shipped today. Until they land, drive observation with per-step capture calls.' — pinned so the V-540-roadmap + NOT-shipped + per-step-capture fallback commitment survives (drift to claiming recordings-shipped would recreate W228.A 6th fictional bug)", () => {
+  it('Recordings-V-540-roadmap framing pinned. Re-enabled by slice 249 after restoring the (V-540) anchor on the recordings paragraph at migration-from-browserless.astro:145', () => {
     expect(body).toMatch(
       /Browserless gives you a one-frame PDF or PNG\. Driftstack\s*\n?\s*session recordings are on the\s*\n?\s*<a href="\/docs\/recordings">roadmap<\/a> \(V-540\) but not shipped\s*\n?\s*today\. Until they land, drive observation with per-step\s*\n?\s*<code>capture<\/code> calls\./,
     );
