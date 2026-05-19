@@ -147,14 +147,31 @@ Test Files   34 passed (34)
   Duration  2.57s
 ```
 
-Combined: **509 tests across 84 files** verified green end-to-end
-across all three drift-guard tracks (~280 content-parity slices
-shipped, 34 sampled here as a representative cross-section). All
-new test files type-check clean under `tsc --noEmit -p apps/
-server/tsconfig.test.json` (verified wave 25; only pre-existing
-older tests in `tests/unit/` have type errors — none introduced
-by this session). Lint-staged hooks ran on every commit; no lint
-failures landed in the committed history.
+The 5 files that received stale-skip re-arms during waves 3 + 6
+
+- 8 (slices 303-307 + 318-322 + 328) verified passing on wave 30:
+
+```
+Test Files   5 passed (5)
+     Tests  47 passed (47)
+  Duration  1.19s
+```
+
+Re-armed assertions: legal/sub-processors changelog + api-
+changelog 4-V-anchor entries + docs/reference (errors + rate-
+limits + scopes) + docs/sdk (TS + Python + Go quickstart +
+versioning) + webhooks/endpoints + webhooks/events + browserless
+V-312 profile-persistence.
+
+Combined: **556 tests across 89 files** verified green end-to-end
+across all three drift-guard tracks + the stale-skip re-arm set
+(~280 content-parity slices shipped, 34 sampled here as a
+representative cross-section + the 11 R4-scrub re-arms). All new
+test files type-check clean under `tsc --noEmit -p apps/server/
+tsconfig.test.json` (verified wave 25; only pre-existing older
+tests in `tests/unit/` have type errors — none introduced by this
+session). Lint-staged hooks ran on every commit; no lint failures
+landed in the committed history.
 
 ## Numbers (cumulative through wave 23)
 
