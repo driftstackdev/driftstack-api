@@ -147,7 +147,10 @@ export class HealthProbeService {
             {
               component: 'health-probe',
               target: target.id,
-              err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+              err:
+                err instanceof Error
+                  ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                  : { value: err },
             },
             'health probe tick failed for target',
           );
@@ -169,7 +172,10 @@ export class HealthProbeService {
         this.logger.warn(
           {
             component: 'health-probe',
-            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+            err:
+              err instanceof Error
+                ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                : { value: err },
           },
           'probe prune failed (will retry next hour)',
         );

@@ -167,7 +167,10 @@ export class IncidentBroadcastService {
         {
           component: 'incident-broadcast',
           channel,
-          err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+          err:
+            err instanceof Error
+              ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+              : { value: err },
         },
         'broadcast webhook failed',
       );

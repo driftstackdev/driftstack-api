@@ -184,7 +184,10 @@ export async function createProductionDeps(
     logger.warn(
       {
         component: 'redis',
-        err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+        err:
+          err instanceof Error
+            ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+            : { value: err },
       },
       'redis connection error',
     );
@@ -1170,7 +1173,10 @@ export async function createProductionDeps(
         logger.warn(
           {
             component: 'scheduled-jobs-poller',
-            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+            err:
+              err instanceof Error
+                ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                : { value: err },
           },
           'scheduled-jobs processTick threw unexpectedly (interval continues)',
         );
@@ -1189,7 +1195,10 @@ export async function createProductionDeps(
         logger.warn(
           {
             component: 'validation-harness-poller',
-            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+            err:
+              err instanceof Error
+                ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                : { value: err },
           },
           'validation-harness processTick threw unexpectedly (interval continues)',
         );
@@ -1212,7 +1221,9 @@ export async function createProductionDeps(
               {
                 component: 'health-probe-poller',
                 err:
-                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+                  err instanceof Error
+                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                    : { value: err },
               },
               'health-probe processTick threw unexpectedly (interval continues)',
             );
@@ -1235,7 +1246,9 @@ export async function createProductionDeps(
               {
                 component: 'status-snapshot-poller',
                 err:
-                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+                  err instanceof Error
+                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                    : { value: err },
               },
               'status-snapshot processSnapshot threw unexpectedly (interval continues)',
             );
@@ -1268,7 +1281,10 @@ export async function createProductionDeps(
         logger.warn(
           {
             component: 'status-subscriber-purge',
-            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+            err:
+              err instanceof Error
+                ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                : { value: err },
           },
           'status-subscriber-purge threw unexpectedly (interval continues)',
         );
@@ -1325,7 +1341,9 @@ export async function createProductionDeps(
               {
                 component: 'webhook-rotation-reminder-poller',
                 err:
-                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+                  err instanceof Error
+                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                    : { value: err },
               },
               'webhook-rotation-reminder tickOnce threw unexpectedly (interval continues)',
             );
@@ -1344,7 +1362,9 @@ export async function createProductionDeps(
               {
                 component: 'byok-anthropic-rotation-reminder-poller',
                 err:
-                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+                  err instanceof Error
+                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                    : { value: err },
               },
               'byok-anthropic-rotation-reminder tickOnce threw unexpectedly (interval continues)',
             );
@@ -1374,7 +1394,10 @@ export async function createProductionDeps(
         logger.warn(
           {
             component: 'pair-mode-heartbeat-sweep',
-            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+            err:
+              err instanceof Error
+                ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                : { value: err },
           },
           'pair-mode-heartbeat-sweep tickOnce threw unexpectedly (interval continues)',
         );
@@ -1395,7 +1418,9 @@ export async function createProductionDeps(
               {
                 component: 'webhook-force-rotation-poller',
                 err:
-                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+                  err instanceof Error
+                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                    : { value: err },
               },
               'webhook-force-rotation tickOnce threw unexpectedly (interval continues)',
             );
@@ -1428,7 +1453,9 @@ export async function createProductionDeps(
               {
                 component: 'webhook-secret-prev-cleanup',
                 err:
-                  err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+                  err instanceof Error
+                    ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                    : { value: err },
               },
               'webhook secret_prev cleanup threw unexpectedly (interval continues)',
             );

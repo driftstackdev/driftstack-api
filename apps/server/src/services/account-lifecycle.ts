@@ -167,7 +167,10 @@ export class AccountLifecycleService {
           component: 'account-lifecycle',
           accountId,
           eventKind: event.kind,
-          err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+          err:
+            err instanceof Error
+              ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+              : { value: err },
         },
         'lifecycle event dispatch failed (best-effort, swallowed)',
       );
@@ -272,7 +275,10 @@ export class AccountLifecycleService {
             component: 'account-lifecycle',
             accountId,
             eventKind: 'subscription.tier_changed',
-            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+            err:
+              err instanceof Error
+                ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                : { value: err },
           },
           'tier_changed audit emit failed (best-effort, swallowed)',
         );

@@ -122,7 +122,10 @@ export class IncidentNotificationsService {
             component: 'incident-notifications',
             email: sub.email,
             kind,
-            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+            err:
+              err instanceof Error
+                ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                : { value: err },
           },
           'incident notification email failed',
         );

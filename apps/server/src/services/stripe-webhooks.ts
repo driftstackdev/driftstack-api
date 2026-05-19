@@ -274,7 +274,10 @@ export class StripeWebhooksService {
           component: 'stripe-webhooks',
           eventId: event.id,
           eventType: event.type,
-          err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+          err:
+            err instanceof Error
+              ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+              : { value: err },
         },
         'Stripe event handler threw',
       );
@@ -548,7 +551,10 @@ export class StripeWebhooksService {
           {
             component: 'stripe-webhooks',
             eventId: event.id,
-            err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+            err:
+              err instanceof Error
+                ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                : { value: err },
           },
           'trial_pack.expired enqueue failed (best-effort, swallowed)',
         );

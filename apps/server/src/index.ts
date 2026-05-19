@@ -48,7 +48,10 @@ async function main(): Promise<void> {
       logger.warn(
         {
           component: 'lifecycle',
-          err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+          err:
+            err instanceof Error
+              ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+              : { value: err },
         },
         'app close failed (proceeding to teardown)',
       );
@@ -70,7 +73,10 @@ async function main(): Promise<void> {
     logger.fatal(
       {
         component: 'lifecycle',
-        err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+        err:
+          err instanceof Error
+            ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+            : { value: err },
       },
       'app.listen failed — exiting',
     );

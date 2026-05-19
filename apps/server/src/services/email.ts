@@ -630,7 +630,10 @@ export function createEmailService({
           to,
           category,
           postmarkCode,
-          err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+          err:
+            err instanceof Error
+              ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+              : { value: err },
         },
         'email send failed (fire-and-forget)',
       );
