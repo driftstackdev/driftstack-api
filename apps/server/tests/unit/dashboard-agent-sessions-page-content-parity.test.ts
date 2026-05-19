@@ -135,10 +135,11 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
     expect(body).toMatch(/encodeURIComponent\(token\)/);
   });
 
-  it('transcript.entry event handler appends per-role styled li elements', () => {
+  it('transcript.entry event handler appends per-role styled li elements — pins all 3 TranscriptEntry.role union members (user/agent/operator) so manual-mode operator turns render distinctly per the agent-decomposer.ts type-doc contract (drift to omitting the operator branch would silently fall back to the unknown-role bg-white/5 styling, contradicting the type definition)', () => {
     expect(body).toMatch(/addEventListener\('transcript\.entry'/);
     expect(body).toMatch(/role === 'user'/);
     expect(body).toMatch(/role === 'agent'/);
+    expect(body).toMatch(/role === 'operator'/);
   });
 
   it('beforeunload closes the EventSource to prevent stream leak', () => {

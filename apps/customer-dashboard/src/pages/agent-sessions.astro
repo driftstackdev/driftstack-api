@@ -533,13 +533,24 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           if (!entry || !transcriptList) return;
           const li = document.createElement('li');
           const role = entry.role || 'unknown';
+          // TranscriptEntry.role union is 'user' | 'agent' | 'operator'
+          // (apps/server/src/services/agent-decomposer.ts). The type
+          // definition explicitly says "dashboard UI branches on this so
+          // manual-driven turns render distinctly" — a pre-2026-05-19
+          // version of this handler fell through to the unknown-role
+          // bg-white/5 styling for operator entries, which contradicted
+          // the type contract. Operator turns now get their own slate-
+          // toned chip so manual-mode actions are visually distinct
+          // from agent-driven ones.
           li.className =
             'rounded px-2 py-1 text-xs ' +
             (role === 'user'
               ? 'self-end bg-glow-red/10 text-ink-primary'
               : role === 'agent'
                 ? 'bg-amber-500/5 text-amber-200'
-                : 'bg-white/5 text-ink-secondary');
+                : role === 'operator'
+                  ? 'bg-sky-500/10 text-sky-200'
+                  : 'bg-white/5 text-ink-secondary');
           li.dataset.role = role;
           li.textContent = '[' + role + '] ' + (entry.body || '');
           transcriptList.appendChild(li);
