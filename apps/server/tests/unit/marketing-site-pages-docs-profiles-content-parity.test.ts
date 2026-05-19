@@ -106,7 +106,7 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
     );
   });
 
-  it.skip("Snapshots V-312 framing pinned: 'Profile snapshots are immutable point-in-time copies of the profile + its browser state. Customers can restore a snapshot into a fresh profile if the current state is broken' + POST /v1/profiles/:id/snapshots create + psnap_-prefix + 'parent_archetype' + 'parent_name' + 'captured_at' fields + 'The restore endpoint lives under /v1/profile-snapshots, not under /v1/profiles/<parent>/snapshots. Each restore creates a fresh profile; the snapshot itself is immutable.' — pinned so the V-312-anchor + psnap_-prefix + parent-fields + restore-on-profile-snapshots-NOT-profiles-subroute + immutable-snapshot commitments survive (drift to claiming restore lives under /v1/profiles/<parent>/snapshots would create marketing↔V-312 route divergence)", () => {
+  it('Snapshots V-312 framing pinned. Re-enabled by slice 247 after restoring the (V-312) parenthetical on the <h2>Snapshots</h2> heading at profiles.astro:137 (same anchor-stripped-to-bare-space drift pattern as slices 235-239)', () => {
     expect(body).toMatch(/<h2>Snapshots \(V-312\)<\/h2>/);
     expect(body).toMatch(/POST \/v1\/profiles\/prof_…\/snapshots/);
     expect(body).toMatch(/"id": "psnap_…"/);
