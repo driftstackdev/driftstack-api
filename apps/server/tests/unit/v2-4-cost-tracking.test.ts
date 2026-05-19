@@ -179,7 +179,11 @@ describe('v2-#4 Q.1.e cost-tracking', () => {
     } as unknown as AgentSessionRecord;
 
     it('calls recorder.record exactly once per decompose() that returns a usage block', async () => {
-      const record = vi.fn(() => Promise.resolve(undefined));
+      // Typed vi.fn so `record.mock.calls[0]![0]` indexes a non-empty
+      // tuple — without the (...args: unknown[]) signature TS infers
+      // `() => Promise<undefined>` and the args tuple is `[]`,
+      // tripping TS2493 on index access.
+      const record = vi.fn((..._args: unknown[]) => Promise.resolve(undefined));
       const runtime = new AgentRuntime({
         decomposer: makeFakeDecomposer({
           kind: 'plan',

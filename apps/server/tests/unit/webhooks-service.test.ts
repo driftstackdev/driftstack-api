@@ -36,6 +36,11 @@ function baseRow(overrides: Partial<WebhookEndpointRow> = {}): WebhookEndpointRo
     secretPrevExpiresAt: null,
     secretCreatedAt: new Date('2026-05-01Z'),
     lastReminderSentAt: null,
+    // Arc 3 sub-slice 28.1 (v2-#28) server-initiated force-rotation
+    // fields — null when no force-rotate in flight; suite doesn't
+    // exercise the path but the row shape requires them.
+    graceWindowEndsAt: null,
+    forceRotatedAt: null,
     events: ['session.completed'],
     description: null,
     active: true,
@@ -116,6 +121,12 @@ function makeRepo(initial: WebhookEndpointRow[] = []): {
     listDlqDeliveries: () => Promise.resolve({ items: [], nextCursor: null }),
     countDlqDeliveries: () => Promise.resolve(0),
     resetDeliveryToPending: () => Promise.resolve(null),
+    // Arc 3 sub-slice 28.x (v2-#28) — server-initiated force-rotation
+    // surface. Not exercised by the V-553.B-14 create/update suite;
+    // no-op stubs to satisfy the WebhooksRepo interface.
+    findEndpointsNeedingForceRotation: () => Promise.resolve([]),
+    forceRotateSecret: () => Promise.resolve(null),
+    clearStaleSecretPrev: () => Promise.resolve({ cleared: 0 }),
   };
   return { repo, rows };
 }

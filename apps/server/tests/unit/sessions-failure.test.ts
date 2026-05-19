@@ -18,7 +18,10 @@ import type { AccountContext } from '../../src/services/auth.js';
 
 interface RecordedEvent {
   accountId: string;
-  eventType: 'session.completed' | 'session.failed';
+  // §eg.7 expanded the session webhook-event union with
+  // 'session.egress_capability_changed'. V-090 suite only fires
+  // completed/failed but type stays in lockstep with the service.
+  eventType: 'session.completed' | 'session.failed' | 'session.egress_capability_changed';
   data: Record<string, unknown>;
 }
 
@@ -117,6 +120,17 @@ class StubRepo implements SessionRepo {
   recordEvent(input: SessionEventInput): Promise<void> {
     this.events.push(input);
     return Promise.resolve();
+  }
+
+  // §eg.1.b — egress capability report. Not exercised by the V-090
+  // driver-failure suite; provided to satisfy the SessionRepo interface
+  // after the Wave 29-400 §10 egress wave extended it.
+  setEgressCapabilityReport(_args: {
+    sessionId: string;
+    derived: unknown;
+    raw: Record<string, unknown>;
+  }): Promise<SessionRecord | null> {
+    return Promise.resolve(null);
   }
 
   /** Test seam. */

@@ -62,7 +62,7 @@ describe('v2-#5 Q.1.f DrizzleAgentDecomposerUsageRecorder audit emit', () => {
 
   it("claude usage → audit action 'agent.decompose.claude' with full metadata payload", async () => {
     const { db } = makeFakeDb();
-    const recordFn = vi.fn(() => Promise.resolve(undefined));
+    const recordFn = vi.fn((..._args: unknown[]) => Promise.resolve(undefined));
     const fakeAudit = { record: recordFn } as unknown as AccountAuditService;
     const rec = new DrizzleAgentDecomposerUsageRecorder(db, makeFakeLogger(), fakeAudit);
     await rec.record({
@@ -104,7 +104,7 @@ describe('v2-#5 Q.1.f DrizzleAgentDecomposerUsageRecorder audit emit', () => {
 
   it("deterministic usage → audit action 'agent.decompose.deterministic'", async () => {
     const { db } = makeFakeDb();
-    const recordFn = vi.fn(() => Promise.resolve(undefined));
+    const recordFn = vi.fn((..._args: unknown[]) => Promise.resolve(undefined));
     const fakeAudit = { record: recordFn } as unknown as AccountAuditService;
     const rec = new DrizzleAgentDecomposerUsageRecorder(db, makeFakeLogger(), fakeAudit);
     await rec.record({

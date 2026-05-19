@@ -36,6 +36,10 @@ function makeRow(overrides: Partial<EligibleRow> = {}): EligibleRow {
     secretPrevExpiresAt: null,
     secretCreatedAt: SEVENTY_DAYS_AGO,
     lastReminderSentAt: null,
+    // Arc 3 sub-slice 28.1 (v2-#28) server-initiated force-rotation
+    // fields — null on customer-initiated rotation-reminder paths.
+    graceWindowEndsAt: null,
+    forceRotatedAt: null,
     events: ['session.completed'],
     description: null,
     active: true,
