@@ -12,6 +12,7 @@ import type {
 } from '../services/webhooks.js';
 import type { AdminAuditAction, AdminAuditService } from '../services/admin-audit.js';
 import { BadRequestError } from '../lib/errors.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
@@ -38,15 +39,6 @@ function publicDelivery(row: WebhookDeliveryRow): Record<string, unknown> {
     delivered_at: row.deliveredAt ? row.deliveredAt.toISOString() : null,
     created_at: row.createdAt.toISOString(),
   };
-}
-
-function clientIp(request: FastifyRequest): string | null {
-  const xff = request.headers['x-forwarded-for'];
-  if (typeof xff === 'string' && xff.length > 0) {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first;
-  }
-  return request.ip;
 }
 
 export interface AdminWebhooksRoutesOptions {
@@ -81,7 +73,7 @@ export function registerAdminWebhookRoutes(
         targetResourceId,
         inputPayload,
         result: 'success',
-        ipAddress: clientIp(request),
+        ipAddress: readClientIp(request),
       });
       return updated;
     } catch (err) {
@@ -94,7 +86,7 @@ export function registerAdminWebhookRoutes(
         targetResourceId,
         inputPayload,
         result: `error: ${code}`,
-        ipAddress: clientIp(request),
+        ipAddress: readClientIp(request),
       });
       throw err;
     }

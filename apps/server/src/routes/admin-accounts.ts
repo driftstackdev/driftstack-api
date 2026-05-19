@@ -43,6 +43,7 @@ import type {
 } from '../services/rate-limit-overrides.js';
 import type { UsageService, UsageSummary } from '../services/usage.js';
 import { BadRequestError } from '../lib/errors.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
@@ -90,16 +91,6 @@ function publicUsage(s: UsageSummary, accountId: string): Record<string, unknown
   };
 }
 
-function clientIp(request: FastifyRequest): string | null {
-  const xff = request.headers['x-forwarded-for'];
-  if (typeof xff === 'string' && xff.length > 0) {
-    // First entry is the original client.
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first;
-  }
-  return request.ip ?? null;
-}
-
 export interface AdminAccountsRoutesOptions {
   accountsAdmin: AccountsAdminService;
   usage: UsageService;
@@ -142,7 +133,7 @@ export function registerAdminAccountsRoutes(
         targetAccountId,
         inputPayload,
         result: 'success',
-        ipAddress: clientIp(request),
+        ipAddress: readClientIp(request),
       });
       return updated;
     } catch (err) {
@@ -155,7 +146,7 @@ export function registerAdminAccountsRoutes(
         targetAccountId,
         inputPayload,
         result: `error: ${code}`,
-        ipAddress: clientIp(request),
+        ipAddress: readClientIp(request),
       });
       throw err;
     }
@@ -478,7 +469,7 @@ export function registerAdminAccountsRoutes(
         targetResourceId: bucketKey,
         inputPayload,
         result: 'success',
-        ipAddress: clientIp(request),
+        ipAddress: readClientIp(request),
       });
       return record;
     } catch (err) {
@@ -492,7 +483,7 @@ export function registerAdminAccountsRoutes(
         targetResourceId: bucketKey,
         inputPayload,
         result: `error: ${code}`,
-        ipAddress: clientIp(request),
+        ipAddress: readClientIp(request),
       });
       throw err;
     }
@@ -516,7 +507,7 @@ export function registerAdminAccountsRoutes(
         targetResourceId: bucketKey,
         inputPayload: { bucket_key: bucketKey },
         result: 'success',
-        ipAddress: clientIp(request),
+        ipAddress: readClientIp(request),
       });
     } catch (err) {
       const code =
@@ -529,7 +520,7 @@ export function registerAdminAccountsRoutes(
         targetResourceId: bucketKey,
         inputPayload: { bucket_key: bucketKey },
         result: `error: ${code}`,
-        ipAddress: clientIp(request),
+        ipAddress: readClientIp(request),
       });
       throw err;
     }
