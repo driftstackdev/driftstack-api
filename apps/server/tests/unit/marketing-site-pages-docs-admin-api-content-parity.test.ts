@@ -39,7 +39,7 @@ function read(p: string): string {
 describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-710 framing pinned: 'overview of the admin API surface. Pitched at the founder + support ops; the page is publicly indexed so customers running audit reviews see what admin keys are capable of. Companion to /docs/api-quickstart (customer-facing surface) and /docs/audit-log (where admin actions land).' — pinned so the V-710 anchor + publicly-indexed-for-audit-reviewers + 2-companion-doc cross-refs survive (drift to making this internal-only would orphan customers from security-review evidence)", () => {
+  it("V-710 framing pinned: 'overview of the admin API surface. Pitched at the founder + support ops; the page is publicly indexed so customers running audit reviews see what admin keys are capable of. Companion to /docs/api-quickstart (customer-facing surface) and /docs/audit-log (where admin actions land).' — pinned so the V-710 anchor + publicly-indexed-for-audit-reviewers + 2-companion-doc cross-refs survive (drift to making this internal-only would orphan customers from security-review evidence). Re-enabled by slice 169 after verifying the V-710 comment exists at admin-api.astro:4-8 with the matching shape", () => {
     expect(body).toMatch(
       /\/\/ V-710 — overview of the admin API surface\. Pitched at the founder\s*\n?\s*\/\/ \+ support ops; the page is publicly indexed so customers running\s*\n?\s*\/\/ audit reviews see what admin keys are capable of\. Companion to\s*\n?\s*\/\/ \/docs\/api-quickstart \(customer-facing surface\) and \/docs\/audit-log\s*\n?\s*\/\/ \(where admin actions land\)\./,
     );
