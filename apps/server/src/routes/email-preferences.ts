@@ -14,9 +14,16 @@ import type { EmailPreferencesService } from '../services/email-preferences.js';
 import { BadRequestError, ForbiddenError } from '../lib/errors.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
+import type { AccountAuditService } from '../services/account-audit.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 export interface EmailPreferencesRoutesOptions {
   emailPreferences: EmailPreferencesService;
+  /** 2026-05-20 — customer audit-log writer. PUT emits
+   *  `account.email_preferences_changed` on each opt-in/out toggle.
+   *  Payload: { event_type, opted_in }. Best-effort emit (errors
+   *  swallowed). */
+  accountAudit?: AccountAuditService;
 }
 
 export function registerEmailPreferencesRoutes(
@@ -24,6 +31,7 @@ export function registerEmailPreferencesRoutes(
   opts: EmailPreferencesRoutesOptions,
 ): void {
   const { emailPreferences } = opts;
+  const accountAudit = opts.accountAudit;
 
   app.get(
     '/v1/account/email-preferences',
@@ -71,6 +79,28 @@ export function registerEmailPreferencesRoutes(
         parsed.data.opted_in,
         effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {},
       );
+      // 2026-05-20 — audit emit after the toggle persists. Best-
+      // effort; audit failure must not break the 204. Audited
+      // account is the effective account (team-target case scopes
+      // the audit row to the owner's log, not the team member's).
+      if (accountAudit !== undefined) {
+        const auditedAccountId = effective.kind === 'team' ? effective.accountId : ctx.account.id;
+        try {
+          await accountAudit.record({
+            accountId: auditedAccountId,
+            actorType: 'customer',
+            action: 'account.email_preferences_changed',
+            targetResourceId: `account_${auditedAccountId}`,
+            payload: {
+              event_type: parsed.data.event_type,
+              opted_in: parsed.data.opted_in,
+            },
+            ipAddress: readClientIp(request),
+          });
+        } catch {
+          /* swallow */
+        }
+      }
       return reply.code(204).send();
     },
   );

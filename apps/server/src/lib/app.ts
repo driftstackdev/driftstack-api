@@ -800,7 +800,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     rateLimitOverrides: deps.rateLimitOverridesService,
   });
   registerLegalRoutes(app, deps.legalService);
-  registerEmailPreferencesRoutes(app, { emailPreferences: deps.emailPreferencesService });
+  registerEmailPreferencesRoutes(app, {
+    emailPreferences: deps.emailPreferencesService,
+    // 2026-05-20 — audit emit on toggle (closes the last 2026-05-19
+    // audit-coverage gap).
+    ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
+  });
   registerAccountAuditRoutes(app, { accountAudit: deps.accountAuditService });
   registerAdminValidationHarnessRoutes(app, { harness: deps.validationHarnessService });
   registerAccountRateLimitsRoutes(app);

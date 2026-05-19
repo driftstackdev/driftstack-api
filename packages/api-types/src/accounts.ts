@@ -302,6 +302,12 @@ export const AccountAuditActionSchema = z.enum([
   // and deployment-fallback. Auditable should be default for any
   // consent change.
   'account.bundled_llm_consent_changed',
+  // 2026-05-20 — email-preferences toggle (last Tier 2 polish item
+  // from the 2026-05-19 audit-coverage doc; "marginal" classification
+  // but trivial to add). Customer-controlled mutation on the
+  // opt-in/out flag for each transactional email category. Payload
+  // carries event_type + opted_in for post-hoc reconstruction.
+  'account.email_preferences_changed',
 ]);
 export type AccountAuditAction = z.infer<typeof AccountAuditActionSchema>;
 
