@@ -97,6 +97,18 @@ ssh "root@${HOST}" "set -euo pipefail; \
   # image gets dev + prod deps; slightly bigger but matches lockfile
   # exactly. Acceptable until docker-compose deploy lands.
 \
+  # Pre-swap immutability + journal-integrity gate. Runs BEFORE the
+  # atomic swap so a misconfigured journal aborts the deploy at the
+  # gate, not at /health-poll-timeout-then-rollback (or worse, after a
+  # half-applied schema). Catches: applied-row-hash drift, pending
+  # journal entries with when <= max(DB.created_at) that drizzle-orm
+  # 0.38.4 would silent-skip, journal/DB count mismatch. See the
+  # 2026-05-19 migration-audit incident for the prevention rationale.
+  echo '[bridge] migration-immutability + journal-integrity pre-gate' >&2; \
+  set -a; source /opt/driftstack/api/.env; set +a; \
+  node \$BUILD_DIR/scripts/migration-immutability-check.mjs > /tmp/deploy-mig-check.log 2>&1 \
+    || (tail -30 /tmp/deploy-mig-check.log; exit 1); \
+\
   echo '[bridge] swapping artefacts into /opt/driftstack/api' >&2; \
   cd /opt/driftstack/api; \
   for d in node_modules apps/server/dist apps/server/src/db/migrations packages/api-types packages/webhook-delivery; do \
