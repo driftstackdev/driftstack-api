@@ -40,7 +40,7 @@ describe('W521.A apps/marketing-site/src/pages/docs/migration-from-puppeteer.ast
     expect(body).toMatch(/\/\/ V-700 — migration guide for Puppeteer \/ Playwright users\./);
   });
 
-  it.skip("4-why-migrate framing pinned: 'No browser-fleet management. No headless Chrome containers to keep alive, no Selenium grid to patch, no Mac mini farm to babysit.' + 'Profile persistence. Cookies / localStorage / IndexedDB live in a server-side encrypted profile (V-312) — clone, snapshot, restore through the API.' + 'Recordings + retention. Every session can be recorded as WebM with tier-dependent retention; presigned playback URLs are HTTP-friendly.' + 'Concurrency caps as a feature. Tier-driven concurrent-session limits + queue feedback let you scale traffic without over-provisioning.' — pinned so the 4-bullet + V-312 profile-anchor + WebM-recordings + concurrency-as-feature commitments survive", () => {
+  it('4-why-migrate framing pinned. Re-enabled by slice 250 after restoring the (V-312) anchor on the Profile persistence bullet at migration-from-puppeteer.astro:25 (same anchor-stripped pattern as slices 247-249)', () => {
     expect(body).toMatch(
       /<strong>No browser-fleet management\.<\/strong> No headless\s*\n?\s*Chrome containers to keep alive, no Selenium grid to patch,\s*\n?\s*no Mac mini farm to babysit\./,
     );
