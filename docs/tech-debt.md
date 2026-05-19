@@ -21,10 +21,10 @@ revisiting, and implementation notes for whoever picks it up.
 **Source:** V-202b (founder verdict 2026-05-05).
 
 **Current state:** Stripe's own infrastructure fires billing receipts
-(payment*succeeded / payment*failed) directly to the customer's email
+(`payment_succeeded` / `payment_failed`) directly to the customer's email
 on file. Driftstack templates exist (`sendBillingReceipt`,
 `sendBillingFailure`) and are listed in the V-204 opt-out preference
-set, but the wire-in at the `invoice.payment**` Stripe handler points
+set, but the wire-in at the `invoice.payment_*` Stripe handler points
 is intentionally not done.
 
 **Why deferred:** Stripe receipts are a solved problem — legally
