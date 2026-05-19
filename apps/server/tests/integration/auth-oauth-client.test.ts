@@ -214,3 +214,47 @@ describe('GET /v1/auth/oauth/:provider/callback — Path A IDP-direct redirect',
     expect(res.statusCode).toBe(404);
   });
 });
+
+describe('GET /v1/auth/oauth-client/callback — Path B SPA exchange', () => {
+  it('IDP error param: short OAuth-spec code lands in 400 detail verbatim', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/auth/oauth-client/callback?error=access_denied',
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json<{ detail?: string }>();
+    expect(body.detail).toContain('IDP returned error: access_denied');
+  });
+
+  it('IDP error param: huge crafted error string is capped at 128 chars before interpolation (prevents problem+json body bloat)', async () => {
+    // OAuth spec error codes are short tokens like 'access_denied'
+    // / 'invalid_scope' — a 10kb error string is either a misconfigured
+    // IDP or an attacker probing for response-bloat. Slice 115 caps
+    // the interpolated portion at 128 chars.
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const huge = 'A'.repeat(10_000);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/auth/oauth-client/callback?error=${huge}`,
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json<{ detail?: string }>();
+    // The detail carries the 128-char slice, NOT the full 10k string.
+    expect(body.detail).toBe(`IDP returned error: ${'A'.repeat(128)}`);
+    // Defensive bound on the entire detail length so a future
+    // refactor that re-introduces the full-string interpolation
+    // trips the test.
+    expect((body.detail ?? '').length).toBeLessThan(200);
+  });
+
+  it('missing code+state: 400 with explicit "Missing code or state" detail', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/auth/oauth-client/callback',
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail?: string }>().detail).toContain('Missing code or state');
+  });
+});

@@ -125,8 +125,13 @@ export function registerOAuthClientRoutes(
     async (req, reply) => {
       // IDP may redirect with ?error=access_denied if the user
       // cancelled the consent — surface a clean 400 in that case.
+      // Cap the error string to a sane bound before interpolating so
+      // a crafted huge ?error= value doesn't swell the problem+json
+      // body (OAuth-spec error codes are short tokens like
+      // 'access_denied', 'invalid_scope', etc.).
       if (typeof req.query.error === 'string' && req.query.error.length > 0) {
-        throw new BadRequestError(`IDP returned error: ${req.query.error}`);
+        const errSlice = req.query.error.slice(0, 128);
+        throw new BadRequestError(`IDP returned error: ${errSlice}`);
       }
       const code = typeof req.query.code === 'string' ? req.query.code : '';
       const stateToken = typeof req.query.state === 'string' ? req.query.state : '';
