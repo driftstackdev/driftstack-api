@@ -27,15 +27,13 @@ Authorization: Bearer <api-key OR ds_web_session_token>
 Where `LK.6 InputEvent` is the 7-variant discriminated union pinned
 in `apps/gui-client/src/lib/livekit.ts:23-30`:
 
-| Variant     | Fields                               |
-| ----------- | ------------------------------------ | --- | --- |
-| `mouseMove` | `x, y`                               |
-| `mouseDown` | `x, y, button: 0                     | 1   | 2`  |
-| `mouseUp`   | `x, y, button: 0                     | 1   | 2`  |
-| `keyDown`   | `key, modifiers?: readonly string[]` |
-| `keyUp`     | `key, modifiers?: readonly string[]` |
-| `wheel`     | `x, y, deltaX, deltaY`               |
-| `ping`      | `timestamp`                          |
+- `mouseMove` — `x, y`
+- `mouseDown` — `x, y, button: 0 | 1 | 2`
+- `mouseUp` — `x, y, button: 0 | 1 | 2`
+- `keyDown` — `key, modifiers?: readonly string[]`
+- `keyUp` — `key, modifiers?: readonly string[]`
+- `wheel` — `x, y, deltaX, deltaY`
+- `ping` — `timestamp`
 
 Response shape: `{ ok: true, duration_ms: number }` — mirrors
 `/gui-input` for symmetry; the duration measures server-side
