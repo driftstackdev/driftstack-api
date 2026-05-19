@@ -65,18 +65,18 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(existsSync(RL)).toBe(true);
   });
 
-  it.skip('reference/scopes.md: V-505 + 3 categories (Broad read/write/admin + Account-control account_owner/driftstack_internal_admin + Granular V-481 verb:resource) + L-001 gui_control special scope pinned', () => {
+  it('reference/scopes.md: 3 categories (Broad read/write/admin + Account-control account_owner/driftstack_internal_admin + Granular verb:resource) + L-001 gui_control special scope pinned. Re-enabled by slice 307 — V-505 (header anchor), V-481 (Granular subtitle), and V-174 (admin-legacy table cell) were all R4-scrubbed; the table cell now says "Pre-alias" instead of "Pre-V-174 alias"', () => {
     const body = read(SC);
     expect(body).toMatch(/^title: API key scopes$/m);
-    expect(body).toMatch(/V-505 reference\./);
+    expect(body).toMatch(/^reference\. Every Driftstack API key carries a set of$/m);
     expect(body).toMatch(/Every Driftstack API key carries a set of/);
     expect(body).toMatch(/scopes\./);
     expect(body).toMatch(/^## Scope categories$/m);
     expect(body).toMatch(/1\. \*\*Broad scopes\*\* — `read`, `write`, `admin`\./);
     expect(body).toMatch(/2\. \*\*Account-control scopes\*\* — `account_owner`,/);
     expect(body).toMatch(/`driftstack_internal_admin`\./);
-    expect(body).toMatch(/3\. \*\*Granular scopes \(V-481\)\*\* — `verb:resource` syntax/);
-    expect(body).toMatch(/\| `admin`\s+\| broad \(legacy\)\s+\| Pre-V-174 alias\./);
+    expect(body).toMatch(/3\. \*\*Granular scopes \*\* — `verb:resource` syntax/);
+    expect(body).toMatch(/\| `admin`\s+\| broad \(legacy\)\s+\| Pre-alias\./);
     expect(body).toMatch(
       /Treated as satisfying both `account_owner` \+ `driftstack_internal_admin`\./,
     );
