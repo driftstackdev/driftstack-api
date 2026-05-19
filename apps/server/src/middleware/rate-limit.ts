@@ -50,9 +50,10 @@ function rateLimitPlugin(
 
       // W199 — full RateLimit-header set as documented at
       // `/docs/rate-limits`. `bucket` lets clients distinguish which
-      // limiter fired (`global` vs `sessions:create` today); `limit`
-      // is the bucket capacity; `reset` is unix seconds at which the
-      // bucket will be back at capacity.
+      // limiter fired (`global` / `sessions:create` /
+      // `agent_sessions:message` today); `limit` is the bucket
+      // capacity; `reset` is unix seconds at which the bucket will
+      // be back at capacity.
       const nowSec = Math.floor(Date.now() / 1000);
       const tokensNeededForFull = result.capacity - result.remaining;
       const secondsToFull =

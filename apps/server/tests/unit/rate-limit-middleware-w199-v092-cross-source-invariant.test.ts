@@ -22,9 +22,9 @@
 //
 //   W199 4-header set framing — 'full RateLimit-header set as
 //   documented at /docs/rate-limits. bucket lets clients distinguish
-//   which limiter fired (global vs sessions:create today); limit is
-//   the bucket capacity; reset is unix seconds at which the bucket
-//   will be back at capacity':
+//   which limiter fired (global / sessions:create /
+//   agent_sessions:message today); limit is the bucket capacity;
+//   reset is unix seconds at which the bucket will be back at capacity':
 //     - x-ratelimit-bucket: bucketKey.
 //     - x-ratelimit-limit: capacity.
 //     - x-ratelimit-remaining: floor(remaining).
@@ -126,13 +126,15 @@ describe('W981 rate-limit middleware W199 + V-092 cross-source invariant', () =>
 
   // ─── W199 4-header set framing ───────────────────────────────
 
-  it("CRITICAL W199 4-header set framing — 'full RateLimit-header set as documented at /docs/rate-limits. bucket lets clients distinguish which limiter fired (global vs sessions:create today); limit is the bucket capacity; reset is unix seconds at which the bucket will be back at capacity'. The 4-header-with-bucket-id-on-which-limiter design is the W199 customer-facing contract.", () => {
+  it("CRITICAL W199 4-header set framing — 'full RateLimit-header set as documented at /docs/rate-limits. bucket lets clients distinguish which limiter fired (global / sessions:create / agent_sessions:message today); limit is the bucket capacity; reset is unix seconds at which the bucket will be back at capacity'. The 4-header-with-bucket-id-on-which-limiter design is the W199 customer-facing contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/rate-limit.ts'));
     expect(p).toMatch(/W199 — full RateLimit-header set as documented at/);
     expect(p).toMatch(/`\/docs\/rate-limits`\. `bucket` lets clients distinguish which/);
-    expect(p).toMatch(/limiter fired \(`global` vs `sessions:create` today\); `limit`/);
-    expect(p).toMatch(/is the bucket capacity; `reset` is unix seconds at which the/);
-    expect(p).toMatch(/bucket will be back at capacity\./);
+    expect(p).toMatch(
+      /limiter fired \(`global` \/ `sessions:create` \/\s*\n?\s*\/\/\s*`agent_sessions:message` today\); `limit` is the bucket/,
+    );
+    expect(p).toMatch(/capacity; `reset` is unix seconds at which the bucket will/);
+    expect(p).toMatch(/be back at capacity\./);
   });
 
   it('CRITICAL W199 4 headers emitted — x-ratelimit-bucket + x-ratelimit-limit + x-ratelimit-remaining + x-ratelimit-reset. The 4-header set is what client SDKs parse for back-off scheduling.', () => {

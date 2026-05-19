@@ -88,8 +88,11 @@ describe('W713 server-side rate-limit middleware parity', () => {
 
   it('CRITICAL x-ratelimit-reset is UNIX SECONDS at which the bucket will be BACK AT CAPACITY (not just retry-after). The "back at capacity" semantic differs from retry-after (next-permitted) — drift to retry-after-semantics would silently change customer client behavior.', () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
+    // Comment was reflowed when adding the 3rd bucket to the
+    // limiter-list — "bucket will" ends one line, "be back at
+    // capacity" starts the next.
     expect(src).toMatch(
-      /`reset` is unix seconds at which the\s*\n?\s*\/\/\s*bucket will be back at capacity/,
+      /`reset` is unix seconds at which the bucket will\s*\n?\s*\/\/\s*be back at capacity/,
     );
   });
 
@@ -154,10 +157,10 @@ describe('W713 server-side rate-limit middleware parity', () => {
     );
   });
 
-  it('CRITICAL `bucket` framing pinned — "bucket lets clients distinguish which limiter fired (global vs sessions:create today)". The closed-2-bucket-set is what matches W704 + W706 cross-SDK roster. Drift to a 3rd bucket without updating the roster would surface as unknown bucket-keys to clients.', () => {
+  it('CRITICAL `bucket` framing pinned — "bucket lets clients distinguish which limiter fired (global / sessions:create / agent_sessions:message today)". v2-#8 sub-slice 8.20 added the agent_sessions:message bucket. Drift to a 4th bucket without updating the roster would surface as unknown bucket-keys to clients.', () => {
     const src = read(RATE_LIMIT_MIDDLEWARE);
     expect(src).toMatch(
-      /`bucket` lets clients distinguish which\s*\n?\s*\/\/\s*limiter fired \(`global` vs `sessions:create` today\)/,
+      /`bucket` lets clients distinguish which\s*\n?\s*\/\/\s*limiter fired \(`global` \/ `sessions:create` \/\s*\n?\s*\/\/\s*`agent_sessions:message` today\)/,
     );
   });
 
