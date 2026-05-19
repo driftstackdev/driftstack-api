@@ -65,11 +65,11 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     });
   });
 
-  it.skip('typescript-quickstart.md: V-504 framing + Node 18+ (22 LTS recommended) + ESM-only + lazy auth (no construct-time network) + try/finally destroy-session-or-idle-timeout pinned', () => {
+  it('typescript-quickstart.md: laser-focused-5-minute framing + Node 18+ (22 LTS recommended) + ESM-only + lazy auth (no construct-time network) + try/finally destroy-session-or-idle-timeout pinned. Re-enabled by slice 318 after the R4 V-NNN scrub (commit b46b8d4124b) removed the V-504 anchor; the doc now leads with the bare em-dash form "— laser-focused..."', () => {
     const body = read(TS);
     expect(body).toMatch(/^title: TypeScript \/ Node\.js quickstart$/m);
     expect(body).toMatch(/^# TypeScript quickstart$/m);
-    expect(body).toMatch(/V-504 — laser-focused 5-minute path to a working TypeScript Driftstack/);
+    expect(body).toMatch(/^— laser-focused 5-minute path to a working TypeScript Driftstack$/m);
     expect(body).toMatch(/- Node\.js 18\+ \(Node 22 LTS recommended;/);
     expect(body).toMatch(/`engines\.node: ">=18"`/);
     expect(body).toMatch(/npm install @driftstack\/sdk/);
@@ -89,11 +89,11 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(existsSync(TS)).toBe(true);
   });
 
-  it.skip('python-quickstart.md: V-504 framing + Python 3.10+ + sync(Driftstack)+async(AsyncDriftstack) clients off same wire shape + uv/poetry alt install + asyncio.run(main()) pinned', () => {
+  it('python-quickstart.md: laser-focused-5-minute framing + Python 3.10+ + sync(Driftstack)+async(AsyncDriftstack) clients off same wire shape + uv/poetry alt install + asyncio.run(main()) pinned. Re-enabled by slice 319 post the R4 V-NNN scrub (V-504 anchor removed; doc leads with bare em-dash)', () => {
     const body = read(PY);
     expect(body).toMatch(/^title: Python quickstart$/m);
     expect(body).toMatch(/^# Python quickstart$/m);
-    expect(body).toMatch(/V-504 — laser-focused 5-minute path to a working Python Driftstack/);
+    expect(body).toMatch(/^— laser-focused 5-minute path to a working Python Driftstack$/m);
     expect(body).toMatch(
       /- Python 3\.10\+ \(the SDK uses modern type hints \+ structural matches\)\./,
     );
@@ -110,11 +110,11 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(existsSync(PY)).toBe(true);
   });
 
-  it.skip('go-quickstart.md: V-504 framing + Go 1.21+ + go-get module path + alpha pin-to-sha guidance + ctx + client.Close() defer pattern pinned', () => {
+  it('go-quickstart.md: laser-focused-5-minute framing + Go 1.21+ + go-get module path + alpha pin-to-sha guidance + ctx + client.Close() defer pattern pinned. Re-enabled by slice 320 post the R4 V-NNN scrub (V-504 anchor removed; doc leads with bare em-dash)', () => {
     const body = read(GO);
     expect(body).toMatch(/^title: Go quickstart$/m);
     expect(body).toMatch(/^# Go quickstart$/m);
-    expect(body).toMatch(/V-504 — laser-focused 5-minute path to a working Go Driftstack/);
+    expect(body).toMatch(/^— laser-focused 5-minute path to a working Go Driftstack$/m);
     expect(body).toMatch(/- Go 1\.21\+ \(the SDK uses generic constraints \+ `slices` package\)\./);
     expect(body).toMatch(/go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go/);
     expect(body).toMatch(/> The Go SDK is alpha until the first tagged release lands\./);
@@ -128,12 +128,12 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(existsSync(GO)).toBe(true);
   });
 
-  it.skip('versioning.md: V-177 active status 2026-05-05 + SemVer 2.0.0 (MAJOR breaking / MINOR additive / PATCH bugfix) + control-plane-NOT-versioned (URL /v1→/v2 path) + pre-1.0 same-bar-as-post-1.0 + 1.0 ships at first-paying-customer + 30d-production + founder-explicit-approval gate pinned', () => {
+  it('versioning.md: active status + 2026-05-05 effective date + SemVer 2.0.0 (MAJOR breaking / MINOR additive / PATCH bugfix) + control-plane-NOT-versioned (URL /v1→/v2 path) + pre-1.0 same-bar-as-post-1.0 + 1.0 ships at first-paying-customer + 30d-production + founder-explicit-approval gate pinned. Re-enabled by slice 321 post the R4 V-NNN scrub (V-177 parenthetical removed; the Effective date now sits bare without the anchor)', () => {
     const body = read(VER);
     expect(body).toMatch(/^title: SDK versioning policy$/m);
     expect(body).toMatch(/^# SDK versioning \+ deprecation policy$/m);
     expect(body).toMatch(/\*\*Status:\*\* Active/);
-    expect(body).toMatch(/\*\*Effective date:\*\* 2026-05-05 \(V-177\)/);
+    expect(body).toMatch(/\*\*Effective date:\*\* 2026-05-05$/m);
     expect(body).toMatch(
       /\*\*Applies to:\*\* `@driftstack\/sdk` \(TypeScript\), `driftstack` \(Python\),/,
     );
