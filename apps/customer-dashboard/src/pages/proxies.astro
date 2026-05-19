@@ -29,14 +29,14 @@ const apiBaseUrl = resolveApiBaseUrl();
     ></div>
 
     <header class="mb-10">
-      <p class="text-sm text-ink-muted">Customer-configurable egress · per planning 133</p>
+      <p class="text-sm text-ink-muted">Egress</p>
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Proxies</h1>
       <p class="mt-2 max-w-prose text-sm text-ink-muted">
-        Saved proxy configurations you can attach to a session. Sessions route
-        all browser traffic through the attached proxy — your target site
-        sees the proxy's IP, not Driftstack's Mac-fleet IP. Phase 1 supports
-        SOCKS5 (with UDP ASSOCIATE for WebRTC); OpenVPN + WireGuard land in
-        Phase 2 + 3 per the launch roadmap.
+        Saved proxy configurations you can attach to a session. Sessions
+        route all browser traffic through the attached proxy — the target
+        site sees the proxy's IP, not Driftstack's Mac-fleet IP. SOCKS5
+        is live now (with UDP ASSOCIATE for WebRTC); OpenVPN and WireGuard
+        are rolling out next.
       </p>
     </header>
 
@@ -59,8 +59,8 @@ const apiBaseUrl = resolveApiBaseUrl();
     <section class="mb-12 dashboard-card" data-create-form>
       <h2 class="text-lg font-semibold text-ink-primary">Add a SOCKS5 proxy</h2>
       <p class="mt-1 text-sm text-ink-muted">
-        Phase 1 launch protocol. UDP ASSOCIATE support required for WebRTC
-        to route through the proxy.
+        The proxy must support UDP ASSOCIATE so WebRTC traffic routes
+        through it; TCP-only SOCKS5 leaks media flows directly.
       </p>
       <div class="mt-5 grid gap-4 sm:grid-cols-2">
         <label class="block">
@@ -142,10 +142,9 @@ const apiBaseUrl = resolveApiBaseUrl();
     <section class="mb-12 dashboard-card" data-create-openvpn-form>
       <h2 class="text-lg font-semibold text-ink-primary">Add an OpenVPN proxy</h2>
       <p class="mt-1 text-sm text-ink-muted">
-        Phase 2 launch protocol (founder priority focus). Paste the full
-        <code class="font-mono">.ovpn</code> file contents. Server-side
-        validation runs at upload; deep parsing happens at session
-        attach inside the per-session VM. Max 256 KB.
+        Paste the full <code class="font-mono">.ovpn</code> file contents.
+        We validate at upload time and parse the full config when a session
+        attaches. Max 256 KB.
       </p>
       <div class="mt-5 grid gap-4">
         <label class="block">
