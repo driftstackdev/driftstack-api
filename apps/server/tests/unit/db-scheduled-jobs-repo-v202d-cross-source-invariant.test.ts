@@ -96,9 +96,7 @@ describe('W1014 db/scheduled-jobs-repo V-202d cross-source invariant', () => {
 
   it("CRITICAL claimDue 5-minute lock-staleness override — '(locked_by IS NULL OR locked_at < ${now - 5*60000})'. The 5-min override lets a fresh worker steal locks from dead workers.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/scheduled-jobs-repo.ts'));
-    expect(p).toMatch(
-      /AND \(locked_by IS NULL OR locked_at < \$\{new Date\(opts\.now\.getTime\(\) - 5 \* 60_000\)\}\)/,
-    );
+    expect(p).toMatch(/AND \(locked_by IS NULL OR locked_at < \$\{lockStaleAtIso\}\)/);
   });
 
   it('CRITICAL claimDue raw SQL — WITH due AS (SELECT id ... FOR UPDATE SKIP LOCKED) UPDATE ... FROM due WHERE sj.id=due.id RETURNING 7 cols.', () => {
@@ -106,7 +104,7 @@ describe('W1014 db/scheduled-jobs-repo V-202d cross-source invariant', () => {
     expect(p).toMatch(/WITH due AS \(/);
     expect(p).toMatch(/SELECT id/);
     expect(p).toMatch(/FROM scheduled_jobs/);
-    expect(p).toMatch(/WHERE run_at <= \$\{opts\.now\}/);
+    expect(p).toMatch(/WHERE run_at <= \$\{nowIso\}/);
     expect(p).toMatch(/AND completed_at IS NULL/);
     expect(p).toMatch(/AND failed_at IS NULL/);
     expect(p).toMatch(/ORDER BY run_at ASC/);
@@ -114,7 +112,7 @@ describe('W1014 db/scheduled-jobs-repo V-202d cross-source invariant', () => {
     expect(p).toMatch(/FOR UPDATE SKIP LOCKED/);
     expect(p).toMatch(/UPDATE scheduled_jobs sj/);
     expect(p).toMatch(/SET locked_by\s+=\s+\$\{opts\.workerId\},/);
-    expect(p).toMatch(/locked_at\s+=\s+\$\{opts\.now\},/);
+    expect(p).toMatch(/locked_at\s+=\s+\$\{nowIso\},/);
     expect(p).toMatch(/attempts\s+= sj\.attempts \+ 1,/);
     expect(p).toMatch(/FROM due/);
     expect(p).toMatch(/WHERE sj\.id = due\.id/);

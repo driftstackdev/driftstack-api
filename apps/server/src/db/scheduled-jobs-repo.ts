@@ -49,6 +49,19 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
     // concurrent workers never claim the same row. The outer UPDATE
     // sets locked_by + locked_at + increments attempts, then RETURNING
     // gives us back the claimed rows.
+    //
+    // Date params pre-serialized to ISO strings: drizzle-orm 0.38.4's
+    // construct(client) swaps postgres-js's OID 1184/1082/1083/1114
+    // serializers with a no-op (val) => val transparentParser; that
+    // leaves Date instances in postgres-js's Bind step where
+    // Buffer.byteLength crashes with ERR_INVALID_ARG_TYPE. drizzle's
+    // table-builder API (db.update().set({date})) pre-serializes via
+    // column-schema metadata before postgres-js sees the value, but raw
+    // sql template literals like this one feed Dates through directly.
+    // Sending the ISO string passes through transparentParser unchanged
+    // and postgres parses it as timestamptz on the server.
+    const nowIso = opts.now.toISOString();
+    const lockStaleAtIso = new Date(opts.now.getTime() - 5 * 60_000).toISOString();
     const result = await this.database.db.execute<{
       id: string;
       job_type: string;
@@ -61,19 +74,19 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
       WITH due AS (
         SELECT id
           FROM scheduled_jobs
-         WHERE run_at <= ${opts.now}
+         WHERE run_at <= ${nowIso}
            AND completed_at IS NULL
            AND failed_at IS NULL
-           AND (locked_by IS NULL OR locked_at < ${new Date(opts.now.getTime() - 5 * 60_000)})
+           AND (locked_by IS NULL OR locked_at < ${lockStaleAtIso})
          ORDER BY run_at ASC
          LIMIT ${opts.batchSize}
          FOR UPDATE SKIP LOCKED
       )
       UPDATE scheduled_jobs sj
          SET locked_by   = ${opts.workerId},
-             locked_at   = ${opts.now},
+             locked_at   = ${nowIso},
              attempts    = sj.attempts + 1,
-             updated_at  = ${opts.now}
+             updated_at  = ${nowIso}
         FROM due
        WHERE sj.id = due.id
        RETURNING sj.id, sj.job_type, sj.account_id, sj.payload, sj.run_at,
