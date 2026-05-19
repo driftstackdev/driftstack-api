@@ -13,9 +13,17 @@ export const Iso8601Schema = z
 
 // Cursor pagination — opaque cursor strings; servers may swap encoding later
 // without breaking clients.
+//
+// Slice 148 — cap cursor at 512 chars matching slice 117/146/147
+// convention across all admin + customer list routes. The base shape
+// flows into 3 customer-facing routes today (profiles / profile-
+// snapshots / sessions) so capping at the source pulls them all into
+// the defensive-cap pattern without 3 separate route-level edits. 512
+// chars covers any base64url-encoded {ts, uuid} pagination token plus
+// headroom; multi-KB cursors are abuse or a bug.
 export const PaginationQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  cursor: z.string().optional(),
+  cursor: z.string().min(1).max(512).optional(),
 });
 
 export type PaginationQuery = z.infer<typeof PaginationQuerySchema>;

@@ -48,7 +48,13 @@ const CURSOR_ONLY_ROUTES = ['apps/server/src/routes/admin-accounts.ts'];
 
 const ALL_CURSOR_CAPPED_ROUTES = [...CURSOR_AND_ACCOUNT_ID_ROUTES, ...CURSOR_ONLY_ROUTES];
 
-describe('Slice 146/147 — admin list-query defensive caps', () => {
+// Slice 148 — the shared PaginationQuerySchema in packages/api-types/
+// src/common.ts caps cursor at 512 at the source so 3 customer-facing
+// routes (profiles / profile-snapshots / sessions) inherit the cap
+// without route-level edits. Pinning the base-schema shape here.
+const SHARED_PAGINATION_SCHEMA = 'packages/api-types/src/common.ts';
+
+describe('Slice 146/147/148 — defensive caps on list-query cursor + account_id', () => {
   it.each(ALL_CURSOR_CAPPED_ROUTES)(
     '%s caps cursor at z.string().min(1).max(512).optional()',
     (rel) => {
@@ -68,4 +74,12 @@ describe('Slice 146/147 — admin list-query defensive caps', () => {
       expect(body).not.toMatch(/account_id:\s*z\.string\(\)\.optional\(\)/);
     },
   );
+
+  it('slice 148 — shared PaginationQuerySchema in api-types/common.ts caps cursor at .min(1).max(512).optional() so 3 customer-facing list routes (profiles / profile-snapshots / sessions) inherit the cap from the source without route-level edits', () => {
+    const body = read(SHARED_PAGINATION_SCHEMA);
+    expect(body).toMatch(/PaginationQuerySchema = z\.object\(\{/);
+    expect(body).toMatch(/cursor:\s*z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\)/);
+    // Drift sentinel — pre-slice-148 bare shape MUST NOT come back.
+    expect(body).not.toMatch(/cursor:\s*z\.string\(\)\.optional\(\)/);
+  });
 });
