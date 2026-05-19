@@ -36,7 +36,7 @@ function read(p: string): string {
 describe('W521.A apps/marketing-site/src/pages/docs/migration-from-puppeteer.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-700 framing pinned: 'migration guide for Puppeteer / Playwright users.' — pinned so the V-700 anchor survives", () => {
+  it("V-700 framing pinned: 'migration guide for Puppeteer / Playwright users.' — pinned so the V-700 anchor survives. Re-enabled by slice 199 after verifying the V-700 comment exists at migration-from-puppeteer.astro:4 with the matching shape", () => {
     expect(body).toMatch(/\/\/ V-700 — migration guide for Puppeteer \/ Playwright users\./);
   });
 
