@@ -21025,7 +21025,7 @@ helpers inline.
 
 V-455 customer-facing OpenAPI gap count: 19 → 13.
 
-## V-458 — register /v1/legal/\* in OpenAPI + add three-SDK methods
+## V-458 — register `/v1/legal/*` in OpenAPI + add three-SDK methods
 
 **Tier**: 1 (V-455 audit gap closure — V-049 legal acceptance
 machinery had server routes but no OpenAPI registration and no
@@ -21067,7 +21067,7 @@ go test + Python pytest 137 + monorepo typecheck clean.
 V-455 customer-facing OpenAPI gap count: 13 → 10. Customer-
 facing SDK gap count: 16 → 13.
 
-## V-459 — register /v1/status/\* in OpenAPI; SDK exposure 🚫 by design
+## V-459 — register `/v1/status/*` in OpenAPI; SDK exposure 🚫 by design
 
 **Tier**: 1 (V-455 audit gap closure — public status surface had
 zero OpenAPI presence and the audit table had it as a 6-route SDK
@@ -21108,7 +21108,7 @@ V-455 customer-facing OpenAPI gap count: 10 → 4 (cli-authorize
 3-route block + gui-input remain). Customer-facing SDK gap count:
 13 → 13 (status reclassified 🚫, not closed via SDK addition).
 
-## V-460 — register /v1/auth/cli-authorize/\* in OpenAPI + add three-SDK methods
+## V-460 — register `/v1/auth/cli-authorize/*` in OpenAPI + add three-SDK methods
 
 **Tier**: 1 (V-455 audit gap closure — V-266 browser-OAuth-style
 activation flow had server routes + Zod schemas in api-types but no
