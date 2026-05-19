@@ -46,6 +46,34 @@ esac
 
 echo "=== deploy-bridge: $ENV ($HOST) → $SHA ===" >&2
 
+# Pre-flight: refuse to deploy to staging if its DATABASE_URL resolves
+# to the same Neon host as prod. The 2026-05-19 Slice E audit surfaced
+# that both /opt/driftstack/api/.env files pointed at the SAME Neon
+# project (ep-aged-pond-al77cutb.../neondb). That means a staging
+# rehearsal of a destructive migration would hit prod immediately —
+# zero DB isolation despite distinct Hetzner hosts.
+#
+# Override with DEPLOY_SKIP_STAGING_DB_ISOLATION_CHECK=1 (e.g., during
+# the migration window when staging is intentionally pointed at the
+# prod DB for one-shot rehearsal). DO NOT habit-form this — fix the
+# .env to point at a separate Neon project per the Slice E
+# remediation path.
+if [ "$ENV" = "staging" ] && [ "${DEPLOY_SKIP_STAGING_DB_ISOLATION_CHECK:-0}" != "1" ]; then
+  PROD_DB_HOST=$(ssh -o BatchMode=yes -o ConnectTimeout=5 root@128.140.37.74 \
+    "grep '^DATABASE_URL=' /opt/driftstack/api/.env 2>/dev/null | cut -d= -f2- | cut -d'@' -f2 | cut -d/ -f1" 2>/dev/null || echo "")
+  STAGING_DB_HOST=$(ssh -o BatchMode=yes -o ConnectTimeout=5 root@116.203.22.197 \
+    "grep '^DATABASE_URL=' /opt/driftstack/api/.env 2>/dev/null | cut -d= -f2- | cut -d'@' -f2 | cut -d/ -f1" 2>/dev/null || echo "")
+  if [ -n "$PROD_DB_HOST" ] && [ -n "$STAGING_DB_HOST" ] && [ "$PROD_DB_HOST" = "$STAGING_DB_HOST" ]; then
+    echo "[bridge] STAGING DB ISOLATION CHECK FAILED" >&2
+    echo "[bridge]   staging .env DATABASE_URL host = $STAGING_DB_HOST" >&2
+    echo "[bridge]   prod    .env DATABASE_URL host = $PROD_DB_HOST" >&2
+    echo "[bridge]   Net: staging has zero DB isolation — applies/inserts would hit prod immediately." >&2
+    echo "[bridge]   See docs/internal/2026-05-19-staging-and-prod-share-neondb.md for the remediation path." >&2
+    echo "[bridge]   Override: DEPLOY_SKIP_STAGING_DB_ISOLATION_CHECK=1 bash scripts/deploy-bridge.sh staging" >&2
+    exit 3
+  fi
+fi
+
 # Resolve the expected SHA locally so the post-deploy verifier can
 # confirm the public /version reports it. `main` resolves via git rev-
 # parse so the verify step uses the same short SHA the SSH-side
