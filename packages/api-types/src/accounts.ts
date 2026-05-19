@@ -286,6 +286,22 @@ export const AccountAuditActionSchema = z.enum([
   'account.byok_anthropic_key_set',
   'account.byok_anthropic_key_cleared',
   'account.byok_anthropic_key_tested',
+  // 2026-05-20 — saved-proxy lifecycle (pre-launch blocker per
+  // audit-log-coverage audit 2026-05-19). Customer needs to audit
+  // every proxy config minted under their account — especially for
+  // shared-team-RBAC sessions where any admin can mint. Payload
+  // carries proxy_id + label + type ('socks5' | 'openvpn' |
+  // 'wireguard'); NEVER the secret material (password / private key
+  // / .ovpn config). Enum values land NOW so the emit point is ready
+  // when EG-API-1.6 wires the storage backend.
+  'proxy.created',
+  'proxy.deleted',
+  // 2026-05-20 — bundled-LLM consent toggle (audit-coverage Tier 2
+  // polish per audit doc 2026-05-19). Customer's consent state is
+  // the trigger for switching billing rails between BYOK-required
+  // and deployment-fallback. Auditable should be default for any
+  // consent change.
+  'account.bundled_llm_consent_changed',
 ]);
 export type AccountAuditAction = z.infer<typeof AccountAuditActionSchema>;
 

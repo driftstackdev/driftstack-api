@@ -59,6 +59,13 @@ const ACTION_LABEL: Record<string, string> = {
   'account.byok_anthropic_key_set': 'BYOK Anthropic key set / rotated',
   'account.byok_anthropic_key_cleared': 'BYOK Anthropic key cleared',
   'account.byok_anthropic_key_tested': 'BYOK Anthropic key tested',
+  // 2026-05-20 — saved-proxy lifecycle (audit-coverage pre-launch
+  // blocker). Emit point pre-positioned in saved-proxies.ts; will
+  // activate when EG-API-1.6 wires the storage backend.
+  'proxy.created': 'Saved proxy created',
+  'proxy.deleted': 'Saved proxy deleted',
+  // 2026-05-20 — bundled-LLM consent toggle.
+  'account.bundled_llm_consent_changed': 'Bundled-LLM consent changed',
 };
 
 // V-354 — preset filters. Each maps to a single AccountAuditAction
@@ -117,6 +124,11 @@ const FILTER_OPTIONS = [
   { value: 'account.byok_anthropic_key_set', label: 'BYOK Anthropic key set / rotated' },
   { value: 'account.byok_anthropic_key_cleared', label: 'BYOK Anthropic key cleared' },
   { value: 'account.byok_anthropic_key_tested', label: 'BYOK Anthropic key tested' },
+  // 2026-05-20 — saved-proxy lifecycle (emit point pre-positioned).
+  { value: 'proxy.created', label: 'Saved proxies created' },
+  { value: 'proxy.deleted', label: 'Saved proxies deleted' },
+  // 2026-05-20 — bundled-LLM consent toggle.
+  { value: 'account.bundled_llm_consent_changed', label: 'Bundled-LLM consent changes' },
 ] as const;
 ---
 

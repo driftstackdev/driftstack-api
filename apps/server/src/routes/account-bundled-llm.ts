@@ -22,7 +22,9 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { BundledLlmService } from '../services/bundled-llm.js';
+import type { AccountAuditService } from '../services/account-audit.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 const PatchBodySchema = z
   .object({
@@ -35,6 +37,13 @@ const PatchBodySchema = z
 
 export interface AccountBundledLlmRoutesOptions {
   service: BundledLlmService;
+  /** 2026-05-20 — customer audit-log writer. PATCH that changes the
+   *  consent boolean emits `account.bundled_llm_consent_changed` so
+   *  the customer can audit every flip. Cap-only updates don't audit
+   *  (less load-bearing for billing-rail switches; if needed later,
+   *  separate `account.bundled_llm_cap_changed` enum value can be
+   *  added). */
+  accountAudit?: AccountAuditService;
 }
 
 export function registerAccountBundledLlmRoutes(
@@ -42,6 +51,7 @@ export function registerAccountBundledLlmRoutes(
   opts: AccountBundledLlmRoutesOptions,
 ): void {
   const { service } = opts;
+  const accountAudit = opts.accountAudit;
 
   app.get(
     '/v1/account/me/bundled-llm-settings',
@@ -104,6 +114,9 @@ export function registerAccountBundledLlmRoutes(
       if (!ctx) throw new Error('account context missing after requireAuth');
       const parsed = PatchBodySchema.safeParse(request.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      // Capture prior consent state so we can detect a true toggle
+      // (not just a no-op re-write) before emitting the audit row.
+      const prior = await service.findSettings(ctx.account.id);
       const next = await service.updateSettings({
         accountId: ctx.account.id,
         ...(parsed.data.consent !== undefined ? { consent: parsed.data.consent } : {}),
@@ -113,6 +126,31 @@ export function registerAccountBundledLlmRoutes(
       });
       if (next === null) {
         throw new BadRequestError('Account row not found — re-authenticate and retry.');
+      }
+      // 2026-05-20 — audit emit ONLY when consent actually changed.
+      // Cap-only PATCHes don't audit (separate enum value if later
+      // needed). Best-effort emit; audit failure must not break the
+      // PATCH response.
+      if (
+        accountAudit !== undefined &&
+        parsed.data.consent !== undefined &&
+        (prior?.consent ?? false) !== next.consent
+      ) {
+        try {
+          await accountAudit.record({
+            accountId: ctx.account.id,
+            actorType: 'customer',
+            action: 'account.bundled_llm_consent_changed',
+            targetResourceId: `account_${ctx.account.id}`,
+            payload: {
+              from: prior?.consent ?? false,
+              to: next.consent,
+            },
+            ipAddress: readClientIp(request),
+          });
+        } catch {
+          /* swallow */
+        }
       }
       return {
         consent: next.consent,

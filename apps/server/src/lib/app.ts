@@ -881,7 +881,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // PATCH their consent flag (the resolution-time gate handles
   // the no-fallback case).
   if (deps.bundledLlmService !== undefined) {
-    registerAccountBundledLlmRoutes(app, { service: deps.bundledLlmService });
+    registerAccountBundledLlmRoutes(app, {
+      service: deps.bundledLlmService,
+      // 2026-05-20 — audit emit on consent toggle (Tier 2 polish per
+      // 2026-05-19 audit-coverage doc).
+      ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
+    });
   }
   if (deps.cliAuthorizeService !== undefined) {
     registerAuthCliRoutes(app, {
@@ -1002,7 +1007,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // the dashboard get a machine-readable "not yet shipped" signal.
   if (deps.sessionEgressService !== undefined) {
     registerSessionProxyRoutes(app, { service: deps.sessionEgressService });
-    registerSavedProxiesRoutes(app, { service: deps.sessionEgressService });
+    registerSavedProxiesRoutes(app, {
+      service: deps.sessionEgressService,
+      // 2026-05-20 — audit emit on POST + DELETE (currently stubbed
+      // until EG-API-1.6 wires the storage backend; emit point is
+      // pre-positioned in the route handler).
+      ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
+    });
   } else {
     registerSessionProxyDisabledRoutes(app);
     registerSavedProxiesDisabledRoutes(app);

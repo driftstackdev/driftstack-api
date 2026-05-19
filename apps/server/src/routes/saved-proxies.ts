@@ -23,7 +23,9 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { SavedProxyConfigSchema } from '@driftstack/api-types';
 import type { SessionEgressService } from '../services/session-egress.js';
+import type { AccountAuditService } from '../services/account-audit.js';
 import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/errors.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!request.account) throw new Error('account context missing after requireAuth');
@@ -32,6 +34,12 @@ function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['accoun
 
 export interface SavedProxiesRoutesDeps {
   service: SessionEgressService;
+  /** 2026-05-20 — customer audit-log writer. Wired here so that when
+   *  EG-API-1.6 lands the storage backend, the emit point is ALREADY
+   *  in place — landing the storage layer doesn't have to also land
+   *  an audit-log Class-A schema migration. Payload carries
+   *  proxy_id + label + type; NEVER the secret material. */
+  accountAudit?: AccountAuditService;
 }
 
 export function registerSavedProxiesRoutes(
@@ -39,6 +47,11 @@ export function registerSavedProxiesRoutes(
   deps: SavedProxiesRoutesDeps,
 ): void {
   const { service: _service } = deps;
+  const accountAudit = deps.accountAudit;
+
+  // Suppress unused-warn pending EG-API-1.6 backend wire. The helper
+  // is referenced inside the POST + DELETE emit-call sites below.
+  void accountAudit;
 
   app.post(
     '/v1/proxies',
@@ -49,8 +62,21 @@ export function registerSavedProxiesRoutes(
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       // EG-API-1.6 propagation slice wires the storage layer
       // (saved_proxy_configs table + AES envelope). Until then the
-      // route surface returns 503 FeatureUnavailable with the same
-      // planning-133 pointer as the per-session route.
+      // route surface returns 503 FeatureUnavailable.
+      //
+      // When the storage layer lands, emit:
+      //   await accountAudit?.record({
+      //     accountId: ctx.account.id,
+      //     actorType: 'customer',
+      //     action: 'proxy.created',
+      //     targetResourceId: `proxy_${created.id}`,
+      //     payload: { proxy_id: created.id, label: parsed.data.label, type: parsed.data.type },
+      //     ipAddress: readClientIp(req),
+      //   });
+      //
+      // Audit enum values + dashboard labels already exist
+      // (2026-05-20). No follow-up needed beyond uncommenting the
+      // emit call after the storage insert succeeds.
       throw new FeatureUnavailableError(
         'Saved-proxy storage is not yet wired on this server. EG-API-1.6 wires the backend.',
       );
@@ -72,9 +98,22 @@ export function registerSavedProxiesRoutes(
     (req): never => {
       requireCtx(req);
       // No saved proxies exist yet → every id is 404.
+      //
+      // When the storage layer lands, emit AFTER successful delete:
+      //   await accountAudit?.record({
+      //     accountId: ctx.account.id,
+      //     actorType: 'customer',
+      //     action: 'proxy.deleted',
+      //     targetResourceId: `proxy_${req.params.id}`,
+      //     payload: { proxy_id: req.params.id, label: deleted.label, type: deleted.type },
+      //     ipAddress: readClientIp(req),
+      //   });
       throw new NotFoundError(`Saved proxy ${req.params.id} not found.`);
     },
   );
+
+  // Suppress unused-warn on readClientIp until the emit calls land.
+  void readClientIp;
 }
 
 // Disabled-stub variant for the no-backend posture. Symmetric with
