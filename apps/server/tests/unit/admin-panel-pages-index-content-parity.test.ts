@@ -96,12 +96,17 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     );
   });
 
-  it('Endpoint contract: GET /v1/admin/overview reads body.accounts.{active,suspended} + body.webhooks.dlq_depth into the 3 live tiles + GET /v1/admin/audit-log?limit=5 reads body.data[] into the recent-activity list — pinned so the field names match the server response shape (drift to body.active_accounts or body.dlq would silently zero out the tile)', () => {
+  it("Endpoint contract: GET /v1/admin/overview reads body.accounts.{active,suspended,total} + body.webhooks.dlq_depth into the live tiles + GET /v1/admin/audit-log?limit=5 reads body.data[] into the recent-activity list — pinned so the field names match the server response shape (drift to body.active_accounts or body.dlq would silently zero out the tile). Slice 136 added a 'of N total' annotation under the Active-accounts tile, surfacing the V-515 server-returned `body.accounts.total` field (with a defensive a+s+d fallback if total is missing)", () => {
     expect(body).toMatch(/authedFetch\('\/v1\/admin\/overview'\)/);
     expect(body).toMatch(/authedFetch\('\/v1\/admin\/audit-log\?limit=5'\)/);
     expect(body).toMatch(/setText\('active-accounts', String\(body\.accounts\.active\)\);/);
     expect(body).toMatch(/setText\('suspended-accounts', String\(body\.accounts\.suspended\)\);/);
     expect(body).toMatch(/setText\('dlq-depth', String\(body\.webhooks\.dlq_depth\)\);/);
+    // Slice 136 — total-accounts annotation reads body.accounts.total
+    // with a defensive a+s+d fallback so missing-field doesn't NaN.
+    expect(body).toMatch(/body\.accounts\.total/);
+    expect(body).toMatch(/setText\('total-accounts-annotation'/);
+    expect(body).toMatch(/data-field="total-accounts-annotation"/);
   });
 
   it("Audit-log render: per-entry timestamp via fmtIso → 'YYYY-MM-DD HH:MM:SS UTC' (slice(0, 19) — not 16 like the leads page, because audit-log needs second-level precision) + entry.admin_account_id mono + → arrow + entry.action code + entry.result success/error badge — pinned so the admin-action row template renders the structured action vocabulary consistently", () => {

@@ -43,6 +43,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         >
           {activeAccounts.length}
         </p>
+        <p class="mt-1 text-[11px] text-slate-400" data-field="total-accounts-annotation">
+          of {MOCK_ACCOUNTS.length} total
+        </p>
       </div>
       <div class="dashboard-card">
         <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Suspended</p>
@@ -217,6 +220,18 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (body && body.accounts) {
             setText('active-accounts', String(body.accounts.active));
             setText('suspended-accounts', String(body.accounts.suspended));
+            // V-515 — server now returns a computed total
+            // (active + suspended + deleted). Annotate the active-
+            // accounts tile with "of N total" so the operator sees
+            // the fleet shape without doing arithmetic. Falls back
+            // gracefully if the field is missing.
+            const total =
+              body.accounts.total !== undefined
+                ? body.accounts.total
+                : (body.accounts.active || 0) +
+                  (body.accounts.suspended || 0) +
+                  (body.accounts.deleted || 0);
+            setText('total-accounts-annotation', 'of ' + total + ' total');
           }
           if (body && body.webhooks) {
             setText('dlq-depth', String(body.webhooks.dlq_depth));
