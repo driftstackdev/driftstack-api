@@ -63,7 +63,7 @@ The single parity-test file pins:
 - Page exists at the expected path
 - DashboardLayout import (consistent posture)
 - 3 operational modes rendered, pair default-checked
-- Every Wave 2.C sub-slice has its data-\* hook (slot scaffolding)
+- Every Wave 2.C sub-slice has its `data-*` hook (slot scaffolding)
 - Both activation banners pre-rendered + hidden
 - Bundled-llm-status probe URL pinned
 - localStorage token key pinned

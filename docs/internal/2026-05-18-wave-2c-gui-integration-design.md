@@ -136,7 +136,7 @@ Right rail collapses on mobile to a top-of-page banner.
 
 Single-page Astro + vanilla JS (matches the rest of the dashboard's
 non-React posture). Mutable state lives on `document.querySelector(
-'[data-page="agent-sessions"]')` as data-\* attributes:
+'[data-page="agent-sessions"]')` as `data-*` attributes:
 
 - `data-active-session-id` — current `agt_<uuid>` or empty
 - `data-pair-mode-state` — current state kind discriminator

@@ -115,7 +115,7 @@ Same flow as today — customer types in the chat box, route hits
 `POST /v1/agent-sessions/:id/message`, runs through the AgentRuntime
 (decompose → executor). Existing `usage_records.metadata.cost_usd_cents`
 captures cost per turn (v2-#4 landed); the chat-UI footer displays
-"This turn cost: $0.0\_ via Anthropic" (open question #5: show actual
+`This turn cost: $0.0_ via Anthropic` (open question #5: show actual
 cost or hide).
 
 ### Pair mode

@@ -153,7 +153,7 @@ route registers when `apps/server/src/services/session-egress.ts`
 is wired into `AppDeps.sessionEgressService`. Until then the
 `proxy` body field on `POST /v1/sessions` is silently stripped
 (no `customerEgress` / `proxyUrl` / `SOCKS5` token appears in
-server source → the parity tests on security.astro / trust/\* keep
+server source → the parity tests on `security.astro` / `trust/*` keep
 the disclaimer copy in place).
 
 Once the impl lands:
