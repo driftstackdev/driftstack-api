@@ -102,7 +102,7 @@ describe('W521.A apps/marketing-site/src/pages/docs/migration-from-puppeteer.ast
     expect(body).toMatch(/→ \{ "html": "…", "url": "…", "cookies": \[\.\.\.\] \}/);
   });
 
-  it.skip("4-not-equivalent framing pinned: page.evaluate arbitrary script (not exposed, action-based, contact us for targeted endpoint) + CDP/devtools introspection (out-of-process WebKit, recordings V-540 for network-level capture) + synchronous chaining (every action is HTTP round-trip ~50-150ms from co-located client) + local plugins/extensions (managed browser doesn't load extensions, stealth-style counter-detection at driver layer + archetype config) — pinned so the 4-not-equivalent + V-540-recordings-for-CDP-alternative + ~50-150ms-latency commitment survives", () => {
+  it('4-not-equivalent framing pinned. Re-enabled by slice 286 after restoring V-540 anchor on the CDP-alternative recordings sentence at migration-from-puppeteer.astro:153 (V-540 anchor was stripped from "recordings (+ retention)" to "recordings (V-540 + retention)")', () => {
     expect(body).toMatch(/<dt>Arbitrary <code>page\.evaluate<\/code> script execution<\/dt>/);
     expect(body).toMatch(/<dd>Not exposed — the API surface is action-based\./);
     expect(body).toMatch(/<dt>Direct browser-process introspection \(CDP, devtools\)<\/dt>/);
