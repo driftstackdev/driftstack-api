@@ -66,18 +66,18 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
     expect(body).toMatch(/<input type="checkbox" name="event" value="quota\.exceeded"/);
   });
 
-  it.skip("V-403 + V-443 delivery-log framing pinned: 'delivery-log status filter + cursor pagination. Backend accepts ?status= + ?cursor= on /v1/webhooks/:id/deliveries. V-443 stores a cursor per endpoint in a closure-scoped Map so the Load-more button can append the next page without re-fetching the whole list. Filter changes reset the cursor + clear append state.' — pinned so the per-endpoint pager Map + filter-resets-cursor semantics stay correct (drift to a global cursor would break parallel delivery-log views for multi-endpoint accounts)", () => {
+  it('V-403 + V-443 delivery-log framing pinned. Re-enabled by slice 211 after verifying the per-endpoint pager Map + filter-resets-cursor framing exists verbatim at webhooks.astro:783-789', () => {
     expect(body).toMatch(
       /\/\/ V-403 \+ V-443 — delivery-log status filter \+ cursor pagination\.\s*\n?\s*\/\/ Backend accepts \?status= \+ \?cursor= on \/v1\/webhooks\/:id\/deliveries\.\s*\n?\s*\/\/ V-443 stores a `cursor` per endpoint in a closure-scoped Map/,
     );
     expect(body).toMatch(/const deliveriesPager = new Map\(\);/);
   });
 
-  it.skip("V-403 6-status filter enum: '' (All statuses) + pending + in_flight + delivered + failed + dlq — pinned so the delivery-log filter taxonomy covers ALL 5 delivery states + the unfiltered 'All' option (drift to dropping in_flight would hide deliveries mid-attempt; drift to dropping dlq would hide deliveries that landed in the dead-letter queue, defeating the requeue UX)", () => {
+  it('V-403 6-status filter enum pinned. Re-enabled by slice 211 after verifying the 6-status array exists verbatim at webhooks.astro:803', () => {
     expect(body).toMatch(/\['', 'pending', 'in_flight', 'delivered', 'failed', 'dlq'\]/);
   });
 
-  it.skip("V-347 secret-shown-ONCE framing pinned: 'Endpoint created' card + 'Copy this signing secret now — it won't be shown again. Use it with the SDK's verifyWebhookSignature helper to authenticate incoming deliveries.' — pinned so customers know the secret is one-shot AND the SDK helper-by-name reference stays correct (drift to dropping verifyWebhookSignature reference would orphan customers from the canonical verification path)", () => {
+  it("V-347 secret-shown-ONCE + verifyWebhookSignature helper-name framing pinned. Re-enabled by slice 211 after verifying the 'Copy this signing secret now…verifyWebhookSignature helper to authenticate incoming deliveries.' copy exists at webhooks.astro:193-196", () => {
     expect(body).toMatch(
       /Copy this signing secret now — it won't be shown again\. Use it with the SDK's\s*\n?\s*<code class="font-mono">verifyWebhookSignature<\/code> helper to authenticate\s*\n?\s*incoming deliveries\./,
     );
