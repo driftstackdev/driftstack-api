@@ -32,19 +32,17 @@ import { DrizzleAtlasPriorityEventsRepo } from '../../src/db/atlas-priority-even
 import { InternalFleetAuth } from '../../src/lib/internal-fleet-auth.js';
 import { registerInternalAtlasPriorityRoutes } from '../../src/routes/internal-atlas-priority.js';
 import { registerErrorHandler } from '../../src/middleware/error-handler.js';
+import type * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 const TEST_TOKEN = 'test-internal-fleet-token-' + Date.now();
 const AUTH = `Bearer ${TEST_TOKEN}`;
 
-// Connection-probe flag — set true on successful DB reach + schema
-// check. The describe.skipIf above auto-handles the no-DATABASE_URL
-// case; this flag prevents test bodies from running against a half-
-// initialized fixture (e.g. PG up but atlas_priority_events table
-// missing because migrations not applied). All test bodies short-
-// circuit `if (!app) return` which depends on this state.
-const _dbReachable = false;
+// Test bodies short-circuit on `if (!app) return` — `app` is null until
+// beforeAll succeeds on both the connection probe AND the schema-presence
+// probe, so the same flag handles both "no DB" and "schema not migrated"
+// fallthroughs.
 let client: ReturnType<typeof postgres> | null = null;
 let app: FastifyInstance | null = null;
 
@@ -52,7 +50,6 @@ beforeAll(async () => {
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;
-    dbReachable = true;
     await probe.end({ timeout: 1 });
   } catch {
     await probe.end({ timeout: 1 }).catch(() => {});
@@ -62,12 +59,15 @@ beforeAll(async () => {
   try {
     await client`SELECT 1 FROM atlas_priority_events LIMIT 0`;
   } catch {
-    dbReachable = false;
     await client.end({ timeout: 1 }).catch(() => {});
     client = null;
     return;
   }
-  const db = drizzle(client);
+  // `drizzle(client)` (no { schema }) — runtime works against real PG;
+  // tests timed out with the schema-typed variant for reasons not
+  // root-caused yet (separate followup). Cast through `unknown` to
+  // satisfy the test typecheck against the schema-typed Database.db.
+  const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
   const repo = new DrizzleAtlasPriorityEventsRepo({ client, db, close: async () => {} });
   const auth = new InternalFleetAuth({ internalToken: TEST_TOKEN });
   app = Fastify({ logger: false });

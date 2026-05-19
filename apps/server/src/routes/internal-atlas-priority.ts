@@ -89,8 +89,12 @@ export function registerInternalAtlasPriorityRoutes(
 ): void {
   // preHandler that enforces the bearer-token auth on every internal
   // route. Centralised here so adding routes later doesn't risk skipping
-  // the check. Sync — validate() throws or returns void; no async work.
-  const requireInternalAuth = (req: FastifyRequest): void => {
+  // the check. Stays async because Fastify hangs the request when a
+  // sync (req) => void preHandler returns without calling the `done`
+  // callback — async signature triggers the Promise-resolution branch
+  // of Fastify's hook lifecycle which doesn't need done().
+  // eslint-disable-next-line @typescript-eslint/require-await
+  const requireInternalAuth = async (req: FastifyRequest): Promise<void> => {
     deps.auth.validate(req);
   };
 

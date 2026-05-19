@@ -36,6 +36,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pino from 'pino';
 import { DrizzleScheduledJobsRepo } from '../../src/db/scheduled-jobs-repo.js';
 import { ScheduledJobsService } from '../../src/services/scheduled-jobs.js';
+import type * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
@@ -80,7 +81,9 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       if (!dbReachable || !client) {
         return;
       }
-      const db = drizzle(client);
+      // `drizzle(client)` (no { schema }) — cast through `unknown` to
+      // satisfy the test typecheck against schema-typed Database.db.
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
       const repo = new DrizzleScheduledJobsRepo({ client, db, close: async () => {} });
       // No expectations on row count — empty result is fine. The only
       // assertion is that the call completes without throwing the
@@ -99,7 +102,9 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       if (!dbReachable || !client) {
         return;
       }
-      const db = drizzle(client);
+      // `drizzle(client)` (no { schema }) — cast through `unknown` to
+      // satisfy the test typecheck against schema-typed Database.db.
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
       const repo = new DrizzleScheduledJobsRepo({ client, db, close: async () => {} });
       const workerId = `regression-guard-claim-${Date.now()}`;
       // Enqueue a due job (runAt in the past), then claim it.
@@ -129,7 +134,9 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       if (!dbReachable || !client) {
         return;
       }
-      const db = drizzle(client);
+      // `drizzle(client)` (no { schema }) — cast through `unknown` to
+      // satisfy the test typecheck against schema-typed Database.db.
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
       const repo = new DrizzleScheduledJobsRepo({ client, db, close: async () => {} });
       const logger = pino({ level: 'silent' });
       const service = new ScheduledJobsService(repo, logger, {
