@@ -195,7 +195,13 @@ jobs:
         working-directory: packages/sdk-python
         run: |
           python -m venv /tmp/smoke
-          /tmp/smoke/bin/pip install dist/driftstack-*.whl
+          # Distribution name in pyproject.toml is `driftstack-sdk`; the
+          # built wheel filename is `driftstack_sdk-<version>-*.whl`
+          # (PEP 427 normalises distribution-name hyphens to underscores
+          # in the wheel filename). The previous glob `driftstack-*.whl`
+          # silently stopped matching after the package was renamed away
+          # from `driftstack`; pip received the literal pattern and exited 1.
+          /tmp/smoke/bin/pip install dist/driftstack_sdk-*.whl
           /tmp/smoke/bin/python -c "
           from driftstack import Driftstack, AsyncDriftstack, verify_webhook_signature
           from driftstack import DriftstackError, RateLimitError, AuthError

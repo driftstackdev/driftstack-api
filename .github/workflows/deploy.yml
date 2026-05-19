@@ -78,7 +78,13 @@ jobs:
           runs again on the Hetzner host via deploy-bridge.sh)
         run: |
           npm ci --no-audit --include=dev
-          npx tsc --build packages/api-types
+          # apps/server imports from @driftstack/api-types AND
+          # @driftstack/webhook-delivery. Both are composite TS projects;
+          # both need dist/ before apps/server tsc --build runs. Use
+          # build:packages (root script) so any future workspace-package
+          # added under packages/* gets compiled automatically (no need
+          # to remember to add an explicit step).
+          npm run build:packages
           npm run build --workspace=@driftstack/server
 
       - name: Upload source maps to Sentry
