@@ -65,7 +65,7 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
     expect(body).toMatch(/\{ value: '', label: 'All events' \},/);
   });
 
-  it.skip('V-484 extra-filters framing pinned: \'extended filter row. Action filter (existing V-354) stays at the top; from/to date range + actor type + target id land in a collapsible "More filters" panel below to keep the common case (action-only filtering) one click.\' — pinned so the panel-collapse UX stays (drift to inlining all filters would clutter the page; drift to dropping would lose the date/actor/target dimensions)', () => {
+  it('V-484 extra-filters framing pinned. Re-enabled by slice 228 after restoring the V-484 anchor + "(existing V-354)" cross-reference on the HTML comment at audit-log.astro:133-138', () => {
     expect(body).toMatch(
       /V-484 — extended filter row\. Action filter \(existing V-354\)\s*\n?\s*stays at the top; from\/to date range \+ actor type \+ target id\s*\n?\s*land in a collapsible "More filters" panel below to keep the\s*\n?\s*common case \(action-only filtering\) one click\./,
     );
