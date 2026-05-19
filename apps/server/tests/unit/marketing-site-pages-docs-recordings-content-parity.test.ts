@@ -51,7 +51,7 @@ describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content par
     );
   });
 
-  it.skip('Planned shape 6-bullet: record:true opt-in + WebM VP9 ~30fps ~500kbps + GET /v1/sessions/:id/recording presigned R2 + session.recording_ready webhook + tier-dependent retention (7d/30d/90d/180d/custom Enterprise) + redaction roadmap — pinned so the 6-element future-API shape stays consistent (drift to dropping WebM-VP9 specificity would obscure the container format customers should plan around; drift to changing retention tier-mapping would create marketing↔V-540-spec divergence)', () => {
+  it('Planned shape 6-bullet pinned. Re-enabled by slice 248 after verifying all 6 bullets (Opt-in/Container WebM-VP9/Retrieval/Webhook/Retention/Redaction) still exist verbatim at recordings.astro:42-58', () => {
     expect(body).toMatch(/<strong>Opt-in per session<\/strong> via a new/);
     expect(body).toMatch(
       /<strong>Container:<\/strong> WebM \(VP9 video, no audio\),\s*\n?\s*matching the session viewport, ~30 fps, ~500 kbps\./,
@@ -82,7 +82,7 @@ describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content par
     expect(body).toMatch(/<code>test\.ping<\/code>/);
   });
 
-  it.skip("Subscribe-to-shipping framing: 'Subscribe to the API changelog RSS or status-page subscriptions; the V-540 rollout will land as an entry on both, along with the new endpoint + event type appearing on /api-reference.' — pinned so the 3-channel notification path (changelog RSS + status-page + /api-reference) survives (drift to dropping any channel would orphan customers who only subscribe via one)", () => {
+  it('Subscribe-to-shipping framing pinned. Re-enabled by slice 248 after verifying the 3-channel framing (API changelog RSS + status-page subscriptions + /api-reference) still exists at recordings.astro:83+', () => {
     expect(body).toMatch(
       /Subscribe to the <a href="\/changelog">API changelog<\/a> RSS\s*\n?\s*or <a href="\/docs\/status-subscriptions">status-page\s*\n?\s*subscriptions<\/a>/,
     );
