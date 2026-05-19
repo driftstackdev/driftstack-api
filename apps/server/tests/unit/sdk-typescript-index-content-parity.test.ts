@@ -78,7 +78,7 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
       /export type \{\s*\n?\s*MfaStatusResponse,\s*\n?\s*MfaEnrollResponse,\s*\n?\s*MfaVerifyRequest,\s*\n?\s*MfaVerifyResponse,\s*\n?\s*MfaDisableRequest,\s*\n?\s*\} from '\.\/resources\/mfa\.js';/,
     );
     expect(body).toMatch(
-      /export type \{ AuditLogEntry, AuditLogListPage, AuditLogQuery \} from '\.\/resources\/audit-log\.js';/,
+      /export type \{\s*\n?\s*AuditLogEntry,\s*\n?\s*AuditLogListPage,\s*\n?\s*AuditLogQuery,\s*\n?\s*AuditLogExportResponse,\s*\n?\s*\} from '\.\/resources\/audit-log\.js';/,
     );
     expect(body).toMatch(
       /export type \{\s*\n?\s*LegalDocumentEntry,\s*\n?\s*LegalRequiredEntry,\s*\n?\s*AcceptLegalDocumentRequest,\s*\n?\s*AcceptLegalDocumentResponse,\s*\n?\s*\} from '\.\/resources\/legal\.js';/,

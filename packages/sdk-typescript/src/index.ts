@@ -24,7 +24,12 @@ export type {
   MfaVerifyResponse,
   MfaDisableRequest,
 } from './resources/mfa.js';
-export type { AuditLogEntry, AuditLogListPage, AuditLogQuery } from './resources/audit-log.js';
+export type {
+  AuditLogEntry,
+  AuditLogListPage,
+  AuditLogQuery,
+  AuditLogExportResponse,
+} from './resources/audit-log.js';
 export type {
   SessionProxyAttachResponse,
   SavedProxySummary,
