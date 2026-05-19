@@ -322,6 +322,14 @@ export class DurableWebhookWorker {
     const batchSize = opts.batchSize ?? 25;
     const nowMs = this.now();
     const nowDate = new Date(nowMs);
+    // Pre-serialize the Date param per the drizzle-orm 0.38.4
+    // transparentParser swap workaround (see
+    // docs/internal/drizzle-date-param-workaround.md). Drizzle replaces
+    // postgres-js's OID 1184 serializer with a no-op identity, so a
+    // raw `sql\`\`` template literal interpolating a Date crashes at
+    // postgres-js's Bind step with Buffer.byteLength(date). Same
+    // class of bug that fired the 2026-05-19 scheduled-jobs incident.
+    const nowIso = nowDate.toISOString();
 
     // Atomic claim: SELECT due rows + flip to in_flight in one txn.
     // FOR UPDATE SKIP LOCKED ensures concurrent workers each get a
@@ -329,7 +337,7 @@ export class DurableWebhookWorker {
     const claimed = await this.database.db.transaction(async (tx) => {
       const candidates = await tx.execute(sql`
         SELECT id FROM webhook_deliveries
-        WHERE status = 'pending' AND next_attempt_at <= ${nowDate}
+        WHERE status = 'pending' AND next_attempt_at <= ${nowIso}
         ORDER BY next_attempt_at ASC
         LIMIT ${batchSize}
         FOR UPDATE SKIP LOCKED
