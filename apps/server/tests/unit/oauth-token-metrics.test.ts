@@ -45,8 +45,8 @@ async function buildApp(args: BuildArgs) {
   // OAuth /token doesn't itself sit behind requireAuth/requireScope —
   // PKCE + client_secret IS the auth. Stub the decorators anyway so
   // the admin routes registered alongside don't fail at register time.
-  app.decorate('requireScope', () => (_req: unknown, _reply: unknown, done: () => void) => done());
-  app.decorate('requireAuth', (_req: unknown, _reply: unknown, done: () => void) => done());
+  app.decorate('requireScope', () => async () => {});
+  app.decorate('requireAuth', async () => {});
   registerOAuthRoutes(app, {
     service: buildService(args.exchangeBehaviour),
     ...(args.metrics !== undefined ? { metrics: args.metrics } : {}),

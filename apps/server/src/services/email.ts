@@ -297,8 +297,17 @@ export function classifyEmailError(err: unknown): {
 // Display-cased OAuth provider name for customer-facing strings. Internal
 // representation is lowercase ('google'/'github') to match the IDP schema;
 // emails address the customer in title case (Google/GitHub).
-function oauthProviderDisplay(provider: 'google' | 'github'): string {
-  return provider === 'google' ? 'Google' : 'GitHub';
+// Accepts unknown (the TEMPLATES record's value type widens to unknown)
+// and narrows at runtime — defaults to the raw string if not one of the
+// known providers (forward-compat for adding new IDPs without a code
+// change on the email-template side).
+function oauthProviderDisplay(provider: unknown): string {
+  if (provider === 'google') return 'Google';
+  if (provider === 'github') return 'GitHub';
+  // Forward-compat fallback for IDPs added without a code change here.
+  // Guarded against non-string inputs so an upstream type drift doesn't
+  // crash the email template render.
+  return typeof provider === 'string' ? provider : '';
 }
 
 const TEMPLATES = {

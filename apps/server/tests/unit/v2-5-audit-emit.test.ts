@@ -41,7 +41,7 @@ function makeFakeLogger() {
     fatal: vi.fn(),
     trace: vi.fn(),
     child: () => makeFakeLogger(),
-  } as unknown as Parameters<typeof DrizzleAgentDecomposerUsageRecorder>[1];
+  } as unknown as ConstructorParameters<typeof DrizzleAgentDecomposerUsageRecorder>[1];
 }
 
 describe('v2-#5 Q.1.f DrizzleAgentDecomposerUsageRecorder audit emit', () => {

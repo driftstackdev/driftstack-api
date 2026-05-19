@@ -59,7 +59,7 @@ function makeFakeLogger() {
     fatal: vi.fn(),
     trace: vi.fn(),
     child: () => makeFakeLogger(),
-  } as unknown as Parameters<typeof WebhookRotationReminderService>[2];
+  } as unknown as ConstructorParameters<typeof WebhookRotationReminderService>[2];
 }
 
 function makeFakeEmail(): { svc: EmailService; calls: Array<Record<string, unknown>> } {

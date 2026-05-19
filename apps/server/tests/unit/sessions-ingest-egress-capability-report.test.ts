@@ -15,7 +15,7 @@ async function seedSession(repo: InMemorySessionsRepo): Promise<string> {
     apiKeyId: 'key_x',
     driverSessionId: 'drv_x',
     archetype: 'iphone16pro_ios18_7_safari26_4',
-    purpose: 'general',
+    purpose: 'production_customer',
     label: null,
     metadata: null,
   });

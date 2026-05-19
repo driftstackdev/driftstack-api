@@ -28,7 +28,7 @@ function makeFakeLogger() {
     fatal: vi.fn(),
     trace: vi.fn(),
     child: () => makeFakeLogger(),
-  } as unknown as Parameters<typeof WebhookSecretForceRotationService>[2];
+  } as unknown as ConstructorParameters<typeof WebhookSecretForceRotationService>[2];
 }
 
 // NOW is wall-clock-adjacent so insertEndpoint's `new Date()` falls

@@ -38,7 +38,7 @@ function makeFakeLogger() {
     fatal: vi.fn(),
     trace: vi.fn(),
     child: () => makeFakeLogger(),
-  } as unknown as Parameters<typeof ByokAnthropicRotationReminderService>[2];
+  } as unknown as ConstructorParameters<typeof ByokAnthropicRotationReminderService>[2];
 }
 
 function makeFakeEmail(): { svc: EmailService; calls: Array<Record<string, unknown>> } {
