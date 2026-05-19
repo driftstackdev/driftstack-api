@@ -308,7 +308,7 @@ Slices landed so far:
   forced-deterministic per Q.1.a verdict option 4 + open-answer
   escape hatch via `DRIFTSTACK_AGENT_DECOMPOSER_FORCE=deterministic`.
   AgentRuntime + AgentSessionsRepo wired unconditionally in
-  AppDeps; /v1/agent-sessions/\* + /v1/recipes routes activate
+  AppDeps; `/v1/agent-sessions/*` + `/v1/recipes` routes activate
   from process start. 8 selection-matrix tests.
 
 - **Slice 2 (`3b4cd9bd`)** — AgentRuntime hybrid error

@@ -257,7 +257,7 @@ Tier 1 (customer-facing OpenAPI parity — most impactful):
 
 Tier 2 (admin OpenAPI parity):
 
-- **V-465** — register 12 missing /v1/admin/\* routes in OpenAPI. ✅ shipped.
+- **V-465** — register 12 missing `/v1/admin/*` routes in OpenAPI. ✅ shipped.
 
 Each slice ships per V-NNN convention with closure verification:
 spec test paths fixture extended, three-SDK build/test green.

@@ -264,8 +264,8 @@ Tracks tokens consumed (B1) + applies a per-session cap. Tier-tiered:
 | trial_pack  | 50K                       |
 | solo_manual | 200K                      |
 | team_manual | 1M                        |
-| agency\_\*  | 5M                        |
-| api\_\*     | configurable (default 1M) |
+| `agency_*`  | 5M                        |
+| `api_*`     | configurable (default 1M) |
 
 Enforced in `agent-decomposer.ts` before each Anthropic call.
 Exceeded → 402 surfaced to UI ("session token budget exhausted;

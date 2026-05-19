@@ -15,40 +15,40 @@ expansion wave can land net-new specs against the highest-leverage gaps.
 
 32 route modules in `apps/server/src/routes/`:
 
-| Module                          | Surface                                      |
-| ------------------------------- | -------------------------------------------- |
-| `account-audit.ts`              | /v1/account/audit-log                        |
-| `account-me.ts`                 | /v1/account/me                               |
-| `account-mfa.ts`                | /v1/account/mfa/\*                           |
-| `account-rate-limits.ts`        | /v1/account/rate-limits                      |
-| `account-web-sessions.ts`       | /v1/account/web-sessions/\*                  |
-| `admin-accounts.ts`             | /v1/admin/accounts                           |
-| `admin-api-keys.ts`             | /v1/admin/api-keys                           |
-| `admin-audit-log.ts`            | /v1/admin/audit-log                          |
-| `admin-force-actions.ts`        | /v1/admin/force-actions/\*                   |
-| `admin-incidents.ts`            | /v1/admin/incidents/\*                       |
-| `admin-overview.ts`             | /v1/admin/overview                           |
-| `admin-rate-limit-overrides.ts` | /v1/admin/rate-limit-overrides               |
-| `admin-sessions.ts`             | /v1/admin/sessions                           |
-| `admin-status-subscribers.ts`   | /v1/admin/status-subscribers                 |
-| `admin-validation-harness.ts`   | /v1/admin/validation-harness                 |
-| `admin-webhooks.ts`             | /v1/admin/webhooks                           |
-| `admin.ts`                      | /v1/admin (root)                             |
-| `auth-cli.ts`                   | /v1/auth/cli-authorize/\*                    |
-| `auth.ts`                       | /v1/auth/\* (signup / login / magic / OAuth) |
-| `billing.ts`                    | /v1/billing/\*                               |
-| `email-preferences.ts`          | /v1/email-preferences                        |
-| `legal.ts`                      | /v1/legal/{documents,required,accept}        |
-| `openapi.ts`                    | /openapi.json + /docs                        |
-| `profile-snapshots.ts`          | /v1/profile-snapshots/\*                     |
-| `profiles.ts`                   | /v1/profiles/\*                              |
-| `sessions.ts`                   | /v1/sessions/\*                              |
-| `status-stream.ts`              | /v1/status/stream (SSE)                      |
-| `status-subscribe.ts`           | /v1/status/subscribe                         |
-| `status.ts`                     | /v1/status                                   |
-| `team.ts`                       | /v1/team/\*                                  |
-| `webhooks.ts`                   | /v1/webhooks/\* + customer-side ingestion    |
-| (root health)                   | /health                                      |
+| Module                          | Surface                                       |
+| ------------------------------- | --------------------------------------------- |
+| `account-audit.ts`              | /v1/account/audit-log                         |
+| `account-me.ts`                 | /v1/account/me                                |
+| `account-mfa.ts`                | `/v1/account/mfa/*`                           |
+| `account-rate-limits.ts`        | /v1/account/rate-limits                       |
+| `account-web-sessions.ts`       | `/v1/account/web-sessions/*`                  |
+| `admin-accounts.ts`             | /v1/admin/accounts                            |
+| `admin-api-keys.ts`             | /v1/admin/api-keys                            |
+| `admin-audit-log.ts`            | /v1/admin/audit-log                           |
+| `admin-force-actions.ts`        | `/v1/admin/force-actions/*`                   |
+| `admin-incidents.ts`            | `/v1/admin/incidents/*`                       |
+| `admin-overview.ts`             | /v1/admin/overview                            |
+| `admin-rate-limit-overrides.ts` | /v1/admin/rate-limit-overrides                |
+| `admin-sessions.ts`             | /v1/admin/sessions                            |
+| `admin-status-subscribers.ts`   | /v1/admin/status-subscribers                  |
+| `admin-validation-harness.ts`   | /v1/admin/validation-harness                  |
+| `admin-webhooks.ts`             | /v1/admin/webhooks                            |
+| `admin.ts`                      | /v1/admin (root)                              |
+| `auth-cli.ts`                   | `/v1/auth/cli-authorize/*`                    |
+| `auth.ts`                       | `/v1/auth/*` (signup / login / magic / OAuth) |
+| `billing.ts`                    | `/v1/billing/*`                               |
+| `email-preferences.ts`          | /v1/email-preferences                         |
+| `legal.ts`                      | /v1/legal/{documents,required,accept}         |
+| `openapi.ts`                    | /openapi.json + /docs                         |
+| `profile-snapshots.ts`          | `/v1/profile-snapshots/*`                     |
+| `profiles.ts`                   | `/v1/profiles/*`                              |
+| `sessions.ts`                   | `/v1/sessions/*`                              |
+| `status-stream.ts`              | /v1/status/stream (SSE)                       |
+| `status-subscribe.ts`           | /v1/status/subscribe                          |
+| `status.ts`                     | /v1/status                                    |
+| `team.ts`                       | `/v1/team/*`                                  |
+| `webhooks.ts`                   | `/v1/webhooks/*` + customer-side ingestion    |
+| (root health)                   | /health                                       |
 
 ## Existing E2E spec coverage
 
@@ -57,9 +57,9 @@ expansion wave can land net-new specs against the highest-leverage gaps.
 | Spec                        | Route surface covered                                         |
 | --------------------------- | ------------------------------------------------------------- |
 | `smoke.spec.ts`             | /health + /openapi.json + auth-required 401 sanity            |
-| `auth.spec.ts`              | /v1/auth/\* signup + login + magic-link + verify-email        |
-| `sessions.spec.ts`          | /v1/sessions/\* create + interact + capture + delete          |
-| `admin.spec.ts`             | /v1/admin\* surface — generic admin auth + scope              |
+| `auth.spec.ts`              | `/v1/auth/*` signup + login + magic-link + verify-email       |
+| `sessions.spec.ts`          | `/v1/sessions/*` create + interact + capture + delete         |
+| `admin.spec.ts`             | `/v1/admin*` surface — generic admin auth + scope             |
 | `admin-tier-change.spec.ts` | /v1/admin/accounts tier-change action                         |
 | `admin-audit-note.spec.ts`  | /v1/admin/audit-log note add                                  |
 | `rate-limit.spec.ts`        | /v1/account/rate-limits + token-bucket rate-limit enforcement |
