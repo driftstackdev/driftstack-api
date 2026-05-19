@@ -12308,7 +12308,7 @@ V-220 — API versioning strategy doc (GENERATE-7, ~1hr Tier 1).
 
 > **HOLD + RENUMBER** received from founder: V-219\* (Tier 3 visual-consistency cycle) inserts ahead of GENERATE queue. V-219 (per-tier rate-limit policy) already landed at `df102f0` before the redirect arrived; V-log keeps that number (append-only). GENERATE entries renumber going forward: V-220 = API versioning doc, V-221 = CDN strategy, V-222 = architecture cross-references audit. The api-versioning.md draft I'd started before the redirect is held uncommitted in working tree and lands at V-220 when the queue resumes.
 
-## V-219\* — customer-dashboard + admin-panel visual-consistency audit (PHASE 1)
+## V-219 family — customer-dashboard + admin-panel visual-consistency audit (PHASE 1)
 
 ### What
 
@@ -12360,7 +12360,7 @@ V-219\* directive: customer dashboard + admin panel visual style match marketing
 
 V-219\* PHASE 2 — apply the proposed layout edits as working-tree drafts, NOT committed until founder redline pass.
 
-## V-219\* PHASE 3 — visual-consistency redlines applied + committed
+## V-219 family PHASE 3 — visual-consistency redlines applied + committed
 
 ### What
 
