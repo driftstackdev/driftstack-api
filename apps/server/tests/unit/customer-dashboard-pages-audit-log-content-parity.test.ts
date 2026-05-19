@@ -55,7 +55,7 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
     expect(body).toMatch(/'admin\.refund_recorded': 'Refund recorded by support'/);
   });
 
-  it.skip("V-354 FILTER_OPTIONS rationale framing pinned: 'each maps to a single AccountAuditAction the backend already accepts on ?action='. The \"security\" group mirrors V-303 catalog intent — login / password / API-key lifecycle — but since the backend takes one action at a time and not a list, \"security\" is exposed as several adjacent presets in the dropdown rather than one composite filter (composite filter would need a backend change; this UI-only slice keeps backend untouched).' — pinned so the 'no composite filter' rationale survives (drift to introducing composite filtering would couple this UI to a backend change that wasn't made)", () => {
+  it("V-354 FILTER_OPTIONS rationale framing pinned. Re-enabled by slice 213 after verifying the 'no composite filter' rationale exists verbatim at audit-log.astro:49-55", () => {
     expect(body).toMatch(
       /\/\/ V-354 — preset filters\. Each maps to a single AccountAuditAction\s*\n?\s*\/\/ the backend already accepts on `\?action=`\. The "security" group\s*\n?\s*\/\/ mirrors V-303 catalog intent — login \/ password \/ API-key lifecycle\s*\n?\s*\/\/ — but since the backend takes one action at a time and not a list,/,
     );
@@ -71,14 +71,14 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
     );
   });
 
-  it.skip('V-484 actor filter 4-option: Any / Customer (you) / System / Staff (Driftstack support) — pinned so the actor taxonomy stays 4-way (Customer = you for self-service; System = automated; Staff = Driftstack support); drift to dropping Staff would hide admin.* events from filter UX', () => {
+  it('V-484 actor filter 4-option pinned. Re-enabled by slice 213 after verifying all 4 options exist at audit-log.astro:195-198', () => {
     expect(body).toMatch(/<option value="">Any<\/option>/);
     expect(body).toMatch(/<option value="customer">Customer \(you\)<\/option>/);
     expect(body).toMatch(/<option value="system">System<\/option>/);
     expect(body).toMatch(/<option value="staff">Staff \(Driftstack support\)<\/option>/);
   });
 
-  it.skip("V-399 payloadHint framing pinned: 'render the payload context inline for actions where a payload tag carries customer-meaningful info. Falls back silently when the payload doesn't carry a known tag.' + 7-case switch (login/recovery_code_used/profile.created/secret_rotated/team.member_invited/subscription.tier_changed/default) — pinned so the inline-context render survives (drift to dropping would hide the 'cloned from X' / 'codes remaining: N' details which give the audit row its meaning)", () => {
+  it('V-399 payloadHint framing + 6-case switch pinned. Re-enabled by slice 213 after verifying V-399 framing + each case exists at audit-log.astro:307-315', () => {
     expect(body).toMatch(
       /\/\/ V-399 — render the payload context inline for actions where\s*\n?\s*\/\/ a payload tag carries customer-meaningful info\. Falls back\s*\n?\s*\/\/ silently when the payload doesn't carry a known tag\./,
     );
@@ -95,7 +95,7 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
     expect(body).toMatch(/nextCursor = body\.next_cursor \|\| null;/);
   });
 
-  it.skip('V-484 buildUrl query-param construction: action= + cursor= + from= + to= + actor_type= + target_resource_id= all encodeURIComponent — pinned so the 6-param matrix stays consistent (drift to omitting encodeURIComponent would break filter values containing special chars; drift to using a different query key would mismatch the server contract)', () => {
+  it('V-484 buildUrl 6-param encodeURIComponent matrix pinned. Re-enabled by slice 213 after verifying all 6 params exist at audit-log.astro:384-391', () => {
     expect(body).toMatch(
       /if \(activeFilter\) params\.push\('action=' \+ encodeURIComponent\(activeFilter\)\);/,
     );
@@ -130,7 +130,7 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
     expect(body).toMatch(/URL\.revokeObjectURL\(url\);/);
   });
 
-  it.skip('V-484 localToIso timezone framing pinned: \'<input type="datetime-local"> emits "YYYY-MM-DDTHH:MM" in local time; coerce to UTC ISO so the server compares like-for-like.\' — pinned so the local→UTC coercion survives (drift to passing the local-time string raw would create off-by-timezone-offset filter windows for non-UTC users)', () => {
+  it('V-484 localToIso local→UTC coercion framing pinned. Re-enabled by slice 213 after verifying the comment exists at audit-log.astro:482-485', () => {
     expect(body).toMatch(
       /\/\/ <input type="datetime-local"> emits "YYYY-MM-DDTHH:MM" in\s*\n?\s*\/\/ local time; coerce to UTC ISO so the server compares like-\s*\n?\s*\/\/ for-like\./,
     );
