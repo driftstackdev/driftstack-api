@@ -92,7 +92,7 @@ describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content par
     );
   });
 
-  it.skip('Measurement framing pinned: V-295b probes + GET /v1/health + dashboard / + 5s timeout + 3-consecutive-fail minute + 60s probe cadence + 2-of-3-locations — pinned so the V-295b anchor + the 5-state measurement methodology (probes / timeout / consecutive-fail / cadence / multi-location) survive (drift to dropping the V-295b anchor would orphan the engineering history; drift to dropping the 2-of-3 multi-location rule would let regional ISP issues count against Driftstack)', () => {
+  it('Measurement framing pinned. Re-enabled by slice 292 after restoring V-295b anchor on the health-probe-service phrase at sla-policy.astro:77', () => {
     expect(body).toMatch(/our health-probe service \(V-295b\)/);
     expect(body).toMatch(/<li><code>GET \/v1\/health<\/code> — the API health endpoint\.<\/li>/);
     expect(body).toMatch(/<li><code>GET \/<\/code> on the dashboard/);
