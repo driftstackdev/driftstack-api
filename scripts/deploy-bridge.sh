@@ -81,7 +81,12 @@ ssh "root@${HOST}" "set -euo pipefail; \
   mkdir -p \$BUILD_DIR; \
   cd \$BUILD_DIR; \
   echo '[bridge] cloning…' >&2; \
-  git clone --depth 50 https://github.com/driftstackdev/driftstack-api.git . > /dev/null 2>&1; \
+  # --depth=400 covers any rollback target the .last-good-sha file
+  # might point at (typical revert windows). 2026-05-19 staging-deploy
+  # auto-revert failed because --depth=50 couldn't reach the 4-day-back
+  # b48f557 (last-good-sha). 400 commits is ~1-2 weeks of activity for
+  # this repo; cheap to clone, generous enough for any practical rollback.
+  git clone --depth 400 https://github.com/driftstackdev/driftstack-api.git . > /dev/null 2>&1; \
   git checkout '$SHA'; \
   GIT_SHA=\$(git rev-parse --short HEAD); \
   echo \"[bridge] HEAD=\$GIT_SHA\" >&2; \
