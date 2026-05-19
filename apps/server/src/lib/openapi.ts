@@ -3133,6 +3133,15 @@ function buildRegistry(): OpenAPIRegistry {
 
   // ── V-666.AY — admin crypto-orders surface. Requires the
   // `driftstack_internal_admin` scope; otherwise the route returns 403.
+  //
+  // Caps below MUST mirror apps/server/src/routes/admin-crypto-orders.ts
+  // ListQuery + GetParams (slice 117 defensive caps). Same shadow-vs-
+  // route drift fix as slice 123 for the customer billing surface.
+  const AdminCryptoOrderIdOpenApi = z
+    .string()
+    .min(1)
+    .max(100)
+    .describe('Order id (ord_<36-char-uuid>; capped at 100 chars).');
   registerRoute(r, {
     method: 'get',
     path: '/v1/admin/crypto-orders',
@@ -3141,14 +3150,14 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       query: z.object({
-        account_id: z.string().optional(),
+        account_id: z.string().min(1).max(100).optional(),
         status: z
           .enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled'])
           .optional(),
-        search: z.string().optional(),
-        payment_id: z.string().optional().describe('Exact-match reverse lookup.'),
+        search: z.string().min(1).max(200).optional(),
+        payment_id: z.string().min(1).max(128).optional().describe('Exact-match reverse lookup.'),
         limit: z.string().optional(),
-        cursor: z.string().optional().describe('Opaque cursor from a prior page.'),
+        cursor: z.string().min(1).max(512).optional().describe('Opaque cursor from a prior page.'),
         created_after: z
           .string()
           .datetime()
@@ -3176,7 +3185,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin', 'crypto'],
     security: auth,
     request: {
-      params: z.object({ order_id: z.string() }),
+      params: z.object({ order_id: AdminCryptoOrderIdOpenApi }),
     },
     responses: {
       200: {
@@ -3194,7 +3203,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin', 'crypto'],
     security: auth,
     request: {
-      params: z.object({ order_id: z.string() }),
+      params: z.object({ order_id: AdminCryptoOrderIdOpenApi }),
     },
     responses: {
       200: {
@@ -3212,7 +3221,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin', 'crypto'],
     security: auth,
     request: {
-      params: z.object({ order_id: z.string() }),
+      params: z.object({ order_id: AdminCryptoOrderIdOpenApi }),
       body: {
         content: { 'application/json': { schema: AdminUpdateInternalNoteRequestSchema } },
       },
@@ -3318,11 +3327,11 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       query: z.object({
-        account_id: z.string().optional(),
+        account_id: z.string().min(1).max(100).optional(),
         status: z
           .enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled'])
           .optional(),
-        search: z.string().optional(),
+        search: z.string().min(1).max(200).optional(),
         limit: z.string().optional(),
         created_after: z.string().datetime().optional(),
         created_before: z.string().datetime().optional(),
@@ -3347,7 +3356,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['admin', 'crypto'],
     security: auth,
     request: {
-      params: z.object({ order_id: z.string() }),
+      params: z.object({ order_id: AdminCryptoOrderIdOpenApi }),
       body: { content: { 'application/json': { schema: AdminApplyIpnRequestSchema } } },
     },
     responses: {
