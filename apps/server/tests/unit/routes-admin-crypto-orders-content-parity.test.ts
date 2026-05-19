@@ -69,7 +69,7 @@ describe('W422.C apps/server/src/routes/admin-crypto-orders.ts content parity', 
   });
 
   it('ListQuery: account_id + limit + V-666.T status enum (6) + search 1..200 + V-666.AS payment_id 1..128 + V-666.AM cursor 1..512 + V-666.BY created_after/before datetime', () => {
-    expect(body).toMatch(/account_id: z\.string\(\)\.min\(1\)\.optional\(\),/);
+    expect(body).toMatch(/account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),/);
     expect(body).toMatch(/limit: z\.string\(\)\.regex\(\/\^\\d\+\$\/\)\.optional\(\),/);
     expect(body).toMatch(/\/\/ V-666\.T — admin search\/filter knobs\./);
     expect(body).toMatch(
@@ -93,13 +93,13 @@ describe('W422.C apps/server/src/routes/admin-crypto-orders.ts content parity', 
 
   it('GetParams + ApplyIpnBody (V-666.F manual IPN, forward-only, reverse-to-pending rejected) + SweepBody (V-666.L olderThanHours 1..8760 + limit 1..500) + DailyQuery (V-666.O days bounded 90)', () => {
     expect(body).toMatch(
-      /const GetParams = z\.object\(\{\s*\n?\s*order_id: z\.string\(\)\.min\(1\),\s*\n?\s*\}\);/,
+      /const GetParams = z\.object\(\{\s*\n?\s*\/\/ order_id is `ord_<36-char-uuid>`[\s\S]*?\n?\s*order_id: z\.string\(\)\.min\(1\)\.max\(100\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /\/\/ V-666\.F — admin manual IPN application\. Operator path: when\s*\n?\s*\/\/ NowPayments fails to deliver an IPN \(rare\), ops can advance an\s*\n?\s*\/\/ order by hand by posting the provider_status they observed in\s*\n?\s*\/\/ the NowPayments dashboard\. The same state machine that the real\s*\n?\s*\/\/ IPN route uses applies \(forward-only, reverse-to-pending rejected\)\./,
     );
     expect(body).toMatch(
-      /const ApplyIpnBody = z\.object\(\{\s*\n?\s*provider_status: z\.string\(\)\.min\(1\),\s*\n?\s*payment_id: z\.string\(\)\.min\(1\),\s*\n?\s*\}\);/,
+      /const ApplyIpnBody = z\.object\(\{[\s\S]*?provider_status: z\.string\(\)\.min\(1\)\.max\(64\),[\s\S]*?payment_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /\/\/ V-666\.L — admin sweep-trigger body\. olderThanHours defaults to 24h\s*\n?\s*\/\/ \(matching the typical NowPayments payment window\); limit defaults\s*\n?\s*\/\/ to 500 \(matching the service's own per-tick cap\)\./,

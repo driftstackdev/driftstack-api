@@ -131,7 +131,7 @@ describe('W1041 routes/billing-crypto-orders V-666.G/J/M/P/Q/U cross-source inva
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto-orders.ts'));
     expect(p).toMatch(/V-666\.BU — cursor for forward pagination\./);
     expect(p).toMatch(/Opaque base64url/);
-    expect(p).toMatch(/cursor: z\.string\(\)\.min\(1\)\.optional\(\),/);
+    expect(p).toMatch(/cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),/);
     expect(p).toMatch(/next_cursor: page\.nextCursor,/);
   });
 

@@ -22,7 +22,9 @@ export interface RegisterAdminUsageRoutesDeps {
   accountsAdminService: AccountsAdminService;
 }
 
-const Params = z.object({ id: z.string().min(1) });
+// account id is `acc_<36-char-uuid>` (40 chars); 100 cap matches
+// the slice 116/117 defensive pattern.
+const Params = z.object({ id: z.string().min(1).max(100) });
 
 export function registerAdminUsageRoutes(
   app: FastifyInstance,

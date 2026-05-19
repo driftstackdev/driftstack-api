@@ -57,13 +57,13 @@ describe('W416.A apps/server/src/routes/admin-cost.ts content parity', () => {
 
   it('Schemas: AccountSummaryParams id min(1) + AccountSummaryQuery/OverviewQuery billing_cycle YYYY-MM optional', () => {
     expect(body).toMatch(
-      /const AccountSummaryParams = z\.object\(\{\s*\n?\s*id: z\.string\(\)\.min\(1\),\s*\n?\s*\}\);/,
+      /const AccountSummaryParams = z\.object\(\{[\s\S]*?id: z\.string\(\)\.min\(1\)\.max\(100\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /const AccountSummaryQuery = z\.object\(\{\s*\n?\s*billing_cycle: z\s*\n?\s*\.string\(\)\s*\n?\s*\.regex\(\/\^\\d\{4\}-\\d\{2\}\$\/\)\s*\n?\s*\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /const OverviewQuery = z\.object\(\{\s*\n?\s*account_ids: z\.string\(\)\.min\(1\),\s*\n?\s*billing_cycle: z\s*\n?\s*\.string\(\)\s*\n?\s*\.regex\(\/\^\\d\{4\}-\\d\{2\}\$\/\)\s*\n?\s*\.optional\(\),\s*\n?\s*\}\);/,
+      /const OverviewQuery = z\.object\(\{[\s\S]*?account_ids: z\.string\(\)\.min\(1\)\.max\(4096\),\s*\n?\s*billing_cycle: z\s*\n?\s*\.string\(\)\s*\n?\s*\.regex\(\/\^\\d\{4\}-\\d\{2\}\$\/\)\s*\n?\s*\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 

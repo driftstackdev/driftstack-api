@@ -26,7 +26,10 @@ export interface RegisterAdminCryptoOrdersRoutesDeps {
 }
 
 const ListQuery = z.object({
-  account_id: z.string().min(1).optional(),
+  // account_id is `acc_<36-char-uuid>` (40 chars). 100 cap (slice 116
+  // pattern) blocks multi-KB strings that would bloat the 400/404
+  // problem+json body if the filter doesn't match anything.
+  account_id: z.string().min(1).max(100).optional(),
   limit: z.string().regex(/^\d+$/).optional(),
   // V-666.T — admin search/filter knobs.
   status: z.enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled']).optional(),
@@ -45,7 +48,8 @@ const ListQuery = z.object({
 });
 
 const GetParams = z.object({
-  order_id: z.string().min(1),
+  // order_id is `ord_<36-char-uuid>` (40 chars); 100 cap = headroom.
+  order_id: z.string().min(1).max(100),
 });
 
 // V-666.F — admin manual IPN application. Operator path: when
@@ -54,8 +58,12 @@ const GetParams = z.object({
 // the NowPayments dashboard. The same state machine that the real
 // IPN route uses applies (forward-only, reverse-to-pending rejected).
 const ApplyIpnBody = z.object({
-  provider_status: z.string().min(1),
-  payment_id: z.string().min(1),
+  // provider_status is a NowPayments status string (~20 chars typical:
+  // 'waiting' / 'confirming' / 'finished' / etc). 64 cap is generous.
+  provider_status: z.string().min(1).max(64),
+  // payment_id is a NowPayments opaque id (~20 chars typical); 128
+  // matches the ListQuery filter cap.
+  payment_id: z.string().min(1).max(128),
 });
 
 // V-666.L — admin sweep-trigger body. olderThanHours defaults to 24h
@@ -76,7 +84,9 @@ const DailyQuery = z.object({
 // V-666.V — CSV export query. Same shape as ListQuery but with a
 // higher limit ceiling (1000) since CSV is the export path.
 const CsvQuery = z.object({
-  account_id: z.string().min(1).optional(),
+  // Same 100 cap as ListQuery — keep the two query schemas
+  // structurally identical except for the limit ceiling.
+  account_id: z.string().min(1).max(100).optional(),
   limit: z.string().regex(/^\d+$/).optional(),
   status: z.enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled']).optional(),
   search: z.string().min(1).max(200).optional(),

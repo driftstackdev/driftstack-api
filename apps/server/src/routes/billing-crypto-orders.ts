@@ -31,8 +31,9 @@ const ListQuery = z.object({
   status: z.enum(['pending', 'confirming', 'paid', 'failed', 'partial', 'cancelled']).optional(),
   // V-666.BU — cursor for forward pagination. Opaque base64url
   // encoding of `{ts, id}`; consumers treat it as a token. The
-  // service layer encodes/decodes it.
-  cursor: z.string().min(1).optional(),
+  // service layer encodes/decodes it. 512 cap matches the admin
+  // ListQuery cursor cap.
+  cursor: z.string().min(1).max(512).optional(),
   // V-666.BX — half-open date-range filter on created_at. Both
   // bounds accept ISO 8601 timestamps. created_after is inclusive,
   // created_before is exclusive.
@@ -41,7 +42,9 @@ const ListQuery = z.object({
 });
 
 const GetParams = z.object({
-  order_id: z.string().min(1),
+  // order_id is `ord_<36-char-uuid>` (40 chars); 100 cap = slice
+  // 116/117 defensive pattern.
+  order_id: z.string().min(1).max(100),
 });
 
 // V-666.AV — customer-facing pay-window hint. Pending orders carry
