@@ -30,9 +30,9 @@ describe('W573.A /docs/marketing/dashboard-admin-visual-audit.md content parity'
 
   it('Header + V-219*-PHASE-1 + small-scope-tokens-only + base.css-byte-identical + already-aligned framing pinned', () => {
     expect(body).toMatch(
-      /^# V-219\\\* — customer-dashboard \+ admin-panel visual-consistency audit$/m,
+      /^# `V-219\*` — customer-dashboard \+ admin-panel visual-consistency audit$/m,
     );
-    expect(body).toMatch(/PHASE 1 of the V-219\\\* Tier 3 visual-consistency cycle\./);
+    expect(body).toMatch(/PHASE 1 of the `V-219\*` Tier 3 visual-consistency cycle\./);
     expect(body).toMatch(/Walks the/);
     expect(body).toMatch(/customer-dashboard \+ admin-panel surfaces against the marketing-site/);
     expect(body).toMatch(/reference design tokens, captures gaps, and proposes a small-scope/);

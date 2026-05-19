@@ -206,7 +206,7 @@ describe('W573.B /docs/gui-client/audit-current-state.md content parity', () => 
     );
     expect(body).toMatch(/No external-tooling references in any visible text\./);
     expect(body).toMatch(/Internal developer comments reference "the founder" generically/);
-    expect(body).toMatch(/### 13\. Brand consistency \(V-219\\\* mirror\)/);
+    expect(body).toMatch(/### 13\. Brand consistency \(`V-219\*` mirror\)/);
     expect(body).toMatch(
       /\*\*Current:\*\* \*\*LOCKED \+ COMPLIANT\.\*\* All tokens aligned with the Driftstack brand:/,
     );
