@@ -40,6 +40,13 @@ import { resolveApiBaseUrl } from '../../lib/api-base-url';
 // to-end ships (per ORCHESTRATOR-STATE.md 2026-05-19 harness Option A
 // verdict — 6-9 weeks Agent 1 work post §10/§11+EG-WK close).
 
+// Astro dynamic-route mode: SSR not SSG. The page is rendered at
+// request time and the client script hydrates from GET /v1/agent-
+// sessions/:id (Slice 3) — there's no list of paths to enumerate at
+// build time. Without this flag astro build fails with
+// GetStaticPathsRequired.
+export const prerender = false;
+
 const { id } = Astro.params;
 const apiBaseUrl = resolveApiBaseUrl();
 ---
