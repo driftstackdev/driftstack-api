@@ -57,6 +57,7 @@ import {
   ValidationError,
 } from '../lib/errors.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 const DEFAULT_TOKEN_BUDGET = 100_000;
 
@@ -620,6 +621,7 @@ export function registerAgentSessionsRoutes(
                 to: nextState.kind,
                 client_id: parsed.data.client_id,
               },
+              ipAddress: readClientIp(req),
             });
           } catch {
             /* swallow */
@@ -703,6 +705,7 @@ export function registerAgentSessionsRoutes(
               action: 'agent_session.pair_mode.handback',
               targetResourceId: `agent_session_${req.params.id}`,
               payload: { from: currentState.kind, to: nextState.kind },
+              ipAddress: readClientIp(req),
             });
           } catch {
             /* swallow */
