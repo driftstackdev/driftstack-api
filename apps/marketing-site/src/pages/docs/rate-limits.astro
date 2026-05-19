@@ -9,9 +9,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // W198 — values mirror the live `TIER_RATE_LIMIT_DEFAULTS` table in
 // `packages/api-types/src/common.ts`. Each bucket has a capacity
 // (burst size) and a refill rate; the columns show "burst / sustained
-// per minute" so customers can size both at a glance. The bucket set
-// is intentionally small today — only `global` and `sessions:create`
-// are enforced server-side.
+// per minute" so customers can size both at a glance. Three buckets
+// today: `global` + `sessions:create` + `agent_sessions:message`
+// (v2-#8 sub-slice 8.20 isolated cap so LLM-driven message loops
+// can't drain global).
 const BUCKETS = [
   {
     name: 'global',
@@ -28,6 +29,14 @@ const BUCKETS = [
     soloSustained: '2 req/min',
     apiBuilderBurst: '60 burst',
     apiBuilderSustained: '60 req/min',
+  },
+  {
+    name: 'agent_sessions:message',
+    desc: 'POST /v1/agent-sessions/:id/messages — isolated from global so an LLM-driven message loop can\'t drain the global cap.',
+    soloBurst: '40 burst',
+    soloSustained: '20 req/min',
+    apiBuilderBurst: '300 burst',
+    apiBuilderSustained: '180 req/min',
   },
 ];
 ---
@@ -58,10 +67,11 @@ const BUCKETS = [
 
     <h2>Bucket reference</h2>
     <p>
-      Two buckets are enforced today: <code>global</code> (every
-      authenticated request) and <code>sessions:create</code> (POST
-      /v1/sessions). Burst is the maximum bucket capacity; sustained
-      throughput is the refill rate.
+      Three buckets are enforced today: <code>global</code> (every
+      authenticated request), <code>sessions:create</code> (POST
+      /v1/sessions), and <code>agent_sessions:message</code> (POST
+      /v1/agent-sessions/:id/messages). Burst is the maximum bucket
+      capacity; sustained throughput is the refill rate.
     </p>
     <table>
       <thead>

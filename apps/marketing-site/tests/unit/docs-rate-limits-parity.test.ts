@@ -58,11 +58,14 @@ describe('W341.A /docs/rate-limits ↔ TIER_RATE_LIMIT_DEFAULTS parity', () => {
     expect(body).toMatch(/apiBuilderSustained:\s*'60 req\/min'/);
   });
 
-  it('page enumerates exactly the two bucket keys (global + sessions:create)', () => {
+  it('page enumerates exactly the three bucket keys (global + sessions:create + agent_sessions:message)', () => {
+    // v2-#8 sub-slice 8.20 added agent_sessions:message as the 3rd
+    // enforced bucket — isolated cap so LLM-driven message loops
+    // can't drain the global cap.
     const bucketMatch = body.match(/BUCKETS\s*=\s*\[([\s\S]*?)\];/);
     expect(bucketMatch).not.toBeNull();
     const names = [...bucketMatch![1]!.matchAll(/name:\s*'([^']+)'/g)].map((m) => m[1]!);
-    expect(names.sort()).toEqual(['global', 'sessions:create']);
+    expect(names.sort()).toEqual(['agent_sessions:message', 'global', 'sessions:create']);
   });
 
   it('page declares the four canonical X-RateLimit-* response headers', () => {

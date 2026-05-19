@@ -42,9 +42,12 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
     expect(body).toMatch(
       /\/\/ W198 — values mirror the live `TIER_RATE_LIMIT_DEFAULTS` table in\s*\n?\s*\/\/ `packages\/api-types\/src\/common\.ts`\./,
     );
+    // v2-#8 sub-slice 8.20 added the agent_sessions:message bucket;
+    // the doc comment was rewritten to enumerate all 3 buckets.
     expect(body).toMatch(
-      /The bucket set\s*\n?\s*\/\/ is intentionally small today — only `global` and `sessions:create`\s*\n?\s*\/\/ are enforced server-side\./,
+      /Three buckets\s*\n?\s*\/\/ today: `global` \+ `sessions:create` \+ `agent_sessions:message`/,
     );
+    expect(body).toMatch(/LLM-driven message loops\s*\n?\s*\/\/ can't drain global/);
   });
 
   it("2-BUCKETS array pinned: 'global' (every authenticated request, default catch-all) Solo 120/120 + API Builder 1,800/1,800 + 'sessions:create' (POST /v1/sessions, burst-sensitive, throttled-tighter-than-global) Solo 10/2 + API Builder 60/60 — pinned so the 2-bucket surface + Solo/Builder rate-pair sample stays consistent with TIER_RATE_LIMIT_DEFAULTS (drift to a different rate-pair would create marketing↔common.ts divergence)", () => {
