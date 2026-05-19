@@ -40,7 +40,7 @@ function read(p: string): string {
 describe('W521.B apps/marketing-site/src/pages/docs/migration-from-browserless.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-705 + W228.A accuracy-pass framing pinned: 'migration guide for teams coming from Browserless.' + W228.A accuracy pass: 'The previous revision claimed: client.sessions.start({target_url, script}) — start() doesn't exist + script body field on session create — not part of the schema + client.sessions.waitUntilTerminal() / getResult() — don't exist + profile_id body field on session create — not part of the schema + \"recordings work by default\" — recordings aren't shipped (V-540).' + 'All of those have been removed in favour of the real action-based surface (navigate/interact/wait/capture).' — pinned so the V-705 anchor + W228.A 5-fictional-removed log + action-based-surface commitment survives", () => {
+  it('V-705 + W228.A accuracy-pass framing pinned. Re-enabled by slice 188 after verifying both V-705 + W228.A comments exist at migration-from-browserless.astro:4-13 with the matching shape', () => {
     expect(body).toMatch(/\/\/ V-705 — migration guide for teams coming from Browserless\./);
     expect(body).toMatch(
       /\/\/ W228\.A — accuracy pass\. The previous revision claimed:\s*\n?\s*\/\/\s+- client\.sessions\.start\(\{target_url, script\}\) — start\(\) doesn't exist\s*\n?\s*\/\/\s+- script body field on session create — not part of the schema\s*\n?\s*\/\/\s+- client\.sessions\.waitUntilTerminal\(\) \/ getResult\(\) — don't exist\s*\n?\s*\/\/\s+- profile_id body field on session create — not part of the schema\s*\n?\s*\/\/\s+- "recordings work by default" — recordings aren't shipped \(V-540\)/,
