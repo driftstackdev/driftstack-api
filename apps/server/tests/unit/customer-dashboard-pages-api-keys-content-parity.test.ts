@@ -37,7 +37,7 @@ function read(p: string): string {
 describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-182 + V-270 framing pinned: V-182 progressive-enhancement wiring against /v1/api-keys + V-270 wired the New-key form + revoke confirmation flow — pinned so the V-cluster provenance for the page's two main features (live-fetch + create-form/revoke-flow) stays explicit", () => {
+  it('V-182 + V-270 framing pinned. Re-enabled by slice 210 after verifying both lines exist verbatim at api-keys.astro:5-6', () => {
     expect(body).toMatch(/\/\/ V-182 — progressive-enhancement wiring against \/v1\/api-keys\./);
     expect(body).toMatch(/\/\/ V-270 — wired the New-key form \+ revoke confirmation flow\./);
   });
