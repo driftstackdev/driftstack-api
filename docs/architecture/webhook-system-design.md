@@ -106,7 +106,7 @@ Exponential backoff with jitter, attempt-indexed:
 - Attempt 5 (final): now + 60 min
 - After attempt 5 fails: status → `dlq`
 
-Total window: ~111 min. ~15% jitter applied to each interval (Math.random \* 0.15 of the base).
+Total window: ~111 min. ~15% jitter applied to each interval (`Math.random() * 0.15` of the base).
 
 ## Worker
 

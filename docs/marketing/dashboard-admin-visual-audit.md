@@ -1,6 +1,6 @@
-# V-219\* — customer-dashboard + admin-panel visual-consistency audit
+# `V-219*` — customer-dashboard + admin-panel visual-consistency audit
 
-PHASE 1 of the V-219\* Tier 3 visual-consistency cycle. Walks the
+PHASE 1 of the `V-219*` Tier 3 visual-consistency cycle. Walks the
 customer-dashboard + admin-panel surfaces against the marketing-site
 reference design tokens, captures gaps, and proposes a small-scope
 PHASE 2 redline set. Per the V-211 anonymity policy, the audit also
@@ -231,7 +231,7 @@ That's 3 files for the PHASE 2 redline if we skip Gap 5 refactor;
 
 ## Out of scope
 
-Per the V-219\* spec, the following are deferred:
+Per the `V-219*` spec, the following are deferred:
 
 - Graphical logo mark design (text wordmark stays).
 - New color palette / new accent colors.

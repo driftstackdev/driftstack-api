@@ -45,7 +45,7 @@ The founder direction asked for Cloudflare Origin Certificates via
 "Origin CA Key" credential (separate from API tokens; viewable at
 dash.cloudflare.com → My Profile → API Tokens → API Keys →
 "Origin CA Key" → View). Even with `Account:SSL and Certificates:Edit`
-on the cfut\_ token, `/v4/certificates` returns
+on the `cfut_` token, `/v4/certificates` returns
 `code 1016 User is not authorized`. Pivoted to Let's Encrypt;
 functionally equivalent posture (publicly-trusted CA, auto-renewed),
 just a different CA. To switch to Cloudflare Origin CA later, the

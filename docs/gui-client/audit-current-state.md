@@ -131,7 +131,7 @@ Surface for founder verdict before implementing.
 
 **Priority:** **None** — already compliant.
 
-### 13. Brand consistency (V-219\* mirror)
+### 13. Brand consistency (`V-219*` mirror)
 
 **Current:** **LOCKED + COMPLIANT.** All tokens aligned with the Driftstack brand:
 

@@ -22,7 +22,7 @@ Phase-3 series CLOSED this window:
   fork-side worker per V-533 contract).
 
 V-540.B (E2E coverage) shipped 12 specs covering customer-facing
-account/\*, profile-snapshots, team, auth-cli, status-subscribe,
+`account/*`, profile-snapshots, team, auth-cli, status-subscribe,
 legal, billing-read.
 
 Other slices: V-534.A/B (gui-client deep-link parser + consumer
