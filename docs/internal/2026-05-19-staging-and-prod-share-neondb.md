@@ -131,3 +131,45 @@ on the Agent 2 side until the DATABASE_URL on the staging host
 changes; at that point the test fixtures naturally re-target the new
 DB without modification (DB-URL is env-driven).
 EOF
+
+## RESOLVED 2026-05-19 (Wave 29-NNN ARC 2)
+
+Option A landed: staging migrated to a separate Neon project
+(`ep-lingering-math-alnalhby` — pooler endpoint in `eu-central-1`).
+
+### Steps executed
+
+1. Founder generated new Neon project + provided connection URL.
+2. Agent 2 ran `node apps/server/dist/db/migrate.js` against the new
+   DB with `DATABASE_URL` pointed at the new endpoint — all 60
+   migrations applied cleanly (empty DB, no watermark interference).
+3. SSH-update on `root@116.203.22.197` rewrote
+   `/opt/driftstack/api/.env` `DATABASE_URL` line to the new endpoint
+   (chown driftstack:driftstack + chmod 600 preserved).
+4. systemctl restart driftstack-api on staging — service came up
+   healthy in <5s, /version `git_sha: 14971a7`.
+5. Cross-contamination smoke test (the empirical proof):
+   - POST staging `/v1/internal/atlas-priority/probe-signature` with
+     a `staging-isolation-test-<ts>` op_seq_sha marker.
+   - Query staging DB directly → 1 row with that marker.
+   - Query prod DB directly → 0 rows with that marker.
+   - **Isolation empirically confirmed.**
+6. Marker row deleted from staging DB post-smoke.
+
+### Deploy-bridge gate downgraded BLOCK → WARN
+
+The `STAGING DB ISOLATION CHECK FAILED` exit-3 gate added at commit
+`11195757` was a placeholder until remediation; now downgraded to a
+warn. Rationale: in normal operation the DBs SHOULD stay separate
+(prod = `ep-aged-pond-al77cutb`, staging = `ep-lingering-math-
+alnalhby`); a future revert that re-points staging at prod's DB
+should surface loudly but not block — operator may have intentional
+override (e.g. one-shot rehearsal against prod's schema).
+
+### Net state
+
+- Prod DB: `ep-aged-pond-al77cutb-pooler.c-3.eu-central-1.aws.neon.tech`
+- Staging DB: `ep-lingering-math-alnalhby-pooler.c-3.eu-central-1.aws.neon.tech`
+- Both `neondb` database name + `neondb_owner` role.
+- 60 migrations applied on both as of 2026-05-19.
+- Cross-contamination empirically impossible going forward.

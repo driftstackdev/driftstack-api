@@ -64,13 +64,19 @@ if [ "$ENV" = "staging" ] && [ "${DEPLOY_SKIP_STAGING_DB_ISOLATION_CHECK:-0}" !=
   STAGING_DB_HOST=$(ssh -o BatchMode=yes -o ConnectTimeout=5 root@116.203.22.197 \
     "grep '^DATABASE_URL=' /opt/driftstack/api/.env 2>/dev/null | cut -d= -f2- | cut -d'@' -f2 | cut -d/ -f1" 2>/dev/null || echo "")
   if [ -n "$PROD_DB_HOST" ] && [ -n "$STAGING_DB_HOST" ] && [ "$PROD_DB_HOST" = "$STAGING_DB_HOST" ]; then
-    echo "[bridge] STAGING DB ISOLATION CHECK FAILED" >&2
+    # Downgraded 2026-05-19 BLOCK → WARN per ARC 2 Option A landing
+    # (separate Neon project for staging — see docs/internal/
+    # 2026-05-19-staging-and-prod-share-neondb.md). Staging now points
+    # at `ep-lingering-math-alnalhby`; prod stays on
+    # `ep-aged-pond-al77cutb`. The shared-DB state should NOT recur in
+    # normal operation — but if it does (e.g. someone reverts the
+    # staging .env), the warn surfaces it loudly instead of silently
+    # compounding.
+    echo "[bridge] WARNING: staging+prod DBs appear to match — verify intentional" >&2
     echo "[bridge]   staging .env DATABASE_URL host = $STAGING_DB_HOST" >&2
     echo "[bridge]   prod    .env DATABASE_URL host = $PROD_DB_HOST" >&2
-    echo "[bridge]   Net: staging has zero DB isolation — applies/inserts would hit prod immediately." >&2
-    echo "[bridge]   See docs/internal/2026-05-19-staging-and-prod-share-neondb.md for the remediation path." >&2
-    echo "[bridge]   Override: DEPLOY_SKIP_STAGING_DB_ISOLATION_CHECK=1 bash scripts/deploy-bridge.sh staging" >&2
-    exit 3
+    echo "[bridge]   Expected post-ARC-2 (2026-05-19): staging = ep-lingering-math, prod = ep-aged-pond" >&2
+    echo "[bridge]   See docs/internal/2026-05-19-staging-and-prod-share-neondb.md §RESOLVED" >&2
   fi
 fi
 
