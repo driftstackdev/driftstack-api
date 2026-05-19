@@ -102,11 +102,11 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(existsSync(WE)).toBe(true);
   });
 
-  it.skip('webhooks/events.md: V-203 catalog + LIVE/DECLARED/PLANNED status tags + quick-index table (session.completed/failed/api_key.revoked + 13 planned + test.ping V-356) + common envelope shape pinned', () => {
+  it('webhooks/events.md: catalog + LIVE/DECLARED/PLANNED status tags + quick-index table (session.completed/failed/api_key.revoked + 13 planned + test.ping) + common envelope shape pinned. Re-enabled by slice 328 post the R4 V-NNN scrub — the V-203 + V-356 anchors were stripped from customer-facing copy; the catalog now leads with a bare em-dash', () => {
     const body = read(EV);
     expect(body).toMatch(/^title: Webhook events catalog$/m);
     expect(body).toMatch(/^# Webhook events — catalog \+ payload shapes$/m);
-    expect(body).toMatch(/V-203 — comprehensive reference for every webhook event type the/);
+    expect(body).toMatch(/^— comprehensive reference for every webhook event type the$/m);
     expect(body).toMatch(/> \*\*Status notation\*\*: events are tagged/);
     expect(body).toMatch(
       /> \[LIVE\] \(declared in the enum \+ fired by a service emitter today\),/,
