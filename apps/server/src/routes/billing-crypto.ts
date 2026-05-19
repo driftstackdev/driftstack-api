@@ -37,6 +37,7 @@ import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 import type { CryptoOrdersService } from '../services/crypto-orders.js';
 import { ValidationError } from '../lib/errors.js';
+import { readIdempotencyKey } from '../lib/idempotency-key.js';
 
 export interface CryptoCheckoutRoutesDeps {
   service: CryptoOrdersService;
@@ -75,24 +76,10 @@ function newOrderId(): string {
   return `ord_${randomBytes(6).toString('hex')}`;
 }
 
-type IdempotencyHeader = { kind: 'absent' } | { kind: 'valid'; key: string } | { kind: 'invalid' };
-
-/**
- * Reads `Idempotency-Key` off the request. Returns a discriminated
- * union: absent (no header / empty), valid (trimmed ASCII <=255),
- * or invalid (rule violation; the route turns that into a 400).
- */
-function readIdempotencyKey(req: FastifyRequest): IdempotencyHeader {
-  const raw = req.headers['idempotency-key'];
-  if (raw === undefined) return { kind: 'absent' };
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (value === undefined) return { kind: 'absent' };
-  const trimmed = value.trim();
-  if (trimmed.length === 0) return { kind: 'absent' };
-  if (trimmed.length > 255) return { kind: 'invalid' };
-  if (!/^[\x21-\x7e]+$/.test(trimmed)) return { kind: 'invalid' };
-  return { kind: 'valid', key: trimmed };
-}
+// Idempotency-Key parser extracted to apps/server/src/lib/idempotency-key.ts
+// so V-666.AO billing-crypto + v2-#19 agent-sessions share one
+// validation path (no-whitespace + max-255 + ASCII-only per the
+// customer-facing docs at /docs/idempotency-keys).
 
 export function registerCryptoCheckoutRoutes(
   app: FastifyInstance,

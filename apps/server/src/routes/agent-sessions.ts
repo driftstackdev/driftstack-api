@@ -56,6 +56,7 @@ import {
   PairModeStateInvalidTransitionRouteError,
   ValidationError,
 } from '../lib/errors.js';
+import { readIdempotencyKey } from '../lib/idempotency-key.js';
 
 const DEFAULT_TOKEN_BUDGET = 100_000;
 
@@ -335,12 +336,18 @@ export function registerAgentSessionsRoutes(
       // v2-#19 — Stripe-pattern idempotency. Header name is lowercase
       // per Fastify's normalised headers map; the dashboard / SDK send
       // it as `Idempotency-Key` and the wire-level toLowerCase happens
-      // before this handler sees it. Empty string treated as "absent"
-      // so a stray `Idempotency-Key:` from an over-eager proxy doesn't
-      // collapse all sessions to a single phantom-keyed row.
-      const rawHeader = req.headers['idempotency-key'];
-      const idempotencyKey =
-        typeof rawHeader === 'string' && rawHeader.length > 0 ? rawHeader : null;
+      // before this handler sees it. Shared parser at
+      // lib/idempotency-key.ts enforces the same no-whitespace +
+      // max-255 + ASCII-only contract as V-666.AO billing-crypto,
+      // per the customer docs at /docs/idempotency-keys.
+      const idempotency = readIdempotencyKey(req);
+      if (idempotency.kind === 'invalid') {
+        throw new ValidationError({
+          formErrors: ['Idempotency-Key must be ≤255 ASCII characters, no whitespace.'],
+          fieldErrors: {},
+        });
+      }
+      const idempotencyKey = idempotency.kind === 'valid' ? idempotency.key : null;
       if (idempotencyKey !== null) {
         const existing = await sessions.findByIdempotencyKey(ctx.account.id, idempotencyKey);
         if (existing !== null) {
