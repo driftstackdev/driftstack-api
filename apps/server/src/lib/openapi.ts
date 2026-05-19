@@ -2951,6 +2951,16 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
+  // Caps below MUST mirror apps/server/src/routes/billing-crypto-orders.ts
+  // ListQuery + GetParams (slice 117 defensive caps). Drift between
+  // the openapi.ts shadow and the route schema is what slice 120
+  // closed for the OAuth surface; this fixes the same drift for the
+  // customer billing-crypto-orders surface.
+  const BillingCryptoOrderIdOpenApi = z
+    .string()
+    .min(1)
+    .max(100)
+    .describe('Order id (ord_<36-char-uuid>; capped at 100 chars).');
   registerRoute(r, {
     method: 'get',
     path: '/v1/billing/crypto-orders',
@@ -2970,10 +2980,12 @@ function buildRegistry(): OpenAPIRegistry {
           .optional()
           .describe('If set, only orders matching this status are returned.'),
         // V-666.BU — forward cursor; opaque base64url token from a
-        // prior page's next_cursor.
+        // prior page's next_cursor. 512 cap matches the route's
+        // ListQuery.cursor cap.
         cursor: z
           .string()
           .min(1)
+          .max(512)
           .optional()
           .describe('Opaque cursor from a prior page. Iterate until null.'),
         // V-666.BX — half-open date-range filter on created_at.
@@ -3004,7 +3016,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
-      params: z.object({ order_id: z.string().describe('Order id (ord_<hex>).') }),
+      params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
     },
     responses: {
       200: {
@@ -3022,7 +3034,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
-      params: z.object({ order_id: z.string() }),
+      params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
       body: { content: { 'application/json': { schema: UpdateCryptoOrderNoteRequestSchema } } },
     },
     responses: {
@@ -3041,7 +3053,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
-      params: z.object({ order_id: z.string() }),
+      params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
     },
     responses: {
       200: {
@@ -3059,7 +3071,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
-      params: z.object({ order_id: z.string() }),
+      params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
     },
     responses: {
       200: {
@@ -3081,7 +3093,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
-      params: z.object({ order_id: z.string() }),
+      params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
     },
     responses: {
       200: {
@@ -3103,7 +3115,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['billing', 'crypto'],
     security: auth,
     request: {
-      params: z.object({ order_id: z.string() }),
+      params: z.object({ order_id: BillingCryptoOrderIdOpenApi }),
     },
     responses: {
       200: {
