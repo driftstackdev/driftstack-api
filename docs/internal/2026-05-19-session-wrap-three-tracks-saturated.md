@@ -138,13 +138,23 @@ Test Files  25 passed (25)
   Duration  2.62s
 ```
 
-Combined: **236 tests across 50 files** on the two pivot tracks
-verified green end-to-end. All new test files type-check clean
-under `tsc --noEmit -p apps/server/tsconfig.test.json` (verified
-wave 25; only pre-existing older tests in `tests/unit/` have type
-errors — none introduced by this session). Lint-staged hooks ran
-on every commit; no lint failures landed in the committed
-history.
+A 34-file sample of the content-parity drift-guard track shipped
+in waves 7-11 verified passing on wave 29:
+
+```
+Test Files   34 passed (34)
+     Tests  273 passed (273)
+  Duration  2.57s
+```
+
+Combined: **509 tests across 84 files** verified green end-to-end
+across all three drift-guard tracks (~280 content-parity slices
+shipped, 34 sampled here as a representative cross-section). All
+new test files type-check clean under `tsc --noEmit -p apps/
+server/tsconfig.test.json` (verified wave 25; only pre-existing
+older tests in `tests/unit/` have type errors — none introduced
+by this session). Lint-staged hooks ran on every commit; no lint
+failures landed in the committed history.
 
 ## Numbers (cumulative through wave 23)
 
