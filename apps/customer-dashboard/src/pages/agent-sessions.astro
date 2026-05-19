@@ -178,6 +178,10 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
               <dt class="text-ink-muted">Used this month</dt>
               <dd data-field="used" class="font-mono text-xs text-ink-secondary">—</dd>
             </div>
+            <div class="flex items-center justify-between">
+              <dt class="text-ink-muted">Remaining</dt>
+              <dd data-field="remaining" class="font-mono text-xs text-ink-secondary">—</dd>
+            </div>
           </dl>
         </div>
 
@@ -594,6 +598,7 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
       const consentEl = root.querySelector('[data-field="consent"]');
       const capEl = root.querySelector('[data-field="cap"]');
       const usedEl = root.querySelector('[data-field="used"]');
+      const remainingEl = root.querySelector('[data-field="remaining"]');
       fetch(apiBaseUrl + '/v1/account/me/bundled-llm-status', {
         headers: { authorization: 'Bearer ' + token },
       })
@@ -612,6 +617,16 @@ const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000
           if (usedEl) {
             const cents = status.used_this_month_cents ?? 0;
             usedEl.textContent = '$' + (cents / 100).toFixed(2);
+          }
+          if (remainingEl) {
+            // remaining_cents is returned by the same endpoint —
+            // pre-derived as Math.max(0, cap - used) so the dashboard
+            // doesn't have to compute it locally. Surfacing it is the
+            // most-actionable number on the panel (customers care
+            // about "how much can I still spend?" more than "what's
+            // my cap?").
+            const cents = status.remaining_cents ?? 0;
+            remainingEl.textContent = '$' + (cents / 100).toFixed(2);
           }
         })
         .catch(() => {

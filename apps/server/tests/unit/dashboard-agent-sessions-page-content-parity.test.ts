@@ -155,9 +155,11 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
   // also read the wrong field, so the cap rendered as "$0.00" for
   // every customer. Fixed in the same slice that refreshed this
   // assertion.
-  it('renders bundled-llm-status fields (consent / cap / used) from GET /v1/account/me/bundled-llm-status using cap_cents (not monthly_cap_usd_cents — that field name belongs to the SETTINGS endpoint)', () => {
+  it('renders bundled-llm-status fields (consent / cap / used / remaining) from GET /v1/account/me/bundled-llm-status using cap_cents (not monthly_cap_usd_cents — that field name belongs to the SETTINGS endpoint). Slice 135 added the remaining_cents row since the server pre-derives Math.max(0, cap - used) and the customer-actionable number is "how much can I still spend"', () => {
     expect(body).toMatch(/cap_cents/);
     expect(body).toMatch(/used_this_month_cents/);
+    expect(body).toMatch(/remaining_cents/);
+    expect(body).toMatch(/data-field="remaining"/);
     expect(body).toMatch(/'opted in' : 'not enabled'/);
     // Drift-guard: the JS must NOT read `status.monthly_cap_usd_cents`
     // from the bundled-llm-status response — that field doesn't exist
