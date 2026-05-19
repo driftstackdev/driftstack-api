@@ -35,7 +35,7 @@ function read(p: string): string {
 describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-701 framing + fix-log pinned: 'incident response + customer-facing policy docs. Major fixes vs. prior revision: removed fictional incident_subscriptions account field, removed claim that incident.* are subscribable webhook events (they aren't — they're admin-audit / SSE-broadcast events), fixed /v1/status/sla response shape (camelCase, data: envelope), removed fictional ?window_days query param.' — pinned so the V-701 anchor + 4-fix-log commitments survive (drift to re-introducing the fictional fields would re-create marketing↔server divergence)", () => {
+  it('V-701 framing + fix-log pinned. Re-enabled by slice 246 after verifying both the V-701 anchor at incident-policy.astro:4 + the 4-fix-log Major-fixes-vs-prior-revision framing at incident-policy.astro:6-11 exist verbatim', () => {
     expect(body).toMatch(/\/\/ V-701 — incident response \+ customer-facing policy docs\./);
     expect(body).toMatch(
       /\/\/ Pinned by tests\/unit\/incident-policy-doc-parity\.test\.ts\. Major fixes\s*\n?\s*\/\/ vs\. prior revision: removed fictional `incident_subscriptions` account\s*\n?\s*\/\/ field, removed claim that `incident\.\*` are subscribable webhook\s*\n?\s*\/\/ events \(they aren't — they're admin-audit \/ SSE-broadcast events\),\s*\n?\s*\/\/ fixed \/v1\/status\/sla response shape \(camelCase, `data:` envelope\),\s*\n?\s*\/\/ removed fictional `\?window_days` query param\./,
