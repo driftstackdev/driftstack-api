@@ -139,6 +139,17 @@ Test Files  25 passed (25)
   Duration  2.62s
 ```
 
+A 4-file sample of the customer-facing docs-content-parity tests
+verified passing on wave 45 after the wave 31-44 markdown-fix
+cleanup (36 tests across legal/sub-processors + docs/reference/
+webhooks + docs/sdk-pages + docs/reference/metrics — confirms
+the markdown fixes didn't break any drift-guards):
+
+```
+Test Files   4 passed (4)
+     Tests  36 passed (36)
+```
+
 A 34-file sample of the content-parity drift-guard track shipped
 in waves 7-11 verified passing on wave 29:
 
