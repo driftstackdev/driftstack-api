@@ -307,6 +307,118 @@ const apiBaseUrl = resolveApiBaseUrl();
       });
     }
 
+    // Slice 4 (Wave 29-NNN ARC 3) — ManualControlOverlay LK.6 InputEvent
+    // capture. Translates browser mouse / wheel / keyboard events into
+    // POST /v1/agent-sessions/:id/input-event calls. Throttled to 120Hz
+    // for mouseMove. Active only when mode ∈ {manual, pair}; gated by
+    // overlay's pointer-events (paintMode flips this).
+    //
+    // The route returns 503 FeatureUnavailable pre-harness; we drop
+    // events silently on 503 to avoid hammering the server (set a
+    // "harness offline" flag so subsequent events don't even attempt
+    // the POST). 4xx (auth / mode / status) surface in the status pill.
+    const MOUSE_MOVE_THROTTLE_MS = 8; // ≤120Hz
+    let lastMouseMoveAt = 0;
+    let harnessOffline = false;
+
+    function viewportCoords(ev, target) {
+      // pointerToViewport — translate clientX/clientY relative to the
+      // target element's bounding rect (origin top-left).
+      const rect = target.getBoundingClientRect();
+      return {
+        x: Math.round(ev.clientX - rect.left),
+        y: Math.round(ev.clientY - rect.top),
+      };
+    }
+
+    function mouseButton(raw) {
+      // Browser MouseEvent.button: 0=left, 1=middle, 2=right. LK.6
+      // InputEvent.button uses the same enum. Anything else → null
+      // (back/forward buttons not supported by Quartz CGEventCreateMouseEvent).
+      return raw === 0 || raw === 1 || raw === 2 ? raw : null;
+    }
+
+    function modifiersFromEvent(ev) {
+      const out = [];
+      if (ev.metaKey) out.push('cmd');
+      if (ev.ctrlKey) out.push('ctrl');
+      if (ev.shiftKey) out.push('shift');
+      if (ev.altKey) out.push('option');
+      return out.length > 0 ? out : undefined;
+    }
+
+    async function sendInputEvent(event) {
+      if (harnessOffline) return;
+      try {
+        const res = await fetch(
+          apiBaseUrl + '/v1/agent-sessions/' + encodeURIComponent(sessionId) + '/input-event',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ event }),
+          },
+        );
+        if (res.status === 503) {
+          // Pre-harness: drop silently, suppress further sends.
+          harnessOffline = true;
+          if (statusPill) {
+            statusPill.title = 'Live input requires harness end-to-end (pending)';
+          }
+        } else if (!res.ok) {
+          paintError('POST /input-event returned ' + res.status.toString());
+        }
+      } catch {
+        // Network drop — let next event retry (don't latch offline).
+      }
+    }
+
+    if (overlay) {
+      overlay.addEventListener('mousemove', (ev) => {
+        const now = Date.now();
+        if (now - lastMouseMoveAt < MOUSE_MOVE_THROTTLE_MS) return;
+        lastMouseMoveAt = now;
+        const { x, y } = viewportCoords(ev, overlay);
+        void sendInputEvent({ type: 'mouseMove', x, y });
+      });
+      overlay.addEventListener('mousedown', (ev) => {
+        const button = mouseButton(ev.button);
+        if (button === null) return;
+        const { x, y } = viewportCoords(ev, overlay);
+        void sendInputEvent({ type: 'mouseDown', x, y, button });
+      });
+      overlay.addEventListener('mouseup', (ev) => {
+        const button = mouseButton(ev.button);
+        if (button === null) return;
+        const { x, y } = viewportCoords(ev, overlay);
+        void sendInputEvent({ type: 'mouseUp', x, y, button });
+      });
+      overlay.addEventListener('wheel', (ev) => {
+        const { x, y } = viewportCoords(ev, overlay);
+        void sendInputEvent({
+          type: 'wheel',
+          x,
+          y,
+          deltaX: Math.round(ev.deltaX),
+          deltaY: Math.round(ev.deltaY),
+        });
+      });
+    }
+
+    // Keyboard targets the document, NOT the overlay (focus is usually
+    // elsewhere — composer textarea, etc.). Only fire when mode ∈
+    // {manual, pair} AND focus is on the workbench page root (not the
+    // composer textarea, which already handles its own input).
+    document.addEventListener('keydown', (ev) => {
+      if (mode === 'ai') return;
+      if (composerTextarea && document.activeElement === composerTextarea) return;
+      void sendInputEvent({ type: 'keyDown', key: ev.key, modifiers: modifiersFromEvent(ev) });
+    });
+    document.addEventListener('keyup', (ev) => {
+      if (mode === 'ai') return;
+      if (composerTextarea && document.activeElement === composerTextarea) return;
+      void sendInputEvent({ type: 'keyUp', key: ev.key, modifiers: modifiersFromEvent(ev) });
+    });
+
     composerForm?.addEventListener('submit', (ev) => {
       ev.preventDefault();
       // Slice 4 wires real POST /v1/agent-sessions/:id/message + SSE
