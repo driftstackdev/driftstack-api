@@ -49,8 +49,8 @@ describe('W254.C docs/api/billing ↔ /v1/billing route parity', () => {
     expect(serverRegisters('/v1/billing/trial-pack')).toBe(true);
   });
 
-  it('subscription ids use the sub_ prefix', () => {
-    expect(doc).toMatch(/"id":\s*"sub_/);
+  it('subscription ids use the sub_ prefix (Stripe-side id, exposed verbatim — Driftstack does not mint a separate id)', () => {
+    expect(doc).toMatch(/"stripe_subscription_id":\s*"sub_/);
   });
 
   it('trial pack uses the documented 14-day window', () => {

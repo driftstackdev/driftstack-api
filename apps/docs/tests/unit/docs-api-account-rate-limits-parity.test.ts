@@ -32,12 +32,19 @@ describe('W257.A docs/api/account-rate-limits ↔ live rate-limit surface', () =
     expect(route).toContain(`'/v1/account/rate-limits'`);
   });
 
-  it('bucket keys global + sessions:create match the schema', () => {
+  it('bucket keys global + sessions:create + agent_sessions:message match the schema', () => {
     expect(doc).toMatch(/`global`/);
     expect(doc).toMatch(/`sessions:create`/);
+    expect(doc).toMatch(/`agent_sessions:message`/);
     // Source-of-truth bucket-key set comes from TIER_RATE_LIMIT_DEFAULTS.
+    // v2-#8 sub-slice 8.20 added the agent_sessions:message bucket so
+    // LLM-driven message loops can't drain the global cap.
     const builder = TIER_RATE_LIMIT_DEFAULTS.api_builder;
-    expect(Object.keys(builder).sort()).toEqual(['global', 'sessions:create']);
+    expect(Object.keys(builder).sort()).toEqual([
+      'agent_sessions:message',
+      'global',
+      'sessions:create',
+    ]);
   });
 
   it('api_builder example row matches TIER_RATE_LIMIT_DEFAULTS exactly', () => {

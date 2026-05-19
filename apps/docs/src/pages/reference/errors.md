@@ -29,34 +29,38 @@ returns true for that class.
 
 ## Mapping table
 
-| Problem-type URI                                  | HTTP | TypeScript                    | Python                         | Go                             | Retryable? |
-| ------------------------------------------------- | ---- | ----------------------------- | ------------------------------ | ------------------------------ | ---------- |
-| `errors.driftstack.dev/bad-request`               | 400  | `BadRequestError`             | `ValidationError`              | `ValidationError`              | no         |
-| `errors.driftstack.dev/validation-failed`         | 400  | `ValidationError`             | `ValidationError`              | `ValidationError`              | no         |
-| `errors.driftstack.dev/unauthorized`              | 401  | `AuthError`                   | `AuthError`                    | `AuthError`                    | no         |
-| `errors.driftstack.dev/invalid-key`               | 401  | `InvalidKeyError`             | `InvalidKeyError`              | `InvalidKeyError`              | no         |
-| `errors.driftstack.dev/revoked-key`               | 401  | `RevokedKeyError`             | `RevokedKeyError`              | `RevokedKeyError`              | no         |
-| `errors.driftstack.dev/expired-key`               | 401  | `ExpiredKeyError`             | `ExpiredKeyError`              | `ExpiredKeyError`              | no         |
-| `errors.driftstack.dev/forbidden`                 | 403  | `ForbiddenError`              | `ForbiddenError`               | `ForbiddenError`               | no         |
-| `errors.driftstack.dev/mfa-step-up-required`      | 403  | `MfaStepUpRequiredError`      | `MfaStepUpRequiredError`       | `MfaStepUpRequiredError`       | no         |
-| `errors.driftstack.dev/email-not-verified`        | 403  | `EmailNotVerifiedError`       | `EmailNotVerifiedError`        | `EmailNotVerifiedError`        | no         |
-| `errors.driftstack.dev/not-found`                 | 404  | `NotFoundError`               | `NotFoundError`                | `NotFoundError`                | no         |
-| `errors.driftstack.dev/conflict`                  | 409  | `ConflictError`               | `ConflictError`                | `ConflictError`                | no         |
-| `errors.driftstack.dev/email-already-registered`  | 409  | `EmailAlreadyRegisteredError` | `EmailAlreadyRegisteredError`  | `EmailAlreadyRegisteredError`  | no         |
-| `errors.driftstack.dev/invalid-credentials`       | 401  | `InvalidCredentialsError`     | `InvalidCredentialsError`      | `InvalidCredentialsError`      | no         |
-| `errors.driftstack.dev/invalid-auth-token`        | 400  | `InvalidAuthTokenError`       | `InvalidAuthTokenError`        | `InvalidAuthTokenError`        | no         |
-| `errors.driftstack.dev/legal-acceptance-required` | 403  | `ForbiddenError`              | `LegalAcceptanceRequiredError` | `LegalAcceptanceRequiredError` | no         |
-| `errors.driftstack.dev/rate-limited`              | 429  | `RateLimitError`              | `RateLimitError`               | `RateLimitError`               | **yes**    |
-| `errors.driftstack.dev/concurrency-limit`         | 429  | `ConcurrencyLimitError`       | `ConcurrencyLimitError`        | `ConcurrencyLimitError`        | no         |
-| `errors.driftstack.dev/tier-limit`                | 429  | `TierLimitError`              | `QuotaExceededError`           | `QuotaExceededError`           | no         |
-| `errors.driftstack.dev/session-destroyed`         | 410  | `SessionDestroyedError`       | `SessionDestroyedError`        | `SessionDestroyedError`        | no         |
-| `errors.driftstack.dev/session-timeout`           | 504  | `SessionDestroyedError`       | `SessionTimeoutError`          | `SessionTimeoutError`          | no         |
-| `errors.driftstack.dev/driver-error`              | 502  | `DriverError`                 | `DriverError`                  | `DriverError`                  | no         |
-| `errors.driftstack.dev/driver-not-integrated`     | 503  | `DriverNotIntegratedError`    | `DriverError`                  | `DriverError`                  | no         |
-| `errors.driftstack.dev/feature-unavailable`       | 503  | `FeatureUnavailableError`     | `FeatureUnavailableError`      | `FeatureUnavailableError`      | no         |
-| `errors.driftstack.dev/byok-anthropic-required`   | 502  | `ByokAnthropicRequiredError`  | `ByokAnthropicRequiredError`   | `ByokAnthropicRequiredError`   | no         |
-| `errors.driftstack.dev/internal`                  | 5xx  | `InternalError`               | `InternalError`                | `InternalError`                | **yes**    |
-| (network failure / parse error)                   | 0    | `TransportError`              | `TransportError`               | `TransportError`               | **yes**    |
+| Problem-type URI                                     | HTTP | TypeScript                       | Python                           | Go                               | Retryable? |
+| ---------------------------------------------------- | ---- | -------------------------------- | -------------------------------- | -------------------------------- | ---------- |
+| `errors.driftstack.dev/bad-request`                  | 400  | `BadRequestError`                | `ValidationError`                | `ValidationError`                | no         |
+| `errors.driftstack.dev/validation-failed`            | 400  | `ValidationError`                | `ValidationError`                | `ValidationError`                | no         |
+| `errors.driftstack.dev/unauthorized`                 | 401  | `AuthError`                      | `AuthError`                      | `AuthError`                      | no         |
+| `errors.driftstack.dev/invalid-key`                  | 401  | `InvalidKeyError`                | `InvalidKeyError`                | `InvalidKeyError`                | no         |
+| `errors.driftstack.dev/revoked-key`                  | 401  | `RevokedKeyError`                | `RevokedKeyError`                | `RevokedKeyError`                | no         |
+| `errors.driftstack.dev/expired-key`                  | 401  | `ExpiredKeyError`                | `ExpiredKeyError`                | `ExpiredKeyError`                | no         |
+| `errors.driftstack.dev/forbidden`                    | 403  | `ForbiddenError`                 | `ForbiddenError`                 | `ForbiddenError`                 | no         |
+| `errors.driftstack.dev/mfa-step-up-required`         | 403  | `MfaStepUpRequiredError`         | `MfaStepUpRequiredError`         | `MfaStepUpRequiredError`         | no         |
+| `errors.driftstack.dev/email-not-verified`           | 403  | `EmailNotVerifiedError`          | `EmailNotVerifiedError`          | `EmailNotVerifiedError`          | no         |
+| `errors.driftstack.dev/not-found`                    | 404  | `NotFoundError`                  | `NotFoundError`                  | `NotFoundError`                  | no         |
+| `errors.driftstack.dev/conflict`                     | 409  | `ConflictError`                  | `ConflictError`                  | `ConflictError`                  | no         |
+| `errors.driftstack.dev/email-already-registered`     | 409  | `EmailAlreadyRegisteredError`    | `EmailAlreadyRegisteredError`    | `EmailAlreadyRegisteredError`    | no         |
+| `errors.driftstack.dev/invalid-credentials`          | 401  | `InvalidCredentialsError`        | `InvalidCredentialsError`        | `InvalidCredentialsError`        | no         |
+| `errors.driftstack.dev/invalid-auth-token`           | 400  | `InvalidAuthTokenError`          | `InvalidAuthTokenError`          | `InvalidAuthTokenError`          | no         |
+| `errors.driftstack.dev/legal-acceptance-required`    | 403  | `ForbiddenError`                 | `LegalAcceptanceRequiredError`   | `LegalAcceptanceRequiredError`   | no         |
+| `errors.driftstack.dev/rate-limited`                 | 429  | `RateLimitError`                 | `RateLimitError`                 | `RateLimitError`                 | **yes**    |
+| `errors.driftstack.dev/concurrency-limit`            | 429  | `ConcurrencyLimitError`          | `ConcurrencyLimitError`          | `ConcurrencyLimitError`          | no         |
+| `errors.driftstack.dev/tier-limit`                   | 429  | `TierLimitError`                 | `QuotaExceededError`             | `QuotaExceededError`             | no         |
+| `errors.driftstack.dev/session-destroyed`            | 410  | `SessionDestroyedError`          | `SessionDestroyedError`          | `SessionDestroyedError`          | no         |
+| `errors.driftstack.dev/session-timeout`              | 504  | `SessionDestroyedError`          | `SessionTimeoutError`            | `SessionTimeoutError`            | no         |
+| `errors.driftstack.dev/driver-error`                 | 502  | `DriverError`                    | `DriverError`                    | `DriverError`                    | no         |
+| `errors.driftstack.dev/driver-not-integrated`        | 503  | `DriverNotIntegratedError`       | `DriverError`                    | `DriverError`                    | no         |
+| `errors.driftstack.dev/feature-unavailable`          | 503  | `FeatureUnavailableError`        | `FeatureUnavailableError`        | `FeatureUnavailableError`        | no         |
+| `errors.driftstack.dev/byok-anthropic-required`      | 502  | `ByokAnthropicRequiredError`     | `ByokAnthropicRequiredError`     | `ByokAnthropicRequiredError`     | no         |
+| `errors.driftstack.dev/bundled-llm-budget-exhausted` | 402  | `BundledLlmBudgetExhaustedError` | `BundledLlmBudgetExhaustedError` | `BundledLlmBudgetExhaustedError` | no         |
+| `errors.driftstack.dev/bundled-llm-consent-required` | 402  | `BundledLlmConsentRequiredError` | `BundledLlmConsentRequiredError` | `BundledLlmConsentRequiredError` | no         |
+| `errors.driftstack.dev/pair-mode-conflict`           | 409  | `PairModeConflictError`          | `PairModeConflictError`          | `PairModeConflictError`          | no         |
+| `errors.driftstack.dev/pair-mode-invalid-transition` | 409  | `PairModeInvalidTransitionError` | `PairModeInvalidTransitionError` | `PairModeInvalidTransitionError` | no         |
+| `errors.driftstack.dev/internal`                     | 5xx  | `InternalError`                  | `InternalError`                  | `InternalError`                  | **yes**    |
+| (network failure / parse error)                      | 0    | `TransportError`                 | `TransportError`                 | `TransportError`                 | **yes**    |
 
 ## When to retry
 

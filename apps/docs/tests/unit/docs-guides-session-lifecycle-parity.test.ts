@@ -46,7 +46,12 @@ describe('W259.D docs/guides/session-lifecycle ↔ live session surface parity',
     const sessionEvents = SubscribableWebhookEventTypeSchema.options.filter((e) =>
       e.startsWith('session.'),
     );
-    expect(sessionEvents.sort()).toEqual(['session.completed', 'session.failed']);
+    // Arc 5 EGRESS eg.7.e added session.egress_capability_changed.
+    expect(sessionEvents.sort()).toEqual([
+      'session.completed',
+      'session.egress_capability_changed',
+      'session.failed',
+    ]);
     for (const e of sessionEvents) {
       expect(doc).toMatch(new RegExp(`\`${e}\``));
     }
