@@ -97,9 +97,17 @@ describe('W385.A marketing-site src/data/sub-processors.ts content parity', () =
     expect(sccMatches!.length).toBeGreaterThanOrEqual(5);
   });
 
-  it('Anthropic opt-in framing pinned (bundled LLM, processes session data only when opt-in)', () => {
+  it('Anthropic two-mode framing pinned (BYOK proxy + Bundled-LLM opt-in rail)', () => {
+    // The Anthropic entry now distinguishes two engagement modes
+    // (BYOK proxy + Bundled-LLM rail) per the 2026-05-17 Q4=A
+    // verdict (BYOK-always-wins over bundled-LLM). Pin both the
+    // BYOK transient-proxy framing AND the bundled-LLM opt-in
+    // framing so future drift can't quietly drop either mode's
+    // disclosure.
+    expect(body).toMatch(/BYOK proxy — when the customer has supplied their own Anthropic API key/);
+    expect(body).toMatch(/Bundled-LLM rail — opt-in only/);
     expect(body).toMatch(
-      /Bundled large language model for the optional AI agent feature\. Opt-in only; processes session data only when customers explicitly enable bundled-LLM billing/,
+      /Session data flows to Anthropic only when one of these two modes is engaged/,
     );
   });
 

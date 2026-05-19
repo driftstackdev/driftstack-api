@@ -43,15 +43,22 @@ describe('W262.A /roadmap ↔ live LOCKED_ARCHETYPE_ID + roadmap framing parity'
     expect(now).toMatch(/Customer dashboard at app\.driftstack\.dev/);
   });
 
-  it('AI agent layer is in LATER, not NOW', () => {
+  it('AI agent layer is in NOW (promoted to v1.0 per 2026-05-17 founder Tier-3 verdict)', () => {
+    // Founder verdict: AI chat + manual live feature APPROVED for
+    // v1.0 (primary differentiator). The "AI agent layer" entry
+    // moved from LATER → NOW and was renamed to "Agent sessions
+    // — natural-language automation with AI / manual / pair modes"
+    // (the canonical title in the current page).
+    const nowStart = page.indexOf('const NOW: RoadmapItem[]');
+    const nextStart = page.indexOf('const NEXT: RoadmapItem[]');
+    expect(nowStart).toBeGreaterThan(-1);
+    const now = page.slice(nowStart, nextStart);
+    expect(now).toMatch(/Agent sessions.*AI \/ manual \/ pair modes/);
     const laterStart = page.indexOf('const LATER: RoadmapItem[]');
     const close = page.indexOf('];', laterStart);
-    expect(laterStart).toBeGreaterThan(-1);
     const later = page.slice(laterStart, close);
-    expect(later).toMatch(/AI agent layer/);
-    const nowEnd = page.indexOf('const NEXT: RoadmapItem[]');
-    const now = page.slice(0, nowEnd);
-    expect(now).not.toMatch(/AI agent layer/);
+    // Old "AI agent layer" framing is gone from LATER.
+    expect(later).not.toMatch(/AI agent layer/);
   });
 
   it('live-session WebRTC stream is in NEXT (not NOW)', () => {

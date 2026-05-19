@@ -1,11 +1,16 @@
 // W369.A — drift guard for marketing-site /roadmap page content.
 // V-473. Existing roadmap-baseline + roadmap-pillars-parity +
 // roadmap-structure-baseline tests pin shape; this guard pins
-// the canonical 5 / 7 / 6 item ladder and the no-dates posture:
+// the canonical 10 / 3 / 5 item ladder and the no-dates posture:
 //
 //   • 3 buckets present: Now / Next / Later (in order).
-//   • Each bucket has the expected item count: Now=5, Next=7,
-//     Later=6. A future drop/add should be a deliberate decision.
+//   • Each bucket has the expected item count: Now=10, Next=3,
+//     Later=5. A future drop/add should be a deliberate decision.
+//     (Ladder was reshuffled 2026-05-17 founder Tier-3 verdicts:
+//     status-page + OAuth + key-rotation + recipe-library +
+//     agent-sessions promoted from NEXT to NOW; AI-agent renamed
+//     to "Agent sessions" + promoted from LATER to NOW per
+//     AI-chat-+-manual-live-feature-APPROVED-for-v1.0 verdict.)
 //   • No-dates / ordering-only framing pinned ("We don't publish
 //     dates; we publish ordering"). Falsifiable commitment.
 //   • Internal V-NNN tags are NOT exposed publicly — the page
@@ -49,9 +54,9 @@ describe('W369.A marketing-site /roadmap page content parity', () => {
     expect(later).toBeGreaterThan(next);
   });
 
-  it('Now bucket has exactly 5 items (canonical foundation surface)', () => {
+  it('Now bucket has exactly 10 items (canonical foundation + promoted-from-NEXT v1.0 surface)', () => {
     const titles = extractList(body, 'NOW');
-    expect(titles.length).toBe(5);
+    expect(titles.length).toBe(10);
     // Each title pinned verbatim.
     expect(titles).toEqual([
       'iPhone family fingerprint parity (15 Pro · 16 Pro · 17 lineup)',
@@ -59,18 +64,19 @@ describe('W369.A marketing-site /roadmap page content parity', () => {
       'Customer dashboard at app.driftstack.dev',
       'Webhook delivery infrastructure',
       'GUI client for human operators',
-    ]);
-  });
-
-  it('Next bucket has exactly 7 items (active engineering)', () => {
-    const titles = extractList(body, 'NEXT');
-    expect(titles.length).toBe(7);
-    for (const t of [
       'Public status page',
       'OAuth signup (Google · GitHub)',
       'API key rotation with grace window',
+      'Recipe library (write-only at v1.0)',
+      'Agent sessions — natural-language automation with AI / manual / pair modes',
+    ]);
+  });
+
+  it('Next bucket has exactly 3 items (active engineering)', () => {
+    const titles = extractList(body, 'NEXT');
+    expect(titles.length).toBe(3);
+    for (const t of [
       'Account deletion (GDPR Article 17)',
-      'Recipe library',
       'Live session WebRTC stream',
       'Workflow recording',
     ]) {
@@ -78,16 +84,15 @@ describe('W369.A marketing-site /roadmap page content parity', () => {
     }
   });
 
-  it('Later bucket has exactly 6 items (on the deck)', () => {
+  it('Later bucket has exactly 5 items (on the deck — AI-agent promoted to NOW as "Agent sessions")', () => {
     const titles = extractList(body, 'LATER');
-    expect(titles.length).toBe(6);
+    expect(titles.length).toBe(5);
     for (const t of [
       'Older iOS archetypes (iPhone 14 + earlier iOS)',
       'Android Chrome archetypes',
       'Hardware-key MFA (WebAuthn)',
       'Public benchmark page',
       'Self-hosted parity polish',
-      'AI agent layer',
     ]) {
       expect(titles, `Later item missing: ${t}`).toContain(t);
     }

@@ -69,6 +69,15 @@ const ALLOWED_NON_SESSION_STATUS = new Set([
   'past_due',
   'trialing',
   'unpaid',
+  // System / incident status enums on the /api/status endpoint
+  // documentation. Component-level health ("operational" /
+  // "monitoring" / "investigating" / "identified" / "resolved")
+  // is a separate schema from SessionStatusSchema.
+  'operational',
+  'monitoring',
+  'investigating',
+  'identified',
+  'resolved',
 ]);
 
 describe('W279.B workspace-wide session-status sweep', () => {
