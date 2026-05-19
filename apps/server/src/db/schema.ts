@@ -1896,3 +1896,69 @@ export const recipes = pgTable('recipes', {
 
 export type RecipeRow = typeof recipes.$inferSelect;
 export type NewRecipeRow = typeof recipes.$inferInsert;
+
+// Wave 29-400 §8.1 — atlas_priority_events. Tracks each Mac-fork-emitted
+// probe signature through its auto-learn lifecycle (emitted → queued →
+// bs_in_flight → bs_succeeded → atlas_appended; bs_failed / atlas_failed
+// terminal). Source for the admin /atlas-priority-queue page (§8.3) +
+// /v1/internal/atlas-priority/* endpoints (§8.2). Migration 0058.
+export const atlasPriorityEvents = pgTable(
+  'atlas_priority_events',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    opSeqSha: text('op_seq_sha').notNull(),
+    opSeqBytesB64: text('op_seq_bytes_b64').notNull(),
+    canvasW: integer('canvas_w').notNull(),
+    canvasH: integer('canvas_h').notNull(),
+    mime: text('mime').notNull(),
+    archetypeId: text('archetype_id').notNull(),
+    lastFillText: text('last_fill_text'),
+    macLen: integer('mac_len'),
+    sessionId: text('session_id').notNull(),
+    customerId: text('customer_id').notNull(),
+    pageUrl: text('page_url').notNull(),
+    status: text('status')
+      .notNull()
+      .$type<
+        | 'emitted'
+        | 'queued'
+        | 'bs_in_flight'
+        | 'bs_succeeded'
+        | 'bs_failed'
+        | 'atlas_appended'
+        | 'atlas_failed'
+      >(),
+    emittedAt: timestamp('emitted_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    bsAutomateSessionId: text('bs_automate_session_id'),
+    bsStartedAt: timestamp('bs_started_at', { withTimezone: true }),
+    bsCompletedAt: timestamp('bs_completed_at', { withTimezone: true }),
+    bsErrorReason: text('bs_error_reason'),
+    atlasEntryHash: text('atlas_entry_hash'),
+    atlasVersion: text('atlas_version'),
+    atlasAppendedAt: timestamp('atlas_appended_at', { withTimezone: true }),
+    atlasErrorReason: text('atlas_error_reason'),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index('atlas_priority_events_status_emitted_at_idx').on(t.status, t.emittedAt),
+    index('atlas_priority_events_customer_emitted_at_idx').on(t.customerId, t.emittedAt),
+    index('atlas_priority_events_session_id_idx').on(t.sessionId),
+  ],
+);
+
+export type AtlasPriorityEventRow = typeof atlasPriorityEvents.$inferSelect;
+export type NewAtlasPriorityEventRow = typeof atlasPriorityEvents.$inferInsert;
+export type AtlasPriorityEventStatus =
+  | 'emitted'
+  | 'queued'
+  | 'bs_in_flight'
+  | 'bs_succeeded'
+  | 'bs_failed'
+  | 'atlas_appended'
+  | 'atlas_failed';

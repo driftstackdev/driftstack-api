@@ -407,6 +407,13 @@
       "when": 1778176807000,
       "tag": "0057_admin_audit_mac_node_livekit_registered",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1779031200000,
+      "tag": "0058_atlas_priority_events",
+      "breakpoints": true
     }
   ]
 }
