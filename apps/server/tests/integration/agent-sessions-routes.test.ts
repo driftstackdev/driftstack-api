@@ -365,6 +365,45 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(a.json<{ id: string }>().id).not.toBe(b.json<{ id: string }>().id);
   });
 
+  it('v2-#19 idempotency: invalid `Idempotency-Key` (whitespace inside the value) returns 400 ValidationError per the /docs/idempotency-keys contract (added in slice 108 — shared parser now enforces the contract on this route, not just billing-crypto)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': 'has space' },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+    // ValidationError stuffs the custom message into extensions.issues;
+    // body.detail stays as the boilerplate "One or more fields failed
+    // validation." (matches billing-crypto's invalid-key 400 behavior).
+    const body = res.json<{ issues?: { formErrors?: string[] } }>();
+    expect(body.issues?.formErrors).toBeDefined();
+    expect(body.issues?.formErrors?.[0]).toMatch(/Idempotency-Key/);
+  });
+
+  it('v2-#19 idempotency: `Idempotency-Key` longer than 255 chars returns 400 (length-cap enforced post-slice-108)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': 'a'.repeat(256) },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('v2-#19 idempotency: `Idempotency-Key` with non-ASCII bytes returns 400 (ASCII-only enforced post-slice-108)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'idempotency-key': 'kéy' },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('v2-#19 idempotency: empty-string `Idempotency-Key` is treated as absent (stray proxy header MUST NOT collapse every session onto a phantom row)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const a = await fx.app.inject({
