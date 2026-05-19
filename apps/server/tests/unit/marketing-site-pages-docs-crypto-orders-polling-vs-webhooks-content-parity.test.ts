@@ -33,7 +33,7 @@ function read(p: string): string {
 describe('W509.A apps/marketing-site/src/pages/docs/crypto-orders-polling-vs-webhooks.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-666.BV framing pinned: 'practitioner guide on how to detect crypto-order state changes. Webhooks for `crypto.order.*` are roadmap (not in SubscribableWebhookEventTypeSchema today) so this page primarily documents the polling pattern + describes the hybrid pattern as the planned end-state.' — pinned so the V-666.BV anchor + 'not in SubscribableWebhookEventTypeSchema today' commitment + polling-as-primary-doc framing all survive (drift to softening 'roadmap' would let customers think the webhooks are live)", () => {
+  it('V-666.BV framing pinned. Re-enabled by slice 239 after verifying the V-666.BV anchor + practitioner-guide framing exists verbatim in the page head comment at lines 4-8', () => {
     expect(body).toMatch(
       /\/\/ V-666\.BV — practitioner guide on how to detect crypto-order state\s*\n?\s*\/\/ changes\. Webhooks for `crypto\.order\.\*` are roadmap \(not in\s*\n?\s*\/\/ SubscribableWebhookEventTypeSchema today\) so this page primarily\s*\n?\s*\/\/ documents the polling pattern \+ describes the hybrid pattern as\s*\n?\s*\/\/ the planned end-state\./,
     );
@@ -63,7 +63,7 @@ describe('W509.A apps/marketing-site/src/pages/docs/crypto-orders-polling-vs-web
     );
   });
 
-  it.skip("Customer dashboard 60s-polling + V-534.BS pattern pinned: 'The Driftstack customer dashboard polls GET /v1/billing/crypto-orders every 60s while any visible order is still pending (V-534.BS).' + 'shorten the poll interval to 5-10s — the rate-limit budget on the customer list endpoint is generous enough' — pinned so the 60s default + V-534.BS anchor + 5-10s rate-limit-budget rationale survive (drift to a different default cadence would create marketing↔customer-dashboard divergence)", () => {
+  it('Customer dashboard 60s-polling + V-534.BS pattern pinned. Re-enabled by slice 239 after restoring the V-534.BS anchor on the pending-order line at crypto-orders-polling-vs-webhooks.astro:84 (anchor stripped to bare space-period in the same drift pattern as 235-238)', () => {
     expect(body).toMatch(
       /The Driftstack customer dashboard polls\s*\n?\s*<code>GET \/v1\/billing\/crypto-orders<\/code> every 60s while\s*\n?\s*any visible order is still <code>pending<\/code> \(V-534\.BS\)\./,
     );
