@@ -77,7 +77,7 @@ describe('W519.C apps/marketing-site/src/pages/docs/emails-reference.astro conte
     );
   });
 
-  it.skip('Billing 4-template framing pinned: billing-receipt (Successful charge (Stripe / crypto), opt-outable per OptOutableEmailEventSchema, most customers leave on for record-keeping) + billing-failure (Payment attempt failed; carries portal URL + retry-at, NOT opt-outable, needed to recover payment before suspension) + billing-renewal-reminder (3-7 days before annual renewal, V-304b, yes opt-outable) + subscription-cancellation (cancellation processed, NOT opt-outable) — pinned so the 4-billing template + opt-outable-mix + V-304b-renewal-reminder anchor + retry-at-portal-URL commitment survives', () => {
+  it('Billing 4-template framing pinned. Re-enabled by slice 236 after restoring the V-304b anchor on the billing-renewal-reminder row at emails-reference.astro:91 (same anchor-dropped-to-bare-space pattern as the slice 235 V-304a restore on the same page)', () => {
     expect(body).toMatch(/<strong>billing-receipt<\/strong>/);
     expect(body).toMatch(/<td>Successful charge \(Stripe \/ crypto\)<\/td>/);
     expect(body).toMatch(
