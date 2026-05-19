@@ -237,22 +237,28 @@ export interface SelfHostedSku {
 // Multi-region + multi-node-clustering were stripped here (V-131) —
 // those were customer deployment choices, not license-tier gates.
 
+// 2026-05-19 founder verdict — software updates, archetype updates,
+// and source access are NOT differentiated by SKU. Every self-hosted
+// customer receives the same iOS / Safari / archetype refresh cadence
+// and the same source-access posture. SKU differentiation is
+// concurrent-capacity-driven (number of Macs + Mac model), not
+// software-feature-gated.
 export const SELF_HOSTED_SOFTWARE_UPDATES: Record<string, string> = {
-  self_hosted_solo: 'Quarterly',
+  self_hosted_solo: 'Continuous',
   self_hosted_pro: 'Continuous',
-  self_hosted_enterprise: 'Continuous + bespoke patches',
+  self_hosted_enterprise: 'Continuous',
 };
 
 export const SELF_HOSTED_ARCHETYPE_UPDATES: Record<string, string> = {
-  self_hosted_solo: 'Major iOS only',
+  self_hosted_solo: 'All releases',
   self_hosted_pro: 'All releases',
-  self_hosted_enterprise: 'All + early access',
+  self_hosted_enterprise: 'All releases',
 };
 
 export const SELF_HOSTED_SOURCE_ACCESS: Record<string, string> = {
   self_hosted_solo: 'Build artifacts',
   self_hosted_pro: 'Build artifacts',
-  self_hosted_enterprise: 'Full repository (read-only audit)',
+  self_hosted_enterprise: 'Build artifacts + read-only repo audit',
 };
 
 export const SELF_HOSTED_SKUS: SelfHostedSku[] = [

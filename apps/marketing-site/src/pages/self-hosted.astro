@@ -7,10 +7,16 @@ import {
   SELF_HOSTED_SOURCE_ACCESS,
 } from '../data/pricing.ts';
 
+// 2026-05-19 founder verdict — hardware is OPTIONAL within the
+// Apple-Silicon family. Any M-series Mac works; the per-SKU rows
+// below are recommended-spec hints sized for the SKU's expected
+// concurrent workload. Customers running fewer concurrent sessions
+// can use a smaller Mac without penalty; customers needing many
+// concurrent sessions need bigger / more Macs (real differentiation).
 const HARDWARE_BY_SKU: Record<string, string> = {
-  self_hosted_solo: 'Mac Mini M4 16 GB (customer-purchased)',
-  self_hosted_pro: 'Mac Studio M4 Max',
-  self_hosted_enterprise: 'Mac Studio Ultra / Mac Pro / multi-node cluster',
+  self_hosted_solo: 'Any Apple Silicon Mac (Mac Mini M4 16 GB recommended)',
+  self_hosted_pro: 'Apple Silicon Mac sized for sustained concurrency (Mac Studio M4 Max recommended)',
+  self_hosted_enterprise: 'Multi-node Apple Silicon fleet (Mac Studio Ultra / Mac Pro recommended)',
 };
 
 function fmtUsd(value: number | null | undefined): string {
@@ -23,14 +29,17 @@ function fmtArchetypes(max: number | null): string {
   return max === 1 ? '1 archetype' : `${max.toString()} archetypes`;
 }
 
+// 2026-05-19 founder verdict — drop tiered SLA ladder (theatre for
+// a small operation). Single best-effort target across all SKUs;
+// Slack Connect available on request post-paid-subscription.
 function fmtSupportTier(tier: 'email_48h' | 'email_slack_12h' | 'dedicated_csm_1h'): string {
   switch (tier) {
     case 'email_48h':
-      return 'Email · 48h SLA';
+      return 'Email · 48h target';
     case 'email_slack_12h':
-      return 'Email + Slack Connect · 12h SLA';
+      return 'Email + Slack Connect · 48h target';
     case 'dedicated_csm_1h':
-      return 'Dedicated CSM · 1h SLA';
+      return 'Email + Slack Connect · 48h target';
   }
 }
 
@@ -60,7 +69,9 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
       <p class="mt-6 max-w-prose text-lg text-ink-secondary">
         Same SDK, same archetypes, same iPhone Safari fidelity — just running
         on hardware you own and inside a network you control. Driftstack
-        handles the orchestration, you handle the metal.
+        handles the orchestration, you handle the metal. Any Apple
+        Silicon Mac works; the SKU you choose maps to how many concurrent
+        sessions you need to run at once, not a software-feature ladder.
       </p>
       <div class="mt-8 flex flex-wrap items-center gap-4">
         <a href="mailto:sales@driftstack.dev?subject=Self-Hosted%20inquiry" class="btn-primary"
