@@ -37,9 +37,6 @@ const NOW: RoadmapItem[] = [
     title: 'GUI client for human operators',
     body: 'Tauri-based desktop client (macOS first) for the Manual ladder. Drive sessions yourself, manage 10–200 persistent profiles, no code required.',
   },
-];
-
-const NEXT: RoadmapItem[] = [
   {
     title: 'Public status page',
     body: 'status.driftstack.dev with manual + auto-poll incident history, email subscriptions, and a simple-by-design surface for "is the platform working right now?".',
@@ -53,12 +50,15 @@ const NEXT: RoadmapItem[] = [
     body: 'Rotate a key without breaking in-flight clients. New key issued, old key kept valid for a configurable grace period, then auto-revoked. Same pattern already shipped for webhook signing secrets.',
   },
   {
+    title: 'Recipe library (write-only at v1.0)',
+    body: 'Snapshot a finished agent-session into a replayable recipe — capture the structured intent_log + transcript without re-paying decompose cost. Read / list / execute / delete surfaces land at v1.1.',
+  },
+];
+
+const NEXT: RoadmapItem[] = [
+  {
     title: 'Account deletion (GDPR Article 17)',
     body: 'Self-service account deletion with explicit retention disclosure — recordings hard-deleted, invoice history kept per EU tax law, audit trail of the deletion event itself preserved.',
-  },
-  {
-    title: 'Recipe library',
-    body: 'A curated library of pre-built session flows for the most common targets. Fork into your account, customize, run. Saves the "I just want to log into X and capture a screenshot" use case from being a 50-line scaffold each time.',
   },
   {
     title: 'Live session WebRTC stream',

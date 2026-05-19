@@ -7,10 +7,13 @@
 //   • V-473 selectively-sourced + no-V-NNN-leak framing.
 //   • 3-section ordering: NOW (live today) / NEXT (in active
 //     engineering) / LATER (on the deck).
-//   • NOW 5-item list: iPhone fingerprint parity / 3-language SDKs /
-//     dashboard / webhooks / GUI client.
-//   • NEXT 7-item list: status page / OAuth / API key rotation /
-//     account deletion (GDPR Article 17) / recipe library / live
+//   • NOW 9-item list: iPhone fingerprint parity / 3-language SDKs /
+//     dashboard / webhooks / GUI client / status page / OAuth signup /
+//     API key rotation / recipe library (write-only at v1.0). Promoted
+//     from NEXT on 2026-05-19: status-site is deployed, V-667.C OAuth-
+//     client routes shipped, TS SDK api-keys.rotate() exists, and the
+//     write-only recipes route ships at v1.0.
+//   • NEXT 3-item list: account deletion (GDPR Article 17) / live
 //     session WebRTC / workflow recording.
 //   • LATER 6-item list: additional iOS / Android Chrome / WebAuthn
 //     SSO / public benchmarks / self-hosted parity / AI agent layer.
@@ -55,7 +58,7 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
     expect(body).toMatch(/Customer demand is the single best ordering signal we have\./);
   });
 
-  it("NOW section 5-item list (M.6 Path A multi-archetype): 'iPhone family fingerprint parity (15 Pro · 16 Pro · 17 lineup)' (foundation — multi-archetype + Safari 26.5 launch scope per founder verdict 2026-05-17) + 'TypeScript · Python · Go SDKs' + 'Customer dashboard at app.driftstack.dev' + 'Webhook delivery infrastructure' + 'GUI client for human operators' — pinned so the live-today scope covers the 5 customer-visible platform pillars (drift to single-archetype framing would re-introduce the v1.0 scope-mismatch the founder rejected in §6 of the orchestrator handoff)", () => {
+  it("NOW section 9-item list (2026-05-19 promotion: status-site + V-667.C OAuth + api-keys.rotate + write-only recipes joined the original 5 launch pillars): 'iPhone family fingerprint parity (15 Pro · 16 Pro · 17 lineup)' + 'TypeScript · Python · Go SDKs' + 'Customer dashboard at app.driftstack.dev' + 'Webhook delivery infrastructure' + 'GUI client for human operators' + 'Public status page' + 'OAuth signup (Google · GitHub)' + 'API key rotation with grace window' + 'Recipe library (write-only at v1.0)' — pinned so the live-today scope covers ALL 9 shipped customer-facing pillars (drift to demoting status-site or OAuth back to NEXT would mis-represent what's actually deployed; drift to single-archetype framing would re-introduce the v1.0 scope-mismatch the founder rejected in §6 of the orchestrator handoff)", () => {
     expect(body).toMatch(
       /title: 'iPhone family fingerprint parity \(15 Pro · 16 Pro · 17 lineup\)',/,
     );
@@ -63,18 +66,29 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
     expect(body).toMatch(/title: 'Customer dashboard at app\.driftstack\.dev',/);
     expect(body).toMatch(/title: 'Webhook delivery infrastructure',/);
     expect(body).toMatch(/title: 'GUI client for human operators',/);
-    // Pre-M.6 single-archetype framing must NOT return.
-    expect(body).not.toMatch(/iPhone 16 Pro · iOS 18\.7 · Safari 26\.4 fingerprint parity/);
-  });
-
-  it("NEXT section items: 'Public status page' + 'OAuth signup (Google · GitHub)' + 'API key rotation with grace window' + 'Account deletion (GDPR Article 17)' + 'Recipe library' + 'Live session WebRTC stream' + 'Workflow recording' — pinned so the active-engineering surface stays consistent (drift to dropping Account deletion would orphan the GDPR Article 17 compliance promise; drift to renaming OAuth would break the 'Continue with Google/GitHub' marketing-page framing)", () => {
     expect(body).toMatch(/title: 'Public status page',/);
     expect(body).toMatch(/title: 'OAuth signup \(Google · GitHub\)',/);
     expect(body).toMatch(/title: 'API key rotation with grace window',/);
+    expect(body).toMatch(/title: 'Recipe library \(write-only at v1\.0\)',/);
+    // Pre-M.6 single-archetype framing must NOT return.
+    expect(body).not.toMatch(/iPhone 16 Pro · iOS 18\.7 · Safari 26\.4 fingerprint parity/);
+    // Pre-2026-05-19 NEXT-only title for recipes must NOT return —
+    // promotion to NOW also dropped the unbounded "Recipe library"
+    // label in favor of "(write-only at v1.0)" to set v1.0-scope
+    // expectations explicitly.
+    expect(body).not.toMatch(/title: 'Recipe library',/);
+  });
+
+  it("NEXT section 3-item list (post-2026-05-19 promotion: status-site + OAuth + api-key rotation + recipes graduated to NOW; remaining surface is account deletion + WebRTC stream + workflow recording): 'Account deletion (GDPR Article 17)' + 'Live session WebRTC stream' + 'Workflow recording' — pinned so the active-engineering surface stays consistent (drift to dropping Account deletion would orphan the GDPR Article 17 compliance promise; drift to re-adding the 4 promoted items would re-introduce the stale 'NEXT' framing for things customers can already use today)", () => {
     expect(body).toMatch(/title: 'Account deletion \(GDPR Article 17\)',/);
-    expect(body).toMatch(/title: 'Recipe library',/);
     expect(body).toMatch(/title: 'Live session WebRTC stream',/);
     expect(body).toMatch(/title: 'Workflow recording',/);
+    // Confirm the NEXT block does NOT re-list the 4 promoted titles.
+    const nextBlock = body.match(/const NEXT:[^=]*=\s*\[([\s\S]*?)\];/)?.[1] ?? '';
+    expect(nextBlock).not.toMatch(/Public status page/);
+    expect(nextBlock).not.toMatch(/OAuth signup/);
+    expect(nextBlock).not.toMatch(/API key rotation with grace window/);
+    expect(nextBlock).not.toMatch(/Recipe library/);
   });
 
   it("LATER section items (M.6 Path A: older iOS archetypes split out from NOW since the launch families cover iPhone 15 Pro / 16 Pro / 17 lineup): 'Older iOS archetypes (iPhone 14 + earlier iOS)' + 'Android Chrome archetypes' + 'Hardware-key MFA (WebAuthn)' + 'Public benchmark page' + 'Self-hosted parity polish' + 'AI agent layer' — pinned so the on-the-deck surface covers the canonical 6 directions (drift to dropping AI agent layer would lose the bundled-or-BYOK LLM commitment that's promised in the tier configuration; drift to dropping WebAuthn would orphan the hardware-key MFA path)", () => {
