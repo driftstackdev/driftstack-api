@@ -48,7 +48,7 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
     );
   });
 
-  it.skip("V-475 in-page rotate-secret reveal framing pinned: 'rotate-secret in-page reveal. Replaces the window.prompt shown in earlier slices; some browsers block prompts in non-interactive contexts (incognito, autofill blockers, etc.). Inline reveal is keyboard-accessible + paste-target-friendly.' — pinned so the why-not-window.prompt rationale + the keyboard-accessibility framing survive (drift to window.prompt would re-introduce the incognito-blocked bug)", () => {
+  it('V-475 in-page rotate-secret reveal framing pinned. Re-enabled by slice 276 after restoring the V-475 anchor on the HTML comment at webhooks.astro:211 (anchor stripped to bare-em-dash + bare-space-indentation)', () => {
     expect(body).toMatch(
       /V-475 — rotate-secret in-page reveal\. Replaces the window\.prompt\s*\n?\s*shown in earlier slices; some browsers block prompts in\s*\n?\s*non-interactive contexts \(incognito, autofill blockers, etc\.\)\./,
     );
