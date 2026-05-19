@@ -70,7 +70,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     );
   });
 
-  it.skip("Detection 3-signal pinned: V-295b 60-second poller against /v1/health + 'Three consecutive failures auto-create a Critical incident' + customer reports email support@driftstack.dev + 'We acknowledge within 30 min during EU business hours' + internal alerting via Sentry + cost-monitoring thresholds — pinned so the V-295b anchor + 3-consecutive-rule + 30-min-EU-biz-hours-ACK + 2-internal-alert-source (Sentry/cost-monitoring) survives", () => {
+  it('Detection 3-signal pinned. Re-enabled by slice 270 after restoring the V-295b anchor on the health-probes list-item at incident-policy.astro:77', () => {
     expect(body).toMatch(
       /<strong>V-295b health probes:<\/strong> 60-second poller\s*\n?\s*against <code>\/v1\/health<\/code> \+ per-region API endpoints\.\s*\n?\s*Three consecutive failures auto-create a Critical incident/,
     );
