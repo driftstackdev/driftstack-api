@@ -63,7 +63,7 @@ describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content pari
     );
   });
 
-  it.skip('11-admin-crypto-orders endpoint surface pinned: GET /v1/admin/crypto-orders (cross-account list, V-666.BY + V-666.AM filters/cursor) + .csv (1000-row-per-call) + /stats + /idempotency-metrics (V-666.AP / V-666.AR) + /pending-age + /daily?days=N + /:order_id + /:order_id/events (append-only) + POST /:order_id/apply-ipn (forward-only state machine) + PATCH /:order_id/internal-note (admin-only) + POST /sweep-expired (bulk-expire pending older than N hours) — pinned so the 11-endpoint surface + V-666.* anchors + forward-only-state-machine commitment survives (drift to dropping any endpoint would shrink the auditable admin surface)', () => {
+  it('11-admin-crypto-orders endpoint surface pinned. Re-enabled by slice 238 after restoring V-666.BY + V-666.AM + V-666.AP/V-666.AR anchors on admin-api.astro:72-73,86 (three anchors stripped to bare-space-period in the same drift pattern as 235-237)', () => {
     expect(body).toMatch(/<td><code>GET \/v1\/admin\/crypto-orders<\/code><\/td>/);
     expect(body).toMatch(/V-666\.BY/);
     expect(body).toMatch(/V-666\.AM/);
