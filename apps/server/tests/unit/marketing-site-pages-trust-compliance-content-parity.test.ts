@@ -93,7 +93,7 @@ describe('W504.A apps/marketing-site/src/pages/trust/compliance.astro content pa
     expect(body).toMatch(/<li>Report findings privately before public disclosure\.<\/li>/);
   });
 
-  it.skip("Sub-processor SLA pinned: '30 calendar days' notice for any material change to the sub-processor list (additions or replacements)' + 'GDPR Article 28(2) and DPA Annex 3' anchor + RSS feed roadmap (V-550.A) — pinned so the 30-day-notice + Article-28(2) anchor + future-RSS-from-V-550.A all survive (drift to softening the 30-day window would breach the DPA; drift to dropping the V-550.A RSS reference would orphan the planned subscription mechanism)", () => {
+  it('Sub-processor SLA pinned. Re-enabled by slice 266 after restoring the V-550.A anchor on the RSS-feed-roadmap sentence at trust/compliance.astro:241 (anchor stripped to bare space before "lands")', () => {
     expect(body).toMatch(
       /Per GDPR Article 28\(2\) and DPA Annex 3, we provide 30 calendar\s*\n?\s*days' notice for any material change to the sub-processor list\s*\n?\s*\(additions or replacements\)\./,
     );
