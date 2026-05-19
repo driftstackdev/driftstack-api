@@ -50,6 +50,16 @@ from driftstack.errors import (
     is_retryable,
 )
 from driftstack.resources.agent_sessions import LiveKitInfo
+from driftstack.resources.api_keys import ApiKeyList
+from driftstack.resources.sessions import SessionsListPage
+from driftstack.resources.team import (
+    AcceptInviteResponse,
+    TeamInvite,
+    TeamInvitesList,
+    TeamMember,
+    TeamMembersList,
+)
+from driftstack.resources.webhooks import WebhookDeliveryListPage, WebhookEndpointList
 from driftstack.webhook_signature import verify_webhook_signature
 
 __all__ = [
@@ -87,6 +97,18 @@ __all__ = [
     "PairModeConflictError",
     "PairModeStateInvalidTransitionError",
     "LiveKitInfo",
+    # Customer-facing pydantic models — used as return types on
+    # client.*.method() so callers can annotate handlers without
+    # deep-importing via driftstack.resources.*.
+    "AcceptInviteResponse",
+    "ApiKeyList",
+    "SessionsListPage",
+    "TeamInvite",
+    "TeamInvitesList",
+    "TeamMember",
+    "TeamMembersList",
+    "WebhookDeliveryListPage",
+    "WebhookEndpointList",
     "is_retryable",
     "verify_webhook_signature",
 ]
