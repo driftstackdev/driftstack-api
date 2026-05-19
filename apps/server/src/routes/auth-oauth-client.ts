@@ -35,8 +35,10 @@ import { signOauthClientState, verifyOauthClientState } from '../lib/oauth-clien
 import { exchangeCodeForTokens, fetchUserInfo } from '../lib/oauth-client-exchange.js';
 import type { OAuthClientService } from '../services/oauth-client.js';
 import type { AuthFlowsService } from '../services/auth-flows.js';
+import type { RateLimitStore } from '../services/rate-limit.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
+import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { Logger } from '../lib/logger.js';
 
 const COOKIE_NAME = 'ds_oauth_pkce';
@@ -73,6 +75,11 @@ export interface RegisterOAuthClientRoutesDeps {
    *  and the dashboard would show "Sign in to see live account data"
    *  on the post-OAuth landing. */
   authFlows: AuthFlowsService;
+  /** 2026-05-20 — required for IP-gate preHandlers on /start +
+   *  /callback + /confirm-merge (per 2026-05-19 rate-limit audit
+   *  doc — these were unauthenticated routes with no abuse gate).
+   *  Same store the AUTH_IP_LIMITS gates on auth.ts use. */
+  rateLimitStore: RateLimitStore;
   /** Test seam — defaults to Date.now() / randomBytes. */
   nowMs?: () => number;
 }
@@ -94,8 +101,29 @@ export function registerOAuthClientRoutes(
 ): void {
   const now = deps.nowMs ?? (() => Date.now());
 
+  // 2026-05-20 — IP gates (pre-launch blocker per 2026-05-19
+  // rate-limit audit). Unauthenticated routes; account-creation
+  // flood is the real abuse vector on /callback's success path,
+  // since the linkOrCreateAccount call mints a fresh row + a
+  // 30-day web session for a never-seen IDP identity.
+  const startGate = ipRateLimit(deps.rateLimitStore, {
+    bucketPrefix: 'oauth_client_start',
+    capacity: AUTH_IP_LIMITS.oauthClientStart.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.oauthClientStart.refillPerSecond,
+  });
+  const callbackGate = ipRateLimit(deps.rateLimitStore, {
+    bucketPrefix: 'oauth_client_callback',
+    capacity: AUTH_IP_LIMITS.oauthClientCallback.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.oauthClientCallback.refillPerSecond,
+  });
+  const confirmMergeGate = ipRateLimit(deps.rateLimitStore, {
+    bucketPrefix: 'oauth_client_confirm_merge',
+    capacity: AUTH_IP_LIMITS.oauthClientConfirmMerge.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.oauthClientConfirmMerge.refillPerSecond,
+  });
+
   // ── POST /v1/auth/oauth-client/start ──────────────────────────
-  app.post('/v1/auth/oauth-client/start', async (req, reply) => {
+  app.post('/v1/auth/oauth-client/start', { preHandler: [startGate] }, async (req, reply) => {
     const parsed = StartBodySchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
     const provider = parsed.data.provider;
@@ -130,6 +158,7 @@ export function registerOAuthClientRoutes(
   // ── GET /v1/auth/oauth-client/callback ────────────────────────
   app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
     '/v1/auth/oauth-client/callback',
+    { preHandler: [callbackGate] },
     async (req, reply) => {
       // IDP may redirect with ?error=access_denied if the user
       // cancelled the consent — surface a clean 400 in that case.
@@ -288,19 +317,23 @@ export function registerOAuthClientRoutes(
   }
 
   // ── POST /v1/auth/oauth-client/confirm-merge ──────────────────
-  app.post('/v1/auth/oauth-client/confirm-merge', async (req, reply) => {
-    const parsed = ConfirmMergeBodySchema.safeParse(req.body);
-    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
-    const result = await deps.service.confirmPendingLink(parsed.data.token, new Date(now()));
-    if (result === null) {
-      throw new BadRequestError('Merge confirmation token is invalid, expired, or already used.');
-    }
-    return reply.code(200).send({
-      outcome: 'merged' as const,
-      account_id: result.accountId,
-      link_id: result.linkId,
-    });
-  });
+  app.post(
+    '/v1/auth/oauth-client/confirm-merge',
+    { preHandler: [confirmMergeGate] },
+    async (req, reply) => {
+      const parsed = ConfirmMergeBodySchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      const result = await deps.service.confirmPendingLink(parsed.data.token, new Date(now()));
+      if (result === null) {
+        throw new BadRequestError('Merge confirmation token is invalid, expired, or already used.');
+      }
+      return reply.code(200).send({
+        outcome: 'merged' as const,
+        account_id: result.accountId,
+        link_id: result.linkId,
+      });
+    },
+  );
 }
 
 // ─── cookie helpers ──────────────────────────────────────────────

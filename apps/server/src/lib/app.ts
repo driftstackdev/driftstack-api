@@ -955,6 +955,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       dashboardOrigin: deps.oauthClient.dashboardOrigin,
       signingSecret: deps.oauthClient.signingSecret,
       authFlows: deps.authFlowsService,
+      // 2026-05-20 — required for IP-gate preHandlers on /start +
+      // /callback + /confirm-merge. Same store the AUTH_IP_LIMITS
+      // gates on auth.ts use.
+      rateLimitStore: deps.rateLimitStore,
       logger: deps.logger,
     });
   }

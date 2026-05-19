@@ -131,4 +131,14 @@ export const AUTH_IP_LIMITS = {
   // signup because we don't create a paying account, and the form is
   // explicitly anonymous (no captcha layer); easier abuse vector.
   statusSubscribe: { capacity: 3, refillPerSecond: 3 / 60 },
+  // 2026-05-20 — OAuth-client flow IP gates (pre-launch blocker per
+  // 2026-05-19 rate-limit audit doc). The /start + /callback +
+  // /confirm-merge surface is unauthenticated by design (the customer
+  // is mid-OAuth-handshake), making account-creation flood the real
+  // risk. 5/min/IP matches the signup posture since the
+  // OAuth-callback success path may MINT a new account on first
+  // /callback for a new IDP identity.
+  oauthClientStart: { capacity: 5, refillPerSecond: 5 / 60 },
+  oauthClientCallback: { capacity: 5, refillPerSecond: 5 / 60 },
+  oauthClientConfirmMerge: { capacity: 5, refillPerSecond: 5 / 60 },
 } as const;
