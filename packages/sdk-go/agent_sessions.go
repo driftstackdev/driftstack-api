@@ -50,6 +50,11 @@ type AgentSession struct {
 	CreatedByUserID       *string `json:"created_by_user_id"`
 	// Arc 2 sub-slice 8.5 (v2-#8) — operational mode.
 	Mode                  string  `json:"mode"`
+	// Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
+	// discriminator. nil when mode != "pair". {kind: "ai-driving" |
+	// "takeover-pending" | ...} when mode == "pair"; see the
+	// agent_pair_mode_state state union for the full set.
+	PairModeState         map[string]any `json:"pair_mode_state"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
 	// LK.4 — auto-populated on POST /v1/agent-sessions when a Mac
@@ -167,6 +172,33 @@ func (r *AgentSessionsResource) Close(ctx context.Context, agentSessionID string
 		method: "DELETE",
 		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID),
 	})
+}
+
+// SetMode sets the agent session's operational mode (Slice 3, Wave
+// 29-NNN ARC 3).
+//
+// Atomic dual-column write of `mode` + `pair_mode_state` on the
+// server. Transitioning INTO "pair" initializes pair_mode_state to
+// {"kind":"ai-driving"}; transitioning OUT clears it to nil.
+// Idempotent — a no-op transition returns the existing row with
+// pair_mode_state preserved.
+//
+// `mode` must be one of "manual", "ai", "pair".
+//
+// Returns 409 ConflictError if the session is not active
+// (closed/paused sessions reject the transition).
+func (r *AgentSessionsResource) SetMode(ctx context.Context, agentSessionID, mode string) (*AgentSession, error) {
+	var out AgentSession
+	req := requestOptions{
+		method: "POST",
+		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/mode",
+		body:   map[string]string{"mode": mode},
+		out:    &out,
+	}
+	if err := r.client.do(ctx, req); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // PairModeStateEnvelope is the response shape for Takeover + Handback.

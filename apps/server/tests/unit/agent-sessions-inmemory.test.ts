@@ -220,6 +220,66 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     );
   });
 
+  it('Slice 3 (Wave 29-NNN ARC 3) setMode: ai → pair sets pair_mode_state to initial state; pair → manual clears it; idempotent same-target preserves state; bumps updatedAt; rejects on unknown id', async () => {
+    let now = new Date('2026-05-19T00:00:00Z');
+    const repo = new InMemoryAgentSessionsRepo(() => now);
+    const rec = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    expect(rec.mode).toBe('ai');
+    expect(rec.pairModeState).toBeNull();
+
+    // ai → pair: initial pair_mode_state.
+    now = new Date('2026-05-19T00:05:00Z');
+    const toPair = await repo.setMode(rec.id, 'pair', { kind: 'ai-driving' });
+    expect(toPair.mode).toBe('pair');
+    expect(toPair.pairModeState).toEqual({ kind: 'ai-driving' });
+    expect(toPair.updatedAt.toISOString()).toBe('2026-05-19T00:05:00.000Z');
+
+    // pair → manual: clears state.
+    now = new Date('2026-05-19T00:10:00Z');
+    const toManual = await repo.setMode(rec.id, 'manual', null);
+    expect(toManual.mode).toBe('manual');
+    expect(toManual.pairModeState).toBeNull();
+    expect(toManual.updatedAt.toISOString()).toBe('2026-05-19T00:10:00.000Z');
+
+    // manual → pair: re-initializes.
+    now = new Date('2026-05-19T00:15:00Z');
+    const reToPair = await repo.setMode(rec.id, 'pair', { kind: 'ai-driving' });
+    expect(reToPair.mode).toBe('pair');
+    expect(reToPair.pairModeState).toEqual({ kind: 'ai-driving' });
+
+    // unknown id rejects.
+    await expect(repo.setMode('agt_inmem_99999999', 'ai', null)).rejects.toThrow(
+      /AgentSession .* not found/,
+    );
+  });
+
+  it('Slice 3 setMode pair → ai: clears non-trivial pair_mode_state (caller controls state argument; a route layer transitioning OUT of pair MUST pass null)', async () => {
+    const repo = new InMemoryAgentSessionsRepo(() => new Date('2026-05-19T00:00:00Z'));
+    const rec = await repo.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100,
+      mode: 'pair',
+    });
+    // Seed mid-takeover state.
+    await repo.setPairModeState(rec.id, {
+      kind: 'takeover-pending',
+      requestedByClientId: 'cli_a',
+      requestedAt: '2026-05-19T00:01:00Z',
+    });
+    // setMode to ai with null state clears.
+    const cleared = await repo.setMode(rec.id, 'ai', null);
+    expect(cleared.mode).toBe('ai');
+    expect(cleared.pairModeState).toBeNull();
+  });
+
+  it('Slice 3 setMode idempotent ai → ai: returns a row with mode unchanged + pair_mode_state echoed', async () => {
+    const repo = new InMemoryAgentSessionsRepo(() => new Date('2026-05-19T00:00:00Z'));
+    const rec = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 100 });
+    const same = await repo.setMode(rec.id, 'ai', null);
+    expect(same.mode).toBe('ai');
+    expect(same.pairModeState).toBeNull();
+  });
+
   it('v2-#19 closeWithReason: sets closedAt to now on first close; re-closing leaves the original closedAt intact (first-close wins)', async () => {
     let now = new Date('2026-05-16T00:00:00Z');
     const repo = new InMemoryAgentSessionsRepo(() => now);

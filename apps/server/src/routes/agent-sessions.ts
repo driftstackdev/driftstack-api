@@ -79,6 +79,11 @@ const RunTurnRequestSchema = z.object({
   user_message: z.string().min(1).max(8000),
 });
 
+// Slice 3 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/mode body.
+const SetModeRequestSchema = z.object({
+  mode: z.enum(['manual', 'ai', 'pair']),
+});
+
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!request.account) throw new Error('account context missing after requireAuth');
   return request.account;
@@ -105,6 +110,12 @@ interface PublicAgentSession {
   created_by_user_id: string | null;
   // Arc 2 sub-slice 8.5 (v2-#8) — operational mode.
   mode: 'manual' | 'ai' | 'pair';
+  // Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
+  // discriminator. NULL when mode != 'pair'; populated with the
+  // initialPairModeState() shape on transition INTO pair mode; the
+  // takeover/handback routes evolve it through the state machine
+  // defined in services/agent-pair-mode-state.ts.
+  pair_mode_state: { kind: string; [k: string]: unknown } | null;
   created_at: string;
   updated_at: string;
   // LK.4 — auto-populated on session-create when a Mac with LiveKit
@@ -140,6 +151,12 @@ function publicAgentSession(
     closed_at: rec.closedAt !== null ? rec.closedAt.toISOString() : null,
     created_by_user_id: rec.createdByUserId,
     mode: rec.mode,
+    pair_mode_state:
+      rec.pairModeState !== null &&
+      typeof rec.pairModeState === 'object' &&
+      'kind' in (rec.pairModeState as Record<string, unknown>)
+        ? (rec.pairModeState as { kind: string; [k: string]: unknown })
+        : null,
     created_at: rec.createdAt.toISOString(),
     updated_at: rec.updatedAt.toISOString(),
   };
@@ -547,6 +564,46 @@ export function registerAgentSessionsRoutes(
       },
     );
   }
+
+  // Slice 3 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/mode.
+  // Top-level mode setter for the AI-chat / manual / pair toggle on
+  // the per-session workbench page. Atomic dual-column write of
+  // `mode` + `pair_mode_state` via sessions.setMode:
+  //   - target 'pair' → pair_mode_state = initialPairModeState()
+  //   - target 'manual' / 'ai' → pair_mode_state = null
+  // Idempotent: a no-op mode transition returns the existing row.
+  // Closed sessions reject with ConflictError. Concurrent /mode calls
+  // serialize at the row-level UPDATE; last writer wins (route layer
+  // doesn't hold the Redis pair-mode lock here — the takeover/handback
+  // routes are the ones that fight over WITHIN-pair state).
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    '/v1/agent-sessions/:id/mode',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const parsed = SetModeRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      const rec = await sessions.get(req.params.id);
+      if (rec === null || rec.accountId !== ctx.account.id) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      if (rec.status !== 'active') {
+        throw new ConflictError(
+          `AgentSession ${req.params.id} is ${rec.status}; mode can only be changed on active sessions.`,
+        );
+      }
+      const target = parsed.data.mode;
+      if (rec.mode === target) {
+        // Idempotent — no-op return preserves pair_mode_state when
+        // the session is already in pair mode mid-takeover.
+        return publicAgentSession(rec);
+      }
+      const nextPairModeState: PairModeState | null =
+        target === 'pair' ? initialPairModeState() : null;
+      const updated = await sessions.setMode(req.params.id, target, nextPairModeState);
+      return publicAgentSession(updated);
+    },
+  );
 
   // Arc 2 sub-slice 8.9 (v2-#8) — pair-mode takeover + handback.
   // Both routes require the pair-mode lock AND mode='pair' on the
@@ -1005,4 +1062,6 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // state.
   app.post('/v1/agent-sessions/:id/takeover', stub);
   app.post('/v1/agent-sessions/:id/handback', stub);
+  // Slice 3 (Wave 29-NNN ARC 3) — POST /:id/mode also gated.
+  app.post('/v1/agent-sessions/:id/mode', stub);
 }

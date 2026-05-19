@@ -121,6 +121,26 @@ class AgentSessionsResource:
         """Close the agent session (idempotent)."""
         self._http.request("DELETE", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}")
 
+    def set_mode(self, agent_session_id: str, mode: str) -> dict[str, Any]:
+        """Slice 3 (Wave 29-NNN ARC 3) — set the session's operational mode.
+
+        Atomic dual-column write of ``mode`` + ``pair_mode_state`` on
+        the server. Transitioning INTO ``'pair'`` initializes
+        ``pair_mode_state`` to ``{"kind": "ai-driving"}``; transitioning
+        OUT clears it to ``None``. Idempotent — a no-op transition
+        returns the existing row with ``pair_mode_state`` preserved.
+
+        ``mode`` must be one of ``"manual"``, ``"ai"``, ``"pair"``.
+
+        Raises ``ConflictError`` (409) if the session is not
+        ``'active'`` (closed/paused sessions reject the transition).
+        """
+        return self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/mode",
+            json_body=coerce_body({"mode": mode}),
+        )
+
     def takeover(self, agent_session_id: str, client_id: str) -> dict[str, Any]:
         """Arc 2 sub-slice 8.9 (v2-#8) — request human takeover on a pair-mode session.
 
@@ -244,6 +264,14 @@ class AsyncAgentSessionsResource:
 
     async def close(self, agent_session_id: str) -> None:
         await self._http.request("DELETE", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}")
+
+    async def set_mode(self, agent_session_id: str, mode: str) -> dict[str, Any]:
+        """Async mirror — same Slice 3 set-mode semantics as sync."""
+        return await self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/mode",
+            json_body=coerce_body({"mode": mode}),
+        )
 
     async def takeover(self, agent_session_id: str, client_id: str) -> dict[str, Any]:
         """Async mirror — same pair-mode takeover semantics as sync."""

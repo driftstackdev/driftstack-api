@@ -164,6 +164,18 @@ export interface AgentSessionsRepo {
   setPairModeState(id: string, state: unknown): Promise<AgentSessionRecord>;
 
   /**
+   * Slice 3 (Wave 29-NNN ARC 3) — top-level operational-mode setter.
+   * Atomic write of `mode` + `pair_mode_state` so the row never
+   * surfaces with `mode='pair'` + `pair_mode_state=NULL` (or
+   * `mode!='pair'` + non-null pair_mode_state). Caller passes the
+   * pair-mode state that should accompany the target mode:
+   *   - `pair`  → `initialPairModeState()` (`{kind:'ai-driving'}`).
+   *   - `manual`/`ai` → `null` (cleared).
+   * Throws when the session is not found.
+   */
+  setMode(id: string, mode: AgentSessionMode, pairModeState: unknown): Promise<AgentSessionRecord>;
+
+  /**
    * Arc 2 sub-slice 8.4 (v2-#8) — write the encrypted
    * gui_control_key blob + its 24h-TTL expiry timestamp. Called by
    * the route layer at first-fetch (auto-mint) or rotation. Pass
@@ -291,6 +303,19 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     const updated: AgentSessionRecord = {
       ...rec,
       pairModeState: state,
+      updatedAt: this.clock(),
+    };
+    this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
+  setMode(id: string, mode: AgentSessionMode, pairModeState: unknown): Promise<AgentSessionRecord> {
+    const rec = this.records.get(id);
+    if (!rec) return Promise.reject(new Error(`AgentSession ${id} not found`));
+    const updated: AgentSessionRecord = {
+      ...rec,
+      mode,
+      pairModeState,
       updatedAt: this.clock(),
     };
     this.records.set(id, updated);

@@ -52,9 +52,19 @@ export interface AgentSession {
   created_by_user_id: string | null;
   /**
    * Arc 2 sub-slice 8.5 (v2-#8) — operational mode chosen at create-
-   * time. Server-side default is 'ai' for backward compat.
+   * time. Server-side default is 'ai' for backward compat. Updated
+   * by POST /v1/agent-sessions/:id/mode (Slice 3, Wave 29-NNN ARC 3).
    */
   mode: 'manual' | 'ai' | 'pair';
+  /**
+   * Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
+   * discriminator. `null` when mode != 'pair'; carries the
+   * `{kind: 'ai-driving' | 'takeover-pending' | ...}` shape (see
+   * services/agent-pair-mode-state.ts for the full state union)
+   * when mode='pair'. Dashboard reads this to decide whether the
+   * customer is mid-takeover.
+   */
+  pair_mode_state: { kind: string; [k: string]: unknown } | null;
   created_at: string;
   updated_at: string;
   /**
@@ -186,6 +196,24 @@ export class AgentSessionsResource {
       ...(opts?.byokApiKey !== undefined && opts.byokApiKey.length > 0
         ? { headers: { 'x-byok-anthropic-api-key': opts.byokApiKey } }
         : {}),
+    });
+  }
+
+  /**
+   * Slice 3 (Wave 29-NNN ARC 3) — set the session's operational
+   * mode. Atomic dual-column write of `mode` + `pair_mode_state`
+   * on the server side; transitioning INTO 'pair' initializes
+   * pair_mode_state to `{kind: 'ai-driving'}`, transitioning OUT
+   * clears it to null. Idempotent — a no-op transition returns the
+   * existing row (pair_mode_state preserved).
+   *
+   * Throws `ConflictError` (409) if the session is not 'active'.
+   */
+  setMode(id: string, mode: 'manual' | 'ai' | 'pair'): Promise<AgentSession> {
+    return this.http.request<AgentSession>({
+      method: 'POST',
+      path: `/v1/agent-sessions/${encodeURIComponent(id)}/mode`,
+      body: { mode },
     });
   }
 

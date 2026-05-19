@@ -47,7 +47,7 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     );
   });
 
-  it('AgentSession interface 15-field surface: id/account_id/driftstack_session_id/status/closed_reason/token_budget_total/token_budget_remaining/transcript_length/closed_at/created_by_user_id/mode/created_at/updated_at/livekit (optional). Drift to dropping a field would break customers reading that field; drift to making livekit required would break pre-LK deployments where the field is absent', () => {
+  it('AgentSession interface 16-field surface: id/account_id/driftstack_session_id/status/closed_reason/token_budget_total/token_budget_remaining/transcript_length/closed_at/created_by_user_id/mode/pair_mode_state/created_at/updated_at/livekit (optional). Drift to dropping a field would break customers reading that field; drift to making livekit required would break pre-LK deployments where the field is absent', () => {
     expect(body).toMatch(/export interface AgentSession \{/);
     expect(body).toMatch(/id: string;/);
     expect(body).toMatch(/account_id: string;/);
@@ -60,6 +60,7 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/closed_at: string \| null;/);
     expect(body).toMatch(/created_by_user_id: string \| null;/);
     expect(body).toMatch(/mode: 'manual' \| 'ai' \| 'pair';/);
+    expect(body).toMatch(/pair_mode_state: \{ kind: string; \[k: string\]: unknown \} \| null;/);
     expect(body).toMatch(/livekit\?: LiveKitInfo;/);
   });
 
@@ -87,7 +88,7 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/kind: 'logged-manual';/);
   });
 
-  it('AgentSessionsResource 6-method surface: create + get + message + close + takeover + handback + livekitToken (7 methods total). Drift to dropping a method would break dashboard + e2e tests that compile against it; drift to changing signature would silently break the wire contract', () => {
+  it('AgentSessionsResource 8-method surface: create + get + message + close + setMode + takeover + handback + livekitToken. Drift to dropping a method would break dashboard + e2e tests that compile against it; drift to changing signature would silently break the wire contract', () => {
     expect(body).toMatch(/export class AgentSessionsResource \{/);
     expect(body).toMatch(/create\(\s*\n?\s*body: CreateAgentSessionRequest = \{\},/);
     expect(body).toMatch(/get\(id: string\): Promise<AgentSession>/);
@@ -95,6 +96,9 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
       /message\(\s*\n?\s*id: string,\s*\n?\s*userMessage: string,\s*\n?\s*opts\?: \{ byokApiKey\?: string \},\s*\n?\s*\): Promise<AgentMessageResponse>/,
     );
     expect(body).toMatch(/close\(id: string\): Promise<void>/);
+    expect(body).toMatch(
+      /setMode\(id: string, mode: 'manual' \| 'ai' \| 'pair'\): Promise<AgentSession>/,
+    );
     expect(body).toMatch(/takeover\(\s*\n?\s*id: string,\s*\n?\s*clientId: string,\s*\n?\s*\)/);
     expect(body).toMatch(/handback\(id: string\)/);
     expect(body).toMatch(/livekitToken\(id: string\): Promise<LiveKitInfo>/);
@@ -142,9 +146,10 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     );
   });
 
-  it('HTTP path-segment encodeURIComponent pinned on all id-bearing routes (get/message/close/takeover/handback/livekitToken). Drift to dropping encodeURIComponent would break customers whose session ids contain reserved URI chars (rare but real — esp. on legacy ids before the prefix-normalization)', () => {
+  it('HTTP path-segment encodeURIComponent pinned on all id-bearing routes (get/message/close/setMode/takeover/handback/livekitToken). Drift to dropping encodeURIComponent would break customers whose session ids contain reserved URI chars (rare but real — esp. on legacy ids before the prefix-normalization)', () => {
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}`/);
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/message`/);
+    expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/mode`/);
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/takeover`/);
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/handback`/);
     expect(body).toMatch(/`\/v1\/agent-sessions\/\$\{encodeURIComponent\(id\)\}\/livekit-token`/);

@@ -90,6 +90,18 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     expect(res.statusCode).toBe(503);
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
   });
+
+  it('Slice 3 (Wave 29-NNN ARC 3) POST /v1/agent-sessions/:id/mode → 503 FeatureUnavailable when runtime not wired', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions/agt_xxx/mode',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair' },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
+  });
 });
 
 describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
@@ -537,6 +549,125 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
       payload: { mode: 'autopilot' },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('Slice 3 (Wave 29-NNN ARC 3) POST /:id/mode ai → pair → manual round-trip; pair_mode_state surfaces on GET; idempotent same-mode call preserves state', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(create.statusCode).toBe(201);
+    const created = create.json<{
+      id: string;
+      mode: string;
+      pair_mode_state: { kind: string } | null;
+    }>();
+    expect(created.mode).toBe('ai');
+    expect(created.pair_mode_state).toBeNull();
+
+    // ai → pair
+    const toPair = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${created.id}/mode`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair' },
+    });
+    expect(toPair.statusCode).toBe(200);
+    const pairBody = toPair.json<{ mode: string; pair_mode_state: { kind: string } | null }>();
+    expect(pairBody.mode).toBe('pair');
+    expect(pairBody.pair_mode_state).toEqual({ kind: 'ai-driving' });
+
+    // GET round-trips the new mode + pair_mode_state.
+    const read = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${created.id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(read.statusCode).toBe(200);
+    const readBody = read.json<{ mode: string; pair_mode_state: { kind: string } | null }>();
+    expect(readBody.mode).toBe('pair');
+    expect(readBody.pair_mode_state).toEqual({ kind: 'ai-driving' });
+
+    // idempotent pair → pair (same target).
+    const idem = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${created.id}/mode`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair' },
+    });
+    expect(idem.statusCode).toBe(200);
+    const idemBody = idem.json<{ mode: string; pair_mode_state: { kind: string } | null }>();
+    expect(idemBody.mode).toBe('pair');
+    // Idempotent path preserves whatever pair_mode_state the row had — here, still ai-driving.
+    expect(idemBody.pair_mode_state).toEqual({ kind: 'ai-driving' });
+
+    // pair → manual: clears state.
+    const toManual = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${created.id}/mode`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'manual' },
+    });
+    expect(toManual.statusCode).toBe(200);
+    const manualBody = toManual.json<{ mode: string; pair_mode_state: { kind: string } | null }>();
+    expect(manualBody.mode).toBe('manual');
+    expect(manualBody.pair_mode_state).toBeNull();
+  });
+
+  it('Slice 3 POST /:id/mode invalid body returns 400 ValidationError', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/mode`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'autopilot' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.ValidationFailed);
+  });
+
+  it('Slice 3 POST /:id/mode on a closed session returns 409 Conflict (mode can only change while active)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const id = create.json<{ id: string }>().id;
+    await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/mode`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair' },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it('Slice 3 POST /:id/mode on never-existed id returns 404 (cross-account guard rejects before setMode)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions/agt_inmem_99999999/mode',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { mode: 'pair' },
+    });
+    expect(res.statusCode).toBe(404);
   });
 
   it('v2-#19 closed_at: NULL while active; ISO timestamp set on DELETE → close', async () => {

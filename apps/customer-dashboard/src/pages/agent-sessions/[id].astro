@@ -173,14 +173,10 @@ const apiBaseUrl = resolveApiBaseUrl();
   </div>
 
   <script is:inline define:vars={{ apiBaseUrl, sessionId: id }}>
-    // Slice 2 SCAFFOLD client logic. Real wiring lands in Slices 3-6.
-    //
-    // What's here:
-    //   - Mode toggle UI state (client-only). POST /v1/agent-sessions/
-    //     :id/mode lands in Slice 3.
-    //   - Composer disabled-when-mode='manual' toggle.
-    //   - Status-pill swap.
-    //   - Cmd-Enter to submit (no-op until Slice 4 wires the POST).
+    // Slice 3 (Wave 29-NNN ARC 3) — hydrates initial mode from
+    // GET /v1/agent-sessions/:id on mount; POST /v1/agent-sessions/
+    // :id/mode on toggle. Slices 4-6 wire transcript SSE + composer
+    // POST + overlay input-event submit.
 
     const root = document.querySelector('[data-page="agent-session-workbench"]');
     if (!root) throw new Error('agent-session workbench root missing');
@@ -195,6 +191,13 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     /** @type {'manual'|'ai'|'pair'} */
     let mode = 'ai';
+    /** @type {{kind: string, [k: string]: unknown} | null} */
+    let pairModeState = null;
+
+    function authHeaders() {
+      const token = localStorage.getItem('ds_web_session_token');
+      return token ? { Authorization: 'Bearer ' + token } : {};
+    }
 
     function paintMode() {
       for (const btn of modeButtons) {
@@ -227,13 +230,79 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
     }
 
+    function paintError(detail) {
+      if (statusPill) {
+        statusPill.textContent = 'OFFLINE';
+        statusPill.className = 'text-xs px-2 py-1 rounded bg-red-900 text-red-200';
+        statusPill.title = detail;
+      }
+      for (const btn of modeButtons) {
+        btn.disabled = true;
+      }
+      if (composerTextarea) composerTextarea.disabled = true;
+      if (composerSubmit) composerSubmit.disabled = true;
+    }
+
+    async function hydrateFromServer() {
+      try {
+        const res = await fetch(apiBaseUrl + '/v1/agent-sessions/' + encodeURIComponent(sessionId), {
+          headers: { ...authHeaders() },
+        });
+        if (!res.ok) {
+          paintError('GET /v1/agent-sessions/' + sessionId + ' returned ' + res.status.toString());
+          return;
+        }
+        const body = await res.json();
+        if (body && (body.mode === 'manual' || body.mode === 'ai' || body.mode === 'pair')) {
+          mode = body.mode;
+        }
+        pairModeState =
+          body && body.pair_mode_state && typeof body.pair_mode_state.kind === 'string'
+            ? body.pair_mode_state
+            : null;
+        paintMode();
+      } catch (err) {
+        paintError(err instanceof Error ? err.message : String(err));
+      }
+    }
+
+    async function postMode(next) {
+      const previousMode = mode;
+      mode = next;
+      paintMode();
+      try {
+        const res = await fetch(
+          apiBaseUrl + '/v1/agent-sessions/' + encodeURIComponent(sessionId) + '/mode',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ mode: next }),
+          },
+        );
+        if (!res.ok) {
+          // Roll back optimistic paint.
+          mode = previousMode;
+          paintMode();
+          paintError('POST /mode returned ' + res.status.toString());
+          return;
+        }
+        const body = await res.json();
+        pairModeState =
+          body && body.pair_mode_state && typeof body.pair_mode_state.kind === 'string'
+            ? body.pair_mode_state
+            : null;
+      } catch (err) {
+        mode = previousMode;
+        paintMode();
+        paintError(err instanceof Error ? err.message : String(err));
+      }
+    }
+
     for (const btn of modeButtons) {
       btn.addEventListener('click', () => {
         const next = btn.getAttribute('data-mode');
-        if (next === 'manual' || next === 'ai' || next === 'pair') {
-          mode = next;
-          paintMode();
-          // Slice 3 will POST /v1/agent-sessions/:id/mode here.
+        if ((next === 'manual' || next === 'ai' || next === 'pair') && next !== mode) {
+          void postMode(next);
         }
       });
     }
@@ -259,8 +328,6 @@ const apiBaseUrl = resolveApiBaseUrl();
     });
 
     paintMode();
-    // Slice 3 hydrates the initial mode from GET /v1/agent-sessions/:id
-    // (server-side render path lands then so the toggle reflects the
-    // canonical pair_mode_state.mode without a flash).
+    void hydrateFromServer();
   </script>
 </DashboardLayout>

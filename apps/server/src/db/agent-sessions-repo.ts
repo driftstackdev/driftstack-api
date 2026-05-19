@@ -217,6 +217,29 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     return rowToRecord(row);
   }
 
+  async setMode(
+    id: string,
+    mode: 'manual' | 'ai' | 'pair',
+    pairModeState: unknown,
+  ): Promise<AgentSessionRecord> {
+    // Slice 3 — atomic dual-column write. Single UPDATE statement
+    // means concurrent /mode calls serialize at the row level; the
+    // last writer wins. The route layer guards against the lossy
+    // "interleave with mid-flight takeover" case by inspecting
+    // pair_mode_state before issuing the transition.
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({ mode, pairModeState, updatedAt: now })
+      .where(eq(agentSessions.id, id))
+      .returning();
+    const row = updated[0];
+    if (!row) {
+      throw new Error(`AgentSession ${id} not found`);
+    }
+    return rowToRecord(row);
+  }
+
   async findByIdempotencyKey(
     accountId: string,
     idempotencyKey: string,
