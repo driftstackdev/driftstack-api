@@ -232,6 +232,27 @@ export async function createProductionDeps(
   const authCache = new RedisAuthCache(redis, logger);
   const authCoalescer = new AuthCoalescer();
 
+  // 2026-05-19 — staff-emails allowlist. Web-session auth bumps
+  // these accounts with `driftstack_internal_admin` scope so the
+  // dashboard user can hit /v1/admin/*. Parsed once at boot;
+  // rotation requires a server restart. Set DRIFTSTACK_STAFF_EMAILS
+  // to a comma-separated list (whitespace + case normalized).
+  const staffEmailsRaw = process.env.DRIFTSTACK_STAFF_EMAILS;
+  const staffEmails: ReadonlySet<string> = staffEmailsRaw
+    ? new Set(
+        staffEmailsRaw
+          .split(',')
+          .map((s) => s.trim().toLowerCase())
+          .filter((s) => s.length > 0),
+      )
+    : new Set();
+  if (staffEmails.size > 0) {
+    logger.info(
+      { component: 'auth', count: staffEmails.size },
+      'staff-emails allowlist wired (account email match → admin scope on web session)',
+    );
+  }
+
   // Rate limit store.
   const rateLimitStore = new RedisRateLimitStore(redis);
 
@@ -917,6 +938,7 @@ export async function createProductionDeps(
     authRepo,
     authCache,
     authCoalescer,
+    ...(staffEmails.size > 0 ? { staffEmails } : {}),
     rateLimitStore,
     sessionsService,
     apiKeysService,

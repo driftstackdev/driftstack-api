@@ -57,6 +57,14 @@ export interface AuthPluginOptions {
    *  Outcome is one of: ok | unauthorized | invalid | revoked |
    *  expired | forbidden | error. Bounded label cardinality. */
   metrics?: MetricsRegistry;
+  /**
+   * 2026-05-19 — lowercased email allowlist for the staff bump on
+   * the web-session auth path. Accounts in this set get
+   * `driftstack_internal_admin` appended to the synthetic api-key
+   * scope set so the dashboard user can hit /v1/admin/*. Empty set
+   * (default) → no bump.
+   */
+  staffEmails?: ReadonlySet<string>;
 }
 
 /** Map a thrown auth error to a bounded outcome label. */
@@ -88,6 +96,7 @@ function authPlugin(
         opts.authCache,
         new Date(),
         opts.authCoalescer,
+        opts.staffEmails ?? new Set(),
       );
       request.account = ctx;
       try {

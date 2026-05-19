@@ -214,6 +214,18 @@ export async function authenticate(
   cache: AuthCache | null = null,
   now: Date = new Date(),
   coalescer: AuthCoalescer | null = null,
+  /**
+   * 2026-05-19 — when a web-session resolves to an account whose
+   * email is in this set, the synthetic ApiKeyRow's scopes get
+   * `driftstack_internal_admin` appended. Lets a small operation
+   * keep staff identity coupled to the same dashboard auth flow
+   * customers use (no separate staff-only credential to lose track
+   * of). Empty set or undefined → no staff bump (default).
+   *
+   * Lowercase comparison; the bootstrap parser lowercases entries.
+   * NEVER reads the plaintext — only the resolved account email.
+   */
+  staffEmails: ReadonlySet<string> = new Set(),
 ): Promise<AccountContext> {
   if (plaintext.length < 24) throw new InvalidKeyError();
 
@@ -252,7 +264,7 @@ export async function authenticate(
   const slowPath = async (): Promise<AccountContext> =>
     isApiKeyShape(plaintext)
       ? slowPathApiKey(repo, plaintext, sha, cache, now)
-      : slowPathWebSession(repo, plaintext, sha, cache, now);
+      : slowPathWebSession(repo, plaintext, sha, cache, now, staffEmails);
 
   if (coalescer) return coalescer.coalesce(sha, slowPath);
   return slowPath();
@@ -365,6 +377,7 @@ async function slowPathWebSession(
   sha: string,
   cache: AuthCache | null,
   now: Date,
+  staffEmails: ReadonlySet<string>,
 ): Promise<AccountContext> {
   const session = await repo.findActiveWebSession({ tokenHash: sha, now });
   // findActiveWebSession already filters expired + revoked rows in the
@@ -408,13 +421,28 @@ async function slowPathWebSession(
   // — that's gated separately for Driftstack-staff-only operations.
   // Pre-V-174 this synthetic key carried 'admin' scope which conflated
   // both; V-174 closes the cross-account `/v1/admin/*` exposure.
+  // 2026-05-19 — staff bump. If the resolved account's email is in
+  // the DRIFTSTACK_STAFF_EMAILS allowlist (parsed from env at boot,
+  // threaded in via authenticate()'s staffEmails param), the
+  // synthetic key gets `driftstack_internal_admin` appended so the
+  // dashboard user can hit /v1/admin/* without minting a separate
+  // staff-only API key. This is intentionally narrow: it ONLY
+  // applies to web-session auth (NOT api-key auth), and the
+  // allowlist is set-once at bootstrap so a rotation requires a
+  // server restart. Staff identity stays coupled to the same login
+  // flow customers use.
+  const baseScopes: ApiKeyRow['scopes'] = ['read', 'write', 'account_owner'];
+  const accountEmail = account.email.toLowerCase();
+  const scopes: ApiKeyRow['scopes'] = staffEmails.has(accountEmail)
+    ? [...baseScopes, 'driftstack_internal_admin']
+    : baseScopes;
   const syntheticKey: ApiKeyRow = {
     id: `wsk_${session.id}`,
     accountId: session.accountId,
     name: 'web-session',
     keyPrefix: 'web_session',
     keyHash: '', // never read for web sessions; defensive empty string
-    scopes: ['read', 'write', 'account_owner'],
+    scopes,
     lastUsedAt: session.lastUsedAt,
     revokedAt: session.revokedAt,
     expiresAt: session.expiresAt,

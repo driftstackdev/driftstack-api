@@ -454,6 +454,15 @@ export interface AppDeps {
    */
   mfaService?: MfaService;
   /**
+   * 2026-05-19 — lowercased email allowlist for staff bump on the
+   * web-session auth path. Accounts in this set get
+   * `driftstack_internal_admin` appended to the synthetic api-key
+   * scope set. Sourced from DRIFTSTACK_STAFF_EMAILS env var at
+   * bootstrap (comma-separated; whitespace + case normalized).
+   * Empty / undefined → no bump.
+   */
+  staffEmails?: ReadonlySet<string>;
+  /**
    * AI-CHAT BYOK Anthropic — per-customer key storage service.
    * Activation-gate: present when MFA_ENCRYPTION_KEY env var is
    * configured (the BYOK store reuses the MFA encryption key per
@@ -640,6 +649,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // V-353e — step-up gate consults MFA enrollment state; null when
     // MFA is disabled in this deploy (gate becomes a no-op).
     mfaService: deps.mfaService ?? null,
+    // 2026-05-19 — staff-emails allowlist. Web-session auth bumps
+    // these accounts with `driftstack_internal_admin` scope. Empty
+    // set when undefined (default; no bump). See deps.staffEmails
+    // sourcing at bootstrap time.
+    ...(deps.staffEmails !== undefined ? { staffEmails: deps.staffEmails } : {}),
     ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
   });
   await app.register(rateLimitPlugin, {
