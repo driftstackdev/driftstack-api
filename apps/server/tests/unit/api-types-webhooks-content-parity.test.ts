@@ -58,7 +58,7 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
       /\*\s*V-356 — events the customer is allowed to subscribe to\. Excludes\s*\n?\s*\*\s*`test\.ping`, which is only ever emitted via the explicit test\s*\n?\s*\*\s*endpoint \(subscribing to it would be meaningless — the test\s*\n?\s*\*\s*endpoint dispatches regardless of subscription\)\./,
     );
     expect(body).toMatch(
-      /export const SubscribableWebhookEventTypeSchema = z\.enum\(\[\s*\n?\s*'session\.completed',\s*\n?\s*'session\.failed',\s*\n?\s*'quota\.warning_80pct',\s*\n?\s*'quota\.exceeded',\s*\n?\s*'api_key\.revoked',\s*\n?\s*\]\);/,
+      /export const SubscribableWebhookEventTypeSchema = z\.enum\(\[\s*\n?\s*'session\.completed',\s*\n?\s*'session\.failed',\s*\n?\s*'quota\.warning_80pct',\s*\n?\s*'quota\.exceeded',\s*\n?\s*'api_key\.revoked',\s*\n?\s*\/\/ Arc 5 EGRESS eg\.7[\s\S]*?'session\.egress_capability_changed',\s*\n?\s*\]\);/,
     );
   });
 
@@ -123,9 +123,13 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
     );
   });
 
-  it('ListDeliveriesQuery: limit coerced int 1..100 default 50 + optional cursor + optional status filter; exports both schema-output and z.input types', () => {
+  it('ListDeliveriesQuery: limit coerced int 1..100 default 50 + optional cursor (min-1 max-512 per slice 149) + optional status filter; exports both schema-output and z.input types', () => {
+    // Slice 149 added .min(1).max(512) to cursor for defensive cap
+    // matching the PaginationQuerySchema cap (slice 148). This
+    // schema doesn't extend the base shape (carries its own status
+    // filter), so the cap is duplicated explicitly here.
     expect(body).toMatch(
-      /export const ListDeliveriesQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n?\s*cursor: z\.string\(\)\.optional\(\),\s*\n?\s*status: WebhookDeliveryStatusSchema\.optional\(\),\s*\n?\s*\}\);/,
+      /export const ListDeliveriesQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n?\s*\/\/ Slice 149[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*status: WebhookDeliveryStatusSchema\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /export type ListDeliveriesQuery = z\.infer<typeof ListDeliveriesQuerySchema>;/,

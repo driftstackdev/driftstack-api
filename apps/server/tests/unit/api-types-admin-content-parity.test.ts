@@ -108,15 +108,15 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
     expect(body).toMatch(/export const AdminAccountResponseSchema = AccountSchema;/);
   });
 
-  it('SetQuotaOverride: bucket_key enum (global|sessions:create) + capacity int 1..1M + refill_per_second 0.01..100k + duration_seconds int 1..30d + reason optional', () => {
+  it('SetQuotaOverride: bucket_key enum (global|sessions:create|agent_sessions:message) + capacity int 1..1M + refill_per_second 0.01..100k + duration_seconds int 1..30d + reason optional', () => {
     expect(body).toMatch(
-      /export const SetQuotaOverrideRequestSchema = z\.object\(\{\s*\n?\s*bucket_key: z\.enum\(\['global', 'sessions:create'\]\),\s*\n?\s*capacity: z\.number\(\)\.int\(\)\.min\(1\)\.max\(1_000_000\),\s*\n?\s*refill_per_second: z\.number\(\)\.min\(0\.01\)\.max\(100_000\),\s*\n?\s*duration_seconds: z\s*\n?\s*\.number\(\)\s*\n?\s*\.int\(\)\s*\n?\s*\.min\(1\)\s*\n?\s*\.max\(86_400 \* 30\), \/\/ up to 30 days\s*\n?\s*reason: z\.string\(\)\.max\(500\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const SetQuotaOverrideRequestSchema = z\.object\(\{\s*\n?\s*bucket_key: z\.enum\(\['global', 'sessions:create', 'agent_sessions:message'\]\),\s*\n?\s*capacity: z\.number\(\)\.int\(\)\.min\(1\)\.max\(1_000_000\),\s*\n?\s*refill_per_second: z\.number\(\)\.min\(0\.01\)\.max\(100_000\),\s*\n?\s*duration_seconds: z\s*\n?\s*\.number\(\)\s*\n?\s*\.int\(\)\s*\n?\s*\.min\(1\)\s*\n?\s*\.max\(86_400 \* 30\), \/\/ up to 30 days\s*\n?\s*reason: z\.string\(\)\.max\(500\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 
-  it('ClearQuotaOverrideQuery: bucket_key enum only; QuotaOverrideResponse: account_id + bucket_key + capacity + refill_per_second + reason nullable + 3 timestamps', () => {
+  it('ClearQuotaOverrideQuery: bucket_key enum only (3 keys); QuotaOverrideResponse: account_id + bucket_key + capacity + refill_per_second + reason nullable + 3 timestamps', () => {
     expect(body).toMatch(
-      /export const ClearQuotaOverrideQuerySchema = z\.object\(\{\s*\n?\s*bucket_key: z\.enum\(\['global', 'sessions:create'\]\),\s*\n?\s*\}\);/,
+      /export const ClearQuotaOverrideQuerySchema = z\.object\(\{\s*\n?\s*bucket_key: z\.enum\(\['global', 'sessions:create', 'agent_sessions:message'\]\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /export const QuotaOverrideResponseSchema = z\.object\(\{\s*\n?\s*account_id: z\.string\(\),\s*\n?\s*bucket_key: z\.string\(\),\s*\n?\s*capacity: z\.number\(\)\.int\(\),\s*\n?\s*refill_per_second: z\.number\(\),\s*\n?\s*reason: z\.string\(\)\.nullable\(\),\s*\n?\s*expires_at: Iso8601Schema,\s*\n?\s*created_at: Iso8601Schema,\s*\n?\s*updated_at: Iso8601Schema,\s*\n?\s*\}\);/,

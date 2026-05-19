@@ -51,9 +51,9 @@ describe('W415.C apps/server/src/routes/admin-rate-limit-overrides.ts content pa
     );
   });
 
-  it("ListAdminOverridesQuerySchema: limit coerce 1..100 default 50 + optional cursor + optional account_id + include_expired zod enum 'true'|'false'", () => {
+  it("ListAdminOverridesQuerySchema: limit coerce 1..100 default 50 + cursor min-1 max-512 optional (slice 149 cap) + optional account_id + include_expired zod enum 'true'|'false'", () => {
     expect(body).toMatch(
-      /const ListAdminOverridesQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n?\s*cursor: z\.string\(\)\.optional\(\),\s*\n?\s*account_id: z\.string\(\)\.optional\(\),\s*\n?\s*include_expired: z\.enum\(\['true', 'false'\]\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const ListAdminOverridesQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n?\s*\/\/ Slice 146[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*\n?\s*include_expired: z\.enum\(\['true', 'false'\]\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 

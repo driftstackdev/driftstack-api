@@ -346,7 +346,7 @@ export type ExportAccountAuditLogResponse = z.infer<typeof ExportAccountAuditLog
 // ───────────────────────────────────────────────────────────────────────────
 
 export const RateLimitBucketSchema = z.object({
-  bucket_key: z.enum(['global', 'sessions:create']),
+  bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']),
   capacity: z.number().int().positive(),
   refill_per_second: z.number().positive(),
   /**

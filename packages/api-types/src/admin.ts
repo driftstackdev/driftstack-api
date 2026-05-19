@@ -119,7 +119,7 @@ export type AdminAccountResponse = z.infer<typeof AdminAccountResponseSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 export const SetQuotaOverrideRequestSchema = z.object({
-  bucket_key: z.enum(['global', 'sessions:create']),
+  bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']),
   capacity: z.number().int().min(1).max(1_000_000),
   refill_per_second: z.number().min(0.01).max(100_000),
   duration_seconds: z
@@ -132,7 +132,7 @@ export const SetQuotaOverrideRequestSchema = z.object({
 export type SetQuotaOverrideRequest = z.infer<typeof SetQuotaOverrideRequestSchema>;
 
 export const ClearQuotaOverrideQuerySchema = z.object({
-  bucket_key: z.enum(['global', 'sessions:create']),
+  bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']),
 });
 export type ClearQuotaOverrideQuery = z.infer<typeof ClearQuotaOverrideQuerySchema>;
 

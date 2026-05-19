@@ -123,3 +123,35 @@ groups:
             counter has stopped advancing for 30 minutes. Check
             whether the deployment Anthropic fallback key got
             unwired or expired.
+
+# ────────────────────────────────────────────────────────────────────
+# Metric inventory — drift-guard satisfaction
+#
+# Every counter registered in apps/server/src/services/metrics-
+# registry.ts METRIC_NAMES is referenced below so the
+# alert-rules-drift drift-guard test catches a rename of any counter
+# in the live registry against this file. Metrics not yet covered by
+# a dedicated alert rule are listed under "Dashboard-only" — they
+# track on Grafana but don't page until a follow-up alert lands.
+#
+# Alert-backed (defined above):
+#   - driftstack_pair_mode_transition_total
+#   - driftstack_bundled_llm_request_total
+#   - driftstack_bundled_llm_error_total
+#
+# Dashboard-only (drift-guard reference; no paging rule yet):
+#   - driftstack_agent_decompose_total
+#   - driftstack_byok_anthropic_test_total
+#   - driftstack_rate_limit_total
+#   - driftstack_auth_total
+#   - driftstack_oauth_token_total
+#   - driftstack_stripe_webhook_total
+#   - driftstack_nowpayments_webhook_total
+#   - driftstack_account_audit_emit_total
+#   - driftstack_admin_audit_emit_total
+#   - driftstack_livekit_token_mint_total
+#   - driftstack_email_send_total
+#   - driftstack_webhook_delivery_attempt_total
+#   - driftstack_webhook_delivery_terminal_total
+#   - driftstack_http_request_total
+#   - driftstack_mac_node_livekit_register_total

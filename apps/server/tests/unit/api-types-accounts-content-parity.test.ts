@@ -174,8 +174,10 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ V-484 — additional filters\. ISO 8601 dates for from\/to \(inclusive\)\.\s*\n?\s*\/\/ Coerced from query strings; Zod's coerce\.date\(\) handles\s*\n?\s*\/\/ YYYY-MM-DD and full ISO 8601 timestamps\./,
     );
+    // Slice 149 added `.min(1).max(512)` to cursor (same defensive
+    // cap pattern as PaginationQuerySchema in common.ts).
     expect(body).toMatch(
-      /export const ListAccountAuditLogQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\)\.default\(50\),\s*\n?\s*cursor: z\.string\(\)\.optional\(\),\s*\n?\s*action: AccountAuditActionSchema\.optional\(\),/,
+      /export const ListAccountAuditLogQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\)\.default\(50\),\s*\n?\s*\/\/ Slice 149[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*action: AccountAuditActionSchema\.optional\(\),/,
     );
     expect(body).toMatch(
       /from: z\.coerce\.date\(\)\.optional\(\),\s*\n?\s*to: z\.coerce\.date\(\)\.optional\(\),/,
@@ -205,10 +207,10 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
     );
   });
 
-  it('V-219 RateLimitBucket: bucket_key enum (global|sessions:create) + capacity positive int + refill_per_second positive + source enum (tier_default|override) + override_expires_at nullable; GetAccountRateLimitsResponse: tier + buckets', () => {
+  it('V-219 RateLimitBucket: bucket_key enum (global|sessions:create|agent_sessions:message) + capacity positive int + refill_per_second positive + source enum (tier_default|override) + override_expires_at nullable; GetAccountRateLimitsResponse: tier + buckets', () => {
     expect(body).toMatch(/\/\/ V-219 — customer-facing rate-limit view/);
     expect(body).toMatch(
-      /export const RateLimitBucketSchema = z\.object\(\{\s*\n?\s*bucket_key: z\.enum\(\['global', 'sessions:create'\]\),\s*\n?\s*capacity: z\.number\(\)\.int\(\)\.positive\(\),\s*\n?\s*refill_per_second: z\.number\(\)\.positive\(\),/,
+      /export const RateLimitBucketSchema = z\.object\(\{\s*\n?\s*bucket_key: z\.enum\(\['global', 'sessions:create', 'agent_sessions:message'\]\),\s*\n?\s*capacity: z\.number\(\)\.int\(\)\.positive\(\),\s*\n?\s*refill_per_second: z\.number\(\)\.positive\(\),/,
     );
     expect(body).toMatch(
       /\*\s*`'tier_default'` when the value comes from the locked tier table;\s*\n?\s*\*\s*`'override'` when an admin-set override is currently in effect\./,

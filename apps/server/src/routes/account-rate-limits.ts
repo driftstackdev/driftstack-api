@@ -6,7 +6,7 @@
 import type { FastifyInstance } from 'fastify';
 import { TIER_RATE_LIMIT_DEFAULTS } from '@driftstack/api-types';
 
-const BUCKET_KEYS = ['global', 'sessions:create'] as const;
+const BUCKET_KEYS = ['global', 'sessions:create', 'agent_sessions:message'] as const;
 type BucketKey = (typeof BUCKET_KEYS)[number];
 
 export function registerAccountRateLimitsRoutes(app: FastifyInstance): void {

@@ -42,7 +42,7 @@ describe('W432.A packages/api-types/src/index.ts content parity', () => {
     );
   });
 
-  it('15-module barrel pinned (common + problem + sessions + api-keys + accounts + usage + webhooks + admin + auth + cli-authorize + incidents + profiles + billing + crypto-orders + egress). EG-API-1.1 added egress per planning 133.', () => {
+  it('16-module barrel pinned (common + problem + sessions + api-keys + accounts + usage + webhooks + admin + auth + cli-authorize + incidents + profiles + billing + crypto-orders + egress + livekit). EG-API-1.1 added egress; v2-#7 added livekit per agent-sessions live-stream signaling.', () => {
     for (const mod of [
       'common',
       'problem',
@@ -59,15 +59,16 @@ describe('W432.A packages/api-types/src/index.ts content parity', () => {
       'billing',
       'crypto-orders',
       'egress',
+      'livekit',
     ] as const) {
       expect(body).toMatch(new RegExp(`export \\* from '\\.\\/${mod}\\.js';`));
     }
   });
 
-  it('Barrel is re-exports only (no inline declarations); 15 export-star lines (one per module)', () => {
+  it('Barrel is re-exports only (no inline declarations); 16 export-star lines (one per module)', () => {
     const exportStarMatches = body.match(/^export \* from '\.\/[a-z-]+\.js';$/gm);
     expect(exportStarMatches).not.toBeNull();
-    expect((exportStarMatches ?? []).length).toBe(15);
+    expect((exportStarMatches ?? []).length).toBe(16);
   });
 
   it('file exists at canonical path', () => {

@@ -49,8 +49,10 @@ describe('W1028 routes/admin-rate-limit-overrides cross-source invariant', () =>
     expect(p).toMatch(
       /limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),/,
     );
-    expect(p).toMatch(/cursor: z\.string\(\)\.optional\(\),/);
-    expect(p).toMatch(/account_id: z\.string\(\)\.optional\(\),/);
+    // Slice 149 added .min(1).max(512) cap to cursor (matches the
+    // PaginationQuerySchema cap pattern across all list routes).
+    expect(p).toMatch(/cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),/);
+    expect(p).toMatch(/account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),/);
     expect(p).toMatch(/include_expired: z\.enum\(\['true', 'false'\]\)\.optional\(\),/);
   });
 

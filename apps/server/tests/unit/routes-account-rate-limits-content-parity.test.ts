@@ -6,7 +6,8 @@
 //
 //   • V-219 framing pinned: customer-facing view; effective config
 //     per bucket; tier default OR currently-active admin override.
-//   • Buckets allowlist: `as const` 2-tuple ['global', 'sessions:create'].
+//   • Buckets allowlist: `as const` 3-tuple ['global', 'sessions:create',
+//     'agent_sessions:message'] — v2-#8 sub-slice 8.20 isolated bucket.
 //   • BucketKey type: typeof BUCKET_KEYS[number].
 //   • Auth posture: requireAuth + global rate-limit gate.
 //   • TIER_RATE_LIMIT_DEFAULTS sourced from @driftstack/api-types
@@ -42,8 +43,10 @@ describe('W413.A apps/server/src/routes/account-rate-limits.ts content parity', 
     );
   });
 
-  it("BUCKET_KEYS: as const 2-tuple ['global', 'sessions:create'] + BucketKey = typeof[number]", () => {
-    expect(body).toMatch(/const BUCKET_KEYS = \['global', 'sessions:create'\] as const;/);
+  it("BUCKET_KEYS: as const 3-tuple ['global', 'sessions:create', 'agent_sessions:message'] + BucketKey = typeof[number]", () => {
+    expect(body).toMatch(
+      /const BUCKET_KEYS = \['global', 'sessions:create', 'agent_sessions:message'\] as const;/,
+    );
     expect(body).toMatch(/type BucketKey = \(typeof BUCKET_KEYS\)\[number\];/);
   });
 
