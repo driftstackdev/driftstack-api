@@ -101,6 +101,13 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     expect(p).toMatch(/escapeHtml\(fmtIsoDay\(e\.rotation_grace_expires_at\)\)/);
   });
 
+  it("Slice 137 — last_success_at inline on the endpoint metadata line. /v1/webhooks already returns last_success_at; surfacing it answers 'is my webhook working?' without drilling into deliveries. Null = no successful delivery recorded yet (new endpoint OR always-failing); the segment is conditionally omitted in that case rather than rendering an ambiguous '—'.", () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/e\.last_success_at/);
+    expect(p).toMatch(/' · last success ' \+ escapeHtml\(fmtIsoDay\(e\.last_success_at\)\)/);
+  });
+
   it("CRITICAL rotate-confirm 24h grace prompt pinned — 'The new secret is shown ONCE. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries.' Drift to omitting would let customers fear rotation breaks their integration.", () => {
     const p = read(PAGE);
 
