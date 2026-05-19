@@ -35,7 +35,7 @@ function read(p: string): string {
 describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip('V-216 + V-297 + V-354 framing pinned: V-216 customer-facing audit log + V-297 added export (CSV / JSON) for GDPR Article 20 portability + V-354 filter dropdown + load-more pagination — pinned so the GDPR Article 20 reference + the export/filter feature provenance all stay explicit (drift to dropping Article 20 reference would break compliance documentation traceability)', () => {
+  it('V-216 + V-297 + V-354 framing pinned: V-216 customer-facing audit log + V-297 added export (CSV / JSON) for GDPR Article 20 portability + V-354 filter dropdown + load-more pagination — pinned so the GDPR Article 20 reference + the export/filter feature provenance all stay explicit (drift to dropping Article 20 reference would break compliance documentation traceability). Re-enabled by slice 159 after verifying all 3 V-NNN comments still exist at audit-log.astro:4-6', () => {
     expect(body).toMatch(/\/\/ V-216 — customer-facing audit log\./);
     expect(body).toMatch(
       /\/\/ V-297 — added export \(CSV \/ JSON\) for GDPR Article 20 portability\./,
@@ -43,7 +43,7 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
     expect(body).toMatch(/\/\/ V-354 — filter dropdown \+ load-more pagination\./);
   });
 
-  it.skip("ACTION_LABEL map: covers account (5 entries) + V-398/V-353b MFA (3 entries: mfa_enrolled/mfa_disabled/recovery_code_used) + api_key (3 entries) + session (2) + profile (4 incl. V-480 imported/exported) + subscription (1) + webhook (5 incl. V-398/V-359 secret_rotated + replayed) + team (3) + admin (2) — pinned so the friendly-label map covers ALL emitted action types (drift to dropping any would render the audit row with the raw 'foo.bar' action key instead of the human label)", () => {
+  it("ACTION_LABEL map: covers account (5 entries) + V-398/V-353b MFA (3 entries: mfa_enrolled/mfa_disabled/recovery_code_used) + api_key (3 entries) + session (2) + profile (4 incl. V-480 imported/exported) + subscription (1) + webhook (5 incl. V-398/V-359 secret_rotated + replayed) + team (3) + admin (2) — pinned so the friendly-label map covers ALL emitted action types (drift to dropping any would render the audit row with the raw 'foo.bar' action key instead of the human label). Re-enabled by slice 159 after verifying all 9 sampled ACTION_LABEL entries still exist at audit-log.astro:12-90", () => {
     expect(body).toMatch(/'account\.email_verified': 'Email verified'/);
     expect(body).toMatch(/'account\.mfa_enrolled': 'MFA enrolled'/);
     expect(body).toMatch(/'account\.mfa_disabled': 'MFA disabled'/);
