@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from driftstack import is_retryable
 from driftstack.errors import (
     PROBLEM_TYPE_TO_ERROR,
     AuthError,
@@ -146,7 +147,8 @@ def test_pair_mode_state_invalid_transition_extracts_from_and_transition() -> No
     body = (
         '{"type":"https://errors.driftstack.dev/pair-mode-invalid-transition",'
         '"title":"Invalid transition","status":409,'
-        '"detail":"Invalid pair-mode transition: takeover-request not allowed from takeover-pending",'
+        '"detail":"Invalid pair-mode transition: takeover-request '
+        'not allowed from takeover-pending",'
         '"from":"takeover-pending","transition":"takeover-request"}'
     )
     err = _error_from_response_data(status=409, text=body, retry_after_header=None)
@@ -252,8 +254,8 @@ def test_empty_body_yields_transport_error() -> None:
 
 # V-490 — public is_retryable predicate. Mirrors the V-489 TS test
 # matrix at packages/sdk-typescript/tests/unit/errors.test.ts.
-
-from driftstack import is_retryable
+# (Import hoisted to top of module to satisfy ruff E402; section
+# comment retained as the original audit anchor.)
 
 
 def test_is_retryable_true_for_transport() -> None:

@@ -17,23 +17,19 @@ import httpx
 
 from driftstack.http import AsyncHttpClient, HttpClient
 from driftstack.resources.account import AccountResource, AsyncAccountResource
-from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
-from driftstack.resources.audit_log import AsyncAuditLogResource, AuditLogResource
-from driftstack.resources.auth import AsyncAuthResource, AuthResource
-from driftstack.resources.billing import AsyncBillingResource, BillingResource
 from driftstack.resources.agent_sessions import (
     AgentSessionsResource,
     AsyncAgentSessionsResource,
 )
-from driftstack.resources.recipes import (
-    AsyncRecipesResource,
-    RecipesResource,
-)
-from driftstack.resources.egress import AsyncEgressResource, EgressResource
+from driftstack.resources.api_keys import ApiKeysResource, AsyncApiKeysResource
+from driftstack.resources.audit_log import AsyncAuditLogResource, AuditLogResource
+from driftstack.resources.auth import AsyncAuthResource, AuthResource
+from driftstack.resources.billing import AsyncBillingResource, BillingResource
 from driftstack.resources.crypto_orders import (
     AsyncCryptoOrdersResource,
     CryptoOrdersResource,
 )
+from driftstack.resources.egress import AsyncEgressResource, EgressResource
 from driftstack.resources.email_preferences import (
     AsyncEmailPreferencesResource,
     EmailPreferencesResource,
@@ -45,6 +41,10 @@ from driftstack.resources.profile_snapshots import (
     ProfileSnapshotsResource,
 )
 from driftstack.resources.profiles import AsyncProfilesResource, ProfilesResource
+from driftstack.resources.recipes import (
+    AsyncRecipesResource,
+    RecipesResource,
+)
 from driftstack.resources.sessions import AsyncSessionsResource, SessionsResource
 from driftstack.resources.team import AsyncTeamResource, TeamResource
 from driftstack.resources.usage import AsyncUsageResource, UsageResource

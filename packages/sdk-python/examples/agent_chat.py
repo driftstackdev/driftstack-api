@@ -26,7 +26,6 @@ import sys
 from driftstack import Driftstack
 from driftstack.errors import FeatureUnavailableError
 
-
 PROMPTS = [
     "open https://example.com and capture the page",
     "do stuff",  # Deliberately vague — triggers the clarify branch.

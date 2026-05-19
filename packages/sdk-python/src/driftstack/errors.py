@@ -393,7 +393,9 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/bundled-llm-consent-required": BundledLlmConsentRequiredError,
     # Arc 2 sub-slice 8.10 (v2-#8) — pair-mode 409 paths.
     "https://errors.driftstack.dev/pair-mode-conflict": PairModeConflictError,
-    "https://errors.driftstack.dev/pair-mode-invalid-transition": PairModeStateInvalidTransitionError,
+    "https://errors.driftstack.dev/pair-mode-invalid-transition": (
+        PairModeStateInvalidTransitionError
+    ),
 }
 
 
