@@ -101,13 +101,13 @@ describe('W496.A apps/customer-dashboard/src/pages/sessions.astro content parity
     );
   });
 
-  it.skip("ADR-006 + V-040 recordings framing pinned: 'Recordings retained 90 days hot, archived to R2 after that. Admin-only access initially per ADR-006; customer-facing recording UI lands when the V-040 R2 mirror ships.' — pinned so the 90d hot + R2 archive retention policy + the admin-only-for-now scope (with V-040 unlock plan) all survive (drift to dropping ADR-006 reference would let customers expect a customer-facing recordings UI that doesn't exist yet)", () => {
+  it('ADR-006 + V-040 recordings framing pinned. Re-enabled by slice 267 after restoring the V-040 anchor on the R2-mirror-ships sentence at sessions.astro:334 (anchor stripped to bare space before "the R2")', () => {
     expect(body).toMatch(
       /Recordings retained 90 days hot, archived to R2 after that\. Admin-only\s*\n?\s*access initially per ADR-006; customer-facing recording UI lands when\s*\n?\s*the V-040 R2 mirror ships\./,
     );
   });
 
-  it.skip("Sessions billing-meter framing pinned: 'Sessions are the only billing meter — you pay for concurrent caps, not duration or per-call.' — pinned so the 'concurrent cap is the only meter' value-prop stays consistent with V-171 usage page + ADR-004 (drift to per-call/per-duration would change the entire pricing narrative)", () => {
+  it('Sessions billing-meter framing pinned. Re-enabled by slice 267 after verifying the concurrent-cap-is-only-meter sentence still exists verbatim at sessions.astro:75-76', () => {
     expect(body).toMatch(
       /Sessions are the only billing meter — you pay for concurrent caps,\s*\n?\s*not duration or per-call\./,
     );
