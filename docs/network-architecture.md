@@ -331,12 +331,12 @@ Cost vs benefit at v1:
    between Mac Mini fleet and control plane terminates on the
    Hetzner VM directly. Skips Cloudflare API Shield (paid feature),
    simpler architecture, fewer moving parts.
-2. \*\*Fleet node identity provisioning: on-device keypair generation
-   - admin-API public-key registration.\*\* Founder provisions the
-     Mac Mini → keypair generated on-device (private key never leaves
-     the device) → public key posted to the control plane via an
-     admin endpoint that requires the founder's existing admin API
-     key. Plus the mandatory revocation flow documented above.
+2. **Fleet node identity provisioning: on-device keypair generation
+   plus admin-API public-key registration.** Founder provisions the
+   Mac Mini → keypair generated on-device (private key never leaves
+   the device) → public key posted to the control plane via an
+   admin endpoint that requires the founder's existing admin API
+   key. Plus the mandatory revocation flow documented above.
 3. **JWT signing-key rotation: monthly auto-rotate with 24h
    overlap.** Per-node keypairs don't rotate (long-term identity).
    The control plane's signing key for control-plane-issued tokens
