@@ -72,27 +72,27 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     );
   });
 
-  it('PKCE AuthorizeQuery framing pinned: code_challenge 43..128 + code_challenge_method LITERAL S256 (no plain downgrade); state 8..256 CSRF; scope optional', () => {
+  it('PKCE AuthorizeQuery framing pinned: code_challenge 43..128 + code_challenge_method LITERAL S256 (no plain downgrade); state 8..256 CSRF; scope optional (≤1024 chars per slice 117 cap)', () => {
     expect(body).toMatch(
-      /const AuthorizeQuery = z\.object\(\{\s*\n?\s*client_id: z\.string\(\)\.min\(1\),\s*\n?\s*redirect_uri: z\.string\(\)\.url\(\),\s*\n?\s*state: z\.string\(\)\.min\(8\)\.max\(256\),\s*\n?\s*code_challenge: z\.string\(\)\.min\(43\)\.max\(128\),\s*\n?\s*code_challenge_method: z\.literal\('S256'\),\s*\n?\s*scope: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const AuthorizeQuery = z\.object\(\{\s*\n?\s*client_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*redirect_uri: z\.string\(\)\.url\(\),\s*\n?\s*state: z\.string\(\)\.min\(8\)\.max\(256\),\s*\n?\s*code_challenge: z\.string\(\)\.min\(43\)\.max\(128\),\s*\n?\s*code_challenge_method: z\.literal\('S256'\),\s*\n?\s*scope: z\.string\(\)\.max\(1024\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 
-  it("ApproveAuthorization body: authorization_id + account_id uuid; ExchangeCode body: grant_type literal 'authorization_code' + code + code_verifier 43..128 + client_id + client_secret + redirect_uri", () => {
+  it("ApproveAuthorization body: authorization_id + account_id uuid; ExchangeCode body: grant_type literal 'authorization_code' + code + code_verifier 43..128 + client_id + client_secret + redirect_uri. Slice 117 added defensive max-length caps on previously-unbounded fields", () => {
     expect(body).toMatch(
-      /const ApproveAuthorizationBody = z\.object\(\{\s*\n?\s*authorization_id: z\.string\(\)\.min\(1\),\s*\n?\s*account_id: z\.string\(\)\.uuid\(\),\s*\n?\s*\}\);/,
+      /const ApproveAuthorizationBody = z\.object\(\{\s*\n?\s*authorization_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*account_id: z\.string\(\)\.uuid\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /const ExchangeCodeBody = z\.object\(\{\s*\n?\s*grant_type: z\.literal\('authorization_code'\),\s*\n?\s*code: z\.string\(\)\.min\(1\),\s*\n?\s*code_verifier: z\.string\(\)\.min\(43\)\.max\(128\),\s*\n?\s*client_id: z\.string\(\)\.min\(1\),\s*\n?\s*client_secret: z\.string\(\)\.min\(1\),\s*\n?\s*redirect_uri: z\.string\(\)\.url\(\),\s*\n?\s*\}\);/,
+      /const ExchangeCodeBody = z\.object\(\{\s*\n?\s*grant_type: z\.literal\('authorization_code'\),\s*\n?\s*code: z\.string\(\)\.min\(1\)\.max\(256\),\s*\n?\s*code_verifier: z\.string\(\)\.min\(43\)\.max\(128\),\s*\n?\s*client_id: z\.string\(\)\.min\(1\)\.max\(128\),\s*\n?\s*client_secret: z\.string\(\)\.min\(1\)\.max\(256\),\s*\n?\s*redirect_uri: z\.string\(\)\.url\(\),\s*\n?\s*\}\);/,
     );
   });
 
-  it('V-667.C RevokeBody framing pinned: RFC 7009; token_type_hint informational (access_token | refresh_token) — ignored but accepted so off-the-shelf OAuth clients post unchanged', () => {
+  it('V-667.C RevokeBody framing pinned: RFC 7009; token_type_hint informational (access_token | refresh_token) — ignored but accepted so off-the-shelf OAuth clients post unchanged. Slice 117 added token max(2048) cap (JWT-sized headroom)', () => {
     expect(body).toMatch(
       /\/\/ V-667\.C — RFC 7009 revoke\. token_type_hint is informational\s*\n?\s*\/\/ \(access_token \| refresh_token\); we ignore it but accept it so\s*\n?\s*\/\/ off-the-shelf OAuth clients can post unchanged\./,
     );
     expect(body).toMatch(
-      /const RevokeBody = z\.object\(\{\s*\n?\s*token: z\.string\(\)\.min\(1\),\s*\n?\s*token_type_hint: z\.enum\(\['access_token', 'refresh_token'\]\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const RevokeBody = z\.object\(\{\s*\n?\s*token: z\.string\(\)\.min\(1\)\.max\(2048\),\s*\n?\s*token_type_hint: z\.enum\(\['access_token', 'refresh_token'\]\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 

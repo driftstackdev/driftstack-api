@@ -91,13 +91,13 @@ describe('W1045 routes/oauth V-667.B + V-667.C/D/E cross-source invariant', () =
 
   // ─── ExchangeCodeBody ────────────────────────────────────────
 
-  it("CRITICAL ExchangeCodeBody — grant_type literal 'authorization_code' + code + code_verifier len 43..128 + client_id + client_secret + redirect_uri. The 6-field shape matches the RFC 6749 token-endpoint POST.", () => {
+  it("CRITICAL ExchangeCodeBody — grant_type literal 'authorization_code' + code + code_verifier len 43..128 + client_id + client_secret + redirect_uri. The 6-field shape matches the RFC 6749 token-endpoint POST. Slice 117 added max-length caps (256/128/256) on the previously-unbounded code/client_id/client_secret fields to prevent problem+json body bloat.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/oauth.ts'));
     expect(p).toMatch(/grant_type: z\.literal\('authorization_code'\),/);
-    expect(p).toMatch(/code: z\.string\(\)\.min\(1\),/);
+    expect(p).toMatch(/code: z\.string\(\)\.min\(1\)\.max\(256\),/);
     expect(p).toMatch(/code_verifier: z\.string\(\)\.min\(43\)\.max\(128\),/);
-    expect(p).toMatch(/client_id: z\.string\(\)\.min\(1\),/);
-    expect(p).toMatch(/client_secret: z\.string\(\)\.min\(1\),/);
+    expect(p).toMatch(/client_id: z\.string\(\)\.min\(1\)\.max\(128\),/);
+    expect(p).toMatch(/client_secret: z\.string\(\)\.min\(1\)\.max\(256\),/);
     expect(p).toMatch(/redirect_uri: z\.string\(\)\.url\(\),/);
   });
 

@@ -61,7 +61,10 @@ import { readIdempotencyKey } from '../lib/idempotency-key.js';
 const DEFAULT_TOKEN_BUDGET = 100_000;
 
 const CreateAgentSessionRequestSchema = z.object({
-  driftstack_session_id: z.string().min(1).optional(),
+  // Canonical `ses_<36-char-uuid>` = 40 chars. Cap at 100 (slice 116
+  // pattern) — generous headroom, blocks multi-KB strings that would
+  // bloat the 404/400 problem+json body if validation lets them in.
+  driftstack_session_id: z.string().min(1).max(100).optional(),
   token_budget: z.number().int().positive().optional(),
   // Arc 2 sub-slice 8.5 (v2-#8) — operational mode at create-time.
   mode: z.enum(['manual', 'ai', 'pair']).optional(),
@@ -548,7 +551,10 @@ export function registerAgentSessionsRoutes(
   // transitions are serialised by the per-row UPDATE in
   // setPairModeState.
   if (pairModeLock !== undefined) {
-    const TakeoverBodySchema = z.object({ client_id: z.string().min(1) });
+    // client_id is a customer-chosen opaque tag identifying which
+    // browser tab / window initiated the takeover. UUID-shape is
+    // typical; 128 cap matches OAuth client_id cap in oauth.ts.
+    const TakeoverBodySchema = z.object({ client_id: z.string().min(1).max(128) });
     app.post<{ Params: { id: string } }>(
       '/v1/agent-sessions/:id/takeover',
       { preHandler: [app.requireAuth, app.rateLimit('global')] },

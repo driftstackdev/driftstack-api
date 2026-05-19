@@ -30,38 +30,44 @@ const RegisterClientBody = z.object({
   account_id: z.string().uuid().nullable().optional(),
 });
 
+// Length caps below mirror the slice 116 defensive pattern: any
+// string field that flows into a downstream lookup / error message
+// gets a max bound. Without these, a multi-MB value would bloat
+// problem+json bodies on the not-found / invalid_client / etc.
+// error paths. Caps are generous (≥10× the realistic upper bound)
+// so legitimate variations stay valid.
 const AuthorizeQuery = z.object({
-  client_id: z.string().min(1),
+  client_id: z.string().min(1).max(128),
   redirect_uri: z.string().url(),
   state: z.string().min(8).max(256),
   code_challenge: z.string().min(43).max(128),
   code_challenge_method: z.literal('S256'),
-  scope: z.string().optional(),
+  scope: z.string().max(1024).optional(),
 });
 
 const ApproveAuthorizationBody = z.object({
-  authorization_id: z.string().min(1),
+  authorization_id: z.string().min(1).max(128),
   account_id: z.string().uuid(),
 });
 
 const ExchangeCodeBody = z.object({
   grant_type: z.literal('authorization_code'),
-  code: z.string().min(1),
+  code: z.string().min(1).max(256),
   code_verifier: z.string().min(43).max(128),
-  client_id: z.string().min(1),
-  client_secret: z.string().min(1),
+  client_id: z.string().min(1).max(128),
+  client_secret: z.string().min(1).max(256),
   redirect_uri: z.string().url(),
 });
 
 const IntrospectBody = z.object({
-  token: z.string().min(1),
+  token: z.string().min(1).max(2048),
 });
 
 // V-667.C — RFC 7009 revoke. token_type_hint is informational
 // (access_token | refresh_token); we ignore it but accept it so
 // off-the-shelf OAuth clients can post unchanged.
 const RevokeBody = z.object({
-  token: z.string().min(1),
+  token: z.string().min(1).max(2048),
   token_type_hint: z.enum(['access_token', 'refresh_token']).optional(),
 });
 
