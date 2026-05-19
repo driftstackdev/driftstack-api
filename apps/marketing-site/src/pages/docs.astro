@@ -109,9 +109,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         </a>
 
         {/* W210 — the Recipe library card pointed at /docs/recipes,
-            which doesn't exist yet (Phase 3 deliverable). Removed
-            until the page ships rather than show customers a 404.
-            See task #190-ish for the planned slice. */}
+            which doesn't exist yet on the marketing-site /docs/* mirror.
+            The recipe library IS shipped at v1.0 in its write-only form
+            (slice 121 promoted it to the roadmap NOW section, and the
+            apps/docs/src/pages/api/recipes.md page is live at
+            docs.driftstack.dev/api/recipes/). The card is omitted until
+            a /docs/recipes mirror page lands on the marketing-site, so
+            this stays a card-less anchor rather than a card linking to
+            an external host (which would break the all-internal-anchors
+            pattern the other cards on this hub follow). */}
       </div>
     </div>
   </section>

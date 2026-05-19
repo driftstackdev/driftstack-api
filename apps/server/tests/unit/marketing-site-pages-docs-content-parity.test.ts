@@ -88,10 +88,16 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     );
   });
 
-  it("W210 recipe-library-removed inline comment pinned: 'the Recipe library card pointed at /docs/recipes, which doesn't exist yet (Phase 3 deliverable). Removed until the page ships rather than show customers a 404. See task #190-ish for the planned slice.' — pinned so the why-removed-not-just-commented-out rationale survives (drift to silently re-adding the card would re-introduce the 404 destination; drift to dropping the comment entirely would lose the Phase 3 follow-on tracking)", () => {
+  it("W210 recipe-library-removed inline comment pinned (slice 144 update — the recipe library IS now shipped at v1.0 per slice 121, so the prior 'Phase 3 deliverable' framing was stale; the marketing-site /docs/recipes MIRROR page still doesn't exist, just the apps/docs/src/pages/api/recipes.md page at docs.driftstack.dev/api/recipes/). The card stays card-less so the all-internal-anchors pattern survives, but the comment is now accurate.", () => {
     expect(body).toMatch(
-      /\{\/\* W210 — the Recipe library card pointed at \/docs\/recipes,\s*\n?\s*which doesn't exist yet \(Phase 3 deliverable\)\. Removed\s*\n?\s*until the page ships rather than show customers a 404\./,
+      /\{\/\* W210 — the Recipe library card pointed at \/docs\/recipes,\s*\n?\s*which doesn't exist yet on the marketing-site \/docs\/\* mirror\./,
     );
+    expect(body).toMatch(/The recipe library IS shipped at v1\.0 in its write-only form/);
+    expect(body).toMatch(/apps\/docs\/src\/pages\/api\/recipes\.md page is live at/);
+    expect(body).toMatch(/docs\.driftstack\.dev\/api\/recipes\//);
+    // Drift sentinel — the pre-slice-144 "Phase 3 deliverable"
+    // framing was wrong post-slice-121 promotion. MUST NOT come back.
+    expect(body).not.toMatch(/\(Phase 3 deliverable\)\. Removed/);
   });
 
   it("Help banner: 'Doc not landing?' + mailto:support@driftstack.dev + 'We answer in writing, usually same business day.' + GitHub → https://github.com/driftstackdev — pinned so the support-channel + same-business-day SLA + the GitHub link all survive (drift to dropping the SLA would lose the response-time expectation; drift to a different github org would break the canonical org reference)", () => {
