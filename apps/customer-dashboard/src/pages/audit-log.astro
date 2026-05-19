@@ -44,6 +44,13 @@ const ACTION_LABEL: Record<string, string> = {
   'agent_session.pair_mode.takeover': 'Pair-mode takeover requested',
   'agent_session.pair_mode.handback': 'Pair-mode handback requested',
   'agent_session.pair_mode.timeout': 'Pair-mode heartbeat timeout',
+  // v2-#5 Q.1.f — per-turn AI agent layer decompose() events.
+  // Customer audit log emission only (no separate operator UI per
+  // founder verdict 2026-05-17). Customer sees WHICH decomposer
+  // ran for each turn — Claude (bundled / BYOK) vs deterministic
+  // (rule-based fallback).
+  'agent.decompose.claude': 'Agent turn decomposed (Claude)',
+  'agent.decompose.deterministic': 'Agent turn decomposed (deterministic)',
 };
 
 // V-354 — preset filters. Each maps to a single AccountAuditAction
@@ -95,6 +102,9 @@ const FILTER_OPTIONS = [
   { value: 'agent_session.pair_mode.takeover', label: 'Pair-mode takeover requested' },
   { value: 'agent_session.pair_mode.handback', label: 'Pair-mode handback requested' },
   { value: 'agent_session.pair_mode.timeout', label: 'Pair-mode heartbeat timeout' },
+  // v2-#5 Q.1.f — agent decomposer per-turn events.
+  { value: 'agent.decompose.claude', label: 'Agent turn decomposed (Claude)' },
+  { value: 'agent.decompose.deterministic', label: 'Agent turn decomposed (deterministic)' },
 ] as const;
 ---
 

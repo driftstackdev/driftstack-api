@@ -1,5 +1,6 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
 
 // v2-#8 Wave 2.C sub-slice 8.24 — agent-sessions page scaffold.
 //
@@ -13,7 +14,7 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 // page renders the empty state + "Feature not enabled" banner when
 // POST /v1/agent-sessions returns 503 FeatureUnavailable.
 
-const apiBaseUrl = import.meta.env.PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
+const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Agent sessions">

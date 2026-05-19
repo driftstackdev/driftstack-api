@@ -35,15 +35,16 @@ describe('W339.A /audit-log action-label parity with AccountAuditActionSchema', 
   );
 
   // ACTION_LABEL is a Record<string, string> declared inline near
-  // the top of the page. Grab its key set.
+  // the top of the page. Grab its key set. Keys can have any number
+  // of dot-separated segments (e.g. `agent_session.pair_mode.takeover`).
   const labelKeys = new Set<string>(
-    [...page.matchAll(/^\s*'([a-z_]+\.[a-z_]+)':\s*'[^']+',/gm)].map((m) => m[1]!),
+    [...page.matchAll(/^\s*'([a-z_]+(?:\.[a-z_]+)+)':\s*'[^']+',/gm)].map((m) => m[1]!),
   );
 
   // FILTER_OPTIONS is a const array of { value, label } literals.
   // The value field is what we care about.
   const filterValues = new Set<string>(
-    [...page.matchAll(/\{\s*value:\s*'([a-z_]+\.[a-z_]+)',/g)].map((m) => m[1]!),
+    [...page.matchAll(/\{\s*value:\s*'([a-z_]+(?:\.[a-z_]+)+)',/g)].map((m) => m[1]!),
   );
 
   it('every action in AccountAuditActionSchema has an ACTION_LABEL entry', () => {

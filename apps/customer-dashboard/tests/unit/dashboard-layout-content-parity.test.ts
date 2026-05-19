@@ -63,7 +63,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack`;/);
   });
 
-  it('13 navItems pinned in canonical order (2026-05-16 enhancement-review A1 added /subscription between /billing and /webhooks; EG-API-1.5 added /proxies between /api-keys and /usage — /proxies page exists but was undiscoverable from the sidebar)', () => {
+  it('14 navItems pinned in canonical order (v2-#8 sub-slice 8.24 added /agent-sessions between /sessions and /api-keys — primary differentiator per 2026-05-17 AI-chat-+-manual-live-feature-APPROVED-for-v1.0 verdict)', () => {
     const block = body.match(/const navItems = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
     const entries = Array.from(block![1]!.matchAll(/\{ href: '([^']+)', label: '([^']+)' \}/g)).map(
@@ -74,6 +74,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
       { href: '/profiles', label: 'Profiles' },
       { href: '/snapshots', label: 'Snapshots' },
       { href: '/sessions', label: 'Sessions' },
+      { href: '/agent-sessions', label: 'Agent sessions' },
       { href: '/api-keys', label: 'API keys' },
       { href: '/proxies', label: 'Proxies' },
       { href: '/usage', label: 'Usage' },

@@ -24,13 +24,17 @@ describe('W297.C /usage page sparkline keys ↔ docs/api/usage parity', () => {
   const docs = read(DOCS_USAGE);
 
   // Dashboard sparkline keys → docs canonical metric names.
-  // The dashboard aggregates state_captures + screenshot_captures
-  // into a single "captures" sparkline by design.
+  // The dashboard aggregates state_capture + screenshot_capture into
+  // a single "captures" sparkline by design. The docs/api/usage.md
+  // page uses the UsageRecordType enum names — SINGULAR forms
+  // (`navigate`, `interact`, `session_minute`, `state_capture`,
+  // `screenshot_capture`) — which is the canonical wire shape.
+  // Dashboard keys are plural display labels.
   const METRIC_PAIRS: Array<{ dashboardKey: string; docsAny: string[] }> = [
-    { dashboardKey: 'navigates', docsAny: ['navigates'] },
-    { dashboardKey: 'interacts', docsAny: ['interacts'] },
-    { dashboardKey: 'captures', docsAny: ['state_captures', 'screenshot_captures'] },
-    { dashboardKey: 'session_minutes', docsAny: ['session_minutes'] },
+    { dashboardKey: 'navigates', docsAny: ['navigate'] },
+    { dashboardKey: 'interacts', docsAny: ['interact'] },
+    { dashboardKey: 'captures', docsAny: ['state_capture', 'screenshot_capture'] },
+    { dashboardKey: 'session_minutes', docsAny: ['session_minute'] },
   ];
 
   for (const { dashboardKey, docsAny } of METRIC_PAIRS) {
