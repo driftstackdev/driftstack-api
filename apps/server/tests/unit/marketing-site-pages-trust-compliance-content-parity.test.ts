@@ -37,7 +37,7 @@ function read(p: string): string {
 describe('W504.A apps/marketing-site/src/pages/trust/compliance.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-661 (V-550.C) framing pinned: 'compliance + pen-test + vulnerability-disclosure page. Honest current-state surface: no claims for certifications we don't have. Where work is in progress, we name the certification and the expected timeline. Where we have no plans, the page is silent (positive-list-only — silence is not a no).' — pinned so the V-661 doc-comment + positive-list-only-honest-current-state posture survives (drift to claiming certs without backing would invite buyer pushback)", () => {
+  it('V-661 (V-550.C) framing pinned. Re-enabled by slice 202 after verifying the V-661 comment exists at compliance.astro:4-8 with the matching shape', () => {
     expect(body).toMatch(
       /\/\/ V-661 \(V-550\.C\) — compliance \+ pen-test \+ vulnerability-disclosure\s*\n?\s*\/\/ page\. Honest current-state surface: no claims for certifications we\s*\n?\s*\/\/ don't have\. Where work is in progress, we name the certification\s*\n?\s*\/\/ and the expected timeline\. Where we have no plans, the page is\s*\n?\s*\/\/ silent \(positive-list-only — silence is not a no\)\./,
     );
