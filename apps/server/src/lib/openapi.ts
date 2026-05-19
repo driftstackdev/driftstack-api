@@ -1412,21 +1412,24 @@ function buildRegistry(): OpenAPIRegistry {
   // tokens on a customer's behalf. Full prose at
   // docs.driftstack.dev/api/oauth. Admin endpoints (/v1/admin/oauth/*)
   // are NOT registered — they're internal-only.
+  // Caps below MUST mirror apps/server/src/routes/oauth.ts so the
+  // openapi spec the SDKs consume matches the actual route validator
+  // (slice 117 added the route-side caps; this slice aligns the spec).
   const OAuthAuthorizeQueryOpenApi = z.object({
-    client_id: z.string().min(1),
+    client_id: z.string().min(1).max(128),
     redirect_uri: z.string().url(),
     state: z.string().min(8).max(256),
     code_challenge: z.string().min(43).max(128),
     code_challenge_method: z.literal('S256'),
-    scope: z.string().optional(),
+    scope: z.string().max(1024).optional(),
   });
   const OAuthAuthorizeResponseOpenApi = z.object({ authorization_id: z.string() });
   const OAuthTokenRequestOpenApi = z.object({
     grant_type: z.literal('authorization_code'),
-    code: z.string().min(1),
+    code: z.string().min(1).max(256),
     code_verifier: z.string().min(43).max(128),
-    client_id: z.string().min(1),
-    client_secret: z.string().min(1),
+    client_id: z.string().min(1).max(128),
+    client_secret: z.string().min(1).max(256),
     redirect_uri: z.string().url(),
   });
   const OAuthTokenResponseOpenApi = z.object({
@@ -1435,7 +1438,7 @@ function buildRegistry(): OpenAPIRegistry {
     expires_in: z.number().int().positive(),
     scope: z.array(z.string()),
   });
-  const OAuthIntrospectRequestOpenApi = z.object({ token: z.string().min(1) });
+  const OAuthIntrospectRequestOpenApi = z.object({ token: z.string().min(1).max(2048) });
   const OAuthIntrospectResponseOpenApi = z.union([
     z.object({ active: z.literal(false) }),
     z.object({
@@ -1447,7 +1450,7 @@ function buildRegistry(): OpenAPIRegistry {
     }),
   ]);
   const OAuthRevokeRequestOpenApi = z.object({
-    token: z.string().min(1),
+    token: z.string().min(1).max(2048),
     token_type_hint: z.enum(['access_token', 'refresh_token']).optional(),
   });
   registerRoute(r, {
