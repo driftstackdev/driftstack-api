@@ -68,7 +68,7 @@ describe('W496.A apps/customer-dashboard/src/pages/sessions.astro content parity
     );
   });
 
-  it.skip("V-348 'How to start a session →' link framing pinned: 'sessions are minted via the SDK or GUI client, not the dashboard. The dashboard is read-only for sessions (filtering / pagination / view individual). The button points at the quickstart so customers can find the SDK flow.' + href=docs.driftstack.dev/quickstart/ — pinned so the dashboard's read-only-for-sessions contract stays explicit (drift to a New session button would mislead customers into expecting a no-code workflow that doesn't exist)", () => {
+  it('V-348 read-only-for-sessions framing pinned. Re-enabled by slice 227 after restoring the V-348 anchor on the HTML comment at sessions.astro:79-85 (the in-DOM <a> tag was untouched; only the comment anchor had drifted)', () => {
     expect(body).toMatch(
       /V-348 — sessions are minted via the SDK or GUI client, not\s*\n?\s*the dashboard\. The dashboard is read-only for sessions\s*\n?\s*\(filtering \/ pagination \/ view individual\)\. The button\s*\n?\s*points at the quickstart so customers can find the SDK\s*\n?\s*flow\./,
     );
