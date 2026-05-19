@@ -256,8 +256,10 @@ Event types emitted:
   - `at` — ISO 8601 timestamp.
   - `intents?` — present only on `role: 'agent'` + plan-executed
     turns; carries the structured intent list the runtime
-    executed (the recipes route flatMaps these into
-    `intent_log` snapshots).
+    executed (the [recipes route](/api/recipes/) flatMaps these
+    into `intent_log` snapshots — see the recipe docs for how a
+    snapshotted intent_log replays without re-running the
+    decomposer).
 
 Resume semantics (RFC 6202 + EventSource spec):
 
