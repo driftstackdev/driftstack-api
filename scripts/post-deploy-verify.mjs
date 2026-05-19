@@ -24,6 +24,17 @@ if (!baseUrl) {
 const expectedSha = args['expected-sha'] ?? null;
 const jsonOut = args.json === 'true';
 
+// Module-load-time constant. Referenced inside the activation-gate
+// check helpers below. Must be declared BEFORE the top-level `for
+// (const fn of checks)` loop fires those helpers — otherwise the
+// temporal dead zone triggers `ReferenceError: Cannot access
+// FEATURE_UNAVAILABLE_TYPE before initialization` and the entire
+// post-deploy-verify aborts misleadingly (auto-revert then fires on
+// what was actually a successful deploy). 2026-05-19 incident:
+// `bash scripts/deploy-bridge.sh staging` for the scheduled-jobs fix
+// (1b2001c8) tripped this twice before being root-caused.
+const FEATURE_UNAVAILABLE_TYPE = 'https://errors.driftstack.dev/feature-unavailable';
+
 // Each check returns { ok, name, detail }; the verifier collects all
 // results and exits non-zero only at the end so a single failure
 // doesn't mask a second one.
@@ -286,8 +297,8 @@ async function checkOpenapi() {
 // disabled posture, so an anonymous request gets 503 + problem-doc.
 // If a regression flips the gate, the check fails with the actual
 // (wrong) status / type — caller sees the drift at deploy time.
-
-const FEATURE_UNAVAILABLE_TYPE = 'https://errors.driftstack.dev/feature-unavailable';
+// (FEATURE_UNAVAILABLE_TYPE hoisted to the top of the module to avoid
+// the temporal dead zone — see the constant's declaration site.)
 
 async function checkEgressSessionProxyGateStub() {
   return featureGateStub('POST', '/v1/sessions/ses_xxx/proxy', 'EGRESS session-proxy gate', {
