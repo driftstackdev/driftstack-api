@@ -1,0 +1,76 @@
+// Drift guard for apps/customer-dashboard/src/pages/auth/magic-link.astro.
+// Pins #190 magic-link consume page — token-one-shot semantics +
+// ds_web_session_token localStorage write + fallback form for mangled
+// links + ?next= round-trip. The session-token-localStorage-write is
+// the load-bearing customer-side persistence; drift would lose the
+// signed-in state on redirect.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/auth/magic-link.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('customer-dashboard/pages/auth/magic-link content parity', () => {
+  const body = read(LIB);
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+
+  it("#190 module-level framing pinned: 'magic-link consume page. Pairs with the V-079 backend route POST /v1/auth/magic-link/consume.' + 5-step flow (request → email → click → POST → session-redirect) + 'Token is one-shot — second use returns 400.' — pinned so the #190 anchor + V-079 cross-reference + 5-step flow + token-one-shot contract all stay documented", () => {
+    expect(body).toMatch(
+      /\/\/ #190 — magic-link consume page\. Pairs with the V-079 backend route\s*\n?\s*\/\/ `POST \/v1\/auth\/magic-link\/consume`\./,
+    );
+    expect(body).toMatch(
+      /\/\/\s+1\. User requests a magic-link on \/login \(forgot-password style\)\./,
+    );
+    expect(body).toMatch(/\/\/\s+5\. Token is one-shot — second use returns 400\./);
+  });
+
+  it("Fallback-form-for-mangled-link framing pinned: 'The form is rendered as a fallback for the rare case where a mail client mangles the link (drops the query string), so the user can paste the token manually.' — pinned so the mail-client-mangled-recovery contract stays documented", () => {
+    expect(body).toMatch(
+      /\/\/ The form is rendered as a fallback for the rare case where a mail\s*\n?\s*\/\/ client mangles the link \(drops the query string\), so the user can\s*\n?\s*\/\/ paste the token manually\./,
+    );
+  });
+
+  it('data-page="magic-link" + Signing-you-in headline + data-form="magic-link" data-state="fallback" hidden + magic-link-token input + autocomplete="one-time-code" — pinned so the page-script root + fallback-form + browser-autocomplete-hint contract all stay documented', () => {
+    expect(body).toMatch(/data-page="magic-link"/);
+    expect(body).toMatch(/Signing you in…/);
+    expect(body).toMatch(/data-form="magic-link" class="hidden space-y-5" data-state="fallback"/);
+    expect(body).toMatch(
+      /<input\s*\n?\s*id="magic-link-token"\s*\n?\s*name="token"\s*\n?\s*type="text"\s*\n?\s*required\s*\n?\s*autocomplete="one-time-code"/,
+    );
+  });
+
+  it('ds_web_session_token localStorage write framing pinned: \'if (session.token) { localStorage.setItem("ds_web_session_token", session.token); }\' — pinned so the canonical localStorage key contract stays documented (drift to a different key would orphan the signed-in state across other pages reading this same key)', () => {
+    expect(body).toMatch(
+      /const session = body\.session \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);\s*\n?\s*\}/,
+    );
+  });
+
+  it("?next= round-trip framing pinned: params.get('next') + window.location.href = next ? next : '/'. Drift to ignoring ?next would lose the original-entry-point on a magic-link click after a 401-bounce", () => {
+    expect(body).toMatch(
+      /const params = new URLSearchParams\(window\.location\.search\);\s*\n?\s*const next = params\.get\('next'\);\s*\n?\s*window\.location\.href = next \? next : '\/';/,
+    );
+  });
+
+  it("fetch POST /v1/auth/magic-link/consume + credentials:'include' + body:JSON.stringify({token:token}) framing pinned. Drift to dropping credentials:'include' would prevent the server's Set-Cookie response from landing", () => {
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/magic-link\/consume', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json' \},\s*\n?\s*body: JSON\.stringify\(\{ token: token \}\),\s*\n?\s*credentials: 'include',\s*\n?\s*\}\)/,
+    );
+  });
+
+  it('On-error-showFallbackForm-with-prefill framing pinned: \'.catch((err) => { showFallbackForm(token); showBanner(err && err.message ? err.message : "Magic-link sign-in failed."); })\' — pinned so the failed-consume-prefills-fallback-form UX contract stays documented (drift to clearing the token on error would force the user to re-type from the email)', () => {
+    expect(body).toMatch(
+      /\.catch\(\(err\) => \{\s*\n?\s*showFallbackForm\(token\);\s*\n?\s*showBanner\(err && err\.message \? err\.message : 'Magic-link sign-in failed\.'\);\s*\n?\s*\}\);/,
+    );
+  });
+});
