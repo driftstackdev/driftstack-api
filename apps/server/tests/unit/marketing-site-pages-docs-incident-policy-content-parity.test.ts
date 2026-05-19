@@ -97,7 +97,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     );
   });
 
-  it.skip("incident.* NOT-in-SubscribableWebhookEventTypeSchema framing pinned: 'incident.created / incident.updated / incident.resolved are admin-audit / internal SSE event types — they are not yet in SubscribableWebhookEventTypeSchema, so they can't be the target of a POST /v1/webhooks subscription. Email subscription is the customer-facing notification path today.' — pinned so the 3-event-namedrop + not-yet-subscribable + email-is-the-customer-path commitment survives (drift to claiming the incident events are subscribable would re-introduce the V-701-fix-log divergence)", () => {
+  it('incident.* NOT-in-SubscribableWebhookEventTypeSchema framing pinned. Re-enabled by slice 279 after verifying the 3-event-namedrop + not-yet-subscribable + email-is-customer-path framing all exist verbatim at incident-policy.astro:108-114', () => {
     expect(body).toMatch(
       /<code>incident\.created<\/code> \/\s*\n?\s*<code>incident\.updated<\/code> \/ <code>incident\.resolved<\/code>\s*\n?\s*are admin-audit \/ internal SSE event types — they are not yet\s*\n?\s*in <code>SubscribableWebhookEventTypeSchema<\/code>, so they\s*\n?\s*can't be the target of a <code>POST \/v1\/webhooks<\/code>\s*\n?\s*subscription\. Email subscription is the customer-facing\s*\n?\s*notification path today\./,
     );
