@@ -28,7 +28,10 @@ import {
 
 const ListAdminAccountsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  cursor: z.string().optional(),
+  // Slice 147 — defensive cap matching slice 117 convention; see
+  // admin-api-keys.ts for the same shape + rationale (512 covers
+  // any base64url-encoded {ts, uuid} pagination token).
+  cursor: z.string().min(1).max(512).optional(),
   status: AccountStatusSchema.optional(),
   tier: AccountTierSchema.optional(),
   email_contains: z.string().min(1).max(254).optional(),

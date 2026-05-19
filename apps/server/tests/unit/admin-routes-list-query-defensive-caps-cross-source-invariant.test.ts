@@ -34,22 +34,33 @@ function read(rel: string): string {
   return readFileSync(resolve(REPO_ROOT, rel), 'utf8');
 }
 
-const CAPPED_ADMIN_ROUTES = [
+// Routes capped at cursor=512 AND account_id=100 (3 of the 4 list
+// routes audited; admin-accounts.ts has cursor but no account_id
+// filter so only the cursor cap applies there).
+const CURSOR_AND_ACCOUNT_ID_ROUTES = [
   'apps/server/src/routes/admin-api-keys.ts',
   'apps/server/src/routes/admin-rate-limit-overrides.ts',
   'apps/server/src/routes/admin-sessions.ts',
 ];
 
-describe('Slice 146 — admin list-query defensive caps', () => {
-  it.each(CAPPED_ADMIN_ROUTES)('%s caps cursor at z.string().min(1).max(512).optional()', (rel) => {
-    const body = read(rel);
-    expect(body).toMatch(/cursor:\s*z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\)/);
-    // Drift sentinel — bare `cursor: z.string().optional()` MUST
-    // NOT come back.
-    expect(body).not.toMatch(/cursor:\s*z\.string\(\)\.optional\(\)/);
-  });
+// Routes capped only at cursor=512 (no account_id filter).
+const CURSOR_ONLY_ROUTES = ['apps/server/src/routes/admin-accounts.ts'];
 
-  it.each(CAPPED_ADMIN_ROUTES)(
+const ALL_CURSOR_CAPPED_ROUTES = [...CURSOR_AND_ACCOUNT_ID_ROUTES, ...CURSOR_ONLY_ROUTES];
+
+describe('Slice 146/147 — admin list-query defensive caps', () => {
+  it.each(ALL_CURSOR_CAPPED_ROUTES)(
+    '%s caps cursor at z.string().min(1).max(512).optional()',
+    (rel) => {
+      const body = read(rel);
+      expect(body).toMatch(/cursor:\s*z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\)/);
+      // Drift sentinel — bare `cursor: z.string().optional()` MUST
+      // NOT come back.
+      expect(body).not.toMatch(/cursor:\s*z\.string\(\)\.optional\(\)/);
+    },
+  );
+
+  it.each(CURSOR_AND_ACCOUNT_ID_ROUTES)(
     '%s caps account_id at z.string().min(1).max(100).optional()',
     (rel) => {
       const body = read(rel);
