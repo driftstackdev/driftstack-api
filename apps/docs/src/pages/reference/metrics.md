@@ -89,10 +89,10 @@ The current counter catalogue (all `driftstack_*` namespaced):
 
 ### Audit log
 
-| Metric                                | Labels                 | What it tracks                                               |
-| ------------------------------------- | ---------------------- | ------------------------------------------------------------ |
-| `driftstack_account_audit_emit_total` | `prefix`, `actor_type` | Customer-facing audit log emissions, namespace-bucketed      |
-| `driftstack_admin_audit_emit_total`   | `prefix`               | Admin (/v1/admin/\*) audit log emissions, namespace-bucketed |
+| Metric                                | Labels                 | What it tracks                                                |
+| ------------------------------------- | ---------------------- | ------------------------------------------------------------- |
+| `driftstack_account_audit_emit_total` | `prefix`, `actor_type` | Customer-facing audit log emissions, namespace-bucketed       |
+| `driftstack_admin_audit_emit_total`   | `prefix`               | Admin (`/v1/admin/*`) audit log emissions, namespace-bucketed |
 
 ### Live-preview (LiveKit)
 
