@@ -1,0 +1,146 @@
+// Drift guard for apps/server/src/lib/oauth-client-exchange.ts. Pins
+// the V-667.C OAuth-CLIENT code-exchange + userinfo-fetch — Step 4-5
+// of the auth flow, fetch-seam pattern, per-provider parse, 5-variant
+// tagged-union results, and the unverified-email rejection for
+// Verdict-1-trust.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/lib/oauth-client-exchange.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('lib/oauth-client-exchange content parity', () => {
+  const body = read(LIB);
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+
+  it("V-667.C module-level framing pinned: 'OAuth-CLIENT code-exchange + userinfo-fetch helpers. Step 4-5 of the auth flow: server-side POST to the IDP token endpoint to exchange code for access_token, then GET the userinfo endpoint to read the IDP's idea of the user. Both providers' responses are normalized to NormalizedUserInfo (see oauth-client-providers.ts) before the route layer touches them.' — pinned so the V-667.C anchor + step-4-5-anchor + NormalizedUserInfo cross-reference all stay documented", () => {
+    expect(body).toMatch(/\/\/ V-667\.C — OAuth-CLIENT code-exchange \+ userinfo-fetch helpers\./);
+    expect(body).toMatch(
+      /\/\/ Step 4-5 of the auth flow: server-side POST to the IDP token\s*\n?\s*\/\/ endpoint to exchange `code` for `access_token`, then GET the\s*\n?\s*\/\/ userinfo endpoint to read the IDP's idea of the user\. Both\s*\n?\s*\/\/ providers' responses are normalized to NormalizedUserInfo \(see\s*\n?\s*\/\/ oauth-client-providers\.ts\) before the route layer touches them\./,
+    );
+  });
+
+  it("Fetch-seam framing pinned: 'every IDP-bound HTTP call routes through deps.fetch, allowing tests to mock both happy + error paths. Default is the global fetch in Node 22+.' — pinned so the test-injectable-fetch pattern + Node-22+-global-fetch baseline stays documented (drift to hardcoding global fetch would defeat the test-mock pattern)", () => {
+    expect(body).toMatch(
+      /\/\/ fetch seam — every IDP-bound HTTP call routes through `deps\.fetch`,\s*\n?\s*\/\/ allowing tests to mock both happy \+ error paths\. Default is the\s*\n?\s*\/\/ global fetch in Node 22\+\./,
+    );
+  });
+
+  it("ExchangeCodeOpts 7-field shape pinned: provider + clientId + clientSecret + callbackUrl + code + codeVerifier (PKCE) + optional fetch (test seam). + 'PKCE code_verifier matching the challenge in the authorize URL.' framing — pinned so the PKCE verifier-matches-challenge contract stay documented", () => {
+    expect(body).toMatch(/export interface ExchangeCodeOpts \{/);
+    expect(body).toMatch(/provider: OAuthClientProvider;/);
+    expect(body).toMatch(/clientId: string;/);
+    expect(body).toMatch(/clientSecret: string;/);
+    expect(body).toMatch(/callbackUrl: string;/);
+    expect(body).toMatch(/code: string;/);
+    expect(body).toMatch(
+      /\/\*\* PKCE code_verifier matching the challenge in the authorize URL\. \*\/\s*\n?\s*codeVerifier: string;/,
+    );
+    expect(body).toMatch(/fetch\?: typeof fetch;/);
+  });
+
+  it("ExchangedTokens 5-field shape pinned: accessToken + idToken (Google only) + expiresIn + refreshToken + scope. + JSDoc framing for each. Drift to dropping idToken would lose Google's sub claim without an extra userinfo round-trip", () => {
+    expect(body).toMatch(/export interface ExchangedTokens \{/);
+    expect(body).toMatch(/accessToken: string;/);
+    expect(body).toMatch(
+      /\/\*\* Google returns this; GitHub doesn't\. The route uses it to read\s*\n?\s*\*\s+the sub claim without an extra userinfo round-trip\. \*\/\s*\n?\s*idToken: string \| null;/,
+    );
+    expect(body).toMatch(
+      /\/\*\* Seconds until access_token expires\. \*\/\s*\n?\s*expiresIn: number \| null;/,
+    );
+    expect(body).toMatch(/refreshToken: string \| null;/);
+    expect(body).toMatch(
+      /\/\*\* IDP-returned scope string\. Used as a sanity check vs requested\. \*\/\s*\n?\s*scope: string \| null;/,
+    );
+  });
+
+  it("ExchangeCodeResult 5-variant tagged-union pinned: ok (with tokens) + invalid-grant (expired/already-used code) + invalid-client (mismatched id/secret) + idp-error (status + body) + network-error (message). Drift to dropping a variant would force callers to handle 'all the rest' as a fall-through", () => {
+    expect(body).toMatch(/export type ExchangeCodeResult =/);
+    expect(body).toMatch(/\| \{ kind: 'ok'; tokens: ExchangedTokens \}/);
+    expect(body).toMatch(/\| \{ kind: 'invalid-grant' \/\* expired or already-used code \*\/ \}/);
+    expect(body).toMatch(/\| \{ kind: 'invalid-client' \/\* mismatched client_id\/secret \*\/ \}/);
+    expect(body).toMatch(/\| \{ kind: 'idp-error'; status: number; body: string \}/);
+    expect(body).toMatch(/\| \{ kind: 'network-error'; message: string \};/);
+  });
+
+  it("exchangeCodeForTokens 6-form-field POST pinned: grant_type=authorization_code + code + redirect_uri + client_id + client_secret + code_verifier (PKCE). + per-provider framing 'Google: standard form-encoded POST...' + 'GitHub: same shape but accepts Accept: application/json header (without it, GitHub returns x-www-form-urlencoded body)'. — pinned so the OAuth2 standard 6-field form-POST + GitHub-needs-Accept-json contract stay documented (drift to dropping Accept:json would let GitHub return form-encoded response body which JSON.parse would reject)", () => {
+    expect(body).toMatch(
+      /Exchange an authorization code for tokens against the IDP\. Per-provider\s*\n?\s*\*\s+body shape:\s*\n?\s*\*\s+- Google: standard form-encoded POST with grant_type, code,\s*\n?\s*\*\s+redirect_uri, client_id, client_secret, code_verifier\s*\n?\s*\*\s+- GitHub: same shape but accepts Accept: application\/json header\s*\n?\s*\*\s+\(without it, GitHub returns x-www-form-urlencoded body\)/,
+    );
+    expect(body).toMatch(
+      /const body = new URLSearchParams\(\{\s*\n?\s*grant_type: 'authorization_code',\s*\n?\s*code: opts\.code,\s*\n?\s*redirect_uri: opts\.callbackUrl,\s*\n?\s*client_id: opts\.clientId,\s*\n?\s*client_secret: opts\.clientSecret,\s*\n?\s*code_verifier: opts\.codeVerifier,\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('invalid_grant + invalid_client error-code routing pinned: HTTP 4xx with error=invalid_grant → invalid-grant variant + HTTP 4xx with error=invalid_client → invalid-client variant + any other 4xx → idp-error. + 200-with-error-body handling (GitHub legacy without Accept:json header) + bad_verification_code → invalid-grant. Drift would let invalid-credential responses fall into the generic idp-error bucket, losing the Verdict-2 fork', () => {
+    expect(body).toMatch(
+      /if \(!res\.ok\) \{\s*\n?\s*const errCode = typeof parsed\.error === 'string' \? parsed\.error : '';\s*\n?\s*if \(errCode === 'invalid_grant'\) return \{ kind: 'invalid-grant' \};\s*\n?\s*if \(errCode === 'invalid_client'\) return \{ kind: 'invalid-client' \};/,
+    );
+    expect(body).toMatch(
+      /\/\/ Some providers \(notably GitHub before sending Accept: json\) return a\s*\n?\s*\/\/ 200 with `error=\.\.\.` body when the code is bad\. Treat that same as\s*\n?\s*\/\/ an HTTP-error response\./,
+    );
+    expect(body).toMatch(
+      /if \(parsed\.error === 'invalid_grant' \|\| parsed\.error === 'bad_verification_code'\) \{\s*\n?\s*return \{ kind: 'invalid-grant' \};\s*\n?\s*\}/,
+    );
+  });
+
+  it("FetchUserInfoResult 5-variant tagged-union pinned: ok (with user) + unauthorized (access_token rejected) + unverified-email (Verdict-1 trust gate) + idp-error + network-error. + unverified-email-rejects-on-Verdict-1 framing 'The function rejects unverified emails — the Verdict 1 (merge-with-verification) collision-flow depends on a trustworthy IDP-asserted email, so we don't proceed unless the IDP says the email is verified.' — pinned so the 5-variant catalog + Verdict-1-trust-contract stay documented", () => {
+    expect(body).toMatch(/export type FetchUserInfoResult =/);
+    expect(body).toMatch(
+      /\| \{ kind: 'unauthorized' \/\* access_token rejected or revoked \*\/ \}/,
+    );
+    expect(body).toMatch(
+      /\| \{ kind: 'unverified-email' \/\* IDP returned no verified email \*\/ \}/,
+    );
+    expect(body).toMatch(
+      /\* Fetch \+ normalize the user profile from the IDP\. Returns\s*\n?\s*\*\s+NormalizedUserInfo on success\. The function rejects unverified\s*\n?\s*\*\s+emails — the Verdict 1 \(merge-with-verification\) collision-flow\s*\n?\s*\*\s+depends on a trustworthy IDP-asserted email, so we don't proceed\s*\n?\s*\*\s+unless the IDP says the email is verified\./,
+    );
+  });
+
+  it("fetchUserInfo Bearer + user-agent framing pinned: 'authorization: Bearer ${accessToken}' + 'GitHub requires a User-Agent on api.github.com requests.' user-agent: 'driftstack-api'. Drift to dropping User-Agent would cause GitHub to reject the userinfo call with 403", () => {
+    expect(body).toMatch(
+      /res = await fetchImpl\(provider\.userinfoUrl, \{\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{opts\.accessToken\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\/\/ GitHub requires a User-Agent on api\.github\.com requests\.\s*\n?\s*'user-agent': 'driftstack-api',\s*\n?\s*\},\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('Google parse pinned: { sub, email, email_verified, name, picture } + Google sub/email-missing → idp-error + emailVerified-false → unverified-email + Verdict-3-avatar from picture. Drift to dropping email_verified check would let unverified Google emails reach the Verdict-1 collision flow', () => {
+    expect(body).toMatch(
+      /if \(opts\.provider === 'google'\) \{\s*\n?\s*\/\/ Google openid userinfo response: \{ sub, email, email_verified, name, picture \}/,
+    );
+    expect(body).toMatch(
+      /const sub = typeof parsed\.sub === 'string' \? parsed\.sub : '';\s*\n?\s*const email = typeof parsed\.email === 'string' \? parsed\.email : '';\s*\n?\s*const emailVerified = parsed\.email_verified === true;\s*\n?\s*if \(sub\.length === 0 \|\| email\.length === 0\) \{\s*\n?\s*return \{ kind: 'idp-error', status: 200, body: 'missing sub\/email' \};\s*\n?\s*\}\s*\n?\s*if \(!emailVerified\) return \{ kind: 'unverified-email' \};/,
+    );
+    expect(body).toMatch(
+      /avatarUrl: typeof parsed\.picture === 'string' \? parsed\.picture : null,/,
+    );
+  });
+
+  it("GitHub parse + 2-fallback framing pinned: 'GitHub: /user returns { id: number, login, name, avatar_url }. Email requires a separate /user/emails call when the user's email is private — that lookup is the caller's responsibility (we focus on the primary call here + return what /user gives us).' + 'GitHub's /user doesn't carry a per-user email_verified flag; the /user/emails endpoint does. Caller cross-checks if needed. Treat the primary email as verified for the V-667.C trust contract since GitHub only exposes primary emails on verified accounts.' — pinned so the GitHub-id-as-string + private-email-fallback-to-/user/emails + V-667.C trust-contract-treats-primary-as-verified contract all stay documented", () => {
+    expect(body).toMatch(
+      /\/\/ GitHub: \/user returns \{ id: number, login, name, avatar_url \}\. Email\s*\n?\s*\/\/ requires a separate \/user\/emails call when the user's email is\s*\n?\s*\/\/ private — that lookup is the caller's responsibility \(we focus on\s*\n?\s*\/\/ the primary call here \+ return what \/user gives us\)\./,
+    );
+    expect(body).toMatch(
+      /\/\/ GitHub's \/user doesn't carry a per-user email_verified flag;\s*\n?\s*\/\/ the \/user\/emails endpoint does\. Caller cross-checks if needed\.\s*\n?\s*\/\/ Treat the primary email as verified for the V-667\.C trust\s*\n?\s*\/\/ contract since GitHub only exposes primary emails on verified\s*\n?\s*\/\/ accounts\./,
+    );
+    expect(body).toMatch(
+      /const githubId = typeof id === 'number' \? String\(id\) : typeof id === 'string' \? id : '';/,
+    );
+  });
+
+  it('idp-error body-truncation pinned: text.slice(0, 500) cap on idp-error body to keep error responses bounded. Drift to including the full body would let IDP-generated multi-KB error pages flood logs', () => {
+    expect(body).toMatch(
+      /return \{ kind: 'idp-error', status: res\.status, body: text\.slice\(0, 500\) \};/,
+    );
+  });
+});
