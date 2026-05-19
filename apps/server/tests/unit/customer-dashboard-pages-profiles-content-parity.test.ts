@@ -48,7 +48,7 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
     );
   });
 
-  it.skip("V-470 inline snapshot-form framing pinned: 'Snapshot capture form, hidden by default. Reveals when a profile row's \"Snapshot\" button is clicked. Replaces the earlier window.prompt flow (some browsers block prompts in non-interactive contexts; inline form is keyboard-accessible).' + 'snapshot capture flow now uses an inline form instead of window.prompt. The form is shared across all profile rows; a single state variable tracks which profile is being captured.' — pinned so the inline-form UX + single-pending state model + the why-not-window.prompt rationale all survive", () => {
+  it('V-470 inline snapshot-form framing pinned. Re-enabled by slice 226 after restoring the V-470 anchor on the HTML-comment side at profiles.astro:80-85 (the JS-side V-470 anchor at line 564 was still intact)', () => {
     expect(body).toMatch(
       /V-470 — Snapshot capture form, hidden by default\. Reveals when a\s*\n?\s*profile row's "Snapshot" button is clicked\. Replaces the earlier\s*\n?\s*window\.prompt flow \(some browsers block prompts in non-\s*\n?\s*interactive contexts; inline form is keyboard-accessible\)\./,
     );
@@ -57,7 +57,7 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
     );
   });
 
-  it.skip("V-480 import-form framing pinned: 'Import form. Reveals when \"Import\" is clicked. Accepts a v1 envelope JSON (paste or file upload), optional name override.' — pinned so the dual-input (paste OR file) + name_override semantics + envelope-v1 contract stay explicit (drift to dropping file upload would break customers with large envelopes that don't paste cleanly)", () => {
+  it('V-480 import-form framing pinned. Re-enabled by slice 226 after restoring the V-480 anchor on the HTML-comment side at profiles.astro:143-146 (the JS-side V-480 anchors at lines 493 + 762 were still intact)', () => {
     expect(body).toMatch(
       /V-480 — Import form\. Reveals when "Import" is clicked\. Accepts a\s*\n?\s*v1 envelope JSON \(paste or file upload\), optional name override\./,
     );
