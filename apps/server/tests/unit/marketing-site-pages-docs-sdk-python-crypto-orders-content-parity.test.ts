@@ -56,7 +56,7 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
     );
   });
 
-  it.skip('list() default limit=50 + status filter V-666.BR + 6-status-enum + 400-on-unknown + limit-clamped-1-100 framing pinned — pinned so the 6-status enum (pending/confirming/paid/failed/partial/cancelled) + V-666.BR anchor + 400-on-unknown contract + 1-100 limit-clamp all survive (drift to a different status enum would create marketing↔server divergence)', () => {
+  it('list() default limit=50 + status filter V-666.BR + 6-status-enum + 400-on-unknown + limit-clamped-1-100 framing pinned. Re-enabled by slice 259 after restoring V-666.BR on the status-filter comment + V-666.AU on the events-print comment at sdk-python-crypto-orders.astro:51,55', () => {
     expect(body).toMatch(/page = client\.crypto_orders\.list\(\)/);
     expect(body).toMatch(/page\["orders"\]/);
     expect(body).toMatch(/V-666\.BR/);
