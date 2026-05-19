@@ -38,7 +38,7 @@ function read(p: string): string {
 describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-691 + W216.A 3-source-file accuracy-pass framing pinned: 'profiles developer docs. Companion to /docs/sessions; covers the saved-profile lifecycle for customers running repeatable, identity-bound automations.' + W216.A accuracy pass pinned against publicProfile in routes/profiles.ts + ProfileSchema + CreateProfileRequestSchema + UpdateProfileRequestSchema in api-types/profiles.ts + PROFILES_PER_TIER in api-types/common.ts — pinned so the V-691 anchor + W216.A 3-source-of-truth commitment survives", () => {
+  it("V-691 + W216.A 3-source-file accuracy-pass framing pinned: 'profiles developer docs. Companion to /docs/sessions; covers the saved-profile lifecycle for customers running repeatable, identity-bound automations.' + W216.A accuracy pass pinned against publicProfile in routes/profiles.ts + ProfileSchema + CreateProfileRequestSchema + UpdateProfileRequestSchema in api-types/profiles.ts + PROFILES_PER_TIER in api-types/common.ts — pinned so the V-691 anchor + W216.A 3-source-of-truth commitment survives. Re-enabled by slice 184 after verifying both comments exist at profiles.astro:4-13", () => {
     expect(body).toMatch(
       /\/\/ V-691 — profiles developer docs\. Companion to \/docs\/sessions;\s*\n?\s*\/\/ covers the saved-profile lifecycle for customers running\s*\n?\s*\/\/ repeatable, identity-bound automations\./,
     );
