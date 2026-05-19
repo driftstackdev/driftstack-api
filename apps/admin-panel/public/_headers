@@ -1,0 +1,24 @@
+# Cloudflare Pages security headers for the admin panel.
+#
+# Audit context: docs/internal/2026-05-20-csp-header-audit.md
+# (TIER 5 security pass per FULL AUTOPILOT directive 2026-05-20).
+#
+# The admin panel is gated behind Cloudflare Access (per V-135) but
+# defense-in-depth still applies: even authenticated staff sessions
+# benefit from clickjacking + MIME-sniffing + Referrer defaults.
+#
+# CSP deferred — same reasoning as customer-dashboard/public/_headers.
+
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+/*.svg
+  Cache-Control: public, max-age=31536000, immutable
+/*.png
+  Cache-Control: public, max-age=31536000, immutable
+
+# ── Security headers — applies to every path ─────────────────────────
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
