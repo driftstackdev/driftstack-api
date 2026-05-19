@@ -64,7 +64,7 @@ describe('W513.C apps/marketing-site/src/pages/docs/crypto-orders-ops-runbook.as
     );
   });
 
-  it.skip("Duplicate-charge framing pinned: 'Crypto orders don't touch cards — that's the Stripe surface.' + 'V-666.AO idempotency keys' double-click cover + 'check the idempotency-metrics endpoint' replays-counter + 'this is a customer-side bug (their integration sent two distinct Idempotency-Keys for what they intended as one intent). Crypto is non-refundable; the resolution is to credit the customer's next billing cycle, not refund.' — pinned so the no-card-on-crypto + V-666.AO idempotency + replays-counter + customer-side-bug-credit-not-refund 4-state framing survives (drift to softening 'not refund' would invite refund disputes)", () => {
+  it('Duplicate-charge framing pinned. Re-enabled by slice 257 after restoring the V-666.AO anchor on the idempotency-keys sentence at crypto-orders-ops-runbook.astro:65 (anchor stripped to bare space + indentation lost)', () => {
     expect(body).toMatch(/Crypto orders don't touch cards — that's the Stripe surface\./);
     expect(body).toMatch(/double-click → handled by V-666\.AO idempotency keys/);
     expect(body).toMatch(
@@ -94,7 +94,7 @@ describe('W513.C apps/marketing-site/src/pages/docs/crypto-orders-ops-runbook.as
     );
   });
 
-  it.skip("V-666.BY CSV export with date-range + status filter framing pinned: 'V-666.BY: scope the export to a date window with ?created_after + ?created_before (ISO 8601). Both work on the JSON list, the CSV endpoint, and the admin GUI's From/To inputs. Combine with ?status=paid for a nightly paid-only reconcile.' + sample URL — pinned so the V-666.BY anchor + ISO-8601 + 3-surface (JSON/CSV/admin-GUI) + nightly-paid-reconcile pattern all survive (drift to dropping ISO-8601 would create date-format ambiguity)", () => {
+  it('V-666.BY CSV export with date-range + status filter framing pinned. Re-enabled by slice 257 after restoring the V-666.BY anchor on the date-range scoping paragraph at crypto-orders-ops-runbook.astro:131', () => {
     expect(body).toMatch(
       /V-666\.BY: scope the export to a date window with\s*\n?\s*<code>\?created_after<\/code> \+ <code>\?created_before<\/code>\s*\n?\s*\(ISO 8601\)\. Both work on the JSON list, the CSV endpoint, and\s*\n?\s*the admin GUI's From\/To inputs\. Combine with\s*\n?\s*<code>\?status=paid<\/code> for a nightly paid-only reconcile\./,
     );
