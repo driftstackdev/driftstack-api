@@ -13,7 +13,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build:packages && npm run build:apps",
+    "build:packages": "npm run build -w packages --if-present",
+    "build:apps": "npm run build -w apps --if-present",
     "dev": "npm run dev --workspace apps/server",
     "dev:all": "concurrently --names server,dashboard,admin,marketing,docs,status --prefix-colors auto -k 'npm:dev:server' 'npm:dev:dashboard' 'npm:dev:admin' 'npm:dev:marketing' 'npm:dev:docs' 'npm:dev:status'",
     "dev:server": "npm run dev --workspace @driftstack/server",
