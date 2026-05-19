@@ -56,7 +56,7 @@ describe('W546.B /docs/tech-debt.md content parity', () => {
     expect(body).toMatch(/\*\*Source:\*\* V-202b \(founder verdict 2026-05-05\)\./);
     expect(body).toMatch(/Stripe's own infrastructure fires billing receipts/);
     expect(body).toMatch(
-      /\(payment\*succeeded \/ payment_failed\) directly to the customer's email/,
+      /\(`payment_succeeded` \/ `payment_failed`\) directly to the customer's email/,
     );
     expect(body).toMatch(/Stripe receipts are a solved problem — legally/);
     expect(body).toMatch(/compliant \(tax-included, receipt-trail-acceptable for accounting\),/);

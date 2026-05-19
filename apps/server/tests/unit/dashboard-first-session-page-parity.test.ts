@@ -43,8 +43,10 @@ describe('W741 dashboard first-session V-184a + V-501 parity', () => {
       /function setBusy\(busy\) \{\s*\n\s+submitBtn\.disabled = busy;\s*\n\s+labelDefault\.classList\.toggle\('hidden', busy\);\s*\n\s+labelBusy\.classList\.toggle\('hidden', !busy\)/,
     );
 
-    // Double-mint guard.
-    expect(p).toMatch(/if \(submitBtn\.disabled\) return; \/\/ — guard against double-mint/);
+    // Double-mint guard (V-501 anchor optionally present in comment).
+    expect(p).toMatch(
+      /if \(submitBtn\.disabled\) return; \/\/ (?:V-501 )?— guard against double-mint/,
+    );
   });
 
   it('CRITICAL LOCKED_ARCHETYPE_DISPLAY_LABEL api-types import pinned + surfaced in the archetype explanation paragraph (single source of truth — drift to inlining would let dashboard show a different label than what the SDK + marketing claim). 2026-05-16 enhancement-review A2: the prior bare "Default archetype: <strong>{LABEL}</strong>." was replaced with a plain-English explanation of what archetype means + why this default.', () => {
