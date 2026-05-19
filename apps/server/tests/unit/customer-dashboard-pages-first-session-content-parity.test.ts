@@ -32,7 +32,7 @@ function read(p: string): string {
 describe('W492.C apps/customer-dashboard/src/pages/first-session.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-184a + V-501 framing pinned: 'onboarding step 5. First session creation. Tier 1 minimal placeholder — full Tier 3 visual UX (tutorial, embedded WebView, view your first capture CTA) lands in V-184b draft.' + 'disabled-while-pending guard + clearer status copy.' — pinned so the onboarding step + V-501 double-click guard framing survive", () => {
+  it('V-184a + V-501 framing pinned. Re-enabled by slice 209 after verifying both V-184a + V-501 comments exist at first-session.astro:5-8 with the matching shape', () => {
     expect(body).toMatch(
       /\/\/ V-184a — onboarding step 5\. First session creation\. Tier 1 minimal\s*\n?\s*\/\/ placeholder — full Tier 3 visual UX \(tutorial, embedded WebView,\s*\n?\s*\/\/ "view your first capture" CTA\) lands in V-184b draft\./,
     );
