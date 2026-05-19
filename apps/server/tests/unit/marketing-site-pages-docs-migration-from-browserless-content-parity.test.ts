@@ -106,7 +106,7 @@ describe('W521.B apps/marketing-site/src/pages/docs/migration-from-browserless.a
     );
   });
 
-  it.skip("Profile-persistence V-312 framing pinned: 'Browserless gives you a fresh browser per request unless you manage your own cookie jar. Driftstack profiles (V-312) persist cookies / localStorage / IndexedDB on the server in the WebKit driver layer.' + 'the customer-facing API does not pin a profile to a specific session at create time today' + client.profiles.create + sessions.create + client.profiles.captureSnapshot — pinned so the V-312 profile-persistence + no-profile-pin-at-create-today + captureSnapshot SDK surface commitment survives", () => {
+  it("Profile-persistence V-312 framing pinned: 'Browserless gives you a fresh browser per request unless you manage your own cookie jar. Driftstack profiles (V-312) persist cookies / localStorage / IndexedDB on the server in the WebKit driver layer.' + 'the customer-facing API does not pin a profile to a specific session at create time today' + client.profiles.create + sessions.create + client.profileSnapshots.capture — pinned so the V-312 profile-persistence + no-profile-pin-at-create-today + profileSnapshots.capture SDK surface commitment survives. Re-enabled by slice 297 after the SDK surface settled on client.profileSnapshots.capture (was client.profiles.captureSnapshot when slice 286 first skipped this assertion)", () => {
     expect(body).toMatch(
       /Browserless gives you a fresh browser per request unless you\s*\n?\s*manage your own cookie jar\. Driftstack profiles \(V-312\)\s*\n?\s*persist cookies \/ localStorage \/ IndexedDB on the server in\s*\n?\s*the WebKit driver layer\./,
     );
@@ -115,7 +115,7 @@ describe('W521.B apps/marketing-site/src/pages/docs/migration-from-browserless.a
     );
     expect(body).toMatch(/const profile = await client\.profiles\.create\(\{/);
     expect(body).toMatch(/name: 'evergreen-scraper',/);
-    expect(body).toMatch(/await client\.profiles\.captureSnapshot\(profile\.id, \{/);
+    expect(body).toMatch(/await client\.profileSnapshots\.capture\(profile\.id, \{/);
     expect(body).toMatch(/label: 'logged-in-baseline',/);
   });
 
