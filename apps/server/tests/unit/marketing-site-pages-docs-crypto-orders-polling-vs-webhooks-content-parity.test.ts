@@ -51,7 +51,7 @@ describe('W509.A apps/marketing-site/src/pages/docs/crypto-orders-polling-vs-web
     );
   });
 
-  it.skip("3-cadence polling guidance: 1-5s (user watching) + 30-60s (dashboard background, V-534 default) + hourly/nightly (reconciliation, V-666.BU cursor) — pinned so the 3-cadence + 2-V-anchor (V-534 + V-666.BU) guidance survive (drift to dropping the 'stop polling once terminal' guidance would let polling run indefinitely; drift to dropping V-666.BU cursor anchor would orphan the backfill mechanism)", () => {
+  it('3-cadence polling guidance pinned. Re-enabled by slice 280 after restoring V-534 + V-666.BU anchors on the 3-cadence bullets at crypto-orders-polling-vs-webhooks.astro:57+59 (both anchors stripped; the 1-5s + 30-60s + hourly/nightly cadence bullets were intact apart from the V-anchor prefix)', () => {
     expect(body).toMatch(
       /<strong>1-5 seconds<\/strong>: user is watching a "Pay\s*\n?\s*with crypto" page\. Stop polling once status is terminal\./,
     );
