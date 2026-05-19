@@ -179,7 +179,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
               before any state mutation
             </p>
             <p class="mt-1 text-sm text-ink-secondary">
- Stripe: timestamp+sha256 HMAC. NowPayments:
+              Stripe: V-080 timestamp+sha256 HMAC. NowPayments: V-487
               HMAC-SHA512 on canonical-keyed JSON. Shared raw-body
               parser ensures the bytes the signature was computed over
               are the bytes the verifier sees.
@@ -222,7 +222,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
               Today's API returns capture bytes inline; there is no
               server-side capture retention layer to configure.
               Session recordings + their retention controls land
- with — see
+              with V-540 — see
               <a href="/docs/recordings" class="text-oxblood-700 underline"
                 >/docs/recordings</a
               >.

@@ -101,7 +101,7 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     expect(body).toMatch(/apps\/server\/src\/lib\/webhook-signing\.ts/);
   });
 
-  it.skip("Inbound webhook claim pinned: 'Stripe: V-080 timestamp+sha256 HMAC. NowPayments: V-487 HMAC-SHA512 on canonical-keyed JSON. Shared raw-body parser ensures the bytes the signature was computed over are the bytes the verifier sees.' — pinned so the per-provider algorithm (Stripe sha256 / NowPayments SHA-512) + V-080/V-487 anchors + canonical-keyed-JSON + shared-raw-body-parser commitments all survive (drift to dropping the canonical-keyed-JSON commitment would let NowPayments signature mismatches slip; drift to dropping the V-080/V-487 anchors would orphan the engineering history)", () => {
+  it('Inbound webhook claim pinned. Re-enabled by slice 277 after restoring V-080 + V-487 anchors on trust/security-overview.astro:182 (both per-provider HMAC algorithm references were intact apart from the V-anchor prefix)', () => {
     expect(body).toMatch(
       /Stripe: V-080 timestamp\+sha256 HMAC\. NowPayments: V-487\s*\n?\s*HMAC-SHA512 on canonical-keyed JSON\. Shared raw-body\s*\n?\s*parser ensures the bytes the signature was computed over\s*\n?\s*are the bytes the verifier sees\./,
     );
@@ -114,7 +114,7 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     );
   });
 
-  it.skip("Capture retention roadmap (V-540) pinned: 'Today's API returns capture bytes inline; there is no server-side capture retention layer to configure. Session recordings + their retention controls land with V-540' — pinned so the no-retention-today honest framing + V-540 future-feature anchor survive (drift to claiming server-side retention now would over-promise; drift to dropping V-540 would orphan the planned feature)", () => {
+  it('Capture retention roadmap (V-540) pinned. Re-enabled by slice 277 after restoring V-540 anchor at trust/security-overview.astro:225 (anchor was stripped from "land with — see" to bare space)', () => {
     expect(body).toMatch(/Capture retention \(roadmap\)/);
     expect(body).toMatch(
       /Today's API returns capture bytes inline; there is no\s*\n?\s*server-side capture retention layer to configure\.\s*\n?\s*Session recordings \+ their retention controls land\s*\n?\s*with V-540/,
