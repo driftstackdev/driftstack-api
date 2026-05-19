@@ -29,8 +29,8 @@ The drift-guard work pinned several load-bearing contracts that would silently
 break if drift went unnoticed:
 
 - **AES-256-GCM `[IV | tag | ciphertext]` envelope** shared across 4 secret
-  classes under `MFA_ENCRYPTION_KEY` (BYOK Anthropic + gui_control_key + LiveKit
-  - MFA TOTP).
+  classes under `MFA_ENCRYPTION_KEY` (BYOK Anthropic, gui_control_key, LiveKit,
+  and MFA TOTP).
 - **Q4=A BYOK-always-wins** founder verdict (locked 2026-05-16) pinned across
   routes/account-byok-anthropic + routes/account-bundled-llm + docs/api/byok-
   anthropic + docs/api/bundled-llm.
