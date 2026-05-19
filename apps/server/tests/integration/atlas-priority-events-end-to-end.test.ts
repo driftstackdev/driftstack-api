@@ -78,7 +78,15 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (app) await app.close();
-  if (client) await client.end({ timeout: 5 });
+  if (client) {
+    // Clean up the rows this suite inserted. probePayload() seeds
+    // every row's customer_id with a `cust-test-<unique>` prefix so
+    // we can scoped-delete without touching real customer data.
+    await client`DELETE FROM atlas_priority_events WHERE customer_id LIKE 'cust-test-%'`.catch(
+      () => {},
+    );
+    await client.end({ timeout: 5 });
+  }
 });
 
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(

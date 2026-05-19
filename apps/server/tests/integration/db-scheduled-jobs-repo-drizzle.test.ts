@@ -71,7 +71,16 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (client) await client.end({ timeout: 5 });
+  if (client) {
+    // Clean up rows this suite inserted so they don't accumulate in
+    // the DB across test runs. Matches all `regression_guard_dummy`
+    // jobs by type — the suite is the only writer of that job_type.
+    // No-throw on the delete (DB may already be torn down).
+    await client`DELETE FROM scheduled_jobs WHERE job_type = 'regression_guard_dummy'`.catch(
+      () => {},
+    );
+    await client.end({ timeout: 5 });
+  }
 });
 
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
