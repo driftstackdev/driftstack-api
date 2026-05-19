@@ -70,6 +70,13 @@ jobs:
       - name: Install npm deps
         run: npm ci
 
+      - name: Build all workspace packages (transitive deps for SDK + gui)
+        # Same fix as deploy.yml (2026-05-19): packages/sdk-typescript imports
+        # from @driftstack/api-types, which is a composite TS project.
+        # Need to build all packages/* (api-types + others) before the SDK
+        # tsup runs, otherwise dts emit fails with TS2307.
+        run: npm run build:packages
+
       - name: Build SDK (transitive dep)
         run: npm run build --workspace packages/sdk-typescript
 

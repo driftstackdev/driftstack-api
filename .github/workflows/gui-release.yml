@@ -72,6 +72,13 @@ jobs:
       - name: Install npm deps
         run: npm ci
 
+      - name: Build all workspace packages (transitive deps)
+        # Same workspace-build-order fix as deploy.yml + gui-build-check.yml
+        # (2026-05-19). packages/sdk-typescript imports from
+        # @driftstack/api-types; the api-types composite project must be
+        # built before sdk-typescript tsup runs dts emit.
+        run: npm run build:packages
+
       - name: Build SDK (transitive dep of gui-client)
         run: npm run build --workspace packages/sdk-typescript
 
