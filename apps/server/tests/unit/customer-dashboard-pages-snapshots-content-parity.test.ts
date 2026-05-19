@@ -32,7 +32,7 @@ function read(p: string): string {
 describe('W495.B apps/customer-dashboard/src/pages/snapshots.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-375 framing pinned: 'Profile snapshots management page. Cross-account list of every snapshot the calling account owns, with Restore + Delete actions. Capture happens on /profiles (per-row Snapshot button).' — pinned so the cross-account scope + the capture-on-/profiles flow stay explicit (drift to per-profile-only listing would force customers to navigate per-profile to find their snapshots)", () => {
+  it("V-375 framing pinned: 'Profile snapshots management page. Cross-account list of every snapshot the calling account owns, with Restore + Delete actions. Capture happens on /profiles (per-row Snapshot button).' — pinned so the cross-account scope + the capture-on-/profiles flow stay explicit (drift to per-profile-only listing would force customers to navigate per-profile to find their snapshots). Re-enabled by slice 158 after verifying the V-375 comment exists at snapshots.astro:4-6 with the matching shape", () => {
     expect(body).toMatch(
       /\/\/ V-375 — Profile snapshots management page\. Cross-account list of\s*\n?\s*\/\/ every snapshot the calling account owns, with Restore \+ Delete\s*\n?\s*\/\/ actions\. Capture happens on \/profiles \(per-row Snapshot button\)\./,
     );
@@ -56,7 +56,7 @@ describe('W495.B apps/customer-dashboard/src/pages/snapshots.astro content parit
     );
   });
 
-  it.skip("V-331b act-as header propagation in authedFetch: '...(typeof window.driftstackActAsHeaders === 'function' ? window.driftstackActAsHeaders() : {})' — pinned so the team-scoped 'view as another account' flow propagates to snapshots reads/writes (drift would silently let team managers restore into their OWN account when trying to restore for a team-mate)", () => {
+  it("V-331b act-as header propagation in authedFetch: '...(typeof window.driftstackActAsHeaders === 'function' ? window.driftstackActAsHeaders() : {})' — pinned so the team-scoped 'view as another account' flow propagates to snapshots reads/writes (drift would silently let team managers restore into their OWN account when trying to restore for a team-mate). Re-enabled by slice 158 after verifying the spread-pattern exists at snapshots.astro:154-155", () => {
     expect(body).toMatch(
       /\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\n?\s*\? window\.driftstackActAsHeaders\(\)\s*\n?\s*: \{\}\),/,
     );
