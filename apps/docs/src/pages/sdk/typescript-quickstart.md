@@ -134,6 +134,46 @@ rotation grace window — see
 endpoint. Accept either header during the overlap and your verifier
 won't drop deliveries.
 
+## Pair-mode takeover (interactive AI sessions)
+
+For sessions where a human needs to step in mid-flight, the SDK
+exposes pair-mode helpers that drive the same takeover state
+machine the dashboard uses.
+
+```ts
+// Create or upgrade a session into pair mode.
+const session = await client.agentSessions.create({ mode: 'pair' });
+// OR: switch an existing AI session into pair mode at any time.
+await client.agentSessions.setMode(session.id, 'pair');
+
+// Driver code keeps running. When the human is ready to take over,
+// the first input-event from the dashboard automatically fires the
+// takeover-request transition — no explicit /takeover call needed:
+await client.agentSessions.sendInputEvent(
+  session.id,
+  { type: 'mouseDown', x: 200, y: 150, button: 0 },
+  { clientId: 'dashboard-tab-a' },
+);
+// Response is a discriminated union — branch on `kind`:
+//   - 'pair-mode-takeover-fired' → pair_mode_state populated
+//   - 'forwarded' → duration_ms populated (after takeover-grant)
+
+// Programmatic takeover from your own code (e.g. an ops dashboard)
+// is identical to the explicit POST /:id/takeover call:
+const after = await client.agentSessions.takeover(session.id, 'cli-bot');
+console.log(after.pair_mode_state.kind); // takeover-pending
+
+// Hand control back to the AI driver when the human is done:
+const back = await client.agentSessions.handback(session.id);
+console.log(back.pair_mode_state.kind); // handback-pending
+```
+
+The state machine kinds you'll see: `ai-driving`,
+`takeover-pending`, `takeover-queued` (when the runtime is
+mid-decompose), `human-driving`, `handback-pending`,
+`handback-queued`. The dashboard polls `agent-sessions/:id` to
+display the current kind.
+
 ## Next steps
 
 - [Session lifecycle reference](/guides/session-lifecycle/) — states,

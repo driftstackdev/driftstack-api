@@ -147,6 +147,45 @@ rotation grace window — see
 endpoint. Verify accepting either keeps deliveries flowing while
 you roll the new secret across your verifier infra.
 
+## Pair-mode takeover (interactive AI sessions)
+
+For sessions where a human needs to step in mid-flight:
+
+```python
+# Create a pair-mode session, or switch an existing AI session.
+session = client.agent_sessions.create({"mode": "pair"})
+# OR: client.agent_sessions.set_mode(session_id, "pair")
+
+# When a dashboard user clicks the live preview, the first input-
+# event automatically fires the takeover-request transition. Pass
+# client_id (any string identifying the calling tab / bot):
+result = client.agent_sessions.send_input_event(
+    session["id"],
+    {"type": "mouseDown", "x": 200, "y": 150, "button": 0},
+    client_id="ops-dashboard-tab-a",
+)
+if result["kind"] == "pair-mode-takeover-fired":
+    # result["pair_mode_state"]["kind"] == "takeover-pending"
+    pass
+
+# Programmatic takeover from your own ops tooling:
+after = client.agent_sessions.takeover(session["id"], "cli-bot")
+print(after["pair_mode_state"]["kind"])  # takeover-pending
+
+# Hand control back when done:
+back = client.agent_sessions.handback(session["id"])
+print(back["pair_mode_state"]["kind"])  # handback-pending
+```
+
+Async mirrors are 1:1: `await aclient.agent_sessions.set_mode(...)`,
+`await aclient.agent_sessions.send_input_event(...)`,
+`await aclient.agent_sessions.takeover(...)`,
+`await aclient.agent_sessions.handback(...)`.
+
+State machine kinds you'll see: `ai-driving`, `takeover-pending`,
+`takeover-queued` (mid-decompose deferral), `human-driving`,
+`handback-pending`, `handback-queued`.
+
 ## Next steps
 
 - [Session lifecycle reference](/guides/session-lifecycle/) —

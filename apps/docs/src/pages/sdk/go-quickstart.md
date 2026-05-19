@@ -172,6 +172,46 @@ rotation grace window — see
 endpoint. Verifier accepts either header so deliveries don't drop
 while you roll the new secret across your verifier infra.
 
+## Pair-mode takeover (interactive AI sessions)
+
+For sessions where a human needs to step in mid-flight:
+
+```go
+ctx := context.Background()
+
+// Create a pair-mode session, or switch an existing AI session.
+session, err := client.AgentSessions.Create(ctx,
+    &driftstack.CreateAgentSessionRequest{Mode: "pair"}, nil)
+if err != nil { return err }
+// OR: client.AgentSessions.SetMode(ctx, session.ID, "pair")
+
+// The first input-event from a dashboard tab in pair-mode
+// ai-driving fires the takeover-request transition. Pass a
+// ClientID to scope the pair-mode lock to your tab / bot.
+result, err := client.AgentSessions.SendInputEvent(ctx, session.ID,
+    map[string]any{"type": "mouseDown", "x": 200, "y": 150, "button": 0},
+    &driftstack.SendInputEventOptions{ClientID: "ops-dashboard-tab-a"},
+)
+if err != nil { return err }
+if result.Kind == "pair-mode-takeover-fired" {
+    // result.PairModeState["kind"] == "takeover-pending"
+}
+
+// Programmatic takeover from your own ops tooling:
+after, err := client.AgentSessions.Takeover(ctx, session.ID, "cli-bot")
+if err != nil { return err }
+// after.PairModeState["kind"] == "takeover-pending"
+
+// Hand control back when done:
+back, err := client.AgentSessions.Handback(ctx, session.ID)
+if err != nil { return err }
+// back.PairModeState["kind"] == "handback-pending"
+```
+
+State machine kinds you'll see: `ai-driving`, `takeover-pending`,
+`takeover-queued` (mid-decompose deferral), `human-driving`,
+`handback-pending`, `handback-queued`.
+
 ## Next steps
 
 - [Session lifecycle reference](/guides/session-lifecycle/) —
