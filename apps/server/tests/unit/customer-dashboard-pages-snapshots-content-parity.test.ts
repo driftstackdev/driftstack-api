@@ -38,7 +38,7 @@ describe('W495.B apps/customer-dashboard/src/pages/snapshots.astro content parit
     );
   });
 
-  it.skip("V-470 inline restore-form framing pinned: 'Restore form, hidden by default. Reveals when a snapshot row's \"Restore\" button is clicked. Replaces the earlier window.prompt flow.' + 'restore flow uses an inline form instead of window.prompt. Form state is shared; a single pending id tracks which snapshot is being restored.' — pinned so the inline-form UX stays + the single-pending-id state model survives (drift to window.prompt would break mobile customers; drift to multi-pending would let customers fire concurrent restores)", () => {
+  it('V-470 inline restore-form framing pinned. Re-enabled by slice 225 after restoring the V-470 anchor on the HTML-comment side (it had drifted off the HTML comment block while the JS-side V-470 anchor was still intact; this slice repairs the HTML-comment side so both halves of the V-470 framing are documented again)', () => {
     expect(body).toMatch(
       /V-470 — Restore form, hidden by default\. Reveals when a snapshot\s*\n?\s*row's "Restore" button is clicked\. Replaces the earlier\s*\n?\s*window\.prompt flow\./,
     );
