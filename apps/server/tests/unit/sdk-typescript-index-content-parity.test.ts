@@ -57,7 +57,9 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
 
   it('Per-resource list-page type re-exports (sessions / api-keys / webhooks / profiles / profile-snapshots)', () => {
     expect(body).toMatch(/export type \{ SessionsListPage \} from '\.\/resources\/sessions\.js';/);
-    expect(body).toMatch(/export type \{ ApiKeyList \} from '\.\/resources\/api-keys\.js';/);
+    expect(body).toMatch(
+      /export type \{\s*\n?\s*ApiKeyList,\s*\n?\s*RotateApiKeyOptions,\s*\n?\s*RotateApiKeyResponse,\s*\n?\s*\} from '\.\/resources\/api-keys\.js';/,
+    );
     expect(body).toMatch(
       /export type \{ WebhookEndpointList, WebhookDeliveryListPage \} from '\.\/resources\/webhooks\.js';/,
     );
@@ -82,6 +84,15 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
     );
     expect(body).toMatch(
       /export type \{\s*\n?\s*LegalDocumentEntry,\s*\n?\s*LegalRequiredEntry,\s*\n?\s*AcceptLegalDocumentRequest,\s*\n?\s*AcceptLegalDocumentResponse,\s*\n?\s*\} from '\.\/resources\/legal\.js';/,
+    );
+    // Team types re-export (added in the slice that closed the
+    // TS SDK type-surface gap for client.team.* method params + return types).
+    expect(body).toMatch(
+      /export type \{\s*\n?\s*TeamRole,\s*\n?\s*TeamMember,\s*\n?\s*TeamInvite,\s*\n?\s*TeamMembersList,\s*\n?\s*TeamInvitesList,\s*\n?\s*AcceptInviteResponse,\s*\n?\s*InviteOptions,\s*\n?\s*\} from '\.\/resources\/team\.js';/,
+    );
+    // Crypto-orders parameter-type re-exports.
+    expect(body).toMatch(
+      /export type \{\s*\n?\s*CreateCryptoCheckoutOptions,\s*\n?\s*ListCryptoOrdersOptions,\s*\n?\s*\} from '\.\/resources\/crypto-orders\.js';/,
     );
   });
 

@@ -5,7 +5,11 @@ export type { RetryConfig } from './retry.js';
 export type { HttpClientConfig, RequestOptions } from './http.js';
 export { iteratePaginated, type CursorPage } from './pagination.js';
 export type { SessionsListPage } from './resources/sessions.js';
-export type { ApiKeyList } from './resources/api-keys.js';
+export type {
+  ApiKeyList,
+  RotateApiKeyOptions,
+  RotateApiKeyResponse,
+} from './resources/api-keys.js';
 export type { WebhookEndpointList, WebhookDeliveryListPage } from './resources/webhooks.js';
 export type { ProfilesListPage } from './resources/profiles.js';
 export type { ProfileSnapshotsListPage } from './resources/profile-snapshots.js';
@@ -44,6 +48,19 @@ export type {
   LiveKitInfo,
 } from './resources/agent-sessions.js';
 export type { Recipe, CreateRecipeRequest } from './resources/recipes.js';
+export type {
+  TeamRole,
+  TeamMember,
+  TeamInvite,
+  TeamMembersList,
+  TeamInvitesList,
+  AcceptInviteResponse,
+  InviteOptions,
+} from './resources/team.js';
+export type {
+  CreateCryptoCheckoutOptions,
+  ListCryptoOrdersOptions,
+} from './resources/crypto-orders.js';
 export type {
   LegalDocumentEntry,
   LegalRequiredEntry,
