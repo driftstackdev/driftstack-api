@@ -1,36 +1,28 @@
 # AI chat + manual side-by-side live feature (v2-#8)
 
-**Status:** DESIGN ONLY. Awaiting founder verdicts on the 5 open
-questions below.
+**Status:** IMPLEMENTATION — Slice 2 scaffold landed. Slices 3-6
+sequential.
 
 **Trigger:** Strategic directive 2026-05-17T19:15Z (3) — APPROVED
 for v1.0 as the primary differentiator. "Highest moat per engineering
 dollar; no competitor has it."
 
-**Date staged:** 2026-05-18. Slice 1 founder-verdict surface
-hoisted 2026-05-19 (Agent 2 directive).
+**Date staged:** 2026-05-18. Slice 1 founder-verdict surface hoisted
+2026-05-19; founder verdicts LOCKED 2026-05-19 (Wave 29-NNN ARC 3).
 
-## 🛑 BLOCKING: 5 founder verdicts needed before Slice 2 implementation fires
+## ✅ Founder verdicts LOCKED 2026-05-19
 
-Full discussion + alternatives at the bottom of this doc; one-line
-recommended pick + the leg the decision drives:
+| #   | Question                                 | Verdict | Implication                                                                                           |
+| --- | ---------------------------------------- | ------- | ----------------------------------------------------------------------------------------------------- |
+| 1   | Live transcript transport                | **A**   | SSE for transcript + POST `/v1/agent-sessions/:id/message` for customer input. Two channels.          |
+| 2   | gui_control key minting policy           | **C**   | Per-session 24h-TTL auto-mint; stored server-side; never visible to customer.                         |
+| 3   | `pair_mode_state` storage                | **A**   | New JSONB column on `agent_sessions.pair_mode_state` (migration TBD; auditable; survives Redis loss). |
+| 4   | Per-session input-conflict lock location | **A**   | Redis-backed route-layer per-session lock (extends existing rate-limit Redis pattern, ~50 LOC).       |
+| 5   | Per-turn cost surfacing in chat UI       | **A**   | Hide actual cost in customer-facing footer (consistent with bundled-LLM design v2-#6 verdict).        |
 
-| #   | Question                                 | Rec. | Drives                                                                                                   |
-| --- | ---------------------------------------- | ---- | -------------------------------------------------------------------------------------------------------- |
-| 1   | Live transcript transport                | A    | SSE + POST /message (vs WebSocket; vs long-poll fallback)                                                |
-| 2   | gui_control key minting policy           | C    | Per-session 24h-TTL auto-mint (vs explicit customer mint; vs per-account auto-mint reused forever)       |
-| 3   | `pair_mode_state` storage                | A    | New JSONB column on `agent_sessions.pair_mode_state` (vs transcript-meta embed; vs Redis-only ephemeral) |
-| 4   | Per-session input-conflict lock location | A    | Route-layer Redis lock (vs harness-layer WebKit queue; vs no-lock-doc-non-deterministic)                 |
-| 5   | Per-turn cost surfacing in chat UI       | A    | Hide cost in customer chat footer (vs operator-only audit-log only; vs surface in chat footer)           |
-
-All five Tier-3-flavored (architecture-shaping; affect 4-7 weeks of
-downstream work). Question 5 also gates the bundled-LLM design v2-#6
-("don't compete on margin transparency" lands consistently or not).
-Founder Ack of recommendations = Agent 2 unblocked to fire Slice 2
-(page route + component scaffold, 2-3 days).
-
-Override path: pick a non-A letter per row + note the rationale; Agent
-2 re-reads on next /loop fire and proceeds from there.
+Slices 2-6 implementation UNBLOCKED. See "Engineering arc" section
+below for the sequence. Bottom-of-doc "Founder verdicts needed" section
+retained as the long-form decision-record context.
 
 ## The product
 

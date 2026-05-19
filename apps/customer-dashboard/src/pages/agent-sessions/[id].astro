@@ -1,0 +1,266 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+import { resolveApiBaseUrl } from '../../lib/api-base-url';
+
+// v2-#8 Wave 29-NNN ARC 3 — AI chat + manual side-by-side LIVE
+// per-session workbench. Slice 2 scaffold per the design doc at
+// docs/internal/ai-chat-manual-side-by-side-design.md (founder
+// verdicts A/C/A/A/A LOCKED 2026-05-19).
+//
+// Split-screen workbench:
+//   LEFT  — LiveKit browser-stream preview + ManualControlOverlay
+//           (mouse/touch on the video translates to /v1/sessions/:id/
+//           input-event POST in Manual / Pair mode; LK.6 wire shape).
+//   RIGHT — AI chat panel (mode toggle / transcript / composer).
+//
+// Modes (per the design doc):
+//   manual — human drives via overlay; AI observes only.
+//   ai     — AgentRuntime drives via decompose loop.
+//   pair   — both; AI pauses on customer takeover, resumes on handback.
+//
+// Verdict Q1 (transport): SSE on /v1/agent-sessions/:id/stream for
+// transcript; POST /v1/agent-sessions/:id/message for customer input.
+//
+// Verdict Q3 (state): agent_sessions.pair_mode_state JSONB column —
+// canonical mode + last_action_at + last_actor live there; Slice 5
+// wires conflict resolution.
+//
+// Verdict Q5 (cost): hide actual per-turn cost in the customer-facing
+// footer (operator-only audit-log surface only).
+//
+// Slice 2 SCAFFOLD scope (this file):
+//   - Layout structure + Tailwind classes
+//   - Mode toggle UI (client-side state only — backend wiring in Slice 3)
+//   - Transcript placeholder (SSE wiring in Slice 4)
+//   - Input event overlay placeholder (POST wiring in Slice 4)
+//   - Mock data fallback so the page renders even when the agent_
+//     session id doesn't exist yet (development affordance)
+//
+// Real harness integration lands when Agent 1's Swift harness end-
+// to-end ships (per ORCHESTRATOR-STATE.md 2026-05-19 harness Option A
+// verdict — 6-9 weeks Agent 1 work post §10/§11+EG-WK close).
+
+const { id } = Astro.params;
+const apiBaseUrl = resolveApiBaseUrl();
+---
+
+<DashboardLayout title={`Agent session ${id ?? ''}`}>
+  <div class="h-screen flex flex-col" data-page="agent-session-workbench" data-session-id={id}>
+    <header class="border-b border-slate-800 px-6 py-3 flex items-center gap-4">
+      <a href="/agent-sessions" class="text-sm text-ink-muted hover:text-ink-primary">
+        ← All agent sessions
+      </a>
+      <div class="flex-1">
+        <h1 class="text-base font-semibold text-ink-primary">Agent session</h1>
+        <p class="text-xs text-ink-muted font-mono">{id}</p>
+      </div>
+      <div data-status-pill class="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300">
+        Loading…
+      </div>
+    </header>
+
+    <main class="flex-1 grid grid-cols-2 gap-0 overflow-hidden" data-component="SplitScreen">
+      <!-- LEFT — LiveKit preview + Manual control overlay -->
+      <section
+        class="border-r border-slate-800 bg-slate-950 flex flex-col"
+        data-component="LeftPanel"
+        aria-label="Live browser preview"
+      >
+        <div class="px-4 py-2 border-b border-slate-800 text-xs uppercase tracking-wide text-ink-muted">
+          Live preview
+        </div>
+        <div
+          class="flex-1 relative flex items-center justify-center"
+          data-component="LiveKitPreview"
+          data-session-id={id}
+        >
+          <!-- Placeholder until harness end-to-end Swift lands (Tier-3
+               verdict 2026-05-19, 6-9wks Agent 1). LiveKit JS SDK
+               wire-up follows in Slice 4. -->
+          <div class="text-center text-ink-muted text-sm">
+            <p class="font-mono">LiveKit stream coming online…</p>
+            <p class="mt-2 text-xs">harness end-to-end (Swift) wires in Slice 4</p>
+          </div>
+          <!-- ManualControlOverlay: transparent click-capture div on top
+               of LiveKit video in Manual/Pair mode. POSTs input events
+               to /v1/sessions/:id/input-event (LK.6 wire shape). Wired
+               in Slice 4. -->
+          <div
+            data-component="ManualControlOverlay"
+            class="absolute inset-0 pointer-events-none"
+            data-overlay-enabled="false"
+          ></div>
+        </div>
+      </section>
+
+      <!-- RIGHT — AI chat panel -->
+      <section class="bg-slate-950 flex flex-col" data-component="RightPanel" aria-label="AI chat">
+        <!-- Mode toggle row -->
+        <div
+          class="px-4 py-3 border-b border-slate-800 flex items-center gap-3"
+          data-component="ChatHeader"
+        >
+          <div
+            class="flex bg-slate-900 rounded-md p-0.5 text-xs"
+            data-component="ModeToggle"
+            role="radiogroup"
+            aria-label="Session mode"
+          >
+            <button
+              data-mode="manual"
+              class="px-3 py-1.5 rounded text-slate-300 hover:text-ink-primary data-[active=true]:bg-slate-700 data-[active=true]:text-ink-primary"
+              aria-checked="false"
+              role="radio"
+            >
+              Manual
+            </button>
+            <button
+              data-mode="ai"
+              class="px-3 py-1.5 rounded text-slate-300 hover:text-ink-primary data-[active=true]:bg-slate-700 data-[active=true]:text-ink-primary"
+              data-active="true"
+              aria-checked="true"
+              role="radio"
+            >
+              AI
+            </button>
+            <button
+              data-mode="pair"
+              class="px-3 py-1.5 rounded text-slate-300 hover:text-ink-primary data-[active=true]:bg-slate-700 data-[active=true]:text-ink-primary"
+              aria-checked="false"
+              role="radio"
+            >
+              Pair
+            </button>
+          </div>
+          <span class="text-xs text-ink-muted ml-auto" data-component="ModeStatus">
+            AI is driving
+          </span>
+        </div>
+
+        <!-- Transcript: SSE-fed in Slice 4; scaffolded with mock entries. -->
+        <div
+          class="flex-1 overflow-y-auto px-4 py-4 space-y-3 text-sm"
+          data-component="ChatTranscript"
+          aria-live="polite"
+        >
+          <p class="text-ink-muted text-xs text-center" data-empty>
+            No turns yet. Send a message to start.
+          </p>
+        </div>
+
+        <!-- Composer: POSTs to /v1/agent-sessions/:id/message in Slice 4. -->
+        <form
+          class="border-t border-slate-800 p-4 flex gap-2"
+          data-component="ChatInput"
+          data-disabled-when-mode="manual"
+          autocomplete="off"
+        >
+          <textarea
+            name="message"
+            rows="1"
+            placeholder="Tell the agent what to do (Cmd-Enter to send)"
+            class="flex-1 resize-none bg-slate-900 border border-slate-800 rounded-md px-3 py-2 text-sm text-ink-primary placeholder-slate-500 focus:outline-none focus:border-slate-600"
+          ></textarea>
+          <button
+            type="submit"
+            class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:bg-slate-700 disabled:cursor-not-allowed"
+          >
+            Send
+          </button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl, sessionId: id }}>
+    // Slice 2 SCAFFOLD client logic. Real wiring lands in Slices 3-6.
+    //
+    // What's here:
+    //   - Mode toggle UI state (client-only). POST /v1/agent-sessions/
+    //     :id/mode lands in Slice 3.
+    //   - Composer disabled-when-mode='manual' toggle.
+    //   - Status-pill swap.
+    //   - Cmd-Enter to submit (no-op until Slice 4 wires the POST).
+
+    const root = document.querySelector('[data-page="agent-session-workbench"]');
+    if (!root) throw new Error('agent-session workbench root missing');
+
+    const statusPill = root.querySelector('[data-status-pill]');
+    const modeButtons = Array.from(root.querySelectorAll('[data-component="ModeToggle"] button[data-mode]'));
+    const modeStatus = root.querySelector('[data-component="ModeStatus"]');
+    const composerForm = root.querySelector('[data-component="ChatInput"]');
+    const composerTextarea = composerForm?.querySelector('textarea');
+    const composerSubmit = composerForm?.querySelector('button[type="submit"]');
+    const overlay = root.querySelector('[data-component="ManualControlOverlay"]');
+
+    /** @type {'manual'|'ai'|'pair'} */
+    let mode = 'ai';
+
+    function paintMode() {
+      for (const btn of modeButtons) {
+        const isActive = btn.getAttribute('data-mode') === mode;
+        btn.setAttribute('data-active', isActive ? 'true' : 'false');
+        btn.setAttribute('aria-checked', isActive ? 'true' : 'false');
+      }
+      const label = { manual: 'You are driving', ai: 'AI is driving', pair: 'Pair mode — AI runs; you can take over' }[mode];
+      if (modeStatus) modeStatus.textContent = label;
+
+      const composerDisabled = mode === 'manual';
+      if (composerTextarea) composerTextarea.disabled = composerDisabled;
+      if (composerSubmit) composerSubmit.disabled = composerDisabled;
+
+      const overlayEnabled = mode === 'manual' || mode === 'pair';
+      if (overlay) {
+        overlay.setAttribute('data-overlay-enabled', overlayEnabled ? 'true' : 'false');
+        overlay.style.pointerEvents = overlayEnabled ? 'auto' : 'none';
+      }
+
+      if (statusPill) {
+        statusPill.textContent = mode.toUpperCase();
+        statusPill.className =
+          'text-xs px-2 py-1 rounded ' +
+          (mode === 'manual'
+            ? 'bg-amber-900 text-amber-200'
+            : mode === 'pair'
+              ? 'bg-blue-900 text-blue-200'
+              : 'bg-emerald-900 text-emerald-200');
+      }
+    }
+
+    for (const btn of modeButtons) {
+      btn.addEventListener('click', () => {
+        const next = btn.getAttribute('data-mode');
+        if (next === 'manual' || next === 'ai' || next === 'pair') {
+          mode = next;
+          paintMode();
+          // Slice 3 will POST /v1/agent-sessions/:id/mode here.
+        }
+      });
+    }
+
+    composerForm?.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      // Slice 4 wires real POST /v1/agent-sessions/:id/message + SSE
+      // re-render of the transcript. Scaffold no-op for now.
+      if (composerTextarea && composerTextarea.value.trim().length > 0) {
+        // eslint-disable-next-line no-console
+        console.info('[scaffold] would POST /v1/agent-sessions/' + sessionId + '/message', {
+          message: composerTextarea.value,
+        });
+        composerTextarea.value = '';
+      }
+    });
+
+    composerTextarea?.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) {
+        ev.preventDefault();
+        composerForm?.dispatchEvent(new Event('submit', { cancelable: true }));
+      }
+    });
+
+    paintMode();
+    // Slice 3 hydrates the initial mode from GET /v1/agent-sessions/:id
+    // (server-side render path lands then so the toggle reflects the
+    // canonical pair_mode_state.mode without a flash).
+  </script>
+</DashboardLayout>
