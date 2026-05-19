@@ -36,7 +36,7 @@ function read(p: string): string {
 describe('W518.C apps/marketing-site/src/pages/docs/api-changelog.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-712 framing pinned: 'public API changelog. Customer-facing summary of meaningful API changes: new endpoints, schema additions (backward compatible), deprecations, and security-relevant changes. Companion to /docs/api-versioning (the policy) and the in-repo CHANGELOG (the engineering-detail log).' — pinned so the V-712 anchor + 4-content-categories + 2-companion (api-versioning + in-repo-CHANGELOG) commitment survives", () => {
+  it("V-712 framing pinned: 'public API changelog. Customer-facing summary of meaningful API changes: new endpoints, schema additions (backward compatible), deprecations, and security-relevant changes. Companion to /docs/api-versioning (the policy) and the in-repo CHANGELOG (the engineering-detail log).' — pinned so the V-712 anchor + 4-content-categories + 2-companion (api-versioning + in-repo-CHANGELOG) commitment survives. Re-enabled by slice 170 after verifying the V-712 comment exists at api-changelog.astro:4-8", () => {
     expect(body).toMatch(
       /\/\/ V-712 — public API changelog\. Customer-facing summary of meaningful\s*\n?\s*\/\/ API changes: new endpoints, schema additions \(backward compatible\),\s*\n?\s*\/\/ deprecations, and security-relevant changes\. Companion to\s*\n?\s*\/\/ \/docs\/api-versioning \(the policy\) and the in-repo CHANGELOG \(the\s*\n?\s*\/\/ engineering-detail log\)\./,
     );
