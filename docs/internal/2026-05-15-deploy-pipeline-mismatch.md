@@ -57,7 +57,7 @@ server's actual setup (systemd + node). Two paths:
 - Install Docker on both Hetzner boxes.
 - Install /opt/driftstack/docker-compose.yml that runs the new
   `ghcr.io/driftstackdev/driftstack-api:${IMAGE_TAG}` image.
-- Migrate the LIVEKIT\_\* env vars I SSH-wrote into
+- Migrate the `LIVEKIT_*` env vars I SSH-wrote into
   `DEPLOY_DOTENV_BASE64` GitHub secret so future deploys carry
   them.
 - Disable the `driftstack-api.service` systemd unit; let

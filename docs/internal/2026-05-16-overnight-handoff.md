@@ -37,7 +37,7 @@ Public incident detail timeline + recent_incidents on /v1/status:
 - GET /v1/status/incidents — list, 30d window, 30s Cache-Control
 - GET /v1/status/incidents/:id — detail + timeline, 30s Cache-Control
 - /v1/status.recent_incidents — top 5 public summaries, typed shape
-- status-site /incident?id=inc\_<uuid> page renders timeline
+- status-site `/incident?id=inc_<uuid>` page renders timeline
 - index card titles link to detail
 - OpenAPI typed schema (was z.unknown())
 
@@ -146,7 +146,7 @@ flag additions.
 ## What's queued but not started
 
 - V-541 cost monitoring admin-panel UI (multi-wave; endpoints
-  already exist at /v1/admin/cost/\*)
+  already exist at `/v1/admin/cost/*`)
 - V-552 API ref deep-dive content (content work, multi-wave)
 - V-543 customer-success email templates (multi-wave parity churn)
 - V-547 Scenarios 5/7/8 (need mocking infra)

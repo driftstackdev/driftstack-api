@@ -442,7 +442,7 @@ design docs; 5 new drift-guard tests.
   of current template state. Not blocked; queue continues.
 - v2-#10.5 webhook secret rotation daily reminder job + UI banner.
 - v2-#11.5 BYOK Anthropic key rotation daily reminder job + UI banner.
-- v2-#3.5/sweep task #25 iphone16pro*\* → iphone17*\* archetype example
+- v2-#3.5/sweep task #25 `iphone16pro_*` → `iphone17_*` archetype example
   rename (founder paste 2026-05-17 ~23:10 CEST identified; cosmetic).
 
 ### Founder verdicts pending in `/tmp/orchestrator-pending-tier3.md`

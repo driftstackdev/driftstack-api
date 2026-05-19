@@ -43,8 +43,8 @@ Deploy-bridge improvements in this batch:
 
 - `npm ci` (lockfile-strict) + no `npm prune --omit=dev` — earlier
   attempt at `npm install + prune` dropped transitive runtime deps
-  like `require-in-the-middle` and crashed the server in MODULE_NOT
-  \_FOUND. The image size penalty (~80MB) is acceptable until docker-
+  like `require-in-the-middle` and crashed the server in
+  `MODULE_NOT_FOUND`. The image size penalty (~80MB) is acceptable until docker-
   compose deploy lands.
 - DB migrations applied between artefact swap and `systemctl restart`
   so the new code never boots against an older schema (migration 0039
