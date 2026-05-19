@@ -36,7 +36,7 @@ function read(p: string): string {
 describe('W513.C apps/marketing-site/src/pages/docs/crypto-orders-ops-runbook.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-721 customer-facing-published rationale pinned: 'ops runbook for the crypto-orders surface. Internal-facing page (linked from /docs/admin-api) that walks support through the common drill-downs' + 'Customer-facing? Yes — the page lives on the public docs site rather than the internal wiki. Reasoning: founder wants the support runbook to be auditable by customers, since the non-refundable policy means every ops decision is consequential.' — pinned so the V-721 anchor + admin-API-link + non-refundable-auditability rationale all survive (drift to retracting customer-facing-published commitment would let the runbook drift away from auditable transparency)", () => {
+  it("V-721 customer-facing-published rationale pinned — pinned so the V-721 anchor + admin-API-link + non-refundable-auditability rationale all survive. Re-enabled by slice 200 after verifying both V-721 + 'Customer-facing? Yes' comments exist at crypto-orders-ops-runbook.astro:4-12 with the matching shape", () => {
     expect(body).toMatch(
       /\/\/ V-721 — ops runbook for the crypto-orders surface\. Internal-\s*\n?\s*\/\/ facing page \(linked from \/docs\/admin-api\) that walks support\s*\n?\s*\/\/ through the common drill-downs/,
     );
