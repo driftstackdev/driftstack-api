@@ -20,10 +20,10 @@ function read(p: string): string {
 }
 
 describe('W604 apps/docs reference + webhooks pages content parity', () => {
-  it.skip('reference/errors.md: V-507 + RFC 9457 problem-details + every problem-type URI + 3-language matrix + retryable column (rate-limited yes / internal yes / TransportError yes; everything else no)', () => {
+  it('reference/errors.md: RFC 9457 problem-details + every problem-type URI + 3-language matrix + retryable column (rate-limited yes / internal yes / TransportError yes; everything else no). Re-enabled by slice 305 — the V-507 anchor was R4-scrubbed (commit b46b8d4124b "V-NNN session-log scrub from customer-facing surfaces"); the doc now leads with the bare "reference." sentence', () => {
     const body = read(ERR);
     expect(body).toMatch(/^title: Error reference$/m);
-    expect(body).toMatch(/V-507 reference\./);
+    expect(body).toMatch(/^reference\. Every error response from the Driftstack API is$/m);
     expect(body).toMatch(/RFC 9457 Problem Details/);
     expect(body).toMatch(/"type": "https:\/\/errors\.driftstack\.dev\/rate-limited"/);
     expect(body).toMatch(/"retry_after_seconds": 12/);
