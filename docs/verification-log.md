@@ -2661,7 +2661,7 @@ Idling on the queue otherwise.
 
 ---
 
-## V-046 — Legal baseline drafts placed at docs/legal/\* (AGENTS.md exception)
+## V-046 — Legal baseline drafts placed at `docs/legal/*` (AGENTS.md exception)
 
 **Date:** 2026-05-03
 **Author:** Driftstack Agent #2
@@ -19907,7 +19907,7 @@ entry for `rotateSecret` / `rotate_secret` / `RotateSecret`
 methods. Matches the V-383 pattern for V-312/V-313 surface
 additions.
 
-## V-420 — /v1/billing/\* OpenAPI registration
+## V-420 — `/v1/billing/*` OpenAPI registration
 
 **Tier**: 1 (V-082 billing routes shipped server-side but
 weren't in spec; Scalar UI + SDK regen now pick them up).
