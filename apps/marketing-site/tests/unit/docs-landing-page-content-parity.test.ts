@@ -103,7 +103,12 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
 
   it('W210 Recipe-library-removal honesty comment pinned (no 404 link until ships)', () => {
     expect(body).toMatch(/W210 — the Recipe library card pointed at \/docs\/recipes/);
-    expect(body).toMatch(/Removed\s+until the page ships rather than show customers a 404/);
+    // The comment block explains why this is a card-less anchor
+    // rather than a card linking to docs.driftstack.dev (which
+    // would break the all-internal-anchors pattern). Pin the
+    // "card-less anchor" framing so future drift can't quietly
+    // revert to a 404-link card.
+    expect(body).toMatch(/card-less anchor rather than a card linking to\s+an external host/);
   });
 
   it('help banner: "Doc not landing?" + support@driftstack.dev mailto + same-business-day claim', () => {

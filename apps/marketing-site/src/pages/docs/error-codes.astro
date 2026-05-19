@@ -41,6 +41,12 @@ const ERRORS = [
   { uri: 'driver-not-integrated', http: 501, when: 'Endpoint hit a driver path that hasn\'t been wired up yet.', action: 'Not retryable; contact support if a documented path lands here.' },
   { uri: 'feature-unavailable', http: 503, when: 'Feature explicitly disabled at deploy time (e.g. R2 bucket unconfigured for avatar upload).', action: 'Not retryable; the operator must wire the missing dependency.' },
   { uri: 'byok-anthropic-required', http: 502, when: 'Agent-sessions message turn cannot resolve an Anthropic API key. BYOK-for-v1.0 means the customer must supply their own key.', action: 'PUT /v1/account/me/byok-anthropic-key to set a stored key, or supply x-byok-anthropic-api-key on each request header.' },
+  // Bundled-LLM (v2-#6 — 402 Payment Required, distinct slugs so SDKs can branch)
+  { uri: 'bundled-llm-budget-exhausted', http: 402, when: 'Bundled-LLM monthly soft-cap reached on this account (default $20; configurable via PATCH /v1/account/me/bundled-llm-settings). Resets at calendar month start.', action: 'Raise the cap, wait until next month, or supply a BYOK Anthropic key (BYOK always wins per Q4=A).' },
+  { uri: 'bundled-llm-consent-required', http: 402, when: 'Deployment is wired for bundled-LLM but the customer has not yet ticked the consent flag. Distinct from byok-anthropic-required so dashboards can render a one-click "enable bundled-LLM" CTA.', action: 'PATCH /v1/account/me/bundled-llm-settings with bundled_llm_consent: true.' },
+  // Pair-mode (v2-#8 takeover/handback contention)
+  { uri: 'pair-mode-conflict', http: 409, when: 'Pair-mode takeover lost the SET-NX-EX race against another participant. Extension carries winner_client_id so the loser dashboard can render "user X is taking over".', action: 'Re-fetch the session; do not retry the takeover unless the winner releases the lock.' },
+  { uri: 'pair-mode-invalid-transition', http: 409, when: 'Pair-mode state machine refused the requested transition (e.g. a handback request before any takeover-grant). Extensions `from` + `transition`.', action: 'Re-fetch the pair-mode state; do not retry the transition without resolving the state mismatch.' },
   // Pre-auth
   { uri: 'email-already-registered', http: 409, when: 'Signup attempted for an email that already has an account.', action: 'Direct the user to /login or to the password-reset flow.' },
 ];

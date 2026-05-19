@@ -78,10 +78,17 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).not.toMatch(/Reference device: iPhone 16 Pro, iOS 18\.7, Safari 26\.4\./);
   });
 
-  it('SDK snippet pinned: archetype + proxy + sessions API shape (TypeScript)', () => {
+  it('SDK snippet pinned: archetype + sessions API shape (TypeScript)', () => {
     expect(body).toMatch(/import \{ Driftstack \} from '@driftstack\/sdk'/);
     expect(body).toMatch(/archetype: 'iphone16pro_ios18_7_safari26_4'/);
-    expect(body).toMatch(/proxy: \{ type: 'wireguard', config: '\.\.\.' \}/);
+    // Hero snippet stays focused on the create / navigate / capture /
+    // destroy critical path. Egress / proxy is documented separately
+    // (see /docs/egress + the @driftstack/sdk proxy attachment
+    // surface) — keeping it out of the hero per Egress-card-503-stub
+    // posture means we don't market a feature that's still stub-only.
+    expect(body).toMatch(/ds\.sessions\.navigate/);
+    expect(body).toMatch(/ds\.sessions\.capture/);
+    expect(body).toMatch(/ds\.sessions\.destroy/);
   });
 
   it('R12 metering framing pinned: "One metric. Concurrent sessions. That\'s it." + no-per-call-markup + no-per-element-fees + 200-pages-on-one-session example — replaces the prior "Pay per concurrent session, not per call." copy', () => {
