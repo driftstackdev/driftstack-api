@@ -101,13 +101,13 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
     expect(body).toMatch(/authedFetch\('\/v1\/profiles\/import', \{\s*\n?\s*method: 'POST',/);
   });
 
-  it.skip("V-313 clone auto-derived-name framing pinned: 'POSTs /v1/profiles/:id/clone with an empty body; server auto-derives \"${source} (copy)\" / (copy 2) / ... naming.' — pinned so the client doesn't try to pre-compute clone names (the server's collision-resolving (copy N) algorithm is the canonical source) — drift to client-side naming would create races where two simultaneous clones collide", () => {
+  it("V-313 clone auto-derived-name framing pinned: 'POSTs /v1/profiles/:id/clone with an empty body; server auto-derives \"${source} (copy)\" / (copy 2) / ... naming.' — pinned so the client doesn't try to pre-compute clone names (the server's collision-resolving (copy N) algorithm is the canonical source) — drift to client-side naming would create races where two simultaneous clones collide. Re-enabled by slice 156 after verifying the V-313 comment still exists at profiles.astro:669-671 with the matching shape", () => {
     expect(body).toMatch(
       /\/\/ V-313 — clone-button wiring\. POSTs \/v1\/profiles\/:id\/clone with\s*\n?\s*\/\/ an empty body; server auto-derives "\$\{source\} \(copy\)" \/ \(copy 2\)\s*\n?\s*\/\/ \/ \.\.\. naming\./,
     );
   });
 
-  it.skip("V-480 export blob download: safeName regex /[^a-zA-Z0-9_.-]/g + 'driftstack-profile-<safe>.json' filename + URL.createObjectURL/revokeObjectURL cleanup — pinned so exports get filesystem-safe filenames (drift to raw name would break Windows downloads on profiles with `/` or `*`) + memory cleanup prevents blob leaks on bulk exports", () => {
+  it("V-480 export blob download: safeName regex /[^a-zA-Z0-9_.-]/g + 'driftstack-profile-<safe>.json' filename + URL.createObjectURL/revokeObjectURL cleanup — pinned so exports get filesystem-safe filenames (drift to raw name would break Windows downloads on profiles with `/` or `*`) + memory cleanup prevents blob leaks on bulk exports. Re-enabled by slice 156 after verifying all 3 sentinels exist at profiles.astro:521-526", () => {
     expect(body).toMatch(/const safeName = name\.replace\(\/\[\^a-zA-Z0-9_\.-\]\/g, '_'\);/);
     expect(body).toMatch(/a\.download = 'driftstack-profile-' \+ safeName \+ '\.json';/);
     expect(body).toMatch(/URL\.revokeObjectURL\(url\);/);
