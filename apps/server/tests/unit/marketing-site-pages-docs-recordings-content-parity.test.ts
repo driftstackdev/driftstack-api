@@ -45,9 +45,9 @@ describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content par
     );
   });
 
-  it.skip("Heads-up warning pinned: 'sending `\"record\": true` on `POST /v1/sessions` today is a no-op — the server silently strips unrecognised fields. Don't rely on recordings landing until V-540 ships.' — pinned so the no-op + silent-strip + V-540 anchor all survive (drift to dropping 'silently strips' would mislead customers about the failure-mode; drift to dropping the V-540 anchor would orphan the planned-feature reference)", () => {
+  it("Heads-up warning pinned: 'record:true' on POST /v1/sessions is a no-op + server silently strips unrecognised fields + don't rely on recordings landing until the feature ships — pinned so the no-op + silent-strip + don't-rely-yet trio survives (drift to dropping 'silently strips' would mislead customers about the failure-mode; drift to dropping the don't-rely-yet caveat would let customers integrate against a non-existent surface). Re-enabled by slice 186 after refreshing the regex against the current 'until the feature ships' text (the original V-540 anchor was paraphrased away in a prior edit; the no-op + silent-strip semantic survives)", () => {
     expect(body).toMatch(
-      /sending\s*\n?\s*<code class="font-mono">"record": true<\/code> on\s*\n?\s*<code class="font-mono">POST \/v1\/sessions<\/code> today is a\s*\n?\s*no-op — the server silently strips unrecognised fields\. Don't\s*\n?\s*rely on recordings landing until V-540 ships\./,
+      /sending\s*\n?\s*<code class="font-mono">"record": true<\/code> on\s*\n?\s*<code class="font-mono">POST \/v1\/sessions<\/code> today is a\s*\n?\s*no-op — the server silently strips unrecognised fields\. Don't\s*\n?\s*rely on recordings landing until the feature ships\./,
     );
   });
 
