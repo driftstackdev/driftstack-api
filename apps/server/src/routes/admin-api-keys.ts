@@ -20,8 +20,16 @@ function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
 
 const ListAdminApiKeysQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  cursor: z.string().optional(),
-  account_id: z.string().optional(),
+  // Slice 146 — defensive caps matching slice 117 conventions across
+  // admin routes (admin-cost / admin-usage / admin-crypto-orders all
+  // capped at max(512) for cursor, max(100) for account_id). cursor
+  // is an opaque pagination token; 512 chars covers any base64url-
+  // encoded {ts, uuid} payload plus headroom. account_id is `acc_
+  // <36-char-uuid>` ≈ 40 chars; 100-char cap blocks multi-KB inputs
+  // that would bloat the 400/404 problem+json body if the filter
+  // doesn't match anything.
+  cursor: z.string().min(1).max(512).optional(),
+  account_id: z.string().min(1).max(100).optional(),
   revoked: z.enum(['true', 'false']).optional(),
 });
 

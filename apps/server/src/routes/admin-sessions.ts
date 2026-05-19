@@ -20,10 +20,12 @@ function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
 
 const ListAdminSessionsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  cursor: z.string().optional(),
+  // Slice 146 — defensive caps matching slice 117 conventions; see
+  // admin-api-keys.ts for the same shape + rationale.
+  cursor: z.string().min(1).max(512).optional(),
   status: z.enum(['creating', 'ready', 'busy', 'destroyed', 'errored']).optional(),
   /** Optional account scoping (`acc_<uuid>` or raw uuid). */
-  account_id: z.string().optional(),
+  account_id: z.string().min(1).max(100).optional(),
 });
 
 function publicSession(s: SessionRecord): Record<string, unknown> {

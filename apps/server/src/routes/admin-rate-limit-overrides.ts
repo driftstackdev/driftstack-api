@@ -23,8 +23,10 @@ function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
 
 const ListAdminOverridesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  cursor: z.string().optional(),
-  account_id: z.string().optional(),
+  // Slice 146 — defensive caps matching slice 117 conventions; see
+  // admin-api-keys.ts for the same shape + rationale.
+  cursor: z.string().min(1).max(512).optional(),
+  account_id: z.string().min(1).max(100).optional(),
   include_expired: z.enum(['true', 'false']).optional(),
 });
 
