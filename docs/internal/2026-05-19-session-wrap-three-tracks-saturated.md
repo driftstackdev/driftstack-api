@@ -93,11 +93,12 @@ drift:
 - **Webhook 24h rotation grace** + 5-retry max-attempts
 - **Webhook 1min/5min/15min/30min/60min backoff schedule**
 - **Audit-log 10k-row export ceiling**
-- **MS_PER_DAY shared 24*60*60\*1000 constant**
-- \*\*rotation-reminder REMINDER_THRESHOLD_DAYS=60 + COOLDOWN_DAYS=7
-  - ROTATION_TARGET_DAYS=90\*\* across BYOK + webhook reminder services
-- **`__brand: '-plaintext'` suffix convention** across BYOK +
-  gui_control_key
+- **MS_PER_DAY shared** as `24 * 60 * 60 * 1000` constant
+- **rotation-reminder constants**: `REMINDER_THRESHOLD_DAYS=60`,
+  `COOLDOWN_DAYS=7`, `ROTATION_TARGET_DAYS=90` across BYOK and
+  webhook reminder services
+- **`__brand: '-plaintext'` suffix convention** across BYOK and
+  gui_control_key encryption modules
 
 ## Track-pivot rationale
 
