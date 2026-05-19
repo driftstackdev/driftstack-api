@@ -32,7 +32,7 @@ function read(p: string): string {
 describe('W508.C apps/marketing-site/src/pages/docs/admin-csv-export.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-718 + V-666.AC framing pinned: 'admin CSV export reference. Documents the contract for GET /v1/admin/crypto-orders.csv (V-666.AC). The endpoint already exists and is referenced from the API changelog' — pinned so the V-718 + V-666.AC anchors + the 'endpoint already exists' framing survive (drift to softening 'already exists' would let customers question availability)", () => {
+  it('V-718 + V-666.AC framing pinned. Re-enabled by slice 187 after verifying the V-718 comment exists at admin-csv-export.astro:4-5', () => {
     expect(body).toMatch(
       /\/\/ V-718 — admin CSV export reference\. Documents the contract for\s*\n?\s*\/\/ GET \/v1\/admin\/crypto-orders\.csv \(V-666\.AC\)\./,
     );
