@@ -54,16 +54,22 @@ Sample-checked files with delta > 3 that aren't explained by A:
 
 ## Pre-launch blockers
 
-1. **`auth-oauth-client.ts` IP-rate-limit gate** — OAuth-client
-   signup flow is unauthenticated; must protect against
-   account-creation flooding. ~30min fix: add V-251 `ipRateLimit`
-   gates to the 4 routes matching the auth.ts pattern.
+1. ~~**`auth-oauth-client.ts` IP-rate-limit gate**~~ — **CLOSED
+   2026-05-20 (commit e7571faf).** AUTH_IP_LIMITS gained
+   `oauthClientStart` / `oauthClientCallback` /
+   `oauthClientConfirmMerge` entries (5/min/IP each); routes
+   thread `ipRateLimit` preHandlers via the new
+   `rateLimitStore` dep on `RegisterOAuthClientRoutesDeps`. The
+   `/v1/auth/oauth/:provider/callback` redirector intentionally
+   stays ungated (302 forwarder, no state mutation).
 
-2. **`account-byok-anthropic.ts` /test endpoint rate-limit** —
-   customer-callable Anthropic-API connection test could be
-   abused to burn customer quota OR get flagged by Anthropic's
-   abuse detection. ~15min fix: add `app.rateLimit('global')` or
-   a dedicated `byok:test` bucket.
+2. ~~**`account-byok-anthropic.ts` /test endpoint rate-limit**~~ —
+   **NO-OP / already covered.** The route already uses
+   `app.rateLimit('global')` as its preHandler; no additional
+   gate needed. The audit's "missing rate-limit" framing was a
+   false-positive on the initial grep — the `global` bucket
+   suffices for this endpoint per the per-tier
+   `TIER_RATE_LIMIT_DEFAULTS` defaults.
 
 ## Follow-up checks (not pre-launch blockers)
 
@@ -71,9 +77,15 @@ Sample-checked files with delta > 3 that aren't explained by A:
    which don't. Each unauthenticated OAuth route needs at least an
    IP gate.
 
-4. **`billing.ts`** — 5 routes without rate-limit. Stripe webhooks
-   are signature-gated so they don't need rate-limit. Verify which
-   other routes are customer-callable; add rate-limit where needed.
+4. ~~**`billing.ts`** — 5 routes without rate-limit~~ — **NO-OP /
+   verified 2026-05-20.** Re-grep shows the 5 mounted billing
+   routes (checkout-session / trial-pack / portal-session / billing
+   GET / account-me-billing-portal) all use
+   `app.rateLimit('global')` as preHandler. The 5 unrated
+   entries the audit flagged were the disabled-stubs registered
+   by `registerBillingDisabledRoutes` — those throw 503
+   immediately without doing any work, so rate-limit isn't
+   needed there.
 
 5. **`admin-incidents.ts`** — 4 routes without rate-limit. Status-
    subscriber routes are public read-only and should have at least
