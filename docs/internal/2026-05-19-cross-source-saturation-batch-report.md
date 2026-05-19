@@ -34,9 +34,9 @@ These pins catch drift classes that single-file content-parity can't:
 - **MFA_ENCRYPTION_KEY 4-class shared**: drift on one class (e.g.
   refactor to a separate LIVEKIT_ENCRYPTION_KEY) would break the
   "rotate one env var → rotate all four ciphertexts" runbook.
-- **ses*/agt* prefix anti-cross**: drift would let a session-id cross
-  into the agent-session-token-mint flow (or vice versa) and 404
-  every legitimate request.
+- **`ses_` / `agt_` prefix anti-cross**: drift would let a session-id
+  cross into the agent-session-token-mint flow (or vice versa) and
+  404 every legitimate request.
 - **PKCE S256-only**: drift to allowing `plain` anywhere in the stack
   weakens the entire PKCE security model.
 - **Activation-gate disabled-stub customer-docs-URL invariant**:
