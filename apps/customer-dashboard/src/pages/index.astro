@@ -44,14 +44,14 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <section class="grid gap-6 md:grid-cols-3">
       <div class="dashboard-card">
-        <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Concurrent now</p>
+        <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Concurrent sessions</p>
         <p class="mt-3 text-3xl font-semibold text-ink-primary">
           <span data-stat-concurrent>—</span>
           <span class="text-base font-normal text-ink-muted">
             / <span data-stat-concurrent-cap>—</span>
           </span>
         </p>
-        <p class="mt-1 text-sm text-ink-muted">live sessions in flight</p>
+        <p class="mt-1 text-sm text-ink-muted">running now</p>
       </div>
       <div class="dashboard-card">
         <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Profiles</p>
@@ -59,12 +59,12 @@ const apiBaseUrl = resolveApiBaseUrl();
           <span data-stat-profiles>—</span>
           <span data-stat-profiles-cap class="text-base font-normal text-ink-muted"></span>
         </p>
-        <p class="mt-1 text-sm text-ink-muted">persistent identity slots</p>
+        <p class="mt-1 text-sm text-ink-muted">saved identities</p>
       </div>
       <div class="dashboard-card">
         <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">API keys</p>
         <p class="mt-3 text-3xl font-semibold text-ink-primary"><span data-stat-api-keys>—</span></p>
-        <p class="mt-1 text-sm text-ink-muted">active keys</p>
+        <p class="mt-1 text-sm text-ink-muted">active</p>
       </div>
     </section>
 
