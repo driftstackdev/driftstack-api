@@ -16,13 +16,13 @@ track.
 
 ## What was protected on the cross-source track
 
-| Slice range | Invariant                                                                                                                                                                                           | Files spanned |
-| ----------: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------: |
-|     348-352 | rotation-reminder constants + BYOK 60/90 staleness + LiveKit 24h TTL + magic-link 15-min TTL + OAuth 5-min cookie↔state coupling                                                                    |      2-4 each |
-|     353-357 | docs/api/usage tier-table ↔ TIER*CONCURRENT_SESSION_LIMITS + MFA_ENCRYPTION_KEY 4-class shared + ses*/agt\_ id-prefix anti-cross + PKCE S256-only + activation-gate disabled-stub customer-docs-URL |      2-5 each |
-|     358-362 | activation-gate 7-feature roster + plaintext brand-type suffix + LiveKit HS256 algorithm + rotation-reminder EmailService methods + webhook signature header names                                  |      2-5 each |
-|     363-367 | problem+json content-type + Sentry/Pino shared secret-redaction + audit-log 10k-row export ceiling + timing-safe-equal pattern + audit-log filter passthrough                                       |      2-5 each |
-|     368-372 | sub-processor list (DPA + sub-processors.md) + webhook 24h rotation grace + webhook 5-retry max-attempts + locked archetype slug + trial-pack 14-day window                                         |      3-5 each |
+| Slice range | Invariant                                                                                                                                                                                                  | Files spanned |
+| ----------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------: |
+|     348-352 | rotation-reminder constants + BYOK 60/90 staleness + LiveKit 24h TTL + magic-link 15-min TTL + OAuth 5-min cookie↔state coupling                                                                           |      2-4 each |
+|     353-357 | docs/api/usage tier-table ↔ `TIER_CONCURRENT_SESSION_LIMITS` + `MFA_ENCRYPTION_KEY` 4-class shared + `ses_`/`agt_` id-prefix anti-cross + PKCE S256-only + activation-gate disabled-stub customer-docs-URL |      2-5 each |
+|     358-362 | activation-gate 7-feature roster + plaintext brand-type suffix + LiveKit HS256 algorithm + rotation-reminder EmailService methods + webhook signature header names                                         |      2-5 each |
+|     363-367 | problem+json content-type + Sentry/Pino shared secret-redaction + audit-log 10k-row export ceiling + timing-safe-equal pattern + audit-log filter passthrough                                              |      2-5 each |
+|     368-372 | sub-processor list (DPA + sub-processors.md) + webhook 24h rotation grace + webhook 5-retry max-attempts + locked archetype slug + trial-pack 14-day window                                                |      3-5 each |
 
 ## High-value pins recorded
 
