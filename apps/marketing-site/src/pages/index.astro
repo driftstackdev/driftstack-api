@@ -9,26 +9,26 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <!-- Hero -->
   <section class="relative overflow-hidden">
     <div class="absolute inset-0 grid-bg opacity-40" aria-hidden="true"></div>
-    <div class="relative mx-auto max-w-6xl px-6 pb-28 pt-24 md:pt-32">
-      <div class="grid gap-12 md:grid-cols-2 md:items-center">
+    <div class="relative mx-auto max-w-6xl px-5 pb-20 pt-14 sm:px-6 sm:pb-28 sm:pt-24 md:pt-32">
+      <div class="grid gap-8 sm:gap-12 md:grid-cols-2 md:items-center">
         <div class="animate-fade-up">
           <p class="section-label">iPhone Safari · on demand</p>
           <h1
-            class="mt-5 text-3xl font-semibold tracking-tight text-ink-primary sm:text-4xl md:text-5xl lg:text-6xl"
-            style="letter-spacing: -0.02em;"
+            class="mt-4 text-[1.625rem] font-semibold tracking-tight text-ink-primary sm:text-4xl sm:mt-5 md:text-5xl lg:text-6xl"
+            style="letter-spacing: -0.02em; line-height: 1.1;"
           >
             <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
               Indistinguishable iPhone Safari.
-            </span><br />
-            Programmable from any language.
+            </span>
+            <span class="block">Programmable from any language.</span>
           </h1>
-          <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed sm:text-lg">
+          <p class="mt-5 max-w-prose text-[15px] text-ink-secondary leading-relaxed sm:mt-6 sm:text-lg">
             Real WebKit — the engine every iPhone ships. Canvas + WebGL
             hashes match the millions of iPhones in the wild, not the
             unique-per-session leak every Chromium-stealth API surfaces.
             Drive sessions from TypeScript, Python, Go, or the GUI.
           </p>
-          <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
+          <div class="mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
             <a href="/pricing#trial-pack" class="btn-primary w-full text-center sm:w-auto">Start for $2.99</a>
             <a href="/comparison" class="btn-secondary w-full text-center sm:w-auto">Compare the alternatives</a>
           </div>
@@ -42,7 +42,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <span class="pip"></span>
             <span class="pip"></span>
             <span class="pip"></span>
-            <span class="ml-3 truncate text-xs text-ink-muted">driftstack-typescript-sdk</span>
+            <span class="ml-3 truncate text-[11px] text-ink-muted sm:text-xs">driftstack-typescript-sdk</span>
             <button
               type="button"
               data-copy-target="hero-sdk-code"
@@ -52,7 +52,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <span data-copy-label>Copy</span>
             </button>
           </div>
-          <pre class="max-h-[280px] overflow-x-auto p-5 text-[11px] leading-relaxed text-ink-primary sm:max-h-none sm:text-xs md:text-sm"><code id="hero-sdk-code">{`import { Driftstack } from '@driftstack/sdk';
+          <pre class="max-h-[260px] overflow-x-auto p-4 text-[10.5px] leading-relaxed text-ink-primary sm:max-h-none sm:p-5 sm:text-xs md:text-sm"><code id="hero-sdk-code">{`import { Driftstack } from '@driftstack/sdk';
 
 const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 
