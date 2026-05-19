@@ -54,11 +54,13 @@ describe('W518.C apps/marketing-site/src/pages/docs/api-changelog.astro content 
     expect(body).toMatch(/<h2>2026-03<\/h2>/);
   });
 
-  it.skip('Spot-check key V-anchors V-079.C + V-184a.B + V-057.E + V-079.B pinned in changelog entries — pinned so the 4-canonical-V-anchor changelog entries (DASHBOARD_ORIGIN derivation + auto-verify-on-verify-email + runtime-URLs-centralized + DASHBOARD_ORIGIN-drives-email-link) survive (drift to dropping any V-anchor entry would orphan customers from the change-history reference)', () => {
-    expect(body).toMatch(/V-079\.C/);
-    expect(body).toMatch(/V-184a\.B/);
-    expect(body).toMatch(/V-057\.E/);
-    expect(body).toMatch(/V-079\.B/);
+  it("Spot-check 4 canonical changelog entry headers pinned (descriptive English form post R4 V-NNN scrub): 'Auth — derivation paths match dashboard routes' (V-079.C origin) + 'Dashboard — auto-verify on the verify-email page' (V-184a.B origin) + 'Server — runtime URLs centralized on DASHBOARD_ORIGIN' (V-057.E origin) + 'Auth — DASHBOARD_ORIGIN now drives email link URLs' (V-079.B origin) — pinned so the 4-canonical-change-record customer-facing audit-trail survives (drift to dropping any of these would orphan customers from the change-history reference for the DASHBOARD_ORIGIN single-source-of-truth feature family). Re-enabled by slice 304 after R4 commit b46b8d4124b 'V-NNN session-log scrub from customer-facing surfaces' replaced V-anchors with descriptive English titles — the V-NNN forms now exist only as internal tracking notes in code comments + this test docstring", () => {
+    expect(body).toMatch(/<strong>Auth — derivation paths match dashboard routes\.<\/strong>/);
+    expect(body).toMatch(/<strong>Dashboard — auto-verify on the verify-email page\.<\/strong>/);
+    expect(body).toMatch(
+      /<strong>Server — runtime URLs centralized on DASHBOARD_ORIGIN\.<\/strong>/,
+    );
+    expect(body).toMatch(/<strong>Auth — DASHBOARD_ORIGIN now drives email link URLs\.<\/strong>/);
   });
 
   it("2026-03 initial-release crypto-orders framing pinned: 'POST /v1/billing/crypto-checkout mints orders; the IPN webhook from NowPayments at POST /webhooks/nowpayments/ipn drives the order state machine. Customer-facing list at GET /v1/billing/crypto-orders; admin surface at GET /v1/admin/crypto-orders.' — pinned so the foundational 2026-03 release anchor (origin of the crypto-orders surface) + 4-canonical-endpoint surface survives (drift to forgetting the origin month would orphan the history)", () => {
