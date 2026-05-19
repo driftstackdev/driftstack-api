@@ -307,9 +307,7 @@ async def test_async_message_byok_api_key_sets_header() -> None:
             return_value=httpx.Response(200, json=reply),
         )
         async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
-            await client.agent_sessions.message(
-                "agt_1", "hi", byok_api_key="sk-ant-test-byok"
-            )
+            await client.agent_sessions.message("agt_1", "hi", byok_api_key="sk-ant-test-byok")
         assert route.called
         sent_headers = route.calls.last.request.headers
         assert sent_headers["x-byok-anthropic-api-key"] == "sk-ant-test-byok"

@@ -85,9 +85,7 @@ class AgentSessionsResource:
 
     def get(self, agent_session_id: str) -> dict[str, Any]:
         """Read agent session state."""
-        return self._http.request(
-            "GET", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}"
-        )
+        return self._http.request("GET", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}")
 
     def message(
         self,
@@ -111,9 +109,7 @@ class AgentSessionsResource:
         # server normalises that to absent (slice 105 fix), but skipping
         # client-side saves the round-trip header and matches the Go
         # SDK's `opts.ByokAPIKey != ""` shape.
-        extra_headers = (
-            {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key else None
-        )
+        extra_headers = {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key else None
         return self._http.request(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
@@ -123,9 +119,7 @@ class AgentSessionsResource:
 
     def close(self, agent_session_id: str) -> None:
         """Close the agent session (idempotent)."""
-        self._http.request(
-            "DELETE", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}"
-        )
+        self._http.request("DELETE", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}")
 
     def takeover(self, agent_session_id: str, client_id: str) -> dict[str, Any]:
         """Arc 2 sub-slice 8.9 (v2-#8) — request human takeover on a pair-mode session.
@@ -240,9 +234,7 @@ class AsyncAgentSessionsResource:
         # server normalises that to absent (slice 105 fix), but skipping
         # client-side saves the round-trip header and matches the Go
         # SDK's `opts.ByokAPIKey != ""` shape.
-        extra_headers = (
-            {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key else None
-        )
+        extra_headers = {"x-byok-anthropic-api-key": byok_api_key} if byok_api_key else None
         return await self._http.request(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
@@ -251,9 +243,7 @@ class AsyncAgentSessionsResource:
         )
 
     async def close(self, agent_session_id: str) -> None:
-        await self._http.request(
-            "DELETE", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}"
-        )
+        await self._http.request("DELETE", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}")
 
     async def takeover(self, agent_session_id: str, client_id: str) -> dict[str, Any]:
         """Async mirror — same pair-mode takeover semantics as sync."""

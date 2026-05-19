@@ -33,9 +33,7 @@ class EmailPreferencesResource:
         with an empty body. Call :meth:`list` afterwards if you
         need the post-update state.
         """
-        self._http.request(
-            "PUT", "/v1/account/email-preferences", json_body=coerce_body(body)
-        )
+        self._http.request("PUT", "/v1/account/email-preferences", json_body=coerce_body(body))
 
     def opt_out(self, event_type: str) -> None:
         """Convenience: opt out of a single event type."""

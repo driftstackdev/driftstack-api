@@ -66,9 +66,7 @@ class AsyncEgressResource:
     def __init__(self, http: AsyncHttpClient) -> None:
         self._http = http
 
-    async def attach_to_session(
-        self, session_id: str, config: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def attach_to_session(self, session_id: str, config: dict[str, Any]) -> dict[str, Any]:
         return await self._http.request(
             "POST",
             f"/v1/sessions/{quote(session_id, safe='')}/proxy",
@@ -76,9 +74,7 @@ class AsyncEgressResource:
         )
 
     async def get_session_proxy(self, session_id: str) -> dict[str, Any]:
-        return await self._http.request(
-            "GET", f"/v1/sessions/{quote(session_id, safe='')}/proxy"
-        )
+        return await self._http.request("GET", f"/v1/sessions/{quote(session_id, safe='')}/proxy")
 
     async def save_proxy(self, body: dict[str, Any]) -> dict[str, Any]:
         return await self._http.request("POST", "/v1/proxies", json_body=coerce_body(body))
