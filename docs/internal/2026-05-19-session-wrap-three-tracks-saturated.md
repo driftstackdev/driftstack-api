@@ -147,9 +147,8 @@ Test Files   34 passed (34)
   Duration  2.57s
 ```
 
-The 5 files that received stale-skip re-arms during waves 3 + 6
-
-- 8 (slices 303-307 + 318-322 + 328) verified passing on wave 30:
+The 5 files that received stale-skip re-arms during waves 3, 6,
+and 8 (slices 303-307 + 318-322 + 328) verified passing on wave 30:
 
 ```
 Test Files   5 passed (5)
