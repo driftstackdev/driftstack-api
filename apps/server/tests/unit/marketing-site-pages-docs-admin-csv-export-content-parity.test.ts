@@ -47,7 +47,7 @@ describe('W508.C apps/marketing-site/src/pages/docs/admin-csv-export.astro conte
     );
   });
 
-  it.skip('5-filter set: status (6-state enum: pending/confirming/paid/failed/partial/cancelled) + search + account_id + created_after/before with V-666.BY + limit 1–1000 default 1000 — pinned so the 5-filter scope + the 6-state status enum + the V-666.BY date-range anchor + the limit-default-1000 all survive (drift to dropping a status value would orphan that state from filterable view; drift to changing the limit default would create marketing↔server-validation divergence)', () => {
+  it('5-filter set + 6-state status enum + V-666.BY date-range anchor pinned. Re-enabled by slice 237 after restoring the V-666.BY anchor on the created_after/before list-item at admin-csv-export.astro:46 (same anchor-dropped-to-bare-space pattern as the slice 235/236 V-304a/V-304b restores)', () => {
     expect(body).toMatch(/<code>status<\/code> — one of/);
     expect(body).toMatch(
       /<code>pending<\/code>, <code>confirming<\/code>, <code>paid<\/code>,\s*\n?\s*<code>failed<\/code>, <code>partial<\/code>, <code>cancelled<\/code>\./,
@@ -60,7 +60,7 @@ describe('W508.C apps/marketing-site/src/pages/docs/admin-csv-export.astro conte
     expect(body).toMatch(/<code>limit<\/code> — integer 1–1000\. Defaults to 1000\./);
   });
 
-  it.skip("Inverted date-range 400 commitment: 'created_before must be strictly greater than created_after; otherwise 400.' — pinned so the inverted-date-range-rejection commitment survives (drift to silently swapping or accepting would invite client bugs; consistent with V-148 inverted-window-400 pattern across the API)", () => {
+  it('Inverted date-range 400 commitment pinned. Re-enabled by slice 237 alongside the V-666.BY anchor restore — the same list-item carries both the V-666.BY anchor + the inverted-date-range guard, so re-enabling both as a pair', () => {
     expect(body).toMatch(
       /<code>created_before<\/code> must be strictly greater than\s*\n?\s*<code>created_after<\/code>; otherwise 400\./,
     );
