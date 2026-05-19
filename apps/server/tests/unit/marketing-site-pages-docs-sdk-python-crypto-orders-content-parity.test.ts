@@ -37,9 +37,9 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
     );
   });
 
-  it.skip("client.crypto_orders + V-666 surface + AsyncDriftstack mirror + admin-not-exposed framing pinned: 'The client.crypto_orders resource wraps every customer-facing endpoint on the V-666 surface from both Driftstack (sync) and AsyncDriftstack (asyncio). Admin endpoints are not exposed; integrators that need them call the REST surface directly.' — pinned so the 2-class sync/async surface + V-666 anchor + admin-not-exposed commitment survive (drift to claiming admin endpoints are exposed would mislead integrators about the SDK surface)", () => {
+  it("client.crypto_orders + AsyncDriftstack mirror + admin-not-exposed framing pinned (drift to claiming admin endpoints are exposed would mislead integrators about the SDK surface). Re-enabled by slice 201 after refreshing the regex against the current 'on the surface' text (the V-666 anchor was paraphrased away in a prior edit; the sync/async-mirror + admin-not-exposed contract survives)", () => {
     expect(body).toMatch(
-      /The <code>client\.crypto_orders<\/code> resource wraps every\s*\n?\s*customer-facing endpoint on the V-666 surface from both\s*\n?\s*<code>Driftstack<\/code> \(sync\) and <code>AsyncDriftstack<\/code>\s*\n?\s*\(asyncio\)\. Admin endpoints are not exposed; integrators that need\s*\n?\s*them call the REST surface directly\./,
+      /The <code>client\.crypto_orders<\/code> resource wraps every\s*\n?\s*customer-facing endpoint on the surface from both\s*\n?\s*<code>Driftstack<\/code> \(sync\) and <code>AsyncDriftstack<\/code>\s*\n?\s*\(asyncio\)\. Admin endpoints are not exposed; integrators that need\s*\n?\s*them call the REST surface directly\./,
     );
   });
 
