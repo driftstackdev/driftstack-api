@@ -63,7 +63,7 @@ Cross-agent dependencies coordinate via planning file 133 schema + `docs/interna
 - **Test suite**: 1800+ files passing (latest verify via `npm test`)
 - **Production deploy**: SHA in `/version` endpoint; auto-revert wired; 4 activation flags (sentry/email/livekit/oauthClient)
 
-Verify current state via `node scripts/deploy-status.mjs --json` or check Sentry + Postmark + LiveKit dashboards.
+Verify current state via `bash scripts/deploy-status.sh` or check Sentry + Postmark + LiveKit dashboards.
 
 ## SSH access (Agent 2 authorized 2026-05-12)
 
