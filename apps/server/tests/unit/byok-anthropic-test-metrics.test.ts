@@ -31,15 +31,19 @@ async function buildTestApp(args: {
 }) {
   const app = Fastify();
   // Stub the auth + scope + rateLimit decorators the route uses.
-  app.decorate('requireAuth', (req: { account?: unknown }, _reply: unknown, done: () => void) => {
+  // Fastify decorator stubs — async/Promise shape per the FastifyInstance
+  // augmentation in apps/server/src/middleware/{auth,rate-limit}.ts.
+  // Older callback `(req, reply, done) => done()` shape was rejected by
+  // TS2345 once those augmentations tightened to Promise<void>.
+  // eslint-disable-next-line @typescript-eslint/require-await
+  app.decorate('requireAuth', async (req: { account?: unknown }) => {
     req.account = {
       account: { id: 'acc_obs4', tier: 'starter' },
       apiKey: { id: 'key_obs4', scopes: ['account_owner', 'read', 'write'] },
     };
-    done();
   });
-  app.decorate('requireScope', () => (_req: unknown, _reply: unknown, done: () => void) => done());
-  app.decorate('rateLimit', () => (_req: unknown, _reply: unknown, done: () => void) => done());
+  app.decorate('requireScope', () => async () => {});
+  app.decorate('rateLimit', () => async () => {});
   app.decorateRequest('account', null);
 
   registerAccountByokAnthropicRoutes(app, {
@@ -163,18 +167,15 @@ describe('Arc 7 obs.4 — byok_anthropic_test_total counter', () => {
 
   it('omitting the metrics option is a silent no-op (does not throw)', async () => {
     const app = Fastify();
-    app.decorate('requireAuth', (req: { account?: unknown }, _reply: unknown, done: () => void) => {
+    // eslint-disable-next-line @typescript-eslint/require-await
+    app.decorate('requireAuth', async (req: { account?: unknown }) => {
       req.account = {
         account: { id: 'acc_obs4', tier: 'starter' },
         apiKey: { id: 'key_obs4', scopes: ['account_owner', 'read', 'write'] },
       };
-      done();
     });
-    app.decorate(
-      'requireScope',
-      () => (_req: unknown, _reply: unknown, done: () => void) => done(),
-    );
-    app.decorate('rateLimit', () => (_req: unknown, _reply: unknown, done: () => void) => done());
+    app.decorate('requireScope', () => async () => {});
+    app.decorate('rateLimit', () => async () => {});
     app.decorateRequest('account', null);
     registerAccountByokAnthropicRoutes(app, {
       service: makeFakeService('sk-ant-api03-fakeplaintext'),

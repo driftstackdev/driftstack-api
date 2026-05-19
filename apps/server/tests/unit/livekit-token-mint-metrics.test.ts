@@ -38,8 +38,8 @@ async function buildApp(args: {
     done();
   });
   await app.register(stubAuthPlugin);
-  app.decorate('rateLimit', () => (_req: unknown, _reply: unknown, done: () => void) => done());
-  app.decorate('requireAuth', (_req: unknown, _reply: unknown, done: () => void) => done());
+  app.decorate('rateLimit', () => async () => {});
+  app.decorate('requireAuth', async () => {});
   registerLivekitTokenRoute(app, {
     apiKey: 'lk_api_test',
     apiSecret: 'lk_secret_test_at_least_32_chars_for_jwt_signing',

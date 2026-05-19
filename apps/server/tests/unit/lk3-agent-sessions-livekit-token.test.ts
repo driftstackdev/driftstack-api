@@ -110,8 +110,8 @@ async function buildApp(args: {
     done();
   });
   await app.register(stubAuthPlugin);
-  app.decorate('rateLimit', () => (_req: unknown, _reply: unknown, done: () => void) => done());
-  app.decorate('requireAuth', (_req: unknown, _reply: unknown, done: () => void) => done());
+  app.decorate('rateLimit', () => async () => {});
+  app.decorate('requireAuth', async () => {});
   registerAgentSessionsLivekitTokenRoute(app, {
     fleetNodesRepo: makeStubFleetRepo(args.mac),
     agentSessionsRepo: makeStubAgentSessionsRepo(args.session),
@@ -148,7 +148,20 @@ describe('LK.3 — POST /v1/agent-sessions/:id/livekit-token', () => {
       url: `/v1/agent-sessions/${SESSION_ID}/livekit-token`,
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json<Record<string, string>>();
+    // Typed response shape — `noUncheckedIndexedAccess: true` makes
+    // Record<string, string> return string|undefined on every key
+    // access, so use a concrete interface with non-optional fields.
+    // Define the response shape inline so noUncheckedIndexedAccess
+    // doesn't make every property string|undefined (which tripped
+    // TS18048 on body.token.split('.') before this typing).
+    type TokenBody = {
+      ws_url: string;
+      room: string;
+      token: string;
+      participant_identity: string;
+      expires_at: string;
+    };
+    const body: TokenBody = res.json();
     expect(body.ws_url).toBe('wss://mac-test-01.driftstack.dev:8443');
     expect(body.room).toBe(SESSION_ID);
     expect(typeof body.token).toBe('string');
