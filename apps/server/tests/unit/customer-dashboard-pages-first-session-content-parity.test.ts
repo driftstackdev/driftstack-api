@@ -51,13 +51,13 @@ describe('W492.C apps/customer-dashboard/src/pages/first-session.astro content p
     );
   });
 
-  it.skip("V-168 two-phase mint framing pinned: '1. Mint a default API key via web session. 2. Use that API key to create the session. 3. Stash the new API key plaintext in sessionStorage so the /first-session redirect to /sessions can show it.' + 'V-184b can refine the UX (e.g. dedicated your first key step).' — pinned so the two-token-type flow (web session for /v1/api-keys; API key for /v1/sessions) stays documented", () => {
+  it('V-168 two-phase mint framing pinned. Re-enabled by slice 260 after verifying the V-168 + 3-step flow + V-184b cross-reference still exist verbatim at first-session.astro:122-130', () => {
     expect(body).toMatch(
       /\/\/ First-session creation typically uses an API key, not a web\s*\n?\s*\/\/ session token\. V-168 makes the web-session token usable on\s*\n?\s*\/\/ \/v1\/api-keys \(so customer can mint a key\) — but for the\s*\n?\s*\/\/ session-creation step, a key is needed\. The minimal flow:\s*\n?\s*\/\/ {3}1\. Mint a "default" API key via web session\.\s*\n?\s*\/\/ {3}2\. Use that API key to create the session\.\s*\n?\s*\/\/ {3}3\. Stash the new API key plaintext in sessionStorage so the\s*\n?\s*\/\/ {6}\/first-session redirect to \/sessions can show it\./,
     );
   });
 
-  it.skip("V-501 setBusy guard: submitBtn.disabled = true + labelDefault/labelBusy class toggle on busy + early bail if submitBtn.disabled — pinned so double-clicks don't mint two API keys + two sessions (the visible 'Creating…' label + disabled state both come from setBusy(true); drift would let the customer accidentally do double-onboarding)", () => {
+  it('V-501 setBusy guard pinned. Re-enabled by slice 260 after restoring the V-501 anchor on the double-mint guard at first-session.astro:143 (V-501 anchor was stripped to bare em-dash; setBusy() function body at lines 135-139 was intact)', () => {
     expect(body).toMatch(
       /function setBusy\(busy\) \{\s*\n?\s*submitBtn\.disabled = busy;\s*\n?\s*labelDefault\.classList\.toggle\('hidden', busy\);\s*\n?\s*labelBusy\.classList\.toggle\('hidden', !busy\);\s*\n?\s*\}/,
     );

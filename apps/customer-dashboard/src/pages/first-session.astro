@@ -140,7 +140,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       form.addEventListener('submit', async (ev) => {
         ev.preventDefault();
- if (submitBtn.disabled) return; // — guard against double-mint.
+        if (submitBtn.disabled) return; // V-501 — guard against double-mint.
         banner.classList.add('hidden');
         const fd = new FormData(form);
         const label = fd.get('label');
