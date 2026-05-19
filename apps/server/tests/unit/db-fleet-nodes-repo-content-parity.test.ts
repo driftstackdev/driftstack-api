@@ -1,0 +1,78 @@
+// Drift guard for apps/server/src/db/fleet-nodes-repo.ts. Pins V-820
+// Drizzle implementation of FleetNodesRepo (migration 0043) — the
+// shipped FleetNodesRepo interface is just `getPublicKey(nodeId)`;
+// this impl adds register/revoke/touchLastSeen/getDetail/listActive
+// for the operator routes. LK.1 per-Mac LiveKit credentials all-or-
+// none CHECK invariant. The intentional asymmetry is documented.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const LIB = resolve(REPO_ROOT, 'apps/server/src/db/fleet-nodes-repo.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('db/fleet-nodes-repo content parity', () => {
+  const body = read(LIB);
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(LIB)).toBe(true);
+  });
+
+  it("V-820 module-level framing pinned: 'Drizzle implementation of FleetNodesRepo (migration 0043). Production wires this; the InMemoryFleetNodesRepo in services/fleet-node-auth.ts continues to back tests + dev mode.' — pinned so the V-820 anchor + migration 0043 + production-vs-InMemory split contract all stay documented", () => {
+    expect(body).toMatch(
+      /\/\/ V-820 — Drizzle implementation of FleetNodesRepo \(migration 0043\)\./,
+    );
+    expect(body).toMatch(
+      /\/\/ Production wires this; the InMemoryFleetNodesRepo in\s*\n?\s*\/\/ services\/fleet-node-auth\.ts continues to back tests \+ dev mode\./,
+    );
+  });
+
+  it("Interface-vs-class asymmetry framing pinned: 'The shipped FleetNodesRepo interface is getPublicKey(nodeId). This impl adds register / revoke / touchLastSeen / getDetail / listActive methods on the class (not the interface) because the future operator routes (POST /v1/admin/fleet-nodes, /revoke, GET list, GET detail) consume the concrete class. Adding them to the interface would require the InMemory variant to grow too; the operator routes only run against the Drizzle path so this asymmetry is intentional.' — pinned so the interface-getPublicKey-only + class-has-5-extra + operator-routes-Drizzle-only contract all stay documented (drift to adding extra methods to the interface would force InMemory parity that has no test value)", () => {
+    expect(body).toMatch(
+      /\/\/ The shipped `FleetNodesRepo` interface is `getPublicKey\(nodeId\)`\.\s*\n?\s*\/\/ This impl adds `register` \/ `revoke` \/ `touchLastSeen` \/\s*\n?\s*\/\/ `getDetail` \/ `listActive` methods on the class \(not the interface\)\s*\n?\s*\/\/ because the future operator routes\s*\n?\s*\/\/ \(POST \/v1\/admin\/fleet-nodes, \/revoke, GET list, GET detail\) consume\s*\n?\s*\/\/ the concrete class\./,
+    );
+    expect(body).toMatch(
+      /Adding them to the interface would require the\s*\n?\s*\/\/ InMemory variant to grow too; the operator routes only run against\s*\n?\s*\/\/ the Drizzle path so this asymmetry is intentional\./,
+    );
+  });
+
+  it("FleetNodeDetail 10-field interface shape pinned: id + publicKeyBase64Url + displayName + region + hardwareClass + registeredAt + lastSeenAt (nullable) + revokedAt (nullable) + revocationReason (nullable) + livekit (nullable union). + LK.1 'per-Mac LiveKit credentials. All four fields are set together (CHECK constraint) or all four are NULL (pre-LK.2).' — pinned so the 10-field shape + LK.1 all-or-none CHECK constraint contract all stay documented (drift to allowing partial LK fields would diverge from the DB CHECK constraint)", () => {
+    expect(body).toMatch(
+      /export interface FleetNodeDetail \{\s*\n?\s*id: string;\s*\n?\s*publicKeyBase64Url: string;\s*\n?\s*displayName: string;\s*\n?\s*region: string;\s*\n?\s*hardwareClass: string;\s*\n?\s*registeredAt: Date;\s*\n?\s*lastSeenAt: Date \| null;\s*\n?\s*revokedAt: Date \| null;\s*\n?\s*revocationReason: string \| null;/,
+    );
+    expect(body).toMatch(
+      /\/\*\* LK\.1 — per-Mac LiveKit credentials\. All four fields are set\s*\n?\s*\*\s+together \(CHECK constraint\) or all four are NULL \(pre-LK\.2\)\. \*\//,
+    );
+    expect(body).toMatch(
+      /livekit: \{\s*\n?\s*apiKey: string;\s*\n?\s*apiSecretCiphertextBase64: string;\s*\n?\s*wsUrl: string;\s*\n?\s*registeredAt: Date;\s*\n?\s*\} \| null;/,
+    );
+  });
+
+  it('RegisterFleetNodeArgs 5-field interface pinned: publicKeyBase64Url + displayName + region + hardwareClass + optional registeredAt (test-injectable for fixture freezing). Drift to dropping the optional registeredAt would make fixture tests need a wall-clock-time freeze', () => {
+    expect(body).toMatch(
+      /export interface RegisterFleetNodeArgs \{\s*\n?\s*publicKeyBase64Url: string;\s*\n?\s*displayName: string;\s*\n?\s*region: string;\s*\n?\s*hardwareClass: string;\s*\n?\s*registeredAt\?: Date;\s*\n?\s*\}/,
+    );
+  });
+
+  it("LK.2 SetFleetNodeLivekitArgs framing pinned + apiSecretCiphertextBase64 envelope spec: 'credentials the Mac harness POSTs to the control plane on boot. apiSecretCiphertextBase64 is the base64-encoded [IV | tag | ciphertext] blob produced by encryptLivekitSecret().' — pinned so the LK.2 anchor + Mac-harness-POSTs-on-boot + base64-encoded envelope + encryptLivekitSecret cross-reference contract all stay documented", () => {
+    expect(body).toMatch(
+      /\/\*\* LK\.2 — credentials the Mac harness POSTs to the control plane on\s*\n?\s*\*\s+boot\. apiSecretCiphertextBase64 is the base64-encoded\s*\n?\s*\*\s+\[IV \| tag \| ciphertext\] blob produced by encryptLivekitSecret\(\)\. \*\//,
+    );
+    expect(body).toMatch(
+      /export interface SetFleetNodeLivekitArgs \{\s*\n?\s*nodeId: string;\s*\n?\s*apiKey: string;\s*\n?\s*apiSecretCiphertextBase64: string;\s*\n?\s*wsUrl: string;\s*\n?\s*registeredAt\?: Date;\s*\n?\s*\}/,
+    );
+  });
+
+  it('DrizzleFleetNodesRepo class declared as implements FleetNodesRepo (interface) + constructor takes Database. Drift to adding the asymmetry-mentioned methods (register/revoke/etc) to the interface would force InMemory parity (rejected per intentional asymmetry)', () => {
+    expect(body).toMatch(
+      /export class DrizzleFleetNodesRepo implements FleetNodesRepo \{\s*\n?\s*constructor\(private readonly database: Database\) \{\}/,
+    );
+  });
+});
