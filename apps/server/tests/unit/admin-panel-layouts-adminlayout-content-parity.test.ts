@@ -1,0 +1,72 @@
+// Drift guard for apps/admin-panel/src/layouts/AdminLayout.astro.
+// Pins the V-219 brand + the noindex,nofollow staff-only posture +
+// the 11-item nav + the "Staff-only surface. All actions audit-
+// logged." footer note.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/layouts/AdminLayout.astro');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('admin-panel layouts/AdminLayout content parity', () => {
+  const body = read(PAGE);
+
+  it('file exists at canonical path', () => {
+    expect(existsSync(PAGE)).toBe(true);
+  });
+
+  it('Props contract pinned: title (required) + description (optional, defaults to staff-only-tagline). Drift to a different shape would break every admin page', () => {
+    expect(body).toMatch(
+      /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(/description = 'Driftstack admin panel — Driftstack staff only\.'/);
+  });
+
+  it('noindex,nofollow staff-only posture pinned (CRITICAL): admin panel must NEVER be indexed by search engines. Drift to dropping the noindex would leak admin URLs to search crawlers — a real security/operational issue', () => {
+    expect(body).toMatch(/<!-- Admin panel must NEVER be indexed; staff-only surface\. -->/);
+    expect(body).toMatch(/<meta name="robots" content="noindex,nofollow" \/>/);
+  });
+
+  it('V-219 brand framing pinned: D-badge + lowercase font-mono "driftstack" wordmark + "admin" pill (staff-context indicator). Drift to dropping the admin pill would let staff confuse the admin surface with the customer dashboard at a glance', () => {
+    expect(body).toMatch(/V-219\* — D-badge \+ lowercase font-mono "driftstack" wordmark/);
+    expect(body).toMatch(/staff-context indicator/);
+    expect(body).toMatch(/<span>driftstack<\/span>/);
+    expect(body).toMatch(
+      /class="rounded-full bg-oxblood-50 px-2 py-0\.5 font-mono text-xs uppercase tracking-wide text-oxblood-700"\s*\n?\s*>\s*\n?\s*admin/,
+    );
+  });
+
+  it("11-item admin nav pinned (Overview / Accounts / Cost / Audit log / Incidents / Status subs / Leads / Sessions / API keys / Webhook DLQ / Rate limits). Drift to dropping any would break admin's at-a-glance nav for an operational surface staff use daily", () => {
+    expect(body).toMatch(/\{ href: '\/', label: 'Overview' \}/);
+    expect(body).toMatch(/\{ href: '\/accounts', label: 'Accounts' \}/);
+    expect(body).toMatch(/\{ href: '\/cost', label: 'Cost' \}/);
+    expect(body).toMatch(/\{ href: '\/audit-log', label: 'Audit log' \}/);
+    expect(body).toMatch(/\{ href: '\/incidents', label: 'Incidents' \}/);
+    expect(body).toMatch(/\{ href: '\/status-subscribers', label: 'Status subs' \}/);
+    expect(body).toMatch(/\{ href: '\/leads', label: 'Leads' \}/);
+    expect(body).toMatch(/\{ href: '\/sessions', label: 'Sessions' \}/);
+    expect(body).toMatch(/\{ href: '\/api-keys', label: 'API keys' \}/);
+    expect(body).toMatch(/\{ href: '\/webhook-dlq', label: 'Webhook DLQ' \}/);
+    expect(body).toMatch(/\{ href: '\/rate-limit-overrides', label: 'Rate limits' \}/);
+  });
+
+  it("Title-suffix pattern pinned: '<title> · Driftstack admin' (unconditional, unlike the docs Header which has a homepage special-case). Drift to dropping the suffix would let admin tabs become indistinguishable from customer tabs in browser tab strips", () => {
+    expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack admin`;/);
+  });
+
+  it("Staff-only audit-logged footer note pinned: 'Staff-only surface. All actions audit-logged.' — drift to softening would let staff forget that admin actions are tracked. Pinning this reinforces the slice 122/129/130/133/164 audit-IP work", () => {
+    expect(body).toMatch(/<p>Staff-only surface\. All actions audit-logged\.<\/p>/);
+  });
+
+  it('isActive() prefix-match pattern: exact OR href + slash. Drift to exact-only would break nav highlighting on every subpage (e.g. /accounts/:id wouldn\'t highlight "Accounts")', () => {
+    expect(body).toMatch(/pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)/);
+  });
+});
