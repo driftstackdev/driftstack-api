@@ -867,6 +867,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAccountByokAnthropicRoutes(app, {
       service: deps.byokAnthropicService,
       ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
+      // 2026-05-20 — best-effort customer audit-log emission on
+      // PUT/DELETE/POST-test of the BYOK key. Pre-launch blocker per
+      // the 2026-05-19 audit-log-coverage audit.
+      ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
     });
   } else {
     registerAccountByokAnthropicDisabledRoutes(app);

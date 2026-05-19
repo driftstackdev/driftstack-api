@@ -274,6 +274,18 @@ export const AccountAuditActionSchema = z.enum([
   'agent_session.pair_mode.takeover',
   'agent_session.pair_mode.handback',
   'agent_session.pair_mode.timeout',
+  // 2026-05-20 — BYOK Anthropic key-management lifecycle (pre-launch
+  // blocker per audit-log-coverage audit 2026-05-19). Customer needs
+  // to audit who set/cleared/tested their Anthropic credential —
+  // it's a customer-controlled secret + a billing-impacting decision.
+  // Per Q2 verdict 2026-05-17 the payload carries account_id +
+  // timestamp + event kind ONLY; NO key-prefix fingerprint (the
+  // plaintext is never persisted beyond the encrypted cipherblob and
+  // the audit log must NOT leak any prefix that would help a database
+  // reader correlate keys to accounts).
+  'account.byok_anthropic_key_set',
+  'account.byok_anthropic_key_cleared',
+  'account.byok_anthropic_key_tested',
 ]);
 export type AccountAuditAction = z.infer<typeof AccountAuditActionSchema>;
 

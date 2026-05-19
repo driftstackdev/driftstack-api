@@ -51,6 +51,14 @@ const ACTION_LABEL: Record<string, string> = {
   // (rule-based fallback).
   'agent.decompose.claude': 'Agent turn decomposed (Claude)',
   'agent.decompose.deterministic': 'Agent turn decomposed (deterministic)',
+  // 2026-05-20 — BYOK Anthropic key-management events. Customer
+  // needs to audit every mutation on their stored Anthropic
+  // credential. Payload carries the test outcome label on _tested;
+  // _set + _cleared have empty payload (no key-prefix per Q2
+  // verdict 2026-05-17).
+  'account.byok_anthropic_key_set': 'BYOK Anthropic key set / rotated',
+  'account.byok_anthropic_key_cleared': 'BYOK Anthropic key cleared',
+  'account.byok_anthropic_key_tested': 'BYOK Anthropic key tested',
 };
 
 // V-354 — preset filters. Each maps to a single AccountAuditAction
@@ -105,6 +113,10 @@ const FILTER_OPTIONS = [
   // v2-#5 Q.1.f — agent decomposer per-turn events.
   { value: 'agent.decompose.claude', label: 'Agent turn decomposed (Claude)' },
   { value: 'agent.decompose.deterministic', label: 'Agent turn decomposed (deterministic)' },
+  // 2026-05-20 — BYOK Anthropic key-management events.
+  { value: 'account.byok_anthropic_key_set', label: 'BYOK Anthropic key set / rotated' },
+  { value: 'account.byok_anthropic_key_cleared', label: 'BYOK Anthropic key cleared' },
+  { value: 'account.byok_anthropic_key_tested', label: 'BYOK Anthropic key tested' },
 ] as const;
 ---
 
