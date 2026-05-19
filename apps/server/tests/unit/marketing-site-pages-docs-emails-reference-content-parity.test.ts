@@ -36,7 +36,7 @@ function read(p: string): string {
 describe('W519.C apps/marketing-site/src/pages/docs/emails-reference.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-057.C + Postmark-approval 2026-05-12 + email.ts-TEMPLATES + OptOutableEmailEventSchema framing pinned: 'public reference for the email types Driftstack sends + how customers manage them. Built after Postmark approval went live on 2026-05-12 so users have a single page to consult. The catalog below is derived from apps/server/src/services/email.ts TEMPLATES + OptOutableEmailEventSchema in @driftstack/api-types.' — pinned so the V-057.C anchor + Postmark-2026-05-12 origin + 2-source-of-truth (email.ts + OptOutableEmailEventSchema) commitment survives", () => {
+  it('V-057.C + Postmark-approval 2026-05-12 + email.ts-TEMPLATES + OptOutableEmailEventSchema framing pinned. Re-enabled by slice 185 after verifying the V-057.C comment exists at emails-reference.astro:4-8 with the matching shape', () => {
     expect(body).toMatch(
       /\/\/ V-057\.C — public reference for the email types Driftstack sends\s*\n?\s*\/\/ \+ how customers manage them\. Built after Postmark approval went\s*\n?\s*\/\/ live on 2026-05-12 so users have a single page to consult\. The\s*\n?\s*\/\/ catalog below is derived from `apps\/server\/src\/services\/email\.ts`\s*\n?\s*\/\/ TEMPLATES \+ `OptOutableEmailEventSchema` in @driftstack\/api-types\./,
     );
