@@ -15,6 +15,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/idempotency-keys.astro');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts');
+const KEY_LIB = resolve(REPO_ROOT, 'apps/server/src/lib/idempotency-key.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -23,6 +24,7 @@ function read(p: string): string {
 describe('W268.A /docs/idempotency-keys ↔ /v1/billing/crypto-checkout parity', () => {
   const page = read(PAGE);
   const route = read(ROUTE);
+  const keyLib = read(KEY_LIB);
 
   it('POST /v1/billing/crypto-checkout endpoint is documented + registered', () => {
     expect(page).toMatch(/POST \/v1\/billing\/crypto-checkout/);
@@ -33,7 +35,12 @@ describe('W268.A /docs/idempotency-keys ↔ /v1/billing/crypto-checkout parity',
     expect(page).toMatch(/Idempotency-Key/);
     expect(page).toMatch(/Idempotent-Replayed/);
     expect(route).toMatch(/Idempotent-Replayed/);
-    expect(route).toMatch(/'idempotency-key'/);
+    // The lowercase header lookup lives in the shared lib (extracted
+    // so V-666.AO billing-crypto + v2-#19 agent-sessions share one
+    // validation path). Pin it there + verify the route imports
+    // through that lib.
+    expect(keyLib).toMatch(/'idempotency-key'/);
+    expect(route).toMatch(/readIdempotencyKey/);
   });
 
   it('24-hour dedupe window matches the live service comment', () => {

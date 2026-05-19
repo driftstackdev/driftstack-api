@@ -66,7 +66,7 @@ describe('W367.A marketing-site /about page content parity', () => {
 
   it("honest-scope: SOC 2 is future-revenue, not today's marketing line", () => {
     // Matches the /security "What we don't claim" honesty block.
-    expect(body).toMatch(/SOC 2 is a future-revenue milestone, not\s+today's marketing line/);
+    expect(body).toMatch(/SOC 2 is a future-revenue\s+milestone, not\s+today's marketing line/);
   });
 
   it('F-5 (Issue 5) V-506 operating-commitments 4 cards pinned (current-scale framing, no "Pre-launch" labels per Issue 5) + each has a verifiable public URL', () => {

@@ -151,6 +151,58 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </tbody>
     </table>
 
+    <h2>Security + rotation</h2>
+    <p>
+      Credential-rotation notifications. Security-critical; never
+      opt-outable.
+    </p>
+    <table>
+      <thead>
+        <tr><th>Template</th><th>Trigger</th><th>Opt-outable?</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>webhook-secret-rotation-reminder</strong></td>
+          <td>
+            Webhook signing secret reaches the 60-day nag threshold
+            (recommended 90-day rotation cadence). Includes endpoint
+            URL + secret prefix so the right endpoint is identifiable
+            without re-exposing the full secret.
+          </td>
+          <td>No — security advisory.</td>
+        </tr>
+        <tr>
+          <td><strong>webhook-secret-force-rotated</strong></td>
+          <td>
+            Server-initiated rotation when a webhook secret crosses
+            the 91-day hard cap. Carries the new secret prefix + 7-day
+            grace deadline so verifier code can pick up the new value
+            during the dual-sign window.
+          </td>
+          <td>No — security advisory.</td>
+        </tr>
+        <tr>
+          <td><strong>webhook-secret-grace-expiring</strong></td>
+          <td>
+            24h-before-grace-expiry nag after a force-rotation. Heads
+            up that the previous secret is about to stop verifying;
+            update verifier code now if it hasn't picked up the new
+            secret yet.
+          </td>
+          <td>No — security advisory.</td>
+        </tr>
+        <tr>
+          <td><strong>byok-anthropic-key-rotation-reminder</strong></td>
+          <td>
+            BYOK Anthropic API key reaches the 60-day nag threshold
+            (recommended 90-day rotation cadence). No partial-key
+            echo in the body — the key never appears.
+          </td>
+          <td>No — security advisory.</td>
+        </tr>
+      </tbody>
+    </table>
+
     <h2>Team + support</h2>
     <table>
       <thead>
