@@ -18,7 +18,7 @@ Once the founder reds in copy + structure choices, the actual `.astro` edits bec
 
 ## Already-approved patterns to apply uniformly
 
-These are the V-219\* PHASE 3 patterns already approved + landed elsewhere; safe to apply to onboarding pages without further redline:
+These are the `V-219*` PHASE 3 patterns already approved + landed elsewhere; safe to apply to onboarding pages without further redline:
 
 - **Minimal horizontal header** (D-badge + `font-mono` "driftstack" wordmark) — `withSidebar={false}` in `DashboardLayout.astro` already does this. All five onboarding pages currently use it; verified ✓.
 - **Oxblood-700 brand accent** for primary CTAs + active states (already in `base.css`).

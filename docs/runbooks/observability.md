@@ -53,7 +53,7 @@ browser-bundled DSNs are injected at build time via repo secrets:
 > Naming note: the api server reads `SENTRY_DSN`, but the GitHub
 > secret is `SENTRY_DSN_SERVER` (disambiguated so a future
 > `SENTRY_DSN_DASHBOARD` secret can't collide). The deploy workflow
-> renames it as it pushes to the prod env file. PUBLIC\_\* DSNs are
+> renames it as it pushes to the prod env file. `PUBLIC_*` DSNs are
 > non-secret (browser-shipped), kept as `gh secret` for log-mask
 > hygiene rather than confidentiality.
 

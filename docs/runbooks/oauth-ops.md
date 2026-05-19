@@ -145,10 +145,12 @@ The developer reports a 401 on a previously-working token:
    unencrypted channel).
 2. Introspect it:
 
+   ```bash
    curl -X POST \
-    -H "Content-Type: application/json" \
-    -d '{"token":"oat\_…"}' \
-    "$BASE_URL/v1/oauth/introspect"
+     -H "Content-Type: application/json" \
+     -d '{"token":"oat_…"}' \
+     "$BASE_URL/v1/oauth/introspect"
+   ```
 
 3. Interpret the response:
    - `active: false` → token is revoked or expired. If expired,
