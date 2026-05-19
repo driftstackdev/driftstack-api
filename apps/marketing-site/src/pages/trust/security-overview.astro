@@ -59,7 +59,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             <p class="mt-1 text-sm text-ink-secondary">
               AES-256-GCM at-rest encryption of TOTP secrets. Recovery
               codes are scrypt-hashed (mirroring API key handling). Step-up
- gate requires MFA on destructive admin paths.
+              gate (V-353e) requires MFA on destructive admin paths.
             </p>
             <p class="mt-1 text-xs font-mono text-ink-muted">
               apps/server/src/lib/mfa-totp.ts · apps/server/src/services/mfa.ts

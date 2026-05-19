@@ -58,7 +58,7 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     );
   });
 
-  it.skip("MFA claim pinned: 'MFA: TOTP + recovery codes' + 'AES-256-GCM at-rest encryption of TOTP secrets' + 'Recovery codes are scrypt-hashed (mirroring API key handling)' + 'Step-up gate (V-353e)' — pinned so the AES-256-GCM cipher + recovery-code-hash-mirror + V-353e step-up reference all survive (drift to dropping AES-256-GCM specificity would weaken the at-rest-encryption claim; drift to dropping V-353e would orphan the step-up-gate engineering reference)", () => {
+  it('MFA claim pinned. Re-enabled by slice 256 after restoring the (V-353e) anchor on the Step-up gate sentence at security-overview.astro:62 (same anchor-stripped-to-bare-space drift pattern as slices 235-250)', () => {
     expect(body).toMatch(/MFA: TOTP \+ recovery codes/);
     expect(body).toMatch(
       /AES-256-GCM at-rest encryption of TOTP secrets\. Recovery\s*\n?\s*codes are scrypt-hashed \(mirroring API key handling\)\. Step-up\s*\n?\s*gate \(V-353e\) requires MFA on destructive admin paths\./,
