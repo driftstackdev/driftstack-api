@@ -36,7 +36,7 @@ function read(p: string): string {
 describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-181 framing pinned: 'progressive-enhancement wiring against /v1/webhooks, mirrors V-180 /sessions pattern. SSG renders mock for instant paint; inline <script> replaces the endpoint list with live data when ds_web_session_token is in localStorage.' — pinned so the SSG-mock + live-replace pattern + the cross-page V-180 sessions consistency reference survive", () => {
+  it("V-181 framing pinned: 'progressive-enhancement wiring against /v1/webhooks, mirrors V-180 /sessions pattern. SSG renders mock for instant paint; inline <script> replaces the endpoint list with live data when ds_web_session_token is in localStorage.' — pinned so the SSG-mock + live-replace pattern + the cross-page V-180 sessions consistency reference survive. Re-enabled by slice 157 after verifying the V-181 comment still exists at webhooks.astro:4-7 with the matching shape", () => {
     expect(body).toMatch(
       /\/\/ V-181 — progressive-enhancement wiring against \/v1\/webhooks,\s*\n?\s*\/\/ mirrors V-180 \/sessions pattern\. SSG renders mock for instant\s*\n?\s*\/\/ paint; inline <script> replaces the endpoint list with live data/,
     );
@@ -114,7 +114,7 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
     );
   });
 
-  it.skip("V-356 send-test framing pinned: 'wire the per-row \"Send test\" buttons. POSTs to /v1/webhooks/:id/test which enqueues a synthetic test.ping delivery on the endpoint regardless of subscription.' + 202-or-r.ok success branch — pinned so the test-delivery 'bypasses subscription filter' semantic survives (drift to requiring subscription would block test-pings on production endpoints subscribed to only quota events)", () => {
+  it("V-356 send-test framing pinned: 'wire the per-row \"Send test\" buttons. POSTs to /v1/webhooks/:id/test which enqueues a synthetic test.ping delivery on the endpoint regardless of subscription.' + 202-or-r.ok success branch — pinned so the test-delivery 'bypasses subscription filter' semantic survives (drift to requiring subscription would block test-pings on production endpoints subscribed to only quota events). Re-enabled by slice 157 after verifying both sentinels exist at webhooks.astro:1296-1298 + :1318", () => {
     expect(body).toMatch(
       /\/\/ V-356 — wire the per-row "Send test" buttons\. POSTs to\s*\n?\s*\/\/ \/v1\/webhooks\/:id\/test which enqueues a synthetic test\.ping\s*\n?\s*\/\/ delivery on the endpoint regardless of subscription\./,
     );
@@ -127,7 +127,7 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
     );
   });
 
-  it.skip("V-475 plaintext-wipe-on-dismiss framing pinned: 'Clear secret from DOM so it isn't recoverable post-dismiss.' + rotateSecretEl.textContent = '' on hide — pinned so the post-dismiss DOM wipe survives (drift to leaving the secret in the DOM would let post-dismiss page inspectors recover the rotated secret, defeating the shown-ONCE contract)", () => {
+  it("V-475 plaintext-wipe-on-dismiss framing pinned: 'Clear secret from DOM so it isn't recoverable post-dismiss.' + rotateSecretEl.textContent = '' on hide — pinned so the post-dismiss DOM wipe survives (drift to leaving the secret in the DOM would let post-dismiss page inspectors recover the rotated secret, defeating the shown-ONCE contract). Re-enabled by slice 157 after verifying both sentinels exist at webhooks.astro:1213-1214", () => {
     expect(body).toMatch(/\/\/ Clear secret from DOM so it isn't recoverable post-dismiss\./);
     expect(body).toMatch(/rotateSecretEl\.textContent = '';/);
   });
