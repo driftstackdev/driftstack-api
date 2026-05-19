@@ -9,11 +9,12 @@
 // The 90d email-purge cron is wired separately (in bootstrap as a daily
 // setInterval); it is not exposed as an HTTP endpoint.
 
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AdminAuditService } from '../services/admin-audit.js';
 import type { StatusSubscribersService } from '../services/status-subscribers.js';
 import { ValidationError } from '../lib/errors.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 const ListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional(),
@@ -31,10 +32,6 @@ function uuidFromPrefixedId(value: string): string {
     });
   }
   return match[1];
-}
-
-function clientIp(request: FastifyRequest): string | null {
-  return request.ip ?? null;
 }
 
 export interface AdminStatusSubscribersRoutesOptions {
@@ -90,7 +87,7 @@ export function registerAdminStatusSubscribersRoutes(
           targetResourceId: `sub_${id}`,
           inputPayload: { email: result.email },
           result: 'success',
-          ipAddress: clientIp(request),
+          ipAddress: readClientIp(request),
         });
       } catch (err) {
         const code =
@@ -105,7 +102,7 @@ export function registerAdminStatusSubscribersRoutes(
           targetResourceId: `sub_${id}`,
           inputPayload: {},
           result: `error: ${code}`,
-          ipAddress: clientIp(request),
+          ipAddress: readClientIp(request),
         });
         throw err;
       }

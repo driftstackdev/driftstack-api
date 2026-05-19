@@ -28,6 +28,12 @@ const CONSUMER_ROUTES = [
   'apps/server/src/routes/admin-webhooks.ts',
   'apps/server/src/routes/admin-force-actions.ts',
   'apps/server/src/routes/admin-accounts.ts',
+  // Added in slice 129 — admin-status-subscribers was the only admin
+  // route with audit-log writes that didn't honor XFF (its hand-rolled
+  // `clientIp` returned bare `request.ip`). Behind the prod LB, that
+  // recorded the proxy IP on every force-unsubscribe instead of the
+  // operator's. Now uses readClientIp so the actor_ip is meaningful.
+  'apps/server/src/routes/admin-status-subscribers.ts',
 ];
 
 function fakeRequest(opts: {
