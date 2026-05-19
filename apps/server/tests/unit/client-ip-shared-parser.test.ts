@@ -34,6 +34,15 @@ const CONSUMER_ROUTES = [
   // recorded the proxy IP on every force-unsubscribe instead of the
   // operator's. Now uses readClientIp so the actor_ip is meaningful.
   'apps/server/src/routes/admin-status-subscribers.ts',
+  // Added in slice 130 — admin-incidents and mac-nodes-register had
+  // the same bare-`request.ip` bug as slice 129's status-subscribers
+  // fix. admin-incidents writes audit rows on incident create /
+  // update / resolve; mac-nodes-register writes a row on every
+  // successful LiveKit credential registration. Both now use the
+  // shared XFF-aware parser so actor_ip is consistent across all 6
+  // admin-side audit-writing routes.
+  'apps/server/src/routes/admin-incidents.ts',
+  'apps/server/src/routes/mac-nodes-register.ts',
 ];
 
 function fakeRequest(opts: {

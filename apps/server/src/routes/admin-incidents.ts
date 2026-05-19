@@ -27,6 +27,7 @@ import type { Incident, IncidentUpdate } from '@driftstack/api-types';
 import type { AdminAuditAction, AdminAuditService } from '../services/admin-audit.js';
 import type { IncidentRow, IncidentUpdateRow, IncidentsService } from '../services/incidents.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
@@ -36,10 +37,6 @@ function uuidFromPrefixedId(value: string, expectedPrefix: string): string {
     throw new BadRequestError(`Invalid id format. Expected "${expectedPrefix}_<uuid>".`);
   }
   return match[1];
-}
-
-function clientIp(request: FastifyRequest): string | null {
-  return request.ip ?? null;
 }
 
 function publicIncident(row: IncidentRow): Incident {
@@ -98,7 +95,7 @@ export function registerAdminIncidentsRoutes(
         targetResourceId,
         inputPayload,
         result: 'success',
-        ipAddress: clientIp(request),
+        ipAddress: readClientIp(request),
       });
     } catch (err) {
       const code =
@@ -111,7 +108,7 @@ export function registerAdminIncidentsRoutes(
         targetResourceId,
         inputPayload,
         result: `error: ${code}`,
-        ipAddress: clientIp(request),
+        ipAddress: readClientIp(request),
       });
       throw err;
     }

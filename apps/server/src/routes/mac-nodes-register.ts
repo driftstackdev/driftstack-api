@@ -17,13 +17,14 @@
 // fleet_nodes (LK.1's note explains the alignment). The route
 // validates the mac_node_id against the existing fleet_nodes row.
 
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { encryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import { BadRequestError, NotFoundError, ValidationError } from '../lib/errors.js';
 import type { AdminAuditService } from '../services/admin-audit.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
+import { readClientIp } from '../lib/client-ip.js';
 
 const RegisterBodySchema = z.object({
   mac_node_id: z.string().uuid('mac_node_id must be a UUID matching an existing fleet_nodes row.'),
@@ -137,7 +138,7 @@ export function registerMacNodesRoutes(
               targetResourceId: `mac_node_${body.mac_node_id}`,
               inputPayload: { ws_url: body.livekit.ws_url },
               result: 'success',
-              ipAddress: clientIp(req),
+              ipAddress: readClientIp(req),
             });
           } catch {
             // Swallow — best-effort. Credentials are already persisted.
@@ -155,8 +156,4 @@ export function registerMacNodesRoutes(
       });
     },
   );
-}
-
-function clientIp(request: FastifyRequest): string | null {
-  return request.ip ?? null;
 }
