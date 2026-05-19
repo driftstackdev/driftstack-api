@@ -47,7 +47,7 @@ function read(p: string): string {
 describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-713 framing pinned: 'public security overview. Pitched at customer security review + procurement teams. Companion to /docs/data-residency, /docs/audit-log, /docs/incident-policy. Keeps the surface area honest — describes what we do, what we don't, and where to find the auditable evidence.' — pinned so the V-713 anchor + 3-companion-doc + audit-evidence-honest commitment survives", () => {
+  it('V-713 framing pinned. Re-enabled by slice 269 after verifying the V-713 anchor + 3-companion-doc framing still exists verbatim at security-overview.astro:4-8', () => {
     expect(body).toMatch(
       /\/\/ V-713 — public security overview\. Pitched at customer security\s*\n?\s*\/\/ review \+ procurement teams\. Companion to \/docs\/data-residency,\s*\n?\s*\/\/ \/docs\/audit-log, \/docs\/incident-policy\./,
     );
