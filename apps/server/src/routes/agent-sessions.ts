@@ -65,7 +65,11 @@ const CreateAgentSessionRequestSchema = z.object({
   // pattern) — generous headroom, blocks multi-KB strings that would
   // bloat the 404/400 problem+json body if validation lets them in.
   driftstack_session_id: z.string().min(1).max(100).optional(),
-  token_budget: z.number().int().positive().optional(),
+  // Default is 100_000 (DEFAULT_TOKEN_BUDGET). Cap at 10M (100× the
+  // default) so a customer can request a generous budget for long
+  // sessions but can't trigger pathological accounting math with an
+  // implausibly large value like 10^15.
+  token_budget: z.number().int().positive().max(10_000_000).optional(),
   // Arc 2 sub-slice 8.5 (v2-#8) — operational mode at create-time.
   mode: z.enum(['manual', 'ai', 'pair']).optional(),
 });

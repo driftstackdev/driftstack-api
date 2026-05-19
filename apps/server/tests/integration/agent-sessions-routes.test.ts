@@ -241,6 +241,25 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(read.body).not.toContain(SECRET);
   });
 
+  it('token_budget upper bound: 10_000_000 accepted, 10_000_001 returns 400 (defensive cap added in slice 119 — blocks pathological accounting math from implausibly large request)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const ok = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 10_000_000 },
+    });
+    expect(ok.statusCode).toBe(201);
+
+    const tooLarge = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 10_000_001 },
+    });
+    expect(tooLarge.statusCode).toBe(400);
+  });
+
   it('BYOK header empty-string is treated as absent (does NOT pass empty key downstream, does NOT skip bundled-LLM fallback)', async () => {
     // Previously an empty `x-byok-anthropic-api-key:` header would
     // be read as the empty string ''. Empty string is `!== undefined`,
