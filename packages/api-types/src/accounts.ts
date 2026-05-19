@@ -297,7 +297,11 @@ export type AccountAuditEntry = z.infer<typeof AccountAuditEntrySchema>;
 
 export const ListAccountAuditLogQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
-  cursor: z.string().optional(),
+  // Slice 149 — defensive cap matching slice 117/146/147/148 cursor
+  // convention; see PaginationQuerySchema in common.ts for the same
+  // shape + rationale (512 covers any base64url-encoded pagination
+  // token plus headroom).
+  cursor: z.string().min(1).max(512).optional(),
   action: AccountAuditActionSchema.optional(),
   // V-484 — additional filters. ISO 8601 dates for from/to (inclusive).
   // Coerced from query strings; Zod's coerce.date() handles

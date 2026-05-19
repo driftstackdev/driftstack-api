@@ -180,7 +180,11 @@ export type WebhookDelivery = z.infer<typeof WebhookDeliverySchema>;
 
 export const ListDeliveriesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  cursor: z.string().optional(),
+  // Slice 149 — defensive cap matching slice 117/146/147/148 cursor
+  // convention. PaginationQuerySchema in common.ts now caps at 512;
+  // this schema doesn't extend the base shape (carries its own
+  // status filter) so the cap is duplicated explicitly here.
+  cursor: z.string().min(1).max(512).optional(),
   status: WebhookDeliveryStatusSchema.optional(),
 });
 export type ListDeliveriesQuery = z.infer<typeof ListDeliveriesQuerySchema>;

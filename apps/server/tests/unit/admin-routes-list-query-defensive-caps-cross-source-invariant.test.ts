@@ -54,7 +54,15 @@ const ALL_CURSOR_CAPPED_ROUTES = [...CURSOR_AND_ACCOUNT_ID_ROUTES, ...CURSOR_ONL
 // without route-level edits. Pinning the base-schema shape here.
 const SHARED_PAGINATION_SCHEMA = 'packages/api-types/src/common.ts';
 
-describe('Slice 146/147/148 — defensive caps on list-query cursor + account_id', () => {
+// Slice 149 — api-types list-query schemas that don't extend
+// PaginationQuerySchema but carry their own cursor field still need
+// the same cap.
+const API_TYPES_LIST_SCHEMAS = [
+  'packages/api-types/src/webhooks.ts', // ListDeliveriesQuerySchema
+  'packages/api-types/src/accounts.ts', // ListAccountAuditLogQuerySchema
+];
+
+describe('Slice 146/147/148/149 — defensive caps on list-query cursor + account_id', () => {
   it.each(ALL_CURSOR_CAPPED_ROUTES)(
     '%s caps cursor at z.string().min(1).max(512).optional()',
     (rel) => {
@@ -82,4 +90,13 @@ describe('Slice 146/147/148 — defensive caps on list-query cursor + account_id
     // Drift sentinel — pre-slice-148 bare shape MUST NOT come back.
     expect(body).not.toMatch(/cursor:\s*z\.string\(\)\.optional\(\)/);
   });
+
+  it.each(API_TYPES_LIST_SCHEMAS)(
+    'slice 149 — %s caps its cursor at .min(1).max(512).optional() (schema-specific, does not extend PaginationQuerySchema)',
+    (rel) => {
+      const body = read(rel);
+      expect(body).toMatch(/cursor:\s*z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\)/);
+      expect(body).not.toMatch(/cursor:\s*z\.string\(\)\.optional\(\)/);
+    },
+  );
 });
