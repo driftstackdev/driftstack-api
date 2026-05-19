@@ -66,7 +66,7 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     expect(body).toMatch(/<a href="\/docs\/api-security-headers">API security headers<\/a>/);
   });
 
-  it.skip("Object storage + profile state framing pinned: 'Customer-generated artefacts that land in Cloudflare R2 use server-side encryption (S3-SSE); underlying objects are never publicly listable. Session recordings are a roadmap item — see /docs/recordings for status.' + 'Per-profile browser state (cookies, localStorage, IndexedDB) lives in the WebKit driver layer as per-profile encrypted files on disk (EU host). The Postgres profile row holds metadata only — name, archetype, description.' — pinned so the S3-SSE-R2 + never-publicly-listable + V-540-recordings-roadmap + per-profile-encrypted-file-EU-host + Postgres-metadata-only commitment survives", () => {
+  it('Object storage + profile state framing pinned. Re-enabled by slice 278 after verifying both Object-storage (S3-SSE + never-publicly-listable + recordings-roadmap) + Profile-state (encrypted-files + EU-host + Postgres-metadata-only) framings still exist verbatim at docs/security-overview.astro:44-55', () => {
     expect(body).toMatch(
       /<strong>Object storage:<\/strong> Customer-generated artefacts\s*\n?\s*that land in Cloudflare R2 use server-side encryption \(S3-SSE\);\s*\n?\s*underlying objects are never publicly listable\. Session\s*\n?\s*recordings are a roadmap item — see\s*\n?\s*<a href="\/docs\/recordings">\/docs\/recordings<\/a> for status\./,
     );
@@ -75,7 +75,7 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     );
   });
 
-  it.skip("Auth + authz 4-bullet framing pinned: 'Customer keys are scoped: read / write / account_owner. We default to least-privilege; the dashboard's \"create key\" flow defaults to read with an explicit checkbox to widen.' + 'MFA (TOTP) is available for every account and required for any operation we classify as \"sensitive\" — see the dashboard for the per-account toggle. We re-prompt for MFA after 15 minutes of step-up inactivity.' + 'Admin actions are gated behind a separate driftstack_internal_admin scope that no customer key can hold.' + 'Every login event + every key mint/revoke is captured in the account audit log (V-074); customers can self-serve a full log export.' — pinned so the 3-scope-ladder + create-key-defaults-read + MFA-TOTP + 15-min-step-up-reprompt + driftstack_internal_admin separate + V-074 audit-log + self-serve-export commitment survives", () => {
+  it('Auth + authz 4-bullet framing pinned. Re-enabled by slice 278 after restoring the V-074 anchor on the account-audit-log bullet at docs/security-overview.astro:81 (the other 3 bullets — scope-ladder + MFA + driftstack_internal_admin — were intact)', () => {
     expect(body).toMatch(
       /Customer keys are scoped: <code>read<\/code> \/\s*\n?\s*<code>write<\/code> \/ <code>account_owner<\/code>\. We default to\s*\n?\s*least-privilege; the dashboard's "create key" flow defaults to\s*\n?\s*<code>read<\/code> with an explicit checkbox to widen\./,
     );
