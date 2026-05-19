@@ -9,12 +9,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <!-- Hero -->
   <section class="relative overflow-hidden">
     <div class="absolute inset-0 grid-bg opacity-40" aria-hidden="true"></div>
-    <div class="relative mx-auto max-w-6xl px-5 pb-20 pt-14 sm:px-6 sm:pb-28 sm:pt-24 md:pt-32">
-      <div class="grid gap-8 sm:gap-12 md:grid-cols-2 md:items-center">
+    <div class="relative mx-auto max-w-6xl px-6 py-16 sm:pb-28 sm:pt-24 md:pt-32">
+      <div class="grid gap-10 sm:gap-12 md:grid-cols-2 md:items-center">
         <div class="animate-fade-up">
           <p class="section-label">iPhone Safari · on demand</p>
           <h1
-            class="mt-4 text-[1.625rem] font-semibold tracking-tight text-ink-primary sm:text-4xl sm:mt-5 md:text-5xl lg:text-6xl"
+            class="mt-5 text-3xl font-semibold tracking-tight text-ink-primary sm:text-4xl md:text-5xl lg:text-6xl"
             style="letter-spacing: -0.02em; line-height: 1.1;"
           >
             <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
@@ -22,15 +22,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             </span>
             <span class="block">Programmable from any language.</span>
           </h1>
-          <p class="mt-5 max-w-prose text-[15px] text-ink-secondary leading-relaxed sm:mt-6 sm:text-lg">
+          <p class="mt-5 max-w-prose text-base text-ink-secondary leading-relaxed sm:text-lg">
             Real WebKit — the engine every iPhone ships. Canvas + WebGL
             hashes match the millions of iPhones in the wild, not the
             unique-per-session leak every Chromium-stealth API surfaces.
             Drive sessions from TypeScript, Python, Go, or the GUI.
           </p>
-          <div class="mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
-            <a href="/pricing#trial-pack" class="btn-primary w-full text-center sm:w-auto">Start for $2.99</a>
-            <a href="/comparison" class="btn-secondary w-full text-center sm:w-auto">Compare the alternatives</a>
+          <div class="mt-7 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4">
+            <a href="/pricing#trial-pack" class="btn-primary">Start for $2.99</a>
+            <a href="/comparison" class="btn-secondary">Compare the alternatives</a>
           </div>
           <p class="mt-4 text-xs text-ink-muted">
             16 hours of session time · 14-day window · one trial per account.
