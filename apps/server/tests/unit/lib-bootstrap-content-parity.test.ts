@@ -94,8 +94,18 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(
       /'R2 not configured — recordings durability \+ presigned URLs disabled\. Set R2_\* env vars to enable\.',/,
     );
+    // Arc 7 obs.13 — email service construction moved later in
+    // bootstrap so the metrics registry can be threaded in at
+    // construction time (email_send_total counter). The earlier
+    // "Postmark email — optional. No-op if not configured." comment
+    // is retained at the original location as a deferred-construction
+    // marker; the actual createEmailService() call now happens after
+    // the metrics registry block with the metrics dep wired in.
     expect(body).toMatch(
-      /\/\/ Postmark email — optional\. No-op if not configured\.\s*\n?\s*const email = createEmailService\(\{ config: config\.postmark, logger \}\);/,
+      /\/\/ Postmark email — optional\. No-op if not configured\. Constructed\s*\n?\s*\/\/ lazily AFTER the metrics registry below/,
+    );
+    expect(body).toMatch(
+      /const email: EmailService = createEmailService\(\{\s*\n?\s*config: config\.postmark,\s*\n?\s*logger,\s*\n?\s*\.\.\.\(metricsRegistry !== undefined \? \{ metrics: metricsRegistry \} : \{\}\),\s*\n?\s*\}\);/,
     );
   });
 

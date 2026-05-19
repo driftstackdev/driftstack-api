@@ -105,7 +105,7 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
       /await app\.register\(authPlugin, \{\s*\n?\s*authRepo: deps\.authRepo,\s*\n?\s*authCache: deps\.authCache,\s*\n?\s*authCoalescer: deps\.authCoalescer,/,
     );
     expect(body).toMatch(
-      /await app\.register\(rateLimitPlugin, \{ store: deps\.rateLimitStore \}\);/,
+      /await app\.register\(rateLimitPlugin, \{\s*\n?\s*store: deps\.rateLimitStore,\s*\n?\s*\.\.\.\(deps\.metricsRegistry !== undefined \? \{ metrics: deps\.metricsRegistry \} : \{\}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(/registerErrorHandler\(app\);/);
   });
