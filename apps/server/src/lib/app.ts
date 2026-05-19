@@ -900,11 +900,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
     });
   }
-  // V-667.C — OAuth-client routes. Gated on all 4: service wired +
-  // signingSecret + callbackUrlBase + at least one provider configured.
+  // V-667.C — OAuth-client routes. Gated on: service wired +
+  // signingSecret + callbackUrlBase + at least one provider configured
+  // + authFlowsService (2026-05-19 — needed to mint the web session
+  // after a successful link-or-create; without it, the callback
+  // returns no session token and the dashboard shows "Sign in to see
+  // live account data" instead of the signed-in state).
   if (
     deps.oauthClientService !== undefined &&
     deps.oauthClient !== undefined &&
+    deps.authFlowsService !== undefined &&
     (deps.oauthClient.google !== undefined || deps.oauthClient.github !== undefined)
   ) {
     const providers: Record<string, { clientId: string; clientSecret: string }> = {};
@@ -916,6 +921,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       callbackUrlBase: deps.oauthClient.callbackUrlBase,
       dashboardOrigin: deps.oauthClient.dashboardOrigin,
       signingSecret: deps.oauthClient.signingSecret,
+      authFlows: deps.authFlowsService,
       logger: deps.logger,
     });
   }

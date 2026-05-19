@@ -87,9 +87,21 @@ const apiBaseUrl = resolveApiBaseUrl();
         )
         .then((body) => {
           if (body.outcome === 'signed-in-existing-link' || body.outcome === 'created-new-account') {
-            // The server has minted the session via Set-Cookie or response body
-            // (V-667.B-9 next slice: actually mint the web session in the
-            // callback handler). For now, navigate to the redirect_to.
+            // 2026-05-19 — server now mints the web session inline in
+            // the callback handler. Write the token to localStorage
+            // before navigating so the dashboard finds it on landing
+            // (otherwise the dashboard surfaces "Sign in to see live
+            // account data" because localStorage is empty). Mirrors
+            // the password-login flow at login.astro:217.
+            if (body.session_token) {
+              try {
+                localStorage.setItem('ds_web_session_token', body.session_token);
+              } catch (_) {
+                // Private mode / disabled storage — sign-in stays
+                // bound to the cookie if present; if not, the
+                // dashboard will redirect back to /login.
+              }
+            }
             window.location.href = body.redirect_to || '/';
             return;
           }

@@ -141,7 +141,13 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       const token = getToken();
       if (!token) {
-        showBanner('Sign in to see live account data.');
+        // 2026-05-19 — dashboard hard-redirects to /login when there's
+        // no session token, instead of rendering a "Sign in to see
+        // live account data" banner over the page's placeholder
+        // mock-data UI. Mock-data UI is a development affordance only;
+        // production-side it reads as broken to unauthed visitors.
+        const ret = encodeURIComponent(window.location.pathname + window.location.search);
+        window.location.replace('/login?return_to=' + ret);
         return;
       }
       // V-331 — pick up the X-Driftstack-Account header from the

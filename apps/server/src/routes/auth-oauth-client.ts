@@ -34,7 +34,9 @@ import { computeS256Challenge } from '../lib/oauth-pkce.js';
 import { signOauthClientState, verifyOauthClientState } from '../lib/oauth-client-state.js';
 import { exchangeCodeForTokens, fetchUserInfo } from '../lib/oauth-client-exchange.js';
 import type { OAuthClientService } from '../services/oauth-client.js';
+import type { AuthFlowsService } from '../services/auth-flows.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
+import { readClientIp } from '../lib/client-ip.js';
 import type { Logger } from '../lib/logger.js';
 
 const COOKIE_NAME = 'ds_oauth_pkce';
@@ -65,6 +67,12 @@ export interface RegisterOAuthClientRoutesDeps {
   /** HMAC-SHA256 key for state JWT + cookie signing (≥32 chars). */
   signingSecret: string;
   logger: Logger;
+  /** 2026-05-19 — auth-flows service used to mint a 30-day web
+   *  session after a successful link-or-create. Without this, the
+   *  callback would return `{outcome, account_id}` without a token
+   *  and the dashboard would show "Sign in to see live account data"
+   *  on the post-OAuth landing. */
+  authFlows: AuthFlowsService;
   /** Test seam — defaults to Date.now() / randomBytes. */
   nowMs?: () => number;
 }
@@ -204,10 +212,34 @@ export function registerOAuthClientRoutes(
         now: new Date(now()),
       });
 
+      // 2026-05-19 — successful link-or-create mints a 30-day web
+      // session immediately so the dashboard finds a token in
+      // localStorage on landing. Prior to this fix the callback
+      // returned `{outcome, account_id, redirect_to}` only; the SPA
+      // would then load the dashboard with no token and surface
+      // "Sign in to see live account data" — same UX as if the
+      // user had never signed in. The OAuth IDP's attestation IS
+      // the auth event here; no password/MFA gate applies.
+      let sessionToken: string | undefined;
+      if (result.kind === 'signed-in-existing-link' || result.kind === 'created-new-account') {
+        const session = await deps.authFlows.issueOAuthWebSession({
+          accountId: result.accountId,
+          issuedFromIp: readClientIp(req),
+          userAgent:
+            typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+          provider,
+        });
+        if (session !== null) sessionToken = session.plaintext;
+      }
+
       return reply.code(200).send({
         outcome: result.kind,
         ...(result.kind === 'signed-in-existing-link' || result.kind === 'created-new-account'
-          ? { account_id: result.accountId, redirect_to: redirectTo }
+          ? {
+              account_id: result.accountId,
+              redirect_to: redirectTo,
+              ...(sessionToken !== undefined ? { session_token: sessionToken } : {}),
+            }
           : {}),
         ...(result.kind === 'collision-pending-verification'
           ? {

@@ -967,4 +967,38 @@ export class AuthFlowsService {
     });
     return { plaintext, row };
   }
+
+  /**
+   * 2026-05-19 — public wrapper for OAuth-client callback after
+   * linkOrCreateAccount succeeds. Looks up the account, mints the
+   * same 30-day web session the password/magic-link/MFA paths mint,
+   * then emits an `account.login` audit row attributing the sign-in
+   * to the IDP provider. The IDP's trust attestation IS the auth
+   * event here; no password/MFA gate applies.
+   *
+   * Founder report 2026-05-19: prior to this method, the OAuth
+   * callback returned `{outcome, account_id, redirect_to}` with NO
+   * session token; the dashboard then showed "Sign in to see live
+   * account data" because localStorage was empty. This closes the
+   * gap.
+   *
+   * Returns `null` if the account was deleted between
+   * linkOrCreateAccount + this call (extremely rare).
+   */
+  async issueOAuthWebSession(args: {
+    accountId: string;
+    issuedFromIp: string | null;
+    userAgent: string | null;
+    provider: string;
+  }): Promise<{ plaintext: string; row: WebSessionRow } | null> {
+    const account = await this.repo.findAccountById(args.accountId);
+    if (account === null) return null;
+    const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
+    await this.emitAuditBestEffort(args.accountId, 'account.login', {
+      kind: 'oauth_callback',
+      provider: args.provider,
+      session_id: session.row.id,
+    });
+    return session;
+  }
 }
