@@ -39,7 +39,7 @@ without founder verdict.
 - All Track A/B/D/E/H code commits since SHA `3f153e3` are LANDED
   on origin but NOT deployed to prod. This includes:
   - Track E V-531.B `/v1/sessions/:id/livekit-token` route (the
-    LIVEKIT\_\* env vars are wired, but the consumer code isn't on
+    `LIVEKIT_*` env vars are wired, but the consumer code isn't on
     the deployed binary — confirmed: route returns 404 in prod).
   - Track H magic-link IP rate-limit (affda641).
   - W1039-W1053 drift-guard tests (test-only, doesn't matter for

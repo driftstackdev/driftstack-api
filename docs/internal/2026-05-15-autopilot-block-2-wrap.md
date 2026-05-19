@@ -45,7 +45,7 @@ Smoke checks:
 - `curl /v1/sessions/.../livekit-token` → 401 (route REGISTERED on
   prod; previously 404). Track E live.
 - `curl /v1/auth/oauth-client/start` → 404 (route DORMANT, no
-  OAUTH*CLIENT*\* env). Expected; lights up after operator wire.
+  `OAUTH_CLIENT_*` env). Expected; lights up after operator wire.
 
 ## Operator action queue (when founder is back)
 
