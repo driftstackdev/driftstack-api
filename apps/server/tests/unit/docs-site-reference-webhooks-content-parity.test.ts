@@ -45,10 +45,10 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(existsSync(ERR)).toBe(true);
   });
 
-  it.skip('reference/rate-limits.md: V-505 + token-bucket anti-abuse-not-pricing-meter (concurrent-only per ADR-004) + 2 bucket keys (global + sessions:create) + 8-tier defaults pinned', () => {
+  it('reference/rate-limits.md: token-bucket anti-abuse-not-pricing-meter (concurrent-only per ADR-004) + 2 bucket keys (global + sessions:create) + 8-tier defaults pinned. Re-enabled by slice 306 — the V-505 anchor was R4-scrubbed; the doc now leads with the bare "reference." sentence', () => {
     const body = read(RL);
     expect(body).toMatch(/^title: Rate limits$/m);
-    expect(body).toMatch(/V-505 reference\./);
+    expect(body).toMatch(/^reference\. Driftstack enforces per-tier token-bucket rate$/m);
     expect(body).toMatch(/Driftstack enforces per-tier token-bucket rate/);
     expect(body).toMatch(/intentional anti-abuse caps \(runaway scripts, accidental DoS\),/);
     expect(body).toMatch(/not the pricing meter\. Pricing is concurrent-only per ADR-004\./);
