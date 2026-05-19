@@ -110,8 +110,20 @@ ssh "root@${HOST}" "set -euo pipefail; \
   # 0.38.4 would silent-skip, journal/DB count mismatch. See the
   # 2026-05-19 migration-audit incident for the prevention rationale.
   echo '[bridge] migration-immutability + journal-integrity pre-gate' >&2; \
-  set -a; source /opt/driftstack/api/.env; set +a; \
-  node \$BUILD_DIR/scripts/migration-immutability-check.mjs > /tmp/deploy-mig-check.log 2>&1 \
+  # Subshell-scope the .env source so DATABASE_URL is exported to the
+  # migration-check.mjs child without polluting the parent shell — the
+  # parent has GIT_SHA set from line 91 (git rev-parse on the freshly-
+  # cloned build dir, e.g. f9da041) and the .env on disk still has the
+  # PRIOR deploy's GIT_SHA (e.g. b48f557). Pre-2026-05-19 16:00 UTC this
+  # was \`set -a; source .env; set +a;\` in the parent shell which
+  # overwrote \$GIT_SHA with the stale .env value, and the subsequent
+  # \"GIT_SHA=\$GIT_SHA\" >> .env at line 138 below wrote the OLD sha
+  # back into .env. Net: every deploy left .env with the previous
+  # deploy's GIT_SHA, /version misreported, post-deploy-verify failed
+  # the --expected-sha check, auto-revert flailed. Subshell isolates the
+  # source so parent \$GIT_SHA stays correct.
+  (set -a; source /opt/driftstack/api/.env; set +a; \
+    node \$BUILD_DIR/scripts/migration-immutability-check.mjs > /tmp/deploy-mig-check.log 2>&1) \
     || (tail -30 /tmp/deploy-mig-check.log; exit 1); \
 \
   echo '[bridge] swapping artefacts into /opt/driftstack/api' >&2; \
