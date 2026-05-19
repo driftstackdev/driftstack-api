@@ -296,6 +296,84 @@ responsibility — the server doesn't enforce a max-subscribers
 limit per session, but each subscriber consumes a long-lived
 TCP connection.
 
+## Set mode
+
+`POST /v1/agent-sessions/{id}/mode`
+
+```json
+{ "mode": "manual" }
+```
+
+The top-level operational-mode setter — distinct from the
+pair-mode takeover/handback flow below. Use this to switch a
+session between `manual` / `ai` / `pair`. Transitioning INTO
+`pair` initializes `pair_mode_state` to `{kind: "ai-driving"}`;
+transitioning OUT clears it. Idempotent — a no-op transition
+returns the existing row with `pair_mode_state` preserved.
+
+Response (200): the full `AgentSession` shape (see
+[Resource shape](#resource-shape) above).
+
+Errors:
+
+- `409 conflict` — session is not `active` (closed/paused sessions
+  reject the transition).
+- `400 validation-failed` — body `mode` isn't one of `'manual' |
+'ai' | 'pair'`.
+- `404 not-found` — session unknown or cross-account.
+
+## Live input event (manual / pair mode)
+
+`POST /v1/agent-sessions/{id}/input-event`
+
+```json
+{
+  "event": { "type": "mouseMove", "x": 200, "y": 150 }
+}
+```
+
+Forwards a raw LK.6 InputEvent to the harness for `mode: 'manual'`
+or `mode: 'pair'` sessions. The 7 valid variants:
+
+```json
+{ "type": "mouseMove", "x": 200, "y": 150 }
+{ "type": "mouseDown", "x": 200, "y": 150, "button": 0 }
+{ "type": "mouseUp",   "x": 200, "y": 150, "button": 0 }
+{ "type": "keyDown",   "key": "Enter", "modifiers": ["cmd"] }
+{ "type": "keyUp",     "key": "Enter" }
+{ "type": "wheel",     "x": 200, "y": 150, "deltaX": 0, "deltaY": 100 }
+{ "type": "ping",      "timestamp": 1747658400000 }
+```
+
+`button` is `0` (left), `1` (middle), or `2` (right). `modifiers`
+is an optional array of `cmd / ctrl / shift / option` strings.
+
+Response (200):
+
+```json
+{ "ok": true, "duration_ms": 3 }
+```
+
+`duration_ms` is server-side dispatch latency, NOT round-trip to
+the harness. Use a separate `ping` event to measure end-to-end
+latency.
+
+Throttle the client side: the route's rate-limit bucket
+(`agent_sessions:input_event`) is sized for ≤120Hz `mouseMove`
+streams with burst of ~2 seconds; intent events
+(`mouseDown` / `mouseUp` / `wheel`) don't need client throttling.
+
+Errors:
+
+- `409 conflict` — session is in `mode: 'ai'` (input-event requires
+  `manual` or `pair`); OR session is not `active`.
+- `400 validation-failed` — event body fails the discriminated-union
+  schema (unknown `type`, out-of-bounds coords, invalid `button`,
+  etc.).
+- `503 feature-unavailable` — harness end-to-end not yet wired on
+  this deployment. Pre-launch state today; lands with the v1.0
+  Mac fleet harness rollout.
+
 ## Pair-mode takeover + handback
 
 For `mode: 'pair'` sessions only — these endpoints return 409 on

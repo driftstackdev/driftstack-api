@@ -41,24 +41,28 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     expect(body).toMatch(/`pair`/);
   });
 
-  it('documents POST / GET / DELETE / takeover / handback endpoints', () => {
+  it('documents POST / GET / DELETE / mode / input-event / takeover / handback endpoints', () => {
     expect(body).toMatch(/POST \/v1\/agent-sessions\b/);
     expect(body).toMatch(/GET \/v1\/agent-sessions\/\{id\}/);
     expect(body).toMatch(/DELETE \/v1\/agent-sessions\/\{id\}/);
     expect(body).toMatch(/POST \/v1\/agent-sessions\/\{id\}\/message/);
+    expect(body).toMatch(/POST \/v1\/agent-sessions\/\{id\}\/mode/);
+    expect(body).toMatch(/POST \/v1\/agent-sessions\/\{id\}\/input-event/);
     expect(body).toMatch(/POST \/v1\/agent-sessions\/\{id\}\/takeover/);
     expect(body).toMatch(/POST \/v1\/agent-sessions\/\{id\}\/handback/);
   });
 
   it('every endpoint in the docs page maps to a real handler in the route source', () => {
     // Documented endpoints reference handlers on the server side; the
-    // /takeover + /handback handlers are the new Wave 2.A surface we
-    // just shipped, so this guard catches renames + drops on both
-    // ends.
+    // /takeover + /handback handlers are the Wave 2.A surface; /mode +
+    // /input-event are the Wave 29-NNN ARC 3 Slice 3 + Slice 4 surfaces.
+    // This guard catches renames + drops on both ends.
     const paths = [
       '/v1/agent-sessions',
       '/v1/agent-sessions/:id',
       '/v1/agent-sessions/:id/message',
+      '/v1/agent-sessions/:id/mode',
+      '/v1/agent-sessions/:id/input-event',
       '/v1/agent-sessions/:id/takeover',
       '/v1/agent-sessions/:id/handback',
     ];
