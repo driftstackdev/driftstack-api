@@ -55,7 +55,7 @@ describe('W519.C apps/marketing-site/src/pages/docs/emails-reference.astro conte
     expect(body).toMatch(/<td>No — user-triggered\.<\/td>/);
   });
 
-  it.skip('Lifecycle 6-template framing pinned: signup-welcome (sent after verify-email succeeds) + session-success-first (V-304a) + session-failed-first (gentle nudge with debugging tips) + tier-changed + trial-pack-purchased + trial-pack-expired + all-opt-outable section heading — pinned so the 6-lifecycle template + V-304a session-first anchor + opt-outable-section commitment survives', () => {
+  it('Lifecycle 6-template framing pinned. Re-enabled by slice 235 after restoring the V-304a anchor on the session-success-first row at emails-reference.astro:63 (anchor + parenthetical had drifted to a bare space-period; the other 5 template rows were intact)', () => {
     expect(body).toMatch(/<h2>Lifecycle \(opt-outable\)<\/h2>/);
     expect(body).toMatch(
       /<tr><td><strong>signup-welcome<\/strong><\/td><td>Sent after verify-email succeeds\.<\/td><\/tr>/,
