@@ -34,14 +34,14 @@ function read(p: string): string {
 describe('W496.A apps/customer-dashboard/src/pages/sessions.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-180 framing pinned: 'progressive-enhancement wiring against /v1/sessions, mirrors the V-171 /usage pattern. SSG renders mock; inline <script> replaces the lists with live data when ds_web_session_token is in localStorage. Banners cover: no-token / fetch-error / live-loaded states.' — pinned so the SSG-mock + live-replace pattern + the 3-state banner taxonomy stays explicit", () => {
+  it('V-180 framing pinned. Re-enabled by slice 212 after verifying V-180 framing exists at sessions.astro:5-8', () => {
     expect(body).toMatch(
       /\/\/ V-180 — progressive-enhancement wiring against \/v1\/sessions, mirrors\s*\n?\s*\/\/ the V-171 \/usage pattern\. SSG renders mock; inline <script> replaces\s*\n?\s*\/\/ the lists with live data when ds_web_session_token is in localStorage\./,
     );
     expect(body).toMatch(/\/\/ Banners cover: no-token \/ fetch-error \/ live-loaded states\./);
   });
 
-  it.skip("V-186 concurrent-meter framing pinned: 'concurrent meter now wired live. concurrent_now is computed from /v1/sessions response (count of status in [creating, ready, busy]). concurrent_limit comes from /v1/usage.tier mapped via TIER_CONCURRENT_SESSION_LIMITS imported from @driftstack/api-types. Both fetches run in parallel; meter updates as soon as the slower of the two settles.' — pinned so the dual-source live meter (sessions for now + usage for cap) + the parallel-Promise.all pattern survives (drift to sequential would double meter latency; drift to single-source would silently freeze one half at SSG mock)", () => {
+  it('V-186 concurrent-meter framing pinned. Re-enabled by slice 212 after verifying V-186 framing exists at sessions.astro:10-15', () => {
     expect(body).toMatch(
       /\/\/ V-186 — concurrent meter now wired live\. concurrent_now is computed\s*\n?\s*\/\/ from \/v1\/sessions response \(count of status in \[creating, ready,\s*\n?\s*\/\/ busy\]\)\. concurrent_limit comes from \/v1\/usage\.tier mapped via\s*\n?\s*\/\/ TIER_CONCURRENT_SESSION_LIMITS imported from @driftstack\/api-types\./,
     );
@@ -76,14 +76,14 @@ describe('W496.A apps/customer-dashboard/src/pages/sessions.astro content parity
     expect(body).toMatch(/How to start a session →/);
   });
 
-  it.skip("V-186 meter live-update independence: 'We update each meter half independently so a partial failure (e.g. usage 5xx) still surfaces the active count from sessions.' + currentNow + currentCap independent state — pinned so a usage-endpoint failure doesn't blank the live session count (drift to coupled updates would make the dashboard look like it lost all sessions if /v1/usage 5xx'd)", () => {
+  it('V-186 meter live-update independence pinned. Re-enabled by slice 212 after verifying second V-186 framing + independent meter state exists at sessions.astro:570-574', () => {
     expect(body).toMatch(
       /\/\/ V-186 — concurrent meter wiring\. concurrent_now derived from\s*\n?\s*\/\/ the live \/v1\/sessions response \(active states\), concurrent_limit\s*\n?\s*\/\/ from \/v1\/usage\.tier mapped via tierConcurrentLimits\. We update\s*\n?\s*\/\/ each meter half independently so a partial failure \(e\.g\. usage\s*\n?\s*\/\/ 5xx\) still surfaces the active count from sessions\./,
     );
     expect(body).toMatch(/let currentNow = null;\s*\n?\s*let currentCap = null;/);
   });
 
-  it.skip("V-331 act-as header propagation in both fetches: '...(typeof window.driftstackActAsHeaders === 'function' ? window.driftstackActAsHeaders() : {})' — pinned so the team-scoped reads propagate to BOTH /v1/sessions AND /v1/usage (drift to omitting on one would silently mix the operator's own usage cap with team-mate's session count)", () => {
+  it('V-331 act-as header propagation in both fetches pinned. Re-enabled by slice 212 after verifying spread-pattern exists at sessions.astro:602-603 + sessions.astro:636-637', () => {
     expect(body).toMatch(
       /\.\.\.\(typeof window\.driftstackActAsHeaders === 'function'\s*\n?\s*\? window\.driftstackActAsHeaders\(\)\s*\n?\s*: \{\}\),/,
     );
