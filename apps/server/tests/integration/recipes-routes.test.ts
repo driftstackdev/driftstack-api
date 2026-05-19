@@ -156,6 +156,26 @@ describe('AI-B4 POST /v1/recipes — wired', () => {
     });
     expect(res.statusCode).toBe(401);
   });
+
+  it('validation: agent_session_id exceeds 100 chars → 400 (defensive cap added in slice 116 — prevents problem+json body bloat on the NotFoundError path)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/recipes',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        // Canonical agent_session_id is 40 chars; in-memory test
+        // fixtures use ~19 chars. 1KB is clearly out of bounds.
+        agent_session_id: 'agt_' + 'a'.repeat(1024),
+        label: 'should reject',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    // The validation issue mentions the agent_session_id field
+    // (extension.issues.fieldErrors carries the per-field detail).
+    const body = res.json<{ issues?: { fieldErrors?: Record<string, string[]> } }>();
+    expect(body.issues?.fieldErrors?.agent_session_id).toBeDefined();
+  });
 });
 
 // Arc 4 Wave 2.B sub-slice 8.20.l (v2-#8) — activation gate posture

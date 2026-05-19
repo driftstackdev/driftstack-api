@@ -20,7 +20,12 @@ function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['accoun
 }
 
 const CreateRecipeRequestSchema = z.object({
-  agent_session_id: z.string().min(1),
+  // Cap at 100 chars — canonical `agt_<36-char-uuid>` is 40 chars,
+  // in-memory test fixtures use `agt_inmem_<counter>` (~19 chars).
+  // Without a cap, a customer could POST a multi-MB string that
+  // flows into the 404 NotFoundError detail and bloats the
+  // problem+json body.
+  agent_session_id: z.string().min(1).max(100),
   label: z.string().min(1).max(120),
   description: z.string().max(2000).optional(),
 });

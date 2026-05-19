@@ -2844,7 +2844,10 @@ function buildRegistry(): OpenAPIRegistry {
         content: {
           'application/json': {
             schema: z.object({
-              agent_session_id: z.string().min(1),
+              // Matches CreateRecipeRequestSchema in routes/recipes.ts;
+              // 100-char cap prevents problem+json body bloat on the
+              // NotFoundError path.
+              agent_session_id: z.string().min(1).max(100),
               label: z.string().min(1).max(120),
               description: z.string().max(2000).optional(),
             }),
