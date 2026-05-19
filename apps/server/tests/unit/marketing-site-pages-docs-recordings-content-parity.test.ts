@@ -30,7 +30,7 @@ function read(p: string): string {
 describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content parity', () => {
   const body = read(LIB);
 
-  it.skip("V-692 + W217.A doc-comment framing pinned: 'recordings developer docs. Recordings are on the roadmap (V-540 work-in-progress) but NOT yet exposed via the public API today' + 'W217.A — accuracy pass: the previous revision of this page documented all three as live. This rewrite reflects reality and is pinned by apps/server/tests/unit/recordings-doc-parity.test.ts to fail if the page silently regrows fictional claims.' — pinned so the V-692 V-540 V-W217.A engineering chain + the explicit 'NOT yet exposed' commitment + the cross-reference to the recordings-doc-parity test all survive (drift to softening 'NOT yet exposed' would let the page silently regrow fictional claims)", () => {
+  it("V-692 + W217.A doc-comment framing pinned: 'recordings developer docs. Recordings are on the roadmap (V-540 work-in-progress) but NOT yet exposed via the public API today' + 'W217.A — accuracy pass: the previous revision of this page documented all three as live. This rewrite reflects reality and is pinned by apps/server/tests/unit/recordings-doc-parity.test.ts to fail if the page silently regrows fictional claims.' — pinned so the V-692 V-540 V-W217.A engineering chain + the explicit 'NOT yet exposed' commitment + the cross-reference to the recordings-doc-parity test all survive. Re-enabled by slice 180 after verifying both V-692 + W217.A comments exist at recordings.astro:4-13", () => {
     expect(body).toMatch(
       /\/\/ V-692 — recordings developer docs\. Recordings are on the roadmap\s*\n?\s*\/\/ \(V-540 work-in-progress\) but NOT yet exposed via the public API\s*\n?\s*\/\/ today/,
     );
