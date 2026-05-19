@@ -421,7 +421,14 @@ export class InMemoryAuthCache implements AuthCache {
 
 // ───────────────────────────────────────────────────────────────────────────
 
-function errSummary(err: unknown): { name?: string; message?: string } {
-  if (err instanceof Error) return { name: err.name, message: err.message };
+function errSummary(err: unknown): {
+  name?: string;
+  message?: string;
+  stack?: string;
+  cause?: unknown;
+} {
+  if (err instanceof Error) {
+    return { name: err.name, message: err.message, stack: err.stack, cause: err.cause };
+  }
   return { message: String(err) };
 }

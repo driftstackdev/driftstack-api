@@ -38,10 +38,15 @@ function handleError(
   if (apiError.status >= 500) {
     request.log.error({ err, problem: apiError.toProblem() }, 'request failed: 5xx');
   } else if (apiError.status >= 400) {
-    request.log.warn(
-      { err: { name: err.name, message: err.message }, problem: apiError.toProblem() },
-      'request rejected: 4xx',
-    );
+    // Pass `err` directly so Pino's stdSerializers.err extracts
+    // name+message+stack+cause. Earlier this wrapped to `{ name, message
+    // }` only — drops the stack reference Pino needs (the wrapper is a
+    // plain Object, Pino sees no .stack property). Same class of bug
+    // as the 2026-05-19 scheduled-jobs-poller wrapper that hid the
+    // 10-day prod TypeError stack (commit 5d7d7348). 4xx is usually
+    // expected client error so the stack is less critical, but the
+    // wrapper-shape consistency closes the loop.
+    request.log.warn({ err, problem: apiError.toProblem() }, 'request rejected: 4xx');
   }
 
   // RFC 7231 §7.1.3: 429 + 503 responses SHOULD carry the Retry-After
