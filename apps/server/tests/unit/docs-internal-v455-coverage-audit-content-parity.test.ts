@@ -243,7 +243,7 @@ describe('W578.A /docs/internal/v455-coverage-audit.md content parity', () => {
     );
     expect(body).toMatch(/Tier 2 \(admin OpenAPI parity\):/);
     expect(body).toMatch(
-      /- \*\*V-465\*\* — register 12 missing \/v1\/admin\/\\\* routes in OpenAPI\. ✅ shipped\./,
+      /- \*\*V-465\*\* — register 12 missing `\/v1\/admin\/\*` routes in OpenAPI\. ✅ shipped\./,
     );
     expect(body).toMatch(/Each slice ships per V-NNN convention with closure verification:/);
     expect(body).toMatch(/spec test paths fixture extended, three-SDK build\/test green\./);
