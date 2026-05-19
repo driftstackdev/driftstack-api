@@ -399,6 +399,7 @@ export function registerAdminAccountsRoutes(
             action: 'admin.support_note',
             targetResourceId: null,
             payload: { note: body.note },
+            ipAddress: readClientIp(request),
           });
           return await accountsAdmin.getAccount(ctx, accountId);
         });
@@ -441,6 +442,7 @@ export function registerAdminAccountsRoutes(
             action: 'admin.refund_recorded',
             targetResourceId: body.external_reference,
             payload,
+            ipAddress: readClientIp(request),
           });
           return await accountsAdmin.getAccount(ctx, accountId);
         });
