@@ -8,6 +8,12 @@ Run::
 
     DRIFTSTACK_API_KEY=ds_live_… python examples/agent_chat.py
 
+Optional BYOK Anthropic key (skip the bundled-LLM rail)::
+
+    DRIFTSTACK_API_KEY=ds_live_… \\
+    DRIFTSTACK_BYOK_ANTHROPIC_API_KEY=sk-ant-… \\
+    python examples/agent_chat.py
+
 The server activation-gates this surface — until the LLM key path is
 enabled on the deployment, calls return 503 FeatureUnavailable.
 """
@@ -34,6 +40,15 @@ def main() -> int:
         print("DRIFTSTACK_API_KEY environment variable is required", file=sys.stderr)
         return 1
 
+    # Optional BYOK Anthropic key. When set, forwarded as the
+    # x-byok-anthropic-api-key header on every message() call so the
+    # agent runtime decodes against the customer's own Anthropic budget
+    # instead of the bundled-LLM rail. Empty string is treated as "no
+    # BYOK" by the Python SDK's `if byok_api_key` guard at resources/
+    # agent_sessions.py:115 (cross-SDK parity contract pinned by slices
+    # 126-128).
+    byok_key = os.environ.get("DRIFTSTACK_BYOK_ANTHROPIC_API_KEY") or None
+
     base_url = os.environ.get("DRIFTSTACK_BASE_URL", "https://api.driftstack.dev")
     client = Driftstack(api_key=api_key, base_url=base_url)
 
@@ -43,7 +58,7 @@ def main() -> int:
 
         for prompt in PROMPTS:
             print(f"\n→ user: {prompt}")
-            resp = client.agent_sessions.message(session["id"], prompt)
+            resp = client.agent_sessions.message(session["id"], prompt, byok_api_key=byok_key)
             kind = resp["kind"]
             if kind == "plan-executed":
                 print(f"← plan-executed (ok={resp['ok']}): {len(resp['intents'])} intent(s)")
