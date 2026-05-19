@@ -203,6 +203,37 @@ func TestAgentSessions_Message_NoByokOmitsHeader(t *testing.T) {
 	}
 }
 
+func TestAgentSessions_Message_EmptyByokKeyOmitsHeader(t *testing.T) {
+	// Cross-SDK parity with TS + Python: passing a non-nil opts with
+	// ByokAPIKey: "" must skip the header entirely. The TS + Python
+	// fix in slices 105/106 closed the same gap on the server side —
+	// the route used to read empty-string headers as "" instead of
+	// undefined, silently skipping the bundled-LLM fallback. The
+	// `opts.ByokAPIKey != ""` guard in agent_sessions.go line 155
+	// already does this; this test pins the behaviour so a future
+	// refactor that drops the guard (e.g. switching to
+	// fmt.Sprintf("%v", opts.ByokAPIKey)) trips immediately.
+	t.Parallel()
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("x-byok-anthropic-api-key"); got != "" {
+			t.Errorf("expected no byok header on empty ByokAPIKey; got %q", got)
+		}
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"kind":               "clarify",
+			"session":            agentSessionEnvelope,
+			"clarifying_question": "?",
+		})
+	})
+	_, err := client.AgentSessions.Message(
+		context.Background(), "agt_1", "hi",
+		&MessageOptions{ByokAPIKey: ""},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestAgentSessions_Close(t *testing.T) {
 	t.Parallel()
 	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
