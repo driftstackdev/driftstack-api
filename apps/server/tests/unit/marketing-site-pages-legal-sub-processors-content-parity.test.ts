@@ -74,12 +74,12 @@ describe('W505.A apps/marketing-site/src/pages/legal/sub-processors.md content p
     expect(body).toMatch(/Intra-EEA transfer; no extra-EEA SCCs required\./);
   });
 
-  it.skip("Changelog summary pinned: 'NowPayments added' for crypto-tier + 'LiveKit added (V-531)' for Browser Theatre + 'Hetzner narrowed' to dev/staging — pinned so the 3-substantive-change record + V-531 anchor + Hetzner-narrowed-from-production audit-trail all survive (drift to dropping V-531 would orphan the Browser Theatre feature anchor; drift to dropping 'Hetzner narrowed' would let customers think Hetzner still processes production data)", () => {
+  it("Changelog summary pinned: 'NowPayments added' for crypto-tier + 'LiveKit added' for Browser Theatre + 'Hetzner narrowed' to dev/staging — pinned so the 3-substantive-change record + Hetzner-narrowed-from-production audit-trail all survive (drift to dropping 'Hetzner narrowed' would let customers think Hetzner still processes production data). Re-enabled by slice 303 after the R4 V-NNN session-log scrub (b46b8d4124b) intentionally removed the (V-531) anchor from customer-facing copy — the test regex had been pinning the pre-scrub form", () => {
     expect(body).toMatch(
       /\*\*NowPayments added\*\* for crypto-tier processing\. Previously\s*\n?\s*crypto-payment customers used a manual invoice flow/,
     );
     expect(body).toMatch(
-      /\*\*LiveKit added\*\* for the Browser Theatre live-session feature\s*\n?\s*\(V-531\)\. Live sessions are off by default/,
+      /\*\*LiveKit added\*\* for the Browser Theatre live-session feature\s*\n?\s*\. Live sessions are off by default/,
     );
     expect(body).toMatch(
       /\*\*Hetzner narrowed\*\* to dev\/staging only\. Previously listed as a\s*\n?\s*production secondary; production has been consolidated onto AWS\./,
