@@ -125,14 +125,13 @@ from 1402 (post-V-530.C) to ~1415-1417 at V-540.B closure.
 
 ## Coverage methodology note
 
-E2E specs exercise the routes through a real Fastify boot + real Postgres
+E2E specs exercise the routes through a real Fastify boot with real
+Postgres and Redis (via Playwright's `request` fixture). They catch:
 
-- Redis (via Playwright's `request` fixture). They catch:
-
-* Route registration / wiring bugs.
-* Schema validation at the HTTP boundary.
-* Cross-route flow bugs (auth → use-protected-route → revoke → expect 401).
-* Real DB interaction (foreign-key constraints, cascades, etc.).
+- Route registration / wiring bugs.
+- Schema validation at the HTTP boundary.
+- Cross-route flow bugs (auth → use-protected-route → revoke → expect 401).
+- Real DB interaction (foreign-key constraints, cascades, etc.).
 
 Integration tests (in `apps/server/tests/integration/`) exercise the
 service layer with the route mounted but bypass real Postgres in many
