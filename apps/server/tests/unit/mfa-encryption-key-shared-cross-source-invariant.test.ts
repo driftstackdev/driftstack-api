@@ -1,0 +1,61 @@
+// Cross-source invariant: the 4 secret-encryption classes (BYOK
+// Anthropic + gui_control_key + LiveKit + MFA TOTP) ALL share the
+// same MFA_ENCRYPTION_KEY env var as the AES-256-GCM key material.
+// Drift on one (e.g. a refactor that introduces a separate
+// LIVEKIT_ENCRYPTION_KEY) would break the "single trust boundary"
+// + "one rotation rotates all four ciphertexts" guarantee.
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+const BYOK = resolve(REPO_ROOT, 'apps/server/src/lib/byok-anthropic-encryption.ts');
+const GCK = resolve(REPO_ROOT, 'apps/server/src/lib/gui-control-key-encryption.ts');
+const LK = resolve(REPO_ROOT, 'apps/server/src/lib/livekit-secret-encryption.ts');
+const MFA = resolve(REPO_ROOT, 'apps/server/src/lib/mfa-totp.ts');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('MFA_ENCRYPTION_KEY shared 4-class cross-source invariant', () => {
+  const byok = read(BYOK);
+  const gck = read(GCK);
+  const lk = read(LK);
+  const mfa = read(MFA);
+
+  it('Each of the 4 lib/* encryption modules references MFA_ENCRYPTION_KEY by name', () => {
+    expect(byok).toMatch(/MFA_ENCRYPTION_KEY/);
+    expect(gck).toMatch(/MFA_ENCRYPTION_KEY/);
+    expect(lk).toMatch(/MFA_ENCRYPTION_KEY/);
+    expect(mfa).toMatch(/MFA_ENCRYPTION_KEY/);
+  });
+
+  it('Each of the 4 lib/* encryption modules validates the key as 32 bytes (AES-256) with a MFA_ENCRYPTION_KEY-named error message — pinned so the must-decode-to-32-bytes guard stays consistent across the 4 classes (drift would let a smaller-key class silently weaken its security)', () => {
+    expect(byok).toMatch(/MFA_ENCRYPTION_KEY must decode to .* bytes; got/);
+    expect(gck).toMatch(/MFA_ENCRYPTION_KEY must decode to .* bytes; got/);
+    expect(lk).toMatch(/MFA_ENCRYPTION_KEY must decode to .* bytes; got/);
+    expect(mfa).toMatch(/MFA_ENCRYPTION_KEY must decode to 32 bytes; got/);
+  });
+
+  it("byok-anthropic-encryption explicitly cross-references mfa-totp: 'The same key is used by mfa-totp.ts; rotating MFA_ENCRYPTION_KEY simultaneously rotates both surfaces' ciphertexts.' — pinned so the rotation-rotates-multiple-surfaces guarantee stays documented (drift here is the load-bearing operator-facing rotation-runbook contract)", () => {
+    expect(byok).toMatch(
+      /The same key is\s*\n?\s*\/\/ used by `mfa-totp\.ts`; rotating MFA_ENCRYPTION_KEY simultaneously\s*\n?\s*\/\/ rotates both surfaces' ciphertexts\./,
+    );
+  });
+
+  it("livekit-secret-encryption explicitly cross-references the single-trust-boundary contract: 'single host-resident MFA_ENCRYPTION_KEY. The reused key is fine (single trust boundary; rotating MFA_ENCRYPTION_KEY rotates all' — pinned so the cross-reference + single-trust-boundary + rotate-all rationale stays documented", () => {
+    expect(lk).toMatch(
+      /single host-resident MFA_ENCRYPTION_KEY\. The reused key is fine\s*\n?\s*\/\/ \(single trust boundary; rotating MFA_ENCRYPTION_KEY rotates all/,
+    );
+  });
+
+  it("gui-control-key-encryption header explicitly cross-references the BYOK envelope + Q2=C verdict: 'Same AES-256-GCM scheme + canonical [IV | tag | ciphertext] blob as the BYOK Anthropic crypto (lib/byok-anthropic-encryption.ts). Re-uses MFA_ENCRYPTION_KEY per Q2=C (24h-TTL, MFA-key pattern).' — pinned so the 4-class Q2=C-locked shared-key contract stays documented", () => {
+    expect(gck).toMatch(
+      /Same AES-256-GCM\s*\n?\s*\/\/ scheme \+ canonical `\[IV \| tag \| ciphertext\]` blob as the BYOK\s*\n?\s*\/\/ Anthropic crypto \(lib\/byok-anthropic-encryption\.ts\)\. Re-uses\s*\n?\s*\/\/ MFA_ENCRYPTION_KEY per Q2=C \(24h-TTL, MFA-key pattern\)\./,
+    );
+  });
+});
