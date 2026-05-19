@@ -17,6 +17,19 @@ covers 10 OIDs instead of 6. **Version bump will NOT fix this** —
 likely a deliberate design choice by drizzle to let users handle Date
 serialization themselves, not an unintentional regression.
 
+**Upstream tracking issue:**
+[drizzle-team/drizzle-orm#3108 — `[BUG]: postgres.js adapter not converting Date object`](https://github.com/drizzle-team/drizzle-orm/issues/3108)
+(open since 2024-10-12, last updated 2025-08-30 as of this writing).
+Three comments confirm the same stack trace + workaround on independent
+codebases. No upstream PR is in flight. Suggested upstream stance from
+the discussion: "It should be manually converted to string by
+`toISOString()` or similar" — i.e. drizzle treats this as caller
+responsibility, not a library bug. Drizzle 0.34.1 reproduced; we've
+re-verified on 0.38.4 + 0.45.2. **Decision: PIN to 0.38.4** (no
+upside to bumping — same bug, no compensating wins worth the audit
+cost). Re-evaluate if drizzle ships a built-in `serializeDate: true`
+config flag or similar opt-out.
+
 ## What happens
 
 When a `Date` instance is interpolated into a `drizzle.execute(sql\`…\`)`
