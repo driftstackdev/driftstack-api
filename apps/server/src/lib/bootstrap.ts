@@ -1193,7 +1193,14 @@ export async function createProductionDeps(
     ...(billingService !== undefined ? { billingService } : {}),
     costMonitoringService,
     readinessChecks,
-    permissiveCors: false,
+    // 2026-05-20 — env-var-controlled escape hatch. Some webview
+    // contexts (Tauri custom-scheme pages, certain mobile in-app
+    // browsers) send Origin variants the allowlist regex doesn't
+    // catch; toggling PERMISSIVE_CORS=true lets @fastify/cors echo
+    // the request Origin so the response satisfies the credentials-
+    // mode spec without us guessing every variant. Stays opt-in
+    // because it widens the CSRF surface.
+    permissiveCors: (process.env.PERMISSIVE_CORS ?? '').toLowerCase() === 'true',
     corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS ?? '')
       .split(',')
       .map((s) => s.trim())
