@@ -73,9 +73,13 @@ Sample-checked files with delta > 3 that aren't explained by A:
 
 ## Follow-up checks (not pre-launch blockers)
 
-3. **`oauth.ts`** — verify which routes already have IP gates and
-   which don't. Each unauthenticated OAuth route needs at least an
-   IP gate.
+3. ~~**`oauth.ts`** — verify which routes already have IP gates~~ —
+   **CLOSED 2026-05-20.** Verified: 5 admin routes gated via
+   `requireScope('driftstack_internal_admin')` + 1 customer route
+   via `requireAuth`. ZERO unauthenticated routes — the unauth
+   OAuth surface lives in `auth-oauth-client.ts` (separate file)
+   where the IP gates were added in commit 86cd8682 (batch 8).
+   No additional IP gating needed.
 
 4. ~~**`billing.ts`** — 5 routes without rate-limit~~ — **NO-OP /
    verified 2026-05-20.** Re-grep shows the 5 mounted billing
