@@ -102,7 +102,7 @@ describe('W414.A apps/server/src/routes/email-preferences.ts content parity', ()
   });
 
   it('imports: FastifyInstance/FastifyRequest + EmailPreferencesService + BadRequestError/ForbiddenError + resolveEffectiveAccount (+ 2026-05-20 AccountAuditService + readClientIp)', () => {
-    expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
+    expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
     expect(body).toMatch(
       /import type \{ EmailPreferencesService \} from '\.\.\/services\/email-preferences\.js';/,
     );

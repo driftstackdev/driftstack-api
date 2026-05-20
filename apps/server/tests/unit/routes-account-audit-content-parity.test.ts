@@ -183,7 +183,7 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
   });
 
   it('imports: FastifyInstance/FastifyRequest + ListAccountAuditLogQuerySchema + AccountAuditEntryRow/AccountAuditService + BadRequestError + resolveEffectiveAccount + zod', () => {
-    expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
+    expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
     expect(body).toMatch(
       /import type \{ AccountAuditEntryRow, AccountAuditService \} from '\.\.\/services\/account-audit\.js';/,
     );

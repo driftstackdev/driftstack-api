@@ -71,10 +71,9 @@ describe('W416.C apps/server/src/routes/admin-status-subscribers.ts content pari
     );
   });
 
-  it('clientIp helper: request.ip ?? null', () => {
-    expect(body).toMatch(
-      /function clientIp\(request: FastifyRequest\): string \| null \{\s*\n?\s*return request\.ip \?\? null;/,
-    );
+  it('readClientIp imported from shared lib/client-ip.ts (extracted to collapse drift across admin-* routes)', () => {
+    expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
+    expect(body).toMatch(/ipAddress: readClientIp\(request\),/);
   });
 
   it('AdminStatusSubscribersRoutesOptions: service (StatusSubscribersService) + audit (AdminAuditService)', () => {
@@ -111,10 +110,10 @@ describe('W416.C apps/server/src/routes/admin-status-subscribers.ts content pari
     expect(body).toMatch(/const id = uuidFromPrefixedId\(request\.params\.id\);/);
   });
 
-  it("V-281 dual-write success path: service.forceUnsubscribe → audit.record action='status_subscriber.force_unsubscribed' result='success'", () => {
+  it("V-281 dual-write success path: service.forceUnsubscribe → audit.record action='status_subscriber.force_unsubscribed' result='success' (ipAddress sourced from shared readClientIp helper)", () => {
     expect(body).toMatch(/result = await service\.forceUnsubscribe\(id, new Date\(\)\);/);
     expect(body).toMatch(
-      /await audit\.record\(\{\s*\n?\s*adminAccountId: ctx\.account\.id,\s*\n?\s*adminKeyId: ctx\.apiKey\.id,\s*\n?\s*action: 'status_subscriber\.force_unsubscribed',\s*\n?\s*targetAccountId: null,\s*\n?\s*targetResourceId: `sub_\$\{id\}`,\s*\n?\s*inputPayload: \{ email: result\.email \},\s*\n?\s*result: 'success',\s*\n?\s*ipAddress: clientIp\(request\),\s*\n?\s*\}\);/,
+      /await audit\.record\(\{\s*\n?\s*adminAccountId: ctx\.account\.id,\s*\n?\s*adminKeyId: ctx\.apiKey\.id,\s*\n?\s*action: 'status_subscriber\.force_unsubscribed',\s*\n?\s*targetAccountId: null,\s*\n?\s*targetResourceId: `sub_\$\{id\}`,\s*\n?\s*inputPayload: \{ email: result\.email \},\s*\n?\s*result: 'success',\s*\n?\s*ipAddress: readClientIp\(request\),\s*\n?\s*\}\);/,
     );
   });
 
@@ -134,8 +133,9 @@ describe('W416.C apps/server/src/routes/admin-status-subscribers.ts content pari
     );
   });
 
-  it('imports: FastifyInstance/FastifyRequest + zod + AdminAuditService + StatusSubscribersService + ValidationError', () => {
-    expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
+  it('imports: FastifyInstance + zod + AdminAuditService + StatusSubscribersService + ValidationError + shared readClientIp', () => {
+    expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
+    expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(
       /import type \{ AdminAuditService \} from '\.\.\/services\/admin-audit\.js';/,

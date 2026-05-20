@@ -62,17 +62,17 @@ describe('W411.B apps/server/src/routes/webhooks-stripe.ts content parity', () =
     expect(body).toMatch(/logger: Logger;/);
   });
 
-  it('Stripe-Signature header missing → 401 UnauthorizedError', () => {
+  it('Stripe-Signature header missing → 401 UnauthorizedError (+ bumpOutcome metric)', () => {
     expect(body).toMatch(/const sigHeader = req\.headers\['stripe-signature'\];/);
     expect(body).toMatch(
-      /if \(typeof sigHeader !== 'string' \|\| sigHeader\.length === 0\) \{\s*\n?\s*throw new UnauthorizedError\('Stripe-Signature header missing\.'\);/,
+      /if \(typeof sigHeader !== 'string' \|\| sigHeader\.length === 0\) \{\s*\n?\s*bumpOutcome\('signature_missing'\);[\s\S]*?throw new UnauthorizedError\('Stripe-Signature header missing\.'\);/,
     );
   });
 
-  it('Empty rawBody → 400 BadRequestError "Empty request body."', () => {
+  it('Empty rawBody → 400 BadRequestError "Empty request body." (+ bumpOutcome metric)', () => {
     expect(body).toMatch(/const rawBody = req\.rawBody;/);
     expect(body).toMatch(
-      /if \(typeof rawBody !== 'string' \|\| rawBody\.length === 0\) \{\s*\n?\s*throw new BadRequestError\('Empty request body\.'\);/,
+      /if \(typeof rawBody !== 'string' \|\| rawBody\.length === 0\) \{\s*\n?\s*bumpOutcome\('empty_body'\);[\s\S]*?throw new BadRequestError\('Empty request body\.'\);/,
     );
   });
 
@@ -89,10 +89,10 @@ describe('W411.B apps/server/src/routes/webhooks-stripe.ts content parity', () =
     expect(body).toMatch(/throw new UnauthorizedError\('Invalid Stripe signature\.'\);/);
   });
 
-  it('Event shape guard: id/type strings + data non-null object → 400 with "Stripe event is missing required fields."', () => {
+  it('Event shape guard: id/type strings + data non-null object → 400 with "Stripe event is missing required fields." (+ bumpOutcome metric)', () => {
     expect(body).toMatch(/const event = req\.body as StripeEvent;/);
     expect(body).toMatch(
-      /if \(\s*\n?\s*typeof event\.id !== 'string' \|\|\s*\n?\s*typeof event\.type !== 'string' \|\|\s*\n?\s*typeof event\.data !== 'object' \|\|\s*\n?\s*event\.data === null\s*\n?\s*\) \{\s*\n?\s*throw new BadRequestError\('Stripe event is missing required fields\.'\);/,
+      /if \(\s*\n?\s*typeof event\.id !== 'string' \|\|\s*\n?\s*typeof event\.type !== 'string' \|\|\s*\n?\s*typeof event\.data !== 'object' \|\|\s*\n?\s*event\.data === null\s*\n?\s*\) \{\s*\n?\s*bumpOutcome\('malformed_event'\);[\s\S]*?throw new BadRequestError\('Stripe event is missing required fields\.'\);/,
     );
   });
 
