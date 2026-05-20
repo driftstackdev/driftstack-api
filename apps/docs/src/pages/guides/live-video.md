@@ -139,6 +139,27 @@ async function sendInput(event: InputEvent, reliable = true): Promise<void> {
 - High-frequency `mouseMove` can use `reliable: false` — cursor
   jitter under congestion is preferable to head-of-line blocking.
 
+### Modifier vocabulary
+
+`keyDown` / `keyUp` `modifiers` arrays use the canonical 4-name
+set `'cmd' | 'ctrl' | 'shift' | 'option'`. These map 1:1 onto
+Quartz `CGEventFlags` on the macOS harness side:
+
+```ts
+await sendInput({
+  type: 'keyDown',
+  key: 'k',
+  modifiers: ['cmd', 'shift'],
+});
+```
+
+DOM-standard names (`Shift / Control / Alt / Meta`) round-trip
+through the schema unchanged but the harness decoder drops them.
+The TS SDK re-exports `CANONICAL_MODIFIER_NAMES` from
+`@driftstack/api-types`; the Python SDK exports
+`CANONICAL_MODIFIER_NAMES` from `driftstack.resources.agent_sessions`;
+the Go SDK exports `driftstack.CanonicalModifierNames`.
+
 ## 4. Disconnect on unmount
 
 Browser pages should disconnect explicitly:

@@ -2758,11 +2758,14 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   // Wave 29-NNN ARC 3 Slice 4+5 (2026-05-19/20) — LK.6 InputEvent
-  // forward-to-harness + pair-mode takeover-trigger.
+  // forward-to-harness + pair-mode takeover-trigger. Slice 6
+  // (2026-05-20) — modifier vocabulary documented in description.
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions/{id}/input-event',
     summary: 'Forward an LK.6 InputEvent to the harness (manual/pair mode only)',
+    description:
+      "Body shape: { event: <discriminated-union>, client_id?: string }. The `event` object must be one of 7 variants discriminated by `type`: mouseMove / mouseDown / mouseUp / keyDown / keyUp / wheel / ping. See packages/api-types/src/agent-input-event.ts:InputEventSchema for the canonical Zod definition. Modifier vocabulary (keyDown / keyUp `modifiers` array): use the canonical 4-name set 'cmd' | 'ctrl' | 'shift' | 'option' — these map 1:1 onto Quartz CGEventFlags on the macOS harness side. DOM-standard names (Shift / Control / Alt / Meta) round-trip through the schema unchanged but the harness decoder drops them.",
     tags: ['agent-chat'],
     security: auth,
     request: {

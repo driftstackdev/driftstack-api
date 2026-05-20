@@ -105,6 +105,21 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
     );
   });
 
+  it('OpenAPI input-event route description pins the modifier vocabulary + the harness-drops-DOM-names warning', () => {
+    const lib = resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts');
+    const body = read(lib);
+    expect(body).toMatch(
+      /Slice 6\s*\n?\s*\/\/ \(2026-05-20\) — modifier vocabulary documented in description\./,
+    );
+    expect(body).toMatch(
+      /Modifier vocabulary \(keyDown \/ keyUp `modifiers` array\): use the canonical 4-name set 'cmd' \| 'ctrl' \| 'shift' \| 'option'/,
+    );
+    expect(body).toMatch(/map 1:1 onto Quartz CGEventFlags on the macOS harness side/);
+    expect(body).toMatch(
+      /DOM-standard names \(Shift \/ Control \/ Alt \/ Meta\) round-trip through the schema unchanged but the harness decoder drops them\./,
+    );
+  });
+
   it('All 3 SDK quickstart docs have a "### Modifier vocabulary" section example using cmd+shift modifiers', () => {
     const ts = read(resolve(REPO_ROOT, 'apps/docs/src/pages/sdk/typescript-quickstart.md'));
     const py = read(resolve(REPO_ROOT, 'apps/docs/src/pages/sdk/python-quickstart.md'));

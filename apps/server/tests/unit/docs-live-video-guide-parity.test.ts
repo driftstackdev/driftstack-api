@@ -61,6 +61,20 @@ describe('Arc 6 docs.live-video — guides/live-video.md parity', () => {
     expect(body).toMatch(/head-of-line blocking/i);
   });
 
+  it('Slice 6 — documents the canonical modifier vocabulary + the harness-drops-DOM-names warning + the 3-SDK constant export locations', () => {
+    expect(body).toMatch(/### Modifier vocabulary/);
+    expect(body).toMatch(/`'cmd' \| 'ctrl' \| 'shift' \| 'option'`/);
+    expect(body).toMatch(/Quartz `CGEventFlags`/);
+    expect(body).toMatch(
+      /DOM-standard names \(`Shift \/ Control \/ Alt \/ Meta`\) round-trip\s*\n?through the schema unchanged but the harness decoder drops them\./,
+    );
+    expect(body).toMatch(/TS SDK re-exports `CANONICAL_MODIFIER_NAMES`/);
+    expect(body).toMatch(
+      /Python SDK exports\s*\n?`CANONICAL_MODIFIER_NAMES` from `driftstack\.resources\.agent_sessions`/,
+    );
+    expect(body).toMatch(/Go SDK exports `driftstack\.CanonicalModifierNames`/);
+  });
+
   it('recommends adaptiveStream + dynacast in the Room constructor', () => {
     expect(body).toMatch(/adaptiveStream:\s*true/);
     expect(body).toMatch(/dynacast:\s*true/);
