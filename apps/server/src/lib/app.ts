@@ -606,7 +606,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     origin:
       deps.permissiveCors === true
         ? true
-        : [/^https?:\/\/localhost(:\d+)?$/, ...(deps.corsAllowedOrigins ?? [])],
+        : [
+            /^https?:\/\/localhost(:\d+)?$/,
+            // 2026-05-20 — Tauri desktop client webview origins. On
+            // macOS WKWebView, Tauri 2 serves the bundled SPA from
+            // `tauri://localhost`; on Windows WebView2 + Linux WebKit2GTK
+            // it's the same scheme. Newer Tauri builds may also surface
+            // `https://tauri.localhost`. Without these in the allow-list
+            // the GUI's cross-origin fetch to api.driftstack.dev fails
+            // preflight + the customer sees a useless "Load failed".
+            /^tauri:\/\/localhost$/,
+            /^https?:\/\/tauri\.localhost$/,
+            ...(deps.corsAllowedOrigins ?? []),
+          ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [

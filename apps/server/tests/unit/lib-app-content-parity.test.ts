@@ -80,9 +80,15 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ `credentials: true` is required by the customer dashboard's\s*\n?\s*\/\/ cookie-based session \(Article-13 auth\), NOT by the SDK \(which\s*\n?\s*\/\/ sends Authorization: Bearer \.\.\.\)/,
     );
+    // 2026-05-20 — Tauri webview origins added to the allow-list so
+    // the desktop GUI's cross-origin fetch to api.driftstack.dev
+    // doesn't fail preflight with the customer seeing "Load failed".
     expect(body).toMatch(
-      /origin:\s*\n?\s*deps\.permissiveCors === true\s*\n?\s*\? true\s*\n?\s*: \[\/\^https\?:\\\/\\\/localhost\(:\\d\+\)\?\$\/, \.\.\.\(deps\.corsAllowedOrigins \?\? \[\]\)\],/,
+      /origin:\s*\n?\s*deps\.permissiveCors === true\s*\n?\s*\? true\s*\n?\s*: \[\s*\n?\s*\/\^https\?:\\\/\\\/localhost\(:\\d\+\)\?\$\/,/,
     );
+    expect(body).toMatch(/\/\^tauri:\\\/\\\/localhost\$\//);
+    expect(body).toMatch(/\/\^https\?:\\\/\\\/tauri\\\.localhost\$\//);
+    expect(body).toMatch(/\.\.\.\(deps\.corsAllowedOrigins \?\? \[\]\),/);
     expect(body).toMatch(/credentials: true,/);
     expect(body).toMatch(/methods: \['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'\],/);
     expect(body).toMatch(
