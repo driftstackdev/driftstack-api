@@ -62,16 +62,37 @@ function Shell(): JSX.Element {
   // after an early-return pulls the hooks count out of sync between
   // the wizard render (early return) and the post-wizard render (full
   // shell), which unmounts the entire tree and shows a black screen.
+  // V-263 — Cmd+, opens Settings. 2026-05-20 — Cmd+Shift+Q triggers
+  // Sign out (forgets the local key); customers asked for a visible
+  // sign-out path, so this complements the new sidebar item.
+  const { settings: kbSettings, update: kbUpdate } = useSettings();
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if (e.metaKey && e.key === ',') {
         e.preventDefault();
         setView({ kind: 'settings' });
+        return;
+      }
+      if (e.metaKey && e.shiftKey && (e.key === 'q' || e.key === 'Q')) {
+        e.preventDefault();
+        if (kbSettings.apiKey === null) return;
+        if (
+          !window.confirm(
+            'Sign out of this device? This forgets the API key locally; the key is NOT revoked on the server.',
+          )
+        ) {
+          return;
+        }
+        void kbUpdate({
+          apiKey: null,
+          baseUrl: kbSettings.baseUrl,
+          telemetryOptIn: kbSettings.telemetryOptIn,
+        });
       }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [kbSettings, kbUpdate]);
 
   // While settings load, render nothing rather than flashing the wizard.
   if (loading) {
@@ -191,6 +212,22 @@ interface SidebarProps {
 }
 
 function Sidebar({ current, onNavigate }: SidebarProps): JSX.Element {
+  const { settings, update } = useSettings();
+  const signedIn = settings.apiKey !== null;
+  const handleSignOut = (): void => {
+    if (
+      !window.confirm(
+        'Sign out of this device? This forgets the API key locally; the key is NOT revoked on the server. Revoke it from the dashboard if you want to fully invalidate it.',
+      )
+    ) {
+      return;
+    }
+    void update({
+      apiKey: null,
+      baseUrl: settings.baseUrl,
+      telemetryOptIn: settings.telemetryOptIn,
+    });
+  };
   return (
     <aside className="flex w-56 flex-col border-r border-surface-divider bg-surface-raised">
       <SidebarSection label="Sessions">
@@ -247,6 +284,18 @@ function Sidebar({ current, onNavigate }: SidebarProps): JSX.Element {
           Settings
         </SidebarItem>
       </SidebarSection>
+      {signedIn && (
+        <div className="mt-auto border-t border-surface-divider px-3 py-3">
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs text-ink-secondary transition hover:bg-surface-base hover:text-status-error"
+          >
+            <span>Sign out</span>
+            <span className="text-2xs text-ink-muted">⌘⇧Q</span>
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
