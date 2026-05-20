@@ -258,6 +258,26 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
+  it("2026-05-20 GUI panel NotificationEventBus wired in bootstrap + cost-alert dispatcher dual-publishes to bus (logger + bus, both load-bearing) — pinned so a refactor can't silently drop the bus publish and leave the GUI notification stream without its first source", () => {
+    expect(body).toMatch(
+      /import \{ NotificationEventBus \} from '\.\.\/services\/notification-event-bus\.js';/,
+    );
+    expect(body).toMatch(/const notificationEventBus = new NotificationEventBus\(\);/);
+    // Pin the cost-alert dual-publish — must include kind + accountId
+    // + the one-to-one mapping from the dispatcher's CostAlertPayload.
+    expect(body).toMatch(/notificationEventBus\.publish\(\{/);
+    expect(body).toMatch(/kind: 'cost\.threshold_alert',/);
+    expect(body).toMatch(/accountId: alert\.account_id,/);
+    expect(body).toMatch(/severity: alert\.severity,/);
+    expect(body).toMatch(/billingCycle: alert\.billing_cycle,/);
+    expect(body).toMatch(/previousState: alert\.previous_state,/);
+    expect(body).toMatch(/currentState: alert\.current_state,/);
+    expect(body).toMatch(/totalCents: alert\.total_cents,/);
+    expect(body).toMatch(/thresholdSoftCents: alert\.threshold_soft_cents,/);
+    expect(body).toMatch(/thresholdHardCents: alert\.threshold_hard_cents,/);
+    expect(body).toMatch(/at: new Date\(\)\.toISOString\(\),/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

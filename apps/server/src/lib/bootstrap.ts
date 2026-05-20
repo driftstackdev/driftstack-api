@@ -120,6 +120,7 @@ import { UsageAggregatorFromUsageRepo } from '../services/cost-aggregator.js';
 import { CostAlertDispatcher } from '../services/cost-alert-dispatcher.js';
 import { registerCostNightlyJob, enqueueNextNightlyRun } from '../services/cost-nightly-job.js';
 import { DrizzleCostNightlyAccountIdProvider } from '../db/cost-nightly-accounts-provider.js';
+import { NotificationEventBus } from '../services/notification-event-bus.js';
 import { DEFAULT_COST_RATES, DEFAULT_TIER_THRESHOLDS_DERIVED } from './cost-defaults.js';
 import { StripeBillingProvider } from '../services/stripe-billing-provider.js';
 import { StripeApiClient } from './stripe-api.js';
@@ -935,6 +936,15 @@ export async function createProductionDeps(
     'CostMonitoringService wired with DEFAULT_COST_RATES + DEFAULT_TIER_THRESHOLDS_DERIVED (real UsageAggregator over usage_records; storage/egress/email/llm dimensions zero until V-541.I/J/K land)',
   );
 
+  // 2026-05-20 — GUI panel notification stream (v0 scaffold). The bus
+  // is wired here so publishers (cost-alert below, future incident /
+  // audit / session.errored publishers) can fan out into a single
+  // per-account stream. Subscribers (v0.1+ SSE route) come later;
+  // publishes with no live subscribers are dropped by design.
+  // Full design: docs/internal/driftstack-telemetry-event-schema-for-
+  // gui-panel.md.
+  const notificationEventBus = new NotificationEventBus();
+
   // 2026-05-20 — V-541.E nightly cost-recompute. Per-account spend
   // evaluated at UTC midnight; threshold transitions fire alerts via
   // the CostAlertDispatcher. Until Postmark / Slack channels are
@@ -963,6 +973,21 @@ export async function createProductionDeps(
         },
         'cost.threshold_alert',
       );
+      // Dual-publish to the GUI notification bus (v0). Drops on the
+      // floor today (no SSE subscribers yet) — same shape will fan
+      // out to the desktop panel once the v0.1 SSE route lands.
+      notificationEventBus.publish({
+        kind: 'cost.threshold_alert',
+        accountId: alert.account_id,
+        severity: alert.severity,
+        billingCycle: alert.billing_cycle,
+        previousState: alert.previous_state,
+        currentState: alert.current_state,
+        totalCents: alert.total_cents,
+        thresholdSoftCents: alert.threshold_soft_cents,
+        thresholdHardCents: alert.threshold_hard_cents,
+        at: new Date().toISOString(),
+      });
       return Promise.resolve();
     },
   });
