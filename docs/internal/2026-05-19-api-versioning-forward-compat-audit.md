@@ -111,15 +111,25 @@ post-launch when pricing evolves.
 
 **No pre-launch v1 breaking changes in the recent autopilot wave.**
 
-**One latent forward-compat concern surfaced:**
-`AccountAuditActionSchema` will gain 6 values pre-launch (per the
-audit-log coverage audit's Tier 1 + Tier 2 recommendations).
-Without SDK-side mitigation, strict-typed audit-log consumers
-will break on the next minor version.
+**Forward-compat concern resolved (2026-05-20 verification):**
+The `AccountAuditActionSchema` gained 7 values during the recent
+audit-log Tier 1 + Tier 2 emissions (`account.byok_anthropic_key_
+{set,cleared,tested}` + `proxy.{created,deleted}` +
+`account.bundled_llm_consent_changed` +
+`account.email_preferences_changed`). Verification via grep over
+the customer-facing SDKs:
 
-Recommended path: implement Option #2 above (loosen SDK action
-type to `string` with TypedDict-on-known-set + passthrough). One
-SDK minor version + zero customer migration effort.
+- `packages/sdk-typescript/src/resources/audit-log.ts` →
+  `action: string;` ✓
+- `packages/sdk-python/src/driftstack/resources/audit_log.py` →
+  `action: str | None = None` ✓
+- `packages/sdk-go/audit_log.go` →
+  `Action string \`json:"action"\`` ✓
 
-Tracked as a follow-up slice. NOT a Tier-3 founder verdict —
-purely SDK ergonomics.
+All 3 SDKs already use the open `string` type (Option #2 from the
+mitigation list above) — passing through unknown values without
+deserialization failure. Zero customer migration impact.
+
+The latent concern is now **CLOSED** without further work. Future
+audit-action additions can land additive without an SDK minor
+bump per the V-220 schema-additive policy.
