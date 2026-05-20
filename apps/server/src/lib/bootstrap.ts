@@ -117,6 +117,9 @@ import type { AccountTier } from '@driftstack/api-types';
 import { BillingService, type BillingProvider } from '../services/billing.js';
 import { CostMonitoringService } from '../services/cost-monitoring.js';
 import { UsageAggregatorFromUsageRepo } from '../services/cost-aggregator.js';
+import { CostAlertDispatcher } from '../services/cost-alert-dispatcher.js';
+import { registerCostNightlyJob, enqueueNextNightlyRun } from '../services/cost-nightly-job.js';
+import { DrizzleCostNightlyAccountIdProvider } from '../db/cost-nightly-accounts-provider.js';
 import { DEFAULT_COST_RATES, DEFAULT_TIER_THRESHOLDS_DERIVED } from './cost-defaults.js';
 import { StripeBillingProvider } from '../services/stripe-billing-provider.js';
 import { StripeApiClient } from './stripe-api.js';
@@ -931,6 +934,46 @@ export async function createProductionDeps(
     { component: 'cost-monitoring' },
     'CostMonitoringService wired with DEFAULT_COST_RATES + DEFAULT_TIER_THRESHOLDS_DERIVED (real UsageAggregator over usage_records; storage/egress/email/llm dimensions zero until V-541.I/J/K land)',
   );
+
+  // 2026-05-20 — V-541.E nightly cost-recompute. Per-account spend
+  // evaluated at UTC midnight; threshold transitions fire alerts via
+  // the CostAlertDispatcher. Until Postmark / Slack channels are
+  // wired (post-launch), the sink is logger-only: every fired alert
+  // lands as a structured `cost.threshold_alert` log line that ops
+  // can grep / page on. Re-arms idempotently via the V-202d dedup-
+  // on-account-and-type flag (job_type 'cost.recompute_nightly',
+  // account_id NULL) — same pattern the auth-tokens sweeper uses,
+  // with the post-2026-05-20 isNull-aware dedup fix (incident #47)
+  // already in place at the scheduled_jobs layer.
+  const costAlertDispatcher = new CostAlertDispatcher({
+    service: costMonitoringService,
+    sendAlert: (alert) => {
+      logger.info(
+        {
+          component: 'cost-alert',
+          account_id: alert.account_id,
+          billing_cycle: alert.billing_cycle,
+          tier: alert.tier,
+          severity: alert.severity,
+          previous_state: alert.previous_state,
+          current_state: alert.current_state,
+          total_cents: alert.total_cents,
+          threshold_soft_cents: alert.threshold_soft_cents,
+          threshold_hard_cents: alert.threshold_hard_cents,
+        },
+        'cost.threshold_alert',
+      );
+      return Promise.resolve();
+    },
+  });
+  registerCostNightlyJob({
+    scheduledJobs: scheduledJobsService,
+    service: costMonitoringService,
+    dispatcher: costAlertDispatcher,
+    accounts: new DrizzleCostNightlyAccountIdProvider(dbHandle),
+    logger,
+  });
+  await enqueueNextNightlyRun({ scheduledJobs: scheduledJobsService });
 
   // Readiness checks. Postgres + Redis are required; R2 only checked
   // if configured. Postmark + Sentry are never readiness-gated.

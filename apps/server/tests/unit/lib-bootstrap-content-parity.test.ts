@@ -234,6 +234,30 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/rotationReminders:\s*!rotationRemindersDisabled/);
   });
 
+  it("V-541.E cost-nightly-job wired in bootstrap: CostAlertDispatcher with logger-only sendAlert sink + DrizzleCostNightlyAccountIdProvider + registerCostNightlyJob + enqueueNextNightlyRun on app start. Pinned 2026-05-20 so a future refactor can't silently drop the wire-up and leave the V-541.E nightly recompute unfired (memory rule: cost-nightly-job had the right shape but was unwired until this slice).", () => {
+    expect(body).toMatch(
+      /import \{ CostAlertDispatcher \} from '\.\.\/services\/cost-alert-dispatcher\.js';/,
+    );
+    expect(body).toMatch(
+      /import \{ registerCostNightlyJob, enqueueNextNightlyRun \} from '\.\.\/services\/cost-nightly-job\.js';/,
+    );
+    expect(body).toMatch(
+      /import \{ DrizzleCostNightlyAccountIdProvider \} from '\.\.\/db\/cost-nightly-accounts-provider\.js';/,
+    );
+    expect(body).toMatch(/const costAlertDispatcher = new CostAlertDispatcher\(\{/);
+    expect(body).toMatch(/service: costMonitoringService,/);
+    // Logger-only sink: structured `cost.threshold_alert` line; pin
+    // the component name + alert field set so a refactor can't silently
+    // drop the per-alert log without explicit intent.
+    expect(body).toMatch(/component: 'cost-alert',/);
+    expect(body).toMatch(/'cost\.threshold_alert'/);
+    expect(body).toMatch(/registerCostNightlyJob\(\{/);
+    expect(body).toMatch(/accounts: new DrizzleCostNightlyAccountIdProvider\(dbHandle\),/);
+    expect(body).toMatch(
+      /await enqueueNextNightlyRun\(\{ scheduledJobs: scheduledJobsService \}\);/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
