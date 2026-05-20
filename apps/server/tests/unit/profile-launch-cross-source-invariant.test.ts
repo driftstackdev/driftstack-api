@@ -64,7 +64,7 @@ describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source i
     const lib = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/profiles.ts');
     const body = read(lib);
     expect(body).toMatch(
-      /launch\(\s*\n?\s*id: string,\s*\n?\s*body: \{ proxy\?: unknown; label\?: string \} = \{\},\s*\n?\s*\): Promise<Session>/,
+      /launch\(\s*\n?\s*id: string,\s*\n?\s*body: \{ proxy\?: unknown; label\?: string \} = \{\}\s*,?\s*\n?\s*\): Promise<Session>/,
     );
     expect(body).toMatch(/path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}\/launch`,/);
   });
