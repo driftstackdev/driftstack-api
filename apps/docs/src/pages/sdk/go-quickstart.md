@@ -212,6 +212,28 @@ State machine kinds you'll see: `ai-driving`, `takeover-pending`,
 `takeover-queued` (mid-decompose deferral), `human-driving`,
 `handback-pending`, `handback-queued`.
 
+### Modifier vocabulary
+
+`keyDown` / `keyUp` events accept a `modifiers` array. Use the
+canonical 4-name set — these map 1:1 onto Quartz `CGEventFlags`
+on the macOS harness side:
+
+```go
+result, err := client.AgentSessions.SendInputEvent(ctx, session.ID,
+    map[string]any{
+        "type":      "keyDown",
+        "key":       "k",
+        "modifiers": []string{"cmd", "shift"},
+    },
+    &driftstack.SendInputEventOptions{ClientID: "ops-dashboard-tab-a"},
+)
+// driftstack.CanonicalModifierNames is the exported slice if you'd
+// rather reference it than hard-code string literals.
+```
+
+DOM-standard names (`Shift / Control / Alt / Meta`) round-trip
+through the schema unchanged but the harness decoder drops them.
+
 ## Next steps
 
 - [Session lifecycle reference](/guides/session-lifecycle/) —

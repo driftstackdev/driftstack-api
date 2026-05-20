@@ -47,6 +47,10 @@ export type {
   AgentMessageResponse,
   LiveKitInfo,
 } from './resources/agent-sessions.js';
+// Slice 6 cross-SDK lock 2026-05-20 — re-export the canonical
+// LK.6 modifier vocabulary so TS customers can import it without
+// reaching into @driftstack/api-types directly.
+export { CANONICAL_MODIFIER_NAMES, type CanonicalModifier } from '@driftstack/api-types';
 export type { Recipe, CreateRecipeRequest } from './resources/recipes.js';
 export type {
   TeamRole,

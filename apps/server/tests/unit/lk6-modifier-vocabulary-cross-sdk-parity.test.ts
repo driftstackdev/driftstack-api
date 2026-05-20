@@ -96,4 +96,29 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
       /var CanonicalModifierNames = \[\]string\{"cmd", "ctrl", "shift", "option"\}/,
     );
   });
+
+  it('TS SDK index.ts re-exports CANONICAL_MODIFIER_NAMES + CanonicalModifier from api-types', () => {
+    const lib = resolve(REPO_ROOT, 'packages/sdk-typescript/src/index.ts');
+    const body = read(lib);
+    expect(body).toMatch(
+      /export \{\s*\n?\s*CANONICAL_MODIFIER_NAMES,\s*\n?\s*type CanonicalModifier,\s*\n?\s*\} from '@driftstack\/api-types';/,
+    );
+  });
+
+  it('All 3 SDK quickstart docs have a "### Modifier vocabulary" section example using cmd+shift modifiers', () => {
+    const ts = read(resolve(REPO_ROOT, 'apps/docs/src/pages/sdk/typescript-quickstart.md'));
+    const py = read(resolve(REPO_ROOT, 'apps/docs/src/pages/sdk/python-quickstart.md'));
+    const go = read(resolve(REPO_ROOT, 'apps/docs/src/pages/sdk/go-quickstart.md'));
+    for (const body of [ts, py, go]) {
+      expect(body).toMatch(/### Modifier vocabulary/);
+      expect(body).toMatch(/canonical 4-name set/);
+      expect(body).toMatch(/Quartz `CGEventFlags`/);
+      expect(body).toMatch(
+        /DOM-standard names \(`Shift \/ Control \/ Alt \/ Meta`\) round-trip\s*\n?\s*through the schema unchanged but the harness decoder drops them\./,
+      );
+    }
+    expect(ts).toMatch(/modifiers: \['cmd', 'shift'\]/);
+    expect(py).toMatch(/"modifiers": \["cmd", "shift"\]/);
+    expect(go).toMatch(/"modifiers": \[\]string\{"cmd", "shift"\}/);
+  });
 });

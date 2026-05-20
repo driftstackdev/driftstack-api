@@ -174,6 +174,25 @@ mid-decompose), `human-driving`, `handback-pending`,
 `handback-queued`. The dashboard polls `agent-sessions/:id` to
 display the current kind.
 
+### Modifier vocabulary
+
+`keyDown` / `keyUp` events accept a `modifiers` array. Use the
+canonical 4-name set — these map 1:1 onto Quartz `CGEventFlags`
+on the macOS harness side:
+
+```ts
+await client.agentSessions.sendInputEvent(
+  session.id,
+  { type: 'keyDown', key: 'k', modifiers: ['cmd', 'shift'] },
+  { clientId: 'dashboard-tab-a' },
+);
+```
+
+DOM-standard names (`Shift / Control / Alt / Meta`) round-trip
+through the schema unchanged but the harness decoder drops them.
+The TS SDK re-exports `CANONICAL_MODIFIER_NAMES` from
+`@driftstack/api-types` if you want to reference it from your code.
+
 ## Next steps
 
 - [Session lifecycle reference](/guides/session-lifecycle/) — states,
