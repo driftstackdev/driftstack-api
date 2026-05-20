@@ -71,6 +71,22 @@ else
   echo "→ sdk-go gofmt SKIPPED (no go toolchain on PATH)"
 fi
 
+# 2026-05-20 — gui-client (Tauri) cargo fmt check. CI's gui-build-check
+# runs `cargo check` + `cargo test` but not `cargo fmt --check`, so
+# rustfmt drift wouldn't trip a gate. Symmetric with the Ruff + gofmt
+# coverage shipped above. Skipped on machines without the Rust toolchain.
+if command -v cargo >/dev/null 2>&1; then
+  if ! (cd apps/gui-client/src-tauri && cargo fmt --check >/dev/null 2>&1); then
+    echo "✗ gui-client cargo fmt drift"
+    (cd apps/gui-client/src-tauri && cargo fmt --check 2>&1) | head -20 | sed 's/^/    /'
+    echo "  run 'cd apps/gui-client/src-tauri && cargo fmt' to fix"
+    exit 1
+  fi
+  echo "→ gui-client cargo fmt check clean"
+else
+  echo "→ gui-client cargo fmt SKIPPED (no cargo on PATH)"
+fi
+
 echo "→ tests"
 npm test
 
