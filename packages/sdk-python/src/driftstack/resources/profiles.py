@@ -123,9 +123,7 @@ class AsyncProfilesResource:
     async def delete(self, profile_id: str) -> None:
         await self._http.request("DELETE", f"/v1/profiles/{quote(profile_id, safe='')}")
 
-    async def launch(
-        self, profile_id: str, body: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    async def launch(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         """Async mirror — same Slice 2 antidetect launch semantics as sync."""
         return await self._http.request(
             "POST",
