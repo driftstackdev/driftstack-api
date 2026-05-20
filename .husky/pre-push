@@ -40,6 +40,19 @@ npm run lint
 echo "→ format check"
 npm run format:check
 
+# 2026-05-20 — sdk-python Ruff format check, gated on the venv being
+# present (devs not touching Python aren't required to set it up).
+# Closes the gap where Ruff regressions in packages/sdk-python/ slip
+# through pre-push and only surface as a red CI run post-push — cost
+# Agent 2 a follow-up commit after fa8cb83a shipped with a 3-line
+# launch() signature that Ruff wanted on one line.
+if [ -x packages/sdk-python/.venv/bin/ruff ]; then
+  echo "→ sdk-python lint + format check"
+  npm run sdk:python:lint
+else
+  echo "→ sdk-python lint SKIPPED (no .venv — install via packages/sdk-python/scripts/setup.sh to enable)"
+fi
+
 echo "→ tests"
 npm test
 
