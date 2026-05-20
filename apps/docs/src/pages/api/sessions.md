@@ -83,7 +83,8 @@ metadata writes).
   "archetype": "iphone16pro_ios18_7_safari26_4",
   "purpose": "production_customer",
   "label": "login flow",
-  "metadata": { "ticket": "SUP-42" }
+  "metadata": { "ticket": "SUP-42" },
+  "profile_id": "prof_01HV..."
 }
 ```
 
@@ -91,21 +92,21 @@ All fields optional. `archetype` defaults to the locked iPhone-16
 Pro / iOS / Safari archetype when omitted (LOCKED_ARCHETYPE_ID).
 `purpose` defaults to `production_customer`.
 
+When `profile_id` is supplied (2026-05-20, commit `fa8cb83a`) the
+server inherits the profile's `archetype` as the default, stamps
+`{profile_id, profile_name}` into the session's `metadata`, and
+bumps the profile's `last_used_at` fire-and-forget. Cross-account
+`profile_id` returns `404` (anti-enumeration — indistinguishable
+from a missing one). See also `POST /v1/profiles/:id/launch` for
+the one-round-trip launch helper.
+
 Returns the created session (200).
 
 Errors:
 
 - `429 ConcurrencyLimit` — concurrent-session cap hit.
-
-> **Profile binding is planned (catalog), not yet wired.** A
-> future addition lets `POST /v1/sessions` accept `profile_id` to
-> bind the session to a persistent profile , with the
-> profile's `last_used_at` updated on session destroy + the
-> profile's underlying browser state restored on session start.
-> Today's API surface is profile-less; the binding lives in the
-> driver layer for the dashboard's GUI client only. Customers
-> using profiles via the SDK currently can't bind a session to a
-> profile programmatically.
+- `404 NotFound` — `profile_id` refers to a profile that doesn't
+  exist OR belongs to a different account.
 
 ## List
 

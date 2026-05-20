@@ -119,26 +119,30 @@ describe('W782 docs /guides/profile-management content parity', () => {
     );
   });
 
-  it("CRITICAL profile-to-session binding planned-not-wired framing pinned. The '**Status: planned (catalog).** Programmatic session-to-profile binding via the SDK isn\\'t yet wired. POST /v1/sessions currently accepts { archetype, purpose, label, metadata } only — no profile_id field. Sessions started via the SDK are profile-less today; the binding lives in the dashboard\\'s GUI client driver layer.' wording matches W761 /api/sessions profile-binding-planned framing.", () => {
+  it('2026-05-20 — profile-to-session binding flipped planned→SHIPPED (fa8cb83a). Doc now pins the wired POST /v1/sessions profile_id field, the cross-account 404 anti-enumeration framing, and the profiles.launch() one-shot helper.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /\*\*Status: planned \(catalog\)\.\*\* Programmatic session-to-profile binding via the SDK isn't yet wired\./,
+      /`POST \/v1\/sessions` accepts an optional `profile_id` field as of 2026-05-20 \(commit `fa8cb83a`\)\./,
     );
+    expect(p).toMatch(/profile_id: 'prof_01HV\.\.\.',/);
     expect(p).toMatch(
-      /`POST \/v1\/sessions` currently accepts `\{ archetype, purpose, label, metadata \}` only — no `profile_id` field\./,
-    );
-    expect(p).toMatch(
-      /Sessions started via the SDK are profile-less today; the binding lives in the dashboard's GUI client driver layer\./,
+      /Cross-account `profile_id` returns `404` \(anti-enumeration — indistinguishable from a missing one\)\./,
     );
   });
 
-  it("CRITICAL V-294 feature-catalog cross-reference pinned. The 'IN-FLIGHT' framing + 'the change will be additive (new optional field on the request body)' matches W772 /api/versioning additive-vs-breaking contract.", () => {
+  it('2026-05-20 — Launch one-shot helper section pins SDK-level profiles.launch() + dashboard /profiles per-row Launch CTA + state inheritance flow.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/V-294 feature catalog/);
+    expect(p).toMatch(/## Launch a profile \(one-shot\)/);
     expect(p).toMatch(
-      /lists "Profile-to-session binding" as IN-FLIGHT; the change will be additive \(new optional field on the request body\)\./,
+      /the SDK exposes `profiles\.launch\(id, body\?\)` as a one-round-trip alternative to `sessions\.create\(\{ profile_id \}\)`:/,
+    );
+    expect(p).toMatch(
+      /The dashboard `\/profiles` page exposes a per-row \*\*Launch\*\* button that calls this endpoint/,
+    );
+    expect(p).toMatch(
+      /Profile-bound sessions inherit the profile's storage state on launch and write new state back on clean destroy/,
     );
   });
 

@@ -71,12 +71,12 @@ describe('W1014 db/scheduled-jobs-repo V-202d cross-source invariant', () => {
     );
   });
 
-  it('CRITICAL enqueue dedup flag — input.dedupOnAccountAndType === true && accountId !== null → SELECT pending (account, jobType, isNull completedAt, isNull failedAt). Returns {enqueued:false} on match.', () => {
+  it('CRITICAL enqueue dedup flag — input.dedupOnAccountAndType === true (post-#47 fix: null-accountId handled via isNull/eq ternary instead of short-circuit) → SELECT pending (account, jobType, isNull completedAt, isNull failedAt). Returns {enqueued:false} on match.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/scheduled-jobs-repo.ts'));
+    expect(p).toMatch(/if \(input\.dedupOnAccountAndType === true\) \{/);
     expect(p).toMatch(
-      /if \(input\.dedupOnAccountAndType === true && input\.accountId !== null\) \{/,
+      /input\.accountId === null\s*\n?\s*\?\s*isNull\(scheduledJobs\.accountId\)\s*\n?\s*:\s*eq\(scheduledJobs\.accountId, input\.accountId\),/,
     );
-    expect(p).toMatch(/eq\(scheduledJobs\.accountId, input\.accountId\),/);
     expect(p).toMatch(/eq\(scheduledJobs\.jobType, input\.jobType\),/);
     expect(p).toMatch(/isNull\(scheduledJobs\.completedAt\),/);
     expect(p).toMatch(/isNull\(scheduledJobs\.failedAt\),/);

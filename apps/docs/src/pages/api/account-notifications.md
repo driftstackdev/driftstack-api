@@ -1,4 +1,5 @@
 ---
+layout: ../../layouts/DocLayout.astro
 title: Account notifications (SSE)
 description: Real-time per-account event stream — cost-threshold alerts, incidents, high-severity audit events, and session errors.
 ---

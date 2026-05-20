@@ -56,7 +56,8 @@ Content-Type: application/json
   "archetype": "default",                  ← optional, lowercase slug
   "purpose": "production_customer",        ← optional, default applied server-side
   "label": "ticket-JIRA-1234",             ← optional, ≤120 chars
-  "metadata": { "ticket": "JIRA-1234" }    ← optional, surfaced in webhooks
+  "metadata": { "ticket": "JIRA-1234" },   ← optional, surfaced in webhooks
+  "profile_id": "prof_01HV…"               ← optional, binds session to a profile
 }
 
 → 201 Created

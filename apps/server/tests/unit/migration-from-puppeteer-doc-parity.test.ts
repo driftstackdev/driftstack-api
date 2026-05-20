@@ -30,12 +30,15 @@ describe('W227.A migration-from-puppeteer doc parity', () => {
   it('session-create example uses schema-accepted fields', () => {
     const shape = CreateSessionRequestSchema.shape;
     expect(shape).toHaveProperty('archetype');
-    expect(shape).not.toHaveProperty('profile_id');
+    // 2026-05-20 — profile_id IS now schema-accepted (fa8cb83a); the
+    // migration-from-puppeteer example stays archetype-only because
+    // the audience hasn't created Driftstack profiles yet, but the
+    // schema check no longer asserts profile_id is absent.
+    expect(shape).toHaveProperty('profile_id');
     expect(shape).not.toHaveProperty('record');
     // Doc body must use the real fields:
     expect(doc).toMatch(/"archetype":\s*"default"/);
-    // And not the stale ones:
-    expect(doc).not.toMatch(/"profile_id":/);
+    // The stale "record" field stays banned (never existed):
     expect(doc).not.toMatch(/"record":\s*true/);
   });
 

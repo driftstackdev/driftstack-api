@@ -112,7 +112,9 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(
       /2\. \*\*Deployment mode\*\* — radio: \*\*Cloud\*\* \(`https:\/\/api\.driftstack\.dev`\) or \*\*Self-hosted\*\*/,
     );
-    expect(body).toMatch(/defaults to `http:\/\/localhost:7780`/);
+    // 2026-05-20 — port 7780→3000 (DEFAULT_SETTINGS.baseUrl shift per
+    // 6d117edb / beed59db; matches the port apps/server binds to in dev).
+    expect(body).toMatch(/defaults to `http:\/\/localhost:3000`/);
     expect(body).toMatch(/3\. \*\*API key\*\*/);
     expect(body).toMatch(/The wizard immediately calls `GET \/v1\/account\/me` to validate\./);
     expect(body).toMatch(/4\. \*\*First profile\*\* \(skippable\)/);

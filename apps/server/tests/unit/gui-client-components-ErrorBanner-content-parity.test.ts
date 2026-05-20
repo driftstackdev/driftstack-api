@@ -44,9 +44,15 @@ describe('W478.A apps/gui-client/src/components/ErrorBanner.tsx content parity',
     );
   });
 
-  it("Render: destructured {message, onDismiss} signature + outer flex with status-error/30 border + status-error/10 bg tints + 'Error' section-label (status-error/80) + truncated message text-ink-primary + Dismiss button with btn-secondary class + type='button'", () => {
+  it('2026-05-20 — message span flipped from `truncate` to `whitespace-pre-line` so multi-line diagnosticFetchError output (newlines + bullets) renders intact instead of collapsing to a single line. Outer flex / border / bg / section-label / Dismiss button shape unchanged.', () => {
     expect(body).toMatch(
-      /export function ErrorBanner\(\{ message, onDismiss \}: ErrorBannerProps\): JSX\.Element \{\s*\n?\s*return \(\s*\n?\s*<div className="flex items-start justify-between gap-3 rounded border border-status-error\/30 bg-status-error\/10 px-3 py-2">\s*\n?\s*<div className="flex flex-col gap-0\.5 min-w-0">\s*\n?\s*<span className="section-label text-status-error\/80">Error<\/span>\s*\n?\s*<span className="text-sm text-ink-primary truncate">\{message\}<\/span>\s*\n?\s*<\/div>\s*\n?\s*<button type="button" className="btn-secondary" onClick=\{onDismiss\}>\s*\n?\s*Dismiss\s*\n?\s*<\/button>\s*\n?\s*<\/div>\s*\n?\s*\);\s*\n?\s*\}/,
+      /export function ErrorBanner\(\{ message, onDismiss \}: ErrorBannerProps\): JSX\.Element \{\s*\n?\s*return \(\s*\n?\s*<div className="flex items-start justify-between gap-3 rounded border border-status-error\/30 bg-status-error\/10 px-3 py-2">\s*\n?\s*<div className="flex flex-col gap-0\.5 min-w-0">\s*\n?\s*<span className="section-label text-status-error\/80">Error<\/span>/,
+    );
+    expect(body).toMatch(
+      /<span className="whitespace-pre-line text-sm text-ink-primary">\{message\}<\/span>\s*\n?\s*<\/div>\s*\n?\s*<button type="button" className="btn-secondary" onClick=\{onDismiss\}>\s*\n?\s*Dismiss\s*\n?\s*<\/button>/,
+    );
+    expect(body).toMatch(
+      /\/\/ 2026-05-20 — whitespace-pre-line so multi-line diagnostic|whitespace-pre-line so multi-line diagnostic/,
     );
   });
 

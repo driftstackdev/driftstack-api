@@ -47,18 +47,18 @@ describe('W475.C apps/gui-client/src/components/TitleBar.tsx content parity', ()
     );
   });
 
-  it("isMac platform sniff: navigator.platform.startsWith('Mac') with typeof navigator !== 'undefined' SSR guard — pinned so Mac traffic-light clearance is decided at module-load on Mac, falsy elsewhere (SSR/Node)", () => {
+  it("2026-05-20 — isMac sniff widened to navigator.platform.startsWith('Mac') OR /Mac OS X|Macintosh/ regex against userAgent (per the deprecated-platform-fallback explainer comment). Keeps typeof navigator !== 'undefined' SSR guard.", () => {
     expect(body).toMatch(
-      /const isMac = typeof navigator !== 'undefined' && navigator\.platform\.startsWith\('Mac'\);/,
+      /const isMac =\s*\n?\s*typeof navigator !== 'undefined' &&\s*\n?\s*\(navigator\.platform\.startsWith\('Mac'\) \|\| \/Mac OS X\|Macintosh\/\.test\(navigator\.userAgent\)\);/,
     );
   });
 
-  it("Props 2-field: subtitle? + right?: ReactNode (small-chrome slot for version label / status pills); TitleBar root: data-tauri-drag-region='true' attribute (draggable handle) + h-9 height + border-b + Mac→pl-20 / non-Mac→pl-3 ternary (traffic-light clearance) + pr-3", () => {
+  it("2026-05-20 — Mac clearance bumped pl-20→pl-24 (founder reported overlap with the 'driftstack' wordmark; lights span ~70px + 12px right margin → 82px → round up to pl-24 / 96px for retina rounding + future-chrome headroom). Props + drag-region + h-9 + border-b unchanged.", () => {
     expect(body).toMatch(
       /interface Props \{\s*\n?\s*subtitle\?: string;\s*\n?\s*right\?: ReactNode;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /<div\s*\n?\s*data-tauri-drag-region="true"\s*\n?\s*className=\{`flex h-9 select-none items-center justify-between border-b border-surface-divider bg-surface-raised pr-3 \$\{\s*\n?\s*isMac \? 'pl-20' : 'pl-3'\s*\n?\s*\}`\}\s*\n?\s*>/,
+      /<div\s*\n?\s*data-tauri-drag-region="true"\s*\n?\s*className=\{`flex h-9 select-none items-center justify-between border-b border-surface-divider bg-surface-raised pr-3 \$\{\s*\n?\s*isMac \? 'pl-24' : 'pl-3'\s*\n?\s*\}`\}\s*\n?\s*>/,
     );
   });
 
@@ -68,12 +68,12 @@ describe('W475.C apps/gui-client/src/components/TitleBar.tsx content parity', ()
     );
   });
 
-  it("DBadge inline SVG: 18×18 viewBox 0 0 64 64 + xmlns + aria-hidden='true' + rect width=64 height=64 rx=12 fill='#722F37' (oxblood-700) + white 'D' text at x=32 y=42 textAnchor='middle' Georgia,serif fontSize=34 fontWeight=700 — pinned to mirror marketing-site favicon, not a flat colour box; comment framing 'Inline SVG mirrors the favicon in apps/marketing-site/src/layouts/BaseLayout.astro — oxblood-700 (#722F37) rounded square with a white \"D\" in serif type. Render at 18×18 in the title bar; the SVG scales without aliasing.'", () => {
+  it("2026-05-20 — DBadge re-tinted to a near-black (#0b0f14, matches surface-base) rounded-square with a glow-red (#e23847, marketing-site CTA colour) 'D'. Founder feedback: prior oxblood-on-white washed out + clashed with the surface-raised dark chrome.", () => {
     expect(body).toMatch(
-      /\/\/ Inline SVG mirrors the favicon in apps\/marketing-site\/src\/layouts\/\s*\n?\s*\/\/ BaseLayout\.astro — oxblood-700 \(#722F37\) rounded square with a white\s*\n?\s*\/\/ "D" in serif type\. Render at 18×18 in the title bar; the SVG scales\s*\n?\s*\/\/ without aliasing\./,
+      /\/\/ 2026-05-20 — DBadge re-tinted to a near-black rounded-square with a\s*\n?\s*\/\/ glow-red "D" per founder feedback \(the earlier oxblood-on-white\s*\n?\s*\/\/ felt washed out \+ clashed with the surface-raised title-bar fill\)\.\s*\n?\s*\/\/ #0b0f14 matches surface-base from globals\.css so the badge reads\s*\n?\s*\/\/ as one continuous element with the dark chrome; #e23847 is the\s*\n?\s*\/\/ marketing site's glow-red CTA colour for visual continuity\./,
     );
     expect(body).toMatch(
-      /<svg\s*\n?\s*width="18"\s*\n?\s*height="18"\s*\n?\s*viewBox="0 0 64 64"\s*\n?\s*xmlns="http:\/\/www\.w3\.org\/2000\/svg"\s*\n?\s*aria-hidden="true"\s*\n?\s*>\s*\n?\s*<rect width="64" height="64" rx="12" fill="#722F37" \/>\s*\n?\s*<text\s*\n?\s*x="32"\s*\n?\s*y="42"\s*\n?\s*textAnchor="middle"\s*\n?\s*fill="white"\s*\n?\s*fontFamily="Georgia,serif"\s*\n?\s*fontSize="34"\s*\n?\s*fontWeight="700"\s*\n?\s*>\s*\n?\s*D\s*\n?\s*<\/text>\s*\n?\s*<\/svg>/,
+      /<svg\s*\n?\s*width="18"\s*\n?\s*height="18"\s*\n?\s*viewBox="0 0 64 64"\s*\n?\s*xmlns="http:\/\/www\.w3\.org\/2000\/svg"\s*\n?\s*aria-hidden="true"\s*\n?\s*>\s*\n?\s*<rect width="64" height="64" rx="12" fill="#0b0f14" \/>\s*\n?\s*<text\s*\n?\s*x="32"\s*\n?\s*y="42"\s*\n?\s*textAnchor="middle"\s*\n?\s*fill="#e23847"\s*\n?\s*fontFamily="Georgia,serif"\s*\n?\s*fontSize="34"\s*\n?\s*fontWeight="700"\s*\n?\s*>\s*\n?\s*D\s*\n?\s*<\/text>\s*\n?\s*<\/svg>/,
     );
   });
 

@@ -38,11 +38,15 @@ describe('W228.A migration-from-browserless doc parity', () => {
     expect(doc).not.toMatch(/recordings\.get\(/);
   });
 
-  it('does not claim session create accepts script/target_url/profile_id', () => {
+  it("does not claim session create accepts the fictional script/target_url fields (profile_id IS now schema-accepted per fa8cb83a but stays out of the browserless migration narrative — audience hasn't created profiles yet)", () => {
     const shape = CreateSessionRequestSchema.shape;
     expect(shape).not.toHaveProperty('script');
     expect(shape).not.toHaveProperty('target_url');
-    expect(shape).not.toHaveProperty('profile_id');
+    // 2026-05-20 — profile_id IS now schema-accepted; the doc still
+    // omits it because the migration audience starts ephemeral. The
+    // doc body itself shouldn't mention profile_id, but the schema
+    // check no longer asserts absence.
+    expect(shape).toHaveProperty('profile_id');
     expect(doc).not.toMatch(/target_url:\s*'/);
     expect(doc).not.toMatch(/script:\s*`/);
     expect(doc).not.toMatch(/profile_id:/);

@@ -50,7 +50,10 @@ describe('W215.C sessions doc parity', () => {
     for (const field of Object.keys(shape)) {
       expect(doc, `request example missing field ${field}`).toContain(`"${field}":`);
     }
-    for (const stale of ['target_url', 'profile_archetype', 'profile_id', 'record']) {
+    // 2026-05-20 — profile_id removed from stale-fields list:
+    // CreateSessionRequestSchema now accepts an optional profile_id
+    // (fa8cb83a antidetect-browser profile-launch arc).
+    for (const stale of ['target_url', 'profile_archetype', 'record']) {
       expect(doc, `request body must not reference stale field ${stale}`).not.toMatch(
         new RegExp(`"${stale}":`),
       );
