@@ -15,6 +15,7 @@ import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import {
   clearSession as clearProfileSession,
+  deleteBinding,
   listBindings,
   markLaunched,
   setDefaultProxy,
@@ -136,6 +137,9 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     setBusyId(id);
     try {
       await client.profiles.delete(id);
+      // Drop the local binding so stale {currentSessionId, defaultProxyId}
+      // entries don't accumulate as customers churn through profiles.
+      await deleteBinding(id);
       await refresh(false);
       await refreshAccountMe();
     } catch (err) {
