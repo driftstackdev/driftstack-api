@@ -19,6 +19,12 @@ const ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-20',
     category: 'launch',
+    title: 'Account notification stream (SSE) — cost / incident / audit / session events',
+    body: "New GET /v1/account/me/notifications Server-Sent Events endpoint surfaces a single per-account stream of real-time events. Four kinds in v0: cost.threshold_alert (fires on tier-spend transitions; warn / critical / resolved), incident.broadcast (customer-visible status incidents with minor / major / critical severity), audit.high_severity (selective republish for high-severity audit actions like api_key.revoked / byok_anthropic.key_set / team.member_removed), and session.errored (driver-terminal errors before customer destroy). Each frame uses the SSE event: header as the discriminator so subscribers can route via EventSource.addEventListener('cost.threshold_alert', ...). The desktop GUI client ships with the wired panel: subscribeNotifications + useNotifications hook + NotificationToastStack overlay component already mounted at the App shell. Bus is in-memory v0 — no Last-Event-ID resume yet; native EventSource auto-reconnect (3s backoff) covers transient drops. Full reference at docs.driftstack.dev/api/account-notifications.",
+  },
+  {
+    date: '2026-05-20',
+    category: 'launch',
     title: 'Antidetect-browser-style profile launch (one-shot)',
     body: 'POST /v1/sessions now accepts an optional profile_id field; cross-account profile_id returns 404 (anti-enumeration). New POST /v1/profiles/:id/launch wraps the sessions.create path into a single round-trip — server inherits the profile\'s archetype, stamps {profile_id, profile_name} into session metadata, and bumps the profile\'s last_used_at fire-and-forget. The dashboard /profiles page gains a per-row Launch primary CTA placed before Clone/Export/Snapshot/Delete; the desktop GUI client already exposed Launch since the earlier antidetect-browser hub restructure. SDK helpers shipped in all three languages: client.profiles.launch(id, body?) in TypeScript + Python (sync + async); ProfilesResource.Launch(ctx, profileID, body) in Go. Full reference at docs.driftstack.dev/api/profiles#launch.',
   },

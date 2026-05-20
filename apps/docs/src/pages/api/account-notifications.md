@@ -1,0 +1,158 @@
+---
+title: Account notifications (SSE)
+description: Real-time per-account event stream — cost-threshold alerts, incidents, high-severity audit events, and session errors.
+---
+
+# Account notifications
+
+A single Server-Sent Events stream for every notification scoped to
+the calling account. Use it to power a "what's happening on my
+account right now" panel without N poll-loops.
+
+The stream is a v0 surface (2026-05-20) and is read-only — it doesn't
+replace the durable audit log or the email channel. It's an
+additive, low-latency notification path.
+
+## Endpoint
+
+`GET /v1/account/me/notifications`
+
+Auth: standard Bearer-key header. Native `EventSource` clients lack
+header support — pair the request with a polyfill that sets headers,
+or use your runtime's authenticated fetch (Tauri's invoke bridge,
+Node's `eventsource` package, etc.).
+
+## Frame shape
+
+Each event in the stream uses the SSE `event:` header as a
+discriminator and the `data:` line as a JSON-encoded payload.
+
+```text
+event: cost.threshold_alert
+data: {"kind":"cost.threshold_alert","accountId":"acc_...","severity":"warn",…}
+
+event: incident.broadcast
+data: {"kind":"incident.broadcast","accountId":"acc_...","severity":"major",…}
+```
+
+Subscribers can either:
+
+- Use one `EventSource.addEventListener('cost.threshold_alert', …)`
+  per kind (recommended — the native router does the dispatch), or
+- Subscribe via `EventSource.onmessage` and switch on `payload.kind`
+  from the parsed JSON.
+
+A `: heartbeat <ISO8601>\n\n` comment frame fires every ~25 seconds
+to keep load-balancers from closing idle connections. Ignore these.
+
+## Event kinds (v0)
+
+### `cost.threshold_alert`
+
+Fires when an account crosses a tier-spend threshold (soft or hard,
+in either direction).
+
+| field                | type                                                             | notes                                      |
+| -------------------- | ---------------------------------------------------------------- | ------------------------------------------ |
+| `kind`               | `"cost.threshold_alert"`                                         | discriminator                              |
+| `accountId`          | `string`                                                         | calling account                            |
+| `severity`           | `"warn" \| "critical" \| "resolved"`                             | `resolved` = spend dropped back below soft |
+| `billingCycle`       | `string`                                                         | `YYYY-MM` UTC                              |
+| `previousState`      | `"under-soft" \| "between-soft-and-hard" \| "over-hard" \| null` | `null` on first-ever evaluation            |
+| `currentState`       | same enum                                                        |                                            |
+| `totalCents`         | `number`                                                         | spend in the current cycle                 |
+| `thresholdSoftCents` | `number`                                                         | soft cap                                   |
+| `thresholdHardCents` | `number`                                                         | hard cap                                   |
+| `at`                 | `string`                                                         | ISO8601 server publish time                |
+
+### `incident.broadcast`
+
+Fires when a customer-visible incident is opened or status-changed.
+
+| field        | type                               | notes          |
+| ------------ | ---------------------------------- | -------------- |
+| `kind`       | `"incident.broadcast"`             |                |
+| `accountId`  | `string`                           |                |
+| `incidentId` | `string`                           |                |
+| `severity`   | `"minor" \| "major" \| "critical"` |                |
+| `title`      | `string`                           | short headline |
+| `at`         | `string`                           | ISO8601        |
+
+### `audit.high_severity`
+
+Selective republish from the audit log for high-severity actions
+(e.g. `api_key.revoked`, `byok_anthropic.key_set`, `team.member_removed`).
+Low-severity events stay in the audit log only — query
+`GET /v1/account/audit-log` for the full ledger.
+
+| field              | type                                | notes                       |
+| ------------------ | ----------------------------------- | --------------------------- |
+| `kind`             | `"audit.high_severity"`             |                             |
+| `accountId`        | `string`                            |                             |
+| `action`           | `string`                            | canonical audit action enum |
+| `actorType`        | `"customer" \| "admin" \| "system"` |                             |
+| `targetResourceId` | `string \| null`                    | e.g. `key_…`                |
+| `at`               | `string`                            | ISO8601                     |
+
+### `session.errored`
+
+Fires when a session's driver hits a terminal error before the
+customer-initiated destroy.
+
+| field        | type                | notes                          |
+| ------------ | ------------------- | ------------------------------ |
+| `kind`       | `"session.errored"` |                                |
+| `accountId`  | `string`            |                                |
+| `sessionId`  | `string`            | `ses_…`                        |
+| `errorClass` | `string`            | e.g. `driver_error`, `timeout` |
+| `at`         | `string`            | ISO8601                        |
+
+## Reconnect + persistence
+
+The bus is in-memory only — events with no live subscribers are
+dropped on the floor. `EventSource`'s native auto-reconnect (default
+3s backoff) is the v0.1 reconnect story; transient drops resume
+without any app-level glue.
+
+There is no `Last-Event-ID` resume in v0.1; the next v0.2 slice will
+add a small per-account ring buffer once a customer concretely asks
+for one. For the durable trail of any event covered by
+`audit.high_severity`, query `GET /v1/account/audit-log`.
+
+## Quotas + rate-limit
+
+One concurrent subscriber per account is plenty in v0; the SSE
+route shares the same `global` rate-limit bucket as every other
+authenticated read. Opening additional subscribers on the same
+account works but offers no benefit (every subscriber sees every
+event).
+
+## Customer example (TypeScript / desktop GUI)
+
+```ts
+import { subscribeNotifications } from '@driftstack/gui-client/lib/notifications';
+
+const close = subscribeNotifications({
+  url: 'https://api.driftstack.dev/v1/account/me/notifications',
+  onEvent: (event) => {
+    switch (event.kind) {
+      case 'cost.threshold_alert':
+        showToast(`Cost ${event.severity}: $${event.totalCents / 100}`);
+        break;
+      case 'incident.broadcast':
+        showBanner(event.title);
+        break;
+      // …
+    }
+  },
+  onState: (state) => {
+    setBadge(state === 'open' ? 'live' : state);
+  },
+});
+// later, on app teardown:
+close();
+```
+
+Full design notes live at
+`docs/internal/driftstack-telemetry-event-schema-for-gui-panel.md`
+in the source repo.
