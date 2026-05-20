@@ -164,7 +164,15 @@ jobs:
 
       - name: Run scripts/deploy-bridge.sh staging
         if: steps.gate.outputs.ready == 'true'
-        run: bash scripts/deploy-bridge.sh staging
+        # 2026-05-20 — pass github.sha explicitly. Without it, the
+        # bridge defaults SHA to "main" and clones the current tip,
+        # which may have moved past the workflow-triggering commit if
+        # another push landed during the workflow run. The bridge
+        # then ships THAT newer commit but post-deploy-verify is
+        # told to expect the original (triggering) SHA, causing a
+        # false-negative auto-revert. Pinning github.sha makes the
+        # bridge deploy the exact ref that triggered the workflow.
+        run: bash scripts/deploy-bridge.sh staging '${{ github.sha }}'
 
   deploy-production:
     name: Deploy to production (manual approval; via deploy-bridge.sh)
@@ -215,4 +223,6 @@ jobs:
 
       - name: Run scripts/deploy-bridge.sh prod
         if: steps.gate.outputs.ready == 'true'
-        run: bash scripts/deploy-bridge.sh prod
+        # 2026-05-20 — pass github.sha explicitly (same race-fix as
+        # staging deploy step above).
+        run: bash scripts/deploy-bridge.sh prod '${{ github.sha }}'
