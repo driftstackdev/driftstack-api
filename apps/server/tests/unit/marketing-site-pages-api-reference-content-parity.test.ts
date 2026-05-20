@@ -104,12 +104,16 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
   });
 
   // Arc 4 Wave 2.B sub-slice 8.20.f (v2-#8) — marketing api-reference
-  // surfaces agent-sessions as a distinct route group; pins the 6
-  // endpoints of the v2-#8 surface so any rename / drop breaks CI.
-  it('Agent sessions route enumeration 6-endpoint: POST + GET /:id + POST /:id/message + POST /:id/takeover + POST /:id/handback + DELETE /:id — pinned so the agent-sessions surface stays visible alongside regular sessions on the marketing page (drift to dropping would hide v2-#8 from prospects)', () => {
+  // surfaces agent-sessions as a distinct route group; pins all 8
+  // endpoints of the v2-#8 surface (extended 2026-05-20 with Slice 3
+  // /:id/mode + Slice 4-6 /:id/input-event landed for Wave 29-NNN
+  // ARC 3) so any rename / drop breaks CI.
+  it('Agent sessions route enumeration 8-endpoint: POST + GET /:id + POST /:id/message + POST /:id/mode + POST /:id/input-event + POST /:id/takeover + POST /:id/handback + DELETE /:id — pinned so the agent-sessions surface stays visible alongside regular sessions on the marketing page (drift to dropping would hide v2-#8 from prospects)', () => {
     expect(body).toMatch(/<li>POST \/v1\/agent-sessions<\/li>/);
     expect(body).toMatch(/<li>GET \/v1\/agent-sessions\/:id<\/li>/);
     expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/message<\/li>/);
+    expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/mode<\/li>/);
+    expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/input-event<\/li>/);
     expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/takeover<\/li>/);
     expect(body).toMatch(/<li>POST \/v1\/agent-sessions\/:id\/handback<\/li>/);
     expect(body).toMatch(/<li>DELETE \/v1\/agent-sessions\/:id<\/li>/);
