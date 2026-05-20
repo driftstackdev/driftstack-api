@@ -69,7 +69,7 @@ describe('services/agent-decomposer-deterministic content parity', () => {
     );
     expect(body).toMatch(/'Tasks that endanger people in the physical world are prohibited\.',/);
     expect(body).toMatch(
-      /'Driftstack does not orchestrate captcha bypass or evasion of platform safety controls\. ' \+\s*\n?\s*'See https:\/\/docs\.driftstack\.dev\/aup',/,
+      /'Driftstack does not orchestrate captcha bypass or evasion of platform safety controls\. ' \+\s*\n?\s*'See https:\/\/driftstack\.dev\/legal\/aup\/',/,
     );
     expect(body).toMatch(/'Credential-attack tasks are prohibited by our AUP\.',/);
   });

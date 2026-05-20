@@ -113,9 +113,9 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/' {2}\{ "kind": "refuse", "refuseReason": "\.\.\." \}',/);
   });
 
-  it("SYSTEM_PROMPT WHEN-TO-REFUSE AUP-cite framing pinned: 'bypass captchas, brute-force credentials, stalk a specific person, generate CSAM, create non-consensual deepfakes, swat / make false emergency calls, or do anything else categorically prohibited by the AUP at https://docs.driftstack.dev/aup. Refuse politely; cite the AUP.' — pinned so the 6-abuse-category catalog + AUP-URL + refuse-politely-cite-AUP contract all stay documented", () => {
+  it("SYSTEM_PROMPT WHEN-TO-REFUSE AUP-cite framing pinned: 'bypass captchas, brute-force credentials, stalk a specific person, generate CSAM, create non-consensual deepfakes, swat / make false emergency calls, or do anything else categorically prohibited by the AUP at https://driftstack.dev/legal/aup/. Refuse politely; cite the AUP.' — pinned so the 6-abuse-category catalog + AUP-URL + refuse-politely-cite-AUP contract all stay documented (URL updated 2026-05-20 — broken `docs.driftstack.dev/aup` retargeted to the live marketing-site `driftstack.dev/legal/aup/` path)", () => {
     expect(body).toMatch(
-      /'WHEN TO REFUSE: the task asks you to bypass captchas, brute-force',\s*\n?\s*'credentials, stalk a specific person, generate CSAM, create',\s*\n?\s*'non-consensual deepfakes, swat \/ make false emergency calls, or do',\s*\n?\s*'anything else categorically prohibited by the AUP at',\s*\n?\s*'https:\/\/docs\.driftstack\.dev\/aup\. Refuse politely; cite the AUP\.',/,
+      /'WHEN TO REFUSE: the task asks you to bypass captchas, brute-force',\s*\n?\s*'credentials, stalk a specific person, generate CSAM, create',\s*\n?\s*'non-consensual deepfakes, swat \/ make false emergency calls, or do',\s*\n?\s*'anything else categorically prohibited by the AUP at',\s*\n?\s*'https:\/\/driftstack\.dev\/legal\/aup\/\. Refuse politely; cite the AUP\.',/,
     );
   });
 

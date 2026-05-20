@@ -754,7 +754,7 @@ export function registerAgentSessionsRoutes(
         'Live input forwarding requires a Mac fleet node with harness end-to-end ' +
           'enabled. Pre-launch this endpoint forwards mode=manual + pair-mode-after-takeover ' +
           'events to a stub; full activation lands with the v1.0 harness Swift work. ' +
-          'See https://docs.driftstack.dev/agent-sessions/manual-mode for activation status.',
+          'See https://docs.driftstack.dev/api/agent-sessions/ for the full agent-session surface.',
       );
     },
   );

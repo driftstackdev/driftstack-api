@@ -161,7 +161,8 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         if (rawBody.proxy === undefined || rawBody.proxy === null) {
           throw new BadRequestError(
             'A proxy configuration is required to create a session on this deployment. ' +
-              'See https://docs.driftstack.dev/sessions/proxy for the schema (planning 133).',
+              'Supply `proxy` in the create-session body — see the egress section of ' +
+              'https://docs.driftstack.dev/api/sessions/ for the schema.',
           );
         }
       }

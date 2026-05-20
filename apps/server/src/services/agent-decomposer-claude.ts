@@ -71,7 +71,7 @@ const AUP_REFUSAL_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> =
     pattern: /\b(bypass|circumvent|evade).{0,30}(captcha|rate limit|account ban|moderation)\b/i,
     reason:
       'Driftstack does not orchestrate captcha bypass or evasion of platform safety controls. ' +
-      'See https://docs.driftstack.dev/aup',
+      'See https://driftstack.dev/legal/aup/',
   },
   {
     pattern: /\b(brute.?force|credential.?stuff|password spray)\b/i,
@@ -111,7 +111,7 @@ const SYSTEM_PROMPT = [
   'credentials, stalk a specific person, generate CSAM, create',
   'non-consensual deepfakes, swat / make false emergency calls, or do',
   'anything else categorically prohibited by the AUP at',
-  'https://docs.driftstack.dev/aup. Refuse politely; cite the AUP.',
+  'https://driftstack.dev/legal/aup/. Refuse politely; cite the AUP.',
   '',
   'OTHERWISE: emit a plan. Keep plans short (1-8 intents). Always end',
   'a plan with a capture intent so the customer gets something back.',
