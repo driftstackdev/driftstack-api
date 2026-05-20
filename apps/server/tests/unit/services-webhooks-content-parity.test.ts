@@ -56,7 +56,7 @@ function read(p: string): string {
 describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
   const body = read(LIB);
 
-  it('WebhookEventType: 6-literal union (5 customer + V-356 test.ping synthetic)', () => {
+  it('WebhookEventType: 7-literal union (5 customer + V-356 test.ping synthetic + Arc 5 EGRESS session.egress_capability_changed)', () => {
     expect(body).toMatch(/export type WebhookEventType =/);
     expect(body).toMatch(/\| 'session\.completed'/);
     expect(body).toMatch(/\| 'session\.failed'/);
@@ -66,7 +66,8 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ V-356 — synthetic event sent only via POST \/v1\/webhooks\/:id\/test\.\s*\n?\s*\/\/ Customers cannot subscribe to it \(Zod schemas reject it\)/,
     );
-    expect(body).toMatch(/\| 'test\.ping';/);
+    expect(body).toMatch(/\| 'test\.ping'/);
+    expect(body).toMatch(/\| 'session\.egress_capability_changed';/);
   });
 
   it('WebhookDeliveryStatus: 5-literal union (pending/in_flight/delivered/failed/dlq)', () => {

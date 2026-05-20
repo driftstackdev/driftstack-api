@@ -56,7 +56,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(body).toMatch(/description = 'Driftstack admin panel — Driftstack staff only\.',/);
   });
 
-  it('11 navItems in canonical order pinned (Cost added 2026-05-16 for V-541.B)', () => {
+  it('12 navItems in canonical order pinned (Cost added 2026-05-16 for V-541.B; Atlas priority added with the internal atlas-priority queue)', () => {
     const block = body.match(/const navItems = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
     const entries = Array.from(block![1]!.matchAll(/\{ href: '([^']+)', label: '([^']+)' \}/g)).map(
@@ -74,6 +74,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
       { href: '/api-keys', label: 'API keys' },
       { href: '/webhook-dlq', label: 'Webhook DLQ' },
       { href: '/rate-limit-overrides', label: 'Rate limits' },
+      { href: '/atlas-priority-queue', label: 'Atlas priority' },
     ]);
   });
 

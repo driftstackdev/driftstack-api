@@ -119,7 +119,7 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(/repo: SessionRepo;/);
     expect(body).toMatch(/driver: Driver;/);
     expect(body).toMatch(
-      /webhooks\?: \{\s*\n?\s*enqueueEvent: \(\s*\n?\s*accountId: string,\s*\n?\s*eventType: 'session\.completed' \| 'session\.failed',/,
+      /webhooks\?: \{\s*\n?\s*enqueueEvent: \(\s*\n?\s*accountId: string,\s*\n?\s*eventType: 'session\.completed' \| 'session\.failed' \| 'session\.egress_capability_changed',/,
     );
     expect(body).toMatch(
       /\/\*\* V-216: optional customer-facing audit emitter\. \*\/\s*\n?\s*accountAudit\?: \{[\s\S]+?action: 'session\.created' \| 'session\.destroyed';/,
