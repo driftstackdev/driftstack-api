@@ -117,6 +117,20 @@ export interface AuthFlowsRepo {
   }): Promise<AuthFlowTokenRow | null>;
   /** Mark a token consumed. Idempotent — caller checks the find first. */
   consumeAuthToken(args: { kind: AuthFlowKind; id: string; at: Date }): Promise<void>;
+  /**
+   * 2026-05-20 — sweeper-driven bulk delete of stale token rows.
+   * `consumedBefore` deletes rows whose `consumedAt` is non-null
+   * and older than the cutoff (keeps a forensic window for support
+   * tickets). `expiredBefore` deletes rows whose `expiresAt` is
+   * before the cutoff AND `consumedAt` is null. Returns the
+   * number of rows deleted across both predicates. Idempotent;
+   * safe to call from a scheduled job.
+   */
+  deleteStaleAuthTokens(args: {
+    kind: AuthFlowKind;
+    consumedBefore: Date;
+    expiredBefore: Date;
+  }): Promise<number>;
 
   /** Insert a new web-session row. */
   insertWebSession(args: {

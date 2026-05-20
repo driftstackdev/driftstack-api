@@ -135,6 +135,24 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     return Promise.resolve();
   }
 
+  deleteStaleAuthTokens(args: {
+    kind: AuthFlowKind;
+    consumedBefore: Date;
+    expiredBefore: Date;
+  }): Promise<number> {
+    const map = this.tokensByKind[args.kind];
+    let deleted = 0;
+    for (const [id, row] of map.entries()) {
+      const staleConsumed = row.consumedAt !== null && row.consumedAt < args.consumedBefore;
+      const staleExpired = row.consumedAt === null && row.expiresAt < args.expiredBefore;
+      if (staleConsumed || staleExpired) {
+        map.delete(id);
+        deleted += 1;
+      }
+    }
+    return Promise.resolve(deleted);
+  }
+
   insertWebSession(args: {
     accountId: string;
     tokenHash: string;

@@ -5,7 +5,7 @@
 // + `web_sessions` + the new `accounts.password_hash` /
 // `accounts.email_verified_at` columns.
 
-import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import type {
   AuthFlowAccountRow,
   AuthFlowKind,
@@ -177,6 +177,29 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
       .update(t)
       .set({ consumedAt: args.at })
       .where(and(eq(t.id, args.id), isNull(t.consumedAt)));
+  }
+
+  async deleteStaleAuthTokens(args: {
+    kind: AuthFlowKind;
+    consumedBefore: Date;
+    expiredBefore: Date;
+  }): Promise<number> {
+    // postgres-js bind step calls Buffer.byteLength on params; pass ISO
+    // strings rather than raw Date objects (matches d9417a91 drift-guard
+    // pattern that fired the 2026-05-19 scheduled-jobs-poller TypeError).
+    const consumedIso = args.consumedBefore.toISOString();
+    const expiredIso = args.expiredBefore.toISOString();
+    const t = tableForKind(args.kind);
+    const result = await this.database.db
+      .delete(t)
+      .where(
+        or(
+          and(sql`${t.consumedAt} IS NOT NULL`, lt(t.consumedAt, sql`${consumedIso}::timestamptz`)),
+          and(isNull(t.consumedAt), lt(t.expiresAt, sql`${expiredIso}::timestamptz`)),
+        ),
+      )
+      .returning({ id: t.id });
+    return result.length;
   }
 
   async insertWebSession(args: {
