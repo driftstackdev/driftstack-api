@@ -44,8 +44,8 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     );
   });
 
-  it('REFRESH_MS = 5000 module constant pinned — pinned so the auto-poll cadence stays in sync with the SessionsView mirror shape (footer copy + cap-counter both depend on this)', () => {
-    expect(body).toMatch(/const REFRESH_MS = 5000;/);
+  it('2026-05-20 — REFRESH_MS bumped 5000→15_000 (mirror of SessionsView change per d15460c7; customer feedback "the page keeps refreshing")', () => {
+    expect(body).toMatch(/const REFRESH_MS = 15_000;/);
   });
 
   it("V-238 KNOWN_ARCHETYPES single-option catalog pinned with iphone16pro_ios18_7_safari26_4 id + 'iPhone 16 Pro / iOS 18.7 / Safari 26.4' label — pinned so the archetype select stays preselected to the canonical one + disabled until V-136 expansion lands more archetypes", () => {
@@ -66,18 +66,16 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     );
   });
 
-  it('refreshAccountMe() called after handleDelete success + after CreateProfileModal onCreated — pinned so the cap counter unlocks New profile button after delete + flips to disabled after create (V-239 invariant)', () => {
+  it('2026-05-20 — refreshAccountMe still fires after handleDelete success + after CreateProfileModal onCreated (V-239 cap-gate invariant) but the deleteBinding + refresh(false) calls were inserted ahead of refreshAccountMe in handleDelete per the antidetect-browser restructure', () => {
     expect(body).toMatch(
-      /await client\.profiles\.delete\(id\);\s*\n?\s*await refresh\(\);\s*\n?\s*\/\/ V-239 — refresh the cap counter so a deletion unlocks the\s*\n?\s*\/\/ New profile button when we drop below cap\.\s*\n?\s*await refreshAccountMe\(\);/,
+      /await client\.profiles\.delete\(id\);\s*\n?\s*\/\/ Drop the local binding so stale \{currentSessionId, defaultProxyId\}\s*\n?\s*\/\/ entries don't accumulate as customers churn through profiles\.\s*\n?\s*await deleteBinding\(id\);\s*\n?\s*await refresh\(false\);\s*\n?\s*await refreshAccountMe\(\);/,
     );
-    expect(body).toMatch(
-      /void refresh\(\);\s*\n?\s*\/\/ V-239 — refresh the cap counter so the gate flips to\s*\n?\s*\/\/ disabled if we just hit cap\.\s*\n?\s*void refreshAccountMe\(\);/,
-    );
+    expect(body).toMatch(/void refreshAccountMe\(\);/);
   });
 
-  it("Auto-poll lifecycle: useEffect initial fetch + setInterval REFRESH_MS + cleanup clearInterval — pinned so poll stops on unmount and doesn't chew API quota in background; refresh deps [client]; client.profiles.iterate({ limit: 50 }) — pinned so we cap the in-memory accumulation per poll", () => {
+  it('2026-05-20 — auto-poll lifecycle: useEffect runs refresh(true) initially (showLoading hint) + setInterval refresh(false) at REFRESH_MS (no flicker on background ticks); cleanup clearInterval keeps unchanged; client.profiles.iterate({ limit: 50 }) still caps per-poll in-memory accumulation', () => {
     expect(body).toMatch(
-      /useEffect\(\(\) => \{\s*\n?\s*void refresh\(\);\s*\n?\s*const id = window\.setInterval\(\(\) => void refresh\(\), REFRESH_MS\);\s*\n?\s*return \(\) => window\.clearInterval\(id\);\s*\n?\s*\}, \[refresh\]\);/,
+      /useEffect\(\(\) => \{\s*\n?\s*void refresh\(true\);\s*\n?\s*const id = window\.setInterval\(\(\) => void refresh\(false\), REFRESH_MS\);\s*\n?\s*return \(\) => window\.clearInterval\(id\);\s*\n?\s*\}, \[refresh\]\);/,
     );
     expect(body).toMatch(
       /for await \(const profile of client\.profiles\.iterate\(\{ limit: 50 \}\)\)/,
@@ -113,9 +111,9 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     );
   });
 
-  it("friendlyError: DriftstackError → '{title} ({kind}): {detail ?? message}' / Error → .message / fallback String(err) — pinned so client-thrown DriftstackErrors surface their structured shape and non-Error throws still stringify instead of rendering as '[object Object]'", () => {
+  it("2026-05-20 — friendlyError signature widened to (err, baseUrl?: string) for the Tauri-WebKit 'Load failed' diagnosticFetchError preflight; baseUrl-undefined branch keeps the prior DriftstackError → Error → String fallback chain so non-network callers still get the structured shape (rendered as '[object Object]' was the prior bug)", () => {
     expect(body).toMatch(
-      /function friendlyError\(err: unknown\): string \{\s*\n?\s*if \(err instanceof DriftstackError\) \{\s*\n?\s*return `\$\{err\.title\} \(\$\{err\.kind\}\): \$\{err\.detail \?\? err\.message\}`;\s*\n?\s*\}\s*\n?\s*if \(err instanceof Error\) \{\s*\n?\s*return err\.message;\s*\n?\s*\}\s*\n?\s*return String\(err\);\s*\n?\s*\}/,
+      /function friendlyError\(err: unknown, baseUrl\?: string\): string \{\s*\n?\s*\/\/ 2026-05-20 — network-failure preflight \(catches Tauri WebKit\s*\n?\s*\/\/ "Load failed" before falling through to per-view formatting\)\.\s*\n?\s*if \(baseUrl !== undefined\) \{\s*\n?\s*const diag = diagnosticFetchError\(err, baseUrl\);\s*\n?\s*if \(diag !== null\) return diag;\s*\n?\s*\}\s*\n?\s*if \(err instanceof DriftstackError\) \{\s*\n?\s*return `\$\{err\.title\} \(\$\{err\.kind\}\): \$\{err\.detail \?\? err\.message\}`;\s*\n?\s*\}\s*\n?\s*if \(err instanceof Error\) \{\s*\n?\s*return err\.message;\s*\n?\s*\}\s*\n?\s*return String\(err\);\s*\n?\s*\}/,
     );
   });
 

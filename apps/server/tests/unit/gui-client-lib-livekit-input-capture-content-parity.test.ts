@@ -64,9 +64,9 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
     );
   });
 
-  it("modifiersFromEvent 4-modifier roster pinned: Shift + Control + Alt + Meta + 'undefined when no modifier is held (matches the InputEvent optional modifiers field).' — pinned so the 4-modifier roster + undefined-for-empty contract stays documented (drift to including empty array would mismatch the optional InputEvent.modifiers field expectation)", () => {
+  it('2026-05-20 — modifiersFromEvent roster swapped from DOM-standard Shift/Control/Alt/Meta to Mac-native cmd/ctrl/shift/option (1:1 with kCGEventFlagMask* on the harness side; eliminates the harness-side Meta→Command remap on every key press). Order swapped to metaKey/ctrlKey/shiftKey/altKey so cmd surfaces first in the canonical label sequence.', () => {
     expect(body).toMatch(
-      /if \(event\.shiftKey\) mods\.push\('Shift'\);\s*\n?\s*if \(event\.ctrlKey\) mods\.push\('Control'\);\s*\n?\s*if \(event\.altKey\) mods\.push\('Alt'\);\s*\n?\s*if \(event\.metaKey\) mods\.push\('Meta'\);\s*\n?\s*return mods\.length > 0 \? mods : undefined;/,
+      /if \(event\.metaKey\) mods\.push\('cmd'\);\s*\n?\s*if \(event\.ctrlKey\) mods\.push\('ctrl'\);\s*\n?\s*if \(event\.shiftKey\) mods\.push\('shift'\);\s*\n?\s*if \(event\.altKey\) mods\.push\('option'\);\s*\n?\s*return mods\.length > 0 \? mods : undefined;/,
     );
   });
 

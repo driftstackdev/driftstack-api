@@ -69,15 +69,15 @@ describe('LK.6.d — useInputCapture hook', () => {
     expect(body).toMatch(/raw === 0 \|\| raw === 1 \|\| raw === 2/);
   });
 
-  it('modifiersFromEvent collects Shift / Control / Alt / Meta from KeyboardEvent flags', () => {
+  it('2026-05-20 — modifiersFromEvent collects cmd/ctrl/shift/option (Mac-native labels, 1:1 with Quartz CGEventFlagMask) from KeyboardEvent meta/ctrl/shift/alt flags', () => {
     expect(body).toMatch(/event\.shiftKey/);
     expect(body).toMatch(/event\.ctrlKey/);
     expect(body).toMatch(/event\.altKey/);
     expect(body).toMatch(/event\.metaKey/);
-    expect(body).toMatch(/'Shift'/);
-    expect(body).toMatch(/'Control'/);
-    expect(body).toMatch(/'Alt'/);
-    expect(body).toMatch(/'Meta'/);
+    expect(body).toMatch(/'cmd'/);
+    expect(body).toMatch(/'ctrl'/);
+    expect(body).toMatch(/'shift'/);
+    expect(body).toMatch(/'option'/);
   });
 
   it('keyboard events bind to window (capture works without video focus)', () => {

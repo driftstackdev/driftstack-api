@@ -46,7 +46,10 @@ describe('EG-API-1.4 — egress safeguard at API layer', () => {
     expect(res.statusCode).toBe(400);
     const body = res.json<{ detail: string }>();
     expect(body.detail).toMatch(/proxy configuration is required/);
-    expect(body.detail).toMatch(/docs\.driftstack\.dev\/sessions\/proxy/);
+    // 2026-05-20 — docs pointer landed on docs.driftstack.dev/api/sessions/
+    // (egress section in the sessions reference) rather than a separate
+    // /sessions/proxy page; matches the routes/sessions.ts source string.
+    expect(body.detail).toMatch(/docs\.driftstack\.dev\/api\/sessions/);
   });
 
   it('wired posture: POST /v1/sessions WITH proxy → 201 (safeguard passes through to service)', async () => {

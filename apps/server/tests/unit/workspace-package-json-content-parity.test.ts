@@ -70,7 +70,13 @@ describe('W529.A /package.json (workspace root) content parity', () => {
   });
 
   it("test + pretest + lint + typecheck framing pinned: 'pretest: npm run build --workspaces --if-present' (fresh-build hook before vitest) + 'test: vitest run' + 'test:watch: vitest' + 'bench: vitest bench --run' + 'bench:check-regression: node scripts/check-bench-regression.mjs' + 'typecheck: npm run typecheck --workspaces --if-present' + 'lint: eslint . && node scripts/check-subprocessor-mirror.mjs' + 'format: prettier --write .' + 'format:check: prettier --check .' — pinned so the pretest-build-hook + test/bench/typecheck/lint workspace propagation + check-subprocessor-mirror lint-companion commitment survives", () => {
-    expect(pkg.scripts.pretest).toBe('npm run build --workspaces --if-present');
+    // 2026-05-20 — pretest wraps the workspace build in a
+    // PUBLIC_API_BASE_URL default so astro builds don't crash when
+    // the env var is unset (pre-push gate guarantee per task #45);
+    // assert the env-default literal + the trailing build command.
+    expect(pkg.scripts.pretest).toBe(
+      'PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL:-http://localhost:3000}" npm run build --workspaces --if-present',
+    );
     expect(pkg.scripts.test).toBe('vitest run');
     expect(pkg.scripts['test:watch']).toBe('vitest');
     expect(pkg.scripts.bench).toBe('vitest bench --run');
