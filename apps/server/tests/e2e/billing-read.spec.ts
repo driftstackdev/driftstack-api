@@ -68,12 +68,17 @@ test('GET /v1/billing on a fresh account → no subscription, inactive trial pac
 
 test('GET /v1/billing reflects an active trial pack (account columns)', async ({ request }) => {
   const seed = await seedAccount(server.client, { tier: 'trial_pack' });
-  const futureExpiry = new Date(Date.now() + 14 * 86_400_000);
+  // 2026-05-20 — pre-serialize to ISO string; raw client`…${Date}…`
+  // crashes postgres-js's Bind step (Date instances aren't accepted
+  // there since drizzle-orm 0.38.4 swaps the OID timestamp/timestamptz
+  // serializers with transparentParser). Same fix as account-audit-
+  // log.spec.ts:53 + auth-flows-repo.ts:190.
+  const futureExpiry = new Date(Date.now() + 14 * 86_400_000).toISOString();
   await server.client`
     UPDATE accounts
     SET trial_pack_purchased_at = NOW(),
         trial_pack_credit_cents = 200,
-        trial_pack_expires_at = ${futureExpiry},
+        trial_pack_expires_at = ${futureExpiry}::timestamptz,
         trial_pack_redeemed = false
     WHERE id = ${seed.accountId}
   `;
@@ -89,12 +94,13 @@ test('GET /v1/billing reflects an active trial pack (account columns)', async ({
 
 test('GET /v1/billing trial_pack redeemed=true after redemption', async ({ request }) => {
   const seed = await seedAccount(server.client, { tier: 'trial_pack' });
-  const futureExpiry = new Date(Date.now() + 14 * 86_400_000);
+  // Same Date-to-ISO pre-serialization as the previous test above.
+  const futureExpiry = new Date(Date.now() + 14 * 86_400_000).toISOString();
   await server.client`
     UPDATE accounts
     SET trial_pack_purchased_at = NOW(),
         trial_pack_credit_cents = 0,
-        trial_pack_expires_at = ${futureExpiry},
+        trial_pack_expires_at = ${futureExpiry}::timestamptz,
         trial_pack_redeemed = true
     WHERE id = ${seed.accountId}
   `;

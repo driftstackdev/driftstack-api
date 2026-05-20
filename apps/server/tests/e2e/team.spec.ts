@@ -64,13 +64,16 @@ async function seedInvite(
   const token = `inv-${randomUUID()}`;
   const tokenHash = createHash('sha256').update(token).digest('hex');
   const id = randomUUID();
-  const expiresAt = new Date(Date.now() + 7 * 86_400_000); // +7d
+  // 2026-05-20 — pre-serialize Date to ISO; postgres-js Bind step
+  // doesn't accept raw Date params (drizzle 0.38.4 transparentParser
+  // swap; same fix as auth-flows-repo.ts:190).
+  const expiresAt = new Date(Date.now() + 7 * 86_400_000).toISOString(); // +7d
   await client`
     INSERT INTO team_invites
       (id, owner_account_id, invited_by_account_id, invitee_email,
        role, invite_token_hash, invite_expires_at)
     VALUES (${id}, ${ownerAccountId}, ${ownerAccountId}, ${inviteeEmail},
-            ${role}, ${tokenHash}, ${expiresAt})
+            ${role}, ${tokenHash}, ${expiresAt}::timestamptz)
   `;
   return { token, inviteId: id };
 }

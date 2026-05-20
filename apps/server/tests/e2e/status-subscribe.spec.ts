@@ -42,11 +42,14 @@ async function seedSubscriberPending(
 ): Promise<{ confirmTokenPlain: string }> {
   const confirmTokenPlain = `cfm-${randomUUID()}`;
   const tokenHash = createHash('sha256').update(confirmTokenPlain).digest('hex');
-  const expiresAt = new Date(Date.now() + 24 * 3600 * 1000);
+  // 2026-05-20 — pre-serialize Date to ISO; postgres-js Bind step
+  // doesn't accept raw Date params (drizzle 0.38.4 transparentParser
+  // swap; same fix as auth-flows-repo.ts:190).
+  const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
   await client`
     INSERT INTO status_subscribers
       (email, confirm_token_hash, confirm_expires_at)
-    VALUES (${email}, ${tokenHash}, ${expiresAt})
+    VALUES (${email}, ${tokenHash}, ${expiresAt}::timestamptz)
   `;
   return { confirmTokenPlain };
 }

@@ -50,12 +50,18 @@ async function insertAuditRows(
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
     if (!row) continue;
-    const ts = new Date(Date.now() - (row.offsetMs ?? i * 1000));
+    // 2026-05-20 — pre-serialize to ISO string. postgres-js's Bind
+    // step calls Buffer.byteLength on raw params; Date instances
+    // crash with "Received an instance of Date" because drizzle-orm
+    // 0.38.4's construct(client) swaps postgres-js's OID 1184/1082/
+    // 1083/1114 serializers with a no-op transparentParser. Same fix
+    // pattern as auth-flows-repo.ts:190 + scheduled-jobs-repo.ts:70.
+    const ts = new Date(Date.now() - (row.offsetMs ?? i * 1000)).toISOString();
     await client`
       INSERT INTO account_audit_log
         (account_id, actor_type, action, target_resource_id, payload, timestamp)
       VALUES (${accountId}, 'customer', ${row.action},
-              ${row.targetResourceId ?? null}, '{}'::jsonb, ${ts})
+              ${row.targetResourceId ?? null}, '{}'::jsonb, ${ts}::timestamptz)
     `;
   }
 }
