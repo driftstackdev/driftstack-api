@@ -65,7 +65,11 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
       /\/\/ V-263 — Cmd\+, shortcut\. MUST live above any conditional returns\s*\n?\s*\/\/ below; React hooks order is positional, so registering the effect\s*\n?\s*\/\/ after an early-return pulls the hooks count out of sync between\s*\n?\s*\/\/ the wizard render \(early return\) and the post-wizard render \(full\s*\n?\s*\/\/ shell\), which unmounts the entire tree and shows a black screen\./,
     );
     expect(body).toMatch(
-      /if \(e\.metaKey && e\.key === ','\) \{\s*\n?\s*e\.preventDefault\(\);\s*\n?\s*setView\(\{ kind: 'settings' \}\);\s*\n?\s*\}/,
+      // 2026-05-20 7291ee25 — Cmd+Shift+L sign-out shortcut added alongside
+      // the existing Cmd+, settings shortcut; the early-return after
+      // setView() became load-bearing so the next handler check doesn't
+      // also fire. Pin the explicit return.
+      /if \(e\.metaKey && e\.key === ','\) \{\s*\n?\s*e\.preventDefault\(\);\s*\n?\s*setView\(\{ kind: 'settings' \}\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
   });
 
@@ -103,10 +107,12 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     );
   });
 
-  it("Sidebar 3-section taxonomy: 'Sessions' (Active / History / Profiles / Recordings) + 'Network' (Proxies / Connectivity test) + 'Cluster' (Mac mini fleet / Settings) — pinned so the IA grouping stays meaningful (proxies + connectivity belong together under network plane; fleet + settings belong together under cluster plane)", () => {
-    expect(body).toMatch(/<SidebarSection label="Sessions">/);
-    expect(body).toMatch(/<SidebarSection label="Network">/);
+  it("Sidebar 4-section taxonomy (2026-05-20 bf3b3628 — antidetect-browser restructure): 'Browse' (Profiles + Proxies) + 'History' (Session log + Recordings) + 'Diagnostics' (Raw sessions + Connectivity test) + 'Cluster' (Mac mini fleet, cloud-customers gated via isCloudBaseUrl) + 'Account' (Settings) — pinned so the IA grouping stays profile-first per the antidetect-browser paradigm", () => {
+    expect(body).toMatch(/<SidebarSection label="Browse">/);
+    expect(body).toMatch(/<SidebarSection label="History">/);
+    expect(body).toMatch(/<SidebarSection label="Diagnostics">/);
     expect(body).toMatch(/<SidebarSection label="Cluster">/);
+    expect(body).toMatch(/<SidebarSection label="Account">/);
     expect(body).toMatch(/Mac mini fleet/);
     expect(body).toMatch(/Connectivity test/);
   });
