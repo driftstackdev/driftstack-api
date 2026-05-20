@@ -235,7 +235,37 @@ const apiBaseUrl = resolveApiBaseUrl();
       const cancelBtn = sections.confirm.querySelector('[data-cancel]');
       const retryBtn = sections.error.querySelector('[data-retry]');
 
+      // Server's document_key values are 'tos' | 'privacy' | 'dpa' |
+      // 'aup' but the marketing-site URL slug for the terms-of-service
+      // page is 'terms', not 'tos'. Remap so links resolve; pass
+      // through the others (they already match).
+      const DOC_URL_SLUG = { tos: 'terms' };
+      function urlSlug(key) {
+        return DOC_URL_SLUG[key] ?? key;
+      }
+      // Friendly label per document. The server's `title` field
+      // historically only carried the document_key (e.g. 'tos') which
+      // reads ugly; map to human titles when present.
+      const DOC_LABEL = {
+        tos: 'Terms of Service',
+        privacy: 'Privacy Policy',
+        dpa: 'Data Processing Addendum',
+        aup: 'Acceptable Use Policy',
+      };
+      function docLabel(doc) {
+        return DOC_LABEL[doc.document_key] ?? doc.title ?? doc.document_key;
+      }
+
+      // 2026-05-20 — stash the pending list in a closure variable so
+      // the "Accept all" click handler reads the canonical
+      // {document_key, current_version} pairs that came back from
+      // /v1/auth/cli-authorize/bind's 409 body. Earlier rev tried to
+      // reconstruct document_key by parsing the rendered <a href>,
+      // which broke for tos (URL slug is /legal/terms/, document_key
+      // is 'tos') and lost version precision on text-node parsing.
+      let pendingAcceptances = [];
       function showLegalAccept(pending) {
+        pendingAcceptances = pending;
         const list = sections.legalAccept.querySelector('[data-legal-pending-list]');
         if (!list) return;
         list.innerHTML = '';
@@ -245,11 +275,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           const dot = document.createElement('span');
           dot.className = 'inline-block size-1.5 rounded-full bg-rose-300';
           const a = document.createElement('a');
-          a.href = 'https://driftstack.dev/legal/' + doc.document_key + '/';
+          a.href = 'https://driftstack.dev/legal/' + urlSlug(doc.document_key) + '/';
           a.target = '_blank';
           a.rel = 'noopener noreferrer';
           a.className = 'text-rose-100 underline underline-offset-4 hover:text-white';
-          a.textContent = doc.title || doc.document_key;
+          a.textContent = docLabel(doc);
           const ver = document.createElement('span');
           ver.className = 'text-xs text-rose-300';
           ver.textContent = '(v' + doc.current_version + ')';
@@ -339,21 +369,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       const acceptAllBtn = sections.legalAccept.querySelector('[data-legal-accept-all]');
       const acceptStatus = sections.legalAccept.querySelector('[data-legal-status]');
       acceptAllBtn.addEventListener('click', function () {
-        const list = sections.legalAccept.querySelector('[data-legal-pending-list]');
-        const items = list ? list.querySelectorAll('a') : [];
-        if (items.length === 0) return;
-        const pending = [];
-        items.forEach(function (a) {
-          // Reconstruct document_key + version from the href + text.
-          const m = a.href.match(/\/legal\/([a-z-]+)\//);
-          const v = (a.nextSibling && a.nextSibling.textContent ? a.nextSibling.textContent : '')
-            .replace(/[^0-9.]/g, '');
-          if (m && v) pending.push({ document_key: m[1], version: v });
-        });
+        if (pendingAcceptances.length === 0) return;
         acceptAllBtn.disabled = true;
         acceptStatus.textContent = 'Recording acceptance…';
         Promise.all(
-          pending.map(function (doc) {
+          pendingAcceptances.map(function (doc) {
             return fetch(apiBaseUrl + '/v1/legal/accept', {
               method: 'POST',
               headers: {
@@ -362,7 +382,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               },
               body: JSON.stringify({
                 document_key: doc.document_key,
-                version: doc.version,
+                version: doc.current_version,
               }),
             });
           }),
@@ -377,7 +397,6 @@ const apiBaseUrl = resolveApiBaseUrl();
               return;
             }
             acceptStatus.textContent = 'Accepted. Authorizing…';
-            // Show the confirm UI again briefly + auto-fire the bind.
             show('confirm');
             authorize();
           })

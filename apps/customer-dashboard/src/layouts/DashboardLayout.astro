@@ -423,19 +423,28 @@ const navItems = [
             .then(function (body) {
               if (!body || !Array.isArray(body.required) || body.required.length === 0) return;
               banner.classList.remove('hidden');
+              // 2026-05-20 — server's document_key for the
+              // Terms-of-Service doc is 'tos' but the marketing-site
+              // URL slug is /legal/terms/. Map the one mismatch.
+              const DOC_URL_SLUG = { tos: 'terms' };
+              const DOC_LABEL = {
+                tos: 'Terms of Service',
+                privacy: 'Privacy Policy',
+                dpa: 'Data Processing Addendum',
+                aup: 'Acceptable Use Policy',
+              };
               body.required.forEach(function (doc) {
                 const li = document.createElement('li');
                 li.className = 'flex items-center gap-2';
                 const dot = document.createElement('span');
                 dot.className = 'inline-block size-1.5 rounded-full bg-glow-red';
                 const a = document.createElement('a');
-                // Slug map: server emits document_key (terms / privacy /
-                // aup / dpa); marketing-site paths use the same slug.
-                a.href = 'https://driftstack.dev/legal/' + doc.document_key + '/';
+                const slug = DOC_URL_SLUG[doc.document_key] || doc.document_key;
+                a.href = 'https://driftstack.dev/legal/' + slug + '/';
                 a.target = '_blank';
                 a.rel = 'noopener noreferrer';
                 a.className = 'text-glow-red underline underline-offset-4 hover:text-glow-red-soft';
-                a.textContent = doc.title || doc.document_key;
+                a.textContent = DOC_LABEL[doc.document_key] || doc.title || doc.document_key;
                 const ver = document.createElement('span');
                 ver.className = 'text-xs text-ink-muted';
                 ver.textContent = '(v' + doc.current_version + ')';

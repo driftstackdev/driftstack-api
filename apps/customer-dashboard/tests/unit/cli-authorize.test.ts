@@ -151,7 +151,7 @@ describe('cli-authorize page — local integration', () => {
     expect(preview?.textContent).toContain('ABCDEF'.slice(0, 6));
   });
 
-  it('on 409 LegalAcceptanceRequired with top-level pending_acceptances, surfaces legal-accept UI (regression for the .extensions.* shape bug)', async () => {
+  it('on 409 LegalAcceptanceRequired with top-level pending_acceptances, surfaces legal-accept UI with mapped slugs + friendly labels (regression for .extensions.* shape AND tos→terms URL slug)', async () => {
     const html = loadBuiltPage();
     const local = setUpDom(html, (window) => {
       window.localStorage.setItem('ds_web_session_token', 'tok-ok');
@@ -166,10 +166,10 @@ describe('cli-authorize page — local integration', () => {
             status: 409,
             detail: 'Operation requires acceptance of 4 document(s) before proceeding.',
             pending_acceptances: [
-              { document_key: 'terms', title: 'Terms', current_version: '1.0' },
-              { document_key: 'privacy', title: 'Privacy', current_version: '1.0' },
-              { document_key: 'aup', title: 'AUP', current_version: '1.0' },
-              { document_key: 'dpa', title: 'DPA', current_version: '1.0' },
+              { document_key: 'tos', current_version: '1.0' },
+              { document_key: 'privacy', current_version: '1.0' },
+              { document_key: 'aup', current_version: '1.0' },
+              { document_key: 'dpa', current_version: '1.0' },
             ],
           }),
           { status: 409, headers: { 'content-type': 'application/problem+json' } },
@@ -183,10 +183,75 @@ describe('cli-authorize page — local integration', () => {
     await flush();
     await flush();
     expect(visibleState(local.window)).toBe('legal-accept');
-    const pendingList = local.window.document.querySelector(
-      '[data-state="legal-accept"] [data-legal-pending-list]',
+    const items = local.window.document.querySelectorAll(
+      '[data-state="legal-accept"] [data-legal-pending-list] li',
     );
-    expect(pendingList?.querySelectorAll('li').length).toBe(4);
+    expect(items.length).toBe(4);
+    // tos → /legal/terms/ slug mapping + friendly label.
+    const tosLink = items[0].querySelector('a') as HTMLAnchorElement;
+    expect(tosLink.href).toBe('https://driftstack.dev/legal/terms/');
+    expect(tosLink.textContent).toBe('Terms of Service');
+    // Pass-through slugs work too.
+    const privacyLink = items[1].querySelector('a') as HTMLAnchorElement;
+    expect(privacyLink.href).toBe('https://driftstack.dev/legal/privacy/');
+    expect(privacyLink.textContent).toBe('Privacy Policy');
+  });
+
+  it('Accept-all posts canonical document_key (NOT the URL slug) and current_version to /v1/legal/accept', async () => {
+    const html = loadBuiltPage();
+    const local = setUpDom(html, (window) => {
+      window.localStorage.setItem('ds_web_session_token', 'tok-ok');
+    });
+    dom = local;
+    local.setFetchPlan([
+      // 1. bind → 409 with the 4 pending docs.
+      (_call) =>
+        new local.window.Response(
+          JSON.stringify({
+            type: 'https://errors.driftstack.dev/legal-acceptance-required',
+            title: 'Legal acceptance required',
+            status: 409,
+            detail: 'Operation requires acceptance of 4 document(s) before proceeding.',
+            pending_acceptances: [
+              { document_key: 'tos', current_version: '1.2' },
+              { document_key: 'privacy', current_version: '1.0' },
+              { document_key: 'aup', current_version: '1.1' },
+              { document_key: 'dpa', current_version: '1.0' },
+            ],
+          }),
+          { status: 409, headers: { 'content-type': 'application/problem+json' } },
+        ),
+      // 2-5. Four /v1/legal/accept calls, all 200.
+      (_call) => new local.window.Response('{}', { status: 200 }),
+      (_call) => new local.window.Response('{}', { status: 200 }),
+      (_call) => new local.window.Response('{}', { status: 200 }),
+      (_call) => new local.window.Response('{}', { status: 200 }),
+      // 6. retry bind → 200 success.
+      (_call) => new local.window.Response(JSON.stringify({ status: 'bound' }), { status: 200 }),
+    ]);
+    await flush();
+    (local.window.document.querySelector('[data-authorize]') as HTMLButtonElement).click();
+    await flush();
+    await flush();
+    (
+      local.window.document.querySelector(
+        '[data-state="legal-accept"] [data-legal-accept-all]',
+      ) as HTMLButtonElement
+    ).click();
+    await flush();
+    await flush();
+    // Verify the 4 POSTs carry the canonical document_key + current_version.
+    const acceptCalls = local.fetchCalls.filter((c) => c.url.endsWith('/v1/legal/accept'));
+    expect(acceptCalls.length).toBe(4);
+    const bodies = acceptCalls.map((c) => JSON.parse(String(c.init?.body)));
+    expect(bodies).toEqual([
+      { document_key: 'tos', version: '1.2' },
+      { document_key: 'privacy', version: '1.0' },
+      { document_key: 'aup', version: '1.1' },
+      { document_key: 'dpa', version: '1.0' },
+    ]);
+    // After successful accept-all + bind retry, success state visible.
+    expect(visibleState(local.window)).toBe('success');
   });
 
   it('on 200 bind success, shows success state', async () => {
