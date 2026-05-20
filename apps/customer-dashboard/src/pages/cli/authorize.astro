@@ -167,11 +167,28 @@ const apiBaseUrl = resolveApiBaseUrl();
         legalAccept: root.querySelector('[data-state="legal-accept"]'),
       };
 
+      // Map data-state attribute (kebab-case) to the section key
+      // (camelCase). 2026-05-20 — earlier rev called show('needs-signin')
+      // / show('legal-accept') which never matched the keys (which are
+      // 'needsSignin' / 'legalAccept'), so the function hid every
+      // section + the page rendered blank under the header. Caught by
+      // the cli-authorize.test.ts integration test.
+      const KEY_BY_STATE = {
+        loading: 'loading',
+        missing: 'missing',
+        'needs-signin': 'needsSignin',
+        confirm: 'confirm',
+        success: 'success',
+        error: 'error',
+        'legal-accept': 'legalAccept',
+      };
+
       function show(name) {
+        const target = KEY_BY_STATE[name] ?? name;
         for (const key of Object.keys(sections)) {
           const el = sections[key];
           if (!el) continue;
-          if (key === name) el.classList.remove('hidden');
+          if (key === target) el.classList.remove('hidden');
           else el.classList.add('hidden');
         }
       }
