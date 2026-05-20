@@ -23,6 +23,11 @@ const PAIR_MODE_ACTIONS = [
   // emits an audit row too. Treated as part of the same pair-mode-
   // adjacent action family for surface-coverage purposes.
   'agent_session.mode.changed',
+  // Slice 6 follow-up 2026-05-20 — agent-session lifecycle audit
+  // rows (create on POST /v1/agent-sessions, destroy on DELETE
+  // /v1/agent-sessions/:id customer-close path).
+  'agent_session.created',
+  'agent_session.destroyed',
 ] as const;
 
 describe('Arc 4 Wave 2.B sub-slice 8.20.b pair-mode audit log surface parity', () => {

@@ -279,6 +279,16 @@ export const AccountAuditActionSchema = z.enum([
   // carries {from, to}; ai→manual / pair→ai is most relevant for
   // incident-investigation queries.
   'agent_session.mode.changed',
+  // Slice 6 follow-up 2026-05-20 — agent-session lifecycle (create
+  // + destroy). Distinct from session.created / session.destroyed
+  // (those audit the underlying driver session). Customers need
+  // the agent-layer audit trail to reconstruct "which agent session
+  // ran what work" for billing dispute / incident investigation.
+  // Payload: created carries {agent_session_id, initial_mode}; destroyed
+  // carries {agent_session_id, reason} where reason is the
+  // closeWithReason discriminator ('customer-closed' on this route).
+  'agent_session.created',
+  'agent_session.destroyed',
   // 2026-05-20 — BYOK Anthropic key-management lifecycle (pre-launch
   // blocker per audit-log-coverage audit 2026-05-19). Customer needs
   // to audit who set/cleared/tested their Anthropic credential —

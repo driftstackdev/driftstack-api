@@ -424,6 +424,22 @@ export function registerAgentSessionsRoutes(
         }
       }
       const livekit = await maybeMintLivekit(created.id, ctx.account.id);
+      // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
+      // effort emit; audit failures don't break the create. Distinct
+      // action from session.created (which audits the underlying driver
+      // session at the regular /v1/sessions surface).
+      try {
+        await accountAudit?.record({
+          accountId: ctx.account.id,
+          actorType: 'customer',
+          action: 'agent_session.created',
+          targetResourceId: `agent_session_${created.id}`,
+          payload: { agent_session_id: created.id, initial_mode: created.mode },
+          ipAddress: readClientIp(req),
+        });
+      } catch {
+        /* swallow */
+      }
       return reply.code(201).send(publicAgentSession(created, livekit));
     },
   );
@@ -1219,6 +1235,22 @@ export function registerAgentSessionsRoutes(
       // delete is idempotent so concurrent budget-exhausted close
       // from the runtime is safe.
       byokKeyCache?.delete(req.params.id);
+      // Slice 6 follow-up 2026-05-20 — agent-session destroy audit.
+      // Best-effort emit. Reason 'customer-closed' captured at the
+      // route-level (runtime-driven closures use their own audit
+      // pathway at the budget/timeout sweepers).
+      try {
+        await accountAudit?.record({
+          accountId: ctx.account.id,
+          actorType: 'customer',
+          action: 'agent_session.destroyed',
+          targetResourceId: `agent_session_${req.params.id}`,
+          payload: { agent_session_id: req.params.id, reason: 'customer-closed' },
+          ipAddress: readClientIp(req),
+        });
+      } catch {
+        /* swallow */
+      }
       return reply.code(204).send();
     },
   );

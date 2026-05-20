@@ -431,19 +431,25 @@ transition emits an `agent_session.pair_mode.timeout` audit row.
 
 ## Audit log
 
-Four actions land on the customer audit log per pair-mode +
-mode-change event (see [Audit log](/api/audit-log/)):
+Six actions land on the customer audit log across the agent-session
+lifecycle + state machine (see [Audit log](/api/audit-log/)):
 
+- `agent_session.created` (customer-initiated `POST /v1/agent-sessions`)
+- `agent_session.destroyed` (customer-initiated `DELETE /v1/agent-sessions/:id`)
+- `agent_session.mode.changed` (customer-initiated `POST /:id/mode`)
 - `agent_session.pair_mode.takeover` (customer-initiated)
 - `agent_session.pair_mode.handback` (customer-initiated)
 - `agent_session.pair_mode.timeout` (system-emitted on
   heartbeat-timeout sweeps)
-- `agent_session.mode.changed` (customer-initiated `POST /:id/mode`)
 
-Payload for the 3 pair-mode rows carries `{ from, to, client_id? }`
-for downstream reconstruction of the state-machine history.
-`agent_session.mode.changed` payload carries `{ from, to }`
-(operational-mode strings: `manual` / `ai` / `pair`). Filter via
+Lifecycle payloads: `created` carries `{ agent_session_id, initial_mode }`;
+`destroyed` carries `{ agent_session_id, reason }` (reason is the
+closeWithReason discriminator — `'customer-closed'` on the customer
+DELETE route). Payload for the 3 pair-mode rows carries
+`{ from, to, client_id? }` for downstream reconstruction of the
+state-machine history. `agent_session.mode.changed` payload carries
+`{ from, to }` (operational-mode strings: `manual` / `ai` / `pair`).
+Filter via
 `GET /v1/account/audit-log?action=agent_session.pair_mode.takeover`.
 
 ## Errors
