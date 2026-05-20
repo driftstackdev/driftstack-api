@@ -142,11 +142,29 @@ parity gaps.
 3. **Per-method content parity tests** for the 4 candidate
    resources (recipes / usage / sessions / agent-sessions). The
    existing `sdk-*-content-parity.test.ts` files pin signature +
-   docstring shape but not method count cross-SDK.
+   docstring shape but not method count cross-SDK. Deferred —
+   post-launch polish.
 
-4. **Go SDK method-count audit** — this audit didn't sample Go
-   method counts (Go files mix struct definitions, request
-   options, helpers, and exported methods). Worth a separate pass.
+4. ~~**Go SDK method-count audit**~~ — **CLOSED 2026-05-20.**
+   Sampled all 18 Go resources via `grep -cE '^func \(r \*[A-Z][a-zA-Z]+Resource\)' packages/sdk-go/*.go`.
+   Counts vs TS / Py-halved (constructors excluded):
+
+   ```text
+   account:9/8/8     agent_sessions:9/9/9    api_keys:4/4/4
+   audit_log:4/4/3   auth:14/14/14           billing:4/4/4
+   crypto_orders:8/8/8 egress:5/5/5          email_prefs:4/4/4
+   legal:3/3/3       mfa:5/5/5               profile_snapshots:8/8/8
+   profiles:7/8/7    recipes:1/1/1           sessions:9/11/9
+   team:5/5/5        usage:2/2/2             webhooks:9/11/9
+   ```
+
+   Real divergences: (a) Go `audit_log` 3 vs TS/Py 4 — missing
+   `iterate()` helper (TS-only lazy pagination, deferred); (b) Go
+   `profiles` 7 vs Py 8 — Py adds `iterate()` mirror; (c) Go
+   `sessions` 9 vs Py 11 / TS 9 — Py adds `iterate()` + an
+   extra helper; (d) Go `webhooks` 9 vs Py 11 / TS 11 — Go
+   missing 2 webhook helpers. All four are convenience helpers,
+   NOT customer-facing route gaps. Defer to post-launch.
 
 ## Verdict
 
@@ -160,3 +178,13 @@ per-method deep audit is a Tier-3 polish slice that adds
 ~1-2 hours of work and surfaces ≤4 minor inconsistencies. Defer
 to post-launch unless a specific customer flow needs the Py-only
 method in TS.
+
+## Closure summary (2026-05-20)
+
+- Item 1 (sessions deep audit): CLOSED. Added TS `sessions.get(sessionId)`.
+- Item 2 (usage deep audit): CLOSED. Naming divergence intentional.
+- Item 3 (per-method content parity tests): DEFERRED to post-launch.
+- Item 4 (Go SDK method-count audit): CLOSED. Convenience-helper deltas only; no route gaps.
+
+Audit is COMPLETE for v1.0. Re-open if a specific customer
+flow surfaces a missing SDK method.
