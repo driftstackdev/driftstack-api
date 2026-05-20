@@ -91,7 +91,7 @@ describe('W777 docs /sdk/versioning content parity', () => {
     expect(p).toMatch(
       /2\. The SDK has been in production use at that customer for ≥ 30 days\s*\n?\s+without breaking changes\./,
     );
-    expect(p).toMatch(/3\. Founder explicitly approves the 1\.0 cut\./);
+    expect(p).toMatch(/3\. Driftstack explicitly approves the 1\.0 cut\./);
   });
 
   it('CRITICAL 3-language @deprecated annotation framing pinned. JSDoc @deprecated + Python DeprecationWarning + Go doc-comment // Deprecated:. Each SDK runtime emits a one-time deprecation warning on first use except Go (doc-only, noise-avoidance).', () => {
@@ -197,8 +197,8 @@ describe('W777 docs /sdk/versioning content parity', () => {
   it("F-5 (Issue 5) founder-approval framing — current-scale framing instead of launch-window. The 'Publish steps are gated on founder approval at the current scale. Once the customer base + release cadence justify it, MINOR + PATCH publishes will run autonomously while MAJOR publishes continue to require explicit founder approval.' wording is the canonical release-gating policy. (Refresh of the prior 'Pre-launch / Post-launch' framing stripped per Issue 5.)", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Publish steps are gated on founder approval at the current scale\./);
-    expect(p).toMatch(/MAJOR publishes continue to\s*\n?require explicit founder approval\./);
+    expect(p).toMatch(/Publish steps are gated on Driftstack approval at the current scale\./);
+    expect(p).toMatch(/MAJOR publishes continue to\s*\n?require explicit Driftstack approval\./);
     expect(p).not.toMatch(/Pre-launch \(no paying customers yet\)/);
   });
 

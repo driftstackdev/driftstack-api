@@ -164,9 +164,9 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
     );
   });
 
-  it('CRITICAL apps without _headers/robots.txt pinned — customer-dashboard/admin-panel/status-site rely on the marketing/docs deployment-config inheritance pattern. Pinning the absence prevents accidental drift to per-app config duplication.', () => {
-    expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/public/_headers'))).toBe(false);
-    expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/public/_headers'))).toBe(false);
+  it('CRITICAL customer-dashboard + admin-panel ship their own _headers (2026-05-20 security-headers add — X-Frame-Options + X-Content-Type-Options + Referrer-Policy + Permissions-Policy); status-site still inherits from the marketing/docs deployment-config pattern; none of the three currently ship robots.txt overrides.', () => {
+    expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/public/_headers'))).toBe(true);
+    expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/public/_headers'))).toBe(true);
     expect(existsSync(resolve(REPO_ROOT, 'apps/status-site/public/_headers'))).toBe(false);
     expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/public/robots.txt'))).toBe(false);
     expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/public/robots.txt'))).toBe(false);
