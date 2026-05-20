@@ -71,13 +71,22 @@ export function pointerToViewport(
 
 /** Capture the modifier-set from a KeyboardEvent. Returns
  *  undefined when no modifier is held (matches the InputEvent
- *  optional `modifiers` field). */
+ *  optional `modifiers` field).
+ *
+ *  Vocabulary: cmd/ctrl/shift/option (Mac-native labels) — 1:1
+ *  with Quartz CGEventFlags on the harness side
+ *  (kCGEventFlagMaskCommand → cmd, etc.) and matches the
+ *  customer-dashboard's ManualControlOverlay inline copy.
+ *  Pre-2026-05-20 this used the DOM-standard Shift/Control/Alt/
+ *  Meta names, which forced the harness to remap Meta → Command
+ *  on every key press; aligning to Mac-native labels here
+ *  collapses the drift. */
 export function modifiersFromEvent(event: KeyboardEvent): readonly string[] | undefined {
   const mods: string[] = [];
-  if (event.shiftKey) mods.push('Shift');
-  if (event.ctrlKey) mods.push('Control');
-  if (event.altKey) mods.push('Alt');
-  if (event.metaKey) mods.push('Meta');
+  if (event.metaKey) mods.push('cmd');
+  if (event.ctrlKey) mods.push('ctrl');
+  if (event.shiftKey) mods.push('shift');
+  if (event.altKey) mods.push('option');
   return mods.length > 0 ? mods : undefined;
 }
 

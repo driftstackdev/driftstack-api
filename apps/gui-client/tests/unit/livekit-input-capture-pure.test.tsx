@@ -161,37 +161,41 @@ describe('LK.6.d pure-function tests', () => {
       expect(modifiersFromEvent(fakeKeyEvent({}))).toBeUndefined();
     });
 
-    it('returns ["Shift"] alone', () => {
-      expect(modifiersFromEvent(fakeKeyEvent({ shift: true }))).toEqual(['Shift']);
+    // 2026-05-20 — Mac-native vocabulary lock. Prior cycle this used
+    // DOM-standard Shift/Control/Alt/Meta names which forced the
+    // harness to remap Meta → Command on every key press; aligned
+    // here to cmd/ctrl/shift/option (1:1 Quartz CGEventFlags) +
+    // matches the customer-dashboard ManualControlOverlay inline
+    // copy. Both surfaces now send the same wire vocabulary.
+
+    it('returns ["shift"] alone', () => {
+      expect(modifiersFromEvent(fakeKeyEvent({ shift: true }))).toEqual(['shift']);
     });
 
-    it('returns ["Control"] alone', () => {
-      expect(modifiersFromEvent(fakeKeyEvent({ ctrl: true }))).toEqual(['Control']);
+    it('returns ["ctrl"] alone', () => {
+      expect(modifiersFromEvent(fakeKeyEvent({ ctrl: true }))).toEqual(['ctrl']);
     });
 
-    it('returns ["Alt"] alone', () => {
-      expect(modifiersFromEvent(fakeKeyEvent({ alt: true }))).toEqual(['Alt']);
+    it('returns ["option"] alone (alt/option on Mac)', () => {
+      expect(modifiersFromEvent(fakeKeyEvent({ alt: true }))).toEqual(['option']);
     });
 
-    it('returns ["Meta"] alone (cmd on macOS, win-key on Windows)', () => {
-      expect(modifiersFromEvent(fakeKeyEvent({ meta: true }))).toEqual(['Meta']);
+    it('returns ["cmd"] alone (Meta on DOM = Command on Mac)', () => {
+      expect(modifiersFromEvent(fakeKeyEvent({ meta: true }))).toEqual(['cmd']);
     });
 
-    it('emits modifiers in canonical Shift→Control→Alt→Meta order, regardless of held combo', () => {
+    it('emits modifiers in canonical cmd→ctrl→shift→option order, regardless of held combo', () => {
       // All 4 held — pin the deterministic order so the Mac-side
       // decoder receives a stable shape across runs.
       expect(
         modifiersFromEvent(fakeKeyEvent({ shift: true, ctrl: true, alt: true, meta: true })),
-      ).toEqual(['Shift', 'Control', 'Alt', 'Meta']);
+      ).toEqual(['cmd', 'ctrl', 'shift', 'option']);
       // Ctrl + Meta only — order preserved.
-      expect(modifiersFromEvent(fakeKeyEvent({ ctrl: true, meta: true }))).toEqual([
-        'Control',
-        'Meta',
-      ]);
+      expect(modifiersFromEvent(fakeKeyEvent({ ctrl: true, meta: true }))).toEqual(['cmd', 'ctrl']);
       // Shift + Alt only — order preserved.
       expect(modifiersFromEvent(fakeKeyEvent({ shift: true, alt: true }))).toEqual([
-        'Shift',
-        'Alt',
+        'shift',
+        'option',
       ]);
     });
   });

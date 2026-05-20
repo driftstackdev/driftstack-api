@@ -87,15 +87,16 @@ describe('sendInputEvent', () => {
     await sendInputEvent(room, {
       type: 'keyDown',
       key: 'A',
-      modifiers: ['Shift', 'Control'],
+      modifiers: ['shift', 'ctrl'],
     });
     const decoded = decodeEvent(firstCall(publishData));
-    expect(decoded).toEqual({ type: 'keyDown', key: 'A', modifiers: ['Shift', 'Control'] });
+    expect(decoded).toEqual({ type: 'keyDown', key: 'A', modifiers: ['shift', 'ctrl'] });
     // Modifier order is preserved exactly — drift to alphabetical
-    // sort would mask the canonical Shift→Control→Alt→Meta order
-    // emitted by modifiersFromEvent.
+    // sort would mask the canonical cmd→ctrl→shift→option order
+    // emitted by modifiersFromEvent (2026-05-20 lock — Mac-native
+    // vocabulary).
     if (decoded.type === 'keyDown') {
-      expect(decoded.modifiers).toEqual(['Shift', 'Control']);
+      expect(decoded.modifiers).toEqual(['shift', 'ctrl']);
     }
   });
 
