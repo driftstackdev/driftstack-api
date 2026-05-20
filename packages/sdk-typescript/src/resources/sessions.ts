@@ -90,6 +90,16 @@ export class SessionsResource {
     });
   }
 
+  /** Fetch the session record (account / api-key / status / archetype /
+   *  egress capabilities / 4 timestamps). For the LIVE in-browser state
+   *  (URL / title / cookies / localStorage) use `getState()` below. */
+  get(sessionId: string): Promise<Session> {
+    return this.http.request<Session>({
+      method: 'GET',
+      path: `/v1/sessions/${encodeURIComponent(sessionId)}`,
+    });
+  }
+
   /** Snapshot current session state (URL, title, cookies, localStorage). */
   getState(sessionId: string): Promise<SessionState> {
     return this.http.request<SessionState>({
