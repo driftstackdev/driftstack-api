@@ -1,9 +1,9 @@
 # Slice 6 — LK.6.d cross-surface progress note (2026-05-20)
 
-**Status:** PARTIAL — modifier vocabulary aligned across both
-surfaces (gui-client + customer-dashboard); coordinate-scaling
-unification deferred until customer-dashboard has a live
-`<video>` element to scale against.
+**Status:** CROSS-SDK CLOSED — modifier vocabulary aligned across
+ALL surfaces (gui-client + customer-dashboard + 3 SDKs + api-types
+schema). Coordinate-scaling unification + recipe integration
+deferred (gated on harness end-to-end / Agent 1, 6-9wks).
 
 ## What landed today (commit `21e0639a`)
 
@@ -77,6 +77,28 @@ the manual-control overlay. Concrete design needed before
 implementation — defer until the recipe storage backend +
 runtime executor are in scope (currently 503-stub per the
 egress card contradiction pattern).
+
+## Cross-SDK closure (2026-05-20)
+
+The bounded cross-SDK piece — pinning the canonical 4-name
+modifier vocabulary (`cmd / ctrl / shift / option`) across all
+3 SDKs + the api-types schema — landed today:
+
+- `packages/api-types/src/agent-input-event.ts` now exports
+  `CANONICAL_MODIFIER_NAMES` + `CanonicalModifier` type +
+  documents the Quartz CGEventFlags mapping in a schema comment.
+- TS / Python / Go SDK `sendInputEvent` docstrings each pin the
+  4-name vocabulary + the harness-drops-DOM-names warning.
+- New cross-SDK parity test
+  `apps/server/tests/unit/lk6-modifier-vocabulary-cross-sdk-
+parity.test.ts` (5 cases) negatively guards against any of
+  the 4 surfaces silently dropping the canonical vocabulary
+  documentation.
+
+This closes the bounded portion of Slice 6 directive's
+"cross-SDK + recipe integration" branch. The remaining
+coordinate-scaling unification + recipe-integration work is
+gated on Agent 1 harness end-to-end (6-9wks).
 
 ## Where this lives
 

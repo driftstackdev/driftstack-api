@@ -160,6 +160,13 @@ class AgentSessionsResource:
         - ``{"type": "wheel", "x": int, "y": int, "deltaX": int, "deltaY": int}``
         - ``{"type": "ping", "timestamp": int}``
 
+        Modifier vocabulary (Slice 6 cross-SDK lock 2026-05-20):
+        ``keyDown`` / ``keyUp`` ``modifiers`` arrays MUST use the
+        4-name set ``"cmd" | "ctrl" | "shift" | "option"`` (1:1 Quartz
+        ``CGEventFlags``). DOM-standard names (``Shift / Control /
+        Alt / Meta``) round-trip through the schema unchanged but the
+        harness decoder drops them.
+
         ``client_id`` is REQUIRED when the session is in mode='pair'
         AND the current pair_mode_state.kind is ``ai-driving`` — the
         first input-event in this configuration fires the

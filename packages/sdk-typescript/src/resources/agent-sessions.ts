@@ -261,6 +261,12 @@ export class AgentSessionsResource {
    * uses this to stream mouse + keyboard + wheel events from a
    * customer's live-preview interaction.
    *
+   * Modifier vocabulary (Slice 6 cross-SDK lock 2026-05-20):
+   * `keyDown` / `keyUp` `modifiers` arrays MUST use the 4-name set
+   * `'cmd' | 'ctrl' | 'shift' | 'option'` (1:1 Quartz CGEventFlags).
+   * DOM-standard names (`Shift / Control / Alt / Meta`) round-trip
+   * through the schema unchanged but the harness decoder drops them.
+   *
    * Pre-harness (today): server returns 503 FeatureUnavailable
    * — the Mac fleet harness Swift work is on the Agent 1 roadmap
    * post §10/§11+EG-WK close (6-9 weeks dedicated per the Tier-3

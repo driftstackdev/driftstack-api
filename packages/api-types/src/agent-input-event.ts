@@ -23,6 +23,24 @@ const MAX_KEY_LENGTH = 64;
 /** Maximum modifier count. Practical max is 4 (Cmd+Shift+Option+Ctrl). */
 const MAX_MODIFIERS = 8;
 
+/** Canonical modifier vocabulary (Slice 6 cross-SDK lock 2026-05-20).
+ *
+ * The 4 names below map 1:1 onto Quartz `CGEventFlags` on the macOS
+ * harness side; the harness decoder rejects DOM-standard variants
+ * (`Shift / Control / Alt / Meta`). Both gui-client and
+ * customer-dashboard emit this vocabulary — the cross-surface parity
+ * test at apps/server/tests/unit/lk6-modifier-vocabulary-cross-surface-
+ * parity.test.ts negatively guards against either surface drifting back.
+ *
+ * The schema deliberately keeps `modifiers: z.array(z.string())` (no
+ * z.enum) so the wire stays forward-compatible for additional Quartz
+ * flag-bits (`fn / capsLock / numericPad / help`) without a schema
+ * version bump. Customers building their own input-event producer
+ * MUST use the 4 names below; anything else round-trips through the
+ * schema unchanged but is dropped on the harness side. */
+export const CANONICAL_MODIFIER_NAMES = ['cmd', 'ctrl', 'shift', 'option'] as const;
+export type CanonicalModifier = (typeof CANONICAL_MODIFIER_NAMES)[number];
+
 /** Bounds for screen-space coordinates. The harness clamps to the
  *  actual viewport at dispatch time; we cap here to block obviously
  *  malformed input + JSON-bloating attacks. 100_000 is generous —
