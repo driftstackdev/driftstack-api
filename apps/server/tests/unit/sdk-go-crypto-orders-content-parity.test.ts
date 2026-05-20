@@ -64,7 +64,10 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
 
   it("ListCryptoOrdersResponse — envelope shape {orders, next_cursor?} with NextCursor *string nullable + omitempty json tag. Pinned struct shape so a regen can't silently drop next_cursor (would break customers paginating with the cursor-walking Iterate variant).", () => {
     expect(body).toMatch(/\/\/ ListCryptoOrdersResponse is the envelope returned by/);
-    expect(body).toMatch(/\/\/ \[CryptoOrdersResource\.List\]: ``\{ orders, next_cursor\? \}``\./);
+    // gofmt 1.19+ doc-comment formatting converts ``code`` → typographic
+    // “code“ quotes; pin the canonical form rather than the pre-1.19
+    // double-backtick variant so re-gofmt passes don't trip the parity.
+    expect(body).toMatch(/\/\/ \[CryptoOrdersResource\.List\]: “\{ orders, next_cursor\? \}“\./);
     expect(body).toMatch(
       /^type ListCryptoOrdersResponse struct \{\s*\n\s*Orders\s+\[\]CryptoOrderEnvelope `json:"orders"`\s*\n\s*NextCursor \*string\s+`json:"next_cursor,omitempty"`\s*\n\}/m,
     );

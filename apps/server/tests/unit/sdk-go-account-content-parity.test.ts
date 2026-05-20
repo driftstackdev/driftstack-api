@@ -65,13 +65,13 @@ describe('W590.B packages/sdk-go/account.go content parity', () => {
     expect(body).toMatch(/\/\/ V-298a\/V-298b\/V-352b\/V-353h fields the server adds beyond the/);
     expect(body).toMatch(/\/\/ base AccountSchema\. Pointer fields are nullable; absent in the/);
     expect(body).toMatch(/\/\/ JSON means nil\./);
-    expect(body).toMatch(/Timezone \*string\s+`json:"timezone"`\s+\/\/ V-352/);
+    expect(body).toMatch(/Timezone\s+\*string\s+`json:"timezone"`\s+\/\/ V-352/);
     expect(body).toMatch(/Slug\s+\*string\s+`json:"slug"`\s+\/\/ V-298a/);
     expect(body).toMatch(
       /Region\s+\*string\s+`json:"region"`\s+\/\/ V-298b — "us"\|"eu"\|"apac"\|null/,
     );
     expect(body).toMatch(
-      /AvatarURL \*string\s+`json:"avatar_url"`\s+\/\/ V-352b — short-lived presigned URL/,
+      /AvatarURL\s+\*string\s+`json:"avatar_url"`\s+\/\/ V-352b — short-lived presigned URL/,
     );
     expect(body).toMatch(/MfaEnrolled\s+bool\s+`json:"mfa_enrolled"` \/\/ V-353h/);
     expect(body).toMatch(/Teams\s+\[\]AccountTeamMembership `json:"teams"` \/\/ V-326c/);
