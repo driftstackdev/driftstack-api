@@ -63,17 +63,17 @@ describe('W588.C packages/sdk-go/errors.go content parity', () => {
     expect(body).toMatch(/ErrNotFound\s+= errors\.New\("not found"\)/);
     expect(body).toMatch(/ErrConflict\s+= errors\.New\("conflict"\)/);
     expect(body).toMatch(/ErrRateLimit\s+= errors\.New\("rate limited"\)/);
-    expect(body).toMatch(/ErrConcurrencyLimit = errors\.New\("concurrency limit hit"\)/);
+    expect(body).toMatch(/ErrConcurrencyLimit\s+= errors\.New\("concurrency limit hit"\)/);
     expect(body).toMatch(/ErrQuotaExceeded\s+= errors\.New\("quota exceeded"\)/);
-    expect(body).toMatch(/ErrSessionDestroyed {9}= errors\.New\("session destroyed"\)/);
-    expect(body).toMatch(/ErrSessionTimeout {11}= errors\.New\("session timeout"\)/);
+    expect(body).toMatch(/ErrSessionDestroyed\s+= errors\.New\("session destroyed"\)/);
+    expect(body).toMatch(/ErrSessionTimeout\s+= errors\.New\("session timeout"\)/);
     expect(body).toMatch(
-      /ErrLegalAcceptanceRequired {2}= errors\.New\("legal acceptance required"\)/,
+      /ErrLegalAcceptanceRequired\s+= errors\.New\("legal acceptance required"\)/,
     );
     expect(body).toMatch(/ErrDriverError\s+= errors\.New\("driver error"\)/);
     expect(body).toMatch(/ErrTransport\s+= errors\.New\("transport-level failure"\)/);
     expect(body).toMatch(/\/\/ V-437 — auth-flow problem types\./);
-    expect(body).toMatch(/ErrEmailAlreadyRegistered = errors\.New\("email already registered"\)/);
+    expect(body).toMatch(/ErrEmailAlreadyRegistered\s+= errors\.New\("email already registered"\)/);
     expect(body).toMatch(/ErrInvalidCredentials\s+= errors\.New\("invalid credentials"\)/);
     expect(body).toMatch(/ErrInvalidAuthToken\s+= errors\.New\("invalid auth token"\)/);
     expect(body).toMatch(/ErrEmailNotVerified\s+= errors\.New\("email not verified"\)/);

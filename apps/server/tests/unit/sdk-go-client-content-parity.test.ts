@@ -49,32 +49,34 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
   });
 
   it('Client struct: apiKey/baseURL/http/retry private + 15 resource accessors (Sessions/APIKeys/Usage/Webhooks/Profiles/ProfileSnapshots/Billing/CryptoOrders/Auth/Account/Mfa/AuditLog/EmailPreferences/Legal/Team) with V-NNN inline comments', () => {
+    // gofmt re-aligns these on every regen so absorb whitespace with \s+
+    // rather than pinning exact column-counts (broke after 0fd7d437 sweep).
     expect(body).toMatch(/^type Client struct \{$/m);
-    expect(body).toMatch(/^\s*apiKey {2}string$/m);
-    expect(body).toMatch(/^\s*baseURL string$/m);
-    expect(body).toMatch(/^\s*http {4}\*http\.Client$/m);
-    expect(body).toMatch(/^\s*retry {3}RetryConfig$/m);
-    expect(body).toMatch(/Sessions \*SessionsResource/);
-    expect(body).toMatch(/APIKeys {2}\*APIKeysResource/);
-    expect(body).toMatch(/Usage {4}\*UsageResource/);
-    expect(body).toMatch(/Webhooks \*WebhooksResource/);
-    expect(body).toMatch(/Profiles {9}\*ProfilesResource/);
-    expect(body).toMatch(/ProfileSnapshots \*ProfileSnapshotsResource/);
-    expect(body).toMatch(/Billing {10}\*BillingResource/);
+    expect(body).toMatch(/^\s*apiKey\s+string$/m);
+    expect(body).toMatch(/^\s*baseURL\s+string$/m);
+    expect(body).toMatch(/^\s*http\s+\*http\.Client$/m);
+    expect(body).toMatch(/^\s*retry\s+RetryConfig$/m);
+    expect(body).toMatch(/Sessions\s+\*SessionsResource/);
+    expect(body).toMatch(/APIKeys\s+\*APIKeysResource/);
+    expect(body).toMatch(/Usage\s+\*UsageResource/);
+    expect(body).toMatch(/Webhooks\s+\*WebhooksResource/);
+    expect(body).toMatch(/Profiles\s+\*ProfilesResource/);
+    expect(body).toMatch(/ProfileSnapshots\s+\*ProfileSnapshotsResource/);
+    expect(body).toMatch(/Billing\s+\*BillingResource/);
     expect(body).toMatch(/\/\/ V-666 — crypto-checkout \/ crypto-orders\./);
-    expect(body).toMatch(/CryptoOrders {5}\*CryptoOrdersResource/);
-    expect(body).toMatch(/Auth {13}\*AuthResource/);
-    expect(body).toMatch(/Account {10}\*AccountResource/);
+    expect(body).toMatch(/CryptoOrders\s+\*CryptoOrdersResource/);
+    expect(body).toMatch(/Auth\s+\*AuthResource/);
+    expect(body).toMatch(/Account\s+\*AccountResource/);
     expect(body).toMatch(/\/\/ V-353b \/ V-448 — MFA enrollment management\./);
-    expect(body).toMatch(/Mfa \*MfaResource/);
+    expect(body).toMatch(/Mfa\s+\*MfaResource/);
     expect(body).toMatch(/\/\/ V-216 \/ V-449 — append-only customer audit log\./);
-    expect(body).toMatch(/AuditLog \*AuditLogResource/);
+    expect(body).toMatch(/AuditLog\s+\*AuditLogResource/);
     expect(body).toMatch(/\/\/ V-204 \/ V-449 — email opt-in\/opt-out preferences\./);
-    expect(body).toMatch(/EmailPreferences \*EmailPreferencesResource/);
+    expect(body).toMatch(/EmailPreferences\s+\*EmailPreferencesResource/);
     expect(body).toMatch(/\/\/ V-049 \/ V-458 — legal acceptance\./);
-    expect(body).toMatch(/Legal \*LegalResource/);
+    expect(body).toMatch(/Legal\s+\*LegalResource/);
     expect(body).toMatch(/\/\/ V-298c — Team RBAC\. Auth path integration is V-298d\./);
-    expect(body).toMatch(/Team \*TeamResource/);
+    expect(body).toMatch(/Team\s+\*TeamResource/);
   });
 
   it('Functional options: WithBaseURL trim trailing slash + WithHTTPClient + WithRetry + WithTimeout (only when http nil) pinned', () => {
