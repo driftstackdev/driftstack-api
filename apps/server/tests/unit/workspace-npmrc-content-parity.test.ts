@@ -19,34 +19,54 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+// 2026-05-20 — .npmrc is gitignored (contains the NPM_TOKEN auth
+// pattern + may carry per-operator publish credentials). On CI the
+// runner has no .npmrc; skip the populated-file assertions when the
+// file is absent so CI stays green while the local operator-side
+// drift guard still fires.
+const NPMRC_EXISTS = existsSync(resolve(REPO_ROOT, '.npmrc'));
+
 describe('W846 workspace .npmrc + .prettierrc parity', () => {
-  it('both files exist at canonical paths', () => {
-    expect(existsSync(resolve(REPO_ROOT, '.npmrc'))).toBe(true);
+  it('.prettierrc.json exists at canonical path (.npmrc is gitignored so existence-check is operator-side only)', () => {
     expect(existsSync(resolve(REPO_ROOT, '.prettierrc.json'))).toBe(true);
   });
 
-  // ─── .npmrc ──────────────────────────────────────────────────
+  // ─── .npmrc (operator-side; gitignored so skipped on CI) ─────
 
-  it("CRITICAL .npmrc declares NPM_TOKEN env-var auth for npmjs registry. The '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' line is the canonical CI-publish auth pattern. Drift to hardcoding a real token would catastrophically leak; drift to dropping the auth line would break npm publish.", () => {
-    const p = read(resolve(REPO_ROOT, '.npmrc'));
-    expect(p).toMatch(/\/\/registry\.npmjs\.org\/:_authToken=\$\{NPM_TOKEN\}/);
-  });
+  it.skipIf(!NPMRC_EXISTS)(
+    "CRITICAL .npmrc declares NPM_TOKEN env-var auth for npmjs registry. The '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' line is the canonical CI-publish auth pattern. Drift to hardcoding a real token would catastrophically leak; drift to dropping the auth line would break npm publish.",
+    () => {
+      const p = read(resolve(REPO_ROOT, '.npmrc'));
+      expect(p).toMatch(/\/\/registry\.npmjs\.org\/:_authToken=\$\{NPM_TOKEN\}/);
+    },
+  );
 
-  it('CRITICAL .npmrc registry pinned to https://registry.npmjs.org/. Drift to a different registry (e.g. private fork, mirror) would let npm install pull tampered packages.', () => {
-    const p = read(resolve(REPO_ROOT, '.npmrc'));
-    expect(p).toMatch(/^registry=https:\/\/registry\.npmjs\.org\/$/m);
-  });
+  it.skipIf(!NPMRC_EXISTS)(
+    'CRITICAL .npmrc registry pinned to https://registry.npmjs.org/. Drift to a different registry (e.g. private fork, mirror) would let npm install pull tampered packages.',
+    () => {
+      const p = read(resolve(REPO_ROOT, '.npmrc'));
+      expect(p).toMatch(/^registry=https:\/\/registry\.npmjs\.org\/$/m);
+    },
+  );
 
-  it("CRITICAL .npmrc declares 'always-auth=true'. This forces auth on every registry request — drift to false would let CI silently use anonymous auth and hit rate limits (npm-published-but-cached-stale).", () => {
-    const p = read(resolve(REPO_ROOT, '.npmrc'));
-    expect(p).toMatch(/^always-auth=true$/m);
-  });
+  it.skipIf(!NPMRC_EXISTS)(
+    "CRITICAL .npmrc declares 'always-auth=true'. This forces auth on every registry request — drift to false would let CI silently use anonymous auth and hit rate limits (npm-published-but-cached-stale).",
+    () => {
+      const p = read(resolve(REPO_ROOT, '.npmrc'));
+      expect(p).toMatch(/^always-auth=true$/m);
+    },
+  );
 
-  it('CRITICAL .npmrc does NOT contain a hardcoded token (must use ${NPM_TOKEN} env-var substitution). Defense against accidental token commits.', () => {
-    const p = read(resolve(REPO_ROOT, '.npmrc'));
-    // No literal 'npm_' token (40+ chars) shape.
-    expect(p, '.npmrc must not contain hardcoded npm_* token').not.toMatch(/npm_[A-Za-z0-9]{30,}/);
-  });
+  it.skipIf(!NPMRC_EXISTS)(
+    'CRITICAL .npmrc does NOT contain a hardcoded token (must use ${NPM_TOKEN} env-var substitution). Defense against accidental token commits.',
+    () => {
+      const p = read(resolve(REPO_ROOT, '.npmrc'));
+      // No literal 'npm_' token (40+ chars) shape.
+      expect(p, '.npmrc must not contain hardcoded npm_* token').not.toMatch(
+        /npm_[A-Za-z0-9]{30,}/,
+      );
+    },
+  );
 
   // ─── .prettierrc.json ────────────────────────────────────────
 
