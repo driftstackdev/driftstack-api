@@ -188,6 +188,24 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(existsSync(resolve(dir, 'settings.astro'))).toBe(true);
   });
 
+  it('2026-05-20 notification SSE banner present + 4-kind subscriber + dismiss affordance', () => {
+    expect(body).toMatch(/data-notification-banner/);
+    expect(body).toMatch(/data-notification-title/);
+    expect(body).toMatch(/data-notification-body/);
+    expect(body).toMatch(/data-notification-dismiss/);
+    expect(body).toMatch(/notification SSE banner\./);
+    expect(body).toMatch(/notification SSE subscriber\./);
+    expect(body).toMatch(/'cost\.threshold_alert',/);
+    expect(body).toMatch(/'incident\.broadcast',/);
+    expect(body).toMatch(/'audit\.high_severity',/);
+    expect(body).toMatch(/'session\.errored',/);
+    expect(body).toMatch(
+      /apiBaseUrl \+\s*\n?\s*'\/v1\/account\/me\/notifications\?token=' \+ encodeURIComponent\(token\)/,
+    );
+    expect(body).toMatch(/new EventSource\(url\)/);
+    expect(body).toMatch(/es\.addEventListener\(kind,/);
+  });
+
   it('active-route highlighting: pathname === href OR startsWith href+"/" → glow-red bg/text + inset-divider shadow', () => {
     expect(body).toMatch(
       /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n?\s*\?\s*'bg-glow-red\/10 font-medium text-glow-red shadow-inset-divider'/,

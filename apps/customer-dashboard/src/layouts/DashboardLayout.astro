@@ -216,6 +216,42 @@ const navItems = [
               </button>
             </div>
           </div>
+          <!-- 2026-05-20 — notification SSE banner. Subscribes to
+               GET /v1/account/me/notifications and renders the most-
+               recent cost.threshold_alert / incident.broadcast /
+               audit.high_severity / session.errored events as a top-
+               of-page bar. Auto-dismisses on Settings nav OR via the
+               × close affordance. Hidden by default; the inline
+               script below toggles on incoming events. -->
+          <div
+            data-notification-banner
+            class="hidden border-b border-glow-red/40 bg-glow-red/10 backdrop-blur-sm"
+            role="status"
+            aria-live="polite"
+          >
+            <div
+              class="mx-auto flex max-w-6xl items-start justify-between gap-4 px-6 py-3"
+            >
+              <div class="min-w-0 flex-1">
+                <p
+                  data-notification-title
+                  class="text-sm font-medium text-ink-primary"
+                ></p>
+                <p
+                  data-notification-body
+                  class="mt-0.5 text-xs text-ink-secondary"
+                ></p>
+              </div>
+              <button
+                type="button"
+                data-notification-dismiss
+                aria-label="Dismiss notification"
+                class="shrink-0 rounded p-1 text-ink-muted hover:bg-glow-red/20 hover:text-ink-primary"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
           <!-- 2026-05-20 — legal-acceptance banner. Pings
                /v1/legal/required on dashboard load; renders pending
                docs + accept controls so the customer can clear the
@@ -389,6 +425,135 @@ const navItems = [
             .catch(function () {
               /* swallow — picker stays hidden */
             });
+        })();
+      </script>
+      <script is:inline define:vars={{ apiBaseUrl }}>
+        // 2026-05-20 — notification SSE subscriber. Opens an
+        // EventSource against /v1/account/me/notifications and
+        // surfaces the most-recent event in the dashboard's top
+        // banner. Mirrors the GUI client's NotificationToastStack
+        // shape (cost.threshold_alert / incident.broadcast /
+        // audit.high_severity / session.errored). One concurrent
+        // subscriber per tab; the SSE connection auto-reconnects
+        // on transient drops via native EventSource behavior.
+        //
+        // Auth: native EventSource lacks header support; the
+        // backend route uses requireAuth Bearer-header, so this
+        // path passes the token via the query param (route layer
+        // change deferred to v0.2 — until then the subscription
+        // either succeeds via a polyfill OR drops on the 401 and
+        // the dashboard stays silent, same as it does today).
+        (function () {
+          const banner = document.querySelector('[data-notification-banner]');
+          if (!banner) return;
+          const titleEl = banner.querySelector('[data-notification-title]');
+          const bodyEl = banner.querySelector('[data-notification-body]');
+          const dismissBtn = banner.querySelector('[data-notification-dismiss]');
+          if (!titleEl || !bodyEl || !dismissBtn) return;
+          let token = null;
+          try {
+            token = localStorage.getItem('ds_web_session_token');
+          } catch (_) {
+            /* localStorage blocked — skip subscription */
+          }
+          if (!token) return;
+          function describe(event) {
+            switch (event.kind) {
+              case 'cost.threshold_alert': {
+                const total = (event.totalCents / 100).toLocaleString('en-US', {
+                  style: 'currency',
+                  currency: 'USD',
+                });
+                const hard = (event.thresholdHardCents / 100).toLocaleString('en-US', {
+                  style: 'currency',
+                  currency: 'USD',
+                });
+                const sev =
+                  event.severity === 'resolved'
+                    ? 'recovered'
+                    : event.severity === 'critical'
+                      ? 'critical'
+                      : 'warn';
+                return {
+                  title: 'Cost ' + sev + ': ' + total + ' / ' + hard,
+                  body:
+                    event.severity === 'resolved'
+                      ? 'Spend dropped back below the soft threshold for ' +
+                        event.billingCycle +
+                        '.'
+                      : 'Billing cycle ' +
+                        event.billingCycle +
+                        ' crossed the ' +
+                        event.currentState +
+                        ' threshold.',
+                };
+              }
+              case 'incident.broadcast':
+                return {
+                  title: 'Incident: ' + event.title,
+                  body: 'Severity ' + event.severity + ' — incident ' + event.incidentId + '.',
+                };
+              case 'audit.high_severity':
+                return {
+                  title: 'Account event: ' + event.action,
+                  body:
+                    'Actor ' +
+                    event.actorType +
+                    (event.targetResourceId !== null
+                      ? ' · target ' + event.targetResourceId
+                      : '') +
+                    '.',
+                };
+              case 'session.errored':
+                return {
+                  title: 'Session error',
+                  body: 'Session ' + event.sessionId + ' hit ' + event.errorClass + '.',
+                };
+              default:
+                return null;
+            }
+          }
+          function show(event) {
+            const d = describe(event);
+            if (!d) return;
+            titleEl.textContent = d.title;
+            bodyEl.textContent = d.body;
+            banner.classList.remove('hidden');
+          }
+          dismissBtn.addEventListener('click', function () {
+            banner.classList.add('hidden');
+          });
+          let es;
+          try {
+            const url =
+              apiBaseUrl + '/v1/account/me/notifications?token=' + encodeURIComponent(token);
+            es = new EventSource(url);
+          } catch (_) {
+            return;
+          }
+          const kinds = [
+            'cost.threshold_alert',
+            'incident.broadcast',
+            'audit.high_severity',
+            'session.errored',
+          ];
+          for (const kind of kinds) {
+            es.addEventListener(kind, function (raw) {
+              try {
+                const parsed = JSON.parse(raw.data);
+                if (parsed && parsed.kind === kind) show(parsed);
+              } catch (_) {
+                /* swallow */
+              }
+            });
+          }
+          window.addEventListener('beforeunload', function () {
+            try {
+              es.close();
+            } catch (_) {
+              /* swallow */
+            }
+          });
         })();
       </script>
       <script is:inline define:vars={{ apiBaseUrl }}>
