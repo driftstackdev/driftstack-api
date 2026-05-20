@@ -1,25 +1,24 @@
 // W544.C — drift guard for /docs/founder-actions/v278-hetzner-deploy-keys.md.
-// Founder runbook for first Hetzner production deploy. Cross-
-// referenced from W542.A deploy.yml + W542.B server-deploy.yml.
-// Drift here either drops the live-mode-Stripe-SSH-only handling
-// rule (would risk pasting sk_live_… into a chat or PR), changes
-// the VM-sizing recommendations (would invalidate ADR-001 cost
-// model), or weakens the dedicated-key-per-environment posture.
 //
-//   • Header + V-278 + push-on-main-vs-tag-triggered split.
-//   • ADR-001 anchor: staging CCX13 4vCPU/16GB/€25mo, prod CCX23
-//     8vCPU/32GB/€50mo, Falkenstein FSN1, Ubuntu 24.04 LTS.
-//   • Bootstrap commands: adduser driftstack + usermod -aG docker
-//     + mkdir /opt/driftstack + curl docker-compose.yml from main.
-//   • Dedicated ed25519 deploy key per environment (NOT personal
-//     SSH key).
-//   • GitHub Environments: staging (no approver) + production
-//     (approver-gate + branch+tag restriction).
-//   • Live-mode Stripe keys SSH-write-to-Hetzner-only (never chat
-//     or PR); test-mode keys fine in DEPLOY_DOTENV_BASE64.
-//   • Image-level rollback (fastest) vs workflow-level rollback
-//     (slower but tracked).
-//   • 19-tier-price-IDs reference to ADR-004.
+// 2026-05-20 — doc rewrote from the original "fresh-setup runbook"
+// (provision VMs + bootstrap + GitHub Environments + ADR-004) into a
+// key-rotation runbook ("the HETZNER_DEPLOY_SSH_KEY repo secret is
+// missing — generate fresh + repopulate so deploys stop no-opping").
+// The single `HETZNER_DEPLOY_SSH_KEY` secret replaces the old 4-secret
+// docker-compose surface; the hard-error gate (commit 81d65fef + the
+// W724 deploy-workflow-parity flip) is what surfaces missing-state.
+//
+//   • Header + key-rotation framing (was first-successful-deploy).
+//   • Current-state callout: secret missing, deploy.yml fails loudly,
+//     prod alive (2026-05-19), last successful auto-deploy SHAs.
+//   • 6-step founder action: confirm key state + generate ed25519
+//     deploy key + add pubkey to both hosts + populate repo secret
+//     via stdin + re-fire workflow + verify /version SHA.
+//   • Rollback: auto-revert via revert-bridge.sh + manual revert
+//     pointer to /opt/driftstack/api/.last-good-sha.
+//   • Troubleshooting: 4 bullets (hard-gate error, ssh permission,
+//     /health 200 but /version stale, awaiting approval).
+//   • Related docs cross-refs.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -37,118 +36,66 @@ function read(p: string): string {
 describe('W544.C /docs/founder-actions/v278-hetzner-deploy-keys.md content parity', () => {
   const body = read(LIB);
 
-  it('Header + push-on-main-vs-tag-triggered + image-pushed-regardless-of-secret-state framing pinned: \'# V-278 — Hetzner deploy keys + secrets (founder ops action)\' + \'End-to-end runbook for going from "fresh repo with deploy workflows in place" to "first successful production deploy lands on the Hetzner VM and `https://api.driftstack.dev/health` returns 200."\' + \'The deploy pipelines (`.github/workflows/deploy.yml` push-on-main + `.github/workflows/server-deploy.yml` tag-triggered) build + push images to `ghcr.io` regardless of secret state. The deploy step is gated on Hetzner secrets — missing secrets cause it to skip cleanly with a "secrets not set" message.\' — pinned so the V-278 + push-on-main-vs-tag-triggered + image-pushed-regardless-of-secret-state + secrets-not-set-graceful-skip commitment survives', () => {
+  it("Header + key-rotation framing pinned: 'V-278 — Hetzner deploy keys + secrets (founder ops action)' + 'rotate the SSH key + repopulate the `HETZNER_DEPLOY_SSH_KEY` repo secret so the deploy workflow stops no-opping'", () => {
     expect(body).toMatch(/# V-278 — Hetzner deploy keys \+ secrets \(founder ops action\)/);
     expect(body).toMatch(
-      /End-to-end runbook for going from "fresh repo with deploy workflows in place" to "first successful production deploy lands on the Hetzner VM and `https:\/\/api\.driftstack\.dev\/health` returns 200\."/,
-    );
-    expect(body).toMatch(
-      /The deploy pipelines \(`\.github\/workflows\/deploy\.yml` push-on-main \+ `\.github\/workflows\/server-deploy\.yml` tag-triggered\) build \+ push images to `ghcr\.io` regardless of secret state\./,
-    );
-    expect(body).toMatch(
-      /The deploy step is gated on Hetzner secrets — missing secrets cause it to skip cleanly with a "secrets not set" message\./,
+      /rotate the SSH key \+ repopulate the\s*\n?\s*`HETZNER_DEPLOY_SSH_KEY` repo secret so the deploy workflow stops\s*\n?\s*no-opping/,
     );
   });
 
-  it("ADR-001 VM-sizing framing pinned: '### 1. Provision two Hetzner VMs' + 'Per ADR-001 (`docs/adr/ADR-001-control-plane-hosting-hetzner.md`):' + '**Staging**: 1× CCX13 in Falkenstein (FSN1). 4 vCPU / 16GB RAM / ~€25/mo.' + '**Production**: 1× CCX23 in Falkenstein (FSN1). 8 vCPU / 32GB RAM / ~€50/mo.' + 'Both running Ubuntu 24.04 LTS (or latest LTS at provisioning time). Add your SSH key during creation. Record the public IPs.' — pinned so the ADR-001 + CCX13-staging-4vCPU/16GB/€25mo + CCX23-prod-8vCPU/32GB/€50mo + Falkenstein-FSN1 + Ubuntu-24.04-LTS commitment survives (drift to a different VM size would invalidate the ADR-001 cost model)", () => {
-    expect(body).toMatch(/### 1\. Provision two Hetzner VMs/);
-    expect(body).toMatch(/Per ADR-001 \(`docs\/adr\/ADR-001-control-plane-hosting-hetzner\.md`\):/);
-    expect(body).toMatch(
-      /- \*\*Staging\*\*: 1× CCX13 in Falkenstein \(FSN1\)\. 4 vCPU \/ 16GB RAM \/ ~€25\/mo\./,
-    );
-    expect(body).toMatch(
-      /- \*\*Production\*\*: 1× CCX23 in Falkenstein \(FSN1\)\. 8 vCPU \/ 32GB RAM \/ ~€50\/mo\./,
-    );
-    expect(body).toMatch(/Both running Ubuntu 24\.04 LTS \(or latest LTS at provisioning time\)\./);
+  it("Current-state callout pinned: hard-fail gate via commit 81d65fef + prod-alive-since-2026-05-19 + last-successful-auto-deploy SHAs (prod e7571fa / staging 14971a7) — pinned so the gate-fix commit anchor stays load-bearing if the post-mortem ever needs to retrace why main went 10h without deploying", () => {
+    expect(body).toMatch(/The deploy\.yml workflow's gate step now FAILS\s*\n?\s*LOUDLY \(commit `81d65fef`\) when the secret is unset/);
+    expect(body).toMatch(/Production \+ staging are alive \(services running since\s*\n?\s*2026-05-19\)/);
+    expect(body).toMatch(/Last successful auto-deploy:\s*\n?\s*`e7571fa` \(prod\) \/ `14971a7` \(staging\)/);
   });
 
-  it("Bootstrap commands + driftstack-user + /opt/driftstack framing pinned: '### 2. Bootstrap each VM (run on the VM)' + 'sudo apt-get update && sudo apt-get upgrade -y' + 'sudo apt-get install -y docker.io docker-compose-plugin curl' + '# Create the deploy user (matches HETZNER_USER convention)' + 'sudo adduser --disabled-password --gecos '' driftstack' + 'sudo usermod -aG docker driftstack' + '# Create the deploy directory' + 'sudo mkdir -p /opt/driftstack' + 'sudo chown driftstack:driftstack /opt/driftstack' + '# Copy the docker-compose.yml from the repo' + 'curl -fsS https://raw.githubusercontent.com/driftstackdev/driftstack-api/main/infra/hetzner/docker-compose.yml -o /opt/driftstack/docker-compose.yml' — pinned so the bootstrap-sequence (apt-update + docker.io + docker-compose-plugin + curl + driftstack-user-disabled-password + docker-group + /opt/driftstack-dir + remote-docker-compose-curl-from-main) commitment survives", () => {
-    expect(body).toMatch(/### 2\. Bootstrap each VM \(run on the VM\)/);
-    expect(body).toMatch(/sudo apt-get update && sudo apt-get upgrade -y/);
-    expect(body).toMatch(/sudo apt-get install -y docker\.io docker-compose-plugin curl/);
-    expect(body).toMatch(/# Create the deploy user \(matches HETZNER_USER convention\)/);
-    expect(body).toMatch(/sudo adduser --disabled-password --gecos '' driftstack/);
-    expect(body).toMatch(/sudo usermod -aG docker driftstack/);
-    expect(body).toMatch(/# Create the deploy directory/);
-    expect(body).toMatch(/sudo mkdir -p \/opt\/driftstack/);
-    expect(body).toMatch(/sudo chown driftstack:driftstack \/opt\/driftstack/);
-    expect(body).toMatch(/# Copy the docker-compose\.yml from the repo/);
-    expect(body).toMatch(
-      /https:\/\/raw\.githubusercontent\.com\/driftstackdev\/driftstack-api\/main\/infra\/hetzner\/docker-compose\.yml/,
-    );
-    expect(body).toMatch(/-o \/opt\/driftstack\/docker-compose\.yml/);
+  it("'What's already in place' inventory pinned: 4-piece (deploy.yml push-on-main pipeline + scripts/deploy-bridge.sh SSH-driven + scripts/post-deploy-verify.mjs 20-invariant + prod CPX32 staging CPX22 systemd units) — pinned so the inventory of pre-existing-infrastructure can't drift apart from the actual files", () => {
+    expect(body).toMatch(/## What's already in place \(no founder action needed\)/);
+    expect(body).toMatch(/`\.github\/workflows\/deploy\.yml` — push-on-main pipeline/);
+    expect(body).toMatch(/`scripts\/deploy-bridge\.sh` — host-side SSH-driven deploy/);
+    expect(body).toMatch(/`scripts\/post-deploy-verify\.mjs` — 20-invariant post-deploy/);
+    expect(body).toMatch(/`root@128\.140\.37\.74` \(CPX32\)/);
+    expect(body).toMatch(/`root@116\.203\.22\.197` \(CPX22\)/);
   });
 
-  it("Dedicated-key-per-env + ed25519 + ssh-copy-id framing pinned: '### 3. Generate a deploy SSH key (run on your local Mac)' + 'A dedicated key per environment, NOT your personal SSH key. Reduces blast radius if either is compromised.' + 'ssh-keygen -t ed25519 -f ~/.driftstack-keys/hetzner-staging -C \"driftstack-deploy-staging\" -N \"\"' + 'ssh-keygen -t ed25519 -f ~/.driftstack-keys/hetzner-production -C \"driftstack-deploy-production\" -N \"\"' + 'ssh-copy-id -i ~/.driftstack-keys/hetzner-staging.pub driftstack@<staging-ip>' + 'ssh-copy-id -i ~/.driftstack-keys/hetzner-production.pub driftstack@<production-ip>' — pinned so the dedicated-key-per-env (blast-radius rationale) + ed25519 + 2-key-pair (staging + production) + ssh-copy-id-to-driftstack-user commitment survives", () => {
-    expect(body).toMatch(/### 3\. Generate a deploy SSH key \(run on your local Mac\)/);
+  it("6-step founder action pinned: (1) confirm prior key state via `gh secret list` + (2) generate ed25519 in ~/.driftstack-keys/hetzner-deploy + (3) add pubkey to both hosts + smoke-test + (4) populate repo secret via stdin (no shell-history exposure) + (5) re-fire via `gh workflow run Deploy` + (6) verify via /version SHA — pinned so the runbook can be followed verbatim without doc-vs-tool drift", () => {
+    expect(body).toMatch(/### 1\. Confirm the prior key state/);
+    expect(body).toMatch(/### 2\. Generate a dedicated deploy key \(run on your local Mac\)/);
     expect(body).toMatch(
-      /A dedicated key per environment, NOT your personal SSH key\. Reduces blast radius if either is compromised\./,
+      /ssh-keygen -t ed25519 \\\s*\n?\s*-f ~\/\.driftstack-keys\/hetzner-deploy \\\s*\n?\s*-C "driftstack-deploy" \\\s*\n?\s*-N ""/,
     );
+    expect(body).toMatch(/### 3\. Add the public key to both hosts/);
+    expect(body).toMatch(/### 4\. Populate the GitHub repo secret/);
+    expect(body).toMatch(/gh secret set HETZNER_DEPLOY_SSH_KEY \\/);
+    expect(body).toMatch(/`gh` reads the private key from stdin \(no shell-history exposure\)\./);
+    expect(body).toMatch(/### 5\. Re-fire the deploy workflow/);
+    expect(body).toMatch(/gh workflow run Deploy --ref main --repo driftstackdev\/driftstack-api/);
+    expect(body).toMatch(/### 6\. Verify the deploy landed/);
+    expect(body).toMatch(/curl -s https:\/\/api\.driftstack\.dev\/version \| jq/);
+  });
+
+  it("Single-key-for-both-hosts framing pinned (NOT per-env keys today — same root SSH posture on both hosts; per-env keys deferred to later hardening) — pinned so a future split into 2 keys is a conscious decision, not silent drift", () => {
     expect(body).toMatch(
-      /ssh-keygen -t ed25519 -f ~\/\.driftstack-keys\/hetzner-staging -C "driftstack-deploy-staging" -N ""/,
-    );
-    expect(body).toMatch(
-      /ssh-keygen -t ed25519 -f ~\/\.driftstack-keys\/hetzner-production -C "driftstack-deploy-production" -N ""/,
-    );
-    expect(body).toMatch(
-      /ssh-copy-id -i ~\/\.driftstack-keys\/hetzner-staging\.pub driftstack@<staging-ip>/,
-    );
-    expect(body).toMatch(
-      /ssh-copy-id -i ~\/\.driftstack-keys\/hetzner-production\.pub driftstack@<production-ip>/,
+      /Single key works for both staging \+ production because both\s*\n?\s*hosts share the same `root` SSH posture today; per-environment\s*\n?\s*keys are a later hardening pass/,
     );
   });
 
-  it("GitHub-Environments + production-approver-gate + ADR-004 19-tier-price framing pinned: '### 4. Configure GitHub Environments' + '**Create `staging` environment** (no approver gate; auto-deploys on main merge):' + 'Add secret: `HETZNER_HOST`' + 'Add secret: `HETZNER_USER` = `driftstack`' + '`HETZNER_SSH_KEY` = paste contents of `~/.driftstack-keys/hetzner-staging` (the PRIVATE key, not `.pub`).' + 'Use stdin for `gh secret set`' + '**Create `production` environment** (with approver gate):' + '**Required reviewers**: add your founder GitHub account. The deploy-production job in `deploy.yml` blocks until approval.' + '**Deployment protection rules**: optionally restrict to `main` branch + tags matching `server-v*`.' + 'DRIFTSTACK_TIER_PRICE_IDS=…  # 19 IDs per ADR-004' — pinned so the GitHub-Environments + staging-no-approver-auto-deploy + production-with-approver-gate + branch+server-v*-restriction + ADR-004-19-tier-price-IDs commitment survives", () => {
-    expect(body).toMatch(/### 4\. Configure GitHub Environments/);
-    expect(body).toMatch(
-      /\*\*Create `staging` environment\*\* \(no approver gate; auto-deploys on main merge\):/,
-    );
-    expect(body).toMatch(/- Add secret: `HETZNER_HOST` = `<staging-ip>`\./);
-    expect(body).toMatch(/- Add secret: `HETZNER_USER` = `driftstack`\./);
-    expect(body).toMatch(
-      /- Add secret: `HETZNER_SSH_KEY` = paste contents of `~\/\.driftstack-keys\/hetzner-staging` \(the PRIVATE key, not `\.pub`\)\./,
-    );
-    expect(body).toMatch(/Use stdin for `gh secret set`/);
-    expect(body).toMatch(/\*\*Create `production` environment\*\* \(with approver gate\):/);
-    expect(body).toMatch(
-      /- \*\*Required reviewers\*\*: add your founder GitHub account\. The deploy-production job in `deploy\.yml` blocks until approval\./,
-    );
-    expect(body).toMatch(
-      /- \*\*Deployment protection rules\*\*: optionally restrict to `main` branch \+ tags matching `server-v\*`\./,
-    );
-    expect(body).toMatch(/DRIFTSTACK_TIER_PRICE_IDS=… {2}# 19 IDs per ADR-004/);
-  });
-
-  it("Live-mode-Stripe-SSH-only + test-mode-OK framing pinned: '**Live-mode Stripe keys MUST go via SSH-write to Hetzner only** per the `stripe_credential_handling` rule — never paste live `sk_live_…` into a chat or PR. Test-mode keys (`sk_test_…`) are fine in `DEPLOY_DOTENV_BASE64` for staging.' — pinned so the live-mode-Stripe-SSH-only + stripe_credential_handling-rule-anchor + sk_test_-OK-in-staging-base64 commitment survives (drift to dropping this rule would risk pasting sk_live into chat or PR; drift to blocking sk_test would unnecessarily friction staging setup)", () => {
-    expect(body).toMatch(
-      /\*\*Live-mode Stripe keys MUST go via SSH-write to Hetzner only\*\* per the `stripe_credential_handling` rule — never paste live `sk_live_…` into a chat or PR\./,
-    );
-    expect(body).toMatch(
-      /Test-mode keys \(`sk_test_…`\) are fine in `DEPLOY_DOTENV_BASE64` for staging\./,
-    );
-  });
-
-  it("Image-level + workflow-level rollback + Troubleshooting framing pinned: '## Rollback' + '**Image-level rollback** (fastest):' + 'IMAGE_TAG=ghcr.io/driftstackdev/driftstack-api:<previous-sha-or-tag> docker compose up -d' + '**Workflow-level rollback** (slower but tracked):' + 'git revert <bad-sha>' + 'git push origin main' + '## Troubleshooting' + '\"Hetzner secrets not all set — skipping deploy.\" — one of `HETZNER_HOST`, `HETZNER_USER`, `HETZNER_SSH_KEY`, `DEPLOY_DOTENV_BASE64` is empty.' + '**SSH connection timeout** — check Hetzner Cloud Firewall' + '**`/health` never returns 200** — likely DB connection failure.' + '**Image pulled but container exits immediately** — usually env-var schema rejection (Zod parse fail at startup).' + '**Manual approval never appears** — production environment's \"Required reviewers\" not configured.' — pinned so the 2-level rollback (image-IMAGE_TAG-export + workflow-git-revert) + 5-troubleshooting-bullet commitment survives", () => {
+  it("Rollback pointer pinned: auto-revert via revert-bridge.sh on /health-fail + manual revert reads .last-good-sha — pinned so the auto-revert + .last-good-sha rollback anchors stay aligned with the bridge script behavior", () => {
     expect(body).toMatch(/## Rollback/);
-    expect(body).toMatch(/\*\*Image-level rollback\*\* \(fastest\):/);
     expect(body).toMatch(
-      /IMAGE_TAG=ghcr\.io\/driftstackdev\/driftstack-api:<previous-sha-or-tag> docker compose up -d/,
+      /The deploy-bridge auto-reverts on `\/health`-fail post-restart\s*\n?\s*via `scripts\/revert-bridge\.sh`/,
     );
-    expect(body).toMatch(/\*\*Workflow-level rollback\*\* \(slower but tracked\):/);
-    expect(body).toMatch(/git revert <bad-sha>/);
-    expect(body).toMatch(/git push origin main/);
+    expect(body).toMatch(/Reverts to `\/opt\/driftstack\/api\/\.last-good-sha`/);
+  });
+
+  it("Troubleshooting 4-bullet pinned: hard-gate-error (81d65fef anchor) + SSH-permission-denied + /health-200-but-/version-stale (drizzle migration-immutability) + deploy-production-Awaiting-approval — pinned so each failure mode the runbook covers stays present (drift to dropping any would leave operators stuck without a recovery path)", () => {
     expect(body).toMatch(/## Troubleshooting/);
-    expect(body).toMatch(
-      /\*\*"Hetzner secrets not all set — skipping deploy\."\*\* — one of `HETZNER_HOST`, `HETZNER_USER`, `HETZNER_SSH_KEY`, `DEPLOY_DOTENV_BASE64` is empty\./,
-    );
-    expect(body).toMatch(/\*\*SSH connection timeout\*\* — check Hetzner Cloud Firewall/);
-    expect(body).toMatch(/\*\*`\/health` never returns 200\*\* — likely DB connection failure\./);
-    expect(body).toMatch(
-      /\*\*Image pulled but container exits immediately\*\* — usually env-var schema rejection \(Zod parse fail at startup\)\./,
-    );
-    expect(body).toMatch(
-      /\*\*Manual approval never appears\*\* — production environment's "Required reviewers" not configured\./,
-    );
+    expect(body).toMatch(/`::error::HETZNER_DEPLOY_SSH_KEY repo secret is unset`/);
+    expect(body).toMatch(/the loud-gate fix from commit `81d65fef` working as designed/);
+    expect(body).toMatch(/SSH permission denied/);
+    expect(body).toMatch(/`\/health` 200 but `\/version` SHA still old/);
+    expect(body).toMatch(/usually a drizzle migration-immutability check failure/);
+    expect(body).toMatch(/deploy-production stays in "Awaiting approval"/);
   });
 
   it('file exists at canonical path', () => {
