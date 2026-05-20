@@ -63,9 +63,9 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     );
   });
 
-  it("CLOUD_DEFAULT_URL = 'https://api.driftstack.dev' + SELF_HOSTED_DEFAULT_URL = 'http://localhost:7780' module constants pinned — pinned so the cloud production URL doesn't drift to a staging/dev host + self-hosted default doesn't drift off the canonical local-dev port", () => {
+  it("CLOUD_DEFAULT_URL = 'https://api.driftstack.dev' + SELF_HOSTED_DEFAULT_URL = 'http://localhost:3000' module constants pinned (2026-05-20: SDK default port — was 7780, shifted to align with packages/sdk-typescript default) — pinned so cloud URL doesn't drift to a staging/dev host + self-hosted default stays consistent with the SDK base", () => {
     expect(body).toMatch(/const CLOUD_DEFAULT_URL = 'https:\/\/api\.driftstack\.dev';/);
-    expect(body).toMatch(/const SELF_HOSTED_DEFAULT_URL = 'http:\/\/localhost:7780';/);
+    expect(body).toMatch(/const SELF_HOSTED_DEFAULT_URL = 'http:\/\/localhost:3000';/);
   });
 
   it("STEP_ORDER 4-step array ['welcome', 'mode', 'apikey', 'profile'] + STEP_LABELS 5-key record (welcome:Welcome / mode:Deployment / apikey:Sign in / profile:First profile / done:Done) — pinned so the stepper progression matches the WizardStep union and 'done' is intentionally excluded from STEP_ORDER (no stepper entry past the final step)", () => {

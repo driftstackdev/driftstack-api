@@ -55,8 +55,8 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     );
   });
 
-  it("REFRESH_MS = 5000 module constant pinned — pinned so the auto-poll cadence isn't reverted to a hard-coded inline literal that drifts apart from the footer 'auto-refresh every Ns' display", () => {
-    expect(body).toMatch(/const REFRESH_MS = 5000;/);
+  it("REFRESH_MS = 15_000 module constant pinned (2026-05-20 d15460c7 — bumped 5s→15s after customer feedback that 'the page keeps refreshing'; background ticks no longer flip the visible loading state either) — pinned so the auto-poll cadence isn't reverted to a hard-coded inline literal that drifts apart from the footer 'auto-refresh every Ns' display", () => {
+    expect(body).toMatch(/const REFRESH_MS = 15_000;/);
   });
 
   it("V-239 + V-073 cap-gate framing pinned: 'gate the New session button when the customer is at the concurrent cap. Server enforces (V-073 returns 402); the GUI's job is to surface the cap proactively so the customer never sees the 402 in normal flow. accountMe === null (not loaded) → don't gate.'", () => {
