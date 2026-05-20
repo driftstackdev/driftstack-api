@@ -1,185 +1,164 @@
 # V-278 — Hetzner deploy keys + secrets (founder ops action)
 
-End-to-end runbook for going from "fresh repo with deploy workflows in place" to "first successful production deploy lands on the Hetzner VM and `https://api.driftstack.dev/health` returns 200."
+End-to-end runbook for "rotate the SSH key + repopulate the
+`HETZNER_DEPLOY_SSH_KEY` repo secret so the deploy workflow stops
+no-opping."
 
-The deploy pipelines (`.github/workflows/deploy.yml` push-on-main + `.github/workflows/server-deploy.yml` tag-triggered) build + push images to `ghcr.io` regardless of secret state. The deploy step is gated on Hetzner secrets — missing secrets cause it to skip cleanly with a "secrets not set" message. Until you complete the steps below, every push to main produces a usable image but does not deploy.
+**Current state (2026-05-20):** `HETZNER_DEPLOY_SSH_KEY` is missing
+from the repo secret list (`gh secret list -R driftstackdev/
+driftstack-api`). The deploy.yml workflow's gate step now FAILS
+LOUDLY (commit `81d65fef`) when the secret is unset, surfacing
+the gap on every push instead of silently exit-0-ing. Prior
+behavior let main go ~10h without an actual deploy while every
+workflow report said "success."
+
+Production + staging are alive (services running since
+2026-05-19); the missing-secret state means new commits don't
+propagate, NOT that prod is down. Last successful auto-deploy:
+`e7571fa` (prod) / `14971a7` (staging). Origin/main is at
+`a4b20190` as of this writing — 12+ commits ahead of prod.
 
 ## What's already in place (no founder action needed)
 
-- `apps/server/Dockerfile` — multi-stage build, Node 22 production runtime.
-- `infra/hetzner/docker-compose.yml` — host-side compose file expected at `/opt/driftstack/docker-compose.yml` on the VM.
-- `.github/workflows/deploy.yml` — push-on-main build + staging-auto-deploy + production-manual-approval pipeline.
-- `.github/workflows/server-deploy.yml` — tag-triggered (`server-v*`) production-only pipeline for explicit-release semantics.
-- `docs/deployment/env-vars.md` — canonical schema for every env var the server reads.
-- `docs/operations/production-env-schema.md` — operations-focused summary (per-environment + provisioning order).
+- `.github/workflows/deploy.yml` — push-on-main pipeline:
+  source-map-upload → deploy-staging → deploy-production
+  (manual-approval gate via the `production` GH Environment).
+- `scripts/deploy-bridge.sh` — host-side SSH-driven deploy:
+  clones GitHub at the target SHA, builds in `/tmp`, atomic
+  swaps artefacts into `/opt/driftstack/api`, applies pending
+  drizzle migrations, restarts `driftstack-api.service`,
+  smoke-tests `/health`, auto-reverts on failure via
+  `scripts/revert-bridge.sh`.
+- `scripts/post-deploy-verify.mjs` — 20-invariant post-deploy
+  smoke (mirrors the `docs/runbooks/deploy-bridge.md` runbook
+  invariant count).
+- Prod systemd service: `/etc/systemd/system/driftstack-api.service`
+  on `root@128.140.37.74` (CPX32). Staging same shape on
+  `root@116.203.22.197` (CPX22).
 
 ## What you (founder) need to do
 
-### 1. Provision two Hetzner VMs
+### 1. Confirm the prior key state
 
-Per ADR-001 (`docs/adr/ADR-001-control-plane-hosting-hetzner.md`):
-
-- **Staging**: 1× CCX13 in Falkenstein (FSN1). 4 vCPU / 16GB RAM / ~€25/mo.
-- **Production**: 1× CCX23 in Falkenstein (FSN1). 8 vCPU / 32GB RAM / ~€50/mo.
-
-Both running Ubuntu 24.04 LTS (or latest LTS at provisioning time). Add your SSH key during creation.
-
-Record the public IPs.
-
-### 2. Bootstrap each VM (run on the VM)
+The prior `HETZNER_DEPLOY_SSH_KEY` was deleted (or never
+existed). Either way the fix is identical: generate fresh + set.
 
 ```sh
-# Update + install docker + docker compose plugin
-sudo apt-get update && sudo apt-get upgrade -y
-sudo apt-get install -y docker.io docker-compose-plugin curl
-
-# Create the deploy user (matches HETZNER_USER convention)
-sudo adduser --disabled-password --gecos '' driftstack
-sudo usermod -aG docker driftstack
-
-# Create the deploy directory
-sudo mkdir -p /opt/driftstack
-sudo chown driftstack:driftstack /opt/driftstack
-
-# Copy the docker-compose.yml from the repo
-sudo -u driftstack curl -fsS \
-  https://raw.githubusercontent.com/driftstackdev/driftstack-api/main/infra/hetzner/docker-compose.yml \
-  -o /opt/driftstack/docker-compose.yml
+gh secret list -R driftstackdev/driftstack-api | grep HETZNER || echo "no HETZNER_* secrets currently set"
 ```
 
-### 3. Generate a deploy SSH key (run on your local Mac)
-
-A dedicated key per environment, NOT your personal SSH key. Reduces blast radius if either is compromised.
+### 2. Generate a dedicated deploy key (run on your local Mac)
 
 ```sh
-ssh-keygen -t ed25519 -f ~/.driftstack-keys/hetzner-staging -C "driftstack-deploy-staging" -N ""
-ssh-keygen -t ed25519 -f ~/.driftstack-keys/hetzner-production -C "driftstack-deploy-production" -N ""
+mkdir -p ~/.driftstack-keys
+ssh-keygen -t ed25519 \
+  -f ~/.driftstack-keys/hetzner-deploy \
+  -C "driftstack-deploy" \
+  -N ""
 ```
 
-Add the public keys to each VM's `/home/driftstack/.ssh/authorized_keys`:
+Single key works for both staging + production because both
+hosts share the same `root` SSH posture today; per-environment
+keys are a later hardening pass.
+
+### 3. Add the public key to both hosts
 
 ```sh
-# From your Mac:
-ssh-copy-id -i ~/.driftstack-keys/hetzner-staging.pub driftstack@<staging-ip>
-ssh-copy-id -i ~/.driftstack-keys/hetzner-production.pub driftstack@<production-ip>
+# From your Mac (uses your existing root-authorized key path).
+PUB=$(cat ~/.driftstack-keys/hetzner-deploy.pub)
+ssh root@128.140.37.74 "echo '$PUB' >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys"
+ssh root@116.203.22.197 "echo '$PUB' >> /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys"
 ```
 
-### 4. Configure GitHub Environments
-
-GitHub repo → **Settings** → **Environments**.
-
-**Create `staging` environment** (no approver gate; auto-deploys on main merge):
-
-- Add secret: `HETZNER_HOST` = `<staging-ip>`.
-- Add secret: `HETZNER_USER` = `driftstack`.
-- Add secret: `HETZNER_SSH_KEY` = paste contents of `~/.driftstack-keys/hetzner-staging` (the PRIVATE key, not `.pub`). Use stdin for `gh secret set` to avoid shell-history exposure: `gh secret set HETZNER_SSH_KEY --env staging < ~/.driftstack-keys/hetzner-staging`.
-- Add secret: `DEPLOY_DOTENV_BASE64` = `base64 < apps/server/.env.staging | tr -d '\n'`. The .env file you produce locally, run base64, store as the secret. See section 5 for the env schema.
-
-**Create `production` environment** (with approver gate):
-
-- Same four secrets, pointed at production VM.
-- **Required reviewers**: add your founder GitHub account. The deploy-production job in `deploy.yml` blocks until approval.
-- **Deployment protection rules**: optionally restrict to `main` branch + tags matching `server-v*`.
-
-### 5. Build the production .env
-
-Use `docs/operations/production-env-schema.md` (or the longer `docs/deployment/env-vars.md`) as the canonical list. The shape:
-
-```
-NODE_ENV=production
-PORT=7780
-LOG_LEVEL=info
-HOST=0.0.0.0
-
-DATABASE_URL=postgres://…@…neon.tech/driftstack-production
-REDIS_URL=rediss://default:…@…upstash.io:…
-AUTH_VERIFY_EMAIL_URL=https://app.driftstack.dev/auth/verify-email
-AUTH_MAGIC_LINK_URL=https://app.driftstack.dev/auth/magic-link
-AUTH_PASSWORD_RESET_URL=https://app.driftstack.dev/auth/password-reset
-DASHBOARD_ORIGIN=https://app.driftstack.dev
-
-POSTMARK_API_TOKEN=…
-POSTMARK_FROM=Driftstack <noreply@driftstack.dev>
-POSTMARK_REPLY_TO=support@driftstack.dev
-
-R2_ACCOUNT_ID=…
-R2_ACCESS_KEY_ID=…
-R2_SECRET_ACCESS_KEY=…
-R2_BUCKET_RECORDINGS=driftstack-recordings-prod
-R2_ENDPOINT_URL=https://….r2.cloudflarestorage.com
-
-SENTRY_DSN=https://…@…ingest.de.sentry.io/…
-SENTRY_ENVIRONMENT=production
-
-STRIPE_SECRET_KEY=sk_live_…
-STRIPE_WEBHOOK_SECRET=whsec_…
-DRIFTSTACK_TIER_PRICE_IDS=…  # 19 IDs per ADR-004
-STRIPE_TRIAL_PACK_PRICE_ID=price_…
-```
-
-**Live-mode Stripe keys MUST go via SSH-write to Hetzner only** per the `stripe_credential_handling` rule — never paste live `sk_live_…` into a chat or PR. Test-mode keys (`sk_test_…`) are fine in `DEPLOY_DOTENV_BASE64` for staging.
-
-Encode + set:
+Smoke test the new key actually works:
 
 ```sh
-base64 < apps/server/.env.production | tr -d '\n' | gh secret set DEPLOY_DOTENV_BASE64 --env production
+ssh -i ~/.driftstack-keys/hetzner-deploy root@128.140.37.74 "echo prod connectivity ok; whoami; hostname"
+ssh -i ~/.driftstack-keys/hetzner-deploy root@116.203.22.197 "echo staging connectivity ok; whoami; hostname"
 ```
 
-### 6. Trigger first deploy
+Expect: `prod connectivity ok / root / <hostname>` (and same
+for staging).
 
-**Option A — push-on-main (deploy.yml)**: any commit to main triggers build → staging → manual-approval → production. Simplest path.
-
-**Option B — tag-triggered (server-deploy.yml)**:
+### 4. Populate the GitHub repo secret
 
 ```sh
-git tag server-v0.1.0
-git push origin server-v0.1.0
+gh secret set HETZNER_DEPLOY_SSH_KEY \
+  --repo driftstackdev/driftstack-api \
+  < ~/.driftstack-keys/hetzner-deploy
 ```
 
-The workflow builds the image at the tagged commit + deploys to production (no staging hop). Manual-approval gate via the production environment still applies.
+`gh` reads the private key from stdin (no shell-history exposure).
 
-### 7. Verify
+Verify:
 
-- `curl https://api.staging.driftstack.dev/health` → 200 with JSON body.
-- `curl https://api.driftstack.dev/health` → 200 (after production approval lands).
-- GitHub Actions tab → both jobs green.
-- Sentry → `production` + `staging` environments populated; first events appear when traffic starts.
-- Cloudflare Pages dashboard → DNS for `api.driftstack.dev` + `api.staging.driftstack.dev` points at the right Hetzner IPs (orange-cloud / proxied for TLS termination).
+```sh
+gh secret list -R driftstackdev/driftstack-api | grep HETZNER_DEPLOY_SSH_KEY
+```
+
+### 5. Re-fire the deploy workflow
+
+The next push to `main` auto-triggers the workflow. To deploy
+the current HEAD without an additional commit:
+
+```sh
+gh workflow run Deploy --ref main --repo driftstackdev/driftstack-api
+```
+
+Monitor:
+
+```sh
+gh run watch --repo driftstackdev/driftstack-api
+```
+
+Expected: source-map-upload + deploy-staging both succeed
+(staging deploys auto); deploy-production stays in
+"Awaiting approval" — approve via the GH Actions UI on the
+workflow page (or `gh run approve <run-id>`).
+
+### 6. Verify the deploy landed
+
+```sh
+# Should report the latest origin/main SHA (e.g. a4b20190 short).
+curl -s https://api.driftstack.dev/version | jq
+curl -s https://staging.driftstack.dev/version | jq
+
+# Service uptime — should reset to ~minutes after the deploy.
+ssh root@128.140.37.74 "systemctl status driftstack-api --no-pager | head -3"
+```
 
 ## Rollback
 
-**Image-level rollback** (fastest):
+The deploy-bridge auto-reverts on `/health`-fail post-restart
+via `scripts/revert-bridge.sh`. Manual revert:
 
 ```sh
-ssh driftstack@<host>
-cd /opt/driftstack
-# Find previous good image tag in `docker images` or the deploy log:
-IMAGE_TAG=ghcr.io/driftstackdev/driftstack-api:<previous-sha-or-tag> docker compose up -d
+ssh root@128.140.37.74 "bash /opt/driftstack/api/scripts/revert-bridge.sh"
 ```
 
-**Workflow-level rollback** (slower but tracked):
-
-```sh
-git revert <bad-sha>
-git push origin main
-# deploy.yml re-fires with the reverted state.
-```
+Reverts to `/opt/driftstack/api/.last-good-sha`.
 
 ## Troubleshooting
 
-- **"Hetzner secrets not all set — skipping deploy."** — one of `HETZNER_HOST`, `HETZNER_USER`, `HETZNER_SSH_KEY`, `DEPLOY_DOTENV_BASE64` is empty. Check the `staging` / `production` environment secrets, not repo-wide secrets.
-- **SSH connection timeout** — check Hetzner Cloud Firewall allows port 22 from GitHub Actions runner IPs (or use a tunnel). Hetzner default firewall is permissive; verify in the Cloud Console.
-- **`/health` never returns 200** — likely DB connection failure. Check `DATABASE_URL` in the .env is the production Neon URL, not staging. SSH in: `docker compose logs api --tail 100`.
-- **Image pulled but container exits immediately** — usually env-var schema rejection (Zod parse fail at startup). `docker compose logs` shows the failed validation.
-- **Manual approval never appears** — production environment's "Required reviewers" not configured. GitHub repo → Settings → Environments → production → add reviewer.
+- **`::error::HETZNER_DEPLOY_SSH_KEY repo secret is unset`** —
+  the loud-gate fix from commit `81d65fef` working as designed.
+  Re-run section 4.
+- **SSH permission denied** — the pubkey didn't land on the host.
+  Re-run section 3 + smoke-test section 3's `ssh -i ...` command
+  directly.
+- **`/health` 200 but `/version` SHA still old** — deploy-bridge
+  reverted post-restart. Check the GH Actions log for the bridge
+  output; usually a drizzle migration-immutability check failure.
+- **deploy-production stays in "Awaiting approval"** —
+  production GH Environment's "Required reviewers" expects your
+  account. Approve via GH UI or `gh run approve <run-id>`.
 
 ## Related docs
 
-- `docs/adr/ADR-001-control-plane-hosting-hetzner.md` — why Hetzner, why Falkenstein.
-- `docs/operations/release-policy.md` — V-283 deploy.yml=staging / server-deploy.yml=production split.
-- `docs/deployment/env-vars.md` — full env-var schema (every variable, every default).
-- `docs/operations/production-env-schema.md` — provisioning-order summary of the same data.
-- `docs/deployment/runbook.md` — day-to-day operations (logs, restart, scale).
-- `docs/deployment/dr-runbook.md` — disaster-recovery procedures.
-- `docs/founder-actions/v258-cloudflare-pages-docs-setup.md` — sister runbook for Cloudflare Pages projects (DNS for `api.driftstack.dev` lives there).
-- `docs/founder-actions/v259-cloudflare-pages-all-projects-setup.md` — consolidated CF Pages runbook for all four marketing/dashboard/admin/docs projects.
+- `docs/runbooks/deploy-bridge.md` — operational deploy-bridge
+  walk-through (20 post-deploy-verify invariants).
+- `docs/deployment/env-vars.md` — full env-var schema (env is
+  host-resident at `/opt/driftstack/api/.env`; not in the
+  GH Actions deploy payload).
+- `docs/adr/ADR-001-control-plane-hosting-hetzner.md` — why
+  Hetzner, why Falkenstein.
