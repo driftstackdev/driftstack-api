@@ -19,7 +19,7 @@ The Driftstack desktop GUI client (Tauri 2.x — macOS, Windows, Linux) doesn't 
 On first launch, the GUI client opens a five-step wizard:
 
 1. **Welcome** — brand intro and a one-line value prop.
-2. **Deployment mode** — radio: **Cloud** (`https://api.driftstack.dev`) or **Self-hosted** (you paste the URL — defaults to `http://localhost:7780`).
+2. **Deployment mode** — radio: **Cloud** (`https://api.driftstack.dev`) or **Self-hosted** (you paste the URL — defaults to `http://localhost:3000`, matching the port `apps/server` binds to in dev). The GUI is a control panel; the Self-hosted branch points it at a Driftstack Node server you operate yourself.
 3. **API key** — paste the key. The wizard immediately calls `GET /v1/account/me` to validate. You see one of:
    - ✅ valid — wizard advances.
    - ❌ wrong key — "Authentication failed. Check the value at app.driftstack.dev/api-keys."

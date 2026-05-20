@@ -25,11 +25,13 @@ export function diagnosticFetchError(err: unknown, targetUrl: string): string | 
   const lines = [
     `Couldn't reach ${targetUrl}.`,
     '',
+    'The GUI is a control panel — it does NOT run the API server itself. Self-hosted mode just points the GUI at a Driftstack server you operate yourself (this machine or elsewhere).',
+    '',
     isLocalhost
-      ? '• Is the Driftstack API server running on this machine?'
+      ? '• Start the server: clone driftstackdev/driftstack-api, then `npm install` + `npm run dev` from apps/server/ (listens on http://localhost:3000 by default).'
       : '• Is the server reachable from this machine? (DNS / firewall / VPN?)',
     isLocalhost
-      ? '• The server defaults to port 3000 — if you started it that way, change the URL in Settings to http://localhost:3000.'
+      ? '• No server set up? Switch to Cloud mode in Settings and use https://api.driftstack.dev with a key from app.driftstack.dev — no install needed.'
       : '• Does the URL use the correct scheme (http vs https)?',
     `• Underlying error: ${raw}`,
   ];

@@ -36,7 +36,11 @@ type WizardStep = 'welcome' | 'mode' | 'apikey' | 'profile' | 'done';
 type DeploymentMode = 'cloud' | 'self-hosted';
 
 const CLOUD_DEFAULT_URL = 'https://api.driftstack.dev';
-const SELF_HOSTED_DEFAULT_URL = 'http://localhost:7780';
+// 2026-05-20 — port flipped from 7780 → 3000 to match
+// apps/server/src/lib/config.ts (Fastify listens on 3000 by default).
+// The old 7780 was an aspirational separate-from-dev-port choice that
+// never matched what `npm run dev` actually bound to.
+const SELF_HOSTED_DEFAULT_URL = 'http://localhost:3000';
 
 export interface FirstRunWizardProps {
   /** Called when the wizard finishes (success or skip-to-app). */
@@ -284,13 +288,23 @@ function ModeStep({
             </div>
             <div className="mt-1 text-xs text-ink-secondary">
               License from <strong>$1,000/mo</strong> on top of the Mac hardware you provide and
-              operate yourself. Pick this only if you already run your own Driftstack server.
-              Default <span className="mono">http://localhost:7780</span>; override below if your
-              server lives elsewhere.
+              operate yourself.{' '}
+              <strong className="text-ink-primary">
+                This GUI is just a control panel — it does NOT run the server.
+              </strong>{' '}
+              Pick this only if you already run a Driftstack server somewhere (this machine or
+              elsewhere on your network); the URL below points the GUI at it.
             </div>
             <ul className="mt-2 space-y-0.5 text-[11px] text-ink-muted">
-              <li>• Bring your own Mac mini / Studio fleet</li>
-              <li>• Operate updates, backups, and capacity yourself</li>
+              <li>
+                • Local dev: clone driftstackdev/driftstack-api, then{' '}
+                <span className="mono">npm install && cd apps/server && npm run dev</span> (defaults
+                to <span className="mono">http://localhost:3000</span>).
+              </li>
+              <li>
+                • Production: bring your own Mac mini / Studio fleet + Postgres + Redis; operate
+                updates yourself.
+              </li>
               <li>
                 • Pricing details: <span className="mono">driftstack.dev/pricing</span>
               </li>
@@ -301,7 +315,7 @@ function ModeStep({
                 value={baseUrl}
                 onChange={(e) => onBaseUrlChange(e.target.value)}
                 className="mono mt-3 w-full rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
-                placeholder="http://localhost:7780"
+                placeholder="http://localhost:3000"
                 spellCheck={false}
                 autoComplete="off"
               />

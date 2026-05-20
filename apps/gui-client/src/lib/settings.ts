@@ -35,7 +35,7 @@ export interface DriftstackSettings {
 
 export const DEFAULT_SETTINGS: DriftstackSettings = {
   apiKey: null,
-  baseUrl: 'http://localhost:7780',
+  baseUrl: 'http://localhost:3000',
   telemetryOptIn: null,
 };
 

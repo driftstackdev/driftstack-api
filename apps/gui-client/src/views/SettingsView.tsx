@@ -56,7 +56,7 @@ export function SettingsView(): JSX.Element {
     try {
       await update({
         apiKey: draftKey.length > 0 ? draftKey : null,
-        baseUrl: draftUrl.trim().replace(/\/+$/, '') || 'http://localhost:7780',
+        baseUrl: draftUrl.trim().replace(/\/+$/, '') || 'http://localhost:3000',
         telemetryOptIn: draftTelemetry,
       });
       setSavedAt(Date.now());
@@ -205,7 +205,7 @@ export function SettingsView(): JSX.Element {
             type="url"
             value={draftUrl}
             onChange={(e) => setDraftUrl(e.target.value)}
-            placeholder="http://localhost:7780"
+            placeholder="http://localhost:3000"
             className="mono w-full rounded bg-surface-inset px-2.5 py-1.5
                        text-ink-primary
                        placeholder:text-ink-muted
@@ -217,9 +217,10 @@ export function SettingsView(): JSX.Element {
           />
           <span className="mt-1 block text-2xs text-ink-muted">
             <span className="mono">https://api.driftstack.dev</span> for cloud (default for new
-            installs). Self-hosted installs point at their own server URL —{' '}
-            <span className="mono">http://localhost:7780</span> by convention for local-machine
-            deployments.
+            installs). Self-hosted points at a Driftstack server you run yourself —{' '}
+            <span className="mono">http://localhost:3000</span> matches{' '}
+            <span className="mono">npm run dev</span> from apps/server, change the port if your
+            deployment binds elsewhere.
           </span>
         </Field>
 
