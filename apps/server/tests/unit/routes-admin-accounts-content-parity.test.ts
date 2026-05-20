@@ -57,7 +57,7 @@ describe('W438.A apps/server/src/routes/admin-accounts.ts content parity', () =>
       /import \{\s*\n?\s*AccountStatusSchema,\s*\n?\s*AccountTierSchema,\s*\n?\s*AddSupportNoteRequestSchema,\s*\n?\s*ChangeTierRequestSchema,\s*\n?\s*ClearQuotaOverrideQuerySchema,\s*\n?\s*RecordRefundRequestSchema,\s*\n?\s*SetQuotaOverrideRequestSchema,\s*\n?\s*SuspendAccountRequestSchema,\s*\n?\s*UnsuspendAccountRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
-      /const ListAdminAccountsQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n?\s*cursor: z\.string\(\)\.optional\(\),\s*\n?\s*status: AccountStatusSchema\.optional\(\),\s*\n?\s*tier: AccountTierSchema\.optional\(\),\s*\n?\s*email_contains: z\.string\(\)\.min\(1\)\.max\(254\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const ListAdminAccountsQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*status: AccountStatusSchema\.optional\(\),\s*\n?\s*tier: AccountTierSchema\.optional\(\),\s*\n?\s*email_contains: z\.string\(\)\.min\(1\)\.max\(254\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /import type \{ AccountsAdminService \} from '\.\.\/services\/admin-accounts\.js';/,
@@ -79,10 +79,9 @@ describe('W438.A apps/server/src/routes/admin-accounts.ts content parity', () =>
     );
   });
 
-  it('clientIp helper: x-forwarded-for first entry trim → fallback to request.ip → null', () => {
-    expect(body).toMatch(
-      /function clientIp\(request: FastifyRequest\): string \| null \{\s*\n?\s*const xff = request\.headers\['x-forwarded-for'\];\s*\n?\s*if \(typeof xff === 'string' && xff\.length > 0\) \{\s*\n?\s*\/\/ First entry is the original client\.\s*\n?\s*const first = xff\.split\(','\)\[0\]\?\.trim\(\);\s*\n?\s*if \(first\) return first;\s*\n?\s*\}\s*\n?\s*return request\.ip \?\? null;\s*\n?\s*\}/,
-    );
+  it('readClientIp imported from shared lib/client-ip.ts (extracted to collapse drift across admin-* routes)', () => {
+    expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
+    expect(body).toMatch(/ipAddress: readClientIp\(request\),/);
   });
 
   it('V-281 AdminAccountsRoutesOptions framing pinned: customer-audit recorder OPTIONAL during migration window; when omitted, new endpoints are not registered (accountAudit?)', () => {
@@ -97,7 +96,7 @@ describe('W438.A apps/server/src/routes/admin-accounts.ts content parity', () =>
       /\/\/ Helper that wraps a mutation with audit-on-success \+ audit-on-error\.\s*\n?\s*\/\/ The route logic stays focused on the action; the wrapper enforces\s*\n?\s*\/\/ D-025's "audit before response" contract\./,
     );
     expect(body).toMatch(
-      /try \{\s*\n?\s*const updated = await perform\(\);\s*\n?\s*await audit\.record\(\{\s*\n?\s*adminAccountId: ctx\.account\.id,\s*\n?\s*adminKeyId: ctx\.apiKey\.id,\s*\n?\s*action,\s*\n?\s*targetAccountId,\s*\n?\s*inputPayload,\s*\n?\s*result: 'success',\s*\n?\s*ipAddress: clientIp\(request\),\s*\n?\s*\}\);\s*\n?\s*return updated;\s*\n?\s*\} catch \(err\) \{\s*\n?\s*const code =\s*\n?\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
+      /try \{\s*\n?\s*const updated = await perform\(\);\s*\n?\s*await audit\.record\(\{\s*\n?\s*adminAccountId: ctx\.account\.id,\s*\n?\s*adminKeyId: ctx\.apiKey\.id,\s*\n?\s*action,\s*\n?\s*targetAccountId,\s*\n?\s*inputPayload,\s*\n?\s*result: 'success',\s*\n?\s*ipAddress: readClientIp\(request\),\s*\n?\s*\}\);\s*\n?\s*return updated;\s*\n?\s*\} catch \(err\) \{\s*\n?\s*const code =\s*\n?\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
     );
     expect(body).toMatch(/result: `error: \$\{code\}`,/);
   });
@@ -149,7 +148,7 @@ describe('W438.A apps/server/src/routes/admin-accounts.ts content parity', () =>
       /\/\/ ── V-281 — POST \/v1\/admin\/accounts\/:id\/audit-note ─[\s\S]*?\/\/ Records a free-form admin support note on the customer's audit log\.\s*\n?\s*\/\/ Audit-only — no side effect on account state\. Both surfaces \(the\s*\n?\s*\/\/ admin_audit_log via withAudit, and the customer-visible\s*\n?\s*\/\/ account_audit log via accountAudit\.record\) are written so the note\s*\n?\s*\/\/ is visible on the per-customer audit slice \+ the admin audit table\./,
     );
     expect(body).toMatch(
-      /await accountAudit\.record\(\{\s*\n?\s*accountId,\s*\n?\s*actorType: 'staff',\s*\n?\s*actorAccountId: ctx\.account\.id,\s*\n?\s*actorKeyId: ctx\.apiKey\.id,\s*\n?\s*action: 'admin\.support_note',\s*\n?\s*targetResourceId: null,\s*\n?\s*payload: \{ note: body\.note \},\s*\n?\s*\}\);/,
+      /await accountAudit\.record\(\{\s*\n?\s*accountId,\s*\n?\s*actorType: 'staff',\s*\n?\s*actorAccountId: ctx\.account\.id,\s*\n?\s*actorKeyId: ctx\.apiKey\.id,\s*\n?\s*action: 'admin\.support_note',\s*\n?\s*targetResourceId: null,\s*\n?\s*payload: \{ note: body\.note \},\s*\n?\s*ipAddress: readClientIp\(request\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(/return reply\.code\(201\)\.send\(\{ ok: true as const \}\);/);
   });

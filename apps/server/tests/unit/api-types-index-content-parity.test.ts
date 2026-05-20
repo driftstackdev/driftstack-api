@@ -65,10 +65,10 @@ describe('W432.A packages/api-types/src/index.ts content parity', () => {
     }
   });
 
-  it('Barrel is re-exports only (no inline declarations); 16 export-star lines (one per module)', () => {
+  it('Barrel is re-exports only (no inline declarations); 17 export-star lines (one per module — one added 2026-05-XX with the api-types growth)', () => {
     const exportStarMatches = body.match(/^export \* from '\.\/[a-z-]+\.js';$/gm);
     expect(exportStarMatches).not.toBeNull();
-    expect((exportStarMatches ?? []).length).toBe(16);
+    expect((exportStarMatches ?? []).length).toBe(17);
   });
 
   it('file exists at canonical path', () => {

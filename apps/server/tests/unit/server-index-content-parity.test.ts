@@ -80,9 +80,9 @@ describe('W461.A apps/server/src/index.ts content parity', () => {
     );
   });
 
-  it("shutdown handler: 'shutdown signal received' log + try/await app.close() with catch logger.warn 'app close failed (proceeding to teardown)' + await teardown() + process.exit(0)", () => {
+  it("shutdown handler: 'shutdown signal received' log + try/await app.close() with catch logger.warn 'app close failed (proceeding to teardown)' (full err object incl. stack+cause for Pino stdSerializers) + await teardown() + process.exit(0)", () => {
     expect(body).toMatch(
-      /const shutdown = async \(signal: string\): Promise<void> => \{\s*\n?\s*logger\.info\(\{ component: 'lifecycle', signal \}, 'shutdown signal received'\);\s*\n?\s*try \{\s*\n?\s*await app\.close\(\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'lifecycle',\s*\n?\s*err: err instanceof Error \? \{ name: err\.name, message: err\.message \} : \{ value: err \},\s*\n?\s*\},\s*\n?\s*'app close failed \(proceeding to teardown\)',\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*await teardown\(\);\s*\n?\s*process\.exit\(0\);\s*\n?\s*\};/,
+      /const shutdown = async \(signal: string\): Promise<void> => \{\s*\n?\s*logger\.info\(\{ component: 'lifecycle', signal \}, 'shutdown signal received'\);\s*\n?\s*try \{\s*\n?\s*await app\.close\(\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'lifecycle',\s*\n?\s*err:\s*\n?\s*err instanceof Error\s*\n?\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \}\s*\n?\s*: \{ value: err \},\s*\n?\s*\},\s*\n?\s*'app close failed \(proceeding to teardown\)',\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*await teardown\(\);\s*\n?\s*process\.exit\(0\);\s*\n?\s*\};/,
     );
   });
 
@@ -91,9 +91,9 @@ describe('W461.A apps/server/src/index.ts content parity', () => {
     expect(body).toMatch(/process\.on\('SIGINT', \(\) => void shutdown\('SIGINT'\)\);/);
   });
 
-  it("app.listen failure: try await app.listen({host, port}) with logger.info success path ({host, port, env}, 'driftstack-api listening') + catch logger.fatal 'app.listen failed — exiting' + await teardown() + process.exit(1)", () => {
+  it("app.listen failure: try await app.listen({host, port}) with logger.info success path ({host, port, env}, 'driftstack-api listening') + catch logger.fatal 'app.listen failed — exiting' (full err object incl. stack+cause) + await teardown() + process.exit(1)", () => {
     expect(body).toMatch(
-      /try \{\s*\n?\s*await app\.listen\(\{ host: config\.host, port: config\.port \}\);\s*\n?\s*logger\.info\(\s*\n?\s*\{ component: 'lifecycle', host: config\.host, port: config\.port, env: config\.nodeEnv \},\s*\n?\s*'driftstack-api listening',\s*\n?\s*\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*logger\.fatal\(\s*\n?\s*\{\s*\n?\s*component: 'lifecycle',\s*\n?\s*err: err instanceof Error \? \{ name: err\.name, message: err\.message \} : \{ value: err \},\s*\n?\s*\},\s*\n?\s*'app\.listen failed — exiting',\s*\n?\s*\);\s*\n?\s*await teardown\(\);\s*\n?\s*process\.exit\(1\);\s*\n?\s*\}/,
+      /try \{\s*\n?\s*await app\.listen\(\{ host: config\.host, port: config\.port \}\);\s*\n?\s*logger\.info\(\s*\n?\s*\{ component: 'lifecycle', host: config\.host, port: config\.port, env: config\.nodeEnv \},\s*\n?\s*'driftstack-api listening',\s*\n?\s*\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*logger\.fatal\(\s*\n?\s*\{\s*\n?\s*component: 'lifecycle',\s*\n?\s*err:\s*\n?\s*err instanceof Error\s*\n?\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \}\s*\n?\s*: \{ value: err \},\s*\n?\s*\},\s*\n?\s*'app\.listen failed — exiting',\s*\n?\s*\);\s*\n?\s*await teardown\(\);\s*\n?\s*process\.exit\(1\);\s*\n?\s*\}/,
     );
   });
 

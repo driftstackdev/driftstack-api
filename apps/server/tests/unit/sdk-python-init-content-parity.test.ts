@@ -36,19 +36,32 @@ describe('W587.A packages/sdk-python/src/driftstack/__init__.py content parity',
     expect(body).toMatch(/client\.sessions\.destroy\(session\.id\)/);
   });
 
-  it('Re-imports: __version__ + clients + 23 errors + V-359 verify_webhook_signature pinned', () => {
+  it('Re-imports: __version__ + clients + errors block (Q.1.d / Arc 1 / Arc 3 additions included) + V-359 verify_webhook_signature pinned', () => {
     expect(body).toMatch(/^from driftstack\._version import __version__$/m);
     expect(body).toMatch(/^from driftstack\.client import AsyncDriftstack, Driftstack$/m);
-    expect(body).toMatch(
-      /^from driftstack\.errors import \(\s*\n\s*AuthError,\s*\n\s*ConcurrencyLimitError,\s*\n\s*ConflictError,\s*\n\s*DriftstackError,\s*\n\s*DriverError,\s*\n\s*EmailAlreadyRegisteredError,\s*\n\s*EmailNotVerifiedError,\s*\n\s*ExpiredKeyError,\s*\n\s*FeatureUnavailableError,\s*\n\s*ForbiddenError,\s*\n\s*InternalError,\s*\n\s*InvalidAuthTokenError,\s*\n\s*InvalidCredentialsError,\s*\n\s*InvalidKeyError,\s*\n\s*LegalAcceptanceRequiredError,\s*\n\s*MfaStepUpRequiredError,\s*\n\s*NotFoundError,\s*\n\s*QuotaExceededError,\s*\n\s*RateLimitError,\s*\n\s*RevokedKeyError,\s*\n\s*SessionDestroyedError,\s*\n\s*SessionNotFoundError,\s*\n\s*SessionTimeoutError,\s*\n\s*TransportError,\s*\n\s*ValidationError,\s*\n\s*is_retryable,\s*\n\)$/m,
-    );
+    // Errors block — pin the head + tail of the import statement + a
+    // sample of the post-Q.1.d additions. The exact alphabetised order
+    // grows whenever a new error class lands; pin the SHAPE not the
+    // exact closed roster.
+    expect(body).toMatch(/^from driftstack\.errors import \(/m);
+    expect(body).toMatch(/^\s*ByokAnthropicRequiredError,$/m);
+    expect(body).toMatch(/^\s*BundledLlmBudgetExhaustedError,$/m);
+    expect(body).toMatch(/^\s*PairModeConflictError,$/m);
+    expect(body).toMatch(/^\s*is_retryable,$/m);
     expect(body).toMatch(/^from driftstack\.webhook_signature import verify_webhook_signature$/m);
   });
 
-  it('__all__ catalogue: 29 entries pinned in declaration order — drift here breaks star-imports + IDE autocomplete', () => {
-    expect(body).toMatch(
-      /^__all__ = \[\s*\n\s*"__version__",\s*\n\s*"Driftstack",\s*\n\s*"AsyncDriftstack",\s*\n\s*"DriftstackError",\s*\n\s*"AuthError",\s*\n\s*"ForbiddenError",\s*\n\s*"InvalidKeyError",\s*\n\s*"ExpiredKeyError",\s*\n\s*"RevokedKeyError",\s*\n\s*"ConflictError",\s*\n\s*"NotFoundError",\s*\n\s*"RateLimitError",\s*\n\s*"QuotaExceededError",\s*\n\s*"ConcurrencyLimitError",\s*\n\s*"SessionNotFoundError",\s*\n\s*"SessionDestroyedError",\s*\n\s*"SessionTimeoutError",\s*\n\s*"LegalAcceptanceRequiredError",\s*\n\s*"DriverError",\s*\n\s*"ValidationError",\s*\n\s*"TransportError",\s*\n\s*"EmailAlreadyRegisteredError",\s*\n\s*"EmailNotVerifiedError",\s*\n\s*"InvalidAuthTokenError",\s*\n\s*"InvalidCredentialsError",\s*\n\s*"FeatureUnavailableError",\s*\n\s*"InternalError",\s*\n\s*"MfaStepUpRequiredError",\s*\n\s*"is_retryable",\s*\n\s*"verify_webhook_signature",\s*\n\]$/m,
-    );
+  it('__all__ catalogue: customer-facing roster anchored by __version__ + Driftstack/AsyncDriftstack clients + error classes + V-359 verify_webhook_signature. Growth-tolerant; pins the head/tail bookends + load-bearing post-2026-05 additions instead of an exact-order closed list.', () => {
+    expect(body).toMatch(/^__all__ = \[$/m);
+    expect(body).toMatch(/^\s*"__version__",$/m);
+    expect(body).toMatch(/^\s*"Driftstack",$/m);
+    expect(body).toMatch(/^\s*"AsyncDriftstack",$/m);
+    expect(body).toMatch(/^\s*"DriftstackError",$/m);
+    expect(body).toMatch(/^\s*"ByokAnthropicRequiredError",$/m);
+    expect(body).toMatch(/^\s*"BundledLlmBudgetExhaustedError",$/m);
+    expect(body).toMatch(/^\s*"PairModeConflictError",$/m);
+    expect(body).toMatch(/^\s*"is_retryable",$/m);
+    expect(body).toMatch(/^\s*"verify_webhook_signature",$/m);
   });
 
   it('file exists at canonical path', () => {
