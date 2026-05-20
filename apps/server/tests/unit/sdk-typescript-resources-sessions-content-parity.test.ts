@@ -146,18 +146,18 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
     );
   });
 
-  it("encodeURIComponent on :sessionId — EXACTLY 6 escape call sites (navigate + interact + wait + getState + capture + destroy). iterate doesn't escape directly (delegates via this.list() which doesn't use :sessionId). create doesn't escape (no :sessionId in the create path). Drift to dropping any escape would let \"abc/../..\" traverse.", () => {
+  it("encodeURIComponent on :sessionId — EXACTLY 7 escape call sites (get + navigate + interact + wait + getState + capture + destroy). iterate doesn't escape directly (delegates via this.list() which doesn't use :sessionId). create doesn't escape (no :sessionId in the create path). Drift to dropping any escape would let \"abc/../..\" traverse.", () => {
     const matches = body.match(/encodeURIComponent\(sessionId\)/g) ?? [];
-    expect(matches.length, 'expected encodeURIComponent(sessionId) 6 times').toBe(6);
+    expect(matches.length, 'expected encodeURIComponent(sessionId) 7 times').toBe(7);
   });
 
-  it('9-verb inventory + verb-mix invariants — exactly 9 method declarations (create + list + iterate + navigate + interact + wait + getState + capture + destroy). Verb mix: 5 POSTs (create + navigate + interact + wait + capture) + 2 GETs (list + getState) + 1 DELETE (destroy) = 8 wire-call verbs (iterate is delegation). ZERO PATCH/PUT — sessions are atomic; no partial-update.', () => {
+  it('10-verb inventory + verb-mix invariants — exactly 10 method declarations (create + list + iterate + get + navigate + interact + wait + getState + capture + destroy). Verb mix: 5 POSTs (create + navigate + interact + wait + capture) + 3 GETs (list + get + getState) + 1 DELETE (destroy) = 9 wire-call verbs (iterate is delegation). ZERO PATCH/PUT — sessions are atomic; no partial-update.', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 9 verb declarations').toBe(9);
+    expect(methods.length, 'expected 10 verb declarations').toBe(10);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
     expect(posts, 'expected 5 POSTs').toBe(5);
     const gets = (body.match(/method: 'GET'/g) ?? []).length;
-    expect(gets, 'expected 2 GETs (list + getState)').toBe(2);
+    expect(gets, 'expected 3 GETs (list + get + getState)').toBe(3);
     const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;
     expect(deletes, 'expected 1 DELETE (destroy)').toBe(1);
     expect(body).not.toMatch(/method: 'PATCH'/);

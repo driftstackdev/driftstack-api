@@ -94,10 +94,13 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
   });
 
-  it('CreateSessionRequest: archetype optional + V-169 purpose optional + label max 120 optional + metadata optional', () => {
+  it('CreateSessionRequest: archetype optional + V-169 purpose optional + label max 120 optional + metadata optional + 2026-05-20 profile_id uuid optional (antidetect-browser profile binding; cross-account 404 anti-enumeration)', () => {
     expect(body).toMatch(
-      /export const CreateSessionRequestSchema = z\.object\(\{\s*\n?\s*archetype: ArchetypeSchema\.optional\(\),\s*\n?\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*\n?\s*purpose: SessionPurposeSchema\.optional\(\),\s*\n?\s*label: z\.string\(\)\.max\(120\)\.optional\(\),\s*\n?\s*metadata: z\.record\(z\.unknown\(\)\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const CreateSessionRequestSchema = z\.object\(\{\s*\n?\s*archetype: ArchetypeSchema\.optional\(\),\s*\n?\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*\n?\s*purpose: SessionPurposeSchema\.optional\(\),\s*\n?\s*label: z\.string\(\)\.max\(120\)\.optional\(\),\s*\n?\s*metadata: z\.record\(z\.unknown\(\)\)\.optional\(\),\s*\n?\s*[\s\S]*?profile_id: z\.string\(\)\.uuid\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
+    // 2026-05-20 anti-enumeration framing pinned
+    expect(body).toMatch(/cross-account profile_id returns/);
+    expect(body).toMatch(/Server validates that the profile/);
   });
 
   it('NavigateRequest: url + timeout_ms 1000..120000 optional + wait_until enum (load|domcontentloaded|networkidle) default load; NavigateResponse: url + status 100..599 + final_url + duration_ms', () => {
