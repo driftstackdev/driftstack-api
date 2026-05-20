@@ -35,6 +35,7 @@
 
 import type { RefObject } from 'react';
 import { useEffect, useRef } from 'react';
+import { type CanonicalModifier } from '@driftstack/sdk';
 import { sendInputEvent, type InputEvent, type Room } from './livekit';
 
 export interface UseInputCaptureOpts {
@@ -81,8 +82,8 @@ export function pointerToViewport(
  *  Meta names, which forced the harness to remap Meta → Command
  *  on every key press; aligning to Mac-native labels here
  *  collapses the drift. */
-export function modifiersFromEvent(event: KeyboardEvent): readonly string[] | undefined {
-  const mods: string[] = [];
+export function modifiersFromEvent(event: KeyboardEvent): readonly CanonicalModifier[] | undefined {
+  const mods: CanonicalModifier[] = [];
   if (event.metaKey) mods.push('cmd');
   if (event.ctrlKey) mods.push('ctrl');
   if (event.shiftKey) mods.push('shift');

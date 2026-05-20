@@ -101,7 +101,7 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
     const lib = resolve(REPO_ROOT, 'packages/sdk-typescript/src/index.ts');
     const body = read(lib);
     expect(body).toMatch(
-      /export \{\s*\n?\s*CANONICAL_MODIFIER_NAMES,\s*\n?\s*type CanonicalModifier,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /export \{[^}]*CANONICAL_MODIFIER_NAMES[^}]*type CanonicalModifier[^}]*\} from '@driftstack\/api-types';/s,
     );
   });
 

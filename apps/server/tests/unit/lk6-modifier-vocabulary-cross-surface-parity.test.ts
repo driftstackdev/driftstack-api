@@ -33,7 +33,7 @@ function read(p: string): string {
 }
 
 describe('LK.6.d modifier-vocabulary cross-surface parity', () => {
-  it('gui-client modifiersFromEvent uses Mac-native vocabulary (cmd/ctrl/shift/option)', () => {
+  it('gui-client modifiersFromEvent uses Mac-native vocabulary (cmd/ctrl/shift/option) + CanonicalModifier return type', () => {
     const body = read(GUI_CLIENT);
     expect(body).toMatch(/if \(event\.metaKey\) mods\.push\('cmd'\);/);
     expect(body).toMatch(/if \(event\.ctrlKey\) mods\.push\('ctrl'\);/);
@@ -44,6 +44,13 @@ describe('LK.6.d modifier-vocabulary cross-surface parity', () => {
     expect(body).not.toMatch(/mods\.push\('Control'\)/);
     expect(body).not.toMatch(/mods\.push\('Alt'\)/);
     expect(body).not.toMatch(/mods\.push\('Meta'\)/);
+    // Slice 6 follow-up — the helper signature is now CanonicalModifier-typed
+    // (imported from @driftstack/sdk's re-export of api-types) so a typo
+    // like mods.push('Cmd') would now fail at compile time, not runtime.
+    expect(body).toMatch(/import \{ type CanonicalModifier \} from '@driftstack\/sdk';/);
+    expect(body).toMatch(
+      /readonly CanonicalModifier\[\] \| undefined \{\s*\n?\s*const mods: CanonicalModifier\[\] = \[\];/,
+    );
   });
 
   it('customer-dashboard inline modifiersFromEvent uses the same Mac-native vocabulary', () => {
