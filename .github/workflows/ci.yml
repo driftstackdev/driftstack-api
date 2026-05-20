@@ -283,6 +283,12 @@ jobs:
         run: npm ci
 
       - name: Build workspaces (bench targets compiled output)
+        # 2026-05-20 — PUBLIC_API_BASE_URL must be set for astro
+        # admin-panel + customer-dashboard production builds (same
+        # gate as task #45's pretest fix). Without this the Perf
+        # job's `npm run build` errors before any benchmark runs.
+        env:
+          PUBLIC_API_BASE_URL: https://api.driftstack.dev
         run: npm run build
 
       - name: Run benchmarks (JSON output)
