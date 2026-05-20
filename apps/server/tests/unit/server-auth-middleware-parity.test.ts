@@ -72,7 +72,7 @@ describe('W712 server-side auth middleware parity', () => {
     const src = read(AUTH_MIDDLEWARE);
 
     expect(src).toMatch(
-      /await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*\)/,
+      /await authenticate\(\s*\n?\s*opts\.authRepo,\s*\n?\s*token,\s*\n?\s*opts\.authCache,\s*\n?\s*new Date\(\),\s*\n?\s*opts\.authCoalescer,\s*\n?\s*opts\.staffEmails \?\? new Set\(\),\s*\n?\s*\)/,
     );
   });
 
@@ -134,9 +134,9 @@ describe('W712 server-side auth middleware parity', () => {
     expect(src).toMatch(/export default fp\(authPlugin, \{ name: 'auth' \}\)/);
   });
 
-  it('CRITICAL imports pinned — MfaStepUpRequiredError from ../lib/errors.js (NOT inline-defined). Matches W710 canonical taxonomy single-source. Drift to inline-defining would let server-side errors diverge from the canonical roster.', () => {
+  it('CRITICAL imports pinned — MfaStepUpRequiredError from ../lib/errors.js (NOT inline-defined). Matches W710 canonical taxonomy single-source. Drift to inline-defining would let server-side errors diverge from the canonical roster. (May be bundled with sibling error imports — single grouped import block.)', () => {
     const src = read(AUTH_MIDDLEWARE);
-    expect(src).toMatch(/import \{ MfaStepUpRequiredError \} from '\.\.\/lib\/errors\.js'/);
+    expect(src).toMatch(/MfaStepUpRequiredError,?[\s\S]*?from '\.\.\/lib\/errors\.js'/);
   });
 
   it('CRITICAL AuthPluginOptions 4-field shape pinned — authRepo + authCache + authCoalescer + mfaService (optional). The 4-field config is what lets test fixtures inject in-memory implementations + production wire-up Redis cache + DB repo. Drift to dropping a field would break either prod boot or test fixtures.', () => {

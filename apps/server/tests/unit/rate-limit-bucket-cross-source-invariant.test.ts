@@ -32,15 +32,20 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-const BUCKET_KEYS = ['global', 'sessions:create', 'agent_sessions:message'] as const;
+const BUCKET_KEYS = [
+  'global',
+  'sessions:create',
+  'agent_sessions:message',
+  'agent_sessions:input_event',
+] as const;
 
 describe('W869 RateLimitBucket cross-source invariant', () => {
   // ─── api-types common.ts TIER_RATE_LIMIT_DEFAULTS shape ──────
 
-  it("CRITICAL packages/api-types/src/common.ts TIER_RATE_LIMIT_DEFAULTS has the EXACT Record<AccountTier, Record<'global' | 'sessions:create' | 'agent_sessions:message', BucketLimitConfig>> shape. The 3-bucket-key shape (extended in v2-#13 for agent_sessions:message AI chat throttle) is the V-219 closed roster.", () => {
+  it("CRITICAL packages/api-types/src/common.ts TIER_RATE_LIMIT_DEFAULTS has the EXACT Record<AccountTier, Record<'global' | 'sessions:create' | 'agent_sessions:message' | 'agent_sessions:input_event', BucketLimitConfig>> shape. The 4-bucket-key shape (v2-#13 added 'agent_sessions:message' for AI chat throttle; Slice 4 added 'agent_sessions:input_event' for LK.6 manual-control stream) is the V-219 closed roster.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
     expect(p).toMatch(
-      /TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n?\s*AccountTier,\s*\n?\s*Record<'global' \| 'sessions:create' \| 'agent_sessions:message', BucketLimitConfig>/,
+      /TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n?\s*AccountTier,\s*\n?\s*Record<\s*\n?\s*'global' \| 'sessions:create' \| 'agent_sessions:message' \| 'agent_sessions:input_event',\s*\n?\s*BucketLimitConfig/,
     );
   });
 
@@ -60,24 +65,26 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
 
   // ─── api-types accounts.ts RateLimitBucketSchema enum field ──
 
-  it("CRITICAL packages/api-types/src/accounts.ts RateLimitBucketSchema declares bucket_key: z.enum(['global', 'sessions:create']). The customer-read response surface — what /v1/account/rate-limits returns to dashboard consumers.", () => {
+  it("CRITICAL packages/api-types/src/accounts.ts RateLimitBucketSchema declares bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']). The customer-read response surface — what /v1/account/rate-limits returns to dashboard consumers. (Schema-side excludes agent_sessions:input_event because that bucket is internal-only — driven by the LK.6 stream-rate gate, not customer-visible.)", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
-    expect(p).toMatch(/bucket_key: z\.enum\(\['global', 'sessions:create'\]\)/);
+    expect(p).toMatch(
+      /bucket_key: z\.enum\(\['global', 'sessions:create', 'agent_sessions:message'\]\)/,
+    );
   });
 
   // ─── api-types admin.ts SetQuotaOverrideRequest enum field ───
 
-  it("CRITICAL packages/api-types/src/admin.ts SetQuotaOverrideRequestSchema declares bucket_key: z.enum(['global', 'sessions:create']). The admin-write surface (POST /v1/admin/accounts/:id/rate-limit-overrides) accepts ONLY the 2 canonical keys.", () => {
+  it("CRITICAL packages/api-types/src/admin.ts SetQuotaOverrideRequestSchema declares bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']). The admin-write surface (POST /v1/admin/accounts/:id/rate-limit-overrides) accepts the 3 customer-visible keys; agent_sessions:input_event stays internal-only.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
     expect(p).toMatch(
-      /SetQuotaOverrideRequestSchema = z\.object\(\{[\s\S]+?bucket_key: z\.enum\(\['global', 'sessions:create'\]\)/,
+      /SetQuotaOverrideRequestSchema = z\.object\(\{[\s\S]+?bucket_key: z\.enum\(\['global', 'sessions:create', 'agent_sessions:message'\]\)/,
     );
   });
 
-  it("CRITICAL packages/api-types/src/admin.ts ClearQuotaOverrideQuerySchema declares bucket_key: z.enum(['global', 'sessions:create']). The admin-clear surface (DELETE /v1/admin/.../rate-limit-overrides?bucket_key=...) accepts ONLY the 2 canonical keys.", () => {
+  it("CRITICAL packages/api-types/src/admin.ts ClearQuotaOverrideQuerySchema declares bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']). The admin-clear surface (DELETE /v1/admin/.../rate-limit-overrides?bucket_key=...) accepts the 3 customer-visible keys.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
     expect(p).toMatch(
-      /ClearQuotaOverrideQuerySchema = z\.object\(\{[\s\S]+?bucket_key: z\.enum\(\['global', 'sessions:create'\]\)/,
+      /ClearQuotaOverrideQuerySchema = z\.object\(\{[\s\S]+?bucket_key: z\.enum\(\['global', 'sessions:create', 'agent_sessions:message'\]\)/,
     );
   });
 
@@ -109,9 +116,14 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
 
   // ─── 2-key cardinality + no forbidden buckets ────────────────
 
-  it('CRITICAL bucket_key roster = EXACTLY 3 values (v2-#13 extended for agent_sessions:message AI chat throttle). Drift to adding a 4th bucket would force coordinated SDK + dashboard + admin updates.', () => {
-    expect(BUCKET_KEYS.length).toBe(3);
-    expect(BUCKET_KEYS).toEqual(['global', 'sessions:create', 'agent_sessions:message']);
+  it('CRITICAL bucket_key roster = EXACTLY 4 values (v2-#13 added agent_sessions:message for AI chat throttle; Slice 4 added agent_sessions:input_event for LK.6 manual-control stream). Drift to adding a 5th bucket would force coordinated SDK + dashboard + admin updates.', () => {
+    expect(BUCKET_KEYS.length).toBe(4);
+    expect(BUCKET_KEYS).toEqual([
+      'global',
+      'sessions:create',
+      'agent_sessions:message',
+      'agent_sessions:input_event',
+    ]);
   });
 
   it("CRITICAL no source declares forbidden bucket-key names (per-route / api / write / read / admin / heavy / light). These are common patterns that V-219 intentionally avoids — the 2-key model maps to 'all calls vs the single most-expensive op'.", () => {
@@ -131,12 +143,13 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
 
   // ─── 'sessions:create' colon-namespace pattern ────────────────
 
-  it("CRITICAL per-route buckets use colon-namespace ('resource:verb') NOT slash or dot. The colon is what distinguishes per-route buckets from the global one. Drift to 'sessions/create' or 'sessions.create' would let the bucket-key parser mis-classify routes.", () => {
+  it("CRITICAL per-route buckets use colon-namespace ('resource:verb' or 'resource:event') NOT slash or dot. The colon is what distinguishes per-route buckets from the global one. Drift to 'sessions/create' or 'sessions.create' would let the bucket-key parser mis-classify routes.", () => {
     expect(BUCKET_KEYS).toContain('sessions:create');
     expect(BUCKET_KEYS).toContain('agent_sessions:message');
-    // v2-#13 — every non-global bucket follows the resource:verb
+    expect(BUCKET_KEYS).toContain('agent_sessions:input_event');
+    // v2-#13 + Slice 4 — every non-global bucket follows the resource:verb
     // colon convention; only 'global' is bare.
-    expect(BUCKET_KEYS.filter((k) => k.includes(':')).length).toBe(2);
+    expect(BUCKET_KEYS.filter((k) => k.includes(':')).length).toBe(3);
     expect(BUCKET_KEYS.filter((k) => k.includes('/')).length).toBe(0);
     expect(BUCKET_KEYS.filter((k) => k.includes('.')).length).toBe(0);
   });

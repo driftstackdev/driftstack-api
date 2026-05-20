@@ -119,7 +119,7 @@ describe('W711 server-side error-handler middleware parity', () => {
     expect(src).toMatch(/return new InternalError\('An unexpected error occurred\.', err\)/);
   });
 
-  it('CRITICAL 5xx vs 4xx log-level + log-shape differentiation pinned. 5xx: request.log.error with full err object (for ops/postmortems). 4xx: request.log.warn with NARROWED err (just name + message — no stack-leak in high-volume 4xx noise). Drift to logging full err on 4xx would 10x log volume.', () => {
+  it('CRITICAL 5xx vs 4xx log-level pinned. Both pass `err` directly so Pino stdSerializers.err extracts name+message+stack+cause (the prior wrapped {name,message} dropped the stack — same class of bug as the 2026-05-19 scheduled-jobs-poller wrapper that hid a 10-day prod TypeError stack).', () => {
     const src = read(ERROR_HANDLER);
 
     // 5xx: log.error with full err.
@@ -127,9 +127,11 @@ describe('W711 server-side error-handler middleware parity', () => {
       /if \(apiError\.status >= 500\) \{\s*\n?\s*request\.log\.error\(\{ err, problem: apiError\.toProblem\(\) \}/,
     );
 
-    // 4xx: log.warn with NARROWED err object (just name + message).
+    // 4xx: log.warn with FULL err (post-2026-05-19 scheduled-jobs-poller
+    // wrapper-bug lesson — wrapped {name,message} drops the stack Pino
+    // would otherwise expose).
     expect(src).toMatch(
-      /request\.log\.warn\(\s*\n?\s*\{ err: \{ name: err\.name, message: err\.message \}/,
+      /request\.log\.warn\(\{ err, problem: apiError\.toProblem\(\) \}, 'request rejected: 4xx'\)/,
     );
   });
 

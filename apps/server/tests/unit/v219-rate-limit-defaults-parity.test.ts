@@ -61,10 +61,10 @@ describe('W731 V-219 TIER_RATE_LIMIT_DEFAULTS parity', () => {
     );
   });
 
-  it("CRITICAL TIER_RATE_LIMIT_DEFAULTS Record type-shape pinned — Record<AccountTier, Record<'global' | 'sessions:create' | 'agent_sessions:message', BucketLimitConfig>>. The 3-bucket-key shape (v2-#13 extended for agent_sessions:message AI chat throttle).", () => {
+  it("CRITICAL TIER_RATE_LIMIT_DEFAULTS Record type-shape pinned — Record<AccountTier, Record<'global' | 'sessions:create' | 'agent_sessions:message' | 'agent_sessions:input_event', BucketLimitConfig>>. The 4-bucket-key shape (v2-#13 added agent_sessions:message AI chat throttle; Slice 4 added agent_sessions:input_event LK.6 manual-control stream).", () => {
     const c = read(COMMON);
     expect(c).toMatch(
-      /export const TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n\s*AccountTier,\s*\n\s*Record<'global' \| 'sessions:create' \| 'agent_sessions:message', BucketLimitConfig>\s*\n>/,
+      /export const TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n\s*AccountTier,\s*\n\s*Record<\s*\n\s*'global' \| 'sessions:create' \| 'agent_sessions:message' \| 'agent_sessions:input_event',\s*\n\s*BucketLimitConfig\s*\n\s*>\s*\n>/,
     );
   });
 

@@ -101,14 +101,12 @@ describe('W979 error-handler RFC 7807 cross-source invariant', () => {
     );
   });
 
-  it("CRITICAL handleError log-routing — status >= 400 → request.log.warn with truncated err {name, message} + problem + 'request rejected: 4xx' message. The no-full-stack design avoids log-spam from 400s.", () => {
+  it("CRITICAL handleError log-routing — status >= 400 → request.log.warn with FULL err + problem + 'request rejected: 4xx' message. Post-2026-05-19 scheduled-jobs-poller wrapper-bug lesson: passing the raw err lets Pino stdSerializers.err extract name+message+stack+cause; the prior {name,message} wrapper dropped the stack reference.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/error-handler.ts'));
     expect(p).toMatch(/\} else if \(apiError\.status >= 400\) \{/);
-    expect(p).toMatch(/request\.log\.warn\(/);
     expect(p).toMatch(
-      /\{ err: \{ name: err\.name, message: err\.message \}, problem: apiError\.toProblem\(\) \},/,
+      /request\.log\.warn\(\{ err, problem: apiError\.toProblem\(\) \}, 'request rejected: 4xx'\);/,
     );
-    expect(p).toMatch(/'request rejected: 4xx',/);
   });
 
   // ─── normaliseError 4-branch waterfall ───────────────────────
