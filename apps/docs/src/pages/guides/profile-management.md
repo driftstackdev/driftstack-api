@@ -98,13 +98,33 @@ const profile = await client.profiles.get('prof_01HV...');
 
 ## Bind a session to a profile
 
-> **Status: planned (catalog).** Programmatic session-to-profile binding via the SDK isn't yet wired. `POST /v1/sessions` currently accepts `{ archetype, purpose, label, metadata }` only — no `profile_id` field. Sessions started via the SDK are profile-less today; the binding lives in the dashboard's GUI client driver layer.
+`POST /v1/sessions` accepts an optional `profile_id` field as of 2026-05-20 (commit `fa8cb83a`). When supplied, the server inherits the profile's `archetype` as the default, stamps `{profile_id, profile_name}` into the session's `metadata`, and bumps the profile's `last_used_at` fire-and-forget:
 
-When the binding lands, sessions created with a profile reference will inherit the profile's storage state on launch and write new state back on clean destroy (or clean idle-timeout). Without a profile, the session starts ephemeral.
+```ts
+const session = await client.sessions.create({
+  profile_id: 'prof_01HV...',
+  // archetype optional — inherited from profile when absent
+  label: 'checkout-run-2026-05-20',
+});
+```
 
-**Track the rollout:** the [V-294 feature catalog](https://github.com/driftstackdev/driftstack-api/blob/main/docs/architecture/v294-feature-catalog.md) lists "Profile-to-session binding" as IN-FLIGHT; the change will be additive (new optional field on the request body).
+Cross-account `profile_id` returns `404` (anti-enumeration — indistinguishable from a missing one).
 
-In the meantime, profiles still serve as long-lived archetype anchors for the dashboard's GUI flows + as restore-from-snapshot targets .
+## Launch a profile (one-shot)
+
+For the antidetect-browser flow (where the typical action is "give me a session on this profile, right now"), the SDK exposes `profiles.launch(id, body?)` as a one-round-trip alternative to `sessions.create({ profile_id })`:
+
+```ts
+const session = await client.profiles.launch('prof_01HV...', {
+  // optional overrides — `proxy` envelope to attach a SOCKS5 backend,
+  // `label` for human-readable identification in the dashboard
+  label: 'checkout-run-2026-05-20',
+});
+```
+
+Returns the freshly-minted session (same shape as `sessions.create`). The dashboard `/profiles` page exposes a per-row **Launch** button that calls this endpoint and surfaces the returned `session.id`; from there the customer drives the session via the desktop GUI client's Live session view or the standard `navigate`/`interact`/`wait`/`capture`/`destroy` verbs from any SDK.
+
+Profile-bound sessions inherit the profile's storage state on launch and write new state back on clean destroy (or clean idle-timeout). Without a `profile_id`, sessions start ephemeral.
 
 ## Delete a profile
 
