@@ -169,21 +169,54 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
 
-      // 2. Sign-in gate
-      if (!sessionToken) {
+      function showNeedsSignin() {
         const signinLink = sections.needsSignin.querySelector('[data-signin-link]');
         const signupLink = sections.needsSignin.querySelector('[data-signup-link]');
         const next = encodeURIComponent(window.location.pathname + window.location.search);
         if (signinLink) signinLink.setAttribute('href', '/login?next=' + next);
         if (signupLink) signupLink.setAttribute('href', '/signup?next=' + next);
         show('needs-signin');
+      }
+
+      // 2. Sign-in gate (token absent locally).
+      if (!sessionToken) {
+        showNeedsSignin();
         return;
       }
 
-      // 3. Confirmation UI
-      const codePreview = sections.confirm.querySelector('[data-code-preview]');
-      if (codePreview) codePreview.textContent = code.slice(0, 6) + '…';
-      show('confirm');
+      // 2b. 2026-05-20 — verify the token is actually valid server-side
+      // before showing the "Authorize this device?" confirm. A stale /
+      // expired token in localStorage previously slipped through and
+      // the customer saw the confirm UI even though they weren't
+      // actually signed in; authorize-button click then 401'd into a
+      // generic error.
+      show('loading');
+      fetch(apiBaseUrl + '/v1/account/me', {
+        headers: { authorization: 'Bearer ' + sessionToken },
+      })
+        .then((r) => {
+          if (r.status === 401) {
+            try {
+              window.localStorage.removeItem('ds_web_session_token');
+            } catch (_) {
+              /* localStorage may be blocked — harmless */
+            }
+            showNeedsSignin();
+            return null;
+          }
+          if (!r.ok) {
+            showError('Sign-in check failed (HTTP ' + r.status + '). Try again in a moment.');
+            return null;
+          }
+          // 3. Confirmation UI
+          const codePreview = sections.confirm.querySelector('[data-code-preview]');
+          if (codePreview) codePreview.textContent = code.slice(0, 6) + '…';
+          show('confirm');
+          return null;
+        })
+        .catch(() => {
+          showError("Couldn't reach the API to verify your session. Check your connection.");
+        });
 
       // 4. Wire buttons
       const authorizeBtn = sections.confirm.querySelector('[data-authorize]');
