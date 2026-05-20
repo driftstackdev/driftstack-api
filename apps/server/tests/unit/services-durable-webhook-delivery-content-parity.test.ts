@@ -62,12 +62,13 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     );
   });
 
-  it('SELECT...FOR UPDATE SKIP LOCKED claim invariant pinned (reused inline, not via WebhooksRepo.claim)', () => {
+  it('SELECT...FOR UPDATE SKIP LOCKED claim invariant pinned (reused inline, not via WebhooksRepo.claim). Date interp converted to nowIso (2026-05-19 d9417a91 drift-guard: never interpolate raw Date in sql template literal — toISOString() at the boundary instead, since postgres-js Bind step calls Buffer.byteLength on the param).', () => {
     expect(body).toMatch(
       /Worker uses SELECT\.\.\.FOR UPDATE SKIP LOCKED for cross-process\s*\n?\s*\/\/\s*coordination \(the existing webhook-worker\.ts already uses this\s*\n?\s*\/\/\s*pattern via WebhooksRepo\.claim; V-173 reuses the same primitive\s*\n?\s*\/\/\s*inline rather than depending on the existing repo\)\./,
     );
+    expect(body).toMatch(/const nowIso = nowDate\.toISOString\(\);/);
     expect(body).toMatch(
-      /SELECT id FROM webhook_deliveries\s*\n?\s*WHERE status = 'pending' AND next_attempt_at <= \$\{nowDate\}\s*\n?\s*ORDER BY next_attempt_at ASC\s*\n?\s*LIMIT \$\{batchSize\}\s*\n?\s*FOR UPDATE SKIP LOCKED/,
+      /SELECT id FROM webhook_deliveries\s*\n?\s*WHERE status = 'pending' AND next_attempt_at <= \$\{nowIso\}\s*\n?\s*ORDER BY next_attempt_at ASC\s*\n?\s*LIMIT \$\{batchSize\}\s*\n?\s*FOR UPDATE SKIP LOCKED/,
     );
   });
 

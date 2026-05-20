@@ -169,10 +169,12 @@ describe('W1046 routes/admin-force-actions V-100 + D-020/D-025 cross-source inva
 
   // ─── x-forwarded-for first-hop ───────────────────────────────
 
-  it('CRITICAL clientIp x-forwarded-for first-hop — splits on comma + takes index 0 + trims; falls back to request.ip ?? null. Same first-hop convention as admin-incidents + admin-webhooks for D-025 audit-IP capture.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
-    expect(p).toMatch(/const xff = request\.headers\['x-forwarded-for'\];/);
-    expect(p).toMatch(/const first = xff\.split\(','\)\[0\]\?\.trim\(\);/);
-    expect(p).toMatch(/return request\.ip \?\? null;/);
+  it('CRITICAL clientIp x-forwarded-for first-hop — extracted to shared lib/client-ip.ts; admin-force-actions imports readClientIp from there. Same first-hop convention as admin-incidents + admin-webhooks for D-025 audit-IP capture.', () => {
+    const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
+    expect(route).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/client-ip.ts'));
+    expect(lib).toMatch(/const xff = request\.headers\['x-forwarded-for'\];/);
+    expect(lib).toMatch(/const first = xff\.split\(','\)\[0\]\?\.trim\(\);/);
+    expect(lib).toMatch(/return request\.ip \?\? null;/);
   });
 });

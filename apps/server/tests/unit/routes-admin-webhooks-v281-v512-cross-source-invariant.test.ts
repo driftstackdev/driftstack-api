@@ -144,11 +144,12 @@ describe('W1043 routes/admin-webhooks V-281 + V-512 cross-source invariant', () 
 
   // ─── clientIp x-forwarded-for first-hop ──────────────────────
 
-  it('CRITICAL clientIp x-forwarded-for first-hop — splits the XFF header on comma + takes index 0 + trims; falls back to request.ip. The first-hop convention is the D-025 audit-IP-capture contract.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-webhooks.ts'));
-    expect(p).toMatch(/function clientIp\(request: FastifyRequest\): string \| null \{/);
-    expect(p).toMatch(/const xff = request\.headers\['x-forwarded-for'\];/);
-    expect(p).toMatch(/const first = xff\.split\(','\)\[0\]\?\.trim\(\);/);
+  it('CRITICAL clientIp x-forwarded-for first-hop — extracted to shared lib/client-ip.ts; admin-webhooks imports readClientIp from there. The first-hop convention is the D-025 audit-IP-capture contract.', () => {
+    const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-webhooks.ts'));
+    expect(route).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/client-ip.ts'));
+    expect(lib).toMatch(/const xff = request\.headers\['x-forwarded-for'\];/);
+    expect(lib).toMatch(/const first = xff\.split\(','\)\[0\]\?\.trim\(\);/);
   });
 
   // ─── id-format error message ─────────────────────────────────

@@ -157,7 +157,7 @@ describe('W1053 routes/admin-accounts D-025 + V-281 cross-source invariant', () 
     expect(p).toMatch(
       /limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),/,
     );
-    expect(p).toMatch(/cursor: z\.string\(\)\.optional\(\),/);
+    expect(p).toMatch(/cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),/);
     expect(p).toMatch(/email_contains: z\.string\(\)\.min\(1\)\.max\(254\)\.optional\(\),/);
   });
 
@@ -183,11 +183,13 @@ describe('W1053 routes/admin-accounts D-025 + V-281 cross-source invariant', () 
 
   // ─── x-forwarded-for first-hop ───────────────────────────────
 
-  it('CRITICAL clientIp x-forwarded-for first-hop — splits XFF on comma + takes index 0 + trims; falls back to request.ip ?? null. Same pattern as admin-incidents + admin-webhooks + admin-force-actions for D-025 audit-IP capture.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-accounts.ts'));
-    expect(p).toMatch(/const xff = request\.headers\['x-forwarded-for'\];/);
-    expect(p).toMatch(/const first = xff\.split\(','\)\[0\]\?\.trim\(\);/);
-    expect(p).toMatch(/return request\.ip \?\? null;/);
+  it('CRITICAL clientIp x-forwarded-for first-hop — extracted to shared lib/client-ip.ts; admin-accounts imports readClientIp from there. Same pattern as admin-incidents + admin-webhooks + admin-force-actions for D-025 audit-IP capture.', () => {
+    const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-accounts.ts'));
+    expect(route).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/client-ip.ts'));
+    expect(lib).toMatch(/const xff = request\.headers\['x-forwarded-for'\];/);
+    expect(lib).toMatch(/const first = xff\.split\(','\)\[0\]\?\.trim\(\);/);
+    expect(lib).toMatch(/return request\.ip \?\? null;/);
   });
 
   // ─── List response envelope ──────────────────────────────────

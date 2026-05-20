@@ -123,19 +123,22 @@ describe('W1040 routes/billing-crypto V-666.C + V-666.AO/AQ/AR cross-source inva
     expect(p).toMatch(/clients can distinguish a retry-success from a fresh create\./);
   });
 
-  it('CRITICAL idempotency-key validation — ASCII printable \\x21-\\x7e, length 1-255, no whitespace, trimmed. The strict regex catches client-side template bugs that submit raw template syntax as the key.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts'));
-    expect(p).toMatch(/if \(trimmed\.length > 255\) return \{ kind: 'invalid' \};/);
-    expect(p).toMatch(
+  it('CRITICAL idempotency-key validation — ASCII printable \\x21-\\x7e, length 1-255, no whitespace, trimmed. Extracted to shared lib/idempotency-key.ts; billing-crypto imports readIdempotencyKey from there. The strict regex catches client-side template bugs that submit raw template syntax as the key.', () => {
+    const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts'));
+    expect(route).toMatch(/import \{ readIdempotencyKey \} from '\.\.\/lib\/idempotency-key\.js';/);
+    expect(route).toMatch(/Idempotency-Key must be 1-255 ASCII chars \(no whitespace\)\./);
+
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/idempotency-key.ts'));
+    expect(lib).toMatch(/if \(trimmed\.length > 255\) return \{ kind: 'invalid' \};/);
+    expect(lib).toMatch(
       /if \(!\/\^\[\\x21-\\x7e\]\+\$\/\.test\(trimmed\)\) return \{ kind: 'invalid' \};/,
     );
-    expect(p).toMatch(/Idempotency-Key must be 1-255 ASCII chars \(no whitespace\)\./);
   });
 
-  it('CRITICAL idempotency discriminated union — three kinds (absent / valid / invalid). The union lets the route distinguish "client did not send a key" from "client sent a malformed key" without coupling validation to the service.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts'));
-    expect(p).toMatch(
-      /type IdempotencyHeader = \{ kind: 'absent' \} \| \{ kind: 'valid'; key: string \} \| \{ kind: 'invalid' \};/,
+  it('CRITICAL idempotency discriminated union — three kinds (absent / valid / invalid). Defined in the shared lib/idempotency-key.ts type IdempotencyHeader. The union lets the route distinguish "client did not send a key" from "client sent a malformed key" without coupling validation to the service.', () => {
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/idempotency-key.ts'));
+    expect(lib).toMatch(
+      /export type IdempotencyHeader =[\s\S]*?\| \{ kind: 'absent' \}[\s\S]*?\| \{ kind: 'valid'; key: string \}[\s\S]*?\| \{ kind: 'invalid' \};/,
     );
   });
 
