@@ -49,11 +49,15 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
     expect(read(PRICING_DATA)).toContain('SELF_HOSTED_SKUS');
   });
 
-  it('HARDWARE_BY_SKU map pinned: Solo / Pro / Enterprise (Mac Mini / Studio M4 Max / Studio Ultra / Pro / multi-node)', () => {
-    expect(body).toMatch(/self_hosted_solo: 'Mac Mini M4 16 GB \(customer-purchased\)'/);
-    expect(body).toMatch(/self_hosted_pro: 'Mac Studio M4 Max'/);
+  it('HARDWARE_BY_SKU map pinned: Solo / Pro / Enterprise recommend Apple Silicon (Mac Mini M4 / Mac Studio M4 Max / Mac Studio Ultra / Mac Pro multi-node). 2026-05-XX reframed to "Any Apple Silicon Mac (... recommended)" — the recommendation is guidance, not a hard requirement.', () => {
     expect(body).toMatch(
-      /self_hosted_enterprise: 'Mac Studio Ultra \/ Mac Pro \/ multi-node cluster'/,
+      /self_hosted_solo: 'Any Apple Silicon Mac \(Mac Mini M4 16 GB recommended\)'/,
+    );
+    expect(body).toMatch(
+      /self_hosted_pro: 'Apple Silicon Mac sized for sustained concurrency \(Mac Studio M4 Max recommended\)'/,
+    );
+    expect(body).toMatch(
+      /self_hosted_enterprise: 'Multi-node Apple Silicon fleet \(Mac Studio Ultra \/ Mac Pro recommended\)'/,
     );
   });
 

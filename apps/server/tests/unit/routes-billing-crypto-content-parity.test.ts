@@ -100,12 +100,22 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     );
   });
 
-  it('IdempotencyHeader discriminated union: absent | valid (trimmed <=255 ASCII printable [\\x21-\\x7e]) | invalid', () => {
-    expect(body).toMatch(
-      /type IdempotencyHeader = \{ kind: 'absent' \} \| \{ kind: 'valid'; key: string \} \| \{ kind: 'invalid' \};/,
+  it('IdempotencyHeader discriminated union: absent | valid (trimmed <=255 ASCII printable [\\x21-\\x7e]) | invalid — extracted to shared lib/idempotency-key.ts. billing-crypto imports readIdempotencyKey from there.', () => {
+    // Route imports the shared helper.
+    expect(body).toMatch(/import \{ readIdempotencyKey \} from '\.\.\/lib\/idempotency-key\.js';/);
+
+    // Type + parser live on the lib file.
+    const libPath = resolve(REPO_ROOT, 'apps/server/src/lib/idempotency-key.ts');
+    const lib = readFileSync(libPath, 'utf8');
+    expect(lib).toMatch(
+      /export type IdempotencyHeader =[\s\S]*?\| \{ kind: 'absent' \}[\s\S]*?\| \{ kind: 'valid'; key: string \}[\s\S]*?\| \{ kind: 'invalid' \};/,
     );
-    expect(body).toMatch(
-      /function readIdempotencyKey\(req: FastifyRequest\): IdempotencyHeader \{\s*\n?\s*const raw = req\.headers\['idempotency-key'\];\s*\n?\s*if \(raw === undefined\) return \{ kind: 'absent' \};\s*\n?\s*const value = Array\.isArray\(raw\) \? raw\[0\] : raw;\s*\n?\s*if \(value === undefined\) return \{ kind: 'absent' \};\s*\n?\s*const trimmed = value\.trim\(\);\s*\n?\s*if \(trimmed\.length === 0\) return \{ kind: 'absent' \};\s*\n?\s*if \(trimmed\.length > 255\) return \{ kind: 'invalid' \};\s*\n?\s*if \(!\/\^\[\\x21-\\x7e\]\+\$\/\.test\(trimmed\)\) return \{ kind: 'invalid' \};\s*\n?\s*return \{ kind: 'valid', key: trimmed \};/,
+    expect(lib).toMatch(
+      /export function readIdempotencyKey\(req: FastifyRequest\): IdempotencyHeader \{\s*\n?\s*const raw = req\.headers\['idempotency-key'\];/,
+    );
+    expect(lib).toMatch(/if \(trimmed\.length > 255\) return \{ kind: 'invalid' \};/);
+    expect(lib).toMatch(
+      /if \(!\/\^\[\\x21-\\x7e\]\+\$\/\.test\(trimmed\)\) return \{ kind: 'invalid' \};/,
     );
   });
 

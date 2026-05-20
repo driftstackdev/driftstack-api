@@ -49,11 +49,11 @@ describe('W1029 routes/admin-sessions cross-source invariant', () => {
     expect(p).toMatch(
       /limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),/,
     );
-    expect(p).toMatch(/cursor: z\.string\(\)\.optional\(\),/);
+    expect(p).toMatch(/cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),/);
     expect(p).toMatch(
       /status: z\.enum\(\['creating', 'ready', 'busy', 'destroyed', 'errored'\]\)\.optional\(\),/,
     );
-    expect(p).toMatch(/account_id: z\.string\(\)\.optional\(\),/);
+    expect(p).toMatch(/account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),/);
   });
 
   it("CRITICAL 5-status enum — 'creating' | 'ready' | 'busy' | 'destroyed' | 'errored'.", () => {

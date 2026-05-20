@@ -63,8 +63,10 @@ describe('W413.C apps/server/src/routes/admin-usage.ts content parity', () => {
     );
   });
 
-  it('Params zod schema: id z.string().min(1)', () => {
-    expect(body).toMatch(/const Params = z\.object\(\{ id: z\.string\(\)\.min\(1\) \}\);/);
+  it('Params zod schema: id z.string().min(1).max(100) (Slice 146 defensive cap)', () => {
+    expect(body).toMatch(
+      /const Params = z\.object\(\{ id: z\.string\(\)\.min\(1\)\.max\(100\) \}\);/,
+    );
   });
 
   it("Route handler: preHandler requireScope('driftstack_internal_admin') only (no rate-limit); typed Params generic", () => {

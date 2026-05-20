@@ -70,7 +70,7 @@ describe('W1019 routes/admin-usage V-689 cross-source invariant', () => {
   it("CRITICAL preHandler [requireScope('driftstack_internal_admin')] + Params Zod schema z.object({ id: z.string().min(1) }).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-usage.ts'));
     expect(p).toMatch(/preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\]/);
-    expect(p).toMatch(/const Params = z\.object\(\{ id: z\.string\(\)\.min\(1\) \}\);/);
+    expect(p).toMatch(/const Params = z\.object\(\{ id: z\.string\(\)\.min\(1\)\.max\(100\) \}\);/);
   });
 
   it("CRITICAL admin-getAccount-first framing — 'AccountsAdminService.getAccount enforces the same scope check as our preHandler — kept to surface 404 on unknown ids using the same NotFoundError shape every other admin route uses'.", () => {

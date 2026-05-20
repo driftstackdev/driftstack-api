@@ -56,9 +56,9 @@ describe('W414.C apps/server/src/routes/admin-api-keys.ts content parity', () =>
     );
   });
 
-  it('ListAdminApiKeysQuerySchema: limit coerce int 1..100 default 50 + optional cursor + optional account_id + revoked enum true|false', () => {
+  it('ListAdminApiKeysQuerySchema: limit coerce int 1..100 default 50 + cursor (string 1-512) + account_id (string 1-100) + revoked enum true|false (Slice 146 defensive caps across admin-cost/admin-usage/admin-crypto-orders/admin-api-keys).', () => {
     expect(body).toMatch(
-      /const ListAdminApiKeysQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n?\s*cursor: z\.string\(\)\.optional\(\),\s*\n?\s*account_id: z\.string\(\)\.optional\(\),\s*\n?\s*revoked: z\.enum\(\['true', 'false'\]\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const ListAdminApiKeysQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*\n?\s*revoked: z\.enum\(\['true', 'false'\]\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 

@@ -69,12 +69,13 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
     );
   });
 
-  it("Prose styling framing pinned: 'prose prose-slate max-w-none' + 'prose-h1:hidden' (h1 hidden because the section-header h1 above the slot already renders the title) + 'prose-a:text-oxblood-700 prose-a:no-underline hover:prose-a:underline' (oxblood-anchor + hover-underline) + 'prose-blockquote:border-l-oxblood-300 prose-blockquote:not-italic prose-blockquote:text-ink-secondary' (oxblood-blockquote-border) — pinned so the prose-class commitment (h1-suppressed + oxblood-anchor + oxblood-blockquote-border + slate-text) survives (drift to a different brand color in prose styling would create cross-page styling divergence)", () => {
-    expect(body).toMatch(/prose prose-slate max-w-none/);
+  it("Prose styling framing pinned (dark-theme): 'prose prose-invert max-w-none' + 'prose-h1:hidden' + 'prose-a:text-oxblood-300 prose-a:no-underline hover:prose-a:underline hover:prose-a:text-oxblood-200' + 'prose-blockquote:border-l-oxblood-300 prose-blockquote:not-italic prose-blockquote:text-ink-secondary' — 2026-05-XX prose theme switched to prose-invert with oxblood-300 anchors to match the dark surface-base/raised page background.", () => {
+    expect(body).toMatch(/prose prose-invert max-w-none/);
     expect(body).toMatch(/prose-h1:hidden/);
-    expect(body).toMatch(/prose-a:text-oxblood-700/);
+    expect(body).toMatch(/prose-a:text-oxblood-300/);
     expect(body).toMatch(/prose-a:no-underline/);
     expect(body).toMatch(/hover:prose-a:underline/);
+    expect(body).toMatch(/hover:prose-a:text-oxblood-200/);
     expect(body).toMatch(/prose-blockquote:border-l-oxblood-300/);
     expect(body).toMatch(/prose-blockquote:not-italic/);
     expect(body).toMatch(/prose-blockquote:text-ink-secondary/);

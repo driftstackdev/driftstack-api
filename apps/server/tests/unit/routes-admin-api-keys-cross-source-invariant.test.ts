@@ -80,8 +80,8 @@ describe('W1026 routes/admin-api-keys cross-source invariant', () => {
     expect(p).toMatch(
       /limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),/,
     );
-    expect(p).toMatch(/cursor: z\.string\(\)\.optional\(\),/);
-    expect(p).toMatch(/account_id: z\.string\(\)\.optional\(\),/);
+    expect(p).toMatch(/cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),/);
+    expect(p).toMatch(/account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),/);
     expect(p).toMatch(/revoked: z\.enum\(\['true', 'false'\]\)\.optional\(\),/);
   });
 

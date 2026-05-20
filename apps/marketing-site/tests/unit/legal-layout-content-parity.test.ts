@@ -84,13 +84,13 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
     expect(body).toMatch(/prose-h1:hidden/);
   });
 
-  it('prose link styling: oxblood-700 + hover-underline (no underline default)', () => {
-    expect(body).toMatch(/prose-a:text-oxblood-700 prose-a:no-underline hover:prose-a:underline/);
+  it('prose link styling: oxblood-300 + hover-underline (dark-theme prose-invert variant; 2026-05-XX dark surface migration)', () => {
+    expect(body).toMatch(/prose-a:text-oxblood-300 prose-a:no-underline hover:prose-a:underline/);
   });
 
-  it('prose code styling: slate-100 background + mono + rounded + no before/after pseudo-content', () => {
+  it('prose code styling: surface-inset background + mono + rounded + ink-primary text + no before/after pseudo-content', () => {
     expect(body).toMatch(
-      /prose-code:rounded prose-code:bg-surface-inset prose-code:px-1\.5 prose-code:py-0\.5 prose-code:font-mono prose-code:text-sm prose-code:before:content-none prose-code:after:content-none/,
+      /prose-code:rounded prose-code:bg-surface-inset prose-code:px-1\.5 prose-code:py-0\.5 prose-code:font-mono prose-code:text-sm prose-code:text-ink-primary prose-code:before:content-none prose-code:after:content-none/,
     );
   });
 

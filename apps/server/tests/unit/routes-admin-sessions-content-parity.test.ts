@@ -51,12 +51,12 @@ describe('W415.A apps/server/src/routes/admin-sessions.ts content parity', () =>
     );
   });
 
-  it('ListAdminSessionsQuerySchema: limit coerce 1..100 default 50 + status enum (creating|ready|busy|destroyed|errored) + optional account_id', () => {
+  it('ListAdminSessionsQuerySchema: limit coerce 1..100 default 50 + cursor (string 1-512) + status enum (creating|ready|busy|destroyed|errored) + account_id (string 1-100) (Slice 146 defensive caps).', () => {
     expect(body).toMatch(
-      /const ListAdminSessionsQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\n?\s*cursor: z\.string\(\)\.optional\(\),\s*\n?\s*status: z\.enum\(\['creating', 'ready', 'busy', 'destroyed', 'errored'\]\)\.optional\(\),/,
+      /const ListAdminSessionsQuerySchema = z\.object\(\{\s*\n?\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\n?\s*status: z\.enum\(\['creating', 'ready', 'busy', 'destroyed', 'errored'\]\)\.optional\(\),/,
     );
     expect(body).toMatch(
-      /\/\*\* Optional account scoping \(`acc_<uuid>` or raw uuid\)\. \*\/\s*\n?\s*account_id: z\.string\(\)\.optional\(\),/,
+      /\/\*\* Optional account scoping \(`acc_<uuid>` or raw uuid\)\. \*\/\s*\n?\s*account_id: z\.string\(\)\.min\(1\)\.max\(100\)\.optional\(\),/,
     );
   });
 
