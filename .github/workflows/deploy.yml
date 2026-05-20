@@ -120,11 +120,20 @@ jobs:
         env:
           HETZNER_DEPLOY_SSH_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_KEY }}
         run: |
+          # 2026-05-20 — gate FAILS loudly on missing secret so this
+          # workflow can't exit success-trivially. Prior behavior
+          # (ready=false → exit 0) let main go ~10h without an actual
+          # deploy while every workflow run reported success; nothing
+          # in the operator surface signalled the silent skip. See
+          # docs/founder-actions/v278-hetzner-deploy-keys.md to
+          # populate the secret. If the founder INTENTIONALLY wants
+          # to ship without an SSH key (post-launch when GH Actions
+          # path is removed entirely), delete this job — don't make
+          # the gate silent again.
           if [ -z "$HETZNER_DEPLOY_SSH_KEY" ]; then
-            echo "HETZNER_DEPLOY_SSH_KEY not set — skipping deploy."
+            echo "::error::HETZNER_DEPLOY_SSH_KEY repo secret is unset; deploy cannot proceed."
             echo "See docs/founder-actions/v278-hetzner-deploy-keys.md to populate the secret."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            exit 1
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
@@ -172,10 +181,14 @@ jobs:
         env:
           HETZNER_DEPLOY_SSH_KEY: ${{ secrets.HETZNER_DEPLOY_SSH_KEY }}
         run: |
+          # 2026-05-20 — gate FAILS loudly on missing secret so this
+          # workflow can't exit success-trivially. Same fix as the
+          # staging gate above. See docs/founder-actions/v278-hetzner-
+          # deploy-keys.md to populate the secret.
           if [ -z "$HETZNER_DEPLOY_SSH_KEY" ]; then
-            echo "HETZNER_DEPLOY_SSH_KEY not set — skipping deploy."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error::HETZNER_DEPLOY_SSH_KEY repo secret is unset; deploy cannot proceed."
+            echo "See docs/founder-actions/v278-hetzner-deploy-keys.md to populate the secret."
+            exit 1
           fi
           echo "ready=true" >> "$GITHUB_OUTPUT"
 
