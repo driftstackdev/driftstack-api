@@ -742,13 +742,34 @@ const apiBaseUrl = resolveApiBaseUrl();
                       .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
               )
               .then((body) => {
-                showBanner(
-                  'Launched "' +
-                    name +
+                // 2026-05-20 — surface a clickable driftstack://session/
+                // open?session_id=<id> deep-link so the customer's
+                // desktop client (Tauri) handles the handoff in one
+                // click. The desktop's V-328 deep-link plugin already
+                // registers the scheme + dispatches via dispatchDeepLink
+                // (lib/deep-link.ts:'session-open' kind). If the
+                // customer hasn't installed the GUI, the OS surfaces
+                // its own "no app handles this URL" prompt — same UX
+                // any custom-scheme link gets. Banner uses innerHTML
+                // (not textContent) for this branch only; name +
+                // sessionId are escapeHtml'd; the deep-link host is
+                // hard-coded so XSS is bounded.
+                const sessionId = body.id || '';
+                if (banner && sessionId.length > 0) {
+                  const deepLink =
+                    'driftstack://session/open?session_id=' + encodeURIComponent(sessionId);
+                  banner.innerHTML =
+                    'Launched "' +
+                    escapeHtml(name) +
                     '" → session ' +
-                    (body.id || '(?)') +
-                    '. Open in the desktop client (Sessions tab) to drive it.',
-                );
+                    escapeHtml(sessionId) +
+                    '. <a href="' +
+                    escapeHtml(deepLink) +
+                    '" class="font-medium text-glow-red underline">Open in desktop client</a>.';
+                  banner.classList.remove('hidden');
+                } else {
+                  showBanner('Launched "' + name + '" → session ' + (sessionId || '(?)') + '.');
+                }
                 btn.disabled = false;
                 btn.textContent = 'Launch';
                 return refresh();
