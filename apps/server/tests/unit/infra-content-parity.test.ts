@@ -490,87 +490,98 @@ describe('W614 infra/ content parity', () => {
     expect(existsSync(I('env-templates/staging.env.template'))).toBe(true);
   });
 
-  it('env-templates/production.env: populated TEST-mode copy + NODE_ENV=production + PORT=7780 + LOG_LEVEL=info + Neon DATABASE_URL + rediss:// REDIS_URL on port 6379 + Postmark API token + Sentry DE region + Stripe sk_test_ key shape + 6 hex auth secrets + 4 base URLs + TRUST_PROXY=1 + CORS allow-list pinned', () => {
-    const body = read(I('env-templates/production.env'));
-    expect(body).toMatch(/^NODE_ENV=production$/m);
-    expect(body).toMatch(/^PORT=7780$/m);
-    expect(body).toMatch(/^LOG_LEVEL=info$/m);
-    expect(body).toMatch(/# Postgres \(Neon, eu-central-1\)/);
-    expect(body).toMatch(
-      /^DATABASE_URL=postgresql:\/\/neondb_owner:[^@]+@ep-aged-pond-al77cutb\.c-3\.eu-central-1\.aws\.neon\.tech\/neondb\?sslmode=require$/m,
-    );
-    expect(body).toMatch(
-      /# Redis \(Upstash, rediss:\/\/ — TLS to port 6379; same auth token as REST\)/,
-    );
-    expect(body).toMatch(
-      /^REDIS_URL=rediss:\/\/default:[^@]+@welcome-antelope-114301\.upstash\.io:6379$/m,
-    );
-    expect(body).toMatch(
-      /^UPSTASH_REDIS_REST_URL=https:\/\/welcome-antelope-114301\.upstash\.io$/m,
-    );
-    expect(body).toMatch(/^UPSTASH_REDIS_REST_TOKEN=\S+$/m);
-    expect(body).toMatch(/# Postmark/);
-    expect(body).toMatch(/^POSTMARK_API_TOKEN=[0-9a-f-]+$/m);
-    expect(body).toMatch(/^POSTMARK_FROM=noreply@driftstack\.dev$/m);
-    expect(body).toMatch(/^POSTMARK_REPLY_TO=info@driftstack\.dev$/m);
-    expect(body).toMatch(/# Sentry \(EU region\)/);
-    expect(body).toMatch(/^SENTRY_ENVIRONMENT=production$/m);
-    expect(body).toMatch(/^SENTRY_TRACES_SAMPLE_RATE=0\.05$/m);
-    expect(body).toMatch(
-      /# Stripe \(TEST mode pre-KvK; live keys swap in via SSH-write post-launch\)/,
-    );
-    expect(body).toMatch(/^STRIPE_SECRET_KEY=sk_test_\S+$/m);
-    expect(body).toMatch(/^STRIPE_PUBLISHABLE_KEY=pk_test_\S+$/m);
-    expect(body).toMatch(/# Auth secrets \(per-environment unique\)/);
-    expect(body).toMatch(/^SESSION_SIGNING_SECRET=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/^EMAIL_VERIFICATION_SIGNING_SECRET=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/^PASSWORD_RESET_SIGNING_SECRET=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/^MAGIC_LINK_SIGNING_SECRET=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/^MFA_AT_REST_KEY=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/# Public URLs/);
-    expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.driftstack\.dev$/m);
-    expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/app\.driftstack\.dev$/m);
-    expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.dev$/m);
-    expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.dev$/m);
-    expect(body).toMatch(/^TRUST_PROXY=1$/m);
-    expect(body).toMatch(
-      /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
-    );
-    expect(existsSync(I('env-templates/production.env'))).toBe(true);
-  });
+  // 2026-05-20 — populated .env files are gitignored (they hold real
+  // secrets; only the *.env.template scaffolds are checked in). On CI
+  // the runner has no .env files; skip the populated-copy parity
+  // checks when the file is absent so CI stays green while the local
+  // operator-side drift guard still fires.
+  it.skipIf(!existsSync(I('env-templates/production.env')))(
+    'env-templates/production.env: populated TEST-mode copy + NODE_ENV=production + PORT=7780 + LOG_LEVEL=info + Neon DATABASE_URL + rediss:// REDIS_URL on port 6379 + Postmark API token + Sentry DE region + Stripe sk_test_ key shape + 6 hex auth secrets + 4 base URLs + TRUST_PROXY=1 + CORS allow-list pinned',
+    () => {
+      const body = read(I('env-templates/production.env'));
+      expect(body).toMatch(/^NODE_ENV=production$/m);
+      expect(body).toMatch(/^PORT=7780$/m);
+      expect(body).toMatch(/^LOG_LEVEL=info$/m);
+      expect(body).toMatch(/# Postgres \(Neon, eu-central-1\)/);
+      expect(body).toMatch(
+        /^DATABASE_URL=postgresql:\/\/neondb_owner:[^@]+@ep-aged-pond-al77cutb\.c-3\.eu-central-1\.aws\.neon\.tech\/neondb\?sslmode=require$/m,
+      );
+      expect(body).toMatch(
+        /# Redis \(Upstash, rediss:\/\/ — TLS to port 6379; same auth token as REST\)/,
+      );
+      expect(body).toMatch(
+        /^REDIS_URL=rediss:\/\/default:[^@]+@welcome-antelope-114301\.upstash\.io:6379$/m,
+      );
+      expect(body).toMatch(
+        /^UPSTASH_REDIS_REST_URL=https:\/\/welcome-antelope-114301\.upstash\.io$/m,
+      );
+      expect(body).toMatch(/^UPSTASH_REDIS_REST_TOKEN=\S+$/m);
+      expect(body).toMatch(/# Postmark/);
+      expect(body).toMatch(/^POSTMARK_API_TOKEN=[0-9a-f-]+$/m);
+      expect(body).toMatch(/^POSTMARK_FROM=noreply@driftstack\.dev$/m);
+      expect(body).toMatch(/^POSTMARK_REPLY_TO=info@driftstack\.dev$/m);
+      expect(body).toMatch(/# Sentry \(EU region\)/);
+      expect(body).toMatch(/^SENTRY_ENVIRONMENT=production$/m);
+      expect(body).toMatch(/^SENTRY_TRACES_SAMPLE_RATE=0\.05$/m);
+      expect(body).toMatch(
+        /# Stripe \(TEST mode pre-KvK; live keys swap in via SSH-write post-launch\)/,
+      );
+      expect(body).toMatch(/^STRIPE_SECRET_KEY=sk_test_\S+$/m);
+      expect(body).toMatch(/^STRIPE_PUBLISHABLE_KEY=pk_test_\S+$/m);
+      expect(body).toMatch(/# Auth secrets \(per-environment unique\)/);
+      expect(body).toMatch(/^SESSION_SIGNING_SECRET=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^EMAIL_VERIFICATION_SIGNING_SECRET=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^PASSWORD_RESET_SIGNING_SECRET=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^MAGIC_LINK_SIGNING_SECRET=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^MFA_AT_REST_KEY=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/# Public URLs/);
+      expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.driftstack\.dev$/m);
+      expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/app\.driftstack\.dev$/m);
+      expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.dev$/m);
+      expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.dev$/m);
+      expect(body).toMatch(/^TRUST_PROXY=1$/m);
+      expect(body).toMatch(
+        /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+      );
+      expect(existsSync(I('env-templates/production.env'))).toBe(true);
+    },
+  );
 
-  it('env-templates/staging.env: populated staging copy + DRIFTSTACK_DEPLOY_ENV=staging + LOG_LEVEL=debug + REDIS_KEY_PREFIX=stg: + SENTRY_ENVIRONMENT=staging + SENTRY_TRACES_SAMPLE_RATE=1.0 + DIFFERENT 6-hex auth secrets (per-environment unique) + staging-specific base URLs + CORS staging.driftstack.dev allow-list pinned', () => {
-    const body = read(I('env-templates/staging.env'));
-    expect(body).toMatch(/^NODE_ENV=production$/m);
-    expect(body).toMatch(/^PORT=7780$/m);
-    expect(body).toMatch(/^LOG_LEVEL=debug$/m);
-    expect(body).toMatch(/^DRIFTSTACK_DEPLOY_ENV=staging$/m);
-    expect(body).toMatch(
-      /^DATABASE_URL=postgresql:\/\/neondb_owner:[^@]+@ep-aged-pond-al77cutb\.c-3\.eu-central-1\.aws\.neon\.tech\/neondb\?sslmode=require$/m,
-    );
-    expect(body).toMatch(
-      /^REDIS_URL=rediss:\/\/default:[^@]+@welcome-antelope-114301\.upstash\.io:6379$/m,
-    );
-    expect(body).toMatch(/^REDIS_KEY_PREFIX=stg:$/m);
-    expect(body).toMatch(/^SENTRY_ENVIRONMENT=staging$/m);
-    expect(body).toMatch(/^SENTRY_TRACES_SAMPLE_RATE=1\.0$/m);
-    expect(body).toMatch(/^STRIPE_SECRET_KEY=sk_test_\S+$/m);
-    expect(body).toMatch(/^STRIPE_PUBLISHABLE_KEY=pk_test_\S+$/m);
-    expect(body).toMatch(/^SESSION_SIGNING_SECRET=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/^EMAIL_VERIFICATION_SIGNING_SECRET=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/^PASSWORD_RESET_SIGNING_SECRET=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/^MAGIC_LINK_SIGNING_SECRET=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/^MFA_AT_REST_KEY=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=[0-9a-f]{64}$/m);
-    expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.staging\.driftstack\.dev$/m);
-    expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/staging\.driftstack\.dev$/m);
-    expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.dev$/m);
-    expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.dev$/m);
-    expect(body).toMatch(/^TRUST_PROXY=1$/m);
-    expect(body).toMatch(
-      /^CORS_ALLOWED_ORIGINS=https:\/\/staging\.driftstack\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
-    );
-    expect(existsSync(I('env-templates/staging.env'))).toBe(true);
-  });
+  it.skipIf(!existsSync(I('env-templates/staging.env')))(
+    'env-templates/staging.env: populated staging copy + DRIFTSTACK_DEPLOY_ENV=staging + LOG_LEVEL=debug + REDIS_KEY_PREFIX=stg: + SENTRY_ENVIRONMENT=staging + SENTRY_TRACES_SAMPLE_RATE=1.0 + DIFFERENT 6-hex auth secrets (per-environment unique) + staging-specific base URLs + CORS staging.driftstack.dev allow-list pinned',
+    () => {
+      const body = read(I('env-templates/staging.env'));
+      expect(body).toMatch(/^NODE_ENV=production$/m);
+      expect(body).toMatch(/^PORT=7780$/m);
+      expect(body).toMatch(/^LOG_LEVEL=debug$/m);
+      expect(body).toMatch(/^DRIFTSTACK_DEPLOY_ENV=staging$/m);
+      expect(body).toMatch(
+        /^DATABASE_URL=postgresql:\/\/neondb_owner:[^@]+@ep-aged-pond-al77cutb\.c-3\.eu-central-1\.aws\.neon\.tech\/neondb\?sslmode=require$/m,
+      );
+      expect(body).toMatch(
+        /^REDIS_URL=rediss:\/\/default:[^@]+@welcome-antelope-114301\.upstash\.io:6379$/m,
+      );
+      expect(body).toMatch(/^REDIS_KEY_PREFIX=stg:$/m);
+      expect(body).toMatch(/^SENTRY_ENVIRONMENT=staging$/m);
+      expect(body).toMatch(/^SENTRY_TRACES_SAMPLE_RATE=1\.0$/m);
+      expect(body).toMatch(/^STRIPE_SECRET_KEY=sk_test_\S+$/m);
+      expect(body).toMatch(/^STRIPE_PUBLISHABLE_KEY=pk_test_\S+$/m);
+      expect(body).toMatch(/^SESSION_SIGNING_SECRET=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^EMAIL_VERIFICATION_SIGNING_SECRET=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^PASSWORD_RESET_SIGNING_SECRET=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^MAGIC_LINK_SIGNING_SECRET=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^MFA_AT_REST_KEY=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.staging\.driftstack\.dev$/m);
+      expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/staging\.driftstack\.dev$/m);
+      expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.dev$/m);
+      expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.dev$/m);
+      expect(body).toMatch(/^TRUST_PROXY=1$/m);
+      expect(body).toMatch(
+        /^CORS_ALLOWED_ORIGINS=https:\/\/staging\.driftstack\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+      );
+      expect(existsSync(I('env-templates/staging.env'))).toBe(true);
+    },
+  );
 });
