@@ -13,14 +13,21 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
   constructor(private readonly database: Database) {}
 
   async enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }> {
-    if (input.dedupOnAccountAndType === true && input.accountId !== null) {
+    if (input.dedupOnAccountAndType === true) {
       // Check for an existing pending job of the same (account_id, job_type).
+      // accountId may be null for global jobs (e.g. auth_tokens.sweep) — handle
+      // the null case explicitly via isNull() since `eq(col, null)` lowers to
+      // `col = NULL` which is always-false in SQL and would silently skip
+      // dedup. Caught in prod 2026-05-20: 13 pending auth_tokens.sweep rows
+      // accumulated across service restarts because of this missed branch.
       const existing = await this.database.db
         .select({ id: scheduledJobs.id })
         .from(scheduledJobs)
         .where(
           and(
-            eq(scheduledJobs.accountId, input.accountId),
+            input.accountId === null
+              ? isNull(scheduledJobs.accountId)
+              : eq(scheduledJobs.accountId, input.accountId),
             eq(scheduledJobs.jobType, input.jobType),
             isNull(scheduledJobs.completedAt),
             isNull(scheduledJobs.failedAt),

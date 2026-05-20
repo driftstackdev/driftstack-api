@@ -5,9 +5,13 @@
 // window (zombie workers leave jobs permanently locked).
 //
 //   • V-202d framing pinned.
-//   • enqueue dedup: when dedupOnAccountAndType + accountId set,
-//     check for existing pending (no completedAt + no failedAt) job
-//     of same (accountId, jobType); skip insert if exists.
+//   • enqueue dedup: when dedupOnAccountAndType=true, check for
+//     existing pending (no completedAt + no failedAt) job of same
+//     (accountId, jobType); skip insert if exists. Null-accountId
+//     branch handled via isNull() — pre-2026-05-20 prod incident
+//     short-circuited on `accountId !== null` and silently skipped
+//     dedup for global jobs (13 dupes of auth_tokens.sweep
+//     accumulated across service restarts).
 //   • claimDue atomic framing pinned: CTE + UPDATE...FROM...RETURNING;
 //     inner SELECT picks unfinished+due rows with FOR UPDATE SKIP
 //     LOCKED so concurrent workers never claim same row; outer
@@ -47,12 +51,22 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
     );
   });
 
-  it("enqueue dedup framing pinned: when dedupOnAccountAndType===true AND accountId !== null, check for existing pending (completedAt IS NULL + failedAt IS NULL) of same (accountId, jobType); return {enqueued:false} if existing; comment: 'Check for an existing pending job of the same (account_id, job_type).'", () => {
+  it('enqueue dedup framing pinned: when dedupOnAccountAndType===true (any accountId, null included), check for existing pending (completedAt IS NULL + failedAt IS NULL) of same (accountId, jobType) using isNull() for null branch and eq() for set branch; return {enqueued:false} if existing', () => {
     expect(body).toMatch(
-      /if \(input\.dedupOnAccountAndType === true && input\.accountId !== null\) \{\s*\n?\s*\/\/ Check for an existing pending job of the same \(account_id, job_type\)\.\s*\n?\s*const existing = await this\.database\.db\s*\n?\s*\.select\(\{ id: scheduledJobs\.id \}\)\s*\n?\s*\.from\(scheduledJobs\)\s*\n?\s*\.where\(\s*\n?\s*and\(\s*\n?\s*eq\(scheduledJobs\.accountId, input\.accountId\),\s*\n?\s*eq\(scheduledJobs\.jobType, input\.jobType\),\s*\n?\s*isNull\(scheduledJobs\.completedAt\),\s*\n?\s*isNull\(scheduledJobs\.failedAt\),\s*\n?\s*\),\s*\n?\s*\)\s*\n?\s*\.limit\(1\);\s*\n?\s*if \(existing\.length > 0\) return \{ enqueued: false \};\s*\n?\s*\}/,
+      /if \(input\.dedupOnAccountAndType === true\) \{\s*\n?\s*\/\/ Check for an existing pending job of the same \(account_id, job_type\)\./,
     );
     expect(body).toMatch(
+      /input\.accountId === null\s*\n?\s*\? isNull\(scheduledJobs\.accountId\)\s*\n?\s*: eq\(scheduledJobs\.accountId, input\.accountId\),\s*\n?\s*eq\(scheduledJobs\.jobType, input\.jobType\),\s*\n?\s*isNull\(scheduledJobs\.completedAt\),\s*\n?\s*isNull\(scheduledJobs\.failedAt\),/,
+    );
+    expect(body).toMatch(/if \(existing\.length > 0\) return \{ enqueued: false \};/);
+    expect(body).toMatch(
       /await this\.database\.db\.insert\(scheduledJobs\)\.values\(\{\s*\n?\s*jobType: input\.jobType,\s*\n?\s*accountId: input\.accountId,\s*\n?\s*payload: input\.payload,\s*\n?\s*runAt: input\.runAt,\s*\n?\s*\}\);\s*\n?\s*return \{ enqueued: true \};/,
+    );
+  });
+
+  it('null-accountId dedup incident comment pinned: the prod 2026-05-20 incident is documented in-source so the bug regression-tests against re-introducing the `accountId !== null` short-circuit', () => {
+    expect(body).toMatch(
+      /Caught in prod 2026-05-20: 13 pending auth_tokens\.sweep rows\s*\n?\s*\/\/ accumulated across service restarts because of this missed branch\./,
     );
   });
 
