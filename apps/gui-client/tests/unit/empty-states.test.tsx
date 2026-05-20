@@ -26,6 +26,17 @@ vi.mock('../../src/lib/SettingsContext', () => {
     client: {
       profiles: {
         list: () => Promise.resolve({ data: [] }),
+        // 2026-05-20 — ProfilesView walks iterate({limit:50}) now (was
+        // raw list()). Empty-async-iterator preserves the empty-state
+        // assertion below without coupling the mock to a real cursor
+        // walk.
+        // eslint-disable-next-line @typescript-eslint/require-await
+        iterate: async function* () {
+          // empty
+        },
+      },
+      sessions: {
+        list: () => Promise.resolve({ data: [] }),
       },
     },
     settings: { apiKey: 'ds_test_x', baseUrl: 'http://localhost:3000' },

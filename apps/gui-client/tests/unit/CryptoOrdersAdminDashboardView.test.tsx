@@ -91,7 +91,11 @@ describe('V-534.AJ CryptoOrdersAdminDashboardView', () => {
     metricsMock.data = { replays: 0, first_writes: 0, body_mismatches: 0 };
     render(<CryptoOrdersAdminDashboardView />);
     const link = screen.getByRole('link', { name: /View API spec/i });
-    expect(link.getAttribute('href')).toBe('http://localhost:7780/docs');
+    // 2026-05-20 — DEFAULT_SETTINGS.baseUrl shifted 7780→3000 to align
+    // with the SDK client default. CryptoOrdersAdminDashboardView's
+    // API-spec link derives from the same fallback when rendered
+    // without a SettingsProvider wrapper.
+    expect(link.getAttribute('href')).toBe('http://localhost:3000/docs');
     expect(link.getAttribute('target')).toBe('_blank');
   });
 
