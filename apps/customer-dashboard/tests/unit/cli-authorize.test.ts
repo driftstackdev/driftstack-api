@@ -228,10 +228,11 @@ describe('cli-authorize page — local integration', () => {
           { status: 409, headers: { 'content-type': 'application/problem+json' } },
         ),
       // 2. accept-all prefetches /v1/legal/required for content_hash.
+      // Real server returns { data: [...] } per routes/legal.ts:76.
       (_call) =>
         new local.window.Response(
           JSON.stringify({
-            required: [
+            data: [
               { document_key: 'tos', current_version: '1.2', content_hash: HASH.tos },
               { document_key: 'privacy', current_version: '1.0', content_hash: HASH.privacy },
               { document_key: 'aup', current_version: '1.1', content_hash: HASH.aup },

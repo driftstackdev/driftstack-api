@@ -385,7 +385,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r.json();
           })
           .then(function (body) {
-            const required = Array.isArray(body && body.required) ? body.required : [];
+            // /v1/legal/required returns { data: [...] } — earlier rev
+            // read body.required which is undefined, so byKey was empty
+            // and every acceptance fell through to the "no canonical
+            // match" rejection branch. Fix verified by integration test.
+            const required = Array.isArray(body && body.data) ? body.data : [];
             const byKey = {};
             required.forEach(function (doc) {
               byKey[doc.document_key] = doc;
@@ -417,11 +421,43 @@ const apiBaseUrl = resolveApiBaseUrl();
             );
           })
           .then(function (responses) {
-            const allOk = responses.every(function (r) {
-              return r.ok;
+            // Capture detailed failure info — collect per-doc results
+            // so the customer sees WHICH acceptance failed + why
+            // (status + problem-detail message). Earlier "one or more
+            // acceptances failed" was opaque and led to 3 round-trips
+            // of guessing.
+            return Promise.all(
+              responses.map(function (r) {
+                if (r.ok) return { ok: true };
+                return r
+                  .text()
+                  .then(function (t) {
+                    let detail = t;
+                    try {
+                      const body = JSON.parse(t);
+                      detail = body.detail || body.title || JSON.stringify(body);
+                    } catch (_) {
+                      /* leave as raw text */
+                    }
+                    return { ok: false, status: r.status, detail: detail };
+                  })
+                  .catch(function () {
+                    return { ok: false, status: r.status, detail: 'unknown' };
+                  });
+              }),
+            );
+          })
+          .then(function (results) {
+            const failures = results.filter(function (x) {
+              return !x.ok;
             });
-            if (!allOk) {
-              acceptStatus.textContent = 'One or more acceptances failed — please retry.';
+            if (failures.length > 0) {
+              const summary = failures
+                .map(function (f) {
+                  return 'HTTP ' + f.status + ': ' + f.detail;
+                })
+                .join(' · ');
+              acceptStatus.textContent = 'Failed: ' + summary;
               acceptAllBtn.disabled = false;
               return;
             }

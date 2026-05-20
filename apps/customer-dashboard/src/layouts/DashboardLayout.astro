@@ -421,7 +421,10 @@ const navItems = [
               return res.ok ? res.json() : null;
             })
             .then(function (body) {
-              if (!body || !Array.isArray(body.required) || body.required.length === 0) return;
+              // /v1/legal/required returns { data: [...] }, NOT { required: [...] }
+              // (2026-05-20 fix — earlier rev silently no-op'd the banner).
+              const required = body && Array.isArray(body.data) ? body.data : [];
+              if (required.length === 0) return;
               banner.classList.remove('hidden');
               // 2026-05-20 — server's document_key for the
               // Terms-of-Service doc is 'tos' but the marketing-site
@@ -433,7 +436,7 @@ const navItems = [
                 dpa: 'Data Processing Addendum',
                 aup: 'Acceptable Use Policy',
               };
-              body.required.forEach(function (doc) {
+              required.forEach(function (doc) {
                 const li = document.createElement('li');
                 li.className = 'flex items-center gap-2';
                 const dot = document.createElement('span');
@@ -458,7 +461,7 @@ const navItems = [
                 // (64-char SHA-256 hex); GET /v1/legal/required already
                 // includes it on each entry so pass it through.
                 Promise.all(
-                  body.required.map(function (doc) {
+                  required.map(function (doc) {
                     return fetch(apiBaseUrl + '/v1/legal/accept', {
                       method: 'POST',
                       headers: headers,
