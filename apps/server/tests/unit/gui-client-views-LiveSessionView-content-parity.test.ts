@@ -120,10 +120,15 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     );
   });
 
-  it("friendlyError 4-branch: GUIInputError 403 → 'API key lacks gui_control scope — manual control is unavailable on this key.' / GUIInputError generic → .message / DriftstackError → .message / Error → .message / fallback 'unknown error' — pinned so the 403 scope-error gets a specific founder-facing message instead of raw HTTP status", () => {
-    expect(body).toMatch(
-      /function friendlyError\(err: unknown\): string \{\s*\n?\s*if \(err instanceof GUIInputError\) \{\s*\n?\s*if \(err\.status === 403\) \{\s*\n?\s*return 'API key lacks gui_control scope — manual control is unavailable on this key\.';\s*\n?\s*\}\s*\n?\s*return err\.message;\s*\n?\s*\}\s*\n?\s*if \(err instanceof DriftstackError\) return err\.message;\s*\n?\s*if \(err instanceof Error\) return err\.message;\s*\n?\s*return 'unknown error';\s*\n?\s*\}/,
-    );
+  it("friendlyError 4-branch: GUIInputError 403 → 'API key lacks gui_control scope — manual control is unavailable on this key.' / GUIInputError generic → .message / DriftstackError → .message / Error → .message / fallback 'unknown error' — pinned so the 403 scope-error gets a specific founder-facing message instead of raw HTTP status; 2026-05-20 — signature widened to accept optional baseUrl for 'Couldn't reach <url>' hint", () => {
+    // Pin signature with optional baseUrl param + the 403-gate branch +
+    // each fallback. Use granular pins instead of one giant regex so a
+    // future refactor of the order can't silently drop a branch.
+    expect(body).toMatch(/function friendlyError\(err: unknown, baseUrl\?: string\): string/);
+    expect(body).toMatch(/if \(err instanceof GUIInputError\) \{/);
+    expect(body).toMatch(/return 'API key lacks gui_control scope — manual control is unavailable on this key\.';/);
+    expect(body).toMatch(/if \(err instanceof DriftstackError\)/);
+    expect(body).toMatch(/return 'unknown error';/);
   });
 
   it("Recording integration: recordingIdRef.current === null gate before addFrame (so frames don't double-buffer when not recording); useRecordings hook from '../lib/recordings' — pinned so the polled frame stream feeds the recording buffer iff a recording is active for this session", () => {

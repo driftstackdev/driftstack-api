@@ -128,10 +128,10 @@ describe('W724 GitHub Actions deploy.yml workflow parity (Option B verdict)', ()
     expect(d).toMatch(/SENTRY_RELEASE: \$\{\{ github\.sha \}\}/);
   });
 
-  it('CRITICAL Hetzner SSH-key secret-gate skip-clean framing pinned. Drift to failing the job would block all initial deploys.', () => {
+  it("CRITICAL Hetzner SSH-key secret-gate fail-hard framing pinned (workflow shifted from soft-skip to hard-error post-V-278.A — operator intent is 'deploy must run', not 'silently skip if misconfigured'). Drift back to soft-skip would silently mask a misconfigured secret + leave prod un-updated.", () => {
     const d = read(DEPLOY);
-    expect(d).toMatch(/HETZNER_DEPLOY_SSH_KEY not set — skipping deploy/);
-    expect(d).toMatch(/See docs\/founder-actions\/v278-hetzner-deploy-keys\.md/);
+    expect(d).toMatch(/HETZNER_DEPLOY_SSH_KEY repo secret is unset; deploy cannot proceed\./);
+    expect(d).toMatch(/exit 1/);
   });
 
   it('CRITICAL single Hetzner secret HETZNER_DEPLOY_SSH_KEY pinned (replaces the old 4-secret docker-compose surface). One-secret narrower attack surface — no active DEPLOY_DOTENV_BASE64 secret ref through GH.', () => {

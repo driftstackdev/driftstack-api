@@ -211,11 +211,11 @@ describe('W625 e2e helpers + baseline.ci + icons README content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'docs/benchmarks/baseline.ci.json'))).toBe(true);
   });
 
-  it('apps/gui-client/src-tauri/icons/README.md: placeholder marker + GUI7 native-packaging replacement framing pinned', () => {
+  it("apps/gui-client/src-tauri/icons/README.md: real icons regenerated 2026-05-20 (previously a placeholder waiting on GUI7 — now resolved); pin the regeneration framing + brand-mark source so a future regen can't silently drop the provenance trail", () => {
     const body = read('apps/gui-client/src-tauri/icons/README.md');
-    expect(body).toMatch(
-      /^# Placeholder icons — GUI7 \(native packaging\) will replace with real assets\.$/m,
-    );
+    expect(body).toMatch(/^# GUI icons$/m);
+    expect(body).toMatch(/Regenerated 2026-05-20/);
+    expect(body).toMatch(/apps\/marketing-site\/public\/driftstack-mark\.svg/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/gui-client/src-tauri/icons/README.md'))).toBe(true);
   });
 });

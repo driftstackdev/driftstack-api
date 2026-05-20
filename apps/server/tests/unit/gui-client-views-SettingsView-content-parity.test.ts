@@ -66,8 +66,9 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     expect(body).toMatch(
       /const browserSignIn = useBrowserSignIn\(\{\s*\n?\s*baseUrl: draftUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\) \|\| settings\.baseUrl,\s*\n?\s*onSuccess: async \(issuedKey, _accountId\) => \{/,
     );
+    // 2026-05-20 — baseUrl fallback shifted 7780→3000 (SDK client default).
     expect(body).toMatch(
-      /apiKey: draftKey\.length > 0 \? draftKey : null,\s*\n?\s*baseUrl: draftUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\) \|\| 'http:\/\/localhost:7780',\s*\n?\s*telemetryOptIn: draftTelemetry,/,
+      /apiKey: draftKey\.length > 0 \? draftKey : null,\s*\n?\s*baseUrl: draftUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\) \|\| 'http:\/\/localhost:3000',\s*\n?\s*telemetryOptIn: draftTelemetry,/,
     );
   });
 
