@@ -1,0 +1,112 @@
+# Admin panel — deploy pipeline.
+#
+# Triggered on push to main. Builds the Astro app at
+# `apps/admin-panel/` (Astro + @astrojs/cloudflare adapter) and
+# deploys the resulting `dist/` to Cloudflare Pages via the
+# `wrangler` CLI.
+#
+# Path-filter triggers are deliberate: only runs when something under
+# `apps/admin-panel/`, this workflow file, or shared root manifests
+# changes — backend-only commits don't redeploy the admin panel.
+#
+# Skipped if `CLOUDFLARE_API_TOKEN` is unset (e.g. fresh repo without
+# secrets populated). Build still runs and surfaces any Astro errors
+# at PR review time; only the upload step gates on the secret.
+#
+# Required GitHub secrets (repository-wide; shared with marketing /
+# docs / dashboard deploys):
+#   - CLOUDFLARE_API_TOKEN          — token with `Cloudflare Pages
+#                                       — Edit` permission.
+#   - CLOUDFLARE_ACCOUNT_ID         — Cloudflare account ID.
+#
+# Required repository variable (DISTINCT from marketing / docs /
+# dashboard variables):
+#   - CLOUDFLARE_ADMIN_PANEL_PROJECT_NAME — Cloudflare Pages project
+#                                       slug for the admin panel (e.g.
+#                                       `driftstack-admin-panel`).
+#                                       Pre-create the project in the CF
+#                                       dashboard before the first deploy.
+#
+# Custom domain configured in the Cloudflare Pages dashboard:
+#   - admin.driftstack.dev → CNAME to the Pages project
+# DNS records live in Cloudflare DNS for the driftstack.dev zone.
+#
+# Security posture: admin panel is staff-only. Every dashboard route
+# calls /v1/admin/* against api.driftstack.dev which gates on the
+# `driftstack_internal_admin` scope (V-134 + V-174). Per the
+# DRIFTSTACK_STAFF_EMAILS allowlist on the api server, only enrolled
+# staff get that scope appended to their web-session synthetic key.
+# The DNS-subdomain + scope gate together form the security boundary.
+
+name: Deploy admin panel
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/admin-panel/**'
+      - '.github/workflows/deploy-admin-panel.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-admin-panel-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build + deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    environment:
+      name: admin-panel-production
+      url: https://admin.driftstack.dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (workspace-aware)
+        run: npm install --no-audit
+
+      - name: Build api-types (admin-panel depends on @driftstack/api-types)
+        run: npm run build --workspace @driftstack/api-types
+
+      - name: Build admin panel
+        env:
+          PUBLIC_API_BASE_URL: ${{ vars.PUBLIC_API_BASE_URL || 'https://api.driftstack.dev' }}
+          PUBLIC_SENTRY_DSN_DASHBOARD: ${{ secrets.PUBLIC_SENTRY_DSN_DASHBOARD }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_RELEASE: ${{ github.sha }}
+          GIT_SHA: ${{ github.sha }}
+        run: npm run build --workspace apps/admin-panel
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT_NAME: ${{ vars.CLOUDFLARE_ADMIN_PANEL_PROJECT_NAME }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "CLOUDFLARE_API_TOKEN unset — skipping Cloudflare Pages upload."
+            echo "Build artifact is at apps/admin-panel/dist/ and verified above."
+            exit 0
+          fi
+          if [ -z "${PROJECT_NAME}" ]; then
+            echo "::error::CLOUDFLARE_ADMIN_PANEL_PROJECT_NAME variable unset — set as a repo variable in Settings → Variables."
+            exit 1
+          fi
+          npx --yes wrangler@^3 pages deploy apps/admin-panel/dist \
+            --project-name="${PROJECT_NAME}" \
+            --branch="${GITHUB_REF_NAME}" \
+            --commit-hash="${GITHUB_SHA}" \
+            --commit-message="${GITHUB_SHA::8} — $(git log -1 --pretty=%s)"
