@@ -49,8 +49,8 @@ describe('W449.B apps/server/src/db/auth-flows-repo.ts content parity', () => {
     );
   });
 
-  it('imports: and/desc/eq/gt/isNull/ne from drizzle-orm; 5 service types; Database; 5 schema tables (accounts + emailVerifyTokens + magicLinkTokens + passwordResetTokens + webSessions); AccountTier from @driftstack/api-types', () => {
-    expect(body).toMatch(/import \{ and, desc, eq, gt, isNull, ne \} from 'drizzle-orm';/);
+  it('imports: and/desc/eq/gt/isNull/lt/ne/or/sql from drizzle-orm (2026-05-20 sweeper slice added lt/or/sql for stale-token deletion); 5 service types; Database; 5 schema tables (accounts + emailVerifyTokens + magicLinkTokens + passwordResetTokens + webSessions); AccountTier from @driftstack/api-types', () => {
+    expect(body).toMatch(/import \{ and, desc, eq, gt, isNull, lt, ne, or, sql \} from 'drizzle-orm';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*AuthFlowAccountRow,\s*\n?\s*AuthFlowKind,\s*\n?\s*AuthFlowTokenRow,\s*\n?\s*AuthFlowsRepo,\s*\n?\s*WebSessionRow,\s*\n?\s*\} from '\.\.\/services\/auth-flows\.js';/,
     );

@@ -68,8 +68,13 @@ describe('W821 cross-SDK HTTP layer parity', () => {
 
   // ─── User-agent header ────────────────────────────────────────
 
-  it("CRITICAL both SDKs send a 'driftstack-sdk-{lang}/{version}' user-agent header. TS: 'driftstack-sdk-typescript/0.0.1' hardcoded. Python: f'driftstack-sdk-python/{__version__}' dynamic from _version.py. Drift to dropping the user-agent would break server-side per-SDK telemetry.", () => {
-    expect(read(TS)).toMatch(/'user-agent': 'driftstack-sdk-typescript\/0\.0\.1',/);
+  it("CRITICAL both SDKs send a 'driftstack-sdk-{lang}/{version}' user-agent header. TS: 'driftstack-sdk-typescript/0.0.1' (gated on !isBrowserContext per 1f3a927b — Tauri WebKit's forbidden-header rule trips CORS preflight if JS sets it; node + non-browser callers still send it). Python: f'driftstack-sdk-python/{__version__}' dynamic from _version.py. Drift to dropping the user-agent on the node path would break server-side per-SDK telemetry.", () => {
+    // 1f3a927b — TS skip user-agent in browser context (Tauri WKWebView
+    // adds JS-set UA to CORS preflight which server doesn't allow).
+    // Pin BOTH the literal header value AND the browser-context gate
+    // so a refactor can't silently drop either half.
+    expect(read(TS)).toMatch(/'user-agent': 'driftstack-sdk-typescript\/0\.0\.1'/);
+    expect(read(TS)).toMatch(/isBrowserContext/);
     expect(read(PY)).toMatch(/^USER_AGENT = f"driftstack-sdk-python\/\{__version__\}"$/m);
     expect(read(PY)).toMatch(/"user-agent": USER_AGENT,/);
   });
