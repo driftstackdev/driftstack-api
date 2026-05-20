@@ -107,9 +107,12 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
     );
   });
 
-  it('CRITICAL default headers — 3 headers + spread of opts.headers + conditional content-type-json. Order matters: (1) authorization Bearer, (2) user-agent versioned, (3) content-type when body, (4) opts.headers SPREAD LAST so caller can override custom non-auth headers. Drift to spreading opts.headers BEFORE defaults would let customer headers be silently overwritten.', () => {
+  it('CRITICAL default headers — authorization always set; user-agent ONLY in non-browser contexts (browsers treat user-agent as a forbidden request header and may break CORS preflight when JS tries to set it); content-type when body; opts.headers SPREAD LAST so callers can override non-auth defaults. Drift to setting user-agent unconditionally re-introduces the 2026-05-20 Tauri WKWebView "Load failed" preflight bug.', () => {
     expect(body).toMatch(
-      /headers: \{\s*\n?\s*authorization: `Bearer \$\{this\.config\.apiKey\}`,\s*\n?\s*'user-agent': 'driftstack-sdk-typescript\/0\.0\.1',\s*\n?\s*\.\.\.\(opts\.body !== undefined \? \{ 'content-type': 'application\/json' \} : \{\}\),\s*\n?\s*\.\.\.opts\.headers,\s*\n?\s*\},/,
+      /const isBrowserContext = typeof globalThis !== 'undefined' && 'window' in globalThis;/,
+    );
+    expect(body).toMatch(
+      /headers: \{\s*\n?\s*authorization: `Bearer \$\{this\.config\.apiKey\}`,\s*\n?\s*\.\.\.\(isBrowserContext\s*\n?\s*\? \{\}\s*\n?\s*: \{ 'user-agent': 'driftstack-sdk-typescript\/0\.0\.1' \}\),\s*\n?\s*\.\.\.\(opts\.body !== undefined \? \{ 'content-type': 'application\/json' \} : \{\}\),\s*\n?\s*\.\.\.opts\.headers,\s*\n?\s*\},/,
     );
   });
 

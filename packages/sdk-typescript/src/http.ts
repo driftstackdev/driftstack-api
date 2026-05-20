@@ -48,11 +48,22 @@ export class HttpClient {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
+        // 2026-05-20 — `user-agent` is a forbidden request header in
+        // Fetch-spec browser contexts (the browser/webview sets its own
+        // and JS isn't allowed to override). WebKit in Tauri 2.x ADDS
+        // any JS-set user-agent to the CORS preflight's
+        // Access-Control-Request-Headers list rather than silently
+        // dropping it — so if the server's allow-headers doesn't list
+        // user-agent, the preflight fails with a generic "Load failed".
+        // Only set the header in Node (where it's legal and useful for
+        // server-side log triage); skip in any context that exposes
+        // `window` (browsers, Tauri WKWebView, Electron renderer, etc.).
+        const isBrowserContext = typeof globalThis !== 'undefined' && 'window' in globalThis;
         const init: RequestInit = {
           method: opts.method,
           headers: {
             authorization: `Bearer ${this.config.apiKey}`,
-            'user-agent': 'driftstack-sdk-typescript/0.0.1',
+            ...(isBrowserContext ? {} : { 'user-agent': 'driftstack-sdk-typescript/0.0.1' }),
             ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),
             ...opts.headers,
           },
