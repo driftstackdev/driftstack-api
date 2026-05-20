@@ -30,6 +30,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzleAtlasPriorityEventsRepo } from '../../src/db/atlas-priority-events-repo.js';
 import { InternalFleetAuth } from '../../src/lib/internal-fleet-auth.js';
+import { MemoryRateLimitStore } from '../../src/lib/memory-rate-limit-store.js';
 import { registerInternalAtlasPriorityRoutes } from '../../src/routes/internal-atlas-priority.js';
 import { registerErrorHandler } from '../../src/middleware/error-handler.js';
 import type * as schema from '../../src/db/schema.js';
@@ -70,9 +71,10 @@ beforeAll(async () => {
   const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
   const repo = new DrizzleAtlasPriorityEventsRepo({ client, db, close: async () => {} });
   const auth = new InternalFleetAuth({ internalToken: TEST_TOKEN });
+  const rateLimitStore = new MemoryRateLimitStore();
   app = Fastify({ logger: false });
   registerErrorHandler(app);
-  registerInternalAtlasPriorityRoutes(app, { repo, auth });
+  registerInternalAtlasPriorityRoutes(app, { repo, auth, rateLimitStore });
   await app.ready();
 });
 
