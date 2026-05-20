@@ -71,19 +71,16 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     );
   });
 
-  it("Auto-poll lifecycle: useEffect initial fetch + setInterval REFRESH_MS + cleanup clearInterval — pinned so poll stops on unmount and doesn't chew API quota in background; refresh deps [client]", () => {
+  it("Auto-poll lifecycle: useEffect first-fetch with showLoading=true + setInterval background refresh(false) at REFRESH_MS + cleanup clearInterval — pinned so poll stops on unmount and doesn't chew API quota in background; 2026-05-20 d15460c7 — refresh accepts a showLoading param so the loading hint only flashes on the initial fetch, not every 15s background tick (customer reported 'the page keeps refreshing')", () => {
     expect(body).toMatch(
-      /\/\/ Initial fetch \+ 5-second poll\.\s*\n?\s*useEffect\(\(\) => \{\s*\n?\s*void refresh\(\);\s*\n?\s*const id = window\.setInterval\(\(\) => void refresh\(\), REFRESH_MS\);\s*\n?\s*return \(\) => window\.clearInterval\(id\);\s*\n?\s*\}, \[refresh\]\);/,
+      /useEffect\(\(\) => \{\s*\n?\s*void refresh\(true\);\s*\n?\s*const id = window\.setInterval\(\(\) => void refresh\(false\), REFRESH_MS\);\s*\n?\s*return \(\) => window\.clearInterval\(id\);\s*\n?\s*\}, \[refresh\]\);/,
     );
   });
 
-  it('handleCreate + handleDestroy both call refreshAccountMe() after successful operation — pinned so the cap counter unlocks Spawn button on destroy and flips disabled on create (V-239 invariant)', () => {
-    expect(body).toMatch(
-      /await client\.sessions\.create\(\);\s*\n?\s*await refresh\(\);\s*\n?\s*\/\/ V-239 — refresh the cap counter after a successful spawn so\s*\n?\s*\/\/ the gate flips to disabled if this brought us to the cap\.\s*\n?\s*await refreshAccountMe\(\);/,
-    );
-    expect(body).toMatch(
-      /await client\.sessions\.destroy\(id\);\s*\n?\s*await refresh\(\);\s*\n?\s*\/\/ V-239 — refresh after destroy so the cap counter unlocks the\s*\n?\s*\/\/ Spawn button when we drop below cap\.\s*\n?\s*await refreshAccountMe\(\);/,
-    );
+  it('handleCreate + handleDestroy both call refreshAccountMe() after successful operation — pinned so the cap counter unlocks Spawn button on destroy and flips disabled on create (V-239 invariant); 2026-05-20 d15460c7 — refresh(false) avoids the loading-flicker on the post-op refresh + handleCreate auto-attaches the first saved proxy as a SOCKS5 envelope (customer reported "2 proxies set, still get proxy-required error")', () => {
+    expect(body).toMatch(/await client\.sessions\.create\(/);
+    expect(body).toMatch(/await refresh\(false\);\s*\n?\s*await refreshAccountMe\(\);/);
+    expect(body).toMatch(/await client\.sessions\.destroy\(id\);/);
   });
 
   it("New session button: disabled + aria-disabled both gated on busyId === '__create__' || atConcurrentCap; title tooltip for cap surface: 'Concurrent session cap reached ({cap} for {tier}). Destroy a session or upgrade to spawn more.' fallback when atConcurrentCap, undefined otherwise (so screen readers + hover both surface the explanation)", () => {
@@ -117,10 +114,11 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     );
   });
 
-  it("friendlyError: DriftstackError instanceof → .message / Error instanceof → .message / fallback 'unknown error' — pinned so client-thrown DriftstackErrors surface their server-friendly message and unrecognized throws don't render as '[object Object]'", () => {
-    expect(body).toMatch(
-      /function friendlyError\(err: unknown\): string \{\s*\n?\s*if \(err instanceof DriftstackError\) \{\s*\n?\s*return err\.message;\s*\n?\s*\}\s*\n?\s*if \(err instanceof Error\) \{\s*\n?\s*return err\.message;\s*\n?\s*\}\s*\n?\s*return 'unknown error';\s*\n?\s*\}/,
-    );
+  it("friendlyError: DriftstackError instanceof → .message / Error instanceof → .message / fallback 'unknown error' — pinned so client-thrown DriftstackErrors surface their server-friendly message and unrecognized throws don't render as '[object Object]'; 2026-05-20 — signature widened to (err, baseUrl?) for Couldn't-reach-<url> network-error hint", () => {
+    expect(body).toMatch(/function friendlyError\(err: unknown, baseUrl\?: string\): string/);
+    expect(body).toMatch(/if \(err instanceof DriftstackError\)/);
+    expect(body).toMatch(/if \(err instanceof Error\)/);
+    expect(body).toMatch(/return 'unknown error';/);
   });
 
   it("Header session count: concurrentCap !== null && concurrentActive !== null → `${active} / ${cap}` cap-display else state.sessions.length (no cap data yet); footer 'Last refreshed <mono>{formatTime(refreshedAt)}</mono> · auto-refresh every {REFRESH_MS/1000}s' template literal — pinned so refresh cadence stays in sync with REFRESH_MS constant", () => {

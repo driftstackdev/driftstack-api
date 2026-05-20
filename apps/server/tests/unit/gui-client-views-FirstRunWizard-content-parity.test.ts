@@ -77,16 +77,17 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     );
   });
 
-  it("validateAndSave: baseUrl trimmed + trailing-slash stripped (.replace(/\\/+$/, '')) + apiKey trimmed before constructing one-shot Driftstack client + calling client.account.me() — pinned so a trailing-slash-typed URL doesn't double-slash in the SDK request path (which a strict server would 404 on)", () => {
+  it("validateAndSave: baseUrl trimmed + trailing-slash stripped (.replace(/\\/+$/, '')) + apiKey trimmed (with ffe8bfa4 overrideKey-first fallback for the browser-sign-in stale-closure fix) before constructing one-shot Driftstack client + calling client.account.me() — pinned so a trailing-slash-typed URL doesn't double-slash in the SDK request path (which a strict server would 404 on), AND so the stale-closure bug (validateAndSave reading apiKey from old render closure → 401) can't re-emerge", () => {
     expect(body).toMatch(
-      /const trimmedUrl = baseUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\);\s*\n?\s*const trimmedKey = apiKey\.trim\(\);/,
+      /const trimmedUrl = baseUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\);\s*\n?\s*const trimmedKey = \(overrideKey \?\? apiKey\)\.trim\(\);/,
     );
     expect(body).toMatch(
       /const client = new Driftstack\(\{ apiKey: trimmedKey, baseUrl: trimmedUrl \}\);\s*\n?\s*await client\.account\.me\(\);/,
     );
-    expect(body).toMatch(
-      /\/\/ Persist via the real settings flow \(keychain for key, store\s*\n?\s*\/\/ for baseUrl\)\.\s*\n?\s*await update\(\{ apiKey: trimmedKey, baseUrl: trimmedUrl \}\);/,
-    );
+    // 2026-05-20 — inline comment was dropped when the validateAndSave
+    // function was rearchitected ffe8bfa4; pin the await update call
+    // shape directly so the persist-through-settings flow stays load-bearing.
+    expect(body).toMatch(/await update\(\{ apiKey: trimmedKey, baseUrl: trimmedUrl \}\);/);
   });
 
   it("baseUrl-mode sync useEffect: mode === 'cloud' → CLOUD_DEFAULT_URL else SELF_HOSTED_DEFAULT_URL — pinned so the URL field updates when the radio flips (otherwise a customer who picks cloud then switches to self-hosted sees the cloud URL stuck)", () => {
