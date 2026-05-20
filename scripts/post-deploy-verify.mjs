@@ -46,6 +46,11 @@ const checks = [
   checkStatusIncidentsList,
   checkStatusIncidentDetailRoute,
   checkAccountOauthLinksRoute,
+  // 2026-05-20 — Slice 3+4+5 ARC 3 agent-sessions surface probes.
+  // A regression that drops these from deploys returns 404 instead
+  // of the expected 401.
+  checkAgentSessionsModeRoute,
+  checkAgentSessionsInputEventRoute,
   checkAdminCostConfigRoute,
   checkOpenapi,
   checkUnknownPath404,
@@ -225,6 +230,73 @@ async function checkStatusIncidentDetailRoute() {
     ok: true,
     name: '/v1/status/incidents/:id',
     detail: 'route registered (V-545.A) — 404 carries ProblemJson detail',
+  };
+}
+
+async function checkAgentSessionsModeRoute() {
+  // Slice 3 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/mode
+  // requires auth. An unauthed POST against a fake session id should
+  // return 401 (auth gate fires before the session existence check).
+  // 404 indicates the route wasn't registered (agent-sessions repo
+  // not wired into AppDeps).
+  const url = `${baseUrl}/v1/agent-sessions/ses_00000000-0000-0000-0000-000000000000/mode`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'manual' }),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      name: '/v1/agent-sessions/:id/mode',
+      detail: `fetch failed: ${err.message}`,
+    };
+  }
+  if (res.status !== 401) {
+    return {
+      ok: false,
+      name: '/v1/agent-sessions/:id/mode',
+      detail: `expected 401 (route registered + auth-gated), got ${res.status}`,
+    };
+  }
+  return {
+    ok: true,
+    name: '/v1/agent-sessions/:id/mode',
+    detail: 'route registered (Slice 3 ARC 3) — 401 confirms requireAuth gate',
+  };
+}
+
+async function checkAgentSessionsInputEventRoute() {
+  // Slice 4+5 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/
+  // input-event requires auth. Same probe pattern as /mode above.
+  const url = `${baseUrl}/v1/agent-sessions/ses_00000000-0000-0000-0000-000000000000/input-event`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ event: { type: 'ping', timestamp: 0 } }),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      name: '/v1/agent-sessions/:id/input-event',
+      detail: `fetch failed: ${err.message}`,
+    };
+  }
+  if (res.status !== 401) {
+    return {
+      ok: false,
+      name: '/v1/agent-sessions/:id/input-event',
+      detail: `expected 401 (route registered + auth-gated), got ${res.status}`,
+    };
+  }
+  return {
+    ok: true,
+    name: '/v1/agent-sessions/:id/input-event',
+    detail: 'route registered (Slice 4+5 ARC 3) — 401 confirms requireAuth gate',
   };
 }
 
