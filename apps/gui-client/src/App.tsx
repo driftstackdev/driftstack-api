@@ -11,6 +11,7 @@ import { ConnectionPill } from './components/ConnectionPill';
 import { TitleBar } from './components/TitleBar';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
+import { isCloudBaseUrl } from './lib/telemetry';
 import { useConnectionStatus } from './lib/use-connection-status';
 import { ConnectivityView } from './views/ConnectivityView';
 import { FirstRunWizard } from './views/FirstRunWizard';
@@ -273,13 +274,22 @@ function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.Element 
           Connectivity test
         </SidebarItem>
       </SidebarSection>
-      <SidebarSection label="Cluster">
-        <SidebarItem
-          active={current.kind === 'fleet'}
-          onClick={() => onNavigate({ kind: 'fleet' })}
-        >
-          Mac mini fleet
-        </SidebarItem>
+      {/* 2026-05-20 — Cluster / Mac mini fleet is a self-hosted-operator
+          surface (manage YOUR OWN Mac fleet); cloud customers never
+          need it. Gate on baseUrl: cloud (api.driftstack.dev) hides
+          the section entirely; self-hosted shows it. The GUI is the
+          same binary for both — this is purely a UX render gate. */}
+      {!isCloudBaseUrl(settings.baseUrl) && (
+        <SidebarSection label="Cluster">
+          <SidebarItem
+            active={current.kind === 'fleet'}
+            onClick={() => onNavigate({ kind: 'fleet' })}
+          >
+            Mac mini fleet
+          </SidebarItem>
+        </SidebarSection>
+      )}
+      <SidebarSection label="Account">
         <SidebarItem
           active={current.kind === 'settings'}
           onClick={() => onNavigate({ kind: 'settings' })}
