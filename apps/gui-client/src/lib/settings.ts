@@ -41,7 +41,23 @@ export const DEFAULT_SETTINGS: DriftstackSettings = {
 
 const STORE_FILE = 'settings.json';
 const SETTINGS_KEY = 'driftstack';
-const KEYCHAIN_API_KEY_NAME = 'api_key';
+// 2026-05-20 — keychain entry name is now scoped by baseUrl origin so
+// switching cloud↔self-hosted (or between two self-hosted servers)
+// doesn't reuse the wrong key. Older single-entry name kept for
+// migration on first load.
+const LEGACY_KEYCHAIN_NAME = 'api_key';
+export function keychainNameFor(baseUrl: string): string {
+  // Normalise: trim, strip protocol, strip trailing slashes, replace
+  // non-safe chars. We don't need cryptographic uniqueness here — just
+  // a stable+readable per-env identifier.
+  const normalised = baseUrl
+    .trim()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '')
+    .replace(/[^a-zA-Z0-9.-]/g, '_')
+    .toLowerCase();
+  return 'api_key:' + (normalised.length > 0 ? normalised : 'unknown');
+}
 
 interface PersistedSettings {
   apiKey?: unknown;
@@ -84,37 +100,51 @@ async function keychainDelete(name: string): Promise<void> {
 
 export async function loadSettings(): Promise<DriftstackSettings> {
   const persisted = await getStore().get<PersistedSettings>(SETTINGS_KEY);
-
-  // Pre-V-241 customers may have apiKey in settings.json. Migrate
-  // transparently on read: if found there AND not present in keychain,
-  // copy to keychain + rewrite settings.json without the apiKey field.
-  let migratedApiKey: string | null = null;
-  if (persisted && typeof persisted.apiKey === 'string' && persisted.apiKey.length > 0) {
-    const inKeychain = await keychainLoad(KEYCHAIN_API_KEY_NAME);
-    if (inKeychain === null) {
-      try {
-        await keychainSave(KEYCHAIN_API_KEY_NAME, persisted.apiKey);
-        migratedApiKey = persisted.apiKey;
-      } catch {
-        // Keychain write failed — leave the apiKey in settings.json
-        // for now so the customer isn't suddenly logged out. The next
-        // attempt on the next launch will retry.
-        migratedApiKey = persisted.apiKey;
-      }
-    } else {
-      // Keychain already has the canonical value; the settings.json
-      // copy is stale — drop it on the next save() below.
-      migratedApiKey = inKeychain;
-    }
-  }
-
-  const apiKey = migratedApiKey ?? (await keychainLoad(KEYCHAIN_API_KEY_NAME));
   const baseUrl =
     persisted && typeof persisted.baseUrl === 'string' && persisted.baseUrl.length > 0
       ? persisted.baseUrl
       : DEFAULT_SETTINGS.baseUrl;
   const telemetryOptIn =
     persisted && typeof persisted.telemetryOptIn === 'boolean' ? persisted.telemetryOptIn : null;
+  const scopedName = keychainNameFor(baseUrl);
+
+  // Pre-V-241 customers may have apiKey in settings.json. Migrate
+  // transparently on read: if found there AND not present in the
+  // baseUrl-scoped keychain entry, copy.
+  let migratedApiKey: string | null = null;
+  if (persisted && typeof persisted.apiKey === 'string' && persisted.apiKey.length > 0) {
+    const inKeychain = await keychainLoad(scopedName);
+    if (inKeychain === null) {
+      try {
+        await keychainSave(scopedName, persisted.apiKey);
+        migratedApiKey = persisted.apiKey;
+      } catch {
+        migratedApiKey = persisted.apiKey;
+      }
+    } else {
+      migratedApiKey = inKeychain;
+    }
+  }
+
+  let apiKey = migratedApiKey ?? (await keychainLoad(scopedName));
+
+  // 2026-05-20 — migrate the legacy single-entry name on first read
+  // ONLY when the scoped entry doesn't already exist, so customers
+  // with a pre-scoping install don't get bounced back to the wizard
+  // unnecessarily. After migration we delete the legacy entry so the
+  // next-launch doesn't replay this branch.
+  if (apiKey === null) {
+    const legacy = await keychainLoad(LEGACY_KEYCHAIN_NAME);
+    if (legacy !== null) {
+      try {
+        await keychainSave(scopedName, legacy);
+        await keychainDelete(LEGACY_KEYCHAIN_NAME);
+        apiKey = legacy;
+      } catch {
+        apiKey = legacy;
+      }
+    }
+  }
 
   // If migration ran (or settings.json had a stale apiKey that we just
   // dropped), persist the cleaned-up shape.
@@ -127,16 +157,20 @@ export async function loadSettings(): Promise<DriftstackSettings> {
 }
 
 export async function saveSettings(s: DriftstackSettings): Promise<void> {
-  // baseUrl + telemetryOptIn → JSON store; apiKey → keychain (or delete on null).
   await getStore().set(SETTINGS_KEY, {
     baseUrl: s.baseUrl,
     telemetryOptIn: s.telemetryOptIn,
   });
   await getStore().save();
-
+  const scopedName = keychainNameFor(s.baseUrl);
   if (s.apiKey === null || s.apiKey.length === 0) {
-    await keychainDelete(KEYCHAIN_API_KEY_NAME);
+    // 2026-05-20 — also wipe the legacy single-entry name on sign-out
+    // so customers don't get re-pulled into a stale key on next launch
+    // (customer reported "logout doesn't work, keychain keeps pulling
+    // from self-hosted"). Idempotent — delete-when-absent is fine.
+    await keychainDelete(scopedName);
+    await keychainDelete(LEGACY_KEYCHAIN_NAME);
   } else {
-    await keychainSave(KEYCHAIN_API_KEY_NAME, s.apiKey);
+    await keychainSave(scopedName, s.apiKey);
   }
 }
