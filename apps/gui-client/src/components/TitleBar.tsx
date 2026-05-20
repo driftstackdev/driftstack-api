@@ -15,7 +15,20 @@
 
 import type { ReactNode } from 'react';
 
-const isMac = typeof navigator !== 'undefined' && navigator.platform.startsWith('Mac');
+// macOS traffic-light cluster sits 12px from the left edge, ~14px wide
+// per pip, ~8px between pips → cluster spans ~12 + 14*3 + 8*2 = 70px.
+// Plus a 12px right-margin before our content starts: ~82px. Round up
+// to pl-24 (96px) for headroom against retina-rendering rounding and
+// future macOS chrome changes. pl-20 (80px) was tight and the user
+// reported the lights overlapping the "driftstack" wordmark.
+//
+// Detection: navigator.platform is deprecated and returns inconsistent
+// values on newer macOS WebKit (sometimes 'MacIntel', sometimes empty
+// in privacy-restricted contexts). Fall back to userAgent regex so the
+// detection works across Big Sur / Monterey / Ventura / Sonoma / Sequoia.
+const isMac =
+  typeof navigator !== 'undefined' &&
+  (navigator.platform.startsWith('Mac') || /Mac OS X|Macintosh/.test(navigator.userAgent));
 
 interface Props {
   subtitle?: string;
@@ -27,7 +40,7 @@ export function TitleBar({ subtitle, right }: Props): JSX.Element {
     <div
       data-tauri-drag-region="true"
       className={`flex h-9 select-none items-center justify-between border-b border-surface-divider bg-surface-raised pr-3 ${
-        isMac ? 'pl-20' : 'pl-3'
+        isMac ? 'pl-24' : 'pl-3'
       }`}
     >
       <div className="flex items-center gap-2" data-tauri-drag-region="true">
