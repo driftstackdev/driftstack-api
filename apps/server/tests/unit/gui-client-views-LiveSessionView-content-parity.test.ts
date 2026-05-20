@@ -126,7 +126,9 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     // future refactor of the order can't silently drop a branch.
     expect(body).toMatch(/function friendlyError\(err: unknown, baseUrl\?: string\): string/);
     expect(body).toMatch(/if \(err instanceof GUIInputError\) \{/);
-    expect(body).toMatch(/return 'API key lacks gui_control scope — manual control is unavailable on this key\.';/);
+    expect(body).toMatch(
+      /return 'API key lacks gui_control scope — manual control is unavailable on this key\.';/,
+    );
     expect(body).toMatch(/if \(err instanceof DriftstackError\)/);
     expect(body).toMatch(/return 'unknown error';/);
   });

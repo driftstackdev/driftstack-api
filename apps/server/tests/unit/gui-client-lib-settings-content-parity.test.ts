@@ -91,7 +91,9 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
     expect(body).toMatch(/const SETTINGS_KEY = 'driftstack';/);
     expect(body).toMatch(/const LEGACY_KEYCHAIN_NAME = 'api_key';/);
     expect(body).toMatch(/export function keychainNameFor\(baseUrl: string\): string/);
-    expect(body).toMatch(/return 'api_key:' \+ \(normalised\.length > 0 \? normalised : 'unknown'\);/);
+    expect(body).toMatch(
+      /return 'api_key:' \+ \(normalised\.length > 0 \? normalised : 'unknown'\);/,
+    );
   });
 
   it("keychainLoad: invoke<string|null>('secret_load', {key:name}) + try/catch → null fallback framing 'Keychain access failed (user dismissed, locked, etc.) — fall back to null. Higher layers treat null as \"not set\" + prompt the customer in settings.'", () => {
@@ -125,13 +127,19 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
   });
 
   it("saveSettings: store.set {baseUrl, telemetryOptIn} + store.save + apiKey null OR length===0 → scoped+legacy dual keychainDelete else keychainSave(scopedName); 2026-05-20 b876a576 scopedName + legacy-name dual-delete on sign-out so cross-env switching can't reuse stale entry ('logout doesn't work, keychain keeps pulling from self-hosted' incident)", () => {
-    expect(body).toMatch(/export async function saveSettings\(s: DriftstackSettings\): Promise<void>/);
-    expect(body).toMatch(/await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*\}\);/);
+    expect(body).toMatch(
+      /export async function saveSettings\(s: DriftstackSettings\): Promise<void>/,
+    );
+    expect(body).toMatch(
+      /await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*\}\);/,
+    );
     expect(body).toMatch(/const scopedName = keychainNameFor\(s\.baseUrl\);/);
     // Sign-out path: dual-delete (scoped + legacy) closes the cross-env
     // stale-key incident; pin both calls so a future refactor can't
     // silently drop the legacy half and reintroduce the regression.
-    expect(body).toMatch(/await keychainDelete\(scopedName\);\s*\n?\s*await keychainDelete\(LEGACY_KEYCHAIN_NAME\);/);
+    expect(body).toMatch(
+      /await keychainDelete\(scopedName\);\s*\n?\s*await keychainDelete\(LEGACY_KEYCHAIN_NAME\);/,
+    );
     expect(body).toMatch(/await keychainSave\(scopedName, s\.apiKey\);/);
   });
 

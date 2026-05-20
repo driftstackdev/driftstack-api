@@ -62,7 +62,9 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     // kebab-case state names ('needs-signin') map to camelCase keys
     // (needsSignin); pin the indirection so a future refactor can't drop
     // it and re-introduce the blank-page bug.
-    expect(p).toMatch(/function show\(name\) \{\s*\n\s+const target = KEY_BY_STATE\[name\] \?\? name;/);
+    expect(p).toMatch(
+      /function show\(name\) \{\s*\n\s+const target = KEY_BY_STATE\[name\] \?\? name;/,
+    );
     expect(p).toMatch(/for \(const key of Object\.keys\(sections\)\)/);
   });
 

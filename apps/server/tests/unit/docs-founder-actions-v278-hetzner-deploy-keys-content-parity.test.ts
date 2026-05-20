@@ -43,10 +43,16 @@ describe('W544.C /docs/founder-actions/v278-hetzner-deploy-keys.md content parit
     );
   });
 
-  it("Current-state callout pinned: hard-fail gate via commit 81d65fef + prod-alive-since-2026-05-19 + last-successful-auto-deploy SHAs (prod e7571fa / staging 14971a7) — pinned so the gate-fix commit anchor stays load-bearing if the post-mortem ever needs to retrace why main went 10h without deploying", () => {
-    expect(body).toMatch(/The deploy\.yml workflow's gate step now FAILS\s*\n?\s*LOUDLY \(commit `81d65fef`\) when the secret is unset/);
-    expect(body).toMatch(/Production \+ staging are alive \(services running since\s*\n?\s*2026-05-19\)/);
-    expect(body).toMatch(/Last successful auto-deploy:\s*\n?\s*`e7571fa` \(prod\) \/ `14971a7` \(staging\)/);
+  it('Current-state callout pinned: hard-fail gate via commit 81d65fef + prod-alive-since-2026-05-19 + last-successful-auto-deploy SHAs (prod e7571fa / staging 14971a7) — pinned so the gate-fix commit anchor stays load-bearing if the post-mortem ever needs to retrace why main went 10h without deploying', () => {
+    expect(body).toMatch(
+      /The deploy\.yml workflow's gate step now FAILS\s*\n?\s*LOUDLY \(commit `81d65fef`\) when the secret is unset/,
+    );
+    expect(body).toMatch(
+      /Production \+ staging are alive \(services running since\s*\n?\s*2026-05-19\)/,
+    );
+    expect(body).toMatch(
+      /Last successful auto-deploy:\s*\n?\s*`e7571fa` \(prod\) \/ `14971a7` \(staging\)/,
+    );
   });
 
   it("'What's already in place' inventory pinned: 4-piece (deploy.yml push-on-main pipeline + scripts/deploy-bridge.sh SSH-driven + scripts/post-deploy-verify.mjs 20-invariant + prod CPX32 staging CPX22 systemd units) — pinned so the inventory of pre-existing-infrastructure can't drift apart from the actual files", () => {
@@ -58,7 +64,7 @@ describe('W544.C /docs/founder-actions/v278-hetzner-deploy-keys.md content parit
     expect(body).toMatch(/`root@116\.203\.22\.197` \(CPX22\)/);
   });
 
-  it("6-step founder action pinned: (1) confirm prior key state via `gh secret list` + (2) generate ed25519 in ~/.driftstack-keys/hetzner-deploy + (3) add pubkey to both hosts + smoke-test + (4) populate repo secret via stdin (no shell-history exposure) + (5) re-fire via `gh workflow run Deploy` + (6) verify via /version SHA — pinned so the runbook can be followed verbatim without doc-vs-tool drift", () => {
+  it('6-step founder action pinned: (1) confirm prior key state via `gh secret list` + (2) generate ed25519 in ~/.driftstack-keys/hetzner-deploy + (3) add pubkey to both hosts + smoke-test + (4) populate repo secret via stdin (no shell-history exposure) + (5) re-fire via `gh workflow run Deploy` + (6) verify via /version SHA — pinned so the runbook can be followed verbatim without doc-vs-tool drift', () => {
     expect(body).toMatch(/### 1\. Confirm the prior key state/);
     expect(body).toMatch(/### 2\. Generate a dedicated deploy key \(run on your local Mac\)/);
     expect(body).toMatch(
@@ -74,13 +80,13 @@ describe('W544.C /docs/founder-actions/v278-hetzner-deploy-keys.md content parit
     expect(body).toMatch(/curl -s https:\/\/api\.driftstack\.dev\/version \| jq/);
   });
 
-  it("Single-key-for-both-hosts framing pinned (NOT per-env keys today — same root SSH posture on both hosts; per-env keys deferred to later hardening) — pinned so a future split into 2 keys is a conscious decision, not silent drift", () => {
+  it('Single-key-for-both-hosts framing pinned (NOT per-env keys today — same root SSH posture on both hosts; per-env keys deferred to later hardening) — pinned so a future split into 2 keys is a conscious decision, not silent drift', () => {
     expect(body).toMatch(
       /Single key works for both staging \+ production because both\s*\n?\s*hosts share the same `root` SSH posture today; per-environment\s*\n?\s*keys are a later hardening pass/,
     );
   });
 
-  it("Rollback pointer pinned: auto-revert via revert-bridge.sh on /health-fail + manual revert reads .last-good-sha — pinned so the auto-revert + .last-good-sha rollback anchors stay aligned with the bridge script behavior", () => {
+  it('Rollback pointer pinned: auto-revert via revert-bridge.sh on /health-fail + manual revert reads .last-good-sha — pinned so the auto-revert + .last-good-sha rollback anchors stay aligned with the bridge script behavior', () => {
     expect(body).toMatch(/## Rollback/);
     expect(body).toMatch(
       /The deploy-bridge auto-reverts on `\/health`-fail post-restart\s*\n?\s*via `scripts\/revert-bridge\.sh`/,
@@ -88,7 +94,7 @@ describe('W544.C /docs/founder-actions/v278-hetzner-deploy-keys.md content parit
     expect(body).toMatch(/Reverts to `\/opt\/driftstack\/api\/\.last-good-sha`/);
   });
 
-  it("Troubleshooting 4-bullet pinned: hard-gate-error (81d65fef anchor) + SSH-permission-denied + /health-200-but-/version-stale (drizzle migration-immutability) + deploy-production-Awaiting-approval — pinned so each failure mode the runbook covers stays present (drift to dropping any would leave operators stuck without a recovery path)", () => {
+  it('Troubleshooting 4-bullet pinned: hard-gate-error (81d65fef anchor) + SSH-permission-denied + /health-200-but-/version-stale (drizzle migration-immutability) + deploy-production-Awaiting-approval — pinned so each failure mode the runbook covers stays present (drift to dropping any would leave operators stuck without a recovery path)', () => {
     expect(body).toMatch(/## Troubleshooting/);
     expect(body).toMatch(/`::error::HETZNER_DEPLOY_SSH_KEY repo secret is unset`/);
     expect(body).toMatch(/the loud-gate fix from commit `81d65fef` working as designed/);
