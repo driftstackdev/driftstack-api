@@ -109,6 +109,18 @@ export class ScheduledJobsService {
     if (due.length === 0) return { processed: 0 };
 
     await Promise.all(due.map((job) => this.runOne(job, now)));
+    // Info log on the rare non-empty tick — gives ops/founder a
+    // single-line audit trail when cadence-fire jobs (auth-tokens
+    // sweep, cost nightly, trial-pack expiry) actually fire,
+    // without flooding logs on the 60s empty-tick majority.
+    this.logger.info(
+      {
+        component: 'scheduled-jobs',
+        processed: due.length,
+        jobTypes: Array.from(new Set(due.map((j) => j.jobType))),
+      },
+      'scheduled-jobs tick processed due jobs',
+    );
     return { processed: due.length };
   }
 

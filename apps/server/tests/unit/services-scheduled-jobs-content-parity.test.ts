@@ -110,13 +110,14 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
     );
   });
 
-  it('processTick: claims due → Promise.all dispatch → returns processed count; early-return {processed:0} on empty', () => {
+  it('processTick: claims due → Promise.all dispatch → info-log on non-empty + returns processed count; early-return {processed:0} on empty', () => {
     expect(body).toMatch(
       /async processTick\(now: Date\): Promise<\{ processed: number \}> \{\s*\n?\s*const due = await this\.repo\.claimDue\(\{\s*\n?\s*batchSize: this\.batchSize,\s*\n?\s*now,\s*\n?\s*workerId: this\.workerId,\s*\n?\s*\}\);\s*\n?\s*if \(due\.length === 0\) return \{ processed: 0 \};/,
     );
-    expect(body).toMatch(
-      /await Promise\.all\(due\.map\(\(job\) => this\.runOne\(job, now\)\)\);\s*\n?\s*return \{ processed: due\.length \};/,
-    );
+    expect(body).toMatch(/await Promise\.all\(due\.map\(\(job\) => this\.runOne\(job, now\)\)\);/);
+    expect(body).toMatch(/'scheduled-jobs tick processed due jobs',/);
+    expect(body).toMatch(/jobTypes: Array\.from\(new Set\(due\.map\(\(j\) => j\.jobType\)\)\),/);
+    expect(body).toMatch(/return \{ processed: due\.length \};/);
   });
 
   it('No-handler path: warn-log with operator guidance + markFailed with no-handler-registered error message', () => {
