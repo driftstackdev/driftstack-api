@@ -48,9 +48,9 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     );
   });
 
-  it("3-tile metric grid: 'Concurrent now' (active / cap) + 'Profiles' (count / cap) + 'API keys' (active count) — pinned so the at-a-glance dashboard metrics stay 3-tile (drift to dropping a tile would force customers to navigate to detail pages for the most-common questions: am I at concurrent cap? am I at profile cap?)", () => {
+  it("3-tile metric grid: 'Concurrent sessions' (active / cap) + 'Profiles' (count / cap) + 'API keys' (active count) — pinned so the at-a-glance dashboard metrics stay 3-tile (drift to dropping a tile would force customers to navigate to detail pages for the most-common questions: am I at concurrent cap? am I at profile cap?)", () => {
     expect(body).toMatch(
-      /<p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Concurrent now<\/p>/,
+      /<p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Concurrent sessions<\/p>/,
     );
     expect(body).toMatch(
       /<p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Profiles<\/p>/,
@@ -114,9 +114,9 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     );
   });
 
-  it("No-token guard: 'Sign in to see live account data.' banner + early-bail — pinned so customers who land on / without a token see a clear sign-in prompt rather than empty placeholders or broken fetches (drift to silent bail would leave the dashboard at the SSG '—' placeholder state with no explanation)", () => {
+  it('No-token guard: hard-redirect to /login?return_to=<current path> (2026-05-19) — pinned so unauthed visitors never see the SSG placeholder UI in prod (drift to a banner-over-placeholder would surface mock UI as broken)', () => {
     expect(body).toMatch(
-      /if \(!token\) \{\s*\n?\s*showBanner\('Sign in to see live account data\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /if \(!token\) \{\s*\n?\s*\/\/ 2026-05-19 — dashboard hard-redirects to \/login when there's\s*\n?\s*\/\/ no session token,[\s\S]*?const ret = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\);\s*\n?\s*window\.location\.replace\('\/login\?return_to=' \+ ret\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
   });
 

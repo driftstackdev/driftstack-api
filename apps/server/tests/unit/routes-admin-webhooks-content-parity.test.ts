@@ -65,10 +65,9 @@ describe('W419.A apps/server/src/routes/admin-webhooks.ts content parity', () =>
     expect(body).toMatch(/created_at: row\.createdAt\.toISOString\(\),/);
   });
 
-  it('clientIp helper: X-Forwarded-For first-element split fallback to request.ip', () => {
-    expect(body).toMatch(
-      /function clientIp\(request: FastifyRequest\): string \| null \{\s*\n?\s*const xff = request\.headers\['x-forwarded-for'\];\s*\n?\s*if \(typeof xff === 'string' && xff\.length > 0\) \{\s*\n?\s*const first = xff\.split\(','\)\[0\]\?\.trim\(\);\s*\n?\s*if \(first\) return first;\s*\n?\s*\}\s*\n?\s*return request\.ip;/,
-    );
+  it('clientIp uses shared readClientIp helper from lib/client-ip (extracted to collapse drift across admin-webhooks / admin-force-actions / admin-accounts)', () => {
+    expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
+    expect(body).toMatch(/ipAddress: readClientIp\(request\),/);
   });
 
   it('withAudit framing pinned: targetResourceId is PUBLIC-prefixed id (audit captures what admin sees, not raw uuid); dual-write success + error with err.name lowercase /error$/ strip', () => {

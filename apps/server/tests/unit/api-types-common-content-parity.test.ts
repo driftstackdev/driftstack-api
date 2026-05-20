@@ -165,21 +165,21 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     );
   });
 
-  it('BucketLimitConfig interface + TIER_RATE_LIMIT_DEFAULTS Record values pinned (trial 60/1 + 5/(1/60); api_scale 6000/100 + 120/2; enterprise 60000/1000 + 600/10)', () => {
+  it('BucketLimitConfig interface + TIER_RATE_LIMIT_DEFAULTS Record values pinned (trial 60/1 + 5/(1/60) + msg 20/(1/5) + input 240/60; api_scale 6000/100 + 120/2 + msg 1000/10 + input 1200/300; enterprise 60000/1000 + 600/10 + msg 10000/100 + input 12000/3000)', () => {
     expect(body).toMatch(
       /export interface BucketLimitConfig \{\s*\n?\s*capacity: number;\s*\n?\s*refill_per_second: number;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /export const TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n?\s*AccountTier,\s*\n?\s*Record<'global' \| 'sessions:create' \| 'agent_sessions:message', BucketLimitConfig>\s*\n?\s*> = \{/,
+      /export const TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n?\s*AccountTier,\s*\n?\s*Record<\s*\n?\s*'global' \| 'sessions:create' \| 'agent_sessions:message' \| 'agent_sessions:input_event',\s*\n?\s*BucketLimitConfig\s*\n?\s*>\s*\n?\s*> = \{/,
     );
     expect(body).toMatch(
-      /trial_pack: \{\s*\n?\s*global: \{ capacity: 60, refill_per_second: 1 \},\s*\n?\s*'sessions:create': \{ capacity: 5, refill_per_second: 1 \/ 60 \},[\s\S]*?'agent_sessions:message': \{ capacity: 20, refill_per_second: 1 \/ 5 \},\s*\n?\s*\},/,
+      /trial_pack: \{\s*\n?\s*global: \{ capacity: 60, refill_per_second: 1 \},\s*\n?\s*'sessions:create': \{ capacity: 5, refill_per_second: 1 \/ 60 \},[\s\S]*?'agent_sessions:message': \{ capacity: 20, refill_per_second: 1 \/ 5 \},[\s\S]*?'agent_sessions:input_event': \{ capacity: 240, refill_per_second: 60 \},\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /api_scale: \{\s*\n?\s*global: \{ capacity: 6_000, refill_per_second: 100 \},\s*\n?\s*'sessions:create': \{ capacity: 120, refill_per_second: 2 \},\s*\n?\s*'agent_sessions:message': \{ capacity: 1_000, refill_per_second: 10 \},\s*\n?\s*\},/,
+      /api_scale: \{\s*\n?\s*global: \{ capacity: 6_000, refill_per_second: 100 \},\s*\n?\s*'sessions:create': \{ capacity: 120, refill_per_second: 2 \},\s*\n?\s*'agent_sessions:message': \{ capacity: 1_000, refill_per_second: 10 \},\s*\n?\s*'agent_sessions:input_event': \{ capacity: 1_200, refill_per_second: 300 \},\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /enterprise: \{\s*\n?\s*global: \{ capacity: 60_000, refill_per_second: 1_000 \},\s*\n?\s*'sessions:create': \{ capacity: 600, refill_per_second: 10 \},\s*\n?\s*'agent_sessions:message': \{ capacity: 10_000, refill_per_second: 100 \},\s*\n?\s*\},/,
+      /enterprise: \{\s*\n?\s*global: \{ capacity: 60_000, refill_per_second: 1_000 \},\s*\n?\s*'sessions:create': \{ capacity: 600, refill_per_second: 10 \},\s*\n?\s*'agent_sessions:message': \{ capacity: 10_000, refill_per_second: 100 \},\s*\n?\s*'agent_sessions:input_event': \{ capacity: 12_000, refill_per_second: 3_000 \},\s*\n?\s*\},/,
     );
   });
 

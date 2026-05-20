@@ -140,7 +140,7 @@ describe('V-531.B routes/sessions-livekit-token cross-source invariant', () => {
   it('CRITICAL ownership-check failure → 404 (not 403). Anti-enumeration parity with the rest of the customer-facing surface.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/sessions-livekit-token.ts'));
     expect(p).toMatch(
-      /if \(!owned\) throw new NotFoundError\(`Session "\$\{sessionId\}" not found\.`\);/,
+      /if \(!owned\) \{\s*\n?\s*bump\([^)]+, 'not_found'\);\s*\n?\s*throw new NotFoundError\(`Session "\$\{sessionId\}" not found\.`\);\s*\n?\s*\}/,
     );
   });
 });
