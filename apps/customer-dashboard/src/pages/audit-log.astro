@@ -44,6 +44,9 @@ const ACTION_LABEL: Record<string, string> = {
   'agent_session.pair_mode.takeover': 'Pair-mode takeover requested',
   'agent_session.pair_mode.handback': 'Pair-mode handback requested',
   'agent_session.pair_mode.timeout': 'Pair-mode heartbeat timeout',
+  // Slice 6 follow-up 2026-05-20 — Slice 3 setMode change (Slice 3
+  // POST /:id/mode) lands a customer audit row too.
+  'agent_session.mode.changed': 'Agent session mode changed',
   // v2-#5 Q.1.f — per-turn AI agent layer decompose() events.
   // Customer audit log emission only (no separate operator UI per
   // founder verdict 2026-05-17). Customer sees WHICH decomposer
@@ -119,6 +122,7 @@ const FILTER_OPTIONS = [
   { value: 'agent_session.pair_mode.takeover', label: 'Pair-mode takeover requested' },
   { value: 'agent_session.pair_mode.handback', label: 'Pair-mode handback requested' },
   { value: 'agent_session.pair_mode.timeout', label: 'Pair-mode heartbeat timeout' },
+  { value: 'agent_session.mode.changed', label: 'Agent session mode changed' },
   // v2-#5 Q.1.f — agent decomposer per-turn events.
   { value: 'agent.decompose.claude', label: 'Agent turn decomposed (Claude)' },
   { value: 'agent.decompose.deterministic', label: 'Agent turn decomposed (deterministic)' },

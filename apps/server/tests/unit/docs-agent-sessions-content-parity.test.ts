@@ -78,12 +78,14 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     }
   });
 
-  it('audit log section names all three pair-mode AccountAuditAction values', () => {
+  it('audit log section names all four pair-mode + mode-change AccountAuditAction values', () => {
     const accepted = new Set<string>(AccountAuditActionSchema.options);
     const pairModeActions: string[] = [
       'agent_session.pair_mode.takeover',
       'agent_session.pair_mode.handback',
       'agent_session.pair_mode.timeout',
+      // Slice 6 follow-up 2026-05-20 — Slice 3 /:id/mode handler audit.
+      'agent_session.mode.changed',
     ];
     for (const action of pairModeActions) {
       expect(accepted.has(action), `${action} should be in AccountAuditActionSchema`).toBe(true);

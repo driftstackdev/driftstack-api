@@ -779,6 +779,23 @@ export function registerAgentSessionsRoutes(
       const nextPairModeState: PairModeState | null =
         target === 'pair' ? initialPairModeState() : null;
       const updated = await sessions.setMode(req.params.id, target, nextPairModeState);
+      // Slice 6 follow-up 2026-05-20 — customer audit log entry. The
+      // mode change is a meaningful state transition (especially
+      // ai → manual / pair → ai for incident investigation). Best-effort:
+      // audit failures don't break the mode change. Matches the v2-#8
+      // takeover/handback audit pattern at sub-slice 8.20.
+      try {
+        await accountAudit?.record({
+          accountId: ctx.account.id,
+          actorType: 'customer',
+          action: 'agent_session.mode.changed',
+          targetResourceId: `agent_session_${req.params.id}`,
+          payload: { from: rec.mode, to: target },
+          ipAddress: readClientIp(req),
+        });
+      } catch {
+        /* swallow */
+      }
       return publicAgentSession(updated);
     },
   );

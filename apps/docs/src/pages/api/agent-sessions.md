@@ -431,16 +431,19 @@ transition emits an `agent_session.pair_mode.timeout` audit row.
 
 ## Audit log
 
-Three actions land on the customer audit log per pair-mode
-transition (see [Audit log](/api/audit-log/)):
+Four actions land on the customer audit log per pair-mode +
+mode-change event (see [Audit log](/api/audit-log/)):
 
 - `agent_session.pair_mode.takeover` (customer-initiated)
 - `agent_session.pair_mode.handback` (customer-initiated)
 - `agent_session.pair_mode.timeout` (system-emitted on
   heartbeat-timeout sweeps)
+- `agent_session.mode.changed` (customer-initiated `POST /:id/mode`)
 
-Payload carries `{ from, to, client_id? }` for downstream
-reconstruction of the state-machine history. Filter via
+Payload for the 3 pair-mode rows carries `{ from, to, client_id? }`
+for downstream reconstruction of the state-machine history.
+`agent_session.mode.changed` payload carries `{ from, to }`
+(operational-mode strings: `manual` / `ai` / `pair`). Filter via
 `GET /v1/account/audit-log?action=agent_session.pair_mode.takeover`.
 
 ## Errors

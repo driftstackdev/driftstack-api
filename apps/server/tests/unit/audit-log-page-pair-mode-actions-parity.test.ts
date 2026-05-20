@@ -19,6 +19,10 @@ const PAIR_MODE_ACTIONS = [
   'agent_session.pair_mode.takeover',
   'agent_session.pair_mode.handback',
   'agent_session.pair_mode.timeout',
+  // Slice 6 follow-up 2026-05-20 — Slice 3 /:id/mode handler now
+  // emits an audit row too. Treated as part of the same pair-mode-
+  // adjacent action family for surface-coverage purposes.
+  'agent_session.mode.changed',
 ] as const;
 
 describe('Arc 4 Wave 2.B sub-slice 8.20.b pair-mode audit log surface parity', () => {
