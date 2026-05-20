@@ -454,6 +454,9 @@ const navItems = [
               acceptAllBtn.addEventListener('click', function () {
                 acceptAllBtn.disabled = true;
                 statusEl.textContent = 'Recording acceptance…';
+                // 2026-05-20 — /v1/legal/accept REQUIRES content_hash
+                // (64-char SHA-256 hex); GET /v1/legal/required already
+                // includes it on each entry so pass it through.
                 Promise.all(
                   body.required.map(function (doc) {
                     return fetch(apiBaseUrl + '/v1/legal/accept', {
@@ -462,6 +465,7 @@ const navItems = [
                       body: JSON.stringify({
                         document_key: doc.document_key,
                         version: doc.current_version,
+                        content_hash: doc.content_hash,
                       }),
                     });
                   }),

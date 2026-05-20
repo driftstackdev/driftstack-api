@@ -372,21 +372,50 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (pendingAcceptances.length === 0) return;
         acceptAllBtn.disabled = true;
         acceptStatus.textContent = 'Recording acceptance…';
-        Promise.all(
-          pendingAcceptances.map(function (doc) {
-            return fetch(apiBaseUrl + '/v1/legal/accept', {
-              method: 'POST',
-              headers: {
-                'content-type': 'application/json',
-                authorization: 'Bearer ' + sessionToken,
-              },
-              body: JSON.stringify({
-                document_key: doc.document_key,
-                version: doc.current_version,
-              }),
+        // /v1/legal/accept REQUIRES content_hash (64-char SHA-256
+        // hex) — that field isn't in the LegalAcceptanceRequiredError's
+        // pending_acceptances extension, so fetch the canonical
+        // /v1/legal/required entries first to get each hash, then
+        // POST each acceptance with its matching {key, version, hash}.
+        fetch(apiBaseUrl + '/v1/legal/required', {
+          headers: { authorization: 'Bearer ' + sessionToken },
+        })
+          .then(function (r) {
+            if (!r.ok) throw new Error('Failed to load legal documents (HTTP ' + r.status + ').');
+            return r.json();
+          })
+          .then(function (body) {
+            const required = Array.isArray(body && body.required) ? body.required : [];
+            const byKey = {};
+            required.forEach(function (doc) {
+              byKey[doc.document_key] = doc;
             });
-          }),
-        )
+            return Promise.all(
+              pendingAcceptances.map(function (doc) {
+                const canon = byKey[doc.document_key];
+                if (!canon || !canon.content_hash) {
+                  return Promise.resolve(
+                    new Response(
+                      JSON.stringify({ error: 'no canonical match for ' + doc.document_key }),
+                      { status: 500 },
+                    ),
+                  );
+                }
+                return fetch(apiBaseUrl + '/v1/legal/accept', {
+                  method: 'POST',
+                  headers: {
+                    'content-type': 'application/json',
+                    authorization: 'Bearer ' + sessionToken,
+                  },
+                  body: JSON.stringify({
+                    document_key: canon.document_key,
+                    version: canon.current_version,
+                    content_hash: canon.content_hash,
+                  }),
+                });
+              }),
+            );
+          })
           .then(function (responses) {
             const allOk = responses.every(function (r) {
               return r.ok;
@@ -400,8 +429,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             show('confirm');
             authorize();
           })
-          .catch(function () {
-            acceptStatus.textContent = 'Network error — please retry.';
+          .catch(function (err) {
+            acceptStatus.textContent =
+              'Network error — please retry. (' + (err && err.message ? err.message : err) + ')';
             acceptAllBtn.disabled = false;
           });
       });

@@ -197,12 +197,18 @@ describe('cli-authorize page — local integration', () => {
     expect(privacyLink.textContent).toBe('Privacy Policy');
   });
 
-  it('Accept-all posts canonical document_key (NOT the URL slug) and current_version to /v1/legal/accept', async () => {
+  it('Accept-all prefetches /v1/legal/required for content_hash, then POSTs {document_key, version, content_hash} per doc', async () => {
     const html = loadBuiltPage();
     const local = setUpDom(html, (window) => {
       window.localStorage.setItem('ds_web_session_token', 'tok-ok');
     });
     dom = local;
+    const HASH = {
+      tos: 'a'.repeat(64),
+      privacy: 'b'.repeat(64),
+      aup: 'c'.repeat(64),
+      dpa: 'd'.repeat(64),
+    };
     local.setFetchPlan([
       // 1. bind → 409 with the 4 pending docs.
       (_call) =>
@@ -221,12 +227,25 @@ describe('cli-authorize page — local integration', () => {
           }),
           { status: 409, headers: { 'content-type': 'application/problem+json' } },
         ),
-      // 2-5. Four /v1/legal/accept calls, all 200.
+      // 2. accept-all prefetches /v1/legal/required for content_hash.
+      (_call) =>
+        new local.window.Response(
+          JSON.stringify({
+            required: [
+              { document_key: 'tos', current_version: '1.2', content_hash: HASH.tos },
+              { document_key: 'privacy', current_version: '1.0', content_hash: HASH.privacy },
+              { document_key: 'aup', current_version: '1.1', content_hash: HASH.aup },
+              { document_key: 'dpa', current_version: '1.0', content_hash: HASH.dpa },
+            ],
+          }),
+          { status: 200 },
+        ),
+      // 3-6. Four /v1/legal/accept calls, all 200.
       (_call) => new local.window.Response('{}', { status: 200 }),
       (_call) => new local.window.Response('{}', { status: 200 }),
       (_call) => new local.window.Response('{}', { status: 200 }),
       (_call) => new local.window.Response('{}', { status: 200 }),
-      // 6. retry bind → 200 success.
+      // 7. retry bind → 200 success.
       (_call) => new local.window.Response(JSON.stringify({ status: 'bound' }), { status: 200 }),
     ]);
     await flush();
@@ -240,17 +259,19 @@ describe('cli-authorize page — local integration', () => {
     ).click();
     await flush();
     await flush();
-    // Verify the 4 POSTs carry the canonical document_key + current_version.
+    await flush();
+    // Prefetch present.
+    expect(local.fetchCalls.find((c) => c.url.endsWith('/v1/legal/required'))).toBeTruthy();
+    // 4 accept POSTs carry the canonical key + version + matching hash.
     const acceptCalls = local.fetchCalls.filter((c) => c.url.endsWith('/v1/legal/accept'));
     expect(acceptCalls.length).toBe(4);
     const bodies = acceptCalls.map((c) => JSON.parse(String(c.init?.body)));
     expect(bodies).toEqual([
-      { document_key: 'tos', version: '1.2' },
-      { document_key: 'privacy', version: '1.0' },
-      { document_key: 'aup', version: '1.1' },
-      { document_key: 'dpa', version: '1.0' },
+      { document_key: 'tos', version: '1.2', content_hash: HASH.tos },
+      { document_key: 'privacy', version: '1.0', content_hash: HASH.privacy },
+      { document_key: 'aup', version: '1.1', content_hash: HASH.aup },
+      { document_key: 'dpa', version: '1.0', content_hash: HASH.dpa },
     ]);
-    // After successful accept-all + bind retry, success state visible.
     expect(visibleState(local.window)).toBe('success');
   });
 
