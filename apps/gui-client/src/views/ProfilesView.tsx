@@ -20,7 +20,7 @@ import {
   setDefaultProxy,
   type ProfileBinding,
 } from '../lib/profile-bindings';
-import { listProxies, type ProxyConfig as LocalProxyConfig } from '../lib/proxies';
+import { addProxy, listProxies, type ProxyConfig as LocalProxyConfig } from '../lib/proxies';
 
 // 2026-05-20 — match SessionsView: slow background poll + skip the
 // visible loading flicker on tick refreshes so the panel doesn't
@@ -484,6 +484,35 @@ function CreateProfileModal({
   const [archetype, setArchetype] = useState(KNOWN_ARCHETYPES[0]?.id ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 2026-05-20 — antidetect-style advanced panel. Proxy is selected
+  // up-front + bound to the profile via profile-bindings on create.
+  // 'create-new' opens an inline SOCKS5 mini-form so the customer can
+  // mint a proxy from inside this modal (no context-switch to Proxies
+  // tab). OpenVPN + WireGuard are surfaced as disabled placeholders
+  // to set expectations — the local proxy store is SOCKS5-only at
+  // v0.0.1; lib/proxies.ts grows when those land.
+  const [proxies, setProxies] = useState<LocalProxyConfig[]>([]);
+  const [proxyChoice, setProxyChoice] = useState<string>('first-available');
+  const [newProxy, setNewProxy] = useState<{
+    label: string;
+    host: string;
+    port: string;
+    username: string;
+    password: string;
+  }>({ label: '', host: '', port: '1080', username: '', password: '' });
+  useEffect(() => {
+    void (async () => {
+      const list = await listProxies();
+      setProxies(list);
+      if (list.length === 0) setProxyChoice('create-new');
+    })();
+  }, []);
+
+  function randomizeArchetype(): void {
+    if (KNOWN_ARCHETYPES.length === 0) return;
+    const idx = Math.floor(Math.random() * KNOWN_ARCHETYPES.length);
+    setArchetype(KNOWN_ARCHETYPES[idx]?.id ?? KNOWN_ARCHETYPES[0]?.id ?? '');
+  }
 
   // ESC-to-close — matches the macOS Cmd+W / standard modal convention.
   useEffect(() => {
@@ -511,11 +540,42 @@ function CreateProfileModal({
     setSubmitting(true);
     setError(null);
     try {
-      await client.profiles.create({
+      // 1. Optionally mint a new SOCKS5 proxy first (inline create
+      //    flow keyed by proxyChoice === 'create-new').
+      let resolvedProxyId: string | null = null;
+      if (proxyChoice === 'create-new') {
+        const portNum = Number.parseInt(newProxy.port, 10);
+        if (
+          newProxy.label.trim().length === 0 ||
+          newProxy.host.trim().length === 0 ||
+          Number.isNaN(portNum) ||
+          portNum < 1 ||
+          portNum > 65535
+        ) {
+          setError('Proxy label, host, and a port between 1–65535 are all required.');
+          setSubmitting(false);
+          return;
+        }
+        const created = await addProxy({
+          label: newProxy.label.trim(),
+          host: newProxy.host.trim(),
+          port: portNum,
+          username: newProxy.username.trim().length > 0 ? newProxy.username.trim() : null,
+          password: newProxy.password.length > 0 ? newProxy.password : null,
+        });
+        resolvedProxyId = created.id;
+      } else if (proxyChoice !== 'first-available') {
+        resolvedProxyId = proxyChoice;
+      }
+      // 2. Create the profile.
+      const profile = await client.profiles.create({
         name: trimmed,
         archetype,
         ...(description.trim().length > 0 ? { description: description.trim() } : {}),
       });
+      // 3. Bind the chosen proxy to the new profile. null = use the
+      //    first-available proxy at Launch time.
+      await setDefaultProxy(profile.id, resolvedProxyId);
       onCreated();
     } catch (err) {
       setError(friendlyError(err, settings.baseUrl));
@@ -583,8 +643,23 @@ function CreateProfileModal({
             />
           </label>
 
-          <label className="flex flex-col gap-1">
-            <span className="section-label">Archetype</span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="section-label">Device archetype</span>
+              <button
+                type="button"
+                onClick={randomizeArchetype}
+                disabled={submitting || KNOWN_ARCHETYPES.length < 2}
+                className="text-2xs text-glow-red underline disabled:cursor-not-allowed disabled:text-ink-muted disabled:no-underline"
+                title={
+                  KNOWN_ARCHETYPES.length < 2
+                    ? 'Only one archetype available today'
+                    : 'Pick a random device'
+                }
+              >
+                Randomize
+              </button>
+            </div>
             <select
               value={archetype}
               onChange={(e) => setArchetype(e.target.value)}
@@ -599,10 +674,92 @@ function CreateProfileModal({
             </select>
             {KNOWN_ARCHETYPES.length < 2 && (
               <span className="text-xs text-ink-muted">
-                Single archetype available today — expands as new device targets land.
+                Single archetype today — Randomize will pick across iPhone 15/16/17 Pro lineups as
+                they land.
               </span>
             )}
-          </label>
+          </div>
+
+          <div className="flex flex-col gap-1 rounded border border-surface-divider bg-surface-base/40 p-3">
+            <span className="section-label">Proxy</span>
+            <select
+              value={proxyChoice}
+              onChange={(e) => setProxyChoice(e.target.value)}
+              disabled={submitting}
+              className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+            >
+              {proxies.length > 0 && (
+                <option value="first-available">First available saved proxy</option>
+              )}
+              {proxies.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} · {p.host}:{p.port}
+                </option>
+              ))}
+              <option value="create-new">+ Add new SOCKS5 proxy…</option>
+              <option value="future-openvpn" disabled>
+                + Add new OpenVPN (coming soon)
+              </option>
+              <option value="future-wireguard" disabled>
+                + Add new WireGuard (coming soon)
+              </option>
+            </select>
+            {proxyChoice === 'create-new' && (
+              <div className="mt-2 flex flex-col gap-1.5 rounded-sm border border-dashed border-surface-divider bg-surface-base/60 p-2">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <input
+                    type="text"
+                    value={newProxy.label}
+                    onChange={(e) => setNewProxy((p) => ({ ...p, label: e.target.value }))}
+                    placeholder="Label (e.g. shopify-us-east)"
+                    disabled={submitting}
+                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                  />
+                  <input
+                    type="text"
+                    value={newProxy.host}
+                    onChange={(e) => setNewProxy((p) => ({ ...p, host: e.target.value }))}
+                    placeholder="Host (e.g. proxy.example.com)"
+                    disabled={submitting}
+                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    value={newProxy.port}
+                    onChange={(e) => setNewProxy((p) => ({ ...p, port: e.target.value }))}
+                    placeholder="Port"
+                    disabled={submitting}
+                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                  />
+                  <input
+                    type="text"
+                    value={newProxy.username}
+                    onChange={(e) => setNewProxy((p) => ({ ...p, username: e.target.value }))}
+                    placeholder="Username (optional)"
+                    disabled={submitting}
+                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                  />
+                  <input
+                    type="password"
+                    value={newProxy.password}
+                    onChange={(e) => setNewProxy((p) => ({ ...p, password: e.target.value }))}
+                    placeholder="Password (optional)"
+                    disabled={submitting}
+                    className="col-span-2 rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                  />
+                </div>
+                <span className="text-2xs text-ink-muted">
+                  Stored locally in this app — credentials never go to the Driftstack control plane.
+                </span>
+              </div>
+            )}
+            <span className="text-xs text-ink-muted">
+              Sessions launched from this profile route through the selected proxy. Manage all saved
+              proxies under the Proxies tab.
+            </span>
+          </div>
 
           {error !== null && (
             <p className="text-xs text-status-error" role="alert">
