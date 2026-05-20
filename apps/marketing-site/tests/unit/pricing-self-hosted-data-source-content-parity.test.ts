@@ -107,25 +107,25 @@ describe('W386.A marketing-site src/data/pricing.ts self-hosted data-source cont
     );
   });
 
-  it('SELF_HOSTED_SOFTWARE_UPDATES: 3-tier record (Solo=Quarterly / Pro=Continuous / Enterprise=Continuous + bespoke patches)', () => {
+  it('SELF_HOSTED_SOFTWARE_UPDATES: 3-tier record — all-tiers Continuous (V-131 license-tier-gate parity simplification 2026-05-XX dropped the Quarterly/bespoke-patches differentiator)', () => {
     expect(body).toMatch(/export const SELF_HOSTED_SOFTWARE_UPDATES: Record<string, string> = \{/);
-    expect(body).toMatch(/self_hosted_solo: 'Quarterly',/);
+    expect(body).toMatch(/self_hosted_solo: 'Continuous',/);
     expect(body).toMatch(/self_hosted_pro: 'Continuous',/);
-    expect(body).toMatch(/self_hosted_enterprise: 'Continuous \+ bespoke patches',/);
+    expect(body).toMatch(/self_hosted_enterprise: 'Continuous',/);
   });
 
-  it('SELF_HOSTED_ARCHETYPE_UPDATES: 3-tier record (Solo=Major iOS only / Pro=All releases / Enterprise=All + early access)', () => {
+  it('SELF_HOSTED_ARCHETYPE_UPDATES: 3-tier record — all-tiers All releases (V-131 license-tier-gate parity simplification dropped the Major-iOS-only / early-access differentiator)', () => {
     expect(body).toMatch(/export const SELF_HOSTED_ARCHETYPE_UPDATES: Record<string, string> = \{/);
-    expect(body).toMatch(/self_hosted_solo: 'Major iOS only',/);
+    expect(body).toMatch(/self_hosted_solo: 'All releases',/);
     expect(body).toMatch(/self_hosted_pro: 'All releases',/);
-    expect(body).toMatch(/self_hosted_enterprise: 'All \+ early access',/);
+    expect(body).toMatch(/self_hosted_enterprise: 'All releases',/);
   });
 
-  it('SELF_HOSTED_SOURCE_ACCESS: 3-tier record (Solo+Pro=Build artifacts / Enterprise=Full repository read-only audit)', () => {
+  it('SELF_HOSTED_SOURCE_ACCESS: 3-tier record (Solo+Pro=Build artifacts / Enterprise=Build artifacts + read-only repo audit)', () => {
     expect(body).toMatch(/export const SELF_HOSTED_SOURCE_ACCESS: Record<string, string> = \{/);
     expect(body).toMatch(/self_hosted_solo: 'Build artifacts',/);
     expect(body).toMatch(/self_hosted_pro: 'Build artifacts',/);
-    expect(body).toMatch(/self_hosted_enterprise: 'Full repository \(read-only audit\)',/);
+    expect(body).toMatch(/self_hosted_enterprise: 'Build artifacts \+ read-only repo audit',/);
   });
 
   it('ANNUAL_DISCOUNT_LABEL = "20% off annual"', () => {

@@ -75,33 +75,33 @@ describe('W412.A apps/server/src/routes/webhooks-nowpayments.ts content parity',
     expect(body).toMatch(/actually_paid\?: number;/);
   });
 
-  it('Missing x-nowpayments-sig → 401 UnauthorizedError', () => {
+  it('Missing x-nowpayments-sig → 401 UnauthorizedError (+ bumpOutcome metric)', () => {
     expect(body).toMatch(/const sigHeader = req\.headers\['x-nowpayments-sig'\];/);
     expect(body).toMatch(
-      /if \(typeof sigHeader !== 'string' \|\| sigHeader\.length === 0\) \{\s*\n?\s*throw new UnauthorizedError\('x-nowpayments-sig header missing\.'\);/,
+      /if \(typeof sigHeader !== 'string' \|\| sigHeader\.length === 0\) \{\s*\n?\s*bumpOutcome\('signature_missing'\);\s*\n?\s*throw new UnauthorizedError\('x-nowpayments-sig header missing\.'\);/,
     );
   });
 
-  it('Empty rawBody → 400 BadRequestError "Empty request body."', () => {
+  it('Empty rawBody → 400 BadRequestError "Empty request body." (+ bumpOutcome metric)', () => {
     expect(body).toMatch(/const rawBody = req\.rawBody;/);
     expect(body).toMatch(
-      /if \(typeof rawBody !== 'string' \|\| rawBody\.length === 0\) \{\s*\n?\s*throw new BadRequestError\('Empty request body\.'\);/,
+      /if \(typeof rawBody !== 'string' \|\| rawBody\.length === 0\) \{\s*\n?\s*bumpOutcome\('empty_body'\);\s*\n?\s*throw new BadRequestError\('Empty request body\.'\);/,
     );
   });
 
-  it('verifyNowpaymentsSignature: body+secret+signature; on !verified warn-log + opaque 401 "Invalid NowPayments signature."', () => {
+  it('verifyNowpaymentsSignature: body+secret+signature; on !verified bumpOutcome + warn-log + opaque 401 "Invalid NowPayments signature."', () => {
     expect(body).toMatch(
       /const verified = verifyNowpaymentsSignature\(\{\s*\n?\s*body: rawBody,\s*\n?\s*secret: deps\.ipnSecret,\s*\n?\s*signature: sigHeader,\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(!verified\) \{\s*\n?\s*deps\.logger\.warn\(\s*\n?\s*\{ component: 'nowpayments-webhooks' \},\s*\n?\s*'NowPayments IPN signature verification failed',\s*\n?\s*\);\s*\n?\s*throw new UnauthorizedError\('Invalid NowPayments signature\.'\);/,
+      /if \(!verified\) \{\s*\n?\s*bumpOutcome\('signature_invalid'\);\s*\n?\s*deps\.logger\.warn\(\s*\n?\s*\{ component: 'nowpayments-webhooks' \},\s*\n?\s*'NowPayments IPN signature verification failed',\s*\n?\s*\);\s*\n?\s*throw new UnauthorizedError\('Invalid NowPayments signature\.'\);/,
     );
   });
 
-  it('Payload shape guard: payment_id number|string + payment_status string → 400 otherwise', () => {
+  it('Payload shape guard: payment_id number|string + payment_status string → 400 otherwise (+ bumpOutcome metric)', () => {
     expect(body).toMatch(/const payload = req\.body as NowpaymentsIpnPayload;/);
     expect(body).toMatch(
-      /if \(\s*\n?\s*payload === null \|\|\s*\n?\s*typeof payload !== 'object' \|\|\s*\n?\s*\(typeof payload\.payment_id !== 'number' && typeof payload\.payment_id !== 'string'\) \|\|\s*\n?\s*typeof payload\.payment_status !== 'string'\s*\n?\s*\) \{\s*\n?\s*throw new BadRequestError\('NowPayments IPN is missing required fields\.'\);/,
+      /if \(\s*\n?\s*payload === null \|\|\s*\n?\s*typeof payload !== 'object' \|\|\s*\n?\s*\(typeof payload\.payment_id !== 'number' && typeof payload\.payment_id !== 'string'\) \|\|\s*\n?\s*typeof payload\.payment_status !== 'string'\s*\n?\s*\) \{\s*\n?\s*bumpOutcome\('malformed_event'\);\s*\n?\s*throw new BadRequestError\('NowPayments IPN is missing required fields\.'\);/,
     );
   });
 

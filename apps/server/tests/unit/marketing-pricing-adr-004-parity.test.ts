@@ -240,11 +240,14 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/SELF_HOSTED_ARCHETYPE_UPDATES: Record<string, string> = \{/);
     expect(p).toMatch(/SELF_HOSTED_SOURCE_ACCESS: Record<string, string> = \{/);
 
-    // Sample entries.
-    expect(p).toMatch(/self_hosted_solo: 'Quarterly'/);
+    // Sample entries (post 2026-05-XX V-131 license-tier-gate parity
+    // simplification: software-updates + archetype-updates all-tiers
+    // Continuous; source-access still tiered Solo/Pro=artifacts /
+    // Enterprise=artifacts + read-only audit).
+    expect(p).toMatch(/self_hosted_solo: 'Continuous'/);
     expect(p).toMatch(/self_hosted_pro: 'Continuous'/);
-    expect(p).toMatch(/self_hosted_enterprise: 'Continuous \+ bespoke patches'/);
-    expect(p).toMatch(/self_hosted_enterprise: 'Full repository \(read-only audit\)'/);
+    expect(p).toMatch(/self_hosted_enterprise: 'Continuous'/);
+    expect(p).toMatch(/self_hosted_enterprise: 'Build artifacts \+ read-only repo audit'/);
   });
 
   it('CRITICAL all 7 paid API_TIERS use the trial-funnel CTA — "Start with $2.99" → /pricing#trial-pack. The funnel design forces every paid signup through the trial pack first (matches ADR-003).', () => {

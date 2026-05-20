@@ -78,12 +78,15 @@ describe('W449.B apps/server/src/db/auth-flows-repo.ts content parity', () => {
     );
   });
 
-  it("findAccountByEmail: where eq(email, email.trim().toLowerCase()) — email canonicalization at boundary; createAccount: same canonicalization on insert + 4-field values + throws 'createAccount: insert returned no row'", () => {
+  it("findAccountByEmail: where eq(email, email.trim().toLowerCase()) — email canonicalization at boundary; createAccount: same canonicalization on insert + 4-field core values (+ optional Arc 1 bundled-LLM consent/cap spread) + throws 'createAccount: insert returned no row'", () => {
     expect(body).toMatch(
       /\.where\(eq\(accounts\.email, email\.trim\(\)\.toLowerCase\(\)\)\)\s*\n?\s*\.limit\(1\);/,
     );
     expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*email: args\.email\.trim\(\)\.toLowerCase\(\),\s*\n?\s*name: args\.name,\s*\n?\s*passwordHash: args\.passwordHash,\s*\n?\s*tier: args\.initialTier,\s*\n?\s*\}\)/,
+      /\.values\(\{\s*\n?\s*email: args\.email\.trim\(\)\.toLowerCase\(\),\s*\n?\s*name: args\.name,\s*\n?\s*passwordHash: args\.passwordHash,\s*\n?\s*tier: args\.initialTier,[\s\S]*?\}\)/,
+    );
+    expect(body).toMatch(
+      /\.\.\.\(args\.bundledLlmConsent !== undefined\s*\n?\s*\? \{ bundledLlmConsent: args\.bundledLlmConsent \}\s*\n?\s*: \{\}\),/,
     );
     expect(body).toMatch(/if \(!row\) throw new Error\('createAccount: insert returned no row'\);/);
   });
