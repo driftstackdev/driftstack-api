@@ -6,6 +6,14 @@ import (
 	"net/url"
 )
 
+// CanonicalModifierNames — Slice 6 cross-SDK lock 2026-05-20 — mirrored
+// from packages/api-types/src/agent-input-event.ts:
+// CANONICAL_MODIFIER_NAMES. The 4 names map 1:1 onto Quartz CGEventFlags
+// on the macOS harness side. Customers building their own input-event
+// producer should reference this slice instead of hard-coding string
+// literals.
+var CanonicalModifierNames = []string{"cmd", "ctrl", "shift", "option"}
+
 // AgentSessionsResource handles /v1/agent-sessions/* (AI-D; planning
 // 132 §"Phase 7"). Mirrors the TypeScript + Python agent-sessions
 // resources.

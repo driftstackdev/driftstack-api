@@ -76,4 +76,24 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
     expect(body).toMatch(/DOM-standard\s*\n?\s*\/\/ names \(Shift \/ Control \/ Alt \/ Meta\)/);
     expect(body).toMatch(/harness decoder drops them/);
   });
+
+  it('Python SDK agent_sessions.py exports CANONICAL_MODIFIER_NAMES tuple + CanonicalModifier Literal type matching api-types', () => {
+    const lib = resolve(
+      REPO_ROOT,
+      'packages/sdk-python/src/driftstack/resources/agent_sessions.py',
+    );
+    const body = read(lib);
+    expect(body).toMatch(
+      /CANONICAL_MODIFIER_NAMES: tuple\[str, \.\.\.\] = \("cmd", "ctrl", "shift", "option"\)/,
+    );
+    expect(body).toMatch(/CanonicalModifier = Literal\["cmd", "ctrl", "shift", "option"\]/);
+  });
+
+  it('Go SDK agent_sessions.go exports CanonicalModifierNames slice matching api-types', () => {
+    const lib = resolve(REPO_ROOT, 'packages/sdk-go/agent_sessions.go');
+    const body = read(lib);
+    expect(body).toMatch(
+      /var CanonicalModifierNames = \[\]string\{"cmd", "ctrl", "shift", "option"\}/,
+    );
+  });
 });

@@ -12,11 +12,20 @@ Discriminated message response: branch on ``["kind"]`` —
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Any, Literal, TypedDict
 from urllib.parse import quote
 
 from driftstack.http import AsyncHttpClient, HttpClient
 from driftstack.resources._common import coerce_body
+
+# Slice 6 cross-SDK lock 2026-05-20 — canonical modifier vocabulary
+# mirrored from packages/api-types/src/agent-input-event.ts:
+# CANONICAL_MODIFIER_NAMES. The 4 names map 1:1 onto Quartz
+# CGEventFlags on the macOS harness side. Customers building their
+# own input-event producer should reference these constants instead
+# of hard-coding string literals.
+CANONICAL_MODIFIER_NAMES: tuple[str, ...] = ("cmd", "ctrl", "shift", "option")
+CanonicalModifier = Literal["cmd", "ctrl", "shift", "option"]
 
 
 class LiveKitInfo(TypedDict):
