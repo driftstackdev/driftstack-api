@@ -412,6 +412,18 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(fmtIso(p.last_used_at)) +
           '</p></div>' +
           '<div class="flex shrink-0 flex-col items-end gap-2">' +
+          // 2026-05-20 — antidetect-browser-style Launch primary CTA
+          // (closes the fa8cb83a profile-launch arc: POST /v1/profiles/
+          // :id/launch returns a fresh session_id; the actual browser
+          // session lives in the desktop GUI client, so the dashboard
+          // mints the session + surfaces it as a session-id reference
+          // that the customer opens via `driftstack sessions navigate
+          // <id>` or the GUI's Sessions tab).
+          '<button type="button" data-launch="' +
+          escapeHtml(p.id) +
+          '" data-launch-name="' +
+          escapeHtml(p.name) +
+          '" class="text-sm font-medium text-glow-red hover:underline">Launch</button>' +
           '<button type="button" data-clone="' +
           escapeHtml(p.id) +
           '" data-clone-name="' +
@@ -487,6 +499,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           wireCloneButtons();
           wireSnapshotButtons();
           wireExportButtons();
+          wireLaunchButtons();
         }
       }
 
@@ -698,6 +711,52 @@ const apiBaseUrl = resolveApiBaseUrl();
                 showBanner('Clone failed: ' + (err && err.message ? err.message : 'network'));
                 btn.disabled = false;
                 btn.textContent = 'Clone';
+              });
+          });
+        });
+      }
+
+      // 2026-05-20 — POST /v1/profiles/:id/launch wires the antidetect-
+      // browser one-shot launch (fa8cb83a): server inherits the
+      // archetype + stamps {profile_id, profile_name} in session
+      // metadata + bumps last_used_at fire-and-forget. Returns the
+      // fresh session_id; the actual browser is the desktop GUI client.
+      function wireLaunchButtons() {
+        const buttons = list.querySelectorAll('[data-launch]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-launch');
+            const name = btn.getAttribute('data-launch-name') || '(unnamed)';
+            btn.disabled = true;
+            btn.textContent = 'Launching…';
+            authedFetch('/v1/profiles/' + encodeURIComponent(id) + '/launch', {
+              method: 'POST',
+              body: JSON.stringify({}),
+            })
+              .then((r) =>
+                r.ok
+                  ? r.json()
+                  : r
+                      .json()
+                      .catch(() => ({}))
+                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+              )
+              .then((body) => {
+                showBanner(
+                  'Launched "' +
+                    name +
+                    '" → session ' +
+                    (body.id || '(?)') +
+                    '. Open in the desktop client (Sessions tab) to drive it.',
+                );
+                btn.disabled = false;
+                btn.textContent = 'Launch';
+                return refresh();
+              })
+              .catch((err) => {
+                showBanner('Launch failed: ' + (err && err.message ? err.message : 'network'));
+                btn.disabled = false;
+                btn.textContent = 'Launch';
               });
           });
         });
