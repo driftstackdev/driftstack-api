@@ -32,17 +32,17 @@ type Client struct {
 	retry   RetryConfig
 
 	// Resource accessors (filled in by New).
-	Sessions *SessionsResource
-	APIKeys  *APIKeysResource
-	Usage    *UsageResource
-	Webhooks *WebhooksResource
+	Sessions         *SessionsResource
+	APIKeys          *APIKeysResource
+	Usage            *UsageResource
+	Webhooks         *WebhooksResource
 	Profiles         *ProfilesResource
 	ProfileSnapshots *ProfileSnapshotsResource
 	Billing          *BillingResource
 	// V-666 — crypto-checkout / crypto-orders.
-	CryptoOrders     *CryptoOrdersResource
-	Auth             *AuthResource
-	Account          *AccountResource
+	CryptoOrders *CryptoOrdersResource
+	Auth         *AuthResource
+	Account      *AccountResource
 	// V-353b / V-448 — MFA enrollment management.
 	Mfa *MfaResource
 	// V-216 / V-449 — append-only customer audit log.

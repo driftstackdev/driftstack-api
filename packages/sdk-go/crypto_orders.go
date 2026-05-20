@@ -38,7 +38,7 @@ type CancelCryptoOrderResponse = map[string]any
 type UpdateCryptoOrderNoteRequest = map[string]any
 
 // ListCryptoOrdersResponse is the envelope returned by
-// [CryptoOrdersResource.List]: ``{ orders, next_cursor? }``.
+// [CryptoOrdersResource.List]: “{ orders, next_cursor? }“.
 type ListCryptoOrdersResponse struct {
 	Orders     []CryptoOrderEnvelope `json:"orders"`
 	NextCursor *string               `json:"next_cursor,omitempty"`

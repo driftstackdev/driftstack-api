@@ -168,8 +168,8 @@ func TestAgentSessions_Message_ByokOption(t *testing.T) {
 		}
 		w.Header().Set("content-type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"kind":               "clarify",
-			"session":            agentSessionEnvelope,
+			"kind":                "clarify",
+			"session":             agentSessionEnvelope,
 			"clarifying_question": "?",
 		})
 	})
@@ -192,8 +192,8 @@ func TestAgentSessions_Message_NoByokOmitsHeader(t *testing.T) {
 		}
 		w.Header().Set("content-type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"kind":               "clarify",
-			"session":            agentSessionEnvelope,
+			"kind":                "clarify",
+			"session":             agentSessionEnvelope,
 			"clarifying_question": "?",
 		})
 	})
@@ -220,8 +220,8 @@ func TestAgentSessions_Message_EmptyByokKeyOmitsHeader(t *testing.T) {
 		}
 		w.Header().Set("content-type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"kind":               "clarify",
-			"session":            agentSessionEnvelope,
+			"kind":                "clarify",
+			"session":             agentSessionEnvelope,
 			"clarifying_question": "?",
 		})
 	})

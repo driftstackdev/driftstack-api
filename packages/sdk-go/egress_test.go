@@ -24,9 +24,9 @@ func TestEgress_AttachToSession(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(SessionProxyAttachResponse{
 			Type: "socks5",
 			Safeguards: map[string]bool{
-				"block_direct_internet":      true,
-				"block_unproxied_dns":        true,
-				"block_webrtc_stun_leakage":  true,
+				"block_direct_internet":     true,
+				"block_unproxied_dns":       true,
+				"block_webrtc_stun_leakage": true,
 			},
 		})
 	})

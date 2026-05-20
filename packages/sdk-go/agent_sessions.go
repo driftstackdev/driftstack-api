@@ -42,34 +42,34 @@ type LiveKitInfo struct {
 // AgentSession is the read envelope returned by Create / Get / and as
 // the .Session field of every Message response.
 type AgentSession struct {
-	ID                    string  `json:"id"`
-	AccountID             string  `json:"account_id"`
-	DriftstackSessionID   *string `json:"driftstack_session_id"`
-	Status                string  `json:"status"`
-	ClosedReason          *string `json:"closed_reason"`
-	TokenBudgetTotal      int     `json:"token_budget_total"`
-	TokenBudgetRemaining  int     `json:"token_budget_remaining"`
-	TranscriptLength      int     `json:"transcript_length"`
+	ID                   string  `json:"id"`
+	AccountID            string  `json:"account_id"`
+	DriftstackSessionID  *string `json:"driftstack_session_id"`
+	Status               string  `json:"status"`
+	ClosedReason         *string `json:"closed_reason"`
+	TokenBudgetTotal     int     `json:"token_budget_total"`
+	TokenBudgetRemaining int     `json:"token_budget_remaining"`
+	TranscriptLength     int     `json:"transcript_length"`
 	// v2-#19 wall-clock ISO-8601 close timestamp; nil while active.
 	// Distinct from UpdatedAt which moves on every transcript append.
-	ClosedAt              *string `json:"closed_at"`
+	ClosedAt *string `json:"closed_at"`
 	// v2-#35 team-RBAC attribution; nil when account-scoped auth
 	// can't resolve a specific user id.
-	CreatedByUserID       *string `json:"created_by_user_id"`
+	CreatedByUserID *string `json:"created_by_user_id"`
 	// Arc 2 sub-slice 8.5 (v2-#8) — operational mode.
-	Mode                  string  `json:"mode"`
+	Mode string `json:"mode"`
 	// Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
 	// discriminator. nil when mode != "pair". {kind: "ai-driving" |
 	// "takeover-pending" | ...} when mode == "pair"; see the
 	// agent_pair_mode_state state union for the full set.
-	PairModeState         map[string]any `json:"pair_mode_state"`
-	CreatedAt             string  `json:"created_at"`
-	UpdatedAt             string  `json:"updated_at"`
+	PairModeState map[string]any `json:"pair_mode_state"`
+	CreatedAt     string         `json:"created_at"`
+	UpdatedAt     string         `json:"updated_at"`
 	// LK.4 — auto-populated on POST /v1/agent-sessions when a Mac
 	// has LiveKit credentials registered. nil on older deployments
 	// or pre-Mac-registration. Fall back to LK.3 endpoint for an
 	// explicit mint.
-	LiveKit               *LiveKitInfo `json:"livekit,omitempty"`
+	LiveKit *LiveKitInfo `json:"livekit,omitempty"`
 }
 
 // CreateAgentSessionRequest is the optional body for Create.
@@ -87,13 +87,13 @@ type CreateAgentSessionRequest struct {
 // "clarify" (ClarifyingQuestion populated), or "refuse"
 // (RefuseReason populated).
 type AgentMessageResponse struct {
-	Kind                string            `json:"kind"`
-	Session             AgentSession      `json:"session"`
-	Intents             []json.RawMessage `json:"intents,omitempty"`
-	Results             []json.RawMessage `json:"results,omitempty"`
-	OK                  bool              `json:"ok,omitempty"`
-	ClarifyingQuestion  string            `json:"clarifying_question,omitempty"`
-	RefuseReason        string            `json:"refuse_reason,omitempty"`
+	Kind               string            `json:"kind"`
+	Session            AgentSession      `json:"session"`
+	Intents            []json.RawMessage `json:"intents,omitempty"`
+	Results            []json.RawMessage `json:"results,omitempty"`
+	OK                 bool              `json:"ok,omitempty"`
+	ClarifyingQuestion string            `json:"clarifying_question,omitempty"`
+	RefuseReason       string            `json:"refuse_reason,omitempty"`
 }
 
 // CreateOptions carries optional per-call overrides for Create.

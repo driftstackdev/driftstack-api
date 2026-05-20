@@ -78,9 +78,9 @@ type SessionPurpose string
 // matched no server enum value and would 400 if a customer used
 // them.
 const (
-	PurposeProductionCustomer    SessionPurpose = "production_customer"
+	PurposeProductionCustomer      SessionPurpose = "production_customer"
 	PurposeCumulativeRigValidation SessionPurpose = "cumulative_rig_validation"
-	PurposeTestDomainProbe       SessionPurpose = "test_domain_probe"
+	PurposeTestDomainProbe         SessionPurpose = "test_domain_probe"
 )
 
 // DefaultSessionPurpose matches packages/api-types DEFAULT_SESSION_PURPOSE.
@@ -828,8 +828,8 @@ type MfaStepUpRequest struct {
 // MfaStepUpResponse — no new session issued; the existing session
 // row's mfa_satisfied_at advances to the returned timestamp.
 type MfaStepUpResponse struct {
-	Via             string    `json:"via"` // "totp" | "recovery"
-	MfaSatisfiedAt  time.Time `json:"mfa_satisfied_at"`
+	Via            string    `json:"via"` // "totp" | "recovery"
+	MfaSatisfiedAt time.Time `json:"mfa_satisfied_at"`
 }
 
 // V-460 / V-266 CLI/GUI activation flow (browser-OAuth-style).

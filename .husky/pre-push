@@ -53,6 +53,24 @@ else
   echo "→ sdk-python lint SKIPPED (no .venv — install via packages/sdk-python/scripts/setup.sh to enable)"
 fi
 
+# 2026-05-20 — sdk-go gofmt drift check. CI runs `go vet` + `go test`
+# but neither enforces gofmt alignment; 12 files had silently drifted
+# (pure indent/comment alignment, no semantic changes) until a sweep
+# caught them. gofmt is part of the Go toolchain so this is gated on
+# `command -v go` rather than a venv path.
+if command -v gofmt >/dev/null 2>&1; then
+  unformatted=$(cd packages/sdk-go && gofmt -l . 2>&1)
+  if [ -n "$unformatted" ]; then
+    echo "✗ sdk-go gofmt drift in:"
+    echo "$unformatted" | sed 's/^/    /'
+    echo "  run 'cd packages/sdk-go && gofmt -w .' to fix"
+    exit 1
+  fi
+  echo "→ sdk-go gofmt check clean"
+else
+  echo "→ sdk-go gofmt SKIPPED (no go toolchain on PATH)"
+fi
+
 echo "→ tests"
 npm test
 

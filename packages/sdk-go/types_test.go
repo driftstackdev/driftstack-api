@@ -59,9 +59,9 @@ func TestNavigateRequestMarshalling(t *testing.T) {
 
 func TestInteractActionConstructors(t *testing.T) {
 	tests := []struct {
-		name    string
-		action  InteractAction
-		expect  string
+		name   string
+		action InteractAction
+		expect string
 	}{
 		{
 			name:   "tap with selector",

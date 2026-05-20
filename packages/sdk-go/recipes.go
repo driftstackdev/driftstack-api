@@ -17,14 +17,14 @@ type RecipesResource struct {
 
 // Recipe is the read envelope returned by Create.
 type Recipe struct {
-	ID              string  `json:"id"`
-	AccountID       string  `json:"account_id"`
-	AgentSessionID  *string `json:"agent_session_id"`
-	Label           string  `json:"label"`
-	Description     *string `json:"description"`
-	IntentCount     int     `json:"intent_count"`
-	CreatedAt       string  `json:"created_at"`
-	UpdatedAt       string  `json:"updated_at"`
+	ID             string  `json:"id"`
+	AccountID      string  `json:"account_id"`
+	AgentSessionID *string `json:"agent_session_id"`
+	Label          string  `json:"label"`
+	Description    *string `json:"description"`
+	IntentCount    int     `json:"intent_count"`
+	CreatedAt      string  `json:"created_at"`
+	UpdatedAt      string  `json:"updated_at"`
 }
 
 // CreateRecipeRequest is the body for Create.

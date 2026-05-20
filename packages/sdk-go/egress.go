@@ -25,9 +25,9 @@ type EgressResource struct {
 // matches the existing SDK pattern for non-billing surfaces and
 // avoids over-eager binding before EG-API-1.6 lands.
 type SessionEgressConfig struct {
-	SessionID       string                 `json:"session_id"`
-	Proxy           map[string]any         `json:"proxy"`
-	EgressSafeguard map[string]bool        `json:"egress_safeguard"`
+	SessionID       string          `json:"session_id"`
+	Proxy           map[string]any  `json:"proxy"`
+	EgressSafeguard map[string]bool `json:"egress_safeguard"`
 }
 
 // SavedProxyConfig is the body shape for SaveProxy.
