@@ -28,6 +28,8 @@ import type { AdminAuditAction, AdminAuditService } from '../services/admin-audi
 import type { IncidentRow, IncidentUpdateRow, IncidentsService } from '../services/incidents.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
+import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
+import type { RateLimitStore } from '../services/rate-limit.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
@@ -68,13 +70,34 @@ function publicIncidentUpdate(row: IncidentUpdateRow): IncidentUpdate {
 export interface AdminIncidentsRoutesOptions {
   incidentsService: IncidentsService;
   audit: AdminAuditService;
+  /**
+   * 2026-05-20 — token-bucket store powering the IP-keyed
+   * defense-in-depth gates on the PUBLIC status-incident reads.
+   * Same shared store as the auth-flow IP gates (V-251 pattern).
+   */
+  rateLimitStore: RateLimitStore;
 }
 
 export function registerAdminIncidentsRoutes(
   app: FastifyInstance,
   opts: AdminIncidentsRoutesOptions,
 ): void {
-  const { incidentsService, audit } = opts;
+  const { incidentsService, audit, rateLimitStore } = opts;
+
+  // 2026-05-20 — defense-in-depth IP gates on the two PUBLIC
+  // status-incident reads. The CDN absorbs the primary load via
+  // Cache-Control: public, max-age=30 (~2/min legit per IP);
+  // these gates catch direct-API abuse that bypasses the CDN.
+  const statusIncidentsListGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'status_incidents_list',
+    capacity: AUTH_IP_LIMITS.statusIncidentsList.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.statusIncidentsList.refillPerSecond,
+  });
+  const statusIncidentDetailGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'status_incident_detail',
+    capacity: AUTH_IP_LIMITS.statusIncidentDetail.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.statusIncidentDetail.refillPerSecond,
+  });
 
   async function withAudit(
     request: FastifyRequest,
@@ -237,27 +260,31 @@ export function registerAdminIncidentsRoutes(
   // ── PUBLIC GET /v1/status/incidents ────────────────────────────────────
   // The status page consumes this; no auth required, only public=true rows
   // surfaced. Limited to the last 30 days by default.
-  app.get('/v1/status/incidents', async (request, reply) => {
-    const parsed = ListIncidentsQuerySchema.safeParse({
-      ...(request.query ?? {}),
-      scope: 'public',
-    });
-    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
-    const since =
-      parsed.data.since !== undefined
-        ? new Date(parsed.data.since)
-        : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const rows = await incidentsService.list({
-      scope: 'public',
-      since,
-      limit: parsed.data.limit ?? 50,
-    });
-    // Cache-Control: public, max-age=30 — matches /v1/status + the
-    // detail route. Status site polls every 30s for live updates;
-    // CDN coalesces concurrent viewers onto one origin call.
-    reply.header('cache-control', 'public, max-age=30');
-    return { data: rows.map(publicIncident) };
-  });
+  app.get(
+    '/v1/status/incidents',
+    { preHandler: statusIncidentsListGate },
+    async (request, reply) => {
+      const parsed = ListIncidentsQuerySchema.safeParse({
+        ...(request.query ?? {}),
+        scope: 'public',
+      });
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      const since =
+        parsed.data.since !== undefined
+          ? new Date(parsed.data.since)
+          : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const rows = await incidentsService.list({
+        scope: 'public',
+        since,
+        limit: parsed.data.limit ?? 50,
+      });
+      // Cache-Control: public, max-age=30 — matches /v1/status + the
+      // detail route. Status site polls every 30s for live updates;
+      // CDN coalesces concurrent viewers onto one origin call.
+      reply.header('cache-control', 'public, max-age=30');
+      return { data: rows.map(publicIncident) };
+    },
+  );
 
   // ── PUBLIC GET /v1/status/incidents/:id ────────────────────────────────
   // V-545.A — status-page incident-detail view. Returns the incident plus
@@ -269,13 +296,17 @@ export function registerAdminIncidentsRoutes(
   // Cache-Control: public, max-age=30 — matches /v1/status. The status
   // site polls every 30s for live updates; CDN coalesces concurrent
   // viewers onto one origin call.
-  app.get<{ Params: { id: string } }>('/v1/status/incidents/:id', async (request, reply) => {
-    const id = uuidFromPrefixedId(request.params.id, 'inc');
-    const result = await incidentsService.get(id, { publicOnly: true });
-    reply.header('cache-control', 'public, max-age=30');
-    return {
-      incident: publicIncident(result.incident),
-      updates: result.updates.map(publicIncidentUpdate),
-    };
-  });
+  app.get<{ Params: { id: string } }>(
+    '/v1/status/incidents/:id',
+    { preHandler: statusIncidentDetailGate },
+    async (request, reply) => {
+      const id = uuidFromPrefixedId(request.params.id, 'inc');
+      const result = await incidentsService.get(id, { publicOnly: true });
+      reply.header('cache-control', 'public, max-age=30');
+      return {
+        incident: publicIncident(result.incident),
+        updates: result.updates.map(publicIncidentUpdate),
+      };
+    },
+  );
 }

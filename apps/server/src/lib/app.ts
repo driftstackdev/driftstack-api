@@ -764,6 +764,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAdminIncidentsRoutes(app, {
       incidentsService: deps.incidentsService,
       audit: deps.adminAuditService,
+      rateLimitStore: deps.rateLimitStore,
     });
   }
   if (deps.statusSubscribersService !== undefined) {

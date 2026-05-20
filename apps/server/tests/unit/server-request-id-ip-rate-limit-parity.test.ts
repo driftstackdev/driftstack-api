@@ -151,7 +151,7 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
     );
   });
 
-  it('CRITICAL AUTH_IP_LIMITS 10-endpoint roster pinned with capacity + refillPerSecond per endpoint. Each row sets the per-IP cap; drift to widening would let abusers fire more requests per minute. magicLink added 2026-05-15 (#190) since each call fires a Postmark send. 2026-05-20 added oauthClientStart/Callback/ConfirmMerge gates pre-launch.', () => {
+  it('CRITICAL AUTH_IP_LIMITS 12-endpoint roster pinned with capacity + refillPerSecond per endpoint. Each row sets the per-IP cap; drift to widening would let abusers fire more requests per minute. magicLink added 2026-05-15 (#190) since each call fires a Postmark send. 2026-05-20 added oauthClientStart/Callback/ConfirmMerge gates pre-launch + statusIncidentsList/Detail defense-in-depth gates on the public CDN-cached reads.', () => {
     const src = read(IP_RATE_LIMIT);
 
     const limits: Array<[string, number]> = [
@@ -165,6 +165,8 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
       ['oauthClientStart', 5],
       ['oauthClientCallback', 5],
       ['oauthClientConfirmMerge', 5],
+      ['statusIncidentsList', 60],
+      ['statusIncidentDetail', 60],
     ];
 
     for (const [name, capacity] of limits) {
@@ -176,12 +178,12 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
     }
   });
 
-  it('CRITICAL "1-minute window" sustained-rate framing pinned. Every AUTH_IP_LIMITS entry sets refillPerSecond = capacity / 60 — drift to a different divisor would silently change customer expectations about per-minute caps. 2026-05-20 grew the roster to 10 entries (+3 OAuth-client start/callback/confirm-merge gates pre-launch).', () => {
+  it('CRITICAL "1-minute window" sustained-rate framing pinned. Every AUTH_IP_LIMITS entry sets refillPerSecond = capacity / 60 — drift to a different divisor would silently change customer expectations about per-minute caps. 2026-05-20 grew the roster to 12 entries (+3 OAuth-client start/callback/confirm-merge gates pre-launch + 2 status-incident list/detail defense-in-depth gates).', () => {
     const src = read(IP_RATE_LIMIT);
 
-    // All 10 entries use the same `/ 60` divisor.
+    // All 12 entries use the same `/ 60` divisor.
     const refillEntries = src.match(/refillPerSecond: \d+ \/ 60/g) ?? [];
-    expect(refillEntries.length, '/ 60 sustained-rate uses').toBe(10);
+    expect(refillEntries.length, '/ 60 sustained-rate uses').toBe(12);
   });
 
   it('CRITICAL AUTH_IP_LIMITS object is `as const` for literal-type narrowing. The `as const` is what lets TypeScript treat each entry as a readonly literal record (vs. a mutable record). Drift to dropping would let callers accidentally mutate the const.', () => {

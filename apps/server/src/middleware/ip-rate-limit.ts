@@ -141,4 +141,13 @@ export const AUTH_IP_LIMITS = {
   oauthClientStart: { capacity: 5, refillPerSecond: 5 / 60 },
   oauthClientCallback: { capacity: 5, refillPerSecond: 5 / 60 },
   oauthClientConfirmMerge: { capacity: 5, refillPerSecond: 5 / 60 },
+  // 2026-05-20 — public status-incident reads (defense-in-depth per
+  // 2026-05-19 rate-limit audit doc Category B). The CDN absorbs
+  // the primary read load (Cache-Control: public, max-age=30 +
+  // status-site polls every 30s), so legit traffic is ~2/min/IP.
+  // 60/min/IP gives a comfortable abuse-burst budget without
+  // affecting CDN-cached normal traffic; abuse via direct API
+  // hits (bypassing CDN) still gets gated.
+  statusIncidentsList: { capacity: 60, refillPerSecond: 60 / 60 },
+  statusIncidentDetail: { capacity: 60, refillPerSecond: 60 / 60 },
 } as const;

@@ -87,9 +87,15 @@ Sample-checked files with delta > 3 that aren't explained by A:
    immediately without doing any work, so rate-limit isn't
    needed there.
 
-5. **`admin-incidents.ts`** — 4 routes without rate-limit. Status-
-   subscriber routes are public read-only and should have at least
-   an IP gate to prevent DoS on the public status page.
+5. ~~**`admin-incidents.ts`** — 4 routes without rate-limit~~ —
+   **CLOSED 2026-05-20.** The two PUBLIC routes (GET
+   `/v1/status/incidents` + GET `/v1/status/incidents/:id`)
+   gained defense-in-depth IP gates: `statusIncidentsList` +
+   `statusIncidentDetail` (60/min/IP each — generous to
+   CDN-coalesced normal traffic at ~2/min legit; tight enough
+   to catch direct-API abuse bypassing the CDN). The admin
+   write routes have always been gated via `requireScope` +
+   `rateLimit('global')`. AUTH_IP_LIMITS now 12 entries.
 
 6. **`internal-atlas-priority.ts`** — bearer-token gated, but token
    compromise could allow unbounded calls. Add per-token rate-limit
