@@ -220,6 +220,23 @@ export interface SessionsServiceDeps {
         | { kind: 'session.success.first'; sessionId: string },
     ) => Promise<void>;
   } | null;
+  /**
+   * 2026-05-20 — optional NotificationEventBus publisher for the
+   * v0 `session.errored` notification kind. When wired, every
+   * transition to status='errored' fans out to subscribers (GUI
+   * panel today; future SDK subscribers later). Best-effort: a
+   * throwing publisher MUST NOT break the underlying error-handling
+   * path — the audit log + webhook stay the durable trail.
+   */
+  notifications?: {
+    publish: (event: {
+      kind: 'session.errored';
+      accountId: string;
+      sessionId: string;
+      errorClass: string;
+      at: string;
+    }) => void;
+  } | null;
 }
 
 export class SessionsService {
@@ -668,6 +685,25 @@ export class SessionsService {
         });
       } catch {
         /* swallow */
+      }
+
+      // 2026-05-20 — publish session.errored to the GUI notification
+      // bus. Best-effort: a throwing publisher must NOT mask the
+      // original driver error (the customer-visible failure wins).
+      // The audit log + webhook stay the durable trail; the bus is
+      // an additive, low-latency surface for the panel toast.
+      if (this.deps.notifications) {
+        try {
+          this.deps.notifications.publish({
+            kind: 'session.errored',
+            accountId: session.accountId,
+            sessionId: session.id,
+            errorClass: errorName,
+            at: erroredAt.toISOString(),
+          });
+        } catch {
+          /* swallow — original error wins */
+        }
       }
 
       // Emit session.failed webhook event. Same fire-and-forget posture

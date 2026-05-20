@@ -130,6 +130,13 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(
       /event:\s*\n?\s*\| \{ kind: 'session\.failed\.first'; sessionId: string; errorMessage: string \}\s*\n?\s*\| \{ kind: 'session\.success\.first'; sessionId: string \},/,
     );
+    // 2026-05-20 — NotificationEventBus publisher for session.errored
+    // pinned (third bus publisher alongside cost-alert + audit.high_
+    // severity). Drift on the shape breaks the GUI panel toast for
+    // driver failures.
+    expect(body).toMatch(
+      /notifications\?: \{\s*\n?\s*publish: \(event: \{\s*\n?\s*kind: 'session\.errored';/,
+    );
   });
 
   it('V-326e1 create: ConcurrencyLimitError when active >= limit; cap on OWNER account via effectiveAccountId opt', () => {

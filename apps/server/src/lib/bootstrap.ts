@@ -471,6 +471,11 @@ export async function createProductionDeps(
     webhooks: webhooksService,
     accountAudit: accountAuditService,
     accountLifecycle: accountLifecycleService,
+    // 2026-05-20 — third NotificationEventBus publisher: session.errored
+    // (cost-alert + audit.high_severity are the other two). The bus
+    // was constructed earlier in bootstrap — see comment near
+    // accountAuditService.
+    notifications: notificationEventBus,
   });
   const usageService = new UsageService(usageRepo);
 

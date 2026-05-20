@@ -284,6 +284,10 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
+  it("2026-05-20 sessionsService takes notificationEventBus as the `notifications` dep so driver failures publish session.errored — third bus publisher (cost-alert + audit.high_severity + this one). Pinned so a refactor can't silently drop the dep and break the GUI panel toast for driver failures", () => {
+    expect(body).toMatch(/notifications: notificationEventBus,/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
