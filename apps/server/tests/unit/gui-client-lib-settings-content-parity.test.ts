@@ -80,16 +80,18 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
     expect(body).toMatch(/telemetryOptIn: boolean \| null;\s*\n?\s*\}/);
   });
 
-  it("DEFAULT_SETTINGS pinned: apiKey null + baseUrl 'http://localhost:7780' + telemetryOptIn null", () => {
+  it("DEFAULT_SETTINGS pinned: apiKey null + baseUrl 'http://localhost:3000' (SDK default port) + telemetryOptIn null", () => {
     expect(body).toMatch(
-      /export const DEFAULT_SETTINGS: DriftstackSettings = \{\s*\n?\s*apiKey: null,\s*\n?\s*baseUrl: 'http:\/\/localhost:7780',\s*\n?\s*telemetryOptIn: null,\s*\n?\s*\};/,
+      /export const DEFAULT_SETTINGS: DriftstackSettings = \{\s*\n?\s*apiKey: null,\s*\n?\s*baseUrl: 'http:\/\/localhost:3000',\s*\n?\s*telemetryOptIn: null,\s*\n?\s*\};/,
     );
   });
 
-  it("Constants: STORE_FILE 'settings.json' + SETTINGS_KEY 'driftstack' + KEYCHAIN_API_KEY_NAME 'api_key'", () => {
+  it("Constants: STORE_FILE 'settings.json' + SETTINGS_KEY 'driftstack' + LEGACY_KEYCHAIN_NAME 'api_key' (legacy single-name, kept for first-load migration) + keychainNameFor(baseUrl) factory returning 'api_key:<host>' (2026-05-20 scoping fix b876a576 — switching cloud↔self-hosted reuses correct per-env entry)", () => {
     expect(body).toMatch(/const STORE_FILE = 'settings\.json';/);
     expect(body).toMatch(/const SETTINGS_KEY = 'driftstack';/);
-    expect(body).toMatch(/const KEYCHAIN_API_KEY_NAME = 'api_key';/);
+    expect(body).toMatch(/const LEGACY_KEYCHAIN_NAME = 'api_key';/);
+    expect(body).toMatch(/export function keychainNameFor\(baseUrl: string\): string/);
+    expect(body).toMatch(/return 'api_key:' \+ \(normalised\.length > 0 \? normalised : 'unknown'\);/);
   });
 
   it("keychainLoad: invoke<string|null>('secret_load', {key:name}) + try/catch → null fallback framing 'Keychain access failed (user dismissed, locked, etc.) — fall back to null. Higher layers treat null as \"not set\" + prompt the customer in settings.'", () => {
@@ -104,16 +106,16 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
     );
   });
 
-  it("loadSettings migration logic: persisted.apiKey string + length>0 + inKeychain === null → keychainSave + migratedApiKey + try/catch leave-in-settings.json fallback framing 'Keychain write failed — leave the apiKey in settings.json for now so the customer isn't suddenly logged out. The next attempt on the next launch will retry.'", () => {
+  it("loadSettings migration logic: persisted.apiKey string + length>0 + inKeychain === null → keychainSave + migratedApiKey + try/catch leave-in-settings.json fallback framing 'Keychain write failed — leave the apiKey in settings.json for now so the customer isn't suddenly logged out. The next attempt on the next launch will retry.' (2026-05-20: writes to scopedName = keychainNameFor(baseUrl) not the legacy single-name; per-env keychain entries)", () => {
     expect(body).toMatch(
-      /let migratedApiKey: string \| null = null;\s*\n?\s*if \(persisted && typeof persisted\.apiKey === 'string' && persisted\.apiKey\.length > 0\) \{\s*\n?\s*const inKeychain = await keychainLoad\(KEYCHAIN_API_KEY_NAME\);\s*\n?\s*if \(inKeychain === null\) \{\s*\n?\s*try \{\s*\n?\s*await keychainSave\(KEYCHAIN_API_KEY_NAME, persisted\.apiKey\);\s*\n?\s*migratedApiKey = persisted\.apiKey;\s*\n?\s*\} catch \{/,
+      /let migratedApiKey: string \| null = null;\s*\n?\s*if \(persisted && typeof persisted\.apiKey === 'string' && persisted\.apiKey\.length > 0\) \{\s*\n?\s*const inKeychain = await keychainLoad\(scopedName\);\s*\n?\s*if \(inKeychain === null\) \{\s*\n?\s*try \{\s*\n?\s*await keychainSave\(scopedName, persisted\.apiKey\);\s*\n?\s*migratedApiKey = persisted\.apiKey;\s*\n?\s*\} catch \{/,
     );
-    expect(body).toMatch(
-      /\/\/ Keychain write failed — leave the apiKey in settings\.json\s*\n?\s*\/\/ for now so the customer isn't suddenly logged out\. The next\s*\n?\s*\/\/ attempt on the next launch will retry\./,
-    );
-    expect(body).toMatch(
-      /\} else \{\s*\n?\s*\/\/ Keychain already has the canonical value; the settings\.json\s*\n?\s*\/\/ copy is stale — drop it on the next save\(\) below\.\s*\n?\s*migratedApiKey = inKeychain;\s*\n?\s*\}/,
-    );
+    // 2026-05-20: the "Keychain write failed — leave in settings.json"
+    // framing was dropped when the migration simplified to silently
+    // fall through to `migratedApiKey = persisted.apiKey` on catch.
+    // Pin the simpler shape so the catch fallback stays load-bearing.
+    expect(body).toMatch(/\} catch \{\s*\n?\s*migratedApiKey = persisted\.apiKey;\s*\n?\s*\}/);
+    expect(body).toMatch(/\} else \{\s*\n?\s*migratedApiKey = inKeychain;\s*\n?\s*\}/);
   });
 
   it("loadSettings cleanup write: persisted && 'apiKey' in persisted → store.set + store.save without apiKey field (cleaned shape) + returns {apiKey, baseUrl, telemetryOptIn}", () => {
@@ -122,10 +124,15 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
     );
   });
 
-  it("saveSettings: store.set {baseUrl, telemetryOptIn} + store.save + apiKey null OR length===0 → keychainDelete else keychainSave (framing 'baseUrl + telemetryOptIn → JSON store; apiKey → keychain (or delete on null)')", () => {
-    expect(body).toMatch(
-      /export async function saveSettings\(s: DriftstackSettings\): Promise<void> \{\s*\n?\s*\/\/ baseUrl \+ telemetryOptIn → JSON store; apiKey → keychain \(or delete on null\)\.\s*\n?\s*await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*\}\);\s*\n?\s*await getStore\(\)\.save\(\);\s*\n?\s*if \(s\.apiKey === null \|\| s\.apiKey\.length === 0\) \{\s*\n?\s*await keychainDelete\(KEYCHAIN_API_KEY_NAME\);\s*\n?\s*\} else \{\s*\n?\s*await keychainSave\(KEYCHAIN_API_KEY_NAME, s\.apiKey\);\s*\n?\s*\}\s*\n?\s*\}/,
-    );
+  it("saveSettings: store.set {baseUrl, telemetryOptIn} + store.save + apiKey null OR length===0 → scoped+legacy dual keychainDelete else keychainSave(scopedName); 2026-05-20 b876a576 scopedName + legacy-name dual-delete on sign-out so cross-env switching can't reuse stale entry ('logout doesn't work, keychain keeps pulling from self-hosted' incident)", () => {
+    expect(body).toMatch(/export async function saveSettings\(s: DriftstackSettings\): Promise<void>/);
+    expect(body).toMatch(/await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*\}\);/);
+    expect(body).toMatch(/const scopedName = keychainNameFor\(s\.baseUrl\);/);
+    // Sign-out path: dual-delete (scoped + legacy) closes the cross-env
+    // stale-key incident; pin both calls so a future refactor can't
+    // silently drop the legacy half and reintroduce the regression.
+    expect(body).toMatch(/await keychainDelete\(scopedName\);\s*\n?\s*await keychainDelete\(LEGACY_KEYCHAIN_NAME\);/);
+    expect(body).toMatch(/await keychainSave\(scopedName, s\.apiKey\);/);
   });
 
   it('file exists at canonical path', () => {
