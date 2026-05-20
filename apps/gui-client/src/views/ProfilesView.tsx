@@ -11,8 +11,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { useSettings } from '../lib/SettingsContext';
-import { DriftstackError } from '../lib/client';
+import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
+import {
+  clearSession as clearProfileSession,
+  listBindings,
+  markLaunched,
+  setDefaultProxy,
+  type ProfileBinding,
+} from '../lib/profile-bindings';
+import { listProxies, type ProxyConfig as LocalProxyConfig } from '../lib/proxies';
 
 // 2026-05-20 — match SessionsView: slow background poll + skip the
 // visible loading flicker on tick refreshes so the panel doesn't
@@ -46,10 +54,19 @@ interface ProfilesState {
 
 export interface ProfilesViewProps {
   onGoToSettings: () => void;
+  /** Open the live-session view for a specific session id. */
+  onOpenSession: (sessionId: string) => void;
 }
 
-export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element {
+export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProps): JSX.Element {
   const { client, settings, accountMe, refreshAccountMe } = useSettings();
+  // 2026-05-20 — antidetect-browser-style hub: profiles are first-class,
+  // sessions are an implementation detail of "this profile is running".
+  // Track live sessions + GUI-local bindings so we can show per-profile
+  // Launch/Stop buttons + a status badge per row.
+  const [activeSessions, setActiveSessions] = useState<Session[]>([]);
+  const [bindings, setBindings] = useState<ProfileBinding[]>([]);
+  const [proxies, setProxies] = useState<LocalProxyConfig[]>([]);
   // V-239 — gate the New profile button at the tier cap (skip when
   // profile_cap === null which means enterprise / no fixed cap).
   const profileCap = accountMe?.profile_cap ?? null;
@@ -75,12 +92,24 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
       }
       if (showLoading) setState((s) => ({ ...s, loading: true }));
       try {
-        const collected: Profile[] = [];
-        for await (const profile of client.profiles.iterate({ limit: 50 })) {
-          collected.push(profile);
-        }
+        // Fetch profiles + active sessions in parallel — both feed the hub.
+        const [profilesPage, sessionsPage, currentBindings, currentProxies] = await Promise.all([
+          (async () => {
+            const collected: Profile[] = [];
+            for await (const profile of client.profiles.iterate({ limit: 50 })) {
+              collected.push(profile);
+            }
+            return collected;
+          })(),
+          client.sessions.list(),
+          listBindings(),
+          listProxies(),
+        ]);
+        setActiveSessions(sessionsPage.data);
+        setBindings(currentBindings);
+        setProxies(currentProxies);
         setState((s) => ({
-          profiles: collected,
+          profiles: profilesPage,
           refreshedAt: Date.now(),
           loading: false,
           error: s.error,
@@ -108,8 +137,91 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
     try {
       await client.profiles.delete(id);
       await refresh(false);
-      // V-239 — refresh the cap counter so a deletion unlocks the
-      // New profile button when we drop below cap.
+      await refreshAccountMe();
+    } catch (err) {
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  /** Returns the currently-active session for a profile, or null when
+   *  the profile is idle. Looks up the binding's currentSessionId in
+   *  the live activeSessions list — a stale binding (session destroyed
+   *  externally) reads as idle. */
+  function runningSessionFor(profileId: string): Session | null {
+    const binding = bindings.find((b) => b.profileId === profileId);
+    if (binding === null || binding === undefined || binding.currentSessionId === null) {
+      return null;
+    }
+    return activeSessions.find((s) => s.id === binding.currentSessionId) ?? null;
+  }
+
+  /** Pick the proxy to use on Launch — explicit binding default first,
+   *  else the first saved proxy, else null (handled in handleLaunch as
+   *  an inline error). */
+  function pickProxy(profileId: string): LocalProxyConfig | null {
+    const binding = bindings.find((b) => b.profileId === profileId);
+    if (binding?.defaultProxyId !== undefined && binding?.defaultProxyId !== null) {
+      const explicit = proxies.find((p) => p.id === binding.defaultProxyId);
+      if (explicit !== undefined) return explicit;
+    }
+    return proxies[0] ?? null;
+  }
+
+  async function handleLaunch(profile: Profile): Promise<void> {
+    if (!client) return;
+    setBusyId(profile.id);
+    try {
+      const proxy = pickProxy(profile.id);
+      if (proxy === null) {
+        setState((s) => ({
+          ...s,
+          error:
+            'No saved proxies. Open the Proxies tab, add a SOCKS5 server, then launch this profile. (Sessions require a proxy on this deployment.)',
+        }));
+        return;
+      }
+      const body: Record<string, unknown> = {
+        archetype: profile.archetype,
+        label: profile.name,
+        proxy: {
+          type: 'socks5',
+          socks5: {
+            host: proxy.host,
+            port: proxy.port,
+            ...(proxy.username !== null ? { username: proxy.username } : {}),
+            ...(proxy.password !== null ? { password: proxy.password } : {}),
+            udp_associate: true,
+            require_remote_dns: false,
+          },
+        },
+        metadata: { gui_profile_id: profile.id, gui_profile_name: profile.name },
+      };
+      const created = await client.sessions.create(body);
+      await markLaunched(profile.id, created.id);
+      await refresh(false);
+      await refreshAccountMe();
+    } catch (err) {
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleStop(profile: Profile): Promise<void> {
+    if (!client) return;
+    const session = runningSessionFor(profile.id);
+    if (session === null) {
+      await clearProfileSession(profile.id);
+      await refresh(false);
+      return;
+    }
+    setBusyId(profile.id);
+    try {
+      await client.sessions.destroy(session.id);
+      await clearProfileSession(profile.id);
+      await refresh(false);
       await refreshAccountMe();
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
@@ -220,34 +332,114 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
         </div>
       ) : (
         <ul className="flex flex-col divide-y divide-surface-divider rounded-md border border-surface-divider bg-surface-raised">
-          {state.profiles.map((profile) => (
-            <li key={profile.id} className="flex items-center justify-between gap-4 px-4 py-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink-primary">{profile.name}</p>
-                <p className="mt-0.5 mono text-xs text-ink-muted">{profile.id}</p>
-                {profile.description !== null && (
-                  <p className="mt-1 text-xs text-ink-secondary">{profile.description}</p>
-                )}
-                <p className="mt-1 text-xs text-ink-muted">
-                  Archetype: <span className="mono">{profile.archetype}</span>
-                  {profile.last_used_at !== null && (
-                    <>
-                      {' · '}
-                      last used {new Date(profile.last_used_at).toLocaleString()}
-                    </>
-                  )}
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn-secondary text-xs"
-                onClick={() => void handleDelete(profile.id)}
-                disabled={busyId === profile.id}
+          {state.profiles.map((profile) => {
+            const session = runningSessionFor(profile.id);
+            const running = session !== null;
+            const binding = bindings.find((b) => b.profileId === profile.id) ?? null;
+            const selectedProxy = pickProxy(profile.id);
+            const busy = busyId === profile.id;
+            return (
+              <li
+                key={profile.id}
+                className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                {busyId === profile.id ? 'Deleting…' : 'Delete'}
-              </button>
-            </li>
-          ))}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-block h-2 w-2 rounded-full ${
+                        running ? 'bg-emerald-500' : 'bg-ink-muted/40'
+                      }`}
+                      aria-label={running ? 'Running' : 'Idle'}
+                    />
+                    <p className="text-sm font-medium text-ink-primary">{profile.name}</p>
+                    <span
+                      className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+                        running
+                          ? 'bg-emerald-500/15 text-emerald-300'
+                          : 'bg-surface-base text-ink-muted'
+                      }`}
+                    >
+                      {running ? 'Running' : 'Idle'}
+                    </span>
+                  </div>
+                  {profile.description !== null && (
+                    <p className="mt-1 text-xs text-ink-secondary">{profile.description}</p>
+                  )}
+                  <p className="mt-1 text-xs text-ink-muted">
+                    <span className="mono">{profile.archetype}</span>
+                    {' · proxy: '}
+                    <select
+                      className="mono rounded-sm bg-surface-base px-1 py-0.5 text-[11px] text-ink-secondary"
+                      value={binding?.defaultProxyId ?? ''}
+                      onChange={(e) => {
+                        const next = e.target.value === '' ? null : e.target.value;
+                        void setDefaultProxy(profile.id, next).then(() => void refresh(false));
+                      }}
+                      disabled={busy || running}
+                      title={running ? 'Stop the profile to change proxy' : undefined}
+                    >
+                      <option value="">— (first available)</option>
+                      {proxies.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.label} ({p.host}:{p.port})
+                        </option>
+                      ))}
+                    </select>
+                    {selectedProxy !== null && binding?.defaultProxyId === null && (
+                      <span className="ml-1 text-ink-muted">
+                        → defaulting to {selectedProxy.label}
+                      </span>
+                    )}
+                    {profile.last_used_at !== null && (
+                      <>
+                        {' · '}last used {new Date(profile.last_used_at).toLocaleString()}
+                      </>
+                    )}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {running ? (
+                    <>
+                      <button
+                        type="button"
+                        className="btn-secondary text-xs"
+                        onClick={() => onOpenSession(session.id)}
+                        disabled={busy}
+                      >
+                        Live view
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded border border-status-error/40 bg-status-error/10 px-3 py-1 text-xs font-medium text-status-error hover:bg-status-error/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => void handleStop(profile)}
+                        disabled={busy}
+                      >
+                        {busy ? 'Stopping…' : 'Stop'}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-primary text-xs"
+                      onClick={() => void handleLaunch(profile)}
+                      disabled={busy || atProfileCap}
+                    >
+                      {busy ? 'Launching…' : 'Launch'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="text-xs text-ink-muted hover:text-status-error"
+                    onClick={() => void handleDelete(profile.id)}
+                    disabled={busy || running}
+                    title={running ? 'Stop the profile before deleting' : undefined}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
 

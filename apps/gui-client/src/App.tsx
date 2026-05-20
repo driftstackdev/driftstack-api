@@ -48,7 +48,9 @@ export function App(): JSX.Element {
 
 function Shell(): JSX.Element {
   const { settings, loading } = useSettings();
-  const [view, setView] = useState<View>({ kind: 'sessions' });
+  // 2026-05-20 — Profiles is the new default landing view (antidetect-
+  // browser-style); Sessions/etc are diagnostics-tier.
+  const [view, setView] = useState<View>({ kind: 'profiles' });
   // V-244 — track wizard state. Customer with no apiKey on boot
   // sees the wizard; once apiKey is set (via wizard or any other
   // path) the regular shell takes over. `wizardDismissed` lets the
@@ -80,7 +82,7 @@ function Shell(): JSX.Element {
       telemetryOptIn: kbSettings.telemetryOptIn,
     });
     setWizardDismissed(false);
-    setView({ kind: 'sessions' });
+    setView({ kind: 'profiles' });
   };
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
@@ -180,7 +182,12 @@ function CurrentView({
     case 'connectivity':
       return <ConnectivityView />;
     case 'profiles':
-      return <ProfilesView onGoToSettings={() => onNavigate({ kind: 'settings' })} />;
+      return (
+        <ProfilesView
+          onGoToSettings={() => onNavigate({ kind: 'settings' })}
+          onOpenSession={(sessionId) => onNavigate({ kind: 'live-session', sessionId })}
+        />
+      );
     case 'sessions-history':
       return <SessionsHistoryView />;
     case 'fleet':
@@ -222,24 +229,28 @@ function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.Element 
   const handleSignOut = onSignOut;
   return (
     <aside className="flex w-56 flex-col border-r border-surface-divider bg-surface-raised">
-      <SidebarSection label="Sessions">
-        <SidebarItem
-          active={current.kind === 'sessions'}
-          onClick={() => onNavigate({ kind: 'sessions' })}
-        >
-          Active
-        </SidebarItem>
-        <SidebarItem
-          active={current.kind === 'sessions-history'}
-          onClick={() => onNavigate({ kind: 'sessions-history' })}
-        >
-          History
-        </SidebarItem>
+      <SidebarSection label="Browse">
+        {/* 2026-05-20 — antidetect-browser-style: profiles are first
+            class (Launch / Stop / status per row inside the view). */}
         <SidebarItem
           active={current.kind === 'profiles'}
           onClick={() => onNavigate({ kind: 'profiles' })}
         >
           Profiles
+        </SidebarItem>
+        <SidebarItem
+          active={current.kind === 'proxies'}
+          onClick={() => onNavigate({ kind: 'proxies' })}
+        >
+          Proxies
+        </SidebarItem>
+      </SidebarSection>
+      <SidebarSection label="History">
+        <SidebarItem
+          active={current.kind === 'sessions-history'}
+          onClick={() => onNavigate({ kind: 'sessions-history' })}
+        >
+          Session log
         </SidebarItem>
         <SidebarItem
           active={current.kind === 'recordings'}
@@ -248,12 +259,12 @@ function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.Element 
           Recordings
         </SidebarItem>
       </SidebarSection>
-      <SidebarSection label="Network">
+      <SidebarSection label="Diagnostics">
         <SidebarItem
-          active={current.kind === 'proxies'}
-          onClick={() => onNavigate({ kind: 'proxies' })}
+          active={current.kind === 'sessions'}
+          onClick={() => onNavigate({ kind: 'sessions' })}
         >
-          Proxies
+          Raw sessions
         </SidebarItem>
         <SidebarItem
           active={current.kind === 'connectivity'}
