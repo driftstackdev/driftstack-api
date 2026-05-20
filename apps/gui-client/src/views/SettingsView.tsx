@@ -125,7 +125,9 @@ export function SettingsView(): JSX.Element {
           )}
           {browserSignIn.state.kind === 'error' && (
             <div className="mt-3">
-              <p className="text-xs text-status-error">{browserSignIn.state.message}</p>
+              <p className="whitespace-pre-line text-xs text-status-error">
+                {browserSignIn.state.message}
+              </p>
               <button
                 type="button"
                 className="btn-primary mt-2"

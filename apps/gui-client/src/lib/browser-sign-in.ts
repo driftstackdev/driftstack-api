@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from 'react';
 import { open as openInBrowser } from '@tauri-apps/plugin-shell';
 import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import { parseDeepLink } from './deep-link';
+import { diagnosticFetchError } from './diagnostic-fetch-error';
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -167,9 +168,15 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
         });
       }, opts.__pollTimeoutMs ?? POLL_TIMEOUT_MS);
     } catch (err) {
+      // 2026-05-20 — surface a multi-line diagnostic for network
+      // failures (Tauri WebKit "Load failed" / Chrome "Failed to fetch"
+      // etc.) instead of the bare error.message. The browser sign-in
+      // path is often the first network call a new customer makes;
+      // an opaque "Load failed" gives them no path forward.
+      const diag = diagnosticFetchError(err, trimmedUrl);
       setState({
         kind: 'error',
-        message: err instanceof Error ? err.message : 'Failed to start browser sign-in.',
+        message: diag ?? (err instanceof Error ? err.message : 'Failed to start browser sign-in.'),
       });
     }
   }

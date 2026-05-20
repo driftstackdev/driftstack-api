@@ -11,7 +11,12 @@ export function ErrorBanner({ message, onDismiss }: ErrorBannerProps): JSX.Eleme
     <div className="flex items-start justify-between gap-3 rounded border border-status-error/30 bg-status-error/10 px-3 py-2">
       <div className="flex flex-col gap-0.5 min-w-0">
         <span className="section-label text-status-error/80">Error</span>
-        <span className="text-sm text-ink-primary truncate">{message}</span>
+        {/* 2026-05-20 — whitespace-pre-line so multi-line diagnostic
+            messages from diagnosticFetchError render with their
+            newlines + bullet points intact. truncate dropped because
+            it collapses everything to a single line; for an error
+            banner we'd rather wrap. */}
+        <span className="whitespace-pre-line text-sm text-ink-primary">{message}</span>
       </div>
       <button type="button" className="btn-secondary" onClick={onDismiss}>
         Dismiss

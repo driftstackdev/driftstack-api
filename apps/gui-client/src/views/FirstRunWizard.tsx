@@ -30,6 +30,7 @@ import { Driftstack } from '@driftstack/sdk';
 import { TitleBar } from '../components/TitleBar';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { useSettings } from '../lib/SettingsContext';
+import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 
 type WizardStep = 'welcome' | 'mode' | 'apikey' | 'profile' | 'done';
 type DeploymentMode = 'cloud' | 'self-hosted';
@@ -72,7 +73,7 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
       await update({ apiKey: trimmedKey, baseUrl: trimmedUrl });
       setStep('profile');
     } catch (err) {
-      setValidationError(diagnosticFetchError(err, trimmedUrl));
+      setValidationError(diagnosticFetchError(err, trimmedUrl) ?? friendlyError(err));
     } finally {
       setValidating(false);
     }
@@ -425,7 +426,9 @@ export function ApiKeyStep({
 
           {browserState.kind === 'error' && (
             <div className="rounded-md border border-status-error/30 bg-status-error/5 p-4">
-              <p className="text-sm text-status-error">{browserState.message}</p>
+              <p className="whitespace-pre-line text-sm text-status-error">
+                {browserState.message}
+              </p>
               <button
                 type="button"
                 className="btn-primary mt-3"
@@ -651,32 +654,4 @@ function friendlyError(err: unknown): string {
     return err.message;
   }
   return String(err);
-}
-
-/**
- * 2026-05-20 — diagnostic version of friendlyError for fetch failures
- * during API-key validation. Raw "Load failed" / "Failed to fetch" /
- * NetworkError messages are useless to the customer — they need to
- * know WHICH url failed and what to check. Detects the 3 browser
- * variants and produces a multi-line actionable message.
- */
-function diagnosticFetchError(err: unknown, targetUrl: string): string {
-  const raw =
-    err && typeof err === 'object' && 'message' in err ? String(err.message) : String(err);
-  const isNetworkFailure =
-    /Load failed|Failed to fetch|NetworkError|ECONNREFUSED|fetch failed|ENOTFOUND/i.test(raw);
-  if (!isNetworkFailure) return raw;
-  const isLocalhost = /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(targetUrl);
-  const lines = [
-    `Couldn't reach ${targetUrl}.`,
-    '',
-    isLocalhost
-      ? '• Is the Driftstack API server running on this machine?'
-      : '• Is the server reachable from this machine? (DNS / firewall / VPN?)',
-    isLocalhost
-      ? `• The server defaults to port 3000 — if you started it that way, change the URL above to http://localhost:3000.`
-      : '• Does the URL use the correct scheme (http vs https)?',
-    `• Underlying error: ${raw}`,
-  ];
-  return lines.join('\n');
 }

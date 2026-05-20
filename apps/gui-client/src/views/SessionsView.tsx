@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type Session } from '../lib/client';
+import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 
 const REFRESH_MS = 5000;
 
@@ -61,7 +62,7 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
       setState((s) => ({
         ...s,
         loading: false,
-        error: friendlyError(err),
+        error: friendlyError(err, settings.baseUrl),
       }));
     }
   }, [client]);
@@ -83,7 +84,7 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
       // the gate flips to disabled if this brought us to the cap.
       await refreshAccountMe();
     } catch (err) {
-      setState((s) => ({ ...s, error: friendlyError(err) }));
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
       setBusyId(null);
     }
@@ -99,7 +100,7 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
       // Spawn button when we drop below cap.
       await refreshAccountMe();
     } catch (err) {
-      setState((s) => ({ ...s, error: friendlyError(err) }));
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
       setBusyId(null);
     }
@@ -347,7 +348,13 @@ function Td({ children }: { children: React.ReactNode }): JSX.Element {
 
 // ─── helpers ──────────────────────────────────────────────────────
 
-function friendlyError(err: unknown): string {
+function friendlyError(err: unknown, baseUrl?: string): string {
+  // 2026-05-20 — network-failure preflight (catches Tauri WebKit
+  // "Load failed" before falling through to per-view formatting).
+  if (baseUrl !== undefined) {
+    const diag = diagnosticFetchError(err, baseUrl);
+    if (diag !== null) return diag;
+  }
   if (err instanceof DriftstackError) {
     return err.message;
   }

@@ -32,6 +32,7 @@ import type { Driftstack } from '@driftstack/sdk';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
+import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { GUIInputError, sendGUIInput, type GUIInputAction } from '../lib/gui-input';
 import { useRecordings } from '../lib/recordings';
 
@@ -143,7 +144,7 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
       setState((s) => ({
         ...s,
         loading: false,
-        error: friendlyError(err),
+        error: friendlyError(err, settings.baseUrl),
       }));
     }
   }, [client, sessionId, addFrame]);
@@ -205,7 +206,7 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
       await destroyAndExit(client, sessionId);
       onBack();
     } catch (err) {
-      setState((s) => ({ ...s, error: friendlyError(err) }));
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     }
   }
 
@@ -224,7 +225,7 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
       try {
         await client.sessions.interact(sessionId, { action });
       } catch (err) {
-        setState((s) => ({ ...s, error: friendlyError(err) }));
+        setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
       }
     },
     [client, sessionId],
@@ -235,7 +236,7 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
       try {
         await sendGUIInput(settings, sessionId, action);
       } catch (err) {
-        setState((s) => ({ ...s, error: friendlyError(err) }));
+        setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
       }
     },
     [settings, sessionId],
@@ -586,7 +587,14 @@ function computeFps(timestamps: number[]): number {
   return ((timestamps.length - 1) * 1000) / elapsedMs;
 }
 
-function friendlyError(err: unknown): string {
+function friendlyError(err: unknown, baseUrl?: string): string {
+  // 2026-05-20 — network-failure preflight. Catches the Tauri WebKit
+  // "Load failed" / Chrome "Failed to fetch" / Firefox NetworkError
+  // class of fetch errors before they reach the per-view fallthrough.
+  if (baseUrl !== undefined) {
+    const diag = diagnosticFetchError(err, baseUrl);
+    if (diag !== null) return diag;
+  }
   if (err instanceof GUIInputError) {
     if (err.status === 403) {
       return 'API key lacks gui_control scope — manual control is unavailable on this key.';

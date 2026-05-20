@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
+import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 
 const REFRESH_MS = 5000;
 
@@ -84,7 +85,7 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
       setState((s) => ({
         ...s,
         loading: false,
-        error: friendlyError(err),
+        error: friendlyError(err, settings.baseUrl),
       }));
     }
   }, [client]);
@@ -105,7 +106,7 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
       // New profile button when we drop below cap.
       await refreshAccountMe();
     } catch (err) {
-      setState((s) => ({ ...s, error: friendlyError(err) }));
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
       setBusyId(null);
     }
@@ -279,7 +280,7 @@ function CreateProfileModal({
   onClose: () => void;
   onCreated: () => void;
 }): JSX.Element {
-  const { client } = useSettings();
+  const { client, settings } = useSettings();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [archetype, setArchetype] = useState(KNOWN_ARCHETYPES[0]?.id ?? '');
@@ -319,7 +320,7 @@ function CreateProfileModal({
       });
       onCreated();
     } catch (err) {
-      setError(friendlyError(err));
+      setError(friendlyError(err, settings.baseUrl));
       setSubmitting(false);
     }
   }
@@ -449,7 +450,13 @@ function EmptyConnect({
   );
 }
 
-function friendlyError(err: unknown): string {
+function friendlyError(err: unknown, baseUrl?: string): string {
+  // 2026-05-20 — network-failure preflight (catches Tauri WebKit
+  // "Load failed" before falling through to per-view formatting).
+  if (baseUrl !== undefined) {
+    const diag = diagnosticFetchError(err, baseUrl);
+    if (diag !== null) return diag;
+  }
   if (err instanceof DriftstackError) {
     return `${err.title} (${err.kind}): ${err.detail ?? err.message}`;
   }
