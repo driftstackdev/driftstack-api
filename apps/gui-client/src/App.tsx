@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { ConnectionPill } from './components/ConnectionPill';
 import { TitleBar } from './components/TitleBar';
+import { NotificationToastStack } from './components/NotificationToastStack';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { isCloudBaseUrl } from './lib/telemetry';
@@ -118,6 +119,12 @@ function Shell(): JSX.Element {
   const mode = deploymentLabel(settings.baseUrl);
   return (
     <div className="flex h-screen w-screen flex-col bg-surface-base">
+      {/* 2026-05-20 — GUI panel notification overlay. Mounts at the
+          shell level (above any view) so cost / incident / audit /
+          session.errored toasts surface regardless of which view the
+          customer is on. Subscribes via useNotifications() — auto-
+          closes on sign-out (apiKey flips null). */}
+      <NotificationToastStack />
       <TitleBar
         subtitle={mode}
         right={

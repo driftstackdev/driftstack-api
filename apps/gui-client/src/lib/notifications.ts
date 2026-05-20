@@ -91,7 +91,14 @@ export interface SubscribeOpts {
 /** Open an EventSource and dispatch parsed events. Returns a
  *  close handle the caller MUST invoke on unmount. */
 export function subscribeNotifications(opts: SubscribeOpts): () => void {
-  const Ctor = opts.eventSourceFactory ?? EventSource;
+  const Ctor =
+    opts.eventSourceFactory ?? (typeof EventSource !== 'undefined' ? EventSource : undefined);
+  if (Ctor === undefined) {
+    // Non-browser / non-Tauri runtime — no SSE transport available.
+    // Treat as already-closed so the caller's onState reflects it.
+    opts.onState?.('closed');
+    return () => undefined;
+  }
   opts.onState?.('connecting');
   const es = new Ctor(opts.url);
 
