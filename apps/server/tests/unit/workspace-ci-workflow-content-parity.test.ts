@@ -109,7 +109,7 @@ describe('W541.A /.github/workflows/ci.yml content parity', () => {
     expect(body).toMatch(/pip install build/);
     expect(body).toMatch(/python -m build/);
     expect(body).toMatch(/python -m venv \/tmp\/smoke/);
-    expect(body).toMatch(/\/tmp\/smoke\/bin\/pip install dist\/driftstack-\*\.whl/);
+    expect(body).toMatch(/\/tmp\/smoke\/bin\/pip install dist\/driftstack_sdk-\*\.whl/);
     expect(body).toMatch(
       /from driftstack import Driftstack, AsyncDriftstack, verify_webhook_signature/,
     );

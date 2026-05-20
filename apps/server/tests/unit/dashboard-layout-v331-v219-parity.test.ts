@@ -148,13 +148,14 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     expect(l).toMatch(/Quiet failure:/);
     expect(l).toMatch(/no token \/ network blip leaves the picker hidden/);
 
-    // Implementation.
+    // Implementation. 2026-05-XX split the !me check earlier in the
+    // chain so other dashboard surfaces can short-circuit before the
+    // picker-specific teams check fires.
     expect(l).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/account\/me', \{\s*\n\s+headers: \{ authorization: 'Bearer ' \+ token \}/,
     );
-    expect(l).toMatch(
-      /if \(!me \|\| !Array\.isArray\(me\.teams\) \|\| me\.teams\.length === 0\) return/,
-    );
+    expect(l).toMatch(/if \(!me\) return;/);
+    expect(l).toMatch(/if \(!Array\.isArray\(me\.teams\) \|\| me\.teams\.length === 0\) return/);
   });
 
   it("CRITICAL V-331 picker options include 'Self' + each team owner with role. The Self option has empty value (which clears ds_act_as_account); each team has owner_account_id + role labeled.", () => {

@@ -169,9 +169,12 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     );
   });
 
-  it('Signup: optional debugToken spread; verification_email_expires_at ISO; clientIp captured as requestedFromIp', () => {
+  it('Signup: optional debugToken spread; verification_email_expires_at ISO; clientIp captured as requestedFromIp (+ Arc 1 sub-slice 6.2 v2-#6 conditional bundled-LLM consent + monthly-cap spread)', () => {
     expect(body).toMatch(
-      /const result = await service\.signup\(\{\s*\n?\s*email: parsed\.data\.email,\s*\n?\s*password: parsed\.data\.password,\s*\n?\s*name: parsed\.data\.name,\s*\n?\s*requestedFromIp: clientIp\(req\),\s*\n?\s*\}\);\s*\n?\s*return \{\s*\n?\s*verification_email_expires_at: result\.verifyExpiresAt\.toISOString\(\),\s*\n?\s*\.\.\.\(result\.debugToken !== null \? \{ debug_token: result\.debugToken \} : \{\}\),\s*\n?\s*\};/,
+      /const result = await service\.signup\(\{\s*\n?\s*email: parsed\.data\.email,\s*\n?\s*password: parsed\.data\.password,\s*\n?\s*name: parsed\.data\.name,\s*\n?\s*requestedFromIp: clientIp\(req\),[\s\S]*?\}\);\s*\n?\s*return \{\s*\n?\s*verification_email_expires_at: result\.verifyExpiresAt\.toISOString\(\),\s*\n?\s*\.\.\.\(result\.debugToken !== null \? \{ debug_token: result\.debugToken \} : \{\}\),\s*\n?\s*\};/,
+    );
+    expect(body).toMatch(
+      /\.\.\.\(parsed\.data\.bundled_llm_consent !== undefined\s*\n?\s*\? \{ bundledLlmConsent: parsed\.data\.bundled_llm_consent \}\s*\n?\s*: \{\}\)/,
     );
   });
 

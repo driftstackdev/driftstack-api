@@ -91,7 +91,10 @@ describe('W724 GitHub Actions deploy.yml workflow parity (Option B verdict)', ()
     const d = read(DEPLOY);
     expect(d).toMatch(/Build server \(for source-map upload only/);
     expect(d).toMatch(/npm ci --no-audit --include=dev/);
-    expect(d).toMatch(/npx tsc --build packages\/api-types/);
+    // 2026-05-XX deploy.yml replaced the inline `npx tsc --build
+    // packages/api-types` step with `npm run build:packages` so any
+    // new workspace package gets built automatically.
+    expect(d).toMatch(/npm run build:packages/);
     expect(d).toMatch(/npm run build --workspace=@driftstack\/server/);
   });
 

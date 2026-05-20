@@ -150,10 +150,13 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     );
   });
 
-  it('V-237 customer self-profile gate: sessionRepo + profilesRepo + authRepo + authCache + r2Public + mfaService passed to registerAccountMeRoutes', () => {
+  it('V-237 customer self-profile gate: sessionRepo + profilesRepo + authRepo + authCache + r2Public + mfaService passed to registerAccountMeRoutes (+ 2026-05-19 optional oauthLinksRepo conditional spread for the IDP-avatar fallback)', () => {
     expect(body).toMatch(/\/\/ V-237 — customer self-profile for tier-aware GUI enforcement\./);
     expect(body).toMatch(
-      /if \(deps\.sessionRepo !== undefined && deps\.profilesRepo !== undefined\) \{\s*\n?\s*registerAccountMeRoutes\(app, \{\s*\n?\s*sessionRepo: deps\.sessionRepo,\s*\n?\s*profilesRepo: deps\.profilesRepo,\s*\n?\s*authRepo: deps\.authRepo,\s*\n?\s*authCache: deps\.authCache,\s*\n?\s*r2Public: deps\.r2Public \?\? null,\s*\n?\s*mfaService: deps\.mfaService \?\? null,\s*\n?\s*\}\);\s*\n?\s*\}/,
+      /if \(deps\.sessionRepo !== undefined && deps\.profilesRepo !== undefined\) \{\s*\n?\s*registerAccountMeRoutes\(app, \{\s*\n?\s*sessionRepo: deps\.sessionRepo,\s*\n?\s*profilesRepo: deps\.profilesRepo,\s*\n?\s*authRepo: deps\.authRepo,\s*\n?\s*authCache: deps\.authCache,\s*\n?\s*r2Public: deps\.r2Public \?\? null,\s*\n?\s*mfaService: deps\.mfaService \?\? null,[\s\S]*?\}\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /\.\.\.\(deps\.oauthLinksRepo !== undefined \? \{ oauthLinksRepo: deps\.oauthLinksRepo \} : \{\}\),/,
     );
   });
 

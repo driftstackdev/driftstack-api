@@ -133,10 +133,10 @@ describe('W1047 routes/admin-crypto-orders V-666.D + family cross-source invaria
     expect(p).toMatch(/IPN route uses applies \(forward-only, reverse-to-pending rejected\)\./);
   });
 
-  it("CRITICAL ApplyIpnBody — provider_status + payment_id, both min(1). The 2-field shape matches NowPayments's IPN payload (subset)", () => {
+  it("CRITICAL ApplyIpnBody — provider_status string min(1).max(64) + payment_id string min(1).max(128). The 2-field shape matches NowPayments's IPN payload (subset); caps prevent query-log bloat from abuse.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-crypto-orders.ts'));
-    expect(p).toMatch(/provider_status: z\.string\(\)\.min\(1\),/);
-    expect(p).toMatch(/payment_id: z\.string\(\)\.min\(1\),/);
+    expect(p).toMatch(/provider_status: z\.string\(\)\.min\(1\)\.max\(64\),/);
+    expect(p).toMatch(/payment_id: z\.string\(\)\.min\(1\)\.max\(128\),/);
   });
 
   // ─── V-666.L sweep-expired ───────────────────────────────────
