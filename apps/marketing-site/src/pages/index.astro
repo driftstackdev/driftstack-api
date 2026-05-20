@@ -14,25 +14,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <div class="animate-fade-up">
           <p class="section-label">iPhone Safari · on demand</p>
           <h1
-            class="mt-5 text-3xl font-semibold tracking-tight text-ink-primary sm:text-4xl md:text-5xl lg:text-6xl"
-            style="letter-spacing: -0.02em; line-height: 1.1;"
+            class="mt-4 text-[1.5rem] font-semibold tracking-tight text-ink-primary sm:mt-5 sm:text-4xl md:text-5xl lg:text-6xl"
+            style="letter-spacing: -0.02em; line-height: 1.15;"
           >
             <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
               Indistinguishable iPhone Safari.
             </span>
             <span class="block">Programmable from any language.</span>
           </h1>
-          <p class="mt-5 max-w-prose text-base text-ink-secondary leading-relaxed sm:text-lg">
+          <p class="mt-4 max-w-prose text-sm text-ink-secondary leading-relaxed sm:mt-5 sm:text-base md:text-lg">
             Real WebKit — the engine every iPhone ships. Canvas + WebGL
             hashes match the millions of iPhones in the wild, not the
             unique-per-session leak every Chromium-stealth API surfaces.
             Drive sessions from TypeScript, Python, Go, or the GUI.
           </p>
-          <div class="mt-7 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4">
+          <div class="mt-5 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4">
             <a href="/pricing#trial-pack" class="btn-primary">Start for $2.99</a>
             <a href="/comparison" class="btn-secondary">Compare the alternatives</a>
           </div>
-          <p class="mt-4 text-xs text-ink-muted">
+          <p class="mt-3 text-[11px] text-ink-muted sm:mt-4 sm:text-xs">
             16 hours of session time · 14-day window · one trial per account.
           </p>
         </div>
@@ -52,7 +52,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               <span data-copy-label>Copy</span>
             </button>
           </div>
-          <pre class="max-h-[260px] overflow-x-auto p-4 text-[10.5px] leading-relaxed text-ink-primary sm:max-h-none sm:p-5 sm:text-xs md:text-sm"><code id="hero-sdk-code">{`import { Driftstack } from '@driftstack/sdk';
+          <pre class="max-h-[220px] overflow-x-auto p-3 text-[9.5px] leading-relaxed text-ink-primary sm:max-h-none sm:p-5 sm:text-xs md:text-sm"><code id="hero-sdk-code">{`import { Driftstack } from '@driftstack/sdk';
 
 const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 
@@ -92,12 +92,12 @@ try {
     <div class="mx-auto max-w-6xl px-6 py-20">
       <p class="section-label">Two ways to drive it</p>
       <h2
-        class="mt-6 max-w-3xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
+        class="mt-5 max-w-3xl text-2xl font-semibold tracking-tight text-ink-primary sm:mt-6 sm:text-3xl md:text-4xl"
         style="letter-spacing: -0.02em;"
       >
         Code it precisely, or just describe what you want.
       </h2>
-      <p class="mt-5 max-w-prose text-base text-ink-secondary leading-relaxed">
+      <p class="mt-4 max-w-prose text-sm text-ink-secondary leading-relaxed sm:mt-5 sm:text-base">
         Engineers drive sessions directly with the SDK (see the hero
         example). Everyone else can open the dashboard, type the task
         in plain English, and watch the agent execute it live — with
@@ -221,7 +221,7 @@ try {
     <div class="mx-auto max-w-6xl px-6 py-20">
       <p class="section-label">Use cases</p>
       <h2
-        class="mt-6 max-w-3xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
+        class="mt-6 max-w-3xl text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-4xl"
         style="letter-spacing: -0.02em;"
       >
         Anywhere mobile Safari fidelity decides the outcome.
@@ -272,7 +272,7 @@ try {
         <div>
           <p class="section-label">Works with your stack</p>
           <h2
-            class="mt-6 max-w-xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
+            class="mt-6 max-w-xl text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-4xl"
             style="letter-spacing: -0.02em;"
           >
             Three SDKs. One HTTPS API. Slots into anything.
@@ -325,14 +325,14 @@ try {
     <div class="mx-auto max-w-6xl px-6 py-24">
       <p class="section-label">Why Driftstack works</p>
       <p
-        class="mt-6 text-6xl font-semibold tracking-tight text-ink-primary md:text-7xl lg:text-8xl"
-        style="letter-spacing: -0.04em;"
+        class="mt-5 text-3xl font-semibold tracking-tight text-ink-primary sm:mt-6 sm:text-5xl md:text-7xl lg:text-8xl"
+        style="letter-spacing: -0.04em; line-height: 1.1;"
       >
         <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
           One iPhone among millions.
         </span>
       </p>
-      <p class="mt-8 max-w-prose text-lg text-ink-secondary leading-relaxed">
+      <p class="mt-6 max-w-prose text-sm text-ink-secondary leading-relaxed sm:mt-8 sm:text-base md:text-lg">
         Detection systems read hundreds of small signals — screen size,
         font rendering, GPU details, JavaScript timing — to decide what
         kind of device is visiting. Driftstack matches every signal
@@ -370,7 +370,7 @@ try {
         <div>
           <p class="section-label">What detection systems see</p>
           <h2
-            class="mt-6 max-w-xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
+            class="mt-6 max-w-xl text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-4xl"
             style="letter-spacing: -0.02em;"
           >
             Same signals as a physical iPhone. Not "close enough".
@@ -447,7 +447,7 @@ try {
     <div class="mx-auto max-w-6xl px-6 py-24">
       <p class="section-label">How it's built</p>
       <h2
-        class="mt-6 max-w-4xl text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl"
+        class="mt-6 max-w-4xl text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-5xl"
         style="letter-spacing: -0.02em;"
       >
         Apple's engine. Not a Chromium copy.
@@ -470,7 +470,7 @@ try {
         <div>
           <p class="section-label">Metering</p>
           <h2
-            class="mt-6 max-w-3xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
+            class="mt-6 max-w-3xl text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-4xl"
             style="letter-spacing: -0.02em;"
           >
             One metric. Concurrent sessions. That's it.
@@ -507,7 +507,7 @@ try {
         <div class="md:col-span-3">
           <p class="section-label">Privacy + compliance</p>
           <h2
-            class="mt-6 max-w-2xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
+            class="mt-6 max-w-2xl text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-4xl"
             style="letter-spacing: -0.02em;"
           >
             EU-only by default.
@@ -551,7 +551,7 @@ try {
     <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="mb-10">
         <p class="section-label">Two ways to use it</p>
-        <h2 class="mt-6 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl" style="letter-spacing: -0.02em;">
+        <h2 class="mt-6 text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-4xl" style="letter-spacing: -0.02em;">
           Drive it by hand, or drive it from code.
         </h2>
       </div>
@@ -628,7 +628,7 @@ try {
       <div class="flex flex-col items-start gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p class="section-label">Pricing</p>
-          <h2 class="mt-6 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl" style="letter-spacing: -0.02em;">
+          <h2 class="mt-6 text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-4xl" style="letter-spacing: -0.02em;">
             Two ladders. One trial pack to start.
           </h2>
           <p class="mt-4 max-w-prose text-ink-secondary leading-relaxed">
@@ -649,7 +649,7 @@ try {
       <div class="grid gap-10 md:grid-cols-2 md:items-center">
         <div>
           <p class="section-label">Self-hosted</p>
-          <h2 class="mt-6 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl" style="letter-spacing: -0.02em;">
+          <h2 class="mt-6 text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-4xl" style="letter-spacing: -0.02em;">
             Run Driftstack on your own infrastructure.
           </h2>
           <p class="mt-4 max-w-prose text-ink-secondary leading-relaxed">
@@ -701,7 +701,7 @@ try {
     <div class="mx-auto max-w-6xl px-6 py-24">
       <p class="section-label">Who builds it</p>
       <h2
-        class="mt-6 max-w-3xl text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl"
+        class="mt-6 max-w-3xl text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-4xl"
         style="letter-spacing: -0.02em;"
       >
         Built by engineers, not a growth team.
@@ -766,7 +766,7 @@ try {
     <div class="absolute inset-0 bg-glow-radial-red opacity-50" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-4xl px-6 py-28 text-center">
       <p class="section-label">Ready when you are</p>
-      <h2 class="mt-6 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl" style="letter-spacing: -0.02em;">
+      <h2 class="mt-6 text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-5xl" style="letter-spacing: -0.02em;">
         See it for yourself. $2.99.
       </h2>
       <p class="mt-4 max-w-prose mx-auto text-ink-secondary leading-relaxed">
