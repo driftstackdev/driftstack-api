@@ -64,12 +64,12 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     );
   });
 
-  it("Hero CTAs + trial-pack subline (R5: 'Start for $2.99' + M.3 Plan Item 2 'Compare the alternatives' generic CTA — replaces 'Why not Browserless?' which gave free SEO to a competitor and read defensive). Tailwind classes match mobile-responsive full-width-on-mobile pattern (M.1: w-full sm:w-auto with centred text), so the buttons stack cleanly under 640px and the tap target spans the column.", () => {
+  it("Hero CTAs + trial-pack subline (R5: 'Start for $2.99' + M.3 Plan Item 2 'Compare the alternatives' generic CTA — replaces 'Why not Browserless?' which gave free SEO to a competitor and read defensive). The 2026-05-19 polish stripped the mobile-responsive w-full sm:w-auto wrappers since the hero already uses flex-wrap; the buttons relax to their natural width on small screens via the parent container.", () => {
     expect(body).toMatch(
-      /<a href="\/pricing#trial-pack" class="btn-primary w-full text-center sm:w-auto">Start for \$2\.99<\/a>/,
+      /<a href="\/pricing#trial-pack" class="btn-primary">Start for \$2\.99<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="\/comparison" class="btn-secondary w-full text-center sm:w-auto">Compare the alternatives<\/a>/,
+      /<a href="\/comparison" class="btn-secondary">Compare the alternatives<\/a>/,
     );
     expect(body).toMatch(/16 hours of session time · 14-day window · one trial per account\./);
     // The defensive "Why not Browserless?" CTA must NOT return.

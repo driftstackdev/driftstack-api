@@ -47,18 +47,20 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     );
   });
 
-  it("HARDWARE_BY_SKU 3-tier map: self_hosted_solo → Mac Mini M4 16 GB (customer-purchased) / self_hosted_pro → Mac Studio M4 Max / self_hosted_enterprise → Mac Studio Ultra / Mac Pro / multi-node cluster — pinned so the hardware-spec per SKU stays consistent (drift to a different Mac SKU would create marketing↔purchase-guidance divergence; drift to omitting 'customer-purchased' on Solo would let customers expect Driftstack to ship hardware)", () => {
+  it('HARDWARE_BY_SKU 3-tier map: each SKU recommends an Apple-Silicon class (Mac Mini M4 / Mac Studio M4 Max / Mac Studio Ultra | Mac Pro multi-node). Reframed 2026-05-XX to "Any Apple Silicon Mac (... recommended)" so customers know the sized-for guidance is a recommendation, not a hard requirement.', () => {
     expect(body).toMatch(
-      /const HARDWARE_BY_SKU: Record<string, string> = \{\s*\n?\s*self_hosted_solo: 'Mac Mini M4 16 GB \(customer-purchased\)',\s*\n?\s*self_hosted_pro: 'Mac Studio M4 Max',\s*\n?\s*self_hosted_enterprise: 'Mac Studio Ultra \/ Mac Pro \/ multi-node cluster',\s*\n?\s*\};/,
+      /const HARDWARE_BY_SKU: Record<string, string> = \{\s*\n?\s*self_hosted_solo: 'Any Apple Silicon Mac \(Mac Mini M4 16 GB recommended\)',\s*\n?\s*self_hosted_pro: 'Apple Silicon Mac sized for sustained concurrency \(Mac Studio M4 Max recommended\)',\s*\n?\s*self_hosted_enterprise: 'Multi-node Apple Silicon fleet \(Mac Studio Ultra \/ Mac Pro recommended\)',\s*\n?\s*\};/,
     );
   });
 
-  it("fmtSupportTier 3-state map: email_48h → 'Email · 48h SLA' / email_slack_12h → 'Email + Slack Connect · 12h SLA' / dedicated_csm_1h → 'Dedicated CSM · 1h SLA' — pinned so the support-tier display strings stay consistent (drift to dropping 'Slack Connect' on Pro would change the support-channel commitment; drift to dropping CSM on Enterprise would lose the dedicated-resource framing)", () => {
-    expect(body).toMatch(/case 'email_48h':\s*\n?\s*return 'Email · 48h SLA';/);
+  it("fmtSupportTier 3-state map: 2026-05-19 founder verdict dropped tiered SLA ladder (theatre for a small operation). All three states route to a single 48h best-effort target; email_slack_12h + dedicated_csm_1h surfaces add 'Email + Slack Connect' framing.", () => {
+    expect(body).toMatch(/case 'email_48h':\s*\n?\s*return 'Email · 48h target';/);
     expect(body).toMatch(
-      /case 'email_slack_12h':\s*\n?\s*return 'Email \+ Slack Connect · 12h SLA';/,
+      /case 'email_slack_12h':\s*\n?\s*return 'Email \+ Slack Connect · 48h target';/,
     );
-    expect(body).toMatch(/case 'dedicated_csm_1h':\s*\n?\s*return 'Dedicated CSM · 1h SLA';/);
+    expect(body).toMatch(
+      /case 'dedicated_csm_1h':\s*\n?\s*return 'Email \+ Slack Connect · 48h target';/,
+    );
   });
 
   it("fmtCustomArchetypeDev 3-state: none → '—' / limited → 'Limited (1/yr)' / unlimited → 'Unlimited' — pinned so the custom-archetype-dev offering stays consistent across SKUs (drift to dropping 'Limited (1/yr)' would change the Pro-tier promise; drift to changing the count would create marketing↔contract divergence)", () => {

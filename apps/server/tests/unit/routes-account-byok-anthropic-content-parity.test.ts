@@ -96,11 +96,12 @@ describe('routes/account-byok-anthropic content parity', () => {
       /\/\/ DELETE \/v1\/account\/me\/byok-anthropic-key — clear\. account_owner\s*\n?\s*\/\/ scope required\. 204 No Content on success\./,
     );
     expect(body).toMatch(
-      /await service\.clearKey\(\{ accountId: ctx\.account\.id, now: now\(\) \}\);\s*\n?\s*reply\.code\(204\);\s*\n?\s*return null;/,
+      /await service\.clearKey\(\{ accountId: ctx\.account\.id, now: now\(\) \}\);/,
     );
+    expect(body).toMatch(/reply\.code\(204\);\s*\n?\s*return null;/);
   });
 
-  it("POST /test no-key-echo + team-quota-protection framing pinned: 'Returns ok/error WITHOUT echoing any part of the key. account_owner scope so team members can't burn the owner's quota.' + getPlaintext + 'No BYOK Anthropic key is set on this account. Use PUT /v1/account/me/byok-anthropic-key first.' BadRequest on null + metrics bump on each path — pinned so the no-key-echo + account_owner-protects-team-quota + actionable-no-key-set guidance contract all stay documented", () => {
+  it("POST /test no-key-echo + team-quota-protection framing pinned: 'Returns ok/error WITHOUT echoing any part of the key. account_owner scope so team members can't burn the owner's quota.' + getPlaintext + 'No BYOK Anthropic key is set on this account. Use PUT /v1/account/me/byok-anthropic-key first.' BadRequest on null + metrics bump on each path (+ 2026-05-20 audit emit on each outcome) — pinned so the no-key-echo + account_owner-protects-team-quota + actionable-no-key-set guidance contract all stay documented", () => {
     expect(body).toMatch(
       /\/\/ POST \/v1\/account\/me\/byok-anthropic-key\/test — connection test\.\s*\n?\s*\/\/ Returns ok\/error WITHOUT echoing any part of the key\. account_owner\s*\n?\s*\/\/ scope so team members can't burn the owner's quota\./,
     );
@@ -110,8 +111,9 @@ describe('routes/account-byok-anthropic content parity', () => {
     expect(body).toMatch(
       /metrics\?\.inc\(METRIC_NAMES\.byokAnthropicTestTotal, \{ outcome: 'not_set' \}\);/,
     );
+    expect(body).toMatch(/const outcome = classifyTestOutcome\(result\);/);
     expect(body).toMatch(
-      /metrics\?\.inc\(METRIC_NAMES\.byokAnthropicTestTotal, \{\s*\n?\s*outcome: classifyTestOutcome\(result\),\s*\n?\s*\}\);/,
+      /metrics\?\.inc\(METRIC_NAMES\.byokAnthropicTestTotal, \{\s*\n?\s*outcome,\s*\n?\s*\}\);/,
     );
   });
 

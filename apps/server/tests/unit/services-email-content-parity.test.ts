@@ -178,14 +178,16 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
     );
   });
 
-  it("send(): try logs 'email sent' info; catch classifyEmailError + warn 'email send failed (fire-and-forget)' + swallow", () => {
+  it("send(): try logs 'email sent' info; catch classifyEmailError + warn 'email send failed (fire-and-forget)' + bump emailSendTotal metric with category outcome + swallow", () => {
     expect(body).toMatch(
       /logger\.info\(\{ component: 'email', template: name, to \}, 'email sent'\);/,
     );
     expect(body).toMatch(/const \{ category, postmarkCode \} = classifyEmailError\(err\);/);
+    expect(body).toMatch(/'email send failed \(fire-and-forget\)',/);
     expect(body).toMatch(
-      /'email send failed \(fire-and-forget\)',\s*\n?\s*\);\s*\n?\s*\/\/ Deliberately swallow — email is never on a request critical path\./,
+      /metrics\?\.inc\(METRIC_NAMES\.emailSendTotal, \{ template: name, outcome: category \}\);/,
     );
+    expect(body).toMatch(/\/\/ Deliberately swallow — email is never on a request critical path\./);
   });
 
   it("sendStatusIncidentNotification: kind 'created' → 'status-incident-created' template; 'updated' → 'status-incident-updated' (V-545.B); 'resolved' → 'status-incident-resolved' template", () => {
