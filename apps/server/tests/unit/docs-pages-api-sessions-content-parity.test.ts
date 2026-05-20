@@ -101,12 +101,17 @@ describe('W761 docs /api/sessions content parity', () => {
     );
   });
 
-  it('CRITICAL profile-binding-planned-not-wired framing pinned. Sets the right expectation for SDK consumers reading the page today.', () => {
+  it('2026-05-20 — profile-binding flipped planned→SHIPPED (fa8cb83a). Doc now pins the wired profile_id field on POST /v1/sessions, the metadata-stamp behaviour, cross-account 404 anti-enumeration, and the cross-link to profiles.launch().', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/\*\*Profile binding is planned \(catalog\), not yet wired\.\*\*/);
     expect(p).toMatch(
-      /Customers\s*\n?> using profiles via the SDK currently can't bind a session to a\s*\n?> profile programmatically\./,
+      /When `profile_id` is supplied \(2026-05-20, commit `fa8cb83a`\) the\s*\n?server inherits the profile's `archetype` as the default, stamps\s*\n?`\{profile_id, profile_name\}` into the session's `metadata`/,
+    );
+    expect(p).toMatch(
+      /Cross-account\s*\n?`profile_id` returns `404` \(anti-enumeration — indistinguishable\s*\n?from a missing one\)\./,
+    );
+    expect(p).toMatch(
+      /See also `POST \/v1\/profiles\/:id\/launch` for\s*\n?the one-round-trip launch helper\./,
     );
   });
 
