@@ -10,6 +10,7 @@
 // posture as admin_audit_log per D-025.
 
 import type { AccountAuditAction, AccountAuditActorType } from '@driftstack/api-types';
+import type { NotificationEventBus } from './notification-event-bus.js';
 import type { AccountContext } from './auth.js';
 import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
 import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
@@ -75,10 +76,41 @@ export function auditActionPrefix(action: string): string {
   return dot === -1 ? action : action.slice(0, dot);
 }
 
+/**
+ * 2026-05-20 — actions republished onto the v0 NotificationEventBus
+ * as `audit.high_severity`. Anything destructive / security-sensitive
+ * that a customer would want to see in the panel toast feed without
+ * polling the audit log. Drift on this set is intentional: adding a
+ * new high-severity action should be a conscious choice, not a side
+ * effect of widening the audit-action enum.
+ *
+ * The selection criterion: would a customer want to be notified
+ * within seconds if this fired without their direct action?
+ *   - api_key.revoked        — yes, possible compromise / account takeover
+ *   - byok_anthropic.key_set — yes, BYOK swap is high-blast-radius
+ *   - byok_anthropic.key_cleared — yes, same reason inverted
+ *   - team.member_removed    — yes, may indicate hostile reshuffle
+ *   - account.mfa_disabled   — yes, security regression
+ *   - account.password_changed — yes, possible takeover signal
+ *
+ * Low-severity actions (logins, recovery-code usage, email-pref
+ * changes) stay in the audit log only — customer can query via
+ * GET /v1/account/audit-log.
+ */
+const HIGH_SEVERITY_AUDIT_ACTIONS = new Set<AccountAuditAction>([
+  'api_key.revoked',
+  'account.byok_anthropic_key_set',
+  'account.byok_anthropic_key_cleared',
+  'team.member_removed',
+  'account.mfa_disabled',
+  'account.password_changed',
+]);
+
 export class AccountAuditService {
   constructor(
     private readonly repo: AccountAuditRepo,
     private readonly metrics?: MetricsRegistry,
+    private readonly notificationBus?: NotificationEventBus,
   ) {}
 
   /**
@@ -120,6 +152,30 @@ export class AccountAuditService {
       });
     } catch {
       // Swallow.
+    }
+    // 2026-05-20 — selective republish onto the v0 NotificationEventBus
+    // for high-severity actions. Best-effort: publish failures NEVER
+    // break the customer-visible operation OR the audit-log insert
+    // (which already succeeded above — the durable trail is intact
+    // even if the panel notification drops).
+    if (this.notificationBus !== undefined && HIGH_SEVERITY_AUDIT_ACTIONS.has(input.action)) {
+      try {
+        // Map server-side actor enum ('staff') to the panel's
+        // 'admin' bucket — customer-facing labels treat any non-
+        // customer non-system action as administrative.
+        const actorType: 'customer' | 'admin' | 'system' =
+          input.actorType === 'staff' ? 'admin' : input.actorType;
+        this.notificationBus.publish({
+          kind: 'audit.high_severity',
+          accountId: input.accountId,
+          action: input.action,
+          actorType,
+          targetResourceId: input.targetResourceId ?? null,
+          at: row.timestamp.toISOString(),
+        });
+      } catch {
+        // Swallow — audit log is the source of truth.
+      }
     }
     return row;
   }

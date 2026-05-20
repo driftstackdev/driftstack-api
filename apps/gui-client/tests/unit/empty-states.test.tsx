@@ -30,9 +30,9 @@ vi.mock('../../src/lib/SettingsContext', () => {
         // raw list()). Empty-async-iterator preserves the empty-state
         // assertion below without coupling the mock to a real cursor
         // walk.
-        // eslint-disable-next-line @typescript-eslint/require-await
-        iterate: async function* () {
-          // empty
+        iterate: function* () {
+          // empty sync generator — the consumer's `for await` accepts
+          // it because every iterator IS async-iterable in JS.
         },
       },
       sessions: {

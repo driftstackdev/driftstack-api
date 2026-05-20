@@ -184,3 +184,107 @@ describe('V-553.B-16 AccountAuditService.record', () => {
     expect(row?.userAgent).toBeNull();
   });
 });
+
+describe('AccountAuditService — 2026-05-20 high-severity notification republish', () => {
+  function makeBusSpy(): {
+    bus: {
+      publish: (event: unknown) => void;
+      subscribe: (accountId: string, handler: (event: unknown) => void) => () => void;
+      subscriberCount: (accountId: string) => number;
+    };
+    captured: Array<{ kind: string; [k: string]: unknown }>;
+  } {
+    const captured: Array<{ kind: string; [k: string]: unknown }> = [];
+    return {
+      bus: {
+        publish: (e: unknown) => captured.push(e as { kind: string }),
+        subscribe: () => () => undefined,
+        subscriberCount: () => 0,
+      },
+      captured,
+    };
+  }
+
+  it('republishes api_key.revoked as audit.high_severity on the bus alongside the audit-log insert', async () => {
+    const { repo } = makeRepo();
+    const { bus, captured } = makeBusSpy();
+    const svc = new AccountAuditService(
+      repo,
+      undefined,
+      bus as unknown as Parameters<typeof AccountAuditService>[2] extends infer T ? T : never,
+    );
+    await svc.record({
+      accountId: 'acc_1',
+      actorType: CUSTOMER_ACTOR,
+      action: 'api_key.revoked',
+      targetResourceId: 'key_xyz',
+    });
+    expect(captured).toHaveLength(1);
+    const evt = captured[0];
+    expect(evt?.kind).toBe('audit.high_severity');
+    expect(evt?.accountId).toBe('acc_1');
+    expect(evt?.action).toBe('api_key.revoked');
+    expect(evt?.actorType).toBe('customer');
+    expect(evt?.targetResourceId).toBe('key_xyz');
+    expect(typeof evt?.at).toBe('string');
+  });
+
+  it('does NOT republish low-severity actions like account.login', async () => {
+    const { repo } = makeRepo();
+    const { bus, captured } = makeBusSpy();
+    const svc = new AccountAuditService(
+      repo,
+      undefined,
+      bus as unknown as Parameters<typeof AccountAuditService>[2] extends infer T ? T : never,
+    );
+    await svc.record({
+      accountId: 'acc_1',
+      actorType: CUSTOMER_ACTOR,
+      action: 'account.login',
+    });
+    expect(captured).toHaveLength(0);
+  });
+
+  it("maps server actorType 'staff' → notification 'admin'", async () => {
+    const { repo } = makeRepo();
+    const { bus, captured } = makeBusSpy();
+    const svc = new AccountAuditService(
+      repo,
+      undefined,
+      bus as unknown as Parameters<typeof AccountAuditService>[2] extends infer T ? T : never,
+    );
+    await svc.record({
+      accountId: 'acc_1',
+      actorType: 'staff',
+      action: 'team.member_removed',
+      targetResourceId: 'membership_42',
+    });
+    expect(captured[0]?.actorType).toBe('admin');
+  });
+
+  it('bus publish failure NEVER breaks the audit-log insert path', async () => {
+    const { repo, state } = makeRepo();
+    const throwingBus = {
+      publish: () => {
+        throw new Error('bus offline');
+      },
+      subscribe: () => () => undefined,
+      subscriberCount: () => 0,
+    };
+    const svc = new AccountAuditService(
+      repo,
+      undefined,
+      throwingBus as unknown as Parameters<typeof AccountAuditService>[2] extends infer T
+        ? T
+        : never,
+    );
+    const written = await svc.record({
+      accountId: 'acc_1',
+      actorType: CUSTOMER_ACTOR,
+      action: 'api_key.revoked',
+    });
+    // Insert still landed; the row is in the repo.
+    expect(written.id).toMatch(/^aud_/);
+    expect(state.rows).toHaveLength(1);
+  });
+});

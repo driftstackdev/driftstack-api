@@ -395,10 +395,23 @@ export async function createProductionDeps(
   // driver is dynamically imported, so this is async.
   const driver = await createDriver(config);
 
+  // 2026-05-20 — GUI panel notification bus. Constructed early so
+  // emit-on-event services (audit, cost-alert) can publish via it
+  // without an ordering dance. No deps; safe to construct before
+  // anything else that needs a publisher.
+  const notificationEventBus = new NotificationEventBus();
+
   // V-216 — customer-facing audit log; constructed early so all
   // emit-on-event services downstream (webhooks, sessions, api-keys,
   // profiles) can wire it.
-  const accountAuditService = new AccountAuditService(accountAuditRepo, metricsRegistry);
+  // 2026-05-20 — also takes the notificationEventBus so high-severity
+  // actions (api_key.revoked, byok_anthropic.key_set, etc.) republish
+  // to the panel notification stream alongside the durable audit row.
+  const accountAuditService = new AccountAuditService(
+    accountAuditRepo,
+    metricsRegistry,
+    notificationEventBus,
+  );
 
   // V-204 — email notification preferences. Constructed early because
   // V-202c lifecycle service consumes it for opt-out checks.
@@ -936,14 +949,10 @@ export async function createProductionDeps(
     'CostMonitoringService wired with DEFAULT_COST_RATES + DEFAULT_TIER_THRESHOLDS_DERIVED (real UsageAggregator over usage_records; storage/egress/email/llm dimensions zero until V-541.I/J/K land)',
   );
 
-  // 2026-05-20 — GUI panel notification stream (v0 scaffold). The bus
-  // is wired here so publishers (cost-alert below, future incident /
-  // audit / session.errored publishers) can fan out into a single
-  // per-account stream. Subscribers (v0.1+ SSE route) come later;
-  // publishes with no live subscribers are dropped by design.
-  // Full design: docs/internal/driftstack-telemetry-event-schema-for-
-  // gui-panel.md.
-  const notificationEventBus = new NotificationEventBus();
+  // notificationEventBus moved earlier in bootstrap so AccountAudit
+  // can publish high-severity actions onto it. See the construction
+  // site near accountAuditService above. Full design: docs/internal/
+  // driftstack-telemetry-event-schema-for-gui-panel.md.
 
   // 2026-05-20 — V-541.E nightly cost-recompute. Per-account spend
   // evaluated at UTC midnight; threshold transitions fire alerts via

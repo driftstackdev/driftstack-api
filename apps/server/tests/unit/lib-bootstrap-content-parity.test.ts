@@ -278,6 +278,12 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/at: new Date\(\)\.toISOString\(\),/);
   });
 
+  it("2026-05-20 accountAuditService takes the notificationEventBus as its 3rd constructor arg so high-severity actions (api_key.revoked, byok_anthropic.key_set, team.member_removed, account.mfa_disabled, account.password_changed) republish onto the panel stream — pinned so a refactor can't silently drop the third arg and break the audit→panel feed", () => {
+    expect(body).toMatch(
+      /const accountAuditService = new AccountAuditService\(\s*\n?\s*accountAuditRepo,\s*\n?\s*metricsRegistry,\s*\n?\s*notificationEventBus,\s*\n?\s*\);/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
