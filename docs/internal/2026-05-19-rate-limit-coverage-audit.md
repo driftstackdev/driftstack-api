@@ -112,8 +112,13 @@ Sample-checked files with delta > 3 that aren't explained by A:
      burst headroom. RateLimitedError thrown on cap-hit with
      retry-after seconds in the message.
 
-7. **`admin-crypto-orders.ts`** — admin-only, but defense-in-depth
-   would add per-admin-token rate-limit. Lower priority than 1-2.
+7. ~~**`admin-crypto-orders.ts`** — admin-only, but defense-in-depth
+   would add per-admin-token rate-limit~~ — **CLOSED 2026-05-20.**
+   11 routes had `requireScope` only; the per-account rate-limit
+   `app.rateLimit('global')` wasn't in their preHandler chain.
+   Added across all 11 routes. Staff API keys now bounded by the
+   same account-keyed token bucket every customer surface uses.
+   Content-parity test updated.
 
 ## Verdict
 

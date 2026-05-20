@@ -143,7 +143,7 @@ export function registerAdminCryptoOrdersRoutes(
     };
   }>(
     '/v1/admin/crypto-orders',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    { preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')] },
     async (
       req: FastifyRequest<{
         Querystring: {
@@ -213,7 +213,7 @@ export function registerAdminCryptoOrdersRoutes(
     };
   }>(
     '/v1/admin/crypto-orders.csv',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    { preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')] },
     async (
       req: FastifyRequest<{
         Querystring: {
@@ -299,7 +299,7 @@ export function registerAdminCryptoOrdersRoutes(
   // for the "which tiers are converting" KPI.
   app.get(
     '/v1/admin/crypto-orders/stats',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    { preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')] },
     async (_req, reply) => {
       const stats = await deps.service.getStatsForAdmin();
       return reply.send({
@@ -322,7 +322,7 @@ export function registerAdminCryptoOrdersRoutes(
   // internal admin scope same as the rest of this surface.
   app.get(
     '/v1/admin/crypto-orders/idempotency-metrics',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    { preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')] },
     (_req, reply) => {
       const m = deps.service.getIdempotencyMetrics();
       return reply.send({
@@ -342,7 +342,7 @@ export function registerAdminCryptoOrdersRoutes(
   // ops can spot stale checkouts that should be swept or contacted.
   app.get(
     '/v1/admin/crypto-orders/pending-age',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    { preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')] },
     async (_req, reply) => {
       const histo = await deps.service.getPendingAgeHistogram();
       return reply.send({
@@ -360,7 +360,7 @@ export function registerAdminCryptoOrdersRoutes(
   // least one order in the window.
   app.get<{ Querystring: { days?: string } }>(
     '/v1/admin/crypto-orders/daily',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    { preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')] },
     async (req: FastifyRequest<{ Querystring: { days?: string } }>, reply) => {
       const query = parseOrThrow(DailyQuery, req.query);
       let days = 7;
@@ -382,7 +382,7 @@ export function registerAdminCryptoOrdersRoutes(
 
   app.get<{ Params: { order_id: string } }>(
     '/v1/admin/crypto-orders/:order_id',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    { preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')] },
     async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
       const params = parseOrThrow(GetParams, req.params);
       const order = await deps.service.getById(params.order_id);
@@ -401,7 +401,7 @@ export function registerAdminCryptoOrdersRoutes(
   // / 'expired' / 'swept').
   app.get<{ Params: { order_id: string } }>(
     '/v1/admin/crypto-orders/:order_id/events',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    { preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')] },
     async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
       const params = parseOrThrow(GetParams, req.params);
       const events = await deps.service.getOrderEvents(params.order_id);
@@ -428,7 +428,7 @@ export function registerAdminCryptoOrdersRoutes(
     Body: { older_than_hours?: number; limit?: number };
   }>(
     '/v1/admin/crypto-orders/sweep-expired',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    { preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')] },
     async (req: FastifyRequest<{ Body: { older_than_hours?: number; limit?: number } }>, reply) => {
       const body = parseOrThrow(SweepBody, req.body ?? {});
       const olderThanHours = body.older_than_hours ?? 24;
@@ -454,7 +454,7 @@ export function registerAdminCryptoOrdersRoutes(
     Body: { provider_status?: string; payment_id?: string };
   }>(
     '/v1/admin/crypto-orders/:order_id/apply-ipn',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    { preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')] },
     async (
       req: FastifyRequest<{
         Params: { order_id: string };
@@ -484,7 +484,7 @@ export function registerAdminCryptoOrdersRoutes(
     Body: { internal_note?: string | null };
   }>(
     '/v1/admin/crypto-orders/:order_id/internal-note',
-    { preHandler: [app.requireScope('driftstack_internal_admin')] },
+    { preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')] },
     async (
       req: FastifyRequest<{
         Params: { order_id: string };

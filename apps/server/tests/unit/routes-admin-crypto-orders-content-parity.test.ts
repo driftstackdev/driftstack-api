@@ -149,7 +149,7 @@ describe('W422.C apps/server/src/routes/admin-crypto-orders.ts content parity', 
 
   it("LIST route: GET '/v1/admin/crypto-orders' + scope-only preHandler + limit 1..200 + V-666.BZ inverted-window guard + listForAdminPage spread + reply.send({orders, next_cursor})", () => {
     expect(body).toMatch(
-      /'\/v1\/admin\/crypto-orders',\s*\n?\s*\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\] \},/,
+      /'\/v1\/admin\/crypto-orders',\s*\n?\s*\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\), app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(
       /throw new BadRequestError\('limit must be an integer between 1 and 200\.'\);/,
@@ -286,9 +286,9 @@ describe('W422.C apps/server/src/routes/admin-crypto-orders.ts content parity', 
     );
   });
 
-  it('every route preHandler is scope-only (no rate-limit; V-666.BT app-level no-store hook covers caching)', () => {
+  it("every route preHandler chains [requireScope('driftstack_internal_admin'), rateLimit('global')] — 2026-05-20 rate-limit audit item 7 closed", () => {
     const occurrences = body.match(
-      /\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\)\] \}/g,
+      /\{ preHandler: \[app\.requireScope\('driftstack_internal_admin'\), app\.rateLimit\('global'\)\] \}/g,
     );
     expect(occurrences).not.toBeNull();
     expect((occurrences ?? []).length).toBe(11);
