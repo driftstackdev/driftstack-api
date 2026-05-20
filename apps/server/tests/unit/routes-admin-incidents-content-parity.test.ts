@@ -141,19 +141,22 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
     );
   });
 
-  it('V-545.A PUBLIC GET /v1/status/incidents/:id surfaces public-only incidents with their full update timeline — registered + delegates to incidentsService.get(id, {publicOnly:true}) + maps via publicIncidentUpdate + Cache-Control 30s', () => {
+  it('V-545.A PUBLIC GET /v1/status/incidents/:id surfaces public-only incidents with their full update timeline — registered + delegates to incidentsService.get(id, {publicOnly:true}) + maps via publicIncidentUpdate + Cache-Control 30s + IP-rate-limit gate (2026-05-20 defense-in-depth)', () => {
     expect(body).toMatch(/V-545\.A — status-page incident-detail view\./);
     expect(body).toMatch(
-      /app\.get<\{ Params: \{ id: string \} \}>\('\/v1\/status\/incidents\/:id', async \(request, reply\) => \{\s*\n?\s*const id = uuidFromPrefixedId\(request\.params\.id, 'inc'\);\s*\n?\s*const result = await incidentsService\.get\(id, \{ publicOnly: true \}\);\s*\n?\s*reply\.header\('cache-control', 'public, max-age=30'\);\s*\n?\s*return \{\s*\n?\s*incident: publicIncident\(result\.incident\),\s*\n?\s*updates: result\.updates\.map\(publicIncidentUpdate\),\s*\n?\s*\};\s*\n?\s*\}\);/,
+      /app\.get<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/status\/incidents\/:id',\s*\n?\s*\{ preHandler: statusIncidentDetailGate \},\s*\n?\s*async \(request, reply\) => \{\s*\n?\s*const id = uuidFromPrefixedId\(request\.params\.id, 'inc'\);\s*\n?\s*const result = await incidentsService\.get\(id, \{ publicOnly: true \}\);\s*\n?\s*reply\.header\('cache-control', 'public, max-age=30'\);/,
+    );
+    expect(body).toMatch(
+      /return \{\s*\n?\s*incident: publicIncident\(result\.incident\),\s*\n?\s*updates: result\.updates\.map\(publicIncidentUpdate\),\s*\n?\s*\};/,
     );
   });
 
-  it("PUBLIC GET /v1/status/incidents: no-auth; scope='public' forced coerce; 30-day default since; limit default 50", () => {
+  it("PUBLIC GET /v1/status/incidents: no-auth (only the IP-rate-limit preHandler gate); scope='public' forced coerce; 30-day default since; limit default 50", () => {
     expect(body).toMatch(
       /\/\/ The status page consumes this; no auth required, only public=true rows\s*\n?\s*\/\/ surfaced\. Limited to the last 30 days by default\./,
     );
     expect(body).toMatch(
-      /app\.get\('\/v1\/status\/incidents', async \(request, reply\) => \{\s*\n?\s*const parsed = ListIncidentsQuerySchema\.safeParse\(\{\s*\n?\s*\.\.\.\(request\.query \?\? \{\}\),\s*\n?\s*scope: 'public',\s*\n?\s*\}\);/,
+      /app\.get\(\s*\n?\s*'\/v1\/status\/incidents',\s*\n?\s*\{ preHandler: statusIncidentsListGate \},\s*\n?\s*async \(request, reply\) => \{\s*\n?\s*const parsed = ListIncidentsQuerySchema\.safeParse\(\{\s*\n?\s*\.\.\.\(request\.query \?\? \{\}\),\s*\n?\s*scope: 'public',\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /const since =\s*\n?\s*parsed\.data\.since !== undefined\s*\n?\s*\? new Date\(parsed\.data\.since\)\s*\n?\s*: new Date\(Date\.now\(\) - 30 \* 24 \* 60 \* 60 \* 1000\);/,

@@ -160,9 +160,15 @@ describe('W1042 routes/admin-incidents V-295a + V-281 cross-source invariant', (
     expect(p).toMatch(/limit: parsed\.data\.limit \?\? 50,/);
   });
 
-  it('CRITICAL public status-incidents path — GET /v1/status/incidents (no auth, NO requireScope preHandler). The lack of any auth gate is what lets the public status page consume this.', () => {
+  it('CRITICAL public status-incidents path — GET /v1/status/incidents (no auth, NO requireScope preHandler). The lack of any auth gate is what lets the public status page consume this. 2026-05-20 added a defense-in-depth IP-rate-limit preHandler (statusIncidentsListGate) — still no auth, but bounded against direct-API abuse bypassing the CDN.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts'));
-    expect(p).toMatch(/app\.get\('\/v1\/status\/incidents', async \(request, reply\) => \{/);
+    expect(p).toMatch(
+      /app\.get\(\s*\n?\s*'\/v1\/status\/incidents',\s*\n?\s*\{ preHandler: statusIncidentsListGate \},\s*\n?\s*async \(request, reply\) => \{/,
+    );
+    // Negative guard: no auth-related preHandler on this path.
+    expect(p).not.toMatch(
+      /\/v1\/status\/incidents[^:]'?,\s*\{[^}]*requireAuth[\s\S]*?async \(request, reply\)/,
+    );
   });
 
   // ─── Defaults on create ──────────────────────────────────────
