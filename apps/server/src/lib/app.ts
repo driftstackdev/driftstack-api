@@ -1144,6 +1144,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerInternalAtlasPriorityRoutes(app, {
       repo: deps.atlasPriorityEventsRepo,
       auth: deps.internalFleetAuth,
+      rateLimitStore: deps.rateLimitStore,
     });
   } else {
     registerInternalAtlasPriorityDisabledRoutes(app);

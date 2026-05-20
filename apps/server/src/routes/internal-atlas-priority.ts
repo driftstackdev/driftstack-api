@@ -27,12 +27,35 @@ import {
   type InsertEmittedArgs,
 } from '../db/atlas-priority-events-repo.js';
 import type { InternalFleetAuth } from '../lib/internal-fleet-auth.js';
-import { BadRequestError, FeatureUnavailableError, NotFoundError } from '../lib/errors.js';
+import {
+  BadRequestError,
+  FeatureUnavailableError,
+  NotFoundError,
+  RateLimitedError,
+} from '../lib/errors.js';
+import type { RateLimitStore } from '../services/rate-limit.js';
+import { createHash } from 'node:crypto';
 
 export interface InternalAtlasPriorityRoutesDeps {
   repo: DrizzleAtlasPriorityEventsRepo;
   auth: InternalFleetAuth;
+  /**
+   * 2026-05-20 — defense-in-depth per-token rate-limit. Token is
+   * the canonical bearer credential; even with a strong bearer-
+   * gate, a leaked token could otherwise drive unbounded calls.
+   * Per the 2026-05-19 rate-limit audit item 6.
+   */
+  rateLimitStore: RateLimitStore;
 }
+
+/**
+ * 2026-05-20 — per-token cap on the internal atlas-priority surface.
+ * Sized comfortably for the legitimate harvester + BS worker + atlas-
+ * append callback cadence (~10-100 req/min per token sustained per
+ * the §8.1.b spec) with burst headroom; tight enough that a leaked
+ * token's blast radius is bounded.
+ */
+const ATLAS_PRIORITY_TOKEN_LIMIT = { capacity: 1000, refillPerSecond: 1000 / 60 } as const;
 
 const STATUS_VALUES = [
   'emitted',
@@ -104,14 +127,32 @@ export function registerInternalAtlasPriorityRoutes(
   deps: InternalAtlasPriorityRoutesDeps,
 ): void {
   // preHandler that enforces the bearer-token auth on every internal
-  // route. Centralised here so adding routes later doesn't risk skipping
-  // the check. Stays async because Fastify hangs the request when a
-  // sync (req) => void preHandler returns without calling the `done`
-  // callback — async signature triggers the Promise-resolution branch
-  // of Fastify's hook lifecycle which doesn't need done().
-  // eslint-disable-next-line @typescript-eslint/require-await
+  // route + applies a per-token rate-limit (2026-05-20 defense-in-
+  // depth; audit item 6). Centralised here so adding routes later
+  // doesn't risk skipping either check. The token is hashed (SHA-256)
+  // before becoming the bucket key so the plaintext never lands in
+  // the in-memory bucket map / Redis key namespace / Prometheus
+  // labels — same posture as the V-127 api-key-hash pattern.
   const requireInternalAuth = async (req: FastifyRequest): Promise<void> => {
     deps.auth.validate(req);
+    const auth = req.headers.authorization;
+    const token = typeof auth === 'string' ? auth.replace(/^Bearer\s+/i, '').trim() : '';
+    if (token.length === 0) return; // validate() would have already thrown; defensive.
+    const tokenHash = createHash('sha256').update(token).digest('hex').slice(0, 16);
+    const result = await deps.rateLimitStore.consume({
+      key: `atlas_priority_token:${tokenHash}`,
+      capacity: ATLAS_PRIORITY_TOKEN_LIMIT.capacity,
+      refillPerSecond: ATLAS_PRIORITY_TOKEN_LIMIT.refillPerSecond,
+      cost: 1,
+      now: Date.now(),
+    });
+    if (!result.allowed) {
+      const retryAfterSec = Math.max(1, Math.ceil(result.retryAfterMs / 1000));
+      throw new RateLimitedError(
+        retryAfterSec,
+        `Too many requests on this internal token. Retry in ${retryAfterSec.toString()}s.`,
+      );
+    }
   };
 
   app.post(

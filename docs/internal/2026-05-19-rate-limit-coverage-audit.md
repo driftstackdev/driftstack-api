@@ -101,9 +101,16 @@ Sample-checked files with delta > 3 that aren't explained by A:
    write routes have always been gated via `requireScope` +
    `rateLimit('global')`. AUTH_IP_LIMITS now 12 entries.
 
-6. **`internal-atlas-priority.ts`** — bearer-token gated, but token
-   compromise could allow unbounded calls. Add per-token rate-limit
-   as defense-in-depth (~30min).
+6. ~~**`internal-atlas-priority.ts`** — bearer-token gated, but token
+   compromise could allow unbounded calls~~ — **CLOSED 2026-05-20.**
+   Per-token rate-limit landed in the `requireInternalAuth`
+   preHandler. Bucket key is `atlas_priority_token:<sha256-prefix>`
+   (token hashed 16-char-prefix; plaintext never lands in bucket
+   namespace / metrics labels — V-127 api-key-hash pattern).
+   Capacity 1000/min sized comfortably for legitimate harvester
+   - BS worker cadence (~10-100 req/min per token) with abuse-
+     burst headroom. RateLimitedError thrown on cap-hit with
+     retry-after seconds in the message.
 
 7. **`admin-crypto-orders.ts`** — admin-only, but defense-in-depth
    would add per-admin-token rate-limit. Lower priority than 1-2.

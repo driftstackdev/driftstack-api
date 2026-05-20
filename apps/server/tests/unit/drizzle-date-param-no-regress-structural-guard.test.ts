@@ -104,6 +104,12 @@ const ALLOW_LIST: Record<string, string[]> = {
   // `usageRecords.recordedAt` is a column REFERENCE (Drizzle's typed
   // accessor), not a JS Date.
   'apps/server/src/db/usage-repo.ts': ['usageRecords.recordedAt'],
+  // auth-flows-repo deleteStaleAuthTokens uses pre-serialised
+  // consumedIso / expiredIso (strings via .toISOString() at the
+  // service-call boundary) AND references `t.consumedAt` as a
+  // column accessor (Drizzle table identifier, renders as SQL at
+  // build time, NOT a JS Date interpolation).
+  'apps/server/src/db/auth-flows-repo.ts': ['t.consumedAt', 'consumedIso', 'expiredIso'],
 };
 
 interface Finding {
