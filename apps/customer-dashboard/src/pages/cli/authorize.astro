@@ -285,10 +285,16 @@ const apiBaseUrl = resolveApiBaseUrl();
               // problem-detail JSON carries `pending_acceptances` on
               // its `extensions` block; render them inline + retry
               // bind after the customer accepts.
+              // RFC-7807 problem body: server's ApiError.toProblem()
+              // SPREADS extensions to the top level of the JSON
+              // (...this.extensions), so the array lives at b.pending_acceptances
+              // — NOT nested under b.extensions. Earlier rev looked
+              // for the nested shape + always fell through to the
+              // generic error path, which is why the customer saw
+              // the raw "Operation requires acceptance of 4 document(s)"
+              // message instead of the inline accept-all UI.
               const pending =
-                b && b.extensions && Array.isArray(b.extensions.pending_acceptances)
-                  ? b.extensions.pending_acceptances
-                  : null;
+                b && Array.isArray(b.pending_acceptances) ? b.pending_acceptances : null;
               if (pending && pending.length > 0) {
                 showLegalAccept(pending);
                 return Promise.reject(new Error('__legal_accept_required__'));
