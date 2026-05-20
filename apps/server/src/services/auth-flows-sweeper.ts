@@ -21,6 +21,10 @@
 // entry. Same pattern as agent-pair-mode-heartbeat-sweep.ts.
 
 import type { AuthFlowsRepo, AuthFlowKind } from './auth-flows.js';
+import type { ScheduledJobsService, ScheduledJobRow } from './scheduled-jobs.js';
+import type { Logger } from '../lib/logger.js';
+
+export const AUTH_TOKENS_SWEEP_JOB_TYPE = 'auth_tokens.sweep';
 
 const CONSUMED_RETENTION_DAYS = 30;
 const EXPIRED_RETENTION_DAYS = 7;
@@ -71,4 +75,68 @@ export class AuthTokensSweeperService {
 
     return { deletedByKind, totalDeleted };
   }
+}
+
+/**
+ * Wire the sweeper onto the ScheduledJobsService. Cadence: daily at
+ * 03:00 UTC (low-traffic window; matches the audit-archive sweep
+ * pattern). Re-arms itself after each successful run via
+ * `enqueueNextAuthTokensSweep` — idempotent via the dedup-on-account-
+ * and-type flag.
+ */
+export interface RegisterAuthTokensSweepJobOpts {
+  scheduledJobs: ScheduledJobsService;
+  sweeper: AuthTokensSweeperService;
+  logger: Logger;
+  /** Test seam — defaults to `Date.now`. */
+  nowFn?: () => number;
+}
+
+export function registerAuthTokensSweepJob(opts: RegisterAuthTokensSweepJobOpts): void {
+  const now = opts.nowFn ?? Date.now;
+  opts.scheduledJobs.register(AUTH_TOKENS_SWEEP_JOB_TYPE, async (_job: ScheduledJobRow) => {
+    const tickStart = new Date(now());
+    const result = await opts.sweeper.tickOnce(tickStart);
+    opts.logger.info?.(
+      {
+        component: 'auth-tokens-sweep',
+        deleted_email_verify: result.deletedByKind.email_verify,
+        deleted_magic_link: result.deletedByKind.magic_link,
+        deleted_password_reset: result.deletedByKind.password_reset,
+        total_deleted: result.totalDeleted,
+      },
+      'auth-tokens sweep complete',
+    );
+    await enqueueNextAuthTokensSweep({ scheduledJobs: opts.scheduledJobs, nowFn: now });
+  });
+}
+
+/**
+ * Enqueue the next daily sweep at 03:00 UTC strictly after `now`.
+ * Idempotent via the dedup-on-account-and-type flag — a pending
+ * pending row for this job_type with account_id IS NULL is a no-op.
+ */
+export async function enqueueNextAuthTokensSweep(opts: {
+  scheduledJobs: ScheduledJobsService;
+  nowFn?: () => number;
+}): Promise<{ enqueued: boolean }> {
+  const now = (opts.nowFn ?? Date.now)();
+  return opts.scheduledJobs.enqueue({
+    jobType: AUTH_TOKENS_SWEEP_JOB_TYPE,
+    accountId: null,
+    payload: {},
+    runAt: nextSweepRunAt(new Date(now)),
+    dedupOnAccountAndType: true,
+  });
+}
+
+/** Returns 03:00 UTC strictly after `now`. */
+export function nextSweepRunAt(now: Date): Date {
+  const next = new Date(now.getTime());
+  next.setUTCHours(3, 0, 0, 0);
+  // If `now` is already past 03:00 UTC today, push to tomorrow.
+  if (next.getTime() <= now.getTime()) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
+  return next;
 }

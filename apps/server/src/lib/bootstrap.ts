@@ -103,6 +103,11 @@ import { SlaReportingService } from '../services/sla-reporting.js';
 import { RateLimitOverridesService } from '../services/rate-limit-overrides.js';
 import { LegalService } from '../services/legal.js';
 import { AuthFlowsService } from '../services/auth-flows.js';
+import {
+  AuthTokensSweeperService,
+  enqueueNextAuthTokensSweep,
+  registerAuthTokensSweepJob,
+} from '../services/auth-flows-sweeper.js';
 import { CliAuthorizeService } from '../services/cli-authorize.js';
 import { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import { ProfilesService } from '../services/profiles.js';
@@ -781,6 +786,22 @@ export async function createProductionDeps(
     mfaService, // V-353d — branch login() on enrollment status
     mfaChallengeStore, // V-353d — short-lived challenge store
   );
+
+  // 2026-05-20 — auth-tokens sweeper. Periodic DELETE of stale rows
+  // across email_verify_tokens / magic_link_tokens / password_reset_
+  // tokens. Closes the audit follow-up from docs/internal/2026-05-20-
+  // stale-row-audit.md (consumeAuthToken sets consumed_at but never
+  // deletes; same shape of bug as the 2026-05-19 scheduled_jobs
+  // accumulation incident, pre-scale today). Daily 03:00 UTC cadence;
+  // re-arms itself after each successful run. See docs/runbooks/auth-
+  // token-sweeper.md.
+  const authTokensSweeper = new AuthTokensSweeperService({ repo: authFlowsRepo });
+  registerAuthTokensSweepJob({
+    scheduledJobs: scheduledJobsService,
+    sweeper: authTokensSweeper,
+    logger,
+  });
+  await enqueueNextAuthTokensSweep({ scheduledJobs: scheduledJobsService });
 
   // V-266: browser-OAuth-style CLI / GUI activation flow. Pure
   // Redis state — no schema migration needed. Always wired (no

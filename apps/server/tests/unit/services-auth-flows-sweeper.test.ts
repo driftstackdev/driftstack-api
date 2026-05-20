@@ -4,7 +4,11 @@
 // the correct retention cutoffs.
 
 import { describe, expect, it } from 'vitest';
-import { AuthTokensSweeperService } from '../../src/services/auth-flows-sweeper.js';
+import {
+  AUTH_TOKENS_SWEEP_JOB_TYPE,
+  AuthTokensSweeperService,
+  nextSweepRunAt,
+} from '../../src/services/auth-flows-sweeper.js';
 import type { AuthFlowKind, AuthFlowsRepo } from '../../src/services/auth-flows.js';
 
 function mockRepo(): {
@@ -78,5 +82,28 @@ describe('AuthTokensSweeperService', () => {
       password_reset: 5,
     });
     expect(result.totalDeleted).toBe(15);
+  });
+
+  it("AUTH_TOKENS_SWEEP_JOB_TYPE is 'auth_tokens.sweep' (matches the canonical 'resource.verb' admin-action convention)", () => {
+    expect(AUTH_TOKENS_SWEEP_JOB_TYPE).toBe('auth_tokens.sweep');
+  });
+
+  it('nextSweepRunAt returns 03:00 UTC strictly after now (rolls to tomorrow when now is past 03:00 today)', () => {
+    // 02:30 UTC → today 03:00.
+    expect(nextSweepRunAt(new Date('2026-05-20T02:30:00Z')).toISOString()).toBe(
+      '2026-05-20T03:00:00.000Z',
+    );
+    // 03:00 UTC exactly → roll to tomorrow (strictly after).
+    expect(nextSweepRunAt(new Date('2026-05-20T03:00:00Z')).toISOString()).toBe(
+      '2026-05-21T03:00:00.000Z',
+    );
+    // 10:00 UTC → tomorrow 03:00.
+    expect(nextSweepRunAt(new Date('2026-05-20T10:00:00Z')).toISOString()).toBe(
+      '2026-05-21T03:00:00.000Z',
+    );
+    // 23:59 UTC → tomorrow 03:00.
+    expect(nextSweepRunAt(new Date('2026-05-20T23:59:00Z')).toISOString()).toBe(
+      '2026-05-21T03:00:00.000Z',
+    );
   });
 });
