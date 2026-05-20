@@ -65,9 +65,12 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
     );
   });
 
-  it('handleError: 5xx → request.log.error(err+problem), 4xx → request.log.warn({name,message}+problem) — sanitised', () => {
+  it('handleError: 5xx → request.log.error(err+problem), 4xx → request.log.warn(err+problem) (post-2026-05-19 scheduled-jobs-poller wrapper-bug lesson: pass through full err for Pino stdSerializers.err extraction)', () => {
     expect(body).toMatch(
-      /if \(apiError\.status >= 500\) \{\s*\n?\s*request\.log\.error\(\{ err, problem: apiError\.toProblem\(\) \}, 'request failed: 5xx'\);\s*\n?\s*\} else if \(apiError\.status >= 400\) \{\s*\n?\s*request\.log\.warn\(\s*\n?\s*\{ err: \{ name: err\.name, message: err\.message \}, problem: apiError\.toProblem\(\) \},\s*\n?\s*'request rejected: 4xx',\s*\n?\s*\);/,
+      /if \(apiError\.status >= 500\) \{\s*\n?\s*request\.log\.error\(\{ err, problem: apiError\.toProblem\(\) \}, 'request failed: 5xx'\);\s*\n?\s*\} else if \(apiError\.status >= 400\) \{/,
+    );
+    expect(body).toMatch(
+      /request\.log\.warn\(\{ err, problem: apiError\.toProblem\(\) \}, 'request rejected: 4xx'\);/,
     );
   });
 

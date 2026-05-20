@@ -58,9 +58,9 @@ describe('W1030 routes/admin-cost V-541.B + V-683 cross-source invariant', () =>
   it('CRITICAL Zod schemas — AccountSummaryParams (id min 1) + AccountSummaryQuery + OverviewQuery (account_ids min 1 + billing_cycle /^\\d{4}-\\d{2}$/).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-cost.ts'));
     expect(p).toMatch(/const AccountSummaryParams = z\.object\(\{/);
-    expect(p).toMatch(/id: z\.string\(\)\.min\(1\),/);
+    expect(p).toMatch(/id: z\.string\(\)\.min\(1\)\.max\(100\),/);
     expect(p).toMatch(/const OverviewQuery = z\.object\(\{/);
-    expect(p).toMatch(/account_ids: z\.string\(\)\.min\(1\),/);
+    expect(p).toMatch(/account_ids: z\.string\(\)\.min\(1\)\.max\(4096\),/);
     expect(p).toMatch(/billing_cycle: z/);
     expect(p).toMatch(/\.regex\(\/\^\\d\{4\}-\\d\{2\}\$\/\)/);
   });

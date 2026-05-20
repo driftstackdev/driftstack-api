@@ -52,6 +52,26 @@ const REQUIRED_ALL_ENTRIES = [
   'FeatureUnavailableError',
   'InternalError',
   'MfaStepUpRequiredError',
+  // Q.1.d 2026-05-17 + Arc 1 bundled-LLM + Arc 3 pair-mode error
+  // class additions.
+  'ByokAnthropicRequiredError',
+  'BundledLlmBudgetExhaustedError',
+  'BundledLlmConsentRequiredError',
+  'PairModeConflictError',
+  'PairModeStateInvalidTransitionError',
+  // Customer-facing return-type pydantic models (re-exported so
+  // callers can annotate handlers without deep-importing via
+  // driftstack.resources.*).
+  'LiveKitInfo',
+  'AcceptInviteResponse',
+  'ApiKeyList',
+  'SessionsListPage',
+  'TeamInvite',
+  'TeamInvitesList',
+  'TeamMember',
+  'TeamMembersList',
+  'WebhookDeliveryListPage',
+  'WebhookEndpointList',
   'is_retryable',
   'verify_webhook_signature',
 ];
@@ -71,7 +91,7 @@ describe('W835 Python SDK __all__ list parity', () => {
 
   // ─── Each required entry is in __all__ ────────────────────────
 
-  it('CRITICAL all 30 required __all__ entries are present in Python __init__.py. Drift to dropping any would break customer star-imports + IDE autocomplete + sphinx-autoapi rendering. The 30 entries cover: __version__ + 2 clients (Driftstack + AsyncDriftstack) + 25 error classes + 2 helpers (is_retryable + verify_webhook_signature).', () => {
+  it('CRITICAL all required __all__ entries are present in Python __init__.py. Drift to dropping any would break customer star-imports + IDE autocomplete + sphinx-autoapi rendering. The roster covers: __version__ + 2 clients (Driftstack + AsyncDriftstack) + 30 error classes + 10 customer-facing pydantic models + 2 helpers (is_retryable + verify_webhook_signature).', () => {
     const p = read(PY_INIT);
     for (const entry of REQUIRED_ALL_ENTRIES) {
       // __all__ uses double-quoted strings, one per line, with trailing comma.
@@ -124,7 +144,7 @@ describe('W835 Python SDK __all__ list parity', () => {
 
   // ─── Total count matches expected ─────────────────────────────
 
-  it('CRITICAL Python __all__ contains exactly the 30 required entries (snapshot). Drift would either grow the public surface accidentally (broader test surface) or shrink it (break customer code). New additions must update both the SDK source AND this parity test.', () => {
+  it('CRITICAL Python __all__ contains exactly the REQUIRED_ALL_ENTRIES snapshot (currently 45 entries after Q.1.d ByokAnthropic + Arc 1 bundled-LLM + Arc 3 pair-mode + customer-facing pydantic-model re-exports). Drift would either grow the public surface accidentally (broader test surface) or shrink it (break customer code). New additions must update both the SDK source AND this parity test.', () => {
     const p = read(PY_INIT);
     const allMatch = p.match(/__all__ = \[([\s\S]+?)\]/);
     expect(allMatch).not.toBeNull();
