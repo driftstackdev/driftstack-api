@@ -131,8 +131,13 @@ describe('W399.A apps/server/src/services/account-audit.ts content parity', () =
     expect(body).toMatch(
       /Service-internal record-on-event\. Callers \(api-keys service,\s*\n?\s*\*\s*sessions service, etc\.\) invoke this to drop a customer-visible\s*\n?\s*\*\s*event into the account's audit log\. Fire-and-forget intent —\s*\n?\s*\*\s*call sites swallow errors so audit failures never break the\s*\n?\s*\*\s*underlying customer action\./,
     );
+    // Arc 7 obs.10 added a best-effort metrics bump labelled by
+    // action prefix + actor type after the insert.
     expect(body).toMatch(
-      /async record\(input: RecordAccountAuditInput\): Promise<AccountAuditEntryRow> \{\s*\n?\s*return this\.repo\.insert\(input\);\s*\n?\s*\}/,
+      /async record\(input: RecordAccountAuditInput\): Promise<AccountAuditEntryRow> \{\s*\n?\s*const row = await this\.repo\.insert\(input\);[\s\S]*?return row;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /this\.metrics\?\.inc\(METRIC_NAMES\.accountAuditEmitTotal, \{\s*\n?\s*prefix: auditActionPrefix\(input\.action\),\s*\n?\s*actor_type: input\.actorType,\s*\n?\s*\}\);/,
     );
   });
 

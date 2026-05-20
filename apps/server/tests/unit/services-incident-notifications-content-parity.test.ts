@@ -120,7 +120,7 @@ describe('W398.B apps/server/src/services/incident-notifications.ts content pari
     expect(body).toMatch(/} catch \(err\) \{/);
     expect(body).toMatch(/failed \+= 1;/);
     expect(body).toMatch(
-      /this\.logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'incident-notifications',\s*\n?\s*email: sub\.email,\s*\n?\s*kind,\s*\n?\s*err: err instanceof Error \? \{ name: err\.name, message: err\.message \} : \{ value: err \},\s*\n?\s*\},\s*\n?\s*'incident notification email failed',\s*\n?\s*\);/,
+      /this\.logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'incident-notifications',\s*\n?\s*email: sub\.email,\s*\n?\s*kind,\s*\n?\s*err:\s*\n?\s*err instanceof Error\s*\n?\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \}\s*\n?\s*: \{ value: err \},\s*\n?\s*\},\s*\n?\s*'incident notification email failed',\s*\n?\s*\);/,
     );
   });
 

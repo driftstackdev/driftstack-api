@@ -70,10 +70,9 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
     );
   });
 
-  it('clientIp helper: X-Forwarded-For first-element split + ?? null fallback to request.ip', () => {
-    expect(body).toMatch(
-      /function clientIp\(request: FastifyRequest\): string \| null \{\s*\n?\s*const xff = request\.headers\['x-forwarded-for'\];\s*\n?\s*if \(typeof xff === 'string' && xff\.length > 0\) \{\s*\n?\s*const first = xff\.split\(','\)\[0\]\?\.trim\(\);\s*\n?\s*if \(first\) return first;\s*\n?\s*\}\s*\n?\s*return request\.ip \?\? null;/,
-    );
+  it('readClientIp imported from shared lib/client-ip.ts (extracted to collapse drift across admin-* routes; inline clientIp + X-Forwarded-For first-element handler now lives there)', () => {
+    expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
+    expect(body).toMatch(/ipAddress: readClientIp\(request\),/);
   });
 
   it('AdminForceActionsRoutesOptions: sessionRepo + apiKeysRepo + driver + audit + authCache (nullable)', () => {
@@ -97,7 +96,7 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
       /\/\/ Admin destroy is idempotent — already-destroyed session returns the\s*\n?\s*\/\/ same shape without re-firing the driver \/ repo writes\./,
     );
     expect(body).toMatch(
-      /if \(session\.status === 'destroyed'\) \{\s*\n?\s*await audit\.record\(\{\s*\n?\s*adminAccountId: ctx\.account\.id,\s*\n?\s*adminKeyId: ctx\.apiKey\.id,\s*\n?\s*action: 'session\.destroyed_by_admin',\s*\n?\s*targetAccountId,\s*\n?\s*targetResourceId: sessionId,\s*\n?\s*inputPayload: \{ \.\.\.inputPayload, idempotent: true \},\s*\n?\s*result: 'success',\s*\n?\s*ipAddress: clientIp\(request\),\s*\n?\s*\}\);/,
+      /if \(session\.status === 'destroyed'\) \{\s*\n?\s*await audit\.record\(\{\s*\n?\s*adminAccountId: ctx\.account\.id,\s*\n?\s*adminKeyId: ctx\.apiKey\.id,\s*\n?\s*action: 'session\.destroyed_by_admin',\s*\n?\s*targetAccountId,\s*\n?\s*targetResourceId: sessionId,\s*\n?\s*inputPayload: \{ \.\.\.inputPayload, idempotent: true \},\s*\n?\s*result: 'success',\s*\n?\s*ipAddress: readClientIp\(request\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /return \{\s*\n?\s*id: `ses_\$\{session\.id\}`,\s*\n?\s*status: 'destroyed',\s*\n?\s*destroyed_at: session\.destroyedAt\?\.toISOString\(\) \?\? null,\s*\n?\s*\};/,

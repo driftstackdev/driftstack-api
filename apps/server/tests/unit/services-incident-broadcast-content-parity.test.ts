@@ -148,9 +148,9 @@ describe('W401.B apps/server/src/services/incident-broadcast.ts content parity',
     );
   });
 
-  it('post(): catch absorbs throw — warn log with err name+message; clearTimeout in finally', () => {
+  it('post(): catch absorbs throw — warn log with err name+message+stack+cause (post-2026-05-19 scheduled-jobs-poller lesson: pass through stack/cause too); clearTimeout in finally', () => {
     expect(body).toMatch(
-      /\} catch \(err\) \{\s*\n?\s*this\.logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'incident-broadcast',\s*\n?\s*channel,\s*\n?\s*err: err instanceof Error \? \{ name: err\.name, message: err\.message \} : \{ value: err \},\s*\n?\s*\},\s*\n?\s*'broadcast webhook failed',\s*\n?\s*\);\s*\n?\s*\} finally \{\s*\n?\s*clearTimeout\(timer\);/,
+      /\} catch \(err\) \{\s*\n?\s*this\.logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'incident-broadcast',\s*\n?\s*channel,\s*\n?\s*err:\s*\n?\s*err instanceof Error\s*\n?\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \}\s*\n?\s*: \{ value: err \},\s*\n?\s*\},\s*\n?\s*'broadcast webhook failed',\s*\n?\s*\);\s*\n?\s*\} finally \{\s*\n?\s*clearTimeout\(timer\);/,
     );
   });
 

@@ -76,7 +76,10 @@ describe('W542.A /.github/workflows/deploy.yml content parity (Option B)', () =>
     expect(body).toMatch(/name: Build \+ upload source maps to Sentry/);
     expect(body).toMatch(/permissions:\s*\n\s*contents: read/);
     expect(body).toMatch(/npm ci --no-audit --include=dev/);
-    expect(body).toMatch(/npx tsc --build packages\/api-types/);
+    // 2026-05-XX deploy.yml replaced `npx tsc --build packages/api-types`
+    // with `npm run build:packages` so any new workspace package builds
+    // automatically.
+    expect(body).toMatch(/npm run build:packages/);
     expect(body).toMatch(/npm run build --workspace=@driftstack\/server/);
   });
 

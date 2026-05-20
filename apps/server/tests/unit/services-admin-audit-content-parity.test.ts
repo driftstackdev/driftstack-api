@@ -86,10 +86,11 @@ describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => 
     expect(body).toMatch(/\| 'incident\.resolved'/);
   });
 
-  it('AdminAuditAction: V-295c3-tombstone status-subscriber cluster (force_unsubscribed / purged)', () => {
+  it('AdminAuditAction: V-295c3-tombstone status-subscriber cluster (force_unsubscribed / purged) + LK.2 mac_node.livekit_registered terminator', () => {
     expect(body).toMatch(/\/\/ V-295c3-tombstone: status-page email subscriber admin actions\./);
     expect(body).toMatch(/\| 'status_subscriber\.force_unsubscribed'/);
-    expect(body).toMatch(/\| 'status_subscriber\.purged';/);
+    expect(body).toMatch(/\| 'status_subscriber\.purged'/);
+    expect(body).toMatch(/\| 'mac_node\.livekit_registered';/);
   });
 
   it('AdminAuditLogRow: 9 camelCased fields (id, adminAccountId, adminKeyId, action, targetAccountId?, targetResourceId?, inputPayload?, result, ipAddress?, timestamp)', () => {
@@ -128,12 +129,16 @@ describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => 
     );
   });
 
-  it('record(): MUST be called by route before response; throw propagates — failure to audit fails the request (D-025)', () => {
+  it('record(): MUST be called by route before response; throw propagates — failure to audit fails the request (D-025) (+ Arc 7 obs.11 best-effort metrics bump labelled by audit-action prefix)', () => {
     expect(body).toMatch(
       /Record one admin action\. Must be called by the route handler before\s*\n?\s*\*\s*returning the response\. A throw here propagates up — failure to\s*\n?\s*\*\s*audit fails the request \(D-025\)\./,
     );
     expect(body).toMatch(
-      /record\(input: NewAdminAuditLogInput\): Promise<AdminAuditLogRow> \{\s*\n?\s*return this\.repo\.insert\(input\);\s*\n?\s*\}/,
+      /async record\(input: NewAdminAuditLogInput\): Promise<AdminAuditLogRow> \{\s*\n?\s*const row = await this\.repo\.insert\(input\);[\s\S]*?return row;\s*\n?\s*\}/,
+    );
+    // Arc 7 obs.11 — best-effort metrics bump after insert.
+    expect(body).toMatch(
+      /this\.metrics\?\.inc\(METRIC_NAMES\.adminAuditEmitTotal, \{\s*\n?\s*prefix: auditActionPrefix\(input\.action\),\s*\n?\s*\}\);/,
     );
   });
 
@@ -143,8 +148,14 @@ describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => 
     );
   });
 
-  it('imports: NONE (self-contained — no api-types dep for the closed enum)', () => {
-    expect(body).not.toMatch(/^import /m);
+  it('imports: NONE from api-types (self-contained — closed enum lives here). Internal cross-module imports from ./metrics-registry + ./account-audit are required for the Arc 7 obs.11 best-effort metrics bump.', () => {
+    // No api-types or @driftstack-package imports.
+    expect(body).not.toMatch(/^import .* from '@driftstack\//m);
+    // Allowed internal imports.
+    expect(body).toMatch(
+      /import \{ METRIC_NAMES, type MetricsRegistry \} from '\.\/metrics-registry/,
+    );
+    expect(body).toMatch(/import \{ auditActionPrefix \} from '\.\/account-audit\.js';/);
   });
 
   it('file exists at canonical path', () => {
