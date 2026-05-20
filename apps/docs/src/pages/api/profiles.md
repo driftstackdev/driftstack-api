@@ -126,6 +126,46 @@ archetype is intentionally not editable — repin via
 `POST /v1/profiles/:id/clone` with a new archetype, then delete the
 old profile after migration.
 
+## Launch
+
+`POST /v1/profiles/:id/launch`
+
+```json
+{ "proxy": null, "label": "checkout-run-2026-05-20" }
+```
+
+Both fields are optional overrides; everything else flows from the
+profile (archetype + metadata inherited, `last_used_at` bumped
+server-side fire-and-forget). One-shot wrapper around `POST
+/v1/sessions` — equivalent to:
+
+```json
+{
+  "profile_id": "prof_<uuid>",
+  "archetype": "<profile.archetype>",
+  "metadata": { "profile_id": "...", "profile_name": "..." }
+}
+```
+
+but in a single round-trip, and the server stamps the linkage on
+the session's metadata so the audit + usage trail tie back to the
+profile.
+
+Returns the freshly-minted session (same shape as `POST
+/v1/sessions`). The customer then drives the session via the
+normal `navigate` / `interact` / `wait` / `capture` /
+`destroy` verbs (or via the desktop GUI's Live session view, which
+mounts on the returned `session.id`).
+
+Errors:
+
+- `404` if the profile isn't owned by the calling account
+  (deliberate anti-enumeration — cross-account `profile_id` is
+  indistinguishable from a missing one).
+- Any error the underlying `POST /v1/sessions` can return — most
+  commonly `402` (concurrent-session cap reached) or `503` if the
+  EGRESS gate fires on a tier that requires a `proxy` envelope.
+
 ## Clone
 
 `POST /v1/profiles/:id/clone`
