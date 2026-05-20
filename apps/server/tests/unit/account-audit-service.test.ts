@@ -211,7 +211,9 @@ describe('AccountAuditService — 2026-05-20 high-severity notification republis
     const svc = new AccountAuditService(
       repo,
       undefined,
-      bus as unknown as Parameters<typeof AccountAuditService>[2] extends infer T ? T : never,
+      bus as unknown as ConstructorParameters<typeof AccountAuditService>[2] extends infer T
+        ? T
+        : never,
     );
     await svc.record({
       accountId: 'acc_1',
@@ -235,7 +237,9 @@ describe('AccountAuditService — 2026-05-20 high-severity notification republis
     const svc = new AccountAuditService(
       repo,
       undefined,
-      bus as unknown as Parameters<typeof AccountAuditService>[2] extends infer T ? T : never,
+      bus as unknown as ConstructorParameters<typeof AccountAuditService>[2] extends infer T
+        ? T
+        : never,
     );
     await svc.record({
       accountId: 'acc_1',
@@ -251,7 +255,9 @@ describe('AccountAuditService — 2026-05-20 high-severity notification republis
     const svc = new AccountAuditService(
       repo,
       undefined,
-      bus as unknown as Parameters<typeof AccountAuditService>[2] extends infer T ? T : never,
+      bus as unknown as ConstructorParameters<typeof AccountAuditService>[2] extends infer T
+        ? T
+        : never,
     );
     await svc.record({
       accountId: 'acc_1',
@@ -274,7 +280,7 @@ describe('AccountAuditService — 2026-05-20 high-severity notification republis
     const svc = new AccountAuditService(
       repo,
       undefined,
-      throwingBus as unknown as Parameters<typeof AccountAuditService>[2] extends infer T
+      throwingBus as unknown as ConstructorParameters<typeof AccountAuditService>[2] extends infer T
         ? T
         : never,
     );
