@@ -111,7 +111,7 @@ describe('routes/auth-oauth-client content parity', () => {
 
   it("4-outcome union response shape pinned: signed-in-existing-link / created-new-account (account_id + redirect_to) + collision-pending-verification (pending_link_id + expires_at) + existing-link-revoked (account_id + hint: 'fall back to password sign-in or re-link the IDP') + ConfirmMerge outcome: 'merged' as const (account_id + link_id) — pinned so the 4-Verdict-locked outcomes + revoked-hint-text + ConfirmMerge-success-shape contract all stay documented", () => {
     expect(body).toMatch(
-      /\.\.\.\(result\.kind === 'signed-in-existing-link' \|\| result\.kind === 'created-new-account'\s*\n?\s*\? \{ account_id: result\.accountId, redirect_to: redirectTo \}\s*\n?\s*: \{\}\),/,
+      /\.\.\.\(result\.kind === 'signed-in-existing-link' \|\| result\.kind === 'created-new-account'\s*\n?\s*\? \{\s*\n?\s*account_id: result\.accountId,\s*\n?\s*redirect_to: redirectTo,[\s\S]*?\}\s*\n?\s*: \{\}\),/,
     );
     expect(body).toMatch(
       /\.\.\.\(result\.kind === 'collision-pending-verification'\s*\n?\s*\? \{\s*\n?\s*pending_link_id: result\.pendingLinkId,\s*\n?\s*expires_at: result\.expiresAt\.toISOString\(\),\s*\n?\s*\}\s*\n?\s*: \{\}\),/,

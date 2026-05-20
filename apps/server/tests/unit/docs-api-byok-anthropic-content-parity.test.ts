@@ -24,9 +24,9 @@ describe('docs/api/byok-anthropic content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Q4=A founder verdict 2026-05-16 framing pinned: 'BYOK always wins over bundled-LLM in the resolution chain — per founder verdict Q4=A (2026-05-16), BYOK is the v1.0 primary path; bundled-LLM is the no-BYOK fallback.' — pinned so the Q4=A verdict-date + BYOK-primary-path + bundled-LLM-fallback contract all stay documented (drift to flipping the priority would break the customer-trust contract codified at Tier-3 lock)", () => {
+  it("Q4=A design verdict 2026-05-16 framing pinned: 'BYOK always wins over bundled-LLM in the resolution chain — per Driftstack design verdict Q4=A (2026-05-16), BYOK is the v1.0 primary path; bundled-LLM is the no-BYOK fallback.' — V-211 anonymity rewrote 'founder verdict' to 'Driftstack design verdict' in customer-facing copy; pinned so the Q4=A verdict-date + BYOK-primary-path + bundled-LLM-fallback contract stays documented.", () => {
     expect(body).toMatch(
-      /BYOK always wins over bundled-LLM\s*\n?\s*in the resolution chain — per founder verdict Q4=A \(2026-05-16\),\s*\n?\s*BYOK is the v1\.0 primary path; bundled-LLM is the no-BYOK fallback\./,
+      /BYOK always wins over bundled-LLM\s*\n?\s*in the resolution chain — per Driftstack design verdict Q4=A\s*\n?\s*\(2026-05-16\), BYOK is the v1\.0 primary path; bundled-LLM is the\s*\n?\s*no-BYOK fallback\./,
     );
   });
 

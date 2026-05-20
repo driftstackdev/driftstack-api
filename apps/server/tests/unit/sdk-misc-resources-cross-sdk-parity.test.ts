@@ -117,23 +117,22 @@ describe('W833 cross-SDK miscellaneous resources parity', () => {
     );
     const go = read(resolve(REPO_ROOT, 'packages/sdk-go/email_preferences.go'));
 
+    // PUT /v1/account/email-preferences returns 204 No Content (no
+    // body) so set() / optIn / optOut now return Promise<void> in TS;
+    // optIn + optOut stay as convenience wrappers around set(...).
     expect(ts).toMatch(/list\(\): Promise<ListEmailPreferencesResponse>/);
-    expect(ts).toMatch(/set\(body: SetEmailPreferenceRequest\): Promise<EmailPreference>/);
-    expect(ts).toMatch(/optOut\(eventType: OptOutableEmailEvent\): Promise<EmailPreference>/);
-    expect(ts).toMatch(/optIn\(eventType: OptOutableEmailEvent\): Promise<EmailPreference>/);
+    expect(ts).toMatch(/set\(body: SetEmailPreferenceRequest\): Promise<void>/);
+    expect(ts).toMatch(/optOut\(eventType: OptOutableEmailEvent\): Promise<void>/);
+    expect(ts).toMatch(/optIn\(eventType: OptOutableEmailEvent\): Promise<void>/);
 
     expect(py).toMatch(/def list\(self\) -> dict\[str, Any\]:/);
-    expect(py).toMatch(/def set\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
-    expect(py).toMatch(/def opt_out\(self, event_type: str\) -> dict\[str, Any\]:/);
-    expect(py).toMatch(/def opt_in\(self, event_type: str\) -> dict\[str, Any\]:/);
+    expect(py).toMatch(/def set\(self, body: dict\[str, Any\]\) -> None:/);
+    expect(py).toMatch(/def opt_out\(self, event_type: str\) -> None:/);
+    expect(py).toMatch(/def opt_in\(self, event_type: str\) -> None:/);
 
     expect(go).toMatch(/List\(ctx context\.Context\) \(\*ListEmailPreferencesResponse, error\)/);
-    expect(go).toMatch(
-      /OptOut\(ctx context\.Context, eventType string\) \(\*EmailPreference, error\)/,
-    );
-    expect(go).toMatch(
-      /OptIn\(ctx context\.Context, eventType string\) \(\*EmailPreference, error\)/,
-    );
+    expect(go).toMatch(/OptOut\(ctx context\.Context, eventType string\) error/);
+    expect(go).toMatch(/OptIn\(ctx context\.Context, eventType string\) error/);
   });
 
   it("CRITICAL EmailPreferences TS uses OptOutableEmailEvent typed enum for eventType param. The typed enum makes the 'only these events are opt-outable' contract enforceable at compile time — drift to plain string would lose the discrimination.", () => {

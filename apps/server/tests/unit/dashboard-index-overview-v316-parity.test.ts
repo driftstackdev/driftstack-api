@@ -78,11 +78,11 @@ describe('W748 dashboard index/overview V-316 live-data parity', () => {
     );
   });
 
-  it('CRITICAL no-token banner-with-recovery framing pinned. Drift to bare 401 would not tell customers what to do; the banner tells them "Sign in to see live account data".', () => {
+  it('CRITICAL no-token hard-redirect framing pinned (2026-05-19 dashboard polish replaced the inline banner-over-placeholder with a /login?return_to=… hard-redirect — production-side the SSG placeholder reads as broken to unauthed visitors).', () => {
     const i = read(INDEX);
 
     expect(i).toMatch(
-      /if \(!token\) \{\s*\n\s+showBanner\('Sign in to see live account data\.'\);\s*\n\s+return;/,
+      /if \(!token\) \{[\s\S]*?const ret = encodeURIComponent\(window\.location\.pathname \+ window\.location\.search\);\s*\n?\s*window\.location\.replace\('\/login\?return_to=' \+ ret\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
   });
 

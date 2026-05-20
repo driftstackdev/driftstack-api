@@ -151,7 +151,7 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(body).toMatch(/`1\.0\.0` ships when:/);
     expect(body).toMatch(/1\. Driftstack has its first paying customer\./);
     expect(body).toMatch(/2\. The SDK has been in production use at that customer for ≥ 30 days/);
-    expect(body).toMatch(/3\. Founder explicitly approves the 1\.0 cut\./);
+    expect(body).toMatch(/3\. Driftstack explicitly approves the 1\.0 cut\./);
     expect(body).toMatch(/^## Deprecation policy$/m);
     expect(existsSync(VER)).toBe(true);
   });

@@ -136,9 +136,10 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/swallow — picker stays hidden/);
   });
 
-  it('picker self-only opt-out: empty teams array hides the widget', () => {
+  it('picker self-only opt-out: split-guard — early-bail on !me first (lets non-picker dashboard surfaces short-circuit) then empty/non-array teams hides the widget', () => {
+    expect(body).toMatch(/if \(!me\) return;/);
     expect(body).toMatch(
-      /if \(!me \|\| !Array\.isArray\(me\.teams\) \|\| me\.teams\.length === 0\) return;/,
+      /if \(!Array\.isArray\(me\.teams\) \|\| me\.teams\.length === 0\) return;/,
     );
   });
 
