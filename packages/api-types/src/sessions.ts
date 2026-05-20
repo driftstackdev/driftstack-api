@@ -97,6 +97,16 @@ export const CreateSessionRequestSchema = z.object({
   purpose: SessionPurposeSchema.optional(),
   label: z.string().max(120).optional(),
   metadata: z.record(z.unknown()).optional(),
+  /**
+   * 2026-05-20 — profile binding. When supplied, the server records
+   * the session as belonging to this profile (cookies, localStorage,
+   * archetype inherited from the profile by default) + bumps the
+   * profile's `last_used_at`. Server validates that the profile
+   * belongs to the calling account; cross-account profile_id returns
+   * 404 to avoid leaking existence. Optional so ephemeral sessions
+   * (no persistent state) still work as before.
+   */
+  profile_id: z.string().uuid().optional(),
 });
 
 export type CreateSessionRequest = z.infer<typeof CreateSessionRequestSchema>;

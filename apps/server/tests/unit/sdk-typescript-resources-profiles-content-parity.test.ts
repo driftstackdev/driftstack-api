@@ -50,9 +50,9 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     expect(body).toMatch(/\/\/ ProfilesResource — typed methods for \/v1\/profiles \(V-081\)\./);
   });
 
-  it('Imports — 5 api-types shapes (CloneProfileRequest + CreateProfileRequest + PaginationQueryInput + Profile + UpdateProfileRequest) + HttpClient + iteratePaginated. CRITICAL: CloneProfileRequest is imported — drift to requiring fields would break the convenience UX where clone(id) duplicates without prompting.', () => {
+  it('Imports — 6 api-types shapes (CloneProfileRequest + CreateProfileRequest + PaginationQueryInput + Profile + Session + UpdateProfileRequest) + HttpClient + iteratePaginated. 2026-05-20 — Session added because launch() returns the freshly-minted Session.', () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*CloneProfileRequest,\s*\n?\s*CreateProfileRequest,\s*\n?\s*PaginationQueryInput,\s*\n?\s*Profile,\s*\n?\s*UpdateProfileRequest,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*\n?\s*CloneProfileRequest,\s*\n?\s*CreateProfileRequest,\s*\n?\s*PaginationQueryInput,\s*\n?\s*Profile,\s*\n?\s*Session,\s*\n?\s*UpdateProfileRequest,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
     expect(body).toMatch(/import \{ iteratePaginated \} from '\.\.\/pagination\.js';/);
@@ -124,16 +124,16 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     );
   });
 
-  it('encodeURIComponent invariant — :id escaped EXACTLY 4 times (get + update + delete + clone). iterate doesn\'t escape directly because it delegates via this.list() (which doesn\'t use :id). Drift to dropping any escape would let "abc/../../admin" traverse path segments.', () => {
+  it('encodeURIComponent invariant — :id escaped EXACTLY 5 times (get + update + delete + launch + clone). 2026-05-20 — launch added for the antidetect-browser one-shot Profile→Session verb.', () => {
     const matches = body.match(/encodeURIComponent\(id\)/g) ?? [];
-    expect(matches.length, 'expected encodeURIComponent(id) 4 times').toBe(4);
+    expect(matches.length, 'expected encodeURIComponent(id) 5 times').toBe(5);
   });
 
-  it('7-verb inventory + verb-mix invariants — exactly 7 method declarations (create + list + iterate + get + update + delete + clone). Verb mix: 2 POSTs (create + clone) + 2 GETs (list + get) + 1 PATCH (update) + 1 DELETE (delete) = 6 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH; drift to PUT would force whole-document replacement.', () => {
+  it('8-verb inventory + verb-mix invariants — exactly 8 method declarations (create + list + iterate + get + update + launch + delete + clone). Verb mix: 3 POSTs (create + launch + clone) + 2 GETs (list + get) + 1 PATCH (update) + 1 DELETE (delete) = 7 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH.', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 7 verb declarations').toBe(7);
+    expect(methods.length, 'expected 8 verb declarations').toBe(8);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
-    expect(posts, 'expected 2 POSTs (create + clone)').toBe(2);
+    expect(posts, 'expected 3 POSTs (create + launch + clone)').toBe(3);
     const gets = (body.match(/method: 'GET'/g) ?? []).length;
     expect(gets, 'expected 2 GETs (list + get)').toBe(2);
     const patches = (body.match(/method: 'PATCH'/g) ?? []).length;

@@ -65,6 +65,18 @@ class ProfilesResource:
     def delete(self, profile_id: str) -> None:
         self._http.request("DELETE", f"/v1/profiles/{quote(profile_id, safe='')}")
 
+    def launch(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        """2026-05-20 — antidetect-browser-style one-shot launch. Creates a
+        session bound to this profile (archetype + metadata inherited).
+        ``body`` accepts optional ``proxy`` + ``label`` overrides; everything
+        else flows from the profile. Returns the freshly-minted Session.
+        """
+        return self._http.request(
+            "POST",
+            f"/v1/profiles/{quote(profile_id, safe='')}/launch",
+            json_body=coerce_body(body or {}),
+        )
+
     def clone(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         """V-313 — duplicate a profile. Server auto-derives "(copy)" / "(copy 2)" /
         ... name when ``body["name"]`` is omitted. Tier-cap + name-conflict
@@ -110,6 +122,16 @@ class AsyncProfilesResource:
 
     async def delete(self, profile_id: str) -> None:
         await self._http.request("DELETE", f"/v1/profiles/{quote(profile_id, safe='')}")
+
+    async def launch(
+        self, profile_id: str, body: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Async mirror — same Slice 2 antidetect launch semantics as sync."""
+        return await self._http.request(
+            "POST",
+            f"/v1/profiles/{quote(profile_id, safe='')}/launch",
+            json_body=coerce_body(body or {}),
+        )
 
     async def clone(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
         return await self._http.request(

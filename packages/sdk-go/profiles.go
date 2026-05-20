@@ -118,6 +118,38 @@ func (r *ProfilesResource) Delete(ctx context.Context, profileID string) error {
 	})
 }
 
+// LaunchProfileRequest — 2026-05-20 antidetect-browser-style one-shot
+// launch. Both fields are optional overrides; everything else flows
+// from the profile (archetype + metadata + last_used_at bumped
+// server-side).
+type LaunchProfileRequest struct {
+	Proxy any    `json:"proxy,omitempty"`
+	Label string `json:"label,omitempty"`
+}
+
+// Launch creates a session bound to this profile. Equivalent to
+// POST /v1/sessions {profile_id, archetype: <profile.archetype>}
+// but one round-trip + the server inherits the profile's archetype.
+func (r *ProfilesResource) Launch(
+	ctx context.Context,
+	profileID string,
+	body *LaunchProfileRequest,
+) (*Session, error) {
+	var out Session
+	req := requestOptions{
+		method: "POST",
+		path:   "/v1/profiles/" + url.PathEscape(profileID) + "/launch",
+		out:    &out,
+	}
+	if body != nil {
+		req.body = body
+	}
+	if err := r.client.do(ctx, req); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // CloneProfileRequest — V-313. Pass an empty struct to let the server
 // auto-derive a "(copy)" / "(copy 2)" / ... name.
 type CloneProfileRequest struct {

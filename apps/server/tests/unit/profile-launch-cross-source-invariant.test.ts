@@ -1,0 +1,95 @@
+// 2026-05-20 — antidetect-browser-style profile-launch arc.
+// Cross-source invariant: the profile_id binding + POST /v1/profiles/:id/launch
+// verb is pinned across:
+//   - api-types CreateSessionRequestSchema (profile_id optional UUID)
+//   - server routes/sessions.ts (validation + touch + launch endpoint)
+//   - TS / Py / Go SDKs (profiles.launch helper)
+//   - SDK type imports (Session passthrough on TS)
+// Drift on any leg breaks the antidetect-browser UX paradigm — the
+// GUI's Launch button is the single load-bearing flow this arc
+// supports, and the harness will read profile_id off session metadata.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+function read(p: string): string {
+  return readFileSync(p, 'utf8');
+}
+
+describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source invariant', () => {
+  it('api-types/src/sessions.ts CreateSessionRequestSchema includes profile_id as optional UUID with the antidetect rationale comment', () => {
+    const lib = resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts');
+    expect(existsSync(lib)).toBe(true);
+    const body = read(lib);
+    expect(body).toMatch(/profile_id: z\.string\(\)\.uuid\(\)\.optional\(\),/);
+    expect(body).toMatch(/2026-05-20 — profile binding\. When supplied/);
+    expect(body).toMatch(/cross-account profile_id returns/);
+  });
+
+  it('server/src/routes/sessions.ts resolveProfileBinding helper validates ownership + inherits archetype + stamps metadata', () => {
+    const lib = resolve(REPO_ROOT, 'apps/server/src/routes/sessions.ts');
+    const body = read(lib);
+    expect(body).toMatch(/async function resolveProfileBinding\(/);
+    expect(body).toMatch(/await profilesService\.get\(\{ id: profileId, accountId \}\);/);
+    expect(body).toMatch(/metadata: \{ profile_id: profile\.id, profile_name: profile\.name \}/);
+  });
+
+  it('server/src/routes/sessions.ts POST /v1/sessions resolves profile_id from body + bumps last_used_at fire-and-forget', () => {
+    const lib = resolve(REPO_ROOT, 'apps/server/src/routes/sessions.ts');
+    const body = read(lib);
+    expect(body).toMatch(/body\.profile_id !== undefined/);
+    expect(body).toMatch(
+      /\.touch\(\{ id: profileId, accountId: ownerAccountId, at: new Date\(\) \}\)\s*\n?\s*\.catch\(\(\) => undefined\)/,
+    );
+  });
+
+  it('server/src/routes/sessions.ts registers POST /v1/profiles/:id/launch with prof_<uuid> validation + egress-safeguard + ownership flow', () => {
+    const lib = resolve(REPO_ROOT, 'apps/server/src/routes/sessions.ts');
+    const body = read(lib);
+    expect(body).toMatch(/'\/v1\/profiles\/:id\/launch'/);
+    expect(body).toMatch(
+      /\/\^prof_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/\s*\.exec\(/,
+    );
+    expect(body).toMatch(
+      /A proxy configuration is required to launch a profile on this deployment\./,
+    );
+  });
+
+  it('TS SDK profiles.ts exposes launch(id, body?) returning Promise<Session>', () => {
+    const lib = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/profiles.ts');
+    const body = read(lib);
+    expect(body).toMatch(
+      /launch\(\s*\n?\s*id: string,\s*\n?\s*body: \{ proxy\?: unknown; label\?: string \} = \{\},\s*\n?\s*\): Promise<Session>/,
+    );
+    expect(body).toMatch(/path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}\/launch`,/);
+  });
+
+  it('Python SDK profiles.py exposes def launch + async def launch (sync + async mirrors)', () => {
+    const lib = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/profiles.py');
+    const body = read(lib);
+    expect(body).toMatch(
+      /def launch\(self, profile_id: str, body: dict\[str, Any\] \| None = None\) -> dict\[str, Any\]:/,
+    );
+    expect(body).toMatch(
+      /async def launch\(\s*\n?\s*self, profile_id: str, body: dict\[str, Any\] \| None = None\s*\n?\s*\) -> dict\[str, Any\]:/,
+    );
+    expect(body).toMatch(/f"\/v1\/profiles\/\{quote\(profile_id, safe=''\)\}\/launch"/);
+  });
+
+  it('Go SDK profiles.go exposes LaunchProfileRequest + Launch method returning *Session', () => {
+    const lib = resolve(REPO_ROOT, 'packages/sdk-go/profiles.go');
+    const body = read(lib);
+    expect(body).toMatch(
+      /type LaunchProfileRequest struct \{[\s\S]*?Proxy any[\s\S]*?Label string/,
+    );
+    expect(body).toMatch(
+      /func \(r \*ProfilesResource\) Launch\(\s*\n?\s*ctx context\.Context,\s*\n?\s*profileID string,\s*\n?\s*body \*LaunchProfileRequest,\s*\n?\s*\) \(\*Session, error\)/,
+    );
+    expect(body).toMatch(/"\/v1\/profiles\/" \+ url\.PathEscape\(profileID\) \+ "\/launch"/);
+  });
+});

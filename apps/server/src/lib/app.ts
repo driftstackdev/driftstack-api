@@ -758,6 +758,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // unchanged. Once true, every session-create body must carry a
     // proxy envelope or rejects with 400.
     egressProxyRequired: deps.sessionEgressService !== undefined,
+    // 2026-05-20 — antidetect-browser-style profile binding. Routes
+    // need the profiles service to validate profile_id ownership +
+    // bump last_used_at when a session is created against a profile.
+    // Optional so test fixtures without profiles still register.
+    ...(deps.profilesService !== undefined ? { profilesService: deps.profilesService } : {}),
   });
   registerAdminRoutes(app, {
     apiKeysService: deps.apiKeysService,

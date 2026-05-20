@@ -5,6 +5,7 @@ import type {
   CreateProfileRequest,
   PaginationQueryInput,
   Profile,
+  Session,
   UpdateProfileRequest,
 } from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';
@@ -66,6 +67,21 @@ export class ProfilesResource {
     return this.http.request<Profile>({
       method: 'PATCH',
       path: `/v1/profiles/${encodeURIComponent(id)}`,
+      body,
+    });
+  }
+
+  /**
+   * 2026-05-20 — antidetect-browser-style one-shot launch. Creates a
+   * session bound to this profile (archetype + metadata inherited from
+   * the profile, last_used_at bumped server-side). Body shape is
+   * {proxy?, label?} — everything else flows from the profile.
+   * Returns the freshly-minted Session (use sessions.destroy to stop).
+   */
+  launch(id: string, body: { proxy?: unknown; label?: string } = {}): Promise<Session> {
+    return this.http.request<Session>({
+      method: 'POST',
+      path: `/v1/profiles/${encodeURIComponent(id)}/launch`,
       body,
     });
   }

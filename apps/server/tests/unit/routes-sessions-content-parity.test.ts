@@ -54,7 +54,7 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
     expect(body).toMatch(/import \{ GUIInputRequestSchema \} from '\.\.\/schemas\/gui-input\.js';/);
     expect(body).toMatch(
-      /import \{ BadRequestError, ForbiddenError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, ForbiddenError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(/import type \{ AccountAuthRepo \} from '\.\.\/services\/auth\.js';/);
     expect(body).toMatch(/import \{ resolveEffectiveAccount \} from '\.\.\/services\/auth\.js';/);
@@ -116,10 +116,12 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body).toMatch(
       /throw new ForbiddenError\(\s*\n?\s*'Creating a session on a team owner requires admin role on that team\.',\s*\n?\s*\);/,
     );
+    // 2026-05-20 — profile_id binding lifted out of the branch as
+    // bodyWithProfile; the create call now references bodyWithProfile.
     expect(body).toMatch(
-      /const session = await service\.create\(ctx, body, \{\s*\n?\s*effectiveAccountId: owner\.id,\s*\n?\s*effectiveTier: owner\.tier,\s*\n?\s*\}\);/,
+      /created = await service\.create\(ctx, bodyWithProfile, \{\s*\n?\s*effectiveAccountId: owner\.id,\s*\n?\s*effectiveTier: owner\.tier,\s*\n?\s*\}\);/,
     );
-    expect(body).toMatch(/return reply\.code\(201\)\.send\(publicSession\(session\)\);/);
+    expect(body).toMatch(/return reply\.code\(201\)\.send\(publicSession\(created\)\);/);
   });
 
   it('V-326d GET /v1/sessions framing pinned: honors X-Driftstack-Account — team member with valid membership sees owner sessions; without header behaves identically to pre-V-326d; response data + has_more (nextCursor !== null) + next_cursor', () => {

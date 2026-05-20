@@ -22,8 +22,9 @@ import {
   WaitRequestSchema,
 } from '@driftstack/api-types';
 import type { SessionRecord, SessionsService } from '../services/sessions.js';
+import type { ProfilesService } from '../services/profiles.js';
 import { GUIInputRequestSchema } from '../schemas/gui-input.js';
-import { BadRequestError, ForbiddenError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
@@ -106,6 +107,14 @@ export interface SessionRoutesOptions {
    */
   authRepo: AccountAuthRepo;
   /**
+   * 2026-05-20 — antidetect-browser profile binding. When wired, the
+   * sessions-create handler validates the optional `profile_id` body
+   * field (cross-account profile_id 404s) + bumps last_used_at on the
+   * profile. Optional so the routes still register in test fixtures
+   * that don't materialise a ProfilesService.
+   */
+  profilesService?: ProfilesService;
+  /**
    * EG-API-1.4 — when `true`, POST /v1/sessions refuses any request
    * whose body lacks a `proxy: ProxyConfig` envelope (per planning 133
    * §"Egress safeguard enforcement"). The flag is true when AppDeps
@@ -134,7 +143,30 @@ function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['accoun
 
 export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesOptions): void {
   const { service, authRepo } = opts;
+  const profilesService = opts.profilesService;
   const egressProxyRequired = opts.egressProxyRequired ?? false;
+
+  // 2026-05-20 — shared helper used by both POST /v1/sessions (when
+  // profile_id is supplied in the body) and POST /v1/profiles/:id/launch.
+  // Validates ownership, inherits archetype default, stamps the binding
+  // into session metadata, then bumps profile.last_used_at after the
+  // create succeeds.
+  async function resolveProfileBinding(
+    profileId: string,
+    accountId: string,
+  ): Promise<{ archetype: string; metadata: Record<string, unknown> }> {
+    if (!profilesService) {
+      throw new NotFoundError(`Profile ${profileId} not found.`);
+    }
+    // service.get throws NotFoundError on missing / cross-account
+    // mismatch; propagate as-is (already returns 404, not 403, so we
+    // don't leak profile existence to outsiders).
+    const profile = await profilesService.get({ id: profileId, accountId });
+    return {
+      archetype: profile.archetype,
+      metadata: { profile_id: profile.id, profile_name: profile.name },
+    };
+  }
 
   // ── POST /v1/sessions ──────────────────────────────────────────────────
   // V-326e1 — when X-Driftstack-Account is set, the new session is
@@ -167,6 +199,24 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         }
       }
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      // 2026-05-20 — resolve profile_id binding BEFORE create so the
+      // archetype default + metadata stamps flow into the session row
+      // atomically. The bump-last-used happens AFTER create so a
+      // create-failed path doesn't leave the profile reading "used".
+      const ownerAccountId = effective.kind === 'team' ? effective.accountId : ctx.account.id;
+      const profileBinding =
+        body.profile_id !== undefined
+          ? await resolveProfileBinding(body.profile_id, ownerAccountId)
+          : null;
+      const bodyWithProfile =
+        profileBinding !== null
+          ? {
+              ...body,
+              archetype: body.archetype ?? profileBinding.archetype,
+              metadata: { ...(body.metadata ?? {}), ...profileBinding.metadata },
+            }
+          : body;
+      let created: SessionRecord;
       if (effective.kind === 'team') {
         if (effective.role !== 'admin') {
           throw new ForbiddenError(
@@ -177,14 +227,98 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         if (!owner) {
           throw new ForbiddenError('Owner account no longer exists.');
         }
-        const session = await service.create(ctx, body, {
+        created = await service.create(ctx, bodyWithProfile, {
           effectiveAccountId: owner.id,
           effectiveTier: owner.tier,
         });
-        return reply.code(201).send(publicSession(session));
+      } else {
+        created = await service.create(ctx, bodyWithProfile);
       }
-      const session = await service.create(ctx, body);
-      return reply.code(201).send(publicSession(session));
+      // Fire-and-forget touch on the profile — if it fails the customer
+      // still gets their session (the binding is recorded in metadata).
+      if (profileBinding !== null && profilesService && body.profile_id !== undefined) {
+        const profileId = body.profile_id;
+        void profilesService
+          .touch({ id: profileId, accountId: ownerAccountId, at: new Date() })
+          .catch(() => undefined);
+      }
+      return reply.code(201).send(publicSession(created));
+    },
+  );
+
+  // ── POST /v1/profiles/:id/launch ───────────────────────────────────────
+  // 2026-05-20 — antidetect-browser-style: one-shot "launch this profile"
+  // verb. Equivalent to POST /v1/sessions with {profile_id: <id>,
+  // archetype: <profile.archetype>, proxy: <optional from body>} but
+  // saves the customer one round-trip + a name-lookup. The endpoint
+  // path lives under /v1/profiles because semantically it's a profile-
+  // verb (the resulting session is a side-effect); the handler lives
+  // here to keep the create-with-profile_id logic in one place.
+  app.post<{ Params: { id: string } }>(
+    '/v1/profiles/:id/launch',
+    {
+      preHandler: [app.requireAuth, app.rateLimit('sessions:create')],
+    },
+    async (request, reply) => {
+      const ctx = requireCtx(request);
+      const profileIdPrefixed = request.params.id;
+      // Strip prof_ prefix to the raw UUID (matches PROFILE_ID_RE in
+      // routes/profiles.ts).
+      const profileIdMatch =
+        /^prof_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/.exec(
+          profileIdPrefixed,
+        );
+      if (profileIdMatch === null) {
+        throw new BadRequestError(
+          `Invalid profile id ${profileIdPrefixed} (expected prof_<uuid>).`,
+        );
+      }
+      const profileId = profileIdMatch[1] as string;
+      // Body shape: optional { proxy?, label? } overrides — everything
+      // else comes from the profile (archetype, name → label default,
+      // metadata stamps).
+      const rawBody = (request.body ?? {}) as Record<string, unknown>;
+      // Egress safeguard applies here too — proxy required when wired.
+      if (egressProxyRequired && (rawBody.proxy === undefined || rawBody.proxy === null)) {
+        throw new BadRequestError(
+          'A proxy configuration is required to launch a profile on this deployment. ' +
+            'Supply `proxy` in the launch body — see the egress section of ' +
+            'https://docs.driftstack.dev/api/sessions/ for the schema.',
+        );
+      }
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      const ownerAccountId = effective.kind === 'team' ? effective.accountId : ctx.account.id;
+      const binding = await resolveProfileBinding(profileId, ownerAccountId);
+      const body = {
+        archetype: binding.archetype,
+        label: typeof rawBody.label === 'string' ? rawBody.label : undefined,
+        metadata: binding.metadata,
+        profile_id: profileId,
+      } as const;
+      let created: SessionRecord;
+      if (effective.kind === 'team') {
+        if (effective.role !== 'admin') {
+          throw new ForbiddenError(
+            'Launching a profile on a team owner requires admin role on that team.',
+          );
+        }
+        const owner = await authRepo.getAccount(effective.accountId);
+        if (!owner) {
+          throw new ForbiddenError('Owner account no longer exists.');
+        }
+        created = await service.create(ctx, body, {
+          effectiveAccountId: owner.id,
+          effectiveTier: owner.tier,
+        });
+      } else {
+        created = await service.create(ctx, body);
+      }
+      if (profilesService) {
+        void profilesService
+          .touch({ id: profileId, accountId: ownerAccountId, at: new Date() })
+          .catch(() => undefined);
+      }
+      return reply.code(201).send(publicSession(created));
     },
   );
 
