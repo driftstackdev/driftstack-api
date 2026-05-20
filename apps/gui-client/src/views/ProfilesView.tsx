@@ -14,7 +14,10 @@ import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 
-const REFRESH_MS = 5000;
+// 2026-05-20 — match SessionsView: slow background poll + skip the
+// visible loading flicker on tick refreshes so the panel doesn't
+// constantly re-flash.
+const REFRESH_MS = 15_000;
 
 // V-238 — only one customer-pickable archetype today. When V-136-style
 // expansion lands more archetypes (e.g. iPhone 17 Pro / iOS 19), surface
@@ -64,35 +67,38 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
   // is a transient overlay scoped to this view's lifecycle.
   const [createOpen, setCreateOpen] = useState(false);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    if (!client) {
-      setState({ profiles: [], refreshedAt: null, loading: false, error: null });
-      return;
-    }
-    setState((s) => ({ ...s, loading: true }));
-    try {
-      const collected: Profile[] = [];
-      for await (const profile of client.profiles.iterate({ limit: 50 })) {
-        collected.push(profile);
+  const refresh = useCallback(
+    async (showLoading: boolean): Promise<void> => {
+      if (!client) {
+        setState({ profiles: [], refreshedAt: null, loading: false, error: null });
+        return;
       }
-      setState({
-        profiles: collected,
-        refreshedAt: Date.now(),
-        loading: false,
-        error: null,
-      });
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        loading: false,
-        error: friendlyError(err, settings.baseUrl),
-      }));
-    }
-  }, [client]);
+      if (showLoading) setState((s) => ({ ...s, loading: true }));
+      try {
+        const collected: Profile[] = [];
+        for await (const profile of client.profiles.iterate({ limit: 50 })) {
+          collected.push(profile);
+        }
+        setState((s) => ({
+          profiles: collected,
+          refreshedAt: Date.now(),
+          loading: false,
+          error: s.error,
+        }));
+      } catch (err) {
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: friendlyError(err, settings.baseUrl),
+        }));
+      }
+    },
+    [client, settings.baseUrl],
+  );
 
   useEffect(() => {
-    void refresh();
-    const id = window.setInterval(() => void refresh(), REFRESH_MS);
+    void refresh(true);
+    const id = window.setInterval(() => void refresh(false), REFRESH_MS);
     return () => window.clearInterval(id);
   }, [refresh]);
 
@@ -101,7 +107,7 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
     setBusyId(id);
     try {
       await client.profiles.delete(id);
-      await refresh();
+      await refresh(false);
       // V-239 — refresh the cap counter so a deletion unlocks the
       // New profile button when we drop below cap.
       await refreshAccountMe();
@@ -136,7 +142,7 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
           <button
             type="button"
             className="btn-secondary"
-            onClick={() => void refresh()}
+            onClick={() => void refresh(true)}
             disabled={state.loading}
           >
             {state.loading ? 'Refreshing…' : 'Refresh'}
@@ -256,7 +262,7 @@ export function ProfilesView({ onGoToSettings }: ProfilesViewProps): JSX.Element
           onClose={() => setCreateOpen(false)}
           onCreated={() => {
             setCreateOpen(false);
-            void refresh();
+            void refresh(false);
             // V-239 — refresh the cap counter so the gate flips to
             // disabled if we just hit cap.
             void refreshAccountMe();
