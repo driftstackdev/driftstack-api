@@ -61,19 +61,20 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
     setBaseUrl(mode === 'cloud' ? CLOUD_DEFAULT_URL : SELF_HOSTED_DEFAULT_URL);
   }, [mode]);
 
-  async function validateAndSave(): Promise<void> {
+  // 2026-05-20 — accept an explicit key override so the browser-sign-in
+  // success callback can validate the JUST-issued key without waiting
+  // for React state to commit (the prior setTimeout(0) + closure-read
+  // pattern was unreliable and the wizard hung on "Authorized.
+  // Continuing…" because validateAndSave read a stale apiKey from
+  // closure).
+  async function validateAndSave(overrideKey?: string): Promise<void> {
     setValidating(true);
     setValidationError(null);
     const trimmedUrl = baseUrl.trim().replace(/\/+$/, '');
-    const trimmedKey = apiKey.trim();
+    const trimmedKey = (overrideKey ?? apiKey).trim();
     try {
-      // Build a one-shot SDK client with the just-entered creds and
-      // hit /v1/account/me. Any failure (invalid key, unreachable,
-      // tier-suspended) surfaces as DriftstackError or fetch rejection.
       const client = new Driftstack({ apiKey: trimmedKey, baseUrl: trimmedUrl });
       await client.account.me();
-      // Persist via the real settings flow (keychain for key, store
-      // for baseUrl).
       await update({ apiKey: trimmedKey, baseUrl: trimmedUrl });
       setStep('profile');
     } catch (err) {
@@ -114,7 +115,7 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
               error={validationError}
               onApiKeyChange={setApiKey}
               onBack={() => setStep('mode')}
-              onValidate={() => void validateAndSave()}
+              onValidate={(override) => void validateAndSave(override)}
             />
           )}
           {step === 'profile' && <ProfileStep onSkip={finish} onCreated={finish} />}
@@ -362,7 +363,9 @@ export function ApiKeyStep({
   error: string | null;
   onApiKeyChange: (s: string) => void;
   onBack: () => void;
-  onValidate: () => void;
+  /** Optional override lets the browser-sign-in success callback
+   *  pass the just-issued key directly, bypassing React state. */
+  onValidate: (override?: string) => void;
 }): JSX.Element {
   const [path, setPath] = useState<'browser' | 'paste'>('browser');
 
@@ -375,11 +378,15 @@ export function ApiKeyStep({
     onSuccess: (issuedKey) => {
       // Hand the plaintext key off to the existing paste/validate
       // flow so the same code path persists to keychain + advances
-      // the wizard.
+      // the wizard. 2026-05-20 — pass the key as an explicit override
+      // to validateAndSave so it doesn't depend on React state being
+      // committed (the setTimeout(0) + closure-read pattern was the
+      // root cause of the wizard hanging on "Authorized. Continuing…"
+      // — validateAndSave saw the stale apiKey from its closure, hit
+      // /v1/account/me with an empty Bearer token, 401'd, and silently
+      // stayed on the success state).
       onApiKeyChange(issuedKey);
-      // Defer one tick so React commits the apiKey state before
-      // onValidate reads it.
-      window.setTimeout(() => onValidate(), 0);
+      onValidate(issuedKey);
     },
   });
 
@@ -519,7 +526,7 @@ export function ApiKeyStep({
           <button
             type="button"
             className="btn-primary"
-            onClick={onValidate}
+            onClick={() => onValidate()}
             disabled={validating || apiKey.trim().length === 0}
           >
             {validating ? 'Validating…' : 'Validate + continue'}
