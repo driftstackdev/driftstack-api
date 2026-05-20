@@ -122,9 +122,11 @@ parity gaps.
 
 ## Recommended follow-ups (separate slices; not in scope here)
 
-1. **Sessions deep audit** (~30min) — confirm the 1-method TS-vs-Py
-   gap on the sessions resource is real or a counting artifact;
-   surface a typed method name if real.
+1. ~~**Sessions deep audit** (~30min)~~ — **CLOSED 2026-05-20.**
+   Confirmed real gap: TS SessionsResource was missing
+   `get(sessionId): Promise<Session>` (Python + Go both have it).
+   Added in commit 5f3bbb8f — matches the GET /v1/sessions/:id
+   server route that's been live since Workstream A.
 
 2. **Usage deep audit** (~15min) — pin which 1 Py-only method
    exists on usage. If customer-facing, lift into TS + Go. If
