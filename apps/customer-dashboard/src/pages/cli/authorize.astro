@@ -127,6 +127,24 @@ const apiBaseUrl = resolveApiBaseUrl();
         Try again
       </button>
     </div>
+
+    <!-- 2026-05-20 — Legal acceptance gate. The bind endpoint returns
+         409 LegalAcceptanceRequired with the pending docs in the
+         problem-extensions; this section renders them with an
+         accept-all button so the customer can clear the gate inline
+         instead of bouncing through a separate page. -->
+    <div data-state="legal-accept" class="mt-8 hidden">
+      <div class="rounded-lg border border-rose-400/30 bg-rose-400/10 px-4 py-4 text-sm text-rose-200">
+        <p class="font-medium">Please review and accept the following before authorizing:</p>
+        <ul data-legal-pending-list class="mt-3 space-y-2"></ul>
+      </div>
+      <div class="mt-6 flex items-center gap-3">
+        <button type="button" data-legal-accept-all class="btn-primary">
+          Accept all and authorize
+        </button>
+        <span data-legal-status class="text-xs text-ink-muted"></span>
+      </div>
+    </div>
   </div>
 
   <script is:inline define:vars={{ apiBaseUrl }}>
@@ -146,6 +164,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         confirm: root.querySelector('[data-state="confirm"]'),
         success: root.querySelector('[data-state="success"]'),
         error: root.querySelector('[data-state="error"]'),
+        legalAccept: root.querySelector('[data-state="legal-accept"]'),
       };
 
       function show(name) {
@@ -223,6 +242,30 @@ const apiBaseUrl = resolveApiBaseUrl();
       const cancelBtn = sections.confirm.querySelector('[data-cancel]');
       const retryBtn = sections.error.querySelector('[data-retry]');
 
+      function showLegalAccept(pending) {
+        const list = sections.legalAccept.querySelector('[data-legal-pending-list]');
+        if (!list) return;
+        list.innerHTML = '';
+        pending.forEach(function (doc) {
+          const li = document.createElement('li');
+          li.className = 'flex items-center gap-2';
+          const dot = document.createElement('span');
+          dot.className = 'inline-block size-1.5 rounded-full bg-rose-300';
+          const a = document.createElement('a');
+          a.href = 'https://driftstack.dev/legal/' + doc.document_key + '/';
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.className = 'text-rose-100 underline underline-offset-4 hover:text-white';
+          a.textContent = doc.title || doc.document_key;
+          const ver = document.createElement('span');
+          ver.className = 'text-xs text-rose-300';
+          ver.textContent = '(v' + doc.current_version + ')';
+          li.append(dot, a, ver);
+          list.append(li);
+        });
+        show('legal-accept');
+      }
+
       function authorize() {
         authorizeBtn.disabled = true;
         authorizeBtn.textContent = 'Authorizing…';
@@ -234,11 +277,25 @@ const apiBaseUrl = resolveApiBaseUrl();
           },
           body: JSON.stringify({ code: code, state: state }),
         })
-          .then((r) =>
-            r.ok
-              ? r.json()
-              : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
-          )
+          .then((r) => {
+            if (r.ok) return r.json();
+            return r.json().then((b) => {
+              // 2026-05-20 — surface the legal-acceptance gate as a
+              // first-class flow instead of a raw error message. The
+              // problem-detail JSON carries `pending_acceptances` on
+              // its `extensions` block; render them inline + retry
+              // bind after the customer accepts.
+              const pending =
+                b && b.extensions && Array.isArray(b.extensions.pending_acceptances)
+                  ? b.extensions.pending_acceptances
+                  : null;
+              if (pending && pending.length > 0) {
+                showLegalAccept(pending);
+                return Promise.reject(new Error('__legal_accept_required__'));
+              }
+              return Promise.reject(new Error(b.detail || 'HTTP ' + r.status));
+            });
+          })
           .then(() => {
             show('success');
             // V-328e — fire the OS deep-link redirect to hand off the
@@ -262,6 +319,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             }, 600);
           })
           .catch((err) => {
+            if (err && err.message === '__legal_accept_required__') return;
             showError(err && err.message ? err.message : 'Authorization failed.');
           })
           .finally(() => {
@@ -274,6 +332,60 @@ const apiBaseUrl = resolveApiBaseUrl();
       retryBtn.addEventListener('click', authorize);
       cancelBtn.addEventListener('click', () => {
         window.location.href = '/';
+      });
+
+      // 2026-05-20 — Accept-all wiring. POST /v1/legal/accept for each
+      // pending doc; on full success, transparently retry the bind so
+      // the customer doesn't have to click Authorize twice.
+      const acceptAllBtn = sections.legalAccept.querySelector('[data-legal-accept-all]');
+      const acceptStatus = sections.legalAccept.querySelector('[data-legal-status]');
+      acceptAllBtn.addEventListener('click', function () {
+        const list = sections.legalAccept.querySelector('[data-legal-pending-list]');
+        const items = list ? list.querySelectorAll('a') : [];
+        if (items.length === 0) return;
+        const pending = [];
+        items.forEach(function (a) {
+          // Reconstruct document_key + version from the href + text.
+          const m = a.href.match(/\/legal\/([a-z-]+)\//);
+          const v = (a.nextSibling && a.nextSibling.textContent ? a.nextSibling.textContent : '')
+            .replace(/[^0-9.]/g, '');
+          if (m && v) pending.push({ document_key: m[1], version: v });
+        });
+        acceptAllBtn.disabled = true;
+        acceptStatus.textContent = 'Recording acceptance…';
+        Promise.all(
+          pending.map(function (doc) {
+            return fetch(apiBaseUrl + '/v1/legal/accept', {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+                authorization: 'Bearer ' + sessionToken,
+              },
+              body: JSON.stringify({
+                document_key: doc.document_key,
+                version: doc.version,
+              }),
+            });
+          }),
+        )
+          .then(function (responses) {
+            const allOk = responses.every(function (r) {
+              return r.ok;
+            });
+            if (!allOk) {
+              acceptStatus.textContent = 'One or more acceptances failed — please retry.';
+              acceptAllBtn.disabled = false;
+              return;
+            }
+            acceptStatus.textContent = 'Accepted. Authorizing…';
+            // Show the confirm UI again briefly + auto-fire the bind.
+            show('confirm');
+            authorize();
+          })
+          .catch(function () {
+            acceptStatus.textContent = 'Network error — please retry.';
+            acceptAllBtn.disabled = false;
+          });
       });
     })();
   </script>
