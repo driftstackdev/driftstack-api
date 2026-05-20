@@ -67,13 +67,13 @@ describe('W822 cross-SDK SessionsResource methods parity', () => {
 
   // ─── Documented get(id) divergence ────────────────────────────
 
-  it('CRITICAL get(sessionId) divergence pinned. Python + Go expose `get` returning the full Session; TS deliberately omits it — TS customers use `getState` instead (returns SessionState which includes the underlying Session). Drift would either re-introduce the divergence or quietly collapse it (which would silently break customer expectations).', () => {
+  it('CRITICAL get(sessionId) parity pinned — 2026-05-20 cross-SDK audit closed the prior TS-omission divergence; TS now mirrors Python + Go. All 3 SDKs expose `get` returning the full Session. Drift to re-omitting from any SDK would silently break customer expectations across the tier.', () => {
     expect(read(PY)).toMatch(/def get\(self, session_id: str\) -> Session:/);
     expect(read(GO)).toMatch(
       /func \(r \*SessionsResource\) Get\(ctx context\.Context, sessionID string\) \(\*Session, error\)/,
     );
-    // TS does NOT have a top-level `get(id)` method on SessionsResource.
-    expect(read(TS)).not.toMatch(/^\s+get\(sessionId: string\):/m);
+    // TS now ALSO exposes get(sessionId) — parity closed.
+    expect(read(TS)).toMatch(/^\s+get\(sessionId: string\):/m);
   });
 
   // ─── Python sync + async dual ─────────────────────────────────

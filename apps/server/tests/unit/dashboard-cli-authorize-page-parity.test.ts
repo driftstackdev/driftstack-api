@@ -58,9 +58,12 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     }
 
     // show() helper toggles visibility (one section visible at a time).
-    expect(p).toMatch(
-      /function show\(name\) \{\s*\n\s+for \(const key of Object\.keys\(sections\)\)/,
-    );
+    // 2026-05-20 d1281076 — show() now indirects through KEY_BY_STATE so
+    // kebab-case state names ('needs-signin') map to camelCase keys
+    // (needsSignin); pin the indirection so a future refactor can't drop
+    // it and re-introduce the blank-page bug.
+    expect(p).toMatch(/function show\(name\) \{\s*\n\s+const target = KEY_BY_STATE\[name\] \?\? name;/);
+    expect(p).toMatch(/for \(const key of Object\.keys\(sections\)\)/);
   });
 
   it('CRITICAL code + state URL param validation pinned. Both required for the bind contract; missing either shows the missing-state UI with clear recovery framing ("Open it from the Driftstack desktop app\'s Sign in with browser button").', () => {
