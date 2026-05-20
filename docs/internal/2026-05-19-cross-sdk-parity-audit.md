@@ -128,9 +128,16 @@ parity gaps.
    Added in commit 5f3bbb8f — matches the GET /v1/sessions/:id
    server route that's been live since Workstream A.
 
-2. **Usage deep audit** (~15min) — pin which 1 Py-only method
-   exists on usage. If customer-facing, lift into TS + Go. If
-   internal-only, doc it as such.
+2. ~~**Usage deep audit** (~15min)~~ — **CLOSED 2026-05-20.**
+   Audit's TS=3 / Py=4 count was approximate. Actual state: all
+   3 SDKs expose exactly 2 methods each:
+   - TS: `current()` / `series()`
+   - Py: `current_period()` / `series()` (sync + async mirrors)
+   - Go: `CurrentPeriod()` / `Series()`
+     The naming divergence (`current()` vs `current_period()` /
+     `CurrentPeriod()`) is an intentional per-SDK ergonomic
+     choice — TS uses the shorter form per JS/TS idiom; Py + Go
+     use the response-type-matching form. Zero wire-shape gap.
 
 3. **Per-method content parity tests** for the 4 candidate
    resources (recipes / usage / sessions / agent-sessions). The
