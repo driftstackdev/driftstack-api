@@ -75,6 +75,8 @@ import type { MfaService } from '../services/mfa.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
 import type { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
+import type { NotificationEventBus } from '../services/notification-event-bus.js';
+import { registerAccountNotificationsRoutes } from '../routes/account-notifications.js';
 import type { PairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
@@ -369,6 +371,15 @@ export interface AppDeps {
    * route subscribes per-sessionId and forwards to the client.
    */
   agentSessionEventBus?: AgentSessionEventBus;
+  /**
+   * 2026-05-20 — per-account notification SSE bus surfaced at
+   * GET /v1/account/me/notifications. When omitted, the route is not
+   * registered (opt-in deploy-side wire). Publishers (cost-alert
+   * dispatcher today; incident / audit / session.errored later)
+   * publish via the bus; the route subscribes per-accountId and
+   * forwards every NotificationEvent as an SSE frame.
+   */
+  notificationEventBus?: NotificationEventBus;
   /**
    * Arc 2 sub-slice 8.4 (v2-#8) — base64-encoded AES-256 key for the
    * gui_control_key auto-mint. Shares MFA_ENCRYPTION_KEY by convention.
@@ -827,6 +838,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerAccountAuditRoutes(app, { accountAudit: deps.accountAuditService });
   registerAdminValidationHarnessRoutes(app, { harness: deps.validationHarnessService });
   registerAccountRateLimitsRoutes(app);
+  // 2026-05-20 — GUI panel notification SSE stream. Registers only
+  // when deps.notificationEventBus is wired (opt-in deploy-side).
+  registerAccountNotificationsRoutes(
+    app,
+    deps.notificationEventBus !== undefined ? { notificationBus: deps.notificationEventBus } : {},
+  );
   // V-237 — customer self-profile for tier-aware GUI enforcement.
   // Registers only when both repos are wired (production always; tests
   // when fixtures expose them).

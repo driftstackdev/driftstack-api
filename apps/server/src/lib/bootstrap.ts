@@ -1120,6 +1120,11 @@ export async function createProductionDeps(
     // unconditionally; route registration is gated on agentRuntime
     // being wired (same activation pattern as the rest).
     agentSessionEventBus,
+    // 2026-05-20 — GUI panel notification bus. Wired
+    // unconditionally; the SSE route registration in app.ts is
+    // already gated on this dep being present, so this single
+    // line activates the customer-facing stream.
+    notificationEventBus,
     pairModeLock,
     pairModeHeartbeatTracker,
     // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics
