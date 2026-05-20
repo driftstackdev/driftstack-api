@@ -2725,6 +2725,80 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
+  // Wave 29-NNN ARC 3 Slice 3 (2026-05-19) — top-level mode setter.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions/{id}/mode',
+    summary: 'Set the operational mode (manual / ai / pair) on an active agent session',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: z.object({ mode: z.enum(['manual', 'ai', 'pair']) }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          'Returns the post-transition AgentSession (with mode + pair_mode_state updated atomically). Idempotent on same-mode targets.',
+        content: { 'application/json': { schema: z.object({}).passthrough() } },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      409: {
+        description: 'Session is not active (cannot change mode on closed/paused).',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
+  // Wave 29-NNN ARC 3 Slice 4+5 (2026-05-19/20) — LK.6 InputEvent
+  // forward-to-harness + pair-mode takeover-trigger.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions/{id}/input-event',
+    summary: 'Forward an LK.6 InputEvent to the harness (manual/pair mode only)',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: z.object({
+              event: z.object({}).passthrough(),
+              client_id: z.string().min(1).max(128).optional(),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          "Discriminated by 'kind'. 'pair-mode-takeover-fired' (Slice 5 — first input-event in pair-mode ai-driving fires the takeover-request transition) carries pair_mode_state. 'forwarded' (post-harness; today 503s) carries duration_ms.",
+        content: { 'application/json': { schema: z.object({}).passthrough() } },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      409: {
+        description:
+          'Session is in mode=ai (input-event requires manual/pair), OR pair_mode_state is mid-transition (takeover-pending / handback-pending / etc.), OR session is closed. Pair-mode takeover-trigger missing client_id surfaces as 400 via errors4xx.',
+        content: problemContent,
+      },
+      503: {
+        description:
+          'Pre-harness: forward-to-harness path returns 503 until Mac fleet Swift work lands. Pair-mode takeover-trigger path returns 200.',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions/{id}/handback',
