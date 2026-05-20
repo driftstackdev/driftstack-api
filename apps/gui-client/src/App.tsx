@@ -277,14 +277,19 @@ function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.Element 
         </SidebarItem>
       </SidebarSection>
       {signedIn && (
-        <div className="mt-auto border-t border-surface-divider px-3 py-3">
+        <div className="mt-auto flex flex-col gap-1 border-t border-surface-divider px-3 py-3">
+          <div className="px-2 py-0.5 text-2xs text-ink-muted">
+            <span className="block truncate font-mono" title={settings.apiKey ?? undefined}>
+              {settings.apiKey?.slice(0, 9) ?? ''}…{settings.apiKey?.slice(-6) ?? ''}
+            </span>
+          </div>
           <button
             type="button"
             onClick={handleSignOut}
-            className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs text-ink-secondary transition hover:bg-surface-base hover:text-status-error"
+            className="flex w-full items-center justify-between rounded bg-status-error/10 px-2 py-1.5 text-left text-xs font-medium text-status-error transition hover:bg-status-error/20"
           >
-            <span>Sign out</span>
-            <span className="text-2xs text-ink-muted">⌘⇧L</span>
+            <span>Sign out (forget key)</span>
+            <span className="text-2xs opacity-70">⌘⇧L</span>
           </button>
         </div>
       )}

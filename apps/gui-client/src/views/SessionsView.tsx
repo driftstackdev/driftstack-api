@@ -10,8 +10,14 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
+import { listProxies, type ProxyConfig as LocalProxyConfig } from '../lib/proxies';
 
-const REFRESH_MS = 5000;
+// 2026-05-20 — slow the background poll from 5s → 15s + suppress the
+// visible "loading" flicker on background refreshes (customer reported
+// the panel "keeps refreshing"). The very first load still shows the
+// loading state so the empty list doesn't flash; subsequent ticks
+// fetch silently and only update the rendered list on completion.
+const REFRESH_MS = 15_000;
 
 interface SessionsState {
   sessions: Session[];
@@ -44,33 +50,37 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
   const atConcurrentCap =
     concurrentCap !== null && concurrentActive !== null && concurrentActive >= concurrentCap;
 
-  const refresh = useCallback(async (): Promise<void> => {
-    if (!client) {
-      setState({ sessions: [], refreshedAt: null, loading: false, error: null });
-      return;
-    }
-    setState((s) => ({ ...s, loading: true }));
-    try {
-      const page = await client.sessions.list();
-      setState({
-        sessions: page.data,
-        refreshedAt: Date.now(),
-        loading: false,
-        error: null,
-      });
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        loading: false,
-        error: friendlyError(err, settings.baseUrl),
-      }));
-    }
-  }, [client]);
+  const refresh = useCallback(
+    async (showLoading: boolean): Promise<void> => {
+      if (!client) {
+        setState({ sessions: [], refreshedAt: null, loading: false, error: null });
+        return;
+      }
+      if (showLoading) setState((s) => ({ ...s, loading: true }));
+      try {
+        const page = await client.sessions.list();
+        setState((s) => ({
+          sessions: page.data,
+          refreshedAt: Date.now(),
+          loading: false,
+          error: s.error,
+        }));
+      } catch (err) {
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: friendlyError(err, settings.baseUrl),
+        }));
+      }
+    },
+    [client, settings.baseUrl],
+  );
 
-  // Initial fetch + 5-second poll.
+  // First fetch shows the loading hint so the empty list doesn't flash;
+  // background polls every 15s fetch silently — no UI flicker.
   useEffect(() => {
-    void refresh();
-    const id = window.setInterval(() => void refresh(), REFRESH_MS);
+    void refresh(true);
+    const id = window.setInterval(() => void refresh(false), REFRESH_MS);
     return () => window.clearInterval(id);
   }, [refresh]);
 
@@ -78,10 +88,31 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
     if (!client) return;
     setBusyId('__create__');
     try {
-      await client.sessions.create();
-      await refresh();
-      // V-239 — refresh the cap counter after a successful spawn so
-      // the gate flips to disabled if this brought us to the cap.
+      // 2026-05-20 — auto-attach the first saved proxy to the
+      // create-session body. Server's egress-required deployments
+      // reject sessions without a `proxy` envelope (per planning 133),
+      // and the local proxy store has been disconnected from the
+      // create flow — customer reported '2 proxies set, still get the
+      // proxy-required error'. Pick the first saved proxy as the
+      // default; future iterations can surface a picker.
+      const saved = await listProxies();
+      const first = saved[0];
+      if (first === undefined) {
+        setState((s) => ({
+          ...s,
+          error:
+            'No saved proxies. Open the Proxies tab in the sidebar, add a SOCKS5 server, then come back to create a session. (This deployment requires every session to ship traffic through a proxy.)',
+        }));
+        return;
+      }
+      const proxy = toServerProxyEnvelope(first);
+      // SDK type doesn't yet declare the proxy field — server accepts
+      // it via the EG-API-1.6 raw-body pass-through. Cast through
+      // unknown to keep the call typesafe at the type-narrow boundary.
+      await client.sessions.create({ proxy } as unknown as Parameters<
+        typeof client.sessions.create
+      >[0]);
+      await refresh(false);
       await refreshAccountMe();
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
@@ -90,12 +121,44 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
     }
   }
 
+  /** Map the GUI-local proxy shape to the server's discriminated-union
+   *  envelope (`{type: 'socks5', socks5: {host, port, ...}}`). Only
+   *  SOCKS5 is supported by the local store at v0.0.1. */
+  function toServerProxyEnvelope(p: LocalProxyConfig): {
+    type: 'socks5';
+    socks5: {
+      host: string;
+      port: number;
+      username?: string;
+      password?: string;
+      udp_associate: boolean;
+      require_remote_dns: boolean;
+    };
+  } {
+    const socks5: {
+      host: string;
+      port: number;
+      username?: string;
+      password?: string;
+      udp_associate: boolean;
+      require_remote_dns: boolean;
+    } = {
+      host: p.host,
+      port: p.port,
+      udp_associate: true,
+      require_remote_dns: false,
+    };
+    if (p.username !== null) socks5.username = p.username;
+    if (p.password !== null) socks5.password = p.password;
+    return { type: 'socks5', socks5 };
+  }
+
   async function handleDestroy(id: string): Promise<void> {
     if (!client) return;
     setBusyId(id);
     try {
       await client.sessions.destroy(id);
-      await refresh();
+      await refresh(false);
       // V-239 — refresh after destroy so the cap counter unlocks the
       // Spawn button when we drop below cap.
       await refreshAccountMe();
@@ -128,7 +191,7 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
           <button
             type="button"
             className="btn-secondary"
-            onClick={() => void refresh()}
+            onClick={() => void refresh(true)}
             disabled={state.loading}
           >
             {state.loading ? 'Refreshing…' : 'Refresh'}
