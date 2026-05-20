@@ -199,18 +199,55 @@ export async function fetchUserInfo(opts: FetchUserInfoOpts): Promise<FetchUserI
   }
 
   // GitHub: /user returns { id: number, login, name, avatar_url }. Email
-  // requires a separate /user/emails call when the user's email is
-  // private — that lookup is the caller's responsibility (we focus on
-  // the primary call here + return what /user gives us).
+  // is null on /user when the customer has "Keep my email addresses
+  // private" enabled in GitHub settings (the default for ~half of
+  // accounts). Fall back to /user/emails (requires the user:email
+  // scope which we always request) to find the primary + verified
+  // address. 2026-05-20 fix: previously this path returned
+  // unverified-email which surfaced as "Userinfo fetch failed:
+  // unverified-email" on the customer side even though their
+  // GitHub email IS verified.
   const id = parsed.id;
   const githubId = typeof id === 'number' ? String(id) : typeof id === 'string' ? id : '';
-  // GitHub's /user returns email only if it's set as public OR the
-  // token has the user:email scope. We requested `user:email` so the
-  // server-side will have it for verified-primary accounts. The route
-  // layer falls back to a /user/emails fetch when email is null.
-  const email = typeof parsed.email === 'string' ? parsed.email : '';
   if (githubId.length === 0) {
     return { kind: 'idp-error', status: 200, body: 'missing GitHub id' };
+  }
+  let email = typeof parsed.email === 'string' ? parsed.email : '';
+  if (email.length === 0) {
+    // /user/emails fallback. Returns:
+    //   [{ email, primary, verified, visibility }, ...]
+    // We want the primary + verified entry. The user:email scope is
+    // always requested in OAUTH_CLIENT_PROVIDERS so this call should
+    // succeed for any logged-in customer.
+    try {
+      const emailsRes = await fetchImpl('https://api.github.com/user/emails', {
+        headers: {
+          authorization: `Bearer ${opts.accessToken}`,
+          accept: 'application/json',
+          'user-agent': 'driftstack-api',
+        },
+      });
+      if (emailsRes.ok) {
+        const emailsText = await emailsRes.text();
+        try {
+          const emailsParsed = JSON.parse(emailsText) as Array<{
+            email?: string;
+            primary?: boolean;
+            verified?: boolean;
+          }>;
+          if (Array.isArray(emailsParsed)) {
+            const primary = emailsParsed.find(
+              (e) => e.primary === true && e.verified === true && typeof e.email === 'string',
+            );
+            if (primary?.email !== undefined) email = primary.email;
+          }
+        } catch {
+          /* fall through to unverified-email below */
+        }
+      }
+    } catch {
+      /* fall through to unverified-email below */
+    }
   }
   if (email.length === 0) {
     return { kind: 'unverified-email' };

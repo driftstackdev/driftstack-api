@@ -58,10 +58,12 @@ export function TitleBar({ subtitle, right }: Props): JSX.Element {
   );
 }
 
-// Inline SVG mirrors the favicon in apps/marketing-site/src/layouts/
-// BaseLayout.astro — oxblood-700 (#722F37) rounded square with a white
-// "D" in serif type. Render at 18×18 in the title bar; the SVG scales
-// without aliasing.
+// 2026-05-20 — DBadge re-tinted to a near-black rounded-square with a
+// glow-red "D" per founder feedback (the earlier oxblood-on-white
+// felt washed out + clashed with the surface-raised title-bar fill).
+// #0b0f14 matches surface-base from globals.css so the badge reads
+// as one continuous element with the dark chrome; #e23847 is the
+// marketing site's glow-red CTA colour for visual continuity.
 function DBadge(): JSX.Element {
   return (
     <svg
@@ -71,12 +73,12 @@ function DBadge(): JSX.Element {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      <rect width="64" height="64" rx="12" fill="#722F37" />
+      <rect width="64" height="64" rx="12" fill="#0b0f14" />
       <text
         x="32"
         y="42"
         textAnchor="middle"
-        fill="white"
+        fill="#e23847"
         fontFamily="Georgia,serif"
         fontSize="34"
         fontWeight="700"

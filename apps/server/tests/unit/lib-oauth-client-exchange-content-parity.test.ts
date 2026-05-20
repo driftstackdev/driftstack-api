@@ -126,15 +126,23 @@ describe('lib/oauth-client-exchange content parity', () => {
     );
   });
 
-  it("GitHub parse + 2-fallback framing pinned: 'GitHub: /user returns { id: number, login, name, avatar_url }. Email requires a separate /user/emails call when the user's email is private — that lookup is the caller's responsibility (we focus on the primary call here + return what /user gives us).' + 'GitHub's /user doesn't carry a per-user email_verified flag; the /user/emails endpoint does. Caller cross-checks if needed. Treat the primary email as verified for the V-667.C trust contract since GitHub only exposes primary emails on verified accounts.' — pinned so the GitHub-id-as-string + private-email-fallback-to-/user/emails + V-667.C trust-contract-treats-primary-as-verified contract all stay documented", () => {
+  it("GitHub parse + /user/emails fallback framing pinned (2026-05-20 — earlier comment claimed the fallback was the caller's responsibility but no caller actually did it, so private-email customers hit 'Userinfo fetch failed: unverified-email'; the fallback now lives inline here)", () => {
     expect(body).toMatch(
-      /\/\/ GitHub: \/user returns \{ id: number, login, name, avatar_url \}\. Email\s*\n?\s*\/\/ requires a separate \/user\/emails call when the user's email is\s*\n?\s*\/\/ private — that lookup is the caller's responsibility \(we focus on\s*\n?\s*\/\/ the primary call here \+ return what \/user gives us\)\./,
+      /\/\/ GitHub: \/user returns \{ id: number, login, name, avatar_url \}\. Email\s*\n?\s*\/\/ is null on \/user when the customer has "Keep my email addresses\s*\n?\s*\/\/ private" enabled in GitHub settings/,
+    );
+    expect(body).toMatch(
+      /\/\/ accounts\)\. Fall back to \/user\/emails \(requires the user:email\s*\n?\s*\/\/ scope which we always request\) to find the primary \+ verified\s*\n?\s*\/\/ address\./,
     );
     expect(body).toMatch(
       /\/\/ GitHub's \/user doesn't carry a per-user email_verified flag;\s*\n?\s*\/\/ the \/user\/emails endpoint does\. Caller cross-checks if needed\.\s*\n?\s*\/\/ Treat the primary email as verified for the V-667\.C trust\s*\n?\s*\/\/ contract since GitHub only exposes primary emails on verified\s*\n?\s*\/\/ accounts\./,
     );
     expect(body).toMatch(
       /const githubId = typeof id === 'number' \? String\(id\) : typeof id === 'string' \? id : '';/,
+    );
+    // /user/emails fallback inline.
+    expect(body).toMatch(/await fetchImpl\('https:\/\/api\.github\.com\/user\/emails'/);
+    expect(body).toMatch(
+      /const primary = emailsParsed\.find\(\s*\n?\s*\(e\) => e\.primary === true && e\.verified === true && typeof e\.email === 'string',\s*\n?\s*\);/,
     );
   });
 

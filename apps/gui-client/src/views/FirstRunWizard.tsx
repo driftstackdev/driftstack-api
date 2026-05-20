@@ -72,7 +72,7 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
       await update({ apiKey: trimmedKey, baseUrl: trimmedUrl });
       setStep('profile');
     } catch (err) {
-      setValidationError(friendlyError(err));
+      setValidationError(diagnosticFetchError(err, trimmedUrl));
     } finally {
       setValidating(false);
     }
@@ -479,7 +479,7 @@ export function ApiKeyStep({
           </div>
 
           {error !== null && (
-            <p className="mt-4 text-xs text-status-error" role="alert">
+            <p className="mt-4 whitespace-pre-line text-xs text-status-error" role="alert">
               {error}
             </p>
           )}
@@ -651,4 +651,32 @@ function friendlyError(err: unknown): string {
     return err.message;
   }
   return String(err);
+}
+
+/**
+ * 2026-05-20 — diagnostic version of friendlyError for fetch failures
+ * during API-key validation. Raw "Load failed" / "Failed to fetch" /
+ * NetworkError messages are useless to the customer — they need to
+ * know WHICH url failed and what to check. Detects the 3 browser
+ * variants and produces a multi-line actionable message.
+ */
+function diagnosticFetchError(err: unknown, targetUrl: string): string {
+  const raw =
+    err && typeof err === 'object' && 'message' in err ? String(err.message) : String(err);
+  const isNetworkFailure =
+    /Load failed|Failed to fetch|NetworkError|ECONNREFUSED|fetch failed|ENOTFOUND/i.test(raw);
+  if (!isNetworkFailure) return raw;
+  const isLocalhost = /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(targetUrl);
+  const lines = [
+    `Couldn't reach ${targetUrl}.`,
+    '',
+    isLocalhost
+      ? '• Is the Driftstack API server running on this machine?'
+      : '• Is the server reachable from this machine? (DNS / firewall / VPN?)',
+    isLocalhost
+      ? `• The server defaults to port 3000 — if you started it that way, change the URL above to http://localhost:3000.`
+      : '• Does the URL use the correct scheme (http vs https)?',
+    `• Underlying error: ${raw}`,
+  ];
+  return lines.join('\n');
 }
