@@ -168,7 +168,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     void py;
   });
 
-  it("CRITICAL method-verb mix on profiles pinned — 2× POST (create + clone) + 2× GET (list + get) + 1× PATCH (update) + 1× DELETE (delete). The 6-method count (excluding iterate which delegates to list) is what the dashboard's CRUD flow depends on.", () => {
+  it("CRITICAL method-verb mix on profiles pinned — 3× POST (create + clone + launch) + 2× GET (list + get) + 1× PATCH (update) + 1× DELETE (delete). The 7-method count (excluding iterate which delegates to list) is what the dashboard's CRUD + antidetect-launch flow depends on. (2026-05-20 fa8cb83a — added profiles.launch one-shot helper.)", () => {
     const ts = read(TS_PROFILES);
 
     // sdk-typescript: count method strings.
@@ -177,7 +177,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const tsPatch = (ts.match(/method: 'PATCH'/g) ?? []).length;
     const tsDelete = (ts.match(/method: 'DELETE'/g) ?? []).length;
 
-    expect(tsPost, 'sdk-typescript POST count').toBe(2);
+    expect(tsPost, 'sdk-typescript POST count').toBe(3);
     expect(tsGet, 'sdk-typescript GET count').toBe(2);
     expect(tsPatch, 'sdk-typescript PATCH count').toBe(1);
     expect(tsDelete, 'sdk-typescript DELETE count').toBe(1);
@@ -188,7 +188,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const goPatch = (go.match(/method: "PATCH"/g) ?? []).length;
     const goDelete = (go.match(/method: "DELETE"/g) ?? []).length;
 
-    expect(goPost, 'sdk-go POST count').toBe(2);
+    expect(goPost, 'sdk-go POST count').toBe(3);
     expect(goGet, 'sdk-go GET count').toBe(2);
     expect(goPatch, 'sdk-go PATCH count').toBe(1);
     expect(goDelete, 'sdk-go DELETE count').toBe(1);
