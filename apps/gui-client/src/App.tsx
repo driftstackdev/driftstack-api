@@ -67,23 +67,18 @@ function Shell(): JSX.Element {
   // is the macOS "Quit all apps" combo; pick Cmd+Shift+L instead so
   // we don't fight the OS shortcut.
   const { settings: kbSettings, update: kbUpdate } = useSettings();
+  // 2026-05-20 — confirm() prompts in Tauri WKWebView can be flaky and
+  // were swallowing the customer's sign-out clicks. Drop the dialog —
+  // sign-out is reversible (key still lives on the server, the wizard
+  // re-mints it on the next browser sign-in), so the friction wasn't
+  // earning anything. One-click is the reliable shape.
   const handleSignOut = async (): Promise<void> => {
     if (kbSettings.apiKey === null) return;
-    if (
-      !window.confirm(
-        'Sign out of this device? This forgets the API key locally; the key is NOT revoked on the server.',
-      )
-    ) {
-      return;
-    }
     await kbUpdate({
       apiKey: null,
       baseUrl: kbSettings.baseUrl,
       telemetryOptIn: kbSettings.telemetryOptIn,
     });
-    // Re-arm the first-run wizard. Without this the shell renders an
-    // unauthenticated UI with no path back — customer reported "Sign
-    // out doesn't work" in exactly that state.
     setWizardDismissed(false);
     setView({ kind: 'sessions' });
   };
