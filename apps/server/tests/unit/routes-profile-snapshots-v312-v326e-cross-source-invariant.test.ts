@@ -84,9 +84,13 @@ describe('W1048 routes/profile-snapshots V-312 + V-326e cross-source invariant',
 
   // ─── x-driftstack-account header (V-326e) ────────────────────
 
-  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER — 'x-driftstack-account'. The exact header name is the contract for team-RBAC effective-account resolution; drift would break customer-dashboard team-switch UI.", () => {
+  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER — 'x-driftstack-account'. Extracted to shared lib/effective-account-header.ts; profile-snapshots imports readEffectiveAccountHeader from there. The exact header name is the contract for team-RBAC effective-account resolution; drift would break customer-dashboard team-switch UI.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profile-snapshots.ts'));
-    expect(p).toMatch(/const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
+    expect(p).toMatch(
+      /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
+    );
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/effective-account-header.ts'));
+    expect(lib).toMatch(/export const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
   });
 
   it("CRITICAL write-requires-admin — 'Snapshot writes on a team owner require admin role.' The forbidden error message is the canonical team-RBAC write-gate message.", () => {

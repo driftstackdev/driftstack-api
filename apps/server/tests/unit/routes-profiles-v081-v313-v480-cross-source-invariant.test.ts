@@ -151,9 +151,13 @@ describe('W1051 routes/profiles V-081 + V-313 + V-480 + V-326e4 cross-source inv
 
   // ─── x-driftstack-account header ────────────────────────────
 
-  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER — 'x-driftstack-account'. Shared across profiles + profile-snapshots + admin for V-326e team-RBAC.", () => {
+  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER — 'x-driftstack-account'. Extracted to shared lib/effective-account-header.ts; profiles + profile-snapshots + admin all import readEffectiveAccountHeader from there for V-326e team-RBAC consistency.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profiles.ts'));
-    expect(p).toMatch(/const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
+    expect(p).toMatch(
+      /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
+    );
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/effective-account-header.ts'));
+    expect(lib).toMatch(/export const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
   });
 
   // ─── Auth + rate-limit on every route ───────────────────────

@@ -29,16 +29,17 @@ function read(p: string): string {
 describe('W848 X-Driftstack-Account header cross-source invariant', () => {
   // ─── Header-name canonical spelling ──────────────────────────
 
-  it("CRITICAL the X-Driftstack-Account header name (canonical Pascal-Hyphenated) is referenced by EVERY server route that honors it. The lowercase 'x-driftstack-account' is the wire form (HTTP headers are case-insensitive on the wire). Both spellings must reach the same handler.", () => {
+  it("CRITICAL the X-Driftstack-Account header name (canonical Pascal-Hyphenated) is referenced by EVERY server route that honors it via the shared lib. The lowercase 'x-driftstack-account' wire form is now defined once in lib/effective-account-header.ts; team-RBAC routes import readEffectiveAccountHeader from there.", () => {
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/effective-account-header.ts'));
+    expect(lib).toMatch(/'x-driftstack-account'/);
     for (const route of [
       'apps/server/src/routes/profiles.ts',
       'apps/server/src/routes/webhooks.ts',
       'apps/server/src/routes/email-preferences.ts',
     ]) {
       const p = read(resolve(REPO_ROOT, route));
-      // Each route declares 'x-driftstack-account' lowercase const.
-      expect(p, `${route} must declare 'x-driftstack-account' header const`).toMatch(
-        /'x-driftstack-account'/,
+      expect(p, `${route} must import the shared header helper`).toMatch(
+        /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
       );
     }
   });
@@ -55,15 +56,17 @@ describe('W848 X-Driftstack-Account header cross-source invariant', () => {
 
   // ─── EFFECTIVE_ACCOUNT_HEADER const consistency ──────────────
 
-  it("CRITICAL the 'EFFECTIVE_ACCOUNT_HEADER' const name is reused across 3 routes (profiles + webhooks + email-preferences). The shared const name makes the cross-route invariant grep-able. Drift to per-route inline strings would let one route silently honor a different header spelling.", () => {
+  it('CRITICAL EFFECTIVE_ACCOUNT_HEADER + readEffectiveAccountHeader extracted to shared lib/effective-account-header.ts; all team-RBAC routes (profiles + webhooks + email-preferences + others) import from there. The shared lib collapses what used to be per-route inline drift surfaces.', () => {
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/effective-account-header.ts'));
+    expect(lib).toMatch(/export const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
     for (const route of [
       'apps/server/src/routes/profiles.ts',
       'apps/server/src/routes/webhooks.ts',
       'apps/server/src/routes/email-preferences.ts',
     ]) {
       const p = read(resolve(REPO_ROOT, route));
-      expect(p, `${route} must declare EFFECTIVE_ACCOUNT_HEADER`).toMatch(
-        /const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/,
+      expect(p, `${route} must import readEffectiveAccountHeader from the shared lib`).toMatch(
+        /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
       );
     }
   });

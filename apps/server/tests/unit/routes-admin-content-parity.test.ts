@@ -65,11 +65,11 @@ describe('W420.A apps/server/src/routes/admin.ts content parity', () => {
     expect(body).toMatch(/throw new ForbiddenError\('Owner account no longer exists\.'\);/);
   });
 
-  it("EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account' + Array.isArray fallback", () => {
-    expect(body).toMatch(/const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
+  it('readEffectiveAccountHeader imported from shared lib/effective-account-header.ts (extraction collapsed inline EFFECTIVE_ACCOUNT_HEADER + array-or-string handler across team-RBAC routes)', () => {
     expect(body).toMatch(
-      /function readEffectiveAccountHeader\(request: FastifyRequest\): string \| undefined \{\s*\n?\s*const raw = request\.headers\[EFFECTIVE_ACCOUNT_HEADER\];\s*\n?\s*if \(Array\.isArray\(raw\)\) return raw\[0\];\s*\n?\s*return raw;/,
+      /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
     );
+    expect(body).toMatch(/readEffectiveAccountHeader\(request\)/);
   });
 
   it('effectiveAccountIdForKeyWrite: returns undefined on self-account; team-with-admin-role → accountId; team-with-non-admin-role → ForbiddenError', () => {

@@ -88,12 +88,12 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     );
   });
 
-  it('GET /me parallel fan-out: Promise.all [countActiveSessions, countByAccount, presignAvatar, mfaService?.getStatus ?? null]', () => {
+  it('GET /me parallel fan-out: Promise.all [countActiveSessions, countByAccount, presignAvatar, mfaService?.getStatus ?? null, oauthAvatarFallback] — 5-promise shape after the OAuth IDP avatar fallback landed', () => {
     expect(body).toMatch(
       /\/\/ Parallel fan-out: counts \+ tier-derived caps \+ avatar presign \+ MFA\.\s*\n?\s*\/\/ Tier caps come from in-memory constants so they cost nothing\./,
     );
     expect(body).toMatch(
-      /const \[activeSessions, profileCount, avatarUrl, mfaStatus\] = await Promise\.all\(\[\s*\n?\s*sessionRepo\.countActiveSessions\(accountId\),\s*\n?\s*profilesRepo\.countByAccount\(accountId\),\s*\n?\s*presignAvatar\(ctx\.account\.avatarR2Key\),\s*\n?\s*mfaService \? mfaService\.getStatus\(accountId\) : Promise\.resolve\(null\),\s*\n?\s*\]\);/,
+      /const \[activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback\] =\s*\n?\s*await Promise\.all\(\[\s*\n?\s*sessionRepo\.countActiveSessions\(accountId\),\s*\n?\s*profilesRepo\.countByAccount\(accountId\),\s*\n?\s*presignAvatar\(ctx\.account\.avatarR2Key\),\s*\n?\s*mfaService \? mfaService\.getStatus\(accountId\) : Promise\.resolve\(null\),\s*\n?\s*ctx\.account\.avatarR2Key \? Promise\.resolve\(null\) : oauthAvatarFallback\(accountId\),\s*\n?\s*\]\);/,
     );
   });
 

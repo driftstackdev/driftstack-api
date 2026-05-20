@@ -64,14 +64,14 @@ describe('W1024 routes/email-preferences V-204 + V-330d cross-source invariant',
     expect(p).toMatch(/own-account header\) keeps pre-V-330d behavior\./);
   });
 
-  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account' + readEffectiveAccountHeader array-or-string handling.", () => {
+  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account' + readEffectiveAccountHeader array-or-string handling — extracted to shared lib/effective-account-header.ts and imported by every team-RBAC route.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/email-preferences.ts'));
-    expect(p).toMatch(/const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
     expect(p).toMatch(
-      /function readEffectiveAccountHeader\(request: FastifyRequest\): string \| undefined \{/,
+      /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
     );
-    expect(p).toMatch(/if \(Array\.isArray\(raw\)\) return raw\[0\];/);
-    expect(p).toMatch(/return raw;/);
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/effective-account-header.ts'));
+    expect(lib).toMatch(/export const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
+    expect(lib).toMatch(/const value = Array\.isArray\(raw\) \? raw\[0\] : raw;/);
   });
 
   it('CRITICAL GET dispatches resolveEffectiveAccount + emailPreferences.list with conditional {effectiveAccountId} for team branch.', () => {

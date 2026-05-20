@@ -47,14 +47,11 @@ describe('W414.A apps/server/src/routes/email-preferences.ts content parity', ()
     );
   });
 
-  it("EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account' constant", () => {
-    expect(body).toMatch(/const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
-  });
-
-  it('readEffectiveAccountHeader: Array.isArray fallback to first element', () => {
+  it('readEffectiveAccountHeader imported from shared lib/effective-account-header.ts (extraction collapsed inline EFFECTIVE_ACCOUNT_HEADER + array-or-string handler across team-RBAC routes)', () => {
     expect(body).toMatch(
-      /function readEffectiveAccountHeader\(request: FastifyRequest\): string \| undefined \{\s*\n?\s*const raw = request\.headers\[EFFECTIVE_ACCOUNT_HEADER\];\s*\n?\s*if \(Array\.isArray\(raw\)\) return raw\[0\];\s*\n?\s*return raw;/,
+      /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
     );
+    expect(body).toMatch(/readEffectiveAccountHeader\(request\)/);
   });
 
   it('SetEmailPreferenceRequestSchema imported from @driftstack/api-types (SDK mirror)', () => {
@@ -96,13 +93,15 @@ describe('W414.A apps/server/src/routes/email-preferences.ts content parity', ()
     );
   });
 
-  it('PUT dispatch: emailPreferences.set with event_type + opted_in + effectiveAccountId on team; 204 reply', () => {
+  it('PUT dispatch: emailPreferences.set with event_type + opted_in + effectiveAccountId on team; 204 reply (+ 2026-05-20 best-effort accountAudit.record account.email_preferences_changed)', () => {
     expect(body).toMatch(
-      /await emailPreferences\.set\(\s*\n?\s*ctx,\s*\n?\s*parsed\.data\.event_type,\s*\n?\s*parsed\.data\.opted_in,\s*\n?\s*effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\},\s*\n?\s*\);\s*\n?\s*return reply\.code\(204\)\.send\(\);/,
+      /await emailPreferences\.set\(\s*\n?\s*ctx,\s*\n?\s*parsed\.data\.event_type,\s*\n?\s*parsed\.data\.opted_in,\s*\n?\s*effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\},\s*\n?\s*\);/,
     );
+    expect(body).toMatch(/action: 'account\.email_preferences_changed',/);
+    expect(body).toMatch(/return reply\.code\(204\)\.send\(\);/);
   });
 
-  it('imports: FastifyInstance/FastifyRequest + EmailPreferencesService + BadRequestError/ForbiddenError + resolveEffectiveAccount', () => {
+  it('imports: FastifyInstance/FastifyRequest + EmailPreferencesService + BadRequestError/ForbiddenError + resolveEffectiveAccount (+ 2026-05-20 AccountAuditService + readClientIp)', () => {
     expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
     expect(body).toMatch(
       /import type \{ EmailPreferencesService \} from '\.\.\/services\/email-preferences\.js';/,
@@ -111,6 +110,10 @@ describe('W414.A apps/server/src/routes/email-preferences.ts content parity', ()
       /import \{ BadRequestError, ForbiddenError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(/import \{ resolveEffectiveAccount \} from '\.\.\/services\/auth\.js';/);
+    expect(body).toMatch(
+      /import type \{ AccountAuditService \} from '\.\.\/services\/account-audit\.js';/,
+    );
+    expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
   });
 
   it('file exists at canonical path', () => {

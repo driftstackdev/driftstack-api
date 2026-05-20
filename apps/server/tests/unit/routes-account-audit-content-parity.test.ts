@@ -62,11 +62,11 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     expect(body).toMatch(/\/\/ V-484 — additional filters forwarded to the service layer\./);
   });
 
-  it("EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account' + Array.isArray fallback to first element", () => {
-    expect(body).toMatch(/const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
+  it('readEffectiveAccountHeader imported from shared lib/effective-account-header.ts (extracted to collapse drift across team-RBAC routes; inline EFFECTIVE_ACCOUNT_HEADER + array-or-string handler now lives there)', () => {
     expect(body).toMatch(
-      /function readEffectiveAccountHeader\(request: FastifyRequest\): string \| undefined \{\s*\n?\s*const raw = request\.headers\[EFFECTIVE_ACCOUNT_HEADER\];\s*\n?\s*if \(Array\.isArray\(raw\)\) return raw\[0\];\s*\n?\s*return raw;/,
+      /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
     );
+    expect(body).toMatch(/readEffectiveAccountHeader\(request\)/);
   });
 
   it('ListAccountAuditLogQuerySchema imported from @driftstack/api-types (SDK mirror)', () => {

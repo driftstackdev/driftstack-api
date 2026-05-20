@@ -83,9 +83,13 @@ describe('W1049 routes/admin V-326e6 + V-330e cross-source invariant', () => {
 
   // ─── x-driftstack-account header ─────────────────────────────
 
-  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER — 'x-driftstack-account'. Same as profile-snapshots; cross-route consistency for team-RBAC routing.", () => {
+  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER — 'x-driftstack-account'. Extracted to shared lib/effective-account-header.ts; admin.ts imports readEffectiveAccountHeader from there for cross-route team-RBAC consistency.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin.ts'));
-    expect(p).toMatch(/const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
+    expect(p).toMatch(
+      /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
+    );
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/effective-account-header.ts'));
+    expect(lib).toMatch(/export const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
   });
 
   // ─── V-296 rotation ──────────────────────────────────────────

@@ -60,11 +60,11 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body).toMatch(/import \{ resolveEffectiveAccount \} from '\.\.\/services\/auth\.js';/);
   });
 
-  it("EFFECTIVE_ACCOUNT_HEADER constant 'x-driftstack-account' + readEffectiveAccountHeader (array-of-headers tolerant)", () => {
-    expect(body).toMatch(/const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
+  it('readEffectiveAccountHeader imported from shared lib/effective-account-header.ts (extraction collapsed inline EFFECTIVE_ACCOUNT_HEADER + array-or-string handler across team-RBAC routes)', () => {
     expect(body).toMatch(
-      /function readEffectiveAccountHeader\(request: FastifyRequest\): string \| undefined \{\s*\n?\s*const raw = request\.headers\[EFFECTIVE_ACCOUNT_HEADER\];\s*\n?\s*if \(Array\.isArray\(raw\)\) return raw\[0\];\s*\n?\s*return raw;\s*\n?\s*\}/,
+      /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
     );
+    expect(body).toMatch(/readEffectiveAccountHeader\(request\)/);
   });
 
   it('V-326e3 effectiveAccountIdForWrite framing pinned: write-type session action (navigate/interact/wait/capture/etc.) enforces Q1 admin-only role gate; returns accountId when team-scoped + admin; undefined when self-scoped; throws ForbiddenError on member; READ actions (getState) use simpler resolveEffectiveAccount inline', () => {

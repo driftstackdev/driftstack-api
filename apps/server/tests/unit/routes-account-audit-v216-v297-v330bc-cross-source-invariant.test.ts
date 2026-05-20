@@ -175,10 +175,14 @@ describe('W1037 routes/account-audit V-216 + V-297 + V-330b/c + V-484 cross-sour
     expect(p).toMatch(/format: z\.enum\(\['csv', 'json'\]\)\.default\('json'\),/);
   });
 
-  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account' + readEffectiveAccountHeader array-or-string handling.", () => {
+  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account' + readEffectiveAccountHeader array-or-string handling — extracted to shared lib/effective-account-header.ts and imported by account-audit.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-audit.ts'));
-    expect(p).toMatch(/const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
-    expect(p).toMatch(/if \(Array\.isArray\(raw\)\) return raw\[0\];/);
+    expect(p).toMatch(
+      /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
+    );
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/effective-account-header.ts'));
+    expect(lib).toMatch(/export const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
+    expect(lib).toMatch(/const value = Array\.isArray\(raw\) \? raw\[0\] : raw;/);
   });
 
   it('CRITICAL export pagination loop — while (all.length < EXPORT_MAX_ROWS) { page = await accountAudit.list; all.push(...items); if (nextCursor === null) break; cursor = nextCursor } + truncated = all.length >= EXPORT_MAX_ROWS.', () => {

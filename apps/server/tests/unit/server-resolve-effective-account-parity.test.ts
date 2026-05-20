@@ -163,7 +163,9 @@ describe('W744 server-side resolveEffectiveAccount V-326e team-RBAC parity', () 
     expect(consumerCount, 'route consumers of resolveEffectiveAccount').toBeGreaterThanOrEqual(5);
   });
 
-  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER constant 'x-driftstack-account' (lowercase) pinned across route files. Fastify normalizes headers to lowercase; drift to uppercase would let req.headers[CONST] return undefined.", () => {
+  it("CRITICAL EFFECTIVE_ACCOUNT_HEADER constant 'x-driftstack-account' (lowercase) defined in shared lib/effective-account-header.ts; each team-RBAC route imports readEffectiveAccountHeader from there. Fastify normalizes headers to lowercase; drift to uppercase would let req.headers[CONST] return undefined.", () => {
+    const lib = read(resolve(REPO_ROOT, 'apps/server/src/lib/effective-account-header.ts'));
+    expect(lib).toMatch(/export const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/);
     const routes = [
       'apps/server/src/routes/profiles.ts',
       'apps/server/src/routes/sessions.ts',
@@ -175,8 +177,8 @@ describe('W744 server-side resolveEffectiveAccount V-326e team-RBAC parity', () 
       const full = resolve(REPO_ROOT, route);
       if (!existsSync(full)) continue;
       const content = read(full);
-      expect(content, `${route} EFFECTIVE_ACCOUNT_HEADER`).toMatch(
-        /const EFFECTIVE_ACCOUNT_HEADER = 'x-driftstack-account';/,
+      expect(content, `${route} imports readEffectiveAccountHeader from the shared lib`).toMatch(
+        /import \{ readEffectiveAccountHeader \} from '\.\.\/lib\/effective-account-header\.js';/,
       );
     }
   });

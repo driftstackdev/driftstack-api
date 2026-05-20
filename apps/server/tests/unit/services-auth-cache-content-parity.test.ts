@@ -216,9 +216,9 @@ describe('W403.C apps/server/src/services/auth-cache.ts content parity', () => {
     );
   });
 
-  it('errSummary: Error → {name, message}; non-Error → {message: String(err)}', () => {
+  it('errSummary: Error → {name, message, stack, cause}; non-Error → {message: String(err)}', () => {
     expect(body).toMatch(
-      /function errSummary\(err: unknown\): \{ name\?: string; message\?: string \} \{\s*\n?\s*if \(err instanceof Error\) return \{ name: err\.name, message: err\.message \};\s*\n?\s*return \{ message: String\(err\) \};\s*\n?\s*\}/,
+      /function errSummary\(err: unknown\): \{\s*\n?\s*name\?: string;\s*\n?\s*message\?: string;\s*\n?\s*stack\?: string;\s*\n?\s*cause\?: unknown;\s*\n?\s*\} \{\s*\n?\s*if \(err instanceof Error\) \{\s*\n?\s*return \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \};\s*\n?\s*\}\s*\n?\s*return \{ message: String\(err\) \};\s*\n?\s*\}/,
     );
   });
 

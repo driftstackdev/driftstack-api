@@ -165,13 +165,15 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     );
   });
 
-  it('V-168 slowPathWebSession: synthetic ApiKeyRow with id=wsk_<sessionId> + V-174 scopes [read,write,account_owner] (NOT admin)', () => {
-    expect(body).toMatch(
-      /\/\/ V-174 — scope is `\['read', 'write', 'account_owner'\]`\. The dashboard\s*\n?\s*\/\/ user has full customer-account control \(mint keys, revoke keys,\s*\n?\s*\/\/ manage subscription\) but does NOT have driftstack_internal_admin\s*\n?\s*\/\/ — that's gated separately for Driftstack-staff-only operations\./,
-    );
+  it('V-168 slowPathWebSession: synthetic ApiKeyRow with id=wsk_<sessionId> + V-174 baseScopes [read,write,account_owner] + 2026-05-19 DRIFTSTACK_STAFF_EMAILS adds driftstack_internal_admin when the dashboard user is on the allowlist', () => {
     expect(body).toMatch(/id: `wsk_\$\{session\.id\}`,/);
     expect(body).toMatch(/keyPrefix: 'web_session',/);
-    expect(body).toMatch(/scopes: \['read', 'write', 'account_owner'\],/);
+    expect(body).toMatch(
+      /const baseScopes: ApiKeyRow\['scopes'\] = \['read', 'write', 'account_owner'\];/,
+    );
+    expect(body).toMatch(
+      /const scopes: ApiKeyRow\['scopes'\] = staffEmails\.has\(accountEmail\)\s*\n?\s*\? \[\.\.\.baseScopes, 'driftstack_internal_admin'\]\s*\n?\s*: baseScopes;/,
+    );
   });
 
   it('Web session known-gap framing: pre-V-168 cross-account admin risk + V-135 Cloudflare-Access mitigation', () => {
