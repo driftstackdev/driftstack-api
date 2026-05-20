@@ -32,7 +32,7 @@ describe('W342.C admin /rate-limit-overrides bucket_key parity', () => {
   // Canonical bucket-key enum. Three Zod declarations use it
   // (admin override create / clear + per-account quota POST); pin
   // that they all agree.
-  const canonical = "z.enum(['global', 'sessions:create'])";
+  const canonical = "z.enum(['global', 'sessions:create', 'agent_sessions:message'])";
 
   it('admin.ts declares the canonical bucket_key enum', () => {
     expect(adminSchema).toContain(canonical);

@@ -30,20 +30,23 @@ function read(p: string): string {
 const pages = walk(PAGES).filter((f) => /\.astro$/.test(f));
 
 describe('W287.B customer-dashboard page-title baseline', () => {
-  it('every page passes a non-empty title="..." prop to DashboardLayout', () => {
+  it('every page passes a non-empty title prop to DashboardLayout (string literal OR dynamic expression)', () => {
     const offenders: string[] = [];
     for (const f of pages) {
       const body = read(f);
-      const m = body.match(/<DashboardLayout\b[^>]*\btitle=["']([^"']*)["']/);
-      const title = m?.[1] ?? '';
-      if (title.length === 0) {
+      // Match either title="..." string-literal OR title={...} expression.
+      const stringForm = body.match(/<DashboardLayout\b[^>]*\btitle=["']([^"']*)["']/);
+      const exprForm = body.match(/<DashboardLayout\b[^>]*\btitle=\{([^}]+)\}/);
+      const titleStr = stringForm?.[1] ?? '';
+      const titleExpr = exprForm?.[1]?.trim() ?? '';
+      if (titleStr.length === 0 && titleExpr.length === 0) {
         offenders.push(f.slice(REPO_ROOT.length + 1));
       }
     }
     expect(offenders).toEqual([]);
   });
 
-  it('no two pages share an identical title', () => {
+  it('no two pages share an identical string-literal title (dynamic-expression titles excluded — they vary per request)', () => {
     const titles: { file: string; title: string }[] = [];
     for (const f of pages) {
       const body = read(f);
