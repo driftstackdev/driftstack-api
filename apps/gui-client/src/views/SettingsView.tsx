@@ -14,17 +14,70 @@
 
 import { useState } from 'react';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
+import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { useSettings } from '../lib/SettingsContext';
 import { isCloudBaseUrl } from '../lib/telemetry';
+
+const CLOUD_URL = 'https://api.driftstack.dev';
+const SELF_HOSTED_DEFAULT = 'http://localhost:3000';
+
+type TestState =
+  | { kind: 'idle' }
+  | { kind: 'testing' }
+  | { kind: 'ok'; version: string }
+  | { kind: 'fail'; message: string };
 
 export function SettingsView(): JSX.Element {
   const { settings, update, loading } = useSettings();
   const [draftKey, setDraftKey] = useState(settings.apiKey ?? '');
   const [draftUrl, setDraftUrl] = useState(settings.baseUrl);
+  const [draftMode, setDraftMode] = useState<'cloud' | 'self-hosted'>(
+    isCloudBaseUrl(settings.baseUrl) ? 'cloud' : 'self-hosted',
+  );
   const [draftTelemetry, setDraftTelemetry] = useState<boolean | null>(settings.telemetryOptIn);
   const [reveal, setReveal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [testState, setTestState] = useState<TestState>({ kind: 'idle' });
+
+  /** Flip mode + auto-fill the URL. Cloud locks the URL; self-hosted
+   *  keeps whatever the customer last typed (or the default). */
+  function switchMode(next: 'cloud' | 'self-hosted'): void {
+    setDraftMode(next);
+    if (next === 'cloud') {
+      setDraftUrl(CLOUD_URL);
+    } else if (draftUrl === CLOUD_URL || draftUrl.length === 0) {
+      setDraftUrl(SELF_HOSTED_DEFAULT);
+    }
+    setTestState({ kind: 'idle' });
+  }
+
+  async function runConnectionTest(): Promise<void> {
+    const target = draftUrl.trim().replace(/\/+$/, '');
+    setTestState({ kind: 'testing' });
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 8_000);
+    try {
+      const res = await fetch(`${target}/version`, {
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+      window.clearTimeout(timer);
+      if (!res.ok) {
+        setTestState({ kind: 'fail', message: `HTTP ${res.status.toString()}` });
+        return;
+      }
+      const body = (await res.json().catch(() => ({}))) as { git_sha?: string };
+      setTestState({ kind: 'ok', version: body.git_sha ?? 'unknown' });
+    } catch (err) {
+      window.clearTimeout(timer);
+      const diag = diagnosticFetchError(err, target);
+      setTestState({
+        kind: 'fail',
+        message: diag ?? (err instanceof Error ? err.message : String(err)),
+      });
+    }
+  }
 
   if (loading) {
     return (
@@ -200,28 +253,79 @@ export function SettingsView(): JSX.Element {
           </span>
         </Field>
 
-        <Field label="API base URL">
+        <Field label="Deployment">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => switchMode('cloud')}
+              className={`flex-1 rounded border px-3 py-2 text-left text-sm transition ${
+                draftMode === 'cloud'
+                  ? 'border-glow-red bg-glow-red/10 text-ink-primary'
+                  : 'border-surface-divider bg-surface-base text-ink-secondary hover:border-glow-red/40 hover:text-ink-primary'
+              }`}
+            >
+              <div className="font-medium">Cloud</div>
+              <div className="mt-0.5 text-2xs text-ink-muted">
+                api.driftstack.dev · managed fleet
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode('self-hosted')}
+              className={`flex-1 rounded border px-3 py-2 text-left text-sm transition ${
+                draftMode === 'self-hosted'
+                  ? 'border-glow-red bg-glow-red/10 text-ink-primary'
+                  : 'border-surface-divider bg-surface-base text-ink-secondary hover:border-glow-red/40 hover:text-ink-primary'
+              }`}
+            >
+              <div className="font-medium">Self-hosted</div>
+              <div className="mt-0.5 text-2xs text-ink-muted">Your own server</div>
+            </button>
+          </div>
           <input
             type="url"
             value={draftUrl}
             onChange={(e) => setDraftUrl(e.target.value)}
             placeholder="http://localhost:3000"
-            className="mono w-full rounded bg-surface-inset px-2.5 py-1.5
+            disabled={draftMode === 'cloud'}
+            className="mono mt-3 w-full rounded bg-surface-inset px-2.5 py-1.5
                        text-ink-primary
                        placeholder:text-ink-muted
                        border border-surface-divider
                        focus-visible:border-accent
-                       focus-visible:ring-1 focus-visible:ring-accent-ring"
+                       focus-visible:ring-1 focus-visible:ring-accent-ring
+                       disabled:cursor-not-allowed disabled:opacity-60"
             spellCheck={false}
             autoComplete="off"
           />
-          <span className="mt-1 block text-2xs text-ink-muted">
-            <span className="mono">https://api.driftstack.dev</span> for cloud (default for new
-            installs). Self-hosted points at a Driftstack server you run yourself —{' '}
-            <span className="mono">http://localhost:3000</span> matches{' '}
-            <span className="mono">npm run dev</span> from apps/server, change the port if your
-            deployment binds elsewhere.
-          </span>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void runConnectionTest()}
+              disabled={testState.kind === 'testing'}
+              className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {testState.kind === 'testing' ? 'Testing…' : 'Test connection'}
+            </button>
+            {testState.kind === 'ok' && (
+              <span className="text-2xs text-emerald-400">
+                ✓ Reachable · {testState.version.slice(0, 7)}
+              </span>
+            )}
+            {testState.kind === 'fail' && (
+              <span className="whitespace-pre-line text-2xs text-status-error">
+                ✗ {testState.message}
+              </span>
+            )}
+          </div>
+          {draftMode === 'self-hosted' && (
+            <span className="mt-2 block text-2xs text-ink-muted">
+              The GUI is a control panel — it does NOT run the API server. Self-hosted means you run
+              apps/server yourself (clone driftstackdev/driftstack-api +{' '}
+              <span className="mono">npm install && cd apps/server && npm run dev</span>). The URL
+              above tells the GUI where to find it.
+            </span>
+          )}
         </Field>
 
         <Field label="Crash reports">

@@ -7,9 +7,11 @@
 // history stack to integrate with.
 
 import { useEffect, useState } from 'react';
+import { ConnectionPill } from './components/ConnectionPill';
 import { TitleBar } from './components/TitleBar';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
+import { useConnectionStatus } from './lib/use-connection-status';
 import { ConnectivityView } from './views/ConnectivityView';
 import { FirstRunWizard } from './views/FirstRunWizard';
 import { LiveSessionView } from './views/LiveSessionView';
@@ -88,7 +90,18 @@ function Shell(): JSX.Element {
   const mode = deploymentLabel(settings.baseUrl);
   return (
     <div className="flex h-screen w-screen flex-col bg-surface-base">
-      <TitleBar subtitle={mode} right={<span className="section-label">v0.0.1</span>} />
+      <TitleBar
+        subtitle={mode}
+        right={
+          <>
+            <LiveConnectionPill
+              baseUrl={settings.baseUrl}
+              onClick={() => setView({ kind: 'settings' })}
+            />
+            <span className="section-label">v0.0.1</span>
+          </>
+        }
+      />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar current={view} onNavigate={setView} />
         <main className="flex-1 overflow-auto bg-surface-base">
@@ -322,4 +335,21 @@ function StatusFooter(): JSX.Element {
 
 function redactBaseUrl(url: string): string {
   return url.replace(/^https?:\/\//, '');
+}
+
+/**
+ * 2026-05-20 — title-bar pill that surfaces the live connection state
+ * by polling /version every 30s (see useConnectionStatus). Click jumps
+ * to Settings so the customer can fix URL / mode without hunting
+ * through the sidebar.
+ */
+function LiveConnectionPill({
+  baseUrl,
+  onClick,
+}: {
+  baseUrl: string;
+  onClick: () => void;
+}): JSX.Element {
+  const status = useConnectionStatus(baseUrl);
+  return <ConnectionPill status={status} baseUrl={baseUrl} onClick={onClick} />;
 }
