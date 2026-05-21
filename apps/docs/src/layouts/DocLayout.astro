@@ -31,8 +31,63 @@ function isActive(href: string): boolean {
 ---
 
 <BaseLayout title={title} description={description}>
+  {/* 2026-05-21 — mobile doc-nav toggle. Default sidebar is
+      `hidden md:block`; the hamburger flips `html[data-mobile-nav-open]`
+      to reveal the aside as a fullscreen overlay. Closes on link tap
+      so the destination doc page doesn't briefly show the overlay. */}
+  <style>
+    html[data-mobile-nav-open='true'] [data-doc-mobile-nav] {
+      display: block;
+      position: fixed;
+      inset: 56px 0 0 0;
+      width: 100%;
+      z-index: 30;
+      overflow-y: auto;
+      padding: 1.5rem;
+      background: rgba(11, 11, 13, 0.95);
+      backdrop-filter: blur(8px);
+    }
+  </style>
+  <div class="md:hidden flex items-center justify-between border-b border-white/10 px-4 py-3">
+    <span class="font-mono text-xs uppercase tracking-widest text-ink-muted">Docs</span>
+    <button
+      type="button"
+      data-doc-mobile-nav-toggle
+      aria-label="Toggle docs navigation"
+      aria-expanded="false"
+      class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 text-ink-secondary hover:text-ink-primary"
+    >
+      <svg
+        data-doc-mobile-nav-icon="closed"
+        viewBox="0 0 16 16"
+        width="18"
+        height="18"
+        aria-hidden="true"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+      >
+        <path d="M2.5 4h11 M2.5 8h11 M2.5 12h11" />
+      </svg>
+      <svg
+        data-doc-mobile-nav-icon="open"
+        viewBox="0 0 16 16"
+        width="18"
+        height="18"
+        aria-hidden="true"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        class="hidden"
+      >
+        <path d="m3 3 10 10 M13 3 3 13" />
+      </svg>
+    </button>
+  </div>
   <div class="mx-auto flex max-w-6xl gap-8 px-6 py-8">
-    <aside class="hidden w-56 shrink-0 md:block">
+    <aside data-doc-mobile-nav class="hidden w-56 shrink-0 md:block">
       <nav class="sticky top-6">
         {
           DOC_NAV.map((section) => (
@@ -107,4 +162,39 @@ function isActive(href: string): boolean {
       <slot />
     </article>
   </div>
+  <script is:inline>
+    (function () {
+      var toggle = document.querySelector('[data-doc-mobile-nav-toggle]');
+      if (!toggle) return;
+      var root = document.documentElement;
+      var closedIcon = document.querySelector('[data-doc-mobile-nav-icon="closed"]');
+      var openIcon = document.querySelector('[data-doc-mobile-nav-icon="open"]');
+      function setOpen(isOpen) {
+        if (isOpen) {
+          root.setAttribute('data-mobile-nav-open', 'true');
+          toggle.setAttribute('aria-expanded', 'true');
+          if (closedIcon) closedIcon.classList.add('hidden');
+          if (openIcon) openIcon.classList.remove('hidden');
+        } else {
+          root.removeAttribute('data-mobile-nav-open');
+          toggle.setAttribute('aria-expanded', 'false');
+          if (closedIcon) closedIcon.classList.remove('hidden');
+          if (openIcon) openIcon.classList.add('hidden');
+        }
+      }
+      toggle.addEventListener('click', function () {
+        setOpen(root.getAttribute('data-mobile-nav-open') !== 'true');
+      });
+      document.querySelectorAll('aside[data-doc-mobile-nav] a').forEach(function (a) {
+        a.addEventListener('click', function () {
+          setOpen(false);
+        });
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && root.getAttribute('data-mobile-nav-open') === 'true') {
+          setOpen(false);
+        }
+      });
+    })();
+  </script>
 </BaseLayout>
