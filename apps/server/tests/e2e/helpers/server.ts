@@ -271,11 +271,17 @@ export async function startTestServer(): Promise<TestServer> {
     statusPageBaseUrl: 'https://status.driftstack.test',
   });
   const teamMembersRepo = new DrizzleTeamMembersRepo(database);
+  // 2026-05-21 — pass authCache so accept/remove invalidate the
+  // member's cached AccountContext immediately. Without it, the
+  // newly-accepted membership only shows up after the 30s TTL — which
+  // breaks the team/owners e2e test that asserts `body.data.length=1`
+  // right after the accept call.
   const teamMembersService = new TeamMembersService(
     teamMembersRepo,
     noopEmail,
     { dashboardBaseUrl: 'https://app.driftstack.test' },
     accountAuditService,
+    authCache,
   );
   const profileSnapshotsRepo = new DrizzleProfileSnapshotsRepo(database);
   const profileSnapshotsService = new ProfileSnapshotsService(
