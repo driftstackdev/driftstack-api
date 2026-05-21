@@ -710,18 +710,26 @@ const navSections: NavSection[] = [
                 } catch (_) {
                   /* swallow */
                 }
-                function buildHref() {
-                  const t = (function () {
-                    try {
-                      return localStorage.getItem('ds_web_session_token') || '';
-                    } catch (_) {
-                      return '';
-                    }
-                  })();
-                  return 'https://admin.driftstack.dev/#token=' + encodeURIComponent(t);
-                }
+                // 2026-05-21 — build the bounce URL at CLICK time, not at
+                // probe time. If the customer signs out between the
+                // probe + click, the link no longer carries a stale
+                // token that the admin layout would treat as authentic.
+                // Falls through to admin layout's direct-visit bounce
+                // when there's no token left to ship.
+                link.addEventListener('click', function (e) {
+                  e.preventDefault();
+                  let t = '';
+                  try {
+                    t = localStorage.getItem('ds_web_session_token') || '';
+                  } catch (_) {
+                    /* swallow */
+                  }
+                  const target =
+                    'https://admin.driftstack.dev/' +
+                    (t.length > 0 ? '#token=' + encodeURIComponent(t) : '');
+                  window.location.href = target;
+                });
                 if (cached === '1') {
-                  link.setAttribute('href', buildHref());
                   shortcut.classList.remove('hidden');
                 }
                 fetch(apiBaseUrl + '/v1/admin/audit-log?limit=1', {
@@ -737,7 +745,6 @@ const navSections: NavSection[] = [
                       /* swallow */
                     }
                     if (isStaff) {
-                      link.setAttribute('href', buildHref());
                       shortcut.classList.remove('hidden');
                     } else {
                       shortcut.classList.add('hidden');
