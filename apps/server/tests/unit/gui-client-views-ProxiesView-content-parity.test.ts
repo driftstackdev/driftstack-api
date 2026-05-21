@@ -109,12 +109,12 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     expect(body).toMatch(/\{mode === 'add' \? 'Add proxy' : 'Save changes'\}/);
   });
 
-  it("ProxyTable: 5-col (Label / Endpoint / Auth / Created / actions) + per-row host:port formatting + username || '—' fallback + createdAt toLocaleString + Edit + Remove buttons (Remove disabled when busyId===p.id with 'Removing…' label); password never displayed in any column — pinned so credentials don't leak into the UI", () => {
+  it("ProxyTable: 5-col (Label / Endpoint / Auth / Created / actions) + per-row host:port formatting + username || '—' fallback + createdAt rendered via <RelativeTime iso=p.createdAt tooltipPrefix=\"Added\"> + Edit + Remove buttons (Remove disabled when busyId===p.id with 'Removing…' label); password never displayed in any column — pinned so credentials don't leak into the UI", () => {
     expect(body).toMatch(/\{p\.host\}:\{p\.port\}/);
     expect(body).toMatch(
       /\{p\.username !== null && p\.username\.length > 0 \? p\.username : '—'\}/,
     );
-    expect(body).toMatch(/\{new Date\(p\.createdAt\)\.toLocaleString\(\)\}/);
+    expect(body).toMatch(/<RelativeTime iso=\{p\.createdAt\} tooltipPrefix="Added" \/>/);
     expect(body).toMatch(
       /disabled=\{busyId === p\.id\}\s*\n?\s*>\s*\n?\s*\{busyId === p\.id \? 'Removing…' : 'Remove'\}/,
     );
