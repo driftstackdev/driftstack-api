@@ -77,10 +77,12 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
     );
   });
 
-  it("Event delegation pattern: root.addEventListener('click', …) + ev.target.closest('[data-action=\"requeue\"]') — pinned so the requeue handler doesn't need to be re-bound to every dynamically-rendered row (drift to per-row addEventListener would leak listeners on every live-replacement + miss buttons added after initial render)", () => {
-    expect(body).toMatch(
-      /root\.addEventListener\('click', \(ev\) => \{\s*\n?\s*const target = ev\.target;\s*\n?\s*if \(!target \|\| !target\.closest\) return;\s*\n?\s*const btn = target\.closest\('\[data-action="requeue"\]'\);\s*\n?\s*if \(!btn\) return;\s*\n?\s*ev\.preventDefault\(\);\s*\n?\s*const id = btn\.getAttribute\('data-id'\);\s*\n?\s*if \(id\) requeue\(id\);\s*\n?\s*\}\);/,
-    );
+  it('Event delegation pattern: root.addEventListener(\'click\', …) branches on [data-action="requeue"] + [data-action="discard"]. 2026-05-22 — Discard branch added alongside Requeue (17126865). Single delegated listener prevents per-row leaks on live-replacement; the handler dispatches to requeue(id) or discard(id) based on which button was clicked.', () => {
+    expect(body).toMatch(/root\.addEventListener\('click', \(ev\) => \{/);
+    expect(body).toMatch(/target\.closest\('\[data-action="requeue"\]'\)/);
+    expect(body).toMatch(/target\.closest\('\[data-action="discard"\]'\)/);
+    expect(body).toMatch(/if \(id\) requeue\(id\);/);
+    expect(body).toMatch(/if \(id\) discard\(id\);/);
   });
 
   it("DLQ row visual treatment: red-200 border + red-50 background + DLQ badge red-100/red-800 'DLQ · {attempts}× tried' + last_error block red-200 border on white bg — pinned so the visual urgency stays consistent (these rows demand operator attention; drift to amber/slate styling would underplay the criticality)", () => {

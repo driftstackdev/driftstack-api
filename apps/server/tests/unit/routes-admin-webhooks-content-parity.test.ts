@@ -81,11 +81,11 @@ describe('W419.A apps/server/src/routes/admin-webhooks.ts content parity', () =>
     expect(body).toMatch(/result: `error: \$\{code\}`,/);
   });
 
-  it("Scope-gate on ALL 4 routes: requireScope('driftstack_internal_admin') + rateLimit('global')", () => {
+  it("Scope-gate on ALL 5 routes: requireScope('driftstack_internal_admin') + rateLimit('global'). 2026-05-22 — POST /webhook-dlq/:id/discard added (17126865); the hard-delete endpoint MUST carry the same staff-scope gate as the existing GET-by-id / replay / list-dlq / requeue routes.", () => {
     const matches = body.match(
       /preHandler: \[app\.requireScope\('driftstack_internal_admin'\), app\.rateLimit\('global'\)\],/g,
     );
-    expect(matches?.length).toBe(4);
+    expect(matches?.length).toBe(5);
   });
 
   it('GET delivery-by-id: typed Params + uuidFromPrefixedId(id, "wdl"); webhooksAdmin.getDelivery; returns publicDelivery(row)', () => {
