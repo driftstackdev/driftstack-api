@@ -461,16 +461,126 @@ const apiBaseUrl = resolveApiBaseUrl();
       void sendInputEvent({ type: 'keyUp', key: ev.key, modifiers: modifiersFromEvent(ev) });
     });
 
-    composerForm?.addEventListener('submit', (ev) => {
+    // 2026-05-21 — V-666.AI-A composer wire-up. Optimistic-render the
+    // customer's turn into the transcript immediately, then POST to
+    // /v1/agent-sessions/:id/message. On response, append the agent's
+    // turn (intent decomposition output). On error, mark the customer
+    // bubble with a retry affordance + leave the textarea content
+    // populated so the customer can resend without retyping.
+    const transcript = root.querySelector('[data-component="ChatTranscript"]');
+    const emptyHint = transcript?.querySelector('[data-empty]');
+    let pendingTurnEl = null;
+
+    function appendTurn(role, body) {
+      if (!transcript) return null;
+      if (emptyHint && !emptyHint.classList.contains('hidden')) {
+        emptyHint.classList.add('hidden');
+      }
+      const wrap = document.createElement('div');
+      wrap.className = 'flex flex-col gap-1';
+      wrap.dataset.role = role;
+      const label = document.createElement('div');
+      label.className =
+        'text-[10px] font-mono uppercase tracking-widest ' +
+        (role === 'agent' ? 'text-glow-red' : 'text-ink-muted');
+      label.textContent = role === 'agent' ? 'agent' : 'you';
+      const bubble = document.createElement('div');
+      bubble.className =
+        'whitespace-pre-wrap break-words rounded-md px-3 py-2 text-sm ' +
+        (role === 'agent'
+          ? 'bg-glow-red/5 text-ink-primary'
+          : 'bg-slate-800 text-ink-primary');
+      bubble.textContent = body;
+      wrap.appendChild(label);
+      wrap.appendChild(bubble);
+      transcript.appendChild(wrap);
+      transcript.scrollTop = transcript.scrollHeight;
+      return wrap;
+    }
+
+    composerForm?.addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      // Slice 4 wires real POST /v1/agent-sessions/:id/message + SSE
-      // re-render of the transcript. Scaffold no-op for now.
-      if (composerTextarea && composerTextarea.value.trim().length > 0) {
-        // eslint-disable-next-line no-console
-        console.info('[scaffold] would POST /v1/agent-sessions/' + sessionId + '/message', {
-          message: composerTextarea.value,
-        });
-        composerTextarea.value = '';
+      if (!composerTextarea) return;
+      const text = composerTextarea.value.trim();
+      if (text.length === 0) return;
+      composerTextarea.value = '';
+      if (composerSubmit) composerSubmit.disabled = true;
+
+      const customerBubble = appendTurn('customer', text);
+      // Pending agent bubble — placeholder text replaced when POST resolves.
+      pendingTurnEl = appendTurn('agent', '…thinking…');
+
+      try {
+        const res = await fetch(
+          apiBaseUrl + '/v1/agent-sessions/' + encodeURIComponent(sessionId) + '/message',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ content: text }),
+          },
+        );
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const detail = body.detail || 'HTTP ' + res.status.toString();
+          if (pendingTurnEl) {
+            const bub = pendingTurnEl.querySelector('div:last-child');
+            if (bub) {
+              bub.textContent = '⚠ ' + detail + ' — your message above is preserved; click to retry.';
+              bub.className = 'rounded-md bg-red-900/30 px-3 py-2 text-sm text-rose-300';
+              bub.style.cursor = 'pointer';
+              bub.addEventListener('click', () => {
+                if (composerTextarea) {
+                  composerTextarea.value = text;
+                  composerTextarea.focus();
+                }
+              });
+            }
+          }
+          return;
+        }
+        // V-666.AI-A response shape: { transcript: [...] } OR
+        // { intent_calls: [...] } — render whatever's present as the
+        // agent reply. SSE streaming is the V-666.AI-D follow-up.
+        const replyText =
+          (typeof body.reply === 'string' && body.reply) ||
+          (Array.isArray(body.transcript) &&
+            body.transcript[body.transcript.length - 1] &&
+            body.transcript[body.transcript.length - 1].content) ||
+          (Array.isArray(body.intent_calls) &&
+            'Planned ' +
+              body.intent_calls.length.toString() +
+              ' intent' +
+              (body.intent_calls.length === 1 ? '' : 's') +
+              ': ' +
+              body.intent_calls
+                .map((c) => (typeof c.verb === 'string' ? c.verb : 'step'))
+                .join(' → ')) ||
+          'Done.';
+        if (pendingTurnEl) {
+          const bub = pendingTurnEl.querySelector('div:last-child');
+          if (bub) bub.textContent = replyText;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (pendingTurnEl) {
+          const bub = pendingTurnEl.querySelector('div:last-child');
+          if (bub) {
+            bub.textContent = '⚠ ' + msg + ' — click to retry.';
+            bub.className = 'rounded-md bg-red-900/30 px-3 py-2 text-sm text-rose-300';
+            bub.style.cursor = 'pointer';
+            bub.addEventListener('click', () => {
+              if (composerTextarea) {
+                composerTextarea.value = text;
+                composerTextarea.focus();
+              }
+            });
+          }
+        }
+      } finally {
+        if (composerSubmit) composerSubmit.disabled = false;
+        pendingTurnEl = null;
+        // Suppress unused-var warning for customerBubble (used for DOM side-effect).
+        void customerBubble;
       }
     });
 
