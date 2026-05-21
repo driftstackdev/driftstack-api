@@ -360,6 +360,9 @@ export async function startTestServer(): Promise<TestServer> {
   // assertion.
   const billingRepo = new DrizzleBillingRepo({ db: drizzle(client, { schema }) });
   const billingProvider = new InMemoryBillingProvider();
+  // 2026-05-21 — hoist the OAuth store so resetState can flush it
+  // between tests (in-memory; not DB-backed).
+  const oauthStore = new InMemoryOAuthStore();
   const billingService = new BillingService(billingRepo, billingProvider, {
     tierPrices: {
       solo_manual: { monthly: 'price_solo_monthly', annual: 'price_solo_annual' },
@@ -395,7 +398,11 @@ export async function startTestServer(): Promise<TestServer> {
     accountLifecycleService,
     scheduledJobsService,
     billingService,
-    oauthStore: new InMemoryOAuthStore(),
+    // 2026-05-21 — hoist the OAuth store to a captured var so resetState
+    // can flush it (each test in oauth.spec.ts expects a fresh client
+    // catalog; before this lift, clients from earlier tests leaked into
+    // the `list 2 clients` assertion).
+    oauthStore: oauthStore,
     costMonitoringService,
     rateLimitStore,
     // 2026-05-20 — wire the V-237 repos so the /v1/account/me route
@@ -437,6 +444,11 @@ export async function startTestServer(): Promise<TestServer> {
     billingProvider.state.portalSessions.length = 0;
     billingProvider.state.customers.clear();
     costUsageByAccount.clear();
+    // 2026-05-21 — same kind of leak with the in-memory OAuth store:
+    // oauth.spec.ts's "lists registered clients" test created 2 then
+    // counted 2, but earlier tests in the same file left a stray
+    // client in the catalog.
+    oauthStore.resetForTest();
   };
 
   const cleanup = async (): Promise<void> => {

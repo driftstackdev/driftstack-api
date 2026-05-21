@@ -95,6 +95,19 @@ export class InMemoryOAuthStore implements OAuthStore {
   private readonly codes = new Map<string, AuthorizationCode>();
   private readonly tokens = new Map<string, AccessToken>();
 
+  /**
+   * 2026-05-21 — test-only state flush. The e2e helper's resetState()
+   * calls this so per-test assertions don't see clients / codes /
+   * tokens left over from earlier tests in the same spec file.
+   * Never call from production code paths — there are no production
+   * code paths that should be wiping the catalog mid-run.
+   */
+  resetForTest(): void {
+    this.clients.clear();
+    this.codes.clear();
+    this.tokens.clear();
+  }
+
   // eslint-disable-next-line @typescript-eslint/require-await
   async insertClient(c: OAuthClient): Promise<void> {
     this.clients.set(c.client_id, c);
