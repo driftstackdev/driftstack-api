@@ -35,7 +35,15 @@ function handleError(
   const apiError = normaliseError(err, request);
 
   // Log at appropriate level.
-  if (apiError.status >= 500) {
+  // 2026-05-21 — 503 FeatureUnavailableError is intentional / expected
+  // (activation-gate not wired; deploy-time env config). Don't log as
+  // an error to avoid Sentry false-positives — log at warn so the
+  // signal is still observable but doesn't page the on-call channel.
+  // Genuine 5xx (DB exception, unexpected JS error, etc.) keep the
+  // error level so they still trigger alerts.
+  if (apiError.status === 503) {
+    request.log.warn({ err, problem: apiError.toProblem() }, 'feature unavailable: 503');
+  } else if (apiError.status >= 500) {
     request.log.error({ err, problem: apiError.toProblem() }, 'request failed: 5xx');
   } else if (apiError.status >= 400) {
     // Pass `err` directly so Pino's stdSerializers.err extracts
