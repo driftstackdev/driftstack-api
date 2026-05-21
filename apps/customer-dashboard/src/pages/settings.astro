@@ -487,6 +487,77 @@ const EMAIL_EVENTS = [
       </form>
     </section>
 
+    {/*
+      2026-05-22 — V-666 BYOK Anthropic key UI. Customer can store
+      their own Anthropic API key so the AI agent runs on their
+      budget (instead of Driftstack's bundled fallback). The
+      ciphertext is AES-256-GCM encrypted with MFA_ENCRYPTION_KEY
+      server-side; plaintext leaves the browser exactly once on PUT.
+      Three actions surface here: Save (PUT), Test (POST /test), Clear
+      (DELETE). The GET /byok-anthropic-key endpoint returns metadata
+      only (set_at + masked prefix) — never the plaintext, even to
+      the owner.
+    */}
+    <section class="dashboard-card mt-6" data-region="byok-anthropic">
+      <h2 class="text-lg font-semibold text-ink-primary">Anthropic API key (BYOK)</h2>
+      <p class="mt-2 text-sm text-ink-muted">
+        Bring your own Anthropic key so AI agent turns bill to your Anthropic console.
+        Stored encrypted at rest; we never read or log the plaintext after you submit
+        it. <a
+          href="https://console.anthropic.com/settings/keys"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-glow-red hover:underline"
+        >Generate a key →</a>
+      </p>
+
+      <div data-byok-state="loading" class="mt-6 text-sm text-ink-muted">
+        Checking key status…
+      </div>
+
+      <div data-byok-state="empty" class="mt-6 hidden">
+        <p class="text-sm text-ink-secondary">No key on file. Agent sessions fall back to the bundled key (if enabled on your tier).</p>
+      </div>
+
+      <div data-byok-state="set" class="mt-6 hidden space-y-2">
+        <div class="flex items-center gap-3">
+          <span class="rounded-full bg-emerald-400/10 px-2 py-0.5 font-mono text-xs uppercase tracking-wide text-emerald-300">
+            Active
+          </span>
+          <span class="text-sm text-ink-secondary">
+            Key set <time data-byok-set-at>—</time>; prefix
+            <code class="font-mono text-xs text-ink-primary" data-byok-prefix>—</code>
+          </span>
+        </div>
+      </div>
+
+      <div data-byok-error class="mt-6 hidden rounded-md bg-glow-red/10 px-3 py-2 text-sm text-glow-red"></div>
+
+      <form data-byok-form class="mt-6 flex flex-wrap items-center gap-3" autocomplete="off">
+        <label for="byok-key" class="sr-only">Anthropic API key</label>
+        <input
+          id="byok-key"
+          type="password"
+          name="byok-key"
+          placeholder="sk-ant-..."
+          autocomplete="off"
+          spellcheck="false"
+          class="flex-1 min-w-[260px] rounded-md border border-white/10 bg-surface-inset px-3 py-2 font-mono text-sm text-ink-primary placeholder-ink-muted focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+        />
+        <button type="submit" class="btn-primary">Save key</button>
+        <button type="button" data-byok-test class="btn-secondary">Test</button>
+        <button type="button" data-byok-clear class="text-sm text-rose-700 hover:underline">
+          Clear
+        </button>
+      </form>
+
+      <p class="mt-3 text-xs text-ink-muted">
+        Test sends a 1-token completion to verify Anthropic accepts the key. Clear
+        removes the stored ciphertext; agent turns immediately fall back to the
+        bundled key (if available).
+      </p>
+    </section>
+
     <!-- Email notifications (V-204 — live-wired) -->
     <section class="dashboard-card mt-6" data-region="email-prefs">
       <h2 class="text-lg font-semibold text-ink-primary">Email notifications</h2>
@@ -1622,6 +1693,164 @@ const EMAIL_EVENTS = [
       const mfaStepUpCancel = root.querySelector('[data-button="mfa-step-up-cancel"]');
       if (mfaStepUpCancel) mfaStepUpCancel.addEventListener('click', closeStepUp);
 
+      // 2026-05-22 — V-666 BYOK Anthropic key wiring. Three actions:
+      //   Save → PUT /v1/account/me/byok-anthropic-key
+      //   Test → POST /v1/account/me/byok-anthropic-key/test
+      //   Clear → DELETE /v1/account/me/byok-anthropic-key
+      // Status fetch on load: GET returns metadata only (set_at +
+      // masked prefix); never plaintext. Plaintext goes over the
+      // wire exactly once (Save), never re-displayed.
+      const byokForm = document.querySelector('[data-byok-form]');
+      const byokInput = document.querySelector('#byok-key');
+      const byokTestBtn = document.querySelector('[data-byok-test]');
+      const byokClearBtn = document.querySelector('[data-byok-clear]');
+      const byokError = document.querySelector('[data-byok-error]');
+      const byokStateLoading = document.querySelector('[data-byok-state="loading"]');
+      const byokStateEmpty = document.querySelector('[data-byok-state="empty"]');
+      const byokStateSet = document.querySelector('[data-byok-state="set"]');
+      const byokSetAt = document.querySelector('[data-byok-set-at]');
+      const byokPrefix = document.querySelector('[data-byok-prefix]');
+
+      function byokShowState(name) {
+        [byokStateLoading, byokStateEmpty, byokStateSet].forEach((el) => {
+          if (el) el.classList.add('hidden');
+        });
+        const el = document.querySelector('[data-byok-state="' + name + '"]');
+        if (el) el.classList.remove('hidden');
+      }
+      function byokShowError(msg) {
+        if (!byokError) return;
+        byokError.textContent = msg;
+        byokError.classList.remove('hidden');
+      }
+      function byokHideError() {
+        if (byokError) byokError.classList.add('hidden');
+      }
+
+      function loadByokAnthropic() {
+        if (!token) return;
+        byokShowState('loading');
+        fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
+          headers: { authorization: 'Bearer ' + token },
+        })
+          .then((r) => {
+            if (r.status === 404) return null; // empty (no key set)
+            if (!r.ok)
+              return r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+            return r.json();
+          })
+          .then((body) => {
+            byokHideError();
+            if (body === null || !body.key_set) {
+              byokShowState('empty');
+              return;
+            }
+            if (byokSetAt && body.set_at) {
+              const d = new Date(body.set_at);
+              byokSetAt.dateTime = d.toISOString();
+              byokSetAt.textContent = d.toISOString().slice(0, 10);
+            }
+            if (byokPrefix && body.key_prefix) byokPrefix.textContent = body.key_prefix;
+            byokShowState('set');
+          })
+          .catch((err) => {
+            byokShowError(err && err.message ? err.message : 'network error');
+            byokShowState('empty');
+          });
+      }
+
+      if (byokForm) {
+        byokForm.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          if (!byokInput || !token) return;
+          const key = byokInput.value.trim();
+          if (key.length === 0) {
+            byokShowError('Paste an Anthropic API key first.');
+            return;
+          }
+          byokHideError();
+          fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
+            method: 'PUT',
+            headers: {
+              authorization: 'Bearer ' + token,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({ api_key: key }),
+          })
+            .then((r) => {
+              if (!r.ok)
+                return r
+                  .json()
+                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+              return r.json();
+            })
+            .then(() => {
+              if (byokInput) byokInput.value = '';
+              loadByokAnthropic();
+            })
+            .catch((err) => byokShowError(err && err.message ? err.message : 'network error'));
+        });
+      }
+
+      if (byokTestBtn) {
+        byokTestBtn.addEventListener('click', () => {
+          if (!byokInput || !token) return;
+          const key = byokInput.value.trim();
+          // Test the field's content if present (e.g. before save);
+          // otherwise test the stored key (server reads ciphertext).
+          const payload = key.length > 0 ? { api_key: key } : {};
+          byokTestBtn.disabled = true;
+          byokTestBtn.textContent = 'Testing…';
+          byokHideError();
+          fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key/test', {
+            method: 'POST',
+            headers: {
+              authorization: 'Bearer ' + token,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+          })
+            .then((r) =>
+              r.ok ? r.json() : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+            )
+            .then((body) => {
+              byokTestBtn.textContent = body.ok === true ? 'Test ✓' : 'Test ⚠';
+              setTimeout(() => {
+                byokTestBtn.textContent = 'Test';
+                byokTestBtn.disabled = false;
+              }, 2000);
+              if (body.ok !== true) byokShowError(body.detail || 'Test call failed.');
+            })
+            .catch((err) => {
+              byokTestBtn.textContent = 'Test ⚠';
+              setTimeout(() => {
+                byokTestBtn.textContent = 'Test';
+                byokTestBtn.disabled = false;
+              }, 2000);
+              byokShowError(err && err.message ? err.message : 'network error');
+            });
+        });
+      }
+
+      if (byokClearBtn) {
+        byokClearBtn.addEventListener('click', () => {
+          if (!token) return;
+          if (!window.confirm('Clear your stored Anthropic key? Agent sessions will fall back to the bundled key (if available on your tier).')) return;
+          fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
+            method: 'DELETE',
+            headers: { authorization: 'Bearer ' + token },
+          })
+            .then((r) => {
+              if (!r.ok && r.status !== 404)
+                return r
+                  .json()
+                  .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+              loadByokAnthropic();
+            })
+            .catch((err) => byokShowError(err && err.message ? err.message : 'network error'));
+        });
+      }
+
       if (!token) {
         showBanner('Sign in to see live preferences + recent activity.');
         return;
@@ -1632,6 +1861,7 @@ const EMAIL_EVENTS = [
       loadWebSessions();
       loadMfa();
       loadOauthLinks();
+      loadByokAnthropic();
       // 2026-05-21 — opacity-gate signal. Five loaders fire in parallel
       // without returning promises (legacy shape). Fire the reveal in
       // a microtask so the first paint happens after the network
