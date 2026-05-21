@@ -118,11 +118,11 @@ describe('W789 admin-panel AdminLayout + mocks content parity', () => {
     expect(p).toMatch(/<body class="bg-slate-50 text-slate-900">/);
   });
 
-  it('CRITICAL desktop-only sidebar pinned — hidden + md:block on w-56 aside. Drift to mobile-visible would leak admin nav on phones.', () => {
+  it('CRITICAL desktop-only sidebar pinned — hidden + md:block on w-56 aside. Drift to mobile-visible would leak admin nav on phones. 2026-05-21 — aside also carries `data-mobile-nav` so the md:hidden hamburger can flip it to a fullscreen overlay via html[data-mobile-nav-open=true] CSS. hidden+md:block default still holds for desktop posture.', () => {
     const p = read(LAYOUT);
 
     expect(p).toMatch(
-      /<aside class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">/,
+      /<aside data-mobile-nav class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">/,
     );
   });
 

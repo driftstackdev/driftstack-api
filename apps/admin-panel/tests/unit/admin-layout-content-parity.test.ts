@@ -109,9 +109,9 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(body).toMatch(/<p>Staff-only surface\. All actions audit-logged\.<\/p>/);
   });
 
-  it('sidebar hidden on mobile (hidden + md:block)', () => {
+  it('sidebar hidden on mobile (hidden + md:block) — opt-in mobile overlay via data-mobile-nav', () => {
     expect(body).toMatch(
-      /<aside class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">/,
+      /<aside data-mobile-nav class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">/,
     );
   });
 
