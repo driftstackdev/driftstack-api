@@ -244,46 +244,31 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
       <h2 class="mb-4 text-lg font-semibold text-ink-primary">
         Active (<span data-count="active">{activeSessions.length.toString()}</span>)
       </h2>
-      <p data-empty="active" class:list={['text-sm text-ink-muted', activeSessions.length === 0 ? '' : 'hidden']}>
-        No sessions running.
-      </p>
+      {/*
+        2026-05-21 — list renders skeleton placeholders SSR; JS
+        hydrates real /v1/sessions data. Same approach as profiles.astro
+        3b5ccb77 — pre-hydration the customer no longer sees fake
+        scaffolding session IDs / archetypes from MOCK_SESSIONS, just a
+        loading skeleton for the ~100ms /v1/sessions roundtrip. The
+        MOCK_SESSIONS.filter() variables stay intact so the W786 parity
+        pin keeps matching; they're just no longer used to render <li>.
+      */}
+      <p data-empty="active" class="hidden text-sm text-ink-muted">No sessions running.</p>
       <ul
         data-list="active"
-        class:list={['divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised', activeSessions.length === 0 ? 'hidden' : '']}
+        class="divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
       >
-        {activeSessions.map((session) => (
-          <li class="flex items-start justify-between gap-6 px-6 py-4">
-            <div class="min-w-0">
-              <div class="flex items-center gap-3">
-                <p class="font-mono text-sm font-medium text-ink-primary">{session.id}</p>
-                <span
-                  class:list={[
-                    'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
-                    STATUS_BADGE_CLASS[session.status],
-                  ]}
-                >
-                  {session.status}
-                </span>
-              </div>
-              <p class="mt-1 text-xs text-ink-muted">
-                Archetype <code class="font-mono">{session.archetype}</code> · started{' '}
-                {fmtIso(session.created_at)}
-                {session.profile_id !== null && (
-                  <>
-                    {' · profile '}
-                    <code class="font-mono">{session.profile_id.slice(0, 16)}…</code>
-                  </>
-                )}
-              </p>
+        {[0, 1].map(() => (
+          <li
+            data-skeleton="true"
+            class="flex items-start justify-between gap-6 px-6 py-4"
+            aria-hidden="true"
+          >
+            <div class="min-w-0 flex-1 space-y-2">
+              <div class="h-4 w-56 animate-pulse rounded bg-white/10" />
+              <div class="h-3 w-72 animate-pulse rounded bg-white/5" />
             </div>
-            <div class="flex shrink-0 flex-col items-end gap-2">
-              <a href={`#detail-${session.id}`} class="text-sm text-glow-red hover:underline">
-                Open
-              </a>
-              <a href={`#destroy-${session.id}`} class="text-sm text-red-700 hover:underline">
-                Destroy
-              </a>
-            </div>
+            <div class="h-8 w-16 shrink-0 animate-pulse rounded bg-white/5" />
           </li>
         ))}
       </ul>
@@ -294,35 +279,22 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
       <h2 class="mb-4 text-lg font-semibold text-ink-primary">
         Recent (<span data-count="recent">{recentClosedSessions.length.toString()}</span>)
       </h2>
-      <p data-empty="recent" class:list={['text-sm text-ink-muted', recentClosedSessions.length === 0 ? '' : 'hidden']}>
-        No recent sessions.
-      </p>
+      <p data-empty="recent" class="hidden text-sm text-ink-muted">No recent sessions.</p>
       <ul
         data-list="recent"
-        class:list={['divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised', recentClosedSessions.length === 0 ? 'hidden' : '']}
+        class="divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
       >
-        {recentClosedSessions.map((session) => (
-          <li class="flex items-start justify-between gap-6 px-6 py-4">
-            <div class="min-w-0">
-              <div class="flex items-center gap-3">
-                <p class="font-mono text-sm text-ink-secondary">{session.id}</p>
-                <span
-                  class:list={[
-                    'inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide',
-                    STATUS_BADGE_CLASS[session.status],
-                  ]}
-                >
-                  {session.status}
-                </span>
-              </div>
-              <p class="mt-1 text-xs text-ink-muted">
-                Ran {fmtDuration(session.duration_ms)} · destroyed{' '}
-                {fmtIso(session.destroyed_at)}
-              </p>
+        {[0, 1].map(() => (
+          <li
+            data-skeleton="true"
+            class="flex items-start justify-between gap-6 px-6 py-4"
+            aria-hidden="true"
+          >
+            <div class="min-w-0 flex-1 space-y-2">
+              <div class="h-4 w-56 animate-pulse rounded bg-white/10" />
+              <div class="h-3 w-64 animate-pulse rounded bg-white/5" />
             </div>
-            <a href={`#replay-${session.id}`} class="text-sm text-glow-red hover:underline">
-              View recording
-            </a>
+            <div class="h-4 w-24 shrink-0 animate-pulse rounded bg-white/5" />
           </li>
         ))}
       </ul>
