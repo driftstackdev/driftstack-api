@@ -150,9 +150,53 @@ const apiBaseUrl = resolveApiBaseUrl();
           data-component="ChatTranscript"
           aria-live="polite"
         >
-          <p class="text-ink-muted text-xs text-center" data-empty>
-            No turns yet. Send a message to start.
-          </p>
+          <div class="flex flex-col items-center justify-center gap-4 py-12 text-center" data-empty>
+            <div class="flex h-12 w-12 items-center justify-center rounded-md bg-glow-red/10 text-glow-red">
+              <svg
+                viewBox="0 0 24 24"
+                width="24"
+                height="24"
+                aria-hidden="true"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </div>
+            <div class="space-y-1">
+              <p class="text-sm font-medium text-ink-primary">No turns yet</p>
+              <p class="max-w-xs text-xs text-ink-muted">
+                Type a task in plain English below — the agent plans the steps, your browser
+                drives the actions. <span class="font-mono">⌘+Enter</span> sends.
+              </p>
+            </div>
+            <div class="grid w-full max-w-xs grid-cols-1 gap-2 text-left">
+              <button
+                type="button"
+                data-empty-suggestion="Take a screenshot of the current page and describe what's on it."
+                class="rounded-md border border-white/10 bg-surface-raised/50 px-3 py-2 text-xs text-ink-secondary hover:border-glow-red/40 hover:text-ink-primary"
+              >
+                📸 Screenshot + describe the page
+              </button>
+              <button
+                type="button"
+                data-empty-suggestion="Sign in with the credentials you'll get from me in the next message."
+                class="rounded-md border border-white/10 bg-surface-raised/50 px-3 py-2 text-xs text-ink-secondary hover:border-glow-red/40 hover:text-ink-primary"
+              >
+                🔐 Log in with credentials I'll provide
+              </button>
+              <button
+                type="button"
+                data-empty-suggestion="Fill the contact form with placeholder text and submit it."
+                class="rounded-md border border-white/10 bg-surface-raised/50 px-3 py-2 text-xs text-ink-secondary hover:border-glow-red/40 hover:text-ink-primary"
+              >
+                ✍️ Fill the contact form
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Composer: POSTs to /v1/agent-sessions/:id/message in Slice 4. -->
@@ -677,6 +721,20 @@ const apiBaseUrl = resolveApiBaseUrl();
         ev.preventDefault();
         composerForm?.dispatchEvent(new Event('submit', { cancelable: true }));
       }
+    });
+
+    // 2026-05-22 — suggestion-chip wiring. Click prefills the
+    // textarea + focuses it (customer can edit before sending).
+    // Bound once at boot rather than per-chip so future tweaks to the
+    // empty state only need to add the data-empty-suggestion attr.
+    document.querySelectorAll('[data-empty-suggestion]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const text = el.getAttribute('data-empty-suggestion') ?? '';
+        if (composerTextarea && text.length > 0) {
+          composerTextarea.value = text;
+          composerTextarea.focus();
+        }
+      });
     });
 
     paintMode();
