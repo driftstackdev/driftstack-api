@@ -121,10 +121,11 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     );
   });
 
-  it("active-link styling pinned: pathname matching → highlighted (bg-glow-red/10 + font-medium + text-glow-red + shadow-inset-divider). 2026-05-21 — exact match for '/' (so Overview doesn't highlight on every nested route) + prefix match for the rest (so /sessions/abc still highlights Sessions). Drift to dropping the prefix-clause would break subpage highlighting; drift to dropping the '/' exception would re-introduce Overview-always-active.", () => {
+  it("active-link styling pinned: pathname matching → highlighted (bg-glow-red/10 + text-glow-red + shadow-inset-divider). 2026-05-21 — exact match for '/' (so Overview doesn't highlight on every nested route) + prefix match for the rest. font-medium applied on BOTH active + inactive (constant width prevents click-induced layout shift).", () => {
     expect(body).toMatch(
       /item\.href === '\/'\s*\n?\s*\?\s*pathname === '\/'\s*\n?\s*:\s*pathname === item\.href \|\|\s*\n?\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
-    expect(body).toMatch(/'bg-glow-red\/10 font-medium text-glow-red shadow-inset-divider'/);
+    expect(body).toMatch(/'bg-glow-red\/10 text-glow-red shadow-inset-divider'/);
+    expect(body).toMatch(/text-sm font-medium transition-colors/);
   });
 });

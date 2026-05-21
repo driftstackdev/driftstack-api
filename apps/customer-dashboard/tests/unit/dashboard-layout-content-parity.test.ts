@@ -211,10 +211,12 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/es\.addEventListener\(kind,/);
   });
 
-  it('active-route highlighting: exact match for "/" (Overview) OR prefix match for the rest → glow-red bg/text + inset-divider shadow. 2026-05-21 — added the "/" exact-match exception so Overview no longer highlights on every nested route, while keeping the prefix-match for sub-routes (e.g. /sessions/abc still highlights Sessions).', () => {
+  it('active-route highlighting: exact match for "/" (Overview) OR prefix match for the rest → glow-red bg/text + inset-divider shadow. 2026-05-21 — added the "/" exact-match exception so Overview no longer highlights on every nested route. font-medium now applied on BOTH active + inactive (constant width prevents click-induced layout shift); active state distinguished by bg + text color + inset divider only.', () => {
     expect(body).toMatch(
       /item\.href === '\/'\s*\n?\s*\?\s*pathname === '\/'\s*\n?\s*:\s*pathname === item\.href \|\|\s*\n?\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
-    expect(body).toMatch(/'bg-glow-red\/10 font-medium text-glow-red shadow-inset-divider'/);
+    expect(body).toMatch(/'bg-glow-red\/10 text-glow-red shadow-inset-divider'/);
+    // font-medium is now applied unconditionally on the <a> base class.
+    expect(body).toMatch(/text-sm font-medium transition-colors/);
   });
 });

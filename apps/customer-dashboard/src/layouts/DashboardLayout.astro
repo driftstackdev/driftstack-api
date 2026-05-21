@@ -241,9 +241,13 @@ const navSections: NavSection[] = [
                             <a
                               href={item.href}
                               class:list={[
-                                'group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-all duration-200',
+                                // 2026-05-21 — font-weight stays constant across
+                                // active/inactive (font-medium widens text → other
+                                // items shifted on click). Active state distinguished
+                                // by bg + text color + inset divider only.
+                                'group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150',
                                 active
-                                  ? 'bg-glow-red/10 font-medium text-glow-red shadow-inset-divider'
+                                  ? 'bg-glow-red/10 text-glow-red shadow-inset-divider'
                                   : 'text-ink-secondary hover:bg-white/5 hover:text-ink-primary',
                               ]}
                             >
@@ -269,12 +273,16 @@ const navSections: NavSection[] = [
                                 <span
                                   data-nav-badge={item.badgeKey}
                                   class:list={[
-                                    'hidden shrink-0 rounded px-1.5 py-px font-mono text-[10px]',
+                                    // 2026-05-21 — opacity-0 (not `hidden`) so the
+                                    // slot reserves layout space pre-hydration; JS
+                                    // sets opacity-100 + textContent in one paint
+                                    // → no width jump when the badge appears.
+                                    'shrink-0 rounded px-1.5 py-px font-mono text-[10px] opacity-0 transition-opacity',
                                     active
                                       ? 'bg-glow-red/20 text-glow-red'
                                       : 'bg-white/5 text-ink-muted group-hover:text-ink-secondary',
                                   ]}
-                                />
+                                  >&nbsp;</span>
                               )}
                             </a>
                           </li>
@@ -492,11 +500,15 @@ const navSections: NavSection[] = [
                 const el = document.querySelector('[data-nav-badge="' + key + '"]');
                 if (!el) return;
                 if (text === null) {
-                  el.classList.add('hidden');
+                  // Keep the slot taking layout space (avoid post-load shift),
+                  // just stay invisible. Slot's pre-hydration content is &nbsp;.
+                  el.classList.add('opacity-0');
+                  el.classList.remove('opacity-100');
                   return;
                 }
                 el.textContent = text;
-                el.classList.remove('hidden');
+                el.classList.remove('opacity-0');
+                el.classList.add('opacity-100');
               };
               const ratio = (active, cap) => {
                 if (typeof active !== 'number') return null;
