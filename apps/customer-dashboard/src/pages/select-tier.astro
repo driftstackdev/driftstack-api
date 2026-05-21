@@ -22,13 +22,21 @@ const apiBaseUrl = resolveApiBaseUrl();
 
 // Tier 1 placeholder list — V-184b will replace with rich comparison
 // surface. Pulled from api-types so values stay aligned with backend.
-const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[] = [
-  { id: 'solo_manual', label: 'Solo Manual', price: '$79/mo', ladder: 'Manual' },
-  { id: 'team_manual', label: 'Team Manual', price: '$249/mo', ladder: 'Manual' },
-  { id: 'agency_manual', label: 'Agency Manual', price: '$699/mo', ladder: 'Manual' },
-  { id: 'api_starter', label: 'API Starter', price: '$149/mo', ladder: 'API' },
-  { id: 'api_builder', label: 'API Builder', price: '$499/mo', ladder: 'API' },
-  { id: 'api_scale', label: 'API Scale', price: '$1,499/mo', ladder: 'API' },
+const TIERS: {
+  id: AccountTier;
+  label: string;
+  price: string;
+  ladder: string;
+  /** Monthly amount in cents — used by the crypto checkout path. All
+   *  tiers clear NowPayments' $19.16 USD-equivalent minimum. */
+  priceCents: number;
+}[] = [
+  { id: 'solo_manual', label: 'Solo Manual', price: '$79/mo', ladder: 'Manual', priceCents: 7900 },
+  { id: 'team_manual', label: 'Team Manual', price: '$249/mo', ladder: 'Manual', priceCents: 24900 },
+  { id: 'agency_manual', label: 'Agency Manual', price: '$699/mo', ladder: 'Manual', priceCents: 69900 },
+  { id: 'api_starter', label: 'API Starter', price: '$149/mo', ladder: 'API', priceCents: 14900 },
+  { id: 'api_builder', label: 'API Builder', price: '$499/mo', ladder: 'API', priceCents: 49900 },
+  { id: 'api_scale', label: 'API Scale', price: '$1,499/mo', ladder: 'API', priceCents: 149900 },
 ];
 ---
 
@@ -94,9 +102,80 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
             >
               Start {t.label}
             </button>
+            <button
+              type="button"
+              data-action="buy-tier-crypto"
+              data-tier={t.id}
+              data-tier-label={t.label}
+              data-tier-price-cents={t.priceCents.toString()}
+              class="mt-2 w-full text-xs text-ink-muted hover:text-glow-red"
+            >
+              or pay with crypto →
+            </button>
           </div>
         ))
       }
+    </div>
+
+    {/* 2026-05-21 — V-666.D shared crypto checkout modal. Single modal
+        for all 4 tier cards; the click handler reads data-tier +
+        data-tier-label + data-tier-price-cents off the source button
+        + POSTs /v1/billing/crypto-checkout. Same shape as the
+        billing-page modal (81a15517) but indexed by tier rather than
+        hard-coded to trial pack. */}
+    <div
+      data-crypto-modal
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-surface-base/80 backdrop-blur-md p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="crypto-modal-title"
+    >
+      <div class="rounded-lg border border-white/10 bg-surface-raised p-6 max-w-md w-full">
+        <div class="flex items-start justify-between gap-4">
+          <h3 id="crypto-modal-title" class="text-lg font-semibold text-ink-primary">
+            Pay <span data-field="crypto-tier-label">—</span> with crypto
+          </h3>
+          <button
+            type="button"
+            data-crypto-modal-close
+            aria-label="Close"
+            class="text-ink-muted hover:text-ink-primary"
+          >
+            ✕
+          </button>
+        </div>
+        <div data-crypto-modal-loading class="mt-6 text-sm text-ink-muted">
+          Minting payment address…
+        </div>
+        <div
+          data-crypto-modal-error
+          class="mt-6 hidden rounded-md bg-glow-red/10 px-3 py-2 text-sm text-glow-red"
+        ></div>
+        <div data-crypto-modal-ready class="mt-6 hidden">
+          <p class="text-sm text-ink-secondary">
+            Send exactly{' '}
+            <span data-field="crypto-amount" class="font-mono text-ink-primary">—</span>{' '}
+            <span data-field="crypto-currency" class="font-mono text-ink-primary uppercase">—</span>{' '}
+            to:
+          </p>
+          <div class="mt-3 break-all rounded-md bg-surface-inset px-3 py-2 font-mono text-xs text-ink-primary">
+            <span data-field="crypto-address">—</span>
+          </div>
+          <button
+            type="button"
+            data-crypto-copy
+            class="mt-3 text-sm text-glow-red hover:underline"
+          >
+            Copy address
+          </button>
+          <p class="mt-4 text-xs text-ink-muted">
+            Order <code data-field="crypto-order-id" class="font-mono">—</code> · once your
+            transaction is detected (usually within minutes), your subscription activates
+            automatically. You can close this window — your order is tracked even if you
+            navigate away.
+          </p>
+        </div>
+      </div>
     </div>
 
     <p class="mt-8 text-xs text-ink-muted">
@@ -234,6 +313,122 @@ const TIERS: { id: AccountTier; label: string; price: string; ladder: string }[]
           });
         });
       });
+
+      // 2026-05-21 — V-666.D crypto checkout per-tier. Each tier card
+      // has a small "or pay with crypto →" link beneath the primary
+      // Stripe button; clicking opens the shared modal + POSTs
+      // /v1/billing/crypto-checkout with the tier's price_cents. All
+      // tiers clear NowPayments' $19.16 USD-equivalent floor.
+      const cryptoBtns = root.querySelectorAll('[data-action="buy-tier-crypto"]');
+      const cryptoModal = root.querySelector('[data-crypto-modal]');
+      const cryptoLoading = root.querySelector('[data-crypto-modal-loading]');
+      const cryptoError = root.querySelector('[data-crypto-modal-error]');
+      const cryptoReady = root.querySelector('[data-crypto-modal-ready]');
+      const cryptoCloseBtn = root.querySelector('[data-crypto-modal-close]');
+      const cryptoCopyBtn = root.querySelector('[data-crypto-copy]');
+
+      function setCryptoText(key, value) {
+        const el = root.querySelector('[data-field="' + key + '"]');
+        if (el && typeof value === 'string') el.textContent = value;
+      }
+      function showCryptoModal() {
+        if (!cryptoModal) return;
+        cryptoModal.classList.remove('hidden');
+        cryptoModal.classList.add('flex');
+      }
+      function hideCryptoModal() {
+        if (!cryptoModal) return;
+        cryptoModal.classList.add('hidden');
+        cryptoModal.classList.remove('flex');
+      }
+      function showCryptoError(msg) {
+        if (!cryptoLoading || !cryptoError || !cryptoReady) return;
+        cryptoLoading.classList.add('hidden');
+        cryptoReady.classList.add('hidden');
+        cryptoError.textContent = msg;
+        cryptoError.classList.remove('hidden');
+      }
+
+      cryptoBtns.forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          if (!token) {
+            showBanner('Sign in to pay with crypto.');
+            return;
+          }
+          const tier = btn.getAttribute('data-tier');
+          const tierLabel = btn.getAttribute('data-tier-label') ?? tier;
+          const priceCents = Number(btn.getAttribute('data-tier-price-cents'));
+          if (!tier || !Number.isFinite(priceCents)) return;
+          if (!cryptoLoading || !cryptoError || !cryptoReady) return;
+          setCryptoText('crypto-tier-label', tierLabel);
+          cryptoLoading.classList.remove('hidden');
+          cryptoError.classList.add('hidden');
+          cryptoReady.classList.add('hidden');
+          showCryptoModal();
+          try {
+            const idempotencyKey =
+              typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+                ? 'crypto-tier-' + crypto.randomUUID()
+                : 'crypto-tier-' + Date.now().toString();
+            const res = await authedFetch('/v1/billing/crypto-checkout', {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+                'idempotency-key': idempotencyKey,
+              },
+              body: JSON.stringify({
+                product: tier,
+                price_cents: priceCents,
+                price_currency: 'USD',
+              }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) {
+              showCryptoError(body.detail || 'HTTP ' + res.status);
+              return;
+            }
+            if (body.provider === 'stub' || !body.payment_address) {
+              showCryptoError(
+                "Crypto checkout isn't fully live yet — please email " +
+                  'billing@driftstack.dev with your order_id ' +
+                  (body.order_id || 'unknown') +
+                  ' for manual wire instructions.',
+              );
+              return;
+            }
+            cryptoLoading.classList.add('hidden');
+            setCryptoText('crypto-amount', String(body.pay_amount));
+            setCryptoText('crypto-currency', body.pay_currency);
+            setCryptoText('crypto-address', body.payment_address);
+            setCryptoText('crypto-order-id', body.order_id);
+            cryptoReady.classList.remove('hidden');
+          } catch (err) {
+            showCryptoError(err && err.message ? err.message : 'network error');
+          }
+        });
+      });
+
+      if (cryptoCloseBtn) cryptoCloseBtn.addEventListener('click', hideCryptoModal);
+      if (cryptoModal) {
+        cryptoModal.addEventListener('click', (e) => {
+          if (e.target === cryptoModal) hideCryptoModal();
+        });
+      }
+      if (cryptoCopyBtn) {
+        cryptoCopyBtn.addEventListener('click', async () => {
+          const addr = root.querySelector('[data-field="crypto-address"]');
+          if (!addr || !addr.textContent || !navigator.clipboard) return;
+          try {
+            await navigator.clipboard.writeText(addr.textContent);
+            cryptoCopyBtn.textContent = 'Copied ✓';
+            setTimeout(() => {
+              cryptoCopyBtn.textContent = 'Copy address';
+            }, 2000);
+          } catch (_) {
+            /* swallow */
+          }
+        });
+      }
     })();
   </script>
 </DashboardLayout>
