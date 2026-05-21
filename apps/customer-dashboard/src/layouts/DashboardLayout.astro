@@ -345,6 +345,42 @@ const navSections: NavSection[] = [
                   </div>
                 ))}
               </nav>
+              {/*
+                2026-05-21 — staff-only "Open admin" shortcut. Hidden by
+                default; the inline `/account/me` hydration script reveals
+                it when the cached `ds_is_staff_user` flag is set OR
+                when /account/me confirms `email` matches the staff
+                allowlist (signalled by /admin/* returning 200). Avoids
+                the localStorage-copy detour by passing the current
+                ds_web_session_token in the URL hash; admin's pre-paint
+                bridge consumes the hash + strips it from history.
+              */}
+              <div
+                data-admin-shortcut
+                class="hidden border-t border-white/10 px-4 py-3"
+              >
+                <a
+                  href="#"
+                  data-admin-shortcut-link
+                  class="flex items-center gap-2 rounded-md bg-glow-red/5 px-3 py-1.5 text-sm font-medium text-glow-red hover:bg-glow-red/10"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    width="14"
+                    height="14"
+                    aria-hidden="true"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="shrink-0"
+                  >
+                    <path d="M6 1.75v3.5H1.75 M1.75 5.25 6 1.75 M10 14.25v-3.5h4.25 M14.25 10.75 10 14.25" />
+                  </svg>
+                  <span class="flex-1">Open admin panel</span>
+                </a>
+              </div>
             </aside>
           )
         }
@@ -587,6 +623,61 @@ const navSections: NavSection[] = [
                 'team',
                 Array.isArray(me.teams) && me.teams.length > 0 ? String(me.teams.length) : null,
               );
+
+              // 2026-05-21 — staff probe + "Open admin panel" reveal.
+              // /v1/account/me doesn't carry the scope set, so probe a
+              // cheap admin endpoint with the current token: 200 means
+              // the staff-bump fired (V-481 staff_emails allowlist hit),
+              // anything else means the user is a customer. Cache the
+              // verdict so the next page-load reveals the link without
+              // a probe delay; clear cache if the verdict flips.
+              (function probeStaff() {
+                const shortcut = document.querySelector('[data-admin-shortcut]');
+                const link = document.querySelector('[data-admin-shortcut-link]');
+                if (!shortcut || !link) return;
+                let cached = null;
+                try {
+                  cached = localStorage.getItem('ds_is_staff_user');
+                } catch (_) {
+                  /* swallow */
+                }
+                function buildHref() {
+                  const t = (function () {
+                    try {
+                      return localStorage.getItem('ds_web_session_token') || '';
+                    } catch (_) {
+                      return '';
+                    }
+                  })();
+                  return 'https://admin.driftstack.dev/#token=' + encodeURIComponent(t);
+                }
+                if (cached === '1') {
+                  link.setAttribute('href', buildHref());
+                  shortcut.classList.remove('hidden');
+                }
+                fetch(apiBaseUrl + '/v1/admin/audit-log?limit=1', {
+                  headers: { authorization: 'Bearer ' + token },
+                  credentials: 'include',
+                })
+                  .then(function (r) {
+                    const isStaff = r.status === 200;
+                    try {
+                      if (isStaff) localStorage.setItem('ds_is_staff_user', '1');
+                      else localStorage.removeItem('ds_is_staff_user');
+                    } catch (_) {
+                      /* swallow */
+                    }
+                    if (isStaff) {
+                      link.setAttribute('href', buildHref());
+                      shortcut.classList.remove('hidden');
+                    } else {
+                      shortcut.classList.add('hidden');
+                    }
+                  })
+                  .catch(function () {
+                    /* network blip — leave whatever cached state was */
+                  });
+              })();
 
               // 2026-05-21 — cache team-membership flag so the NEXT page
               // load can pre-reserve picker space (avoids first-render

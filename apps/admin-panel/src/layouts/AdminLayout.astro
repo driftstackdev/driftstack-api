@@ -122,6 +122,27 @@ const navItems = [
          */
       }
       (function () {
+        // 2026-05-21 — token-hash SSO bridge from the customer dashboard.
+        // When the customer clicks "Open admin panel" on app.driftstack.dev,
+        // the dashboard appends `#token=<ds_web_session_token>` to the
+        // admin URL. The block below reads that hash, stores the token in
+        // admin.driftstack.dev's localStorage (separate origin = separate
+        // store), and strips the hash so it never ends up in browser
+        // history. Runs before the layout reveal script so subsequent
+        // page-load fetches already have the token.
+        try {
+          if (location.hash && location.hash.indexOf('#token=') === 0) {
+            var t = decodeURIComponent(location.hash.slice('#token='.length));
+            if (t.length > 0) {
+              localStorage.setItem('ds_web_session_token', t);
+            }
+            // Strip the hash from the URL bar + history without
+            // reloading the page.
+            history.replaceState(null, '', location.pathname + location.search);
+          }
+        } catch (_) {
+          /* swallow — block missing localStorage etc */
+        }
         var main = document.querySelector('main[data-hydrate="pending"]');
         if (!main) return;
         var revealed = false;
