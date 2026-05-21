@@ -76,7 +76,11 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
   });
 
   it("Auth pattern: localStorage.getItem('driftstack_admin_token') + Bearer header on /v1/admin/status-subscribers?limit=200 — pinned so the admin-token key stays in sync with the auth bootstrap (drift to a different key would silently sign every admin out). 2026-05-21 — fetch URL prefixed by apiBaseUrl (admin.driftstack.dev is a static Pages origin; relative paths 404).", () => {
-    expect(body).toMatch(/localStorage\.getItem\('driftstack_admin_token'\) \|\| ''/);
+    // 2026-05-21 — staff token now lives in `ds_web_session_token`
+    // (canonical key the SSO bridge populates from app.driftstack.dev).
+    // The legacy `driftstack_admin_token` key was a paper trail and
+    // never populated anywhere.
+    expect(body).toMatch(/localStorage\.getItem\('ds_web_session_token'\) \|\| ''/);
     expect(body).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/admin\/status-subscribers\?limit=200', \{\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)/,
     );

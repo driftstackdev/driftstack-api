@@ -55,7 +55,10 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function getToken() {
         try {
-          return localStorage.getItem('driftstack_admin_token') || '';
+          // 2026-05-21 — use ds_web_session_token (canonical staff bearer
+          // set by the SSO bridge from app.driftstack.dev). The legacy
+          // `driftstack_admin_token` key was never populated.
+          return localStorage.getItem('ds_web_session_token') || '';
         } catch (_) {
           return '';
         }

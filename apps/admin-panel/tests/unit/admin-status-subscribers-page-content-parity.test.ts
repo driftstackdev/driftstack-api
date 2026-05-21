@@ -63,8 +63,8 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toMatch(/method: 'POST'/);
   });
 
-  it('localStorage driftstack_admin_token convention', () => {
-    expect(body).toMatch(/localStorage\.getItem\('driftstack_admin_token'\)/);
+  it('localStorage ds_web_session_token convention. 2026-05-21 — switched from the legacy `driftstack_admin_token` key (never populated) to the canonical staff bearer the SSO bridge writes.', () => {
+    expect(body).toMatch(/localStorage\.getItem\('ds_web_session_token'\)/);
   });
 
   it('3 subscriber row states pinned (confirmed=emerald / pending=amber / unsubscribed=slate)', () => {
