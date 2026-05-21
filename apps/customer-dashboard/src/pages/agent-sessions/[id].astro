@@ -507,8 +507,22 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (composerSubmit) composerSubmit.disabled = true;
 
       const customerBubble = appendTurn('customer', text);
-      // Pending agent bubble — placeholder text replaced when POST resolves.
-      pendingTurnEl = appendTurn('agent', '…thinking…');
+      // Pending agent bubble — three pulsing dots replace the
+      // "thinking…" text when POST resolves. Pulse cadence staggered
+      // 200ms per dot via inline animation-delay so it reads as a
+      // live typing indicator.
+      pendingTurnEl = appendTurn('agent', '');
+      if (pendingTurnEl) {
+        const bub = pendingTurnEl.querySelector('div:last-child');
+        if (bub) {
+          bub.innerHTML =
+            '<span class="inline-flex items-center gap-1" aria-label="agent is thinking">' +
+            '<span class="inline-block h-2 w-2 rounded-full bg-glow-red animate-pulse"></span>' +
+            '<span class="inline-block h-2 w-2 rounded-full bg-glow-red animate-pulse" style="animation-delay:200ms"></span>' +
+            '<span class="inline-block h-2 w-2 rounded-full bg-glow-red animate-pulse" style="animation-delay:400ms"></span>' +
+            '</span>';
+        }
+      }
 
       try {
         const res = await fetch(
