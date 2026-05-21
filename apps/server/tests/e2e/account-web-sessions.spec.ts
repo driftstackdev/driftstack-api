@@ -58,14 +58,16 @@ async function seedWebSession(
   const { createHash } = await import('node:crypto');
   const tokenHash = createHash('sha256').update(tokenPlain).digest('hex');
   const sessionId = randomUUID();
-  const expiresAt = new Date(Date.now() + 86_400_000); // +24h
+  // 2026-05-20 — pre-serialize Date to ISO; postgres-js Bind step
+  // doesn't accept raw Date params (same fix as auth-flows-repo.ts:190).
+  const expiresAt = new Date(Date.now() + 86_400_000).toISOString(); // +24h
   const ua =
     opts.userAgent ??
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Safari/16.4';
   await client`
     INSERT INTO web_sessions
       (id, account_id, token_hash, expires_at, user_agent, last_used_at)
-    VALUES (${sessionId}, ${accountId}, ${tokenHash}, ${expiresAt},
+    VALUES (${sessionId}, ${accountId}, ${tokenHash}, ${expiresAt}::timestamptz,
             ${ua}, NOW())
   `;
   return sessionId;

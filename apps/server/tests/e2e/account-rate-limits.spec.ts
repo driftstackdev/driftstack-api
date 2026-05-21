@@ -75,12 +75,14 @@ test('active override is reflected with source=override and an expiry timestamp'
   request,
 }) => {
   const seed = await seedAccount(server.client);
-  const futureExpiry = new Date(Date.now() + 60 * 60 * 1000); // +1h
+  // 2026-05-20 — pre-serialize Date to ISO; postgres-js Bind step
+  // doesn't accept raw Date params (same fix as auth-flows-repo.ts:190).
+  const futureExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // +1h
   await server.client`
     INSERT INTO rate_limit_overrides
       (account_id, bucket_key, capacity, refill_per_second_centi,
        expires_at, set_by_key_id)
-    VALUES (${seed.accountId}, 'global', 9999, 100000, ${futureExpiry},
+    VALUES (${seed.accountId}, 'global', 9999, 100000, ${futureExpiry}::timestamptz,
             ${seed.apiKeyId})
   `;
 
@@ -103,12 +105,13 @@ test('active override is reflected with source=override and an expiry timestamp'
 
 test('expired override falls back to tier_default', async ({ request }) => {
   const seed = await seedAccount(server.client);
-  const pastExpiry = new Date(Date.now() - 60 * 1000); // -1m
+  // Same Date-to-ISO pre-serialization as above.
+  const pastExpiry = new Date(Date.now() - 60 * 1000).toISOString(); // -1m
   await server.client`
     INSERT INTO rate_limit_overrides
       (account_id, bucket_key, capacity, refill_per_second_centi,
        expires_at, set_by_key_id)
-    VALUES (${seed.accountId}, 'global', 9999, 100000, ${pastExpiry},
+    VALUES (${seed.accountId}, 'global', 9999, 100000, ${pastExpiry}::timestamptz,
             ${seed.apiKeyId})
   `;
 
