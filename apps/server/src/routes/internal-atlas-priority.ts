@@ -255,6 +255,57 @@ export function registerInternalAtlasPriorityRoutes(
   );
 }
 
+/** 2026-05-21 — admin-staff read mirror. The /v1/internal/* family
+ *  authenticates with DRIFTSTACK_FLEET_INTERNAL_TOKEN (used by BS
+ *  Automate workers + harvester callbacks). The admin panel surfaces
+ *  the same queue + event detail to Driftstack staff via web session
+ *  auth + `driftstack_internal_admin` scope. This avoids handing the
+ *  fleet token to every staff browser. Read-only — no POST mirrors. */
+export function registerAdminAtlasPriorityRoutes(
+  app: FastifyInstance,
+  deps: { repo: NonNullable<InternalAtlasPriorityRoutesDeps['repo']> },
+): void {
+  app.get(
+    '/v1/admin/atlas-priority/queue',
+    {
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+    },
+    async (req) => {
+      const q = queueQuerySchema.parse(req.query);
+      const events = await deps.repo.listRecent({
+        status: q.status,
+        customerId: q.customer_id,
+        since: q.since,
+        limit: q.limit,
+      });
+      const stats = await deps.repo.getStats(new Date());
+      return {
+        events: events.map(serializeEvent),
+        total_count: events.length,
+        stats,
+      };
+    },
+  );
+
+  app.get(
+    '/v1/admin/atlas-priority/event/:id',
+    {
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+    },
+    async (req) => {
+      const { id } = eventDetailParamsSchema.parse(req.params);
+      const row = await deps.repo.findById(id);
+      if (!row) {
+        throw new NotFoundError(`atlas-priority-event ${id} not found`);
+      }
+      return {
+        event: serializeEvent(row),
+        timeline: lifecycleTimeline(row),
+      };
+    },
+  );
+}
+
 /** Activation-gate disabled variant — registers the routes but every
  *  call returns 503 FeatureUnavailable. Mirrors the fleet-events
  *  disabled-routes pattern. */

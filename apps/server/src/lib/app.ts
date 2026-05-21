@@ -137,6 +137,7 @@ import {
   registerFleetEventsRoutes,
 } from '../routes/fleet-events.js';
 import {
+  registerAdminAtlasPriorityRoutes,
   registerInternalAtlasPriorityDisabledRoutes,
   registerInternalAtlasPriorityRoutes,
 } from '../routes/internal-atlas-priority.js';
@@ -1182,6 +1183,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   } else {
     registerInternalAtlasPriorityDisabledRoutes(app);
+  }
+  // 2026-05-21 — admin-staff read mirror for the atlas-priority queue.
+  // Independent of the internal-fleet-auth activation gate (admin auth
+  // uses web session + driftstack_internal_admin scope). Gated only on
+  // the repo being available — i.e. enabled wherever the underlying
+  // Postgres table is wired.
+  if (deps.atlasPriorityEventsRepo !== undefined) {
+    registerAdminAtlasPriorityRoutes(app, {
+      repo: deps.atlasPriorityEventsRepo,
+    });
   }
   // LK.2 — Mac-side LiveKit credentials registration. Gated on both
   // the Drizzle repo (in-memory test fixtures skip it; prod wires
