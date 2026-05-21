@@ -100,6 +100,13 @@ const navItems = [
         </nav>
         <div class="border-t border-slate-200 px-6 py-4 text-xs text-slate-500">
           <p>Staff-only surface. All actions audit-logged.</p>
+          <button
+            type="button"
+            data-signout
+            class="mt-2 text-slate-500 hover:text-oxblood-700"
+          >
+            Sign out
+          </button>
         </div>
       </aside>
       <main
@@ -175,6 +182,36 @@ const navItems = [
         // covers pages not yet retrofitted.
         window.dashboardHydrated = reveal;
         setTimeout(reveal, 1200);
+
+        // 2026-05-21 — sign-out wiring. Same pattern as DashboardLayout
+        // 5f7eff40 — clears admin's localStorage + redirects to the
+        // dashboard sign-in (admin has no /login page of its own).
+        var signOut = document.querySelector('[data-signout]');
+        if (signOut) {
+          signOut.addEventListener('click', function () {
+            try {
+              var token = localStorage.getItem('ds_web_session_token') || '';
+              if (token) {
+                fetch('https://api.driftstack.dev/v1/auth/logout', {
+                  method: 'POST',
+                  headers: { authorization: 'Bearer ' + token },
+                  credentials: 'include',
+                  keepalive: true,
+                }).catch(function () {
+                  /* fire-and-forget */
+                });
+              }
+              localStorage.removeItem('ds_web_session_token');
+              localStorage.removeItem('ds_is_staff_user');
+            } catch (_) {
+              /* swallow */
+            }
+            // Bounce out of the admin origin entirely — admin has no
+            // login page; the dashboard's /login is the canonical sign-
+            // in surface.
+            window.location.href = 'https://app.driftstack.dev/login';
+          });
+        }
       })();
     </script>
   </body>
