@@ -254,6 +254,13 @@ const apiBaseUrl = resolveApiBaseUrl();
             showBanner(
               'Failed to load team: ' + (err && err.message ? err.message : 'network error'),
             );
+          })
+          .finally(function () {
+            // 2026-05-21 — signal the layout opacity-gate; same pattern
+            // as billing/usage/profiles/sessions/api-keys/webhooks.
+            if (typeof window.dashboardHydrated === 'function') {
+              window.dashboardHydrated();
+            }
           });
       }
 

@@ -206,6 +206,12 @@ const apiBaseUrl = resolveApiBaseUrl();
                 (err && err.message ? err.message : 'network error') +
                 ').',
             );
+          })
+          .finally(function () {
+            // 2026-05-21 — opacity-gate hydrate signal.
+            if (typeof window.dashboardHydrated === 'function') {
+              window.dashboardHydrated();
+            }
           });
       }
 

@@ -492,6 +492,13 @@ const FILTER_OPTIONS = [
                 (err && err.message ? err.message : 'network error') +
                 ').',
             );
+          })
+          .finally(function () {
+            // 2026-05-21 — opacity-gate hydrate signal (same pattern
+            // as the other dashboard pages).
+            if (typeof window.dashboardHydrated === 'function') {
+              window.dashboardHydrated();
+            }
           });
       }
 

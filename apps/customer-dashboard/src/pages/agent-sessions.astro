@@ -257,6 +257,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         })
         .catch(() => {
           /* swallow — network issues handled separately */
+        })
+        .finally(() => {
+          // 2026-05-21 — opacity-gate hydrate signal (same pattern
+          // as the other dashboard pages).
+          if (typeof window.dashboardHydrated === 'function') {
+            window.dashboardHydrated();
+          }
         });
 
       // v2-#8 Wave 2.C sub-slice 8.25 — create-session form wiring.

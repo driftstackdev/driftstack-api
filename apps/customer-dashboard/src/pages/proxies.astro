@@ -305,6 +305,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!token) {
           showBanner('Sign in to manage saved proxies.');
           renderList([]);
+          // 2026-05-21 — opacity-gate hydrate signal even when we
+          // short-circuited on missing token; otherwise the page sits
+          // at opacity:0 until the 1200ms safety cap.
+          if (typeof window.dashboardHydrated === 'function') {
+            window.dashboardHydrated();
+          }
           return;
         }
         try {
@@ -318,6 +324,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         } catch (err) {
           renderList([]);
           showBanner('Could not load saved proxies (' + ((err && err.message) || 'network') + ').');
+        } finally {
+          // 2026-05-21 — same opacity-gate signal (success / failure
+          // both reach here; the renderList call has run either way).
+          if (typeof window.dashboardHydrated === 'function') {
+            window.dashboardHydrated();
+          }
         }
       }
 
