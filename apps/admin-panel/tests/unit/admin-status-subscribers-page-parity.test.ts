@@ -94,11 +94,13 @@ describe('W356.C /status-subscribers admin page parity', () => {
     expect(body).toMatch(/Customer can re-subscribe via the public form/);
   });
 
-  it('admin token read from localStorage under driftstack_admin_token key (admin-panel convention)', () => {
-    // Same key the rest of admin-panel uses — a rename here
-    // without a coordinated migration would silently lock every
-    // admin out of the page.
-    expect(body).toContain("'driftstack_admin_token'");
+  it('admin token read from localStorage under ds_web_session_token key (SSO bridge convention)', () => {
+    // 2026-05-21 — switched from the legacy `driftstack_admin_token`
+    // key (never populated anywhere) to the canonical staff bearer
+    // the SSO bridge writes from app.driftstack.dev. Same key the
+    // rest of admin-panel uses; a rename without coordinated
+    // migration would silently lock every admin out of the page.
+    expect(body).toContain("'ds_web_session_token'");
   });
 
   it('three status-badge slots cover the schema row states (pending / confirmed / unsubscribed)', () => {
