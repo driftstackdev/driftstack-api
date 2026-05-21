@@ -15,6 +15,8 @@ import {
   type ProfileSortBy,
   type ProfileStatusFilter,
 } from '../components/ProfilesActionBar';
+import { ProxyChip } from '../components/ProxyChip';
+import { RelativeTime } from '../components/RelativeTime';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
@@ -459,10 +461,18 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                   {profile.description !== null && (
                     <p className="mt-1 text-xs text-ink-secondary">{profile.description}</p>
                   )}
-                  <p className="mt-1 text-xs text-ink-muted">
-                    <span className="mono">{profile.archetype}</span>
-                    {' · proxy: '}
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
+                    <span className="mono rounded-sm bg-surface-base px-1.5 py-0.5 text-[11px]">
+                      {profile.archetype}
+                    </span>
+                    <ProxyChip
+                      proxy={selectedProxy}
+                      defaulted={
+                        binding?.defaultProxyId === null || binding?.defaultProxyId === undefined
+                      }
+                    />
                     <select
+                      aria-label={`Change proxy binding for ${profile.name}`}
                       className="mono rounded-sm bg-surface-base px-1 py-0.5 text-[11px] text-ink-secondary"
                       value={binding?.defaultProxyId ?? ''}
                       onChange={(e) => {
@@ -470,7 +480,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                         void setDefaultProxy(profile.id, next).then(() => void refresh(false));
                       }}
                       disabled={busy || running}
-                      title={running ? 'Stop the profile to change proxy' : undefined}
+                      title={running ? 'Stop the profile to change proxy' : 'Change proxy binding'}
                     >
                       <option value="">— (first available)</option>
                       {proxies.map((p) => (
@@ -479,17 +489,13 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                         </option>
                       ))}
                     </select>
-                    {selectedProxy !== null && binding?.defaultProxyId === null && (
-                      <span className="ml-1 text-ink-muted">
-                        → defaulting to {selectedProxy.label}
+                    {profile.last_used_at !== null && (
+                      <span>
+                        last used{' '}
+                        <RelativeTime iso={profile.last_used_at} tooltipPrefix="Last used" />
                       </span>
                     )}
-                    {profile.last_used_at !== null && (
-                      <>
-                        {' · '}last used {new Date(profile.last_used_at).toLocaleString()}
-                      </>
-                    )}
-                  </p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   {running ? (
