@@ -137,14 +137,19 @@ test('exchange with a mismatched state returns 400 (state_mismatch)', async ({ r
   expect(res.status()).toBe(400);
 });
 
-test('exchange with an unknown code returns 404', async ({ request }) => {
-  // 2026-05-21 — exchange schema requires state >= 16 chars. The unknown-code
-  // assertion stays meaningful with a well-formed state — the route still
-  // looks up the code first and 404s before checking state semantics.
+test('exchange with an unknown code returns status=expired', async ({ request }) => {
+  // 2026-05-21 — the service maps "code not in store" to
+  // `{ status: 'expired' }` (cli-authorize.ts comment: "Either never
+  // existed OR Redis evicted on TTL — treat both as expired from the
+  // CLI / GUI's perspective"). The earlier expectation of 404 was
+  // wrong; the route returns 200 + body.status='expired'. CLI loops
+  // on expired the same way it loops on pending → restarts the flow.
   const res = await request.post(`${server.baseUrl}/v1/auth/cli-authorize/exchange`, {
     data: { code: 'definitely-not-a-real-code', state: 'state-padded-to-16+' },
   });
-  expect(res.status()).toBe(404);
+  expect(res.status()).toBe(200);
+  const body = (await res.json()) as { status: string };
+  expect(body.status).toBe('expired');
 });
 
 test('bind with a mismatched state returns 400', async ({ request }) => {
