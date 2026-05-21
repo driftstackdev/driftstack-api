@@ -131,6 +131,30 @@ const navSections: NavSection[] = [
             (function () {
               try {
                 var t = localStorage.getItem('ds_web_session_token');
+                // 2026-05-21 — handle the admin bounce: if a staff member
+                // landed on admin.driftstack.dev with no token, the admin
+                // layout redirects here with ?next-admin=<path>. If we
+                // already have a session token, bounce them back with
+                // the token in the URL hash. Falls through to the normal
+                // /login redirect when there's no token yet — login.astro
+                // honours ?next= and will land back here, where this
+                // block re-runs and forwards on to admin.
+                var qs = new URLSearchParams(location.search);
+                var nextAdmin = qs.get('next-admin');
+                if (nextAdmin && t && t.length > 0) {
+                  location.replace(
+                    'https://admin.driftstack.dev' + nextAdmin + '?bounced=1#token=' +
+                      encodeURIComponent(t),
+                  );
+                  return;
+                }
+                if (nextAdmin && (!t || t.length === 0)) {
+                  // Carry the next-admin intent through /login as a
+                  // doubly-encoded ?next= round-trip.
+                  var loginNext = '/?next-admin=' + encodeURIComponent(nextAdmin);
+                  location.replace('/login?next=' + encodeURIComponent(loginNext));
+                  return;
+                }
                 if (!t || t.length === 0) {
                   var here = location.pathname + location.search;
                   location.replace('/login?next=' + encodeURIComponent(here));

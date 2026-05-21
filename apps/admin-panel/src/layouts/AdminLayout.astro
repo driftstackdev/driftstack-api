@@ -140,6 +140,23 @@ const navItems = [
             // reloading the page.
             history.replaceState(null, '', location.pathname + location.search);
           }
+          // 2026-05-21 — direct-visit bounce. If a staff member lands
+          // on admin.driftstack.dev without a token (e.g. bookmarked
+          // the URL or typed it directly), redirect them through the
+          // dashboard's signed-in flow: app.driftstack.dev?next-admin=<path>
+          // → after sign-in the dashboard bounces them back with
+          // #token= set. The `bounced=1` guard prevents infinite loops
+          // if app-side auth itself fails.
+          if (
+            !localStorage.getItem('ds_web_session_token') &&
+            location.search.indexOf('bounced=1') === -1
+          ) {
+            location.replace(
+              'https://app.driftstack.dev/?next-admin=' +
+                encodeURIComponent(location.pathname + location.search),
+            );
+            return;
+          }
         } catch (_) {
           /* swallow — block missing localStorage etc */
         }
