@@ -3,6 +3,7 @@
 // Recordings live until the app closes (see lib/recordings.tsx). The
 // playback view is reached by clicking a row.
 
+import { RelativeTime } from '../components/RelativeTime';
 import {
   formatDuration,
   recordingDurationMs,
@@ -62,8 +63,11 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                       <span className="mono text-ink-secondary">{r.sessionId}</span>
                     </Td>
                     <Td>
-                      <span className="mono text-ink-muted">
-                        {new Date(r.startedAt).toLocaleString()}
+                      <span className="text-ink-muted">
+                        <RelativeTime
+                          iso={new Date(r.startedAt).toISOString()}
+                          tooltipPrefix="Started"
+                        />
                       </span>
                     </Td>
                     <Td>

@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { RelativeTime } from '../components/RelativeTime';
 import {
   addProxy,
   listProxies,
@@ -217,8 +218,8 @@ function ProxyTable({
                 </span>
               </Td>
               <Td>
-                <span className="mono text-ink-muted">
-                  {new Date(p.createdAt).toLocaleString()}
+                <span className="text-ink-muted">
+                  <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
                 </span>
               </Td>
               <Td>
