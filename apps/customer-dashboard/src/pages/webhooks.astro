@@ -1305,6 +1305,13 @@ const apiBaseUrl = resolveApiBaseUrl();
               (err && err.message ? err.message : 'network error') +
               '). Showing preview data below.',
           );
+        })
+        .finally(function () {
+          // 2026-05-21 — signal the layout's opacity-gate that the
+          // primary /v1/webhooks fetch resolved (success or failure).
+          if (typeof window.dashboardHydrated === 'function') {
+            window.dashboardHydrated();
+          }
         });
     })();
   </script>

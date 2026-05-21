@@ -625,7 +625,14 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           // mock value rather than hiding it.
         });
 
-      void Promise.all([sessionsP, usageP]);
+      void Promise.all([sessionsP, usageP]).finally(function () {
+        // 2026-05-21 — signal the layout's opacity-gate that the
+        // primary /v1/sessions + /v1/usage fetches resolved (success or
+        // failure). Skeleton <li>s already swapped via sessionsP's then.
+        if (typeof window.dashboardHydrated === 'function') {
+          window.dashboardHydrated();
+        }
+      });
     })();
   </script>
 </DashboardLayout>

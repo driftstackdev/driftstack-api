@@ -483,6 +483,15 @@ const apiBaseUrl = resolveApiBaseUrl();
                 (err && err.message ? err.message : 'network error') +
                 ').',
             );
+          })
+          .finally(function () {
+            // 2026-05-21 — signal the layout's opacity-gate that the
+            // primary fetch resolved. Skeleton <li>s are already
+            // swapped at this point (success path) or the banner
+            // explains the failure (catch path); either way reveal.
+            if (typeof window.dashboardHydrated === 'function') {
+              window.dashboardHydrated();
+            }
           });
       }
 

@@ -518,6 +518,13 @@ const apiBaseUrl = resolveApiBaseUrl();
                 (err && err.message ? err.message : 'network error') +
                 ').',
             );
+          })
+          .finally(function () {
+            // 2026-05-21 — signal the layout's opacity-gate that the
+            // /v1/api-keys fetch resolved (success or failure).
+            if (typeof window.dashboardHydrated === 'function') {
+              window.dashboardHydrated();
+            }
           });
       }
 
