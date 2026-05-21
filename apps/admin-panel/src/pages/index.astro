@@ -71,9 +71,29 @@ const apiBaseUrl = resolveApiBaseUrl();
     <section class="mt-10 dashboard-card">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold text-slate-900">Recent admin activity</h2>
-        <a href="/audit-log" class="text-sm text-oxblood-700 hover:underline">
-          See full log →
-        </a>
+        <div class="flex items-center gap-3 text-xs">
+          {/* 2026-05-21 — live auto-refresh indicator. JS toggles
+              `data-state` to dot-green while idle, dot-amber while
+              fetching, dot-red on error. Updates every 30s. */}
+          <span class="flex items-center gap-1.5 text-slate-500" data-live-indicator>
+            <span
+              aria-hidden="true"
+              data-live-dot
+              class="inline-block h-2 w-2 rounded-full bg-emerald-500"
+            ></span>
+            <span data-live-status>Live · updated <span data-live-age>just now</span></span>
+          </span>
+          <button
+            type="button"
+            data-live-refresh
+            class="text-oxblood-700 hover:underline"
+          >
+            Refresh now
+          </button>
+          <a href="/audit-log" class="text-oxblood-700 hover:underline">
+            See full log →
+          </a>
+        </div>
       </div>
       <ul class="mt-4 divide-y divide-slate-100" data-list="recent-audits">
         {
@@ -238,14 +258,30 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
         });
 
-      const auditP = authedFetch('/v1/admin/audit-log?limit=5')
-        .then((r) => {
-          if (r.status === 403) return Promise.reject(new Error('forbidden'));
-          return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
-        })
-        .then((body) => {
-          renderAudits(body.data || []);
-        });
+      // 2026-05-21 — live activity feed. The audit-log fetch is
+      // extracted so we can refresh it on a 30s timer + bind to the
+      // "Refresh now" button. Each refresh updates `lastAuditFetch`
+      // for the "Live · updated <N> ago" indicator.
+      let lastAuditFetch = Date.now();
+      function fetchAudit() {
+        const liveDot = root.querySelector('[data-live-dot]');
+        if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+        return authedFetch('/v1/admin/audit-log?limit=5')
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then((body) => {
+            renderAudits(body.data || []);
+            lastAuditFetch = Date.now();
+            if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
+          })
+          .catch((err) => {
+            if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
+            throw err;
+          });
+      }
+      const auditP = fetchAudit();
 
       Promise.all([overviewP, auditP])
         .then(() => hideBanner())
@@ -266,6 +302,24 @@ const apiBaseUrl = resolveApiBaseUrl();
             window.dashboardHydrated();
           }
         });
+
+      // 2026-05-21 — 30s polling timer + "Refresh now" button +
+      // "updated <N> ago" age-ticker. The age string updates every
+      // 5s without re-fetching so the indicator feels responsive.
+      const refreshBtn = root.querySelector('[data-live-refresh]');
+      if (refreshBtn) refreshBtn.addEventListener('click', () => void fetchAudit());
+      setInterval(() => void fetchAudit(), 30_000);
+      function fmtAge(ms) {
+        const s = Math.floor((Date.now() - ms) / 1000);
+        if (s < 5) return 'just now';
+        if (s < 60) return s.toString() + 's ago';
+        if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
+        return Math.floor(s / 3600).toString() + 'h ago';
+      }
+      const ageEl = root.querySelector('[data-live-age]');
+      setInterval(() => {
+        if (ageEl) ageEl.textContent = fmtAge(lastAuditFetch);
+      }, 5_000);
     })();
   </script>
 </AdminLayout>
