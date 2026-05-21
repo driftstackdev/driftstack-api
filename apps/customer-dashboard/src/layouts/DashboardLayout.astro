@@ -655,6 +655,26 @@ const navSections: NavSection[] = [
             headers: { authorization: 'Bearer ' + token },
           })
             .then(function (r) {
+              // 2026-05-21 — 401 from /account/me means the session
+              // token expired or was revoked server-side. Clear local
+              // state + bounce to /login so the customer hits the
+              // password / OAuth flow instead of seeing stale data +
+              // generic banner errors. Same effect as the pre-paint
+              // login gate, just covers the "had-token-but-expired"
+              // case the gate can't detect (token presence != validity).
+              if (r.status === 401) {
+                try {
+                  localStorage.removeItem('ds_web_session_token');
+                  localStorage.removeItem('ds_is_team_user');
+                  localStorage.removeItem('ds_is_staff_user');
+                  localStorage.removeItem('ds_act_as_account');
+                } catch (_) {
+                  /* swallow */
+                }
+                window.location.href =
+                  '/login?next=' + encodeURIComponent(location.pathname + location.search);
+                return null;
+              }
               return r.ok ? r.json() : null;
             })
             .then(function (me) {
