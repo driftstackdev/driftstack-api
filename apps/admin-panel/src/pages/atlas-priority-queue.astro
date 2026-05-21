@@ -231,6 +231,11 @@ const STATUS_BADGE: Record<string, string> = {
           'Showing ' + (data.events?.length ?? 0) + ' events · ' + new Date().toISOString();
       } catch (err) {
         showError('Fetch failed: ' + (err.message || String(err)));
+      } finally {
+        // 2026-05-21 — AdminLayout opacity-gate signal.
+        if (typeof window.dashboardHydrated === 'function') {
+          window.dashboardHydrated();
+        }
       }
     }
 

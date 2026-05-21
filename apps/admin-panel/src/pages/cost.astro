@@ -370,5 +370,10 @@ const apiBaseUrl = resolveApiBaseUrl();
     });
   }
 
-  void loadConfig();
+  void loadConfig().finally(() => {
+    // 2026-05-21 — AdminLayout opacity-gate signal.
+    if (typeof window.dashboardHydrated === 'function') {
+      window.dashboardHydrated();
+    }
+  });
 </script>
