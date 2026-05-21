@@ -165,6 +165,11 @@ import AdminLayout from '../layouts/AdminLayout.astro';
                 (err && err.message ? err.message : 'network error'),
               true,
             );
+          })
+          .finally(function () {
+            if (typeof window.dashboardHydrated === 'function') {
+              window.dashboardHydrated();
+            }
           });
       }
 

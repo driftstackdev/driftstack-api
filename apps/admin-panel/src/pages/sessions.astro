@@ -318,6 +318,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner("Couldn't load sessions (" + msg + '). Showing preview data below.');
             }
+          })
+          .finally(() => {
+            if (typeof window.dashboardHydrated === 'function') {
+              window.dashboardHydrated();
+            }
           });
       }
 

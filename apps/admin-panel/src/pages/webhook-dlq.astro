@@ -260,6 +260,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner("Couldn't load DLQ (" + msg + '). Showing preview data below.');
             }
+          })
+          .finally(() => {
+            if (typeof window.dashboardHydrated === 'function') {
+              window.dashboardHydrated();
+            }
           });
       }
 

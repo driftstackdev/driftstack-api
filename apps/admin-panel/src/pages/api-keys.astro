@@ -321,6 +321,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner("Couldn't load API keys (" + msg + '). Showing preview data below.');
             }
+          })
+          .finally(() => {
+            if (typeof window.dashboardHydrated === 'function') {
+              window.dashboardHydrated();
+            }
           });
       }
 
