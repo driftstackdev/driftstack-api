@@ -235,10 +235,18 @@ function StatusFooter(): JSX.Element {
   // file-127 enforcement-aware UX intent. accountMe comes from the
   // SettingsContext (V-239 pre-fetch); when it's null we fall back to
   // the prior connection-only chrome rather than blocking.
+  // 2026-05-21 — Slice E expansion: also surface profile_count / cap
+  // alongside sessions so the customer sees both caps at-a-glance
+  // (matches the Sidebar's per-item count badges; the footer is the
+  // always-visible mirror that survives across every view).
   const { settings, client, accountMe } = useSettings();
   const connected = client !== null;
   const atCap =
     accountMe !== null && accountMe.concurrent_session_active >= accountMe.concurrent_session_cap;
+  const atProfileCap =
+    accountMe !== null &&
+    accountMe.profile_cap !== null &&
+    accountMe.profile_count >= accountMe.profile_cap;
   return (
     <footer
       className="flex h-6 items-center justify-between border-t
@@ -248,22 +256,30 @@ function StatusFooter(): JSX.Element {
       <div className="flex items-center gap-2">
         <span className={`status-pip ${connected ? 'bg-status-ready' : 'bg-status-idle'}`} />
         <span>{connected ? 'connected' : 'not connected'}</span>
-        {settings.apiKey !== null && (
-          <span className="mono">
-            {settings.apiKey.slice(0, 8)}…{settings.apiKey.slice(-4)}
-          </span>
-        )}
         {accountMe !== null && (
           <>
-            <span className="mono text-ink-muted">·</span>
+            <span className="text-ink-muted">·</span>
             <span className="section-label">{accountMe.tier}</span>
             <span className={atCap ? 'mono text-status-error' : 'mono'}>
               {accountMe.concurrent_session_active} / {accountMe.concurrent_session_cap} sessions
             </span>
+            <span className="text-ink-muted">·</span>
+            <span className={atProfileCap ? 'mono text-status-error' : 'mono'}>
+              {accountMe.profile_count}
+              {accountMe.profile_cap !== null ? ` / ${accountMe.profile_cap}` : ''} profiles
+            </span>
           </>
         )}
       </div>
-      <div className="mono">{redactBaseUrl(settings.baseUrl)}</div>
+      <div className="flex items-center gap-2">
+        {settings.apiKey !== null && (
+          <span className="mono" title="API key (truncated for screen-share safety)">
+            {settings.apiKey.slice(0, 8)}…{settings.apiKey.slice(-4)}
+          </span>
+        )}
+        <span className="text-ink-muted">·</span>
+        <span className="mono">{redactBaseUrl(settings.baseUrl)}</span>
+      </div>
     </footer>
   );
 }

@@ -98,6 +98,11 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     expect(body).toMatch(
       /const atCap =\s*\n?\s*accountMe !== null && accountMe\.concurrent_session_active >= accountMe\.concurrent_session_cap;/,
     );
+    // 2026-05-21 Slice E — same shape for profile cap so the footer
+    // mirrors the Sidebar's per-item count badges on every view.
+    expect(body).toMatch(
+      /const atProfileCap =\s*\n?\s*accountMe !== null &&\s*\n?\s*accountMe\.profile_cap !== null &&\s*\n?\s*accountMe\.profile_count >= accountMe\.profile_cap;/,
+    );
   });
 
   it('API-key masking in footer: slice(0,8) + … + slice(-4) — pinned so the full secret never lands in the chrome (visible while screen-sharing / screenshotting); redactBaseUrl strips https?:// prefix so the URL bar shows host+path only', () => {
