@@ -8,8 +8,13 @@
 // Mirrors SessionsView shape: 5-second poll, inline error banner, busy
 // state per row.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
+import {
+  ProfilesActionBar,
+  type ProfileSortBy,
+  type ProfileStatusFilter,
+} from '../components/ProfilesActionBar';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
@@ -84,6 +89,12 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   // because every other ProfilesView interaction is local; the modal
   // is a transient overlay scoped to this view's lifecycle.
   const [createOpen, setCreateOpen] = useState(false);
+  // 2026-05-21 — Slice B header action cluster (BlackBird-inspired).
+  // Pure-local filter/sort over `state.profiles`; no API change. Defaults
+  // match the antidetect-browser baseline (show all, sort by recent use).
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<ProfileStatusFilter>('all');
+  const [sortBy, setSortBy] = useState<ProfileSortBy>('last-used');
 
   const refresh = useCallback(
     async (showLoading: boolean): Promise<void> => {
@@ -160,6 +171,47 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     }
     return activeSessions.find((s) => s.id === binding.currentSessionId) ?? null;
   }
+
+  // 2026-05-21 — Slice B: derive the filtered/sorted view over state.profiles.
+  // Search matches name + description + archetype; status filter joins against
+  // activeSessions via runningSessionFor; sort is recency-by-default (matches
+  // antidetect-browser ergonomics — "what did I touch last?" beats alpha).
+  const filteredProfiles = useMemo(() => {
+    let list = state.profiles;
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length > 0) {
+      list = list.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.description?.toLowerCase().includes(q) ?? false) ||
+          p.archetype.toLowerCase().includes(q),
+      );
+    }
+    if (statusFilter !== 'all') {
+      list = list.filter((p) => {
+        const binding = bindings.find((b) => b.profileId === p.id);
+        const running =
+          binding !== undefined &&
+          binding.currentSessionId !== null &&
+          activeSessions.some((s) => s.id === binding.currentSessionId);
+        return statusFilter === 'running' ? running : !running;
+      });
+    }
+    const ordered = [...list].sort((a, b) => {
+      switch (sortBy) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'created':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        case 'last-used': {
+          const at = a.last_used_at !== null ? new Date(a.last_used_at).getTime() : 0;
+          const bt = b.last_used_at !== null ? new Date(b.last_used_at).getTime() : 0;
+          return bt - at;
+        }
+      }
+    });
+    return ordered;
+  }, [state.profiles, searchQuery, statusFilter, sortBy, activeSessions, bindings]);
 
   /** Pick the proxy to use on Launch — explicit binding default first,
    *  else the first saved proxy, else null (handled in handleLaunch as
@@ -240,46 +292,69 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <header className="flex items-center justify-between">
-        <div className="flex flex-col gap-0.5">
-          <span className="section-label">Profiles</span>
-          <h2 className="text-lg font-medium text-ink-primary">
-            Persistent identity slots
-            <span className="ml-2 mono text-ink-muted">
-              {profileCap !== null && profileCount !== null
-                ? `${profileCount.toString()} / ${profileCap.toString()}`
-                : profileCount !== null
-                  ? `${profileCount.toString()}`
-                  : state.profiles.length.toString()}
-            </span>
-          </h2>
+      <header className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-0.5">
+            <span className="section-label">Profiles</span>
+            <h2 className="text-lg font-medium text-ink-primary">
+              Persistent identity slots
+              <span className="ml-2 mono text-ink-muted">
+                {profileCap !== null && profileCount !== null
+                  ? `${profileCount.toString()} / ${profileCap.toString()}`
+                  : profileCount !== null
+                    ? `${profileCount.toString()}`
+                    : state.profiles.length.toString()}
+              </span>
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void refresh(true)}
+              disabled={state.loading}
+            >
+              {state.loading ? 'Refreshing…' : 'Refresh'}
+            </button>
+            <button
+              type="button"
+              className="btn-primary flex items-center gap-1.5"
+              onClick={() => setCreateOpen(true)}
+              disabled={state.loading || atProfileCap}
+              aria-disabled={state.loading || atProfileCap}
+              title={
+                atProfileCap
+                  ? `Profile cap reached (${(profileCap ?? 0).toString()} for ${
+                      accountMe?.tier ?? 'this tier'
+                    }). Delete a profile or upgrade to add more.`
+                  : undefined
+              }
+            >
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path
+                  d="M8 3v10M3 8h10"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span>New profile</span>
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => void refresh(true)}
-            disabled={state.loading}
-          >
-            {state.loading ? 'Refreshing…' : 'Refresh'}
-          </button>
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => setCreateOpen(true)}
-            disabled={state.loading || atProfileCap}
-            aria-disabled={state.loading || atProfileCap}
-            title={
-              atProfileCap
-                ? `Profile cap reached (${(profileCap ?? 0).toString()} for ${
-                    accountMe?.tier ?? 'this tier'
-                  }). Delete a profile or upgrade to add more.`
-                : undefined
-            }
-          >
-            New profile
-          </button>
-        </div>
+        {state.profiles.length > 0 && (
+          <ProfilesActionBar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            sortBy={sortBy}
+            onSortByChange={setSortBy}
+            visibleCount={filteredProfiles.length}
+            totalCount={state.profiles.length}
+          />
+        )}
       </header>
 
       {state.error !== null && (
@@ -336,7 +411,22 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
         </div>
       ) : (
         <ul className="flex flex-col divide-y divide-surface-divider rounded-md border border-surface-divider bg-surface-raised">
-          {state.profiles.map((profile) => {
+          {filteredProfiles.length === 0 ? (
+            <li className="px-4 py-8 text-center text-sm text-ink-muted">
+              No profiles match the current filter.{' '}
+              <button
+                type="button"
+                className="text-accent underline-offset-2 hover:underline"
+                onClick={() => {
+                  setSearchQuery('');
+                  setStatusFilter('all');
+                }}
+              >
+                Clear
+              </button>
+            </li>
+          ) : null}
+          {filteredProfiles.map((profile) => {
             const session = runningSessionFor(profile.id);
             const running = session !== null;
             const binding = bindings.find((b) => b.profileId === profile.id) ?? null;
