@@ -140,8 +140,10 @@ test('POST /v1/legal/accept 409 on stale version / hash mismatch', async ({ requ
     data: {
       document_key: first.document_key,
       version: first.version,
-      // Wrong hash → server replies 409 with the current hash.
-      content_hash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+      // 2026-05-21 — content_hash schema is bare 64-char lowercase hex
+      // (no `sha256:` prefix); prefix was a stale fixture from an earlier
+      // schema shape. Wrong hash → server replies 409 with the current.
+      content_hash: '0'.repeat(64),
     },
   });
   expect(res.status()).toBe(409);
@@ -154,7 +156,7 @@ test('POST /v1/legal/accept 404 on unknown document_key', async ({ request }) =>
     data: {
       document_key: 'no-such-document',
       version: '1.0.0',
-      content_hash: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+      content_hash: '0'.repeat(64),
     },
   });
   expect(res.status()).toBe(404);

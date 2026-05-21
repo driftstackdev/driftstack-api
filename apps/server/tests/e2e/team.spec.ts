@@ -41,9 +41,13 @@ interface InviteEntry {
 
 interface MemberEntry {
   id: string;
-  account_id: string;
-  email: string;
+  owner_account_id: string;
+  member_account_id: string;
+  member_email: string;
   role: 'member' | 'admin';
+  invited_at: string;
+  accepted_at: string;
+  invited_by_account_id: string | null;
 }
 
 interface OwnerEntry {
@@ -149,7 +153,10 @@ test('GET /v1/team/members lists the owner perspective', async ({ request }) => 
   expect(res.status()).toBe(200);
   const body = (await res.json()) as { data: MemberEntry[] };
   expect(body.data.length).toBe(1);
-  expect(body.data[0]?.email).toBe('member-c@driftstack.test');
+  // 2026-05-21 — route shape: { member_email } (not { email }); see
+  // publicMember() in apps/server/src/routes/team.ts. Fix the test's
+  // interface + assertion to match.
+  expect(body.data[0]?.member_email).toBe('member-c@driftstack.test');
 });
 
 test('GET /v1/team/owners lists the member perspective', async ({ request }) => {

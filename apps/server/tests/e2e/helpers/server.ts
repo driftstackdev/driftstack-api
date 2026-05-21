@@ -428,6 +428,15 @@ export async function startTestServer(): Promise<TestServer> {
   const resetState = async (): Promise<void> => {
     await client.unsafe(TRUNCATE_SQL);
     await redis.flushdb();
+    // 2026-05-21 — clear the in-memory billing provider state so
+    // checkoutSessions / portalSessions / customers from a prior test
+    // don't leak into the next test's `[0]` index. Surfaced by the
+    // billing-write-happy-path spec which read `[0]` expecting the
+    // current test's session but found the previous test's.
+    billingProvider.state.checkoutSessions.length = 0;
+    billingProvider.state.portalSessions.length = 0;
+    billingProvider.state.customers.clear();
+    costUsageByAccount.clear();
   };
 
   const cleanup = async (): Promise<void> => {
