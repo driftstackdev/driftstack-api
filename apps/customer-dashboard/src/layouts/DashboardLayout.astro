@@ -101,6 +101,31 @@ const navSections: NavSection[] = [
     <meta name="description" content={description} />
     <meta name="robots" content="noindex" />
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=2" />
+    {
+      withSidebar && (
+        <script is:inline>
+          {`
+            // 2026-05-21 — login gate. The signed-in dashboard pages should
+            // never render to a non-authenticated visitor — that exposed a
+            // flash of scaffolding mock data on every page load. This runs
+            // BEFORE the body parses (in <head>), so the redirect happens
+            // pre-paint. Onboarding / auth pages opt out by setting
+            // withSidebar={false} (this script isn't emitted on those).
+            (function () {
+              try {
+                var t = localStorage.getItem('ds_web_session_token');
+                if (!t || t.length === 0) {
+                  var here = location.pathname + location.search;
+                  location.replace('/login?next=' + encodeURIComponent(here));
+                }
+              } catch (_) {
+                location.replace('/login');
+              }
+            })();
+          `}
+        </script>
+      )
+    }
   </head>
   <body class="relative">
     {/*
