@@ -321,7 +321,11 @@ const navSections: NavSection[] = [
             </aside>
           )
         }
-        <main class="flex-1">
+        <main
+          class="flex-1"
+          data-hydrate="pending"
+          style="opacity: 0; transition: opacity 0.18s ease-out"
+        >
           <!-- V-331 — "Acting as" indicator banner. Hidden by default.
                JS below toggles + populates when the local
                ds_act_as_account selection differs from self. -->
@@ -852,5 +856,48 @@ const navSections: NavSection[] = [
         </div>
       </footer>
     </div>
+    <script is:inline>
+      {
+        /*
+         * 2026-05-21 — page-hydrate reveal. <main> renders with
+         * opacity:0 (SSR style attr) so the customer doesn't see any
+         * scaffolding-era MOCK_X data flash on first paint. Two reveal
+         * triggers, whichever fires first:
+         *
+         *   1. requestAnimationFrame after DOMContentLoaded — gives
+         *      page-specific inline scripts a chance to swap mock
+         *      <li> placeholders with real data + populate spans from
+         *      /v1/account/me etc.
+         *   2. 600ms safety fallback — if a page's inline script
+         *      never resolves (network down, API 5xx), the user still
+         *      sees the page chrome rather than a perpetually-blank
+         *      <main>.
+         *
+         * Both triggers just clear opacity; the actual data swap is
+         * up to each page's existing inline script. Skeleton <li>
+         * placeholders on the list pages stay visible during the
+         * fetch round-trip.
+         */
+      }
+      (function () {
+        var main = document.querySelector('main[data-hydrate="pending"]');
+        if (!main) return;
+        var revealed = false;
+        function reveal() {
+          if (revealed) return;
+          revealed = true;
+          main.style.opacity = '1';
+          main.setAttribute('data-hydrate', 'ready');
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function () {
+            requestAnimationFrame(reveal);
+          });
+        } else {
+          requestAnimationFrame(reveal);
+        }
+        setTimeout(reveal, 600);
+      })();
+    </script>
   </body>
 </html>
