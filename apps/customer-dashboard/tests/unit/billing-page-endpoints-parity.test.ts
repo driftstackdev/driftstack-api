@@ -11,6 +11,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/billing.astro');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts');
+// 2026-05-21 — V-666.D added /v1/billing/crypto-checkout to the page;
+// that route lives in billing-crypto.ts (separate file from
+// billing.ts since the auth gate + service deps differ). Include both
+// route sources when checking registration coverage.
+const CRYPTO_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -19,11 +24,13 @@ function read(p: string): string {
 describe('W268.D /billing page ↔ /v1/billing/* route parity', () => {
   const page = read(PAGE);
   const route = read(ROUTE);
+  const cryptoRoute = read(CRYPTO_ROUTE);
+  const allRouteSources = route + '\n' + cryptoRoute;
 
   it('every /v1/billing/* path cited by inline action handlers is registered', () => {
     const paths = [...page.matchAll(/['"`](\/v1\/billing\/[a-z-]+)['"`]/g)].map((m) => m[1]!);
     expect(paths.length).toBeGreaterThan(0);
-    const missing = paths.filter((p) => !route.includes(`'${p}'`));
+    const missing = paths.filter((p) => !allRouteSources.includes(`'${p}'`));
     expect(missing).toEqual([]);
   });
 
