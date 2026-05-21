@@ -497,11 +497,56 @@ const apiBaseUrl = resolveApiBaseUrl();
       labelRow.appendChild(time);
       const bubble = document.createElement('div');
       bubble.className =
-        'whitespace-pre-wrap break-words rounded-md px-3 py-2 text-sm ' +
+        'group whitespace-pre-wrap break-words rounded-md px-3 py-2 text-sm relative ' +
         (role === 'agent'
           ? 'bg-glow-red/5 text-ink-primary'
           : 'bg-slate-800 text-ink-primary');
-      bubble.textContent = body;
+      // 2026-05-21 — inline-code rendering for agent turns. Matches
+      // single-backtick `code` spans and wraps them in <code> with
+      // a subtle background. HTML-safe: we re-encode the body before
+      // string-replacing so user text can't inject script tags.
+      function escHtml(s) {
+        return s
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+      if (role === 'agent' && /`[^`]+`/.test(body)) {
+        bubble.innerHTML = escHtml(body).replace(
+          /`([^`]+)`/g,
+          '<code class="rounded bg-white/10 px-1 py-px font-mono text-[12px]">$1</code>',
+        );
+      } else {
+        bubble.textContent = body;
+      }
+      // Copy-message affordance — hover-revealed pill on the bubble's
+      // top-right corner. Only on agent turns (your own typed text
+      // doesn't need a copy). Click writes the raw body (NOT the
+      // HTML-rendered version) to the clipboard.
+      if (role === 'agent') {
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className =
+          'absolute top-1 right-1 hidden rounded bg-surface-base/60 px-1.5 py-0.5 ' +
+          'font-mono text-[10px] text-ink-muted opacity-0 transition group-hover:block ' +
+          'group-hover:opacity-100 hover:text-ink-primary';
+        copyBtn.textContent = 'copy';
+        copyBtn.addEventListener('click', async () => {
+          if (!navigator.clipboard) return;
+          try {
+            await navigator.clipboard.writeText(body);
+            copyBtn.textContent = 'copied ✓';
+            setTimeout(() => {
+              copyBtn.textContent = 'copy';
+            }, 1500);
+          } catch (_) {
+            /* swallow */
+          }
+        });
+        bubble.appendChild(copyBtn);
+      }
       wrap.appendChild(labelRow);
       wrap.appendChild(bubble);
       transcript.appendChild(wrap);
