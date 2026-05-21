@@ -33,6 +33,7 @@ import { buildLegalCatalog } from '../../../src/services/legal-catalog.js';
 import { DrizzleLegalRepo } from '../../../src/db/legal-repo.js';
 import { RedisAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
+import { ProfilesService } from '../../../src/services/profiles.js';
 import { MfaService } from '../../../src/services/mfa.js';
 import { InMemoryMfaChallengeStore } from '../../../src/services/mfa-challenge-store.js';
 import { AuthFlowsService } from '../../../src/services/auth-flows.js';
@@ -282,6 +283,12 @@ export async function startTestServer(): Promise<TestServer> {
     profilesRepo,
     accountAuditService,
   );
+  // ProfilesService gates /v1/profiles routes AND is the prerequisite
+  // for profile-snapshots routes (apps/server/src/lib/app.ts:1026 +
+  // :1030 nested). Production wires it unconditionally; e2e was
+  // missing the construction, leaving 404 on both /v1/profiles and
+  // /v1/profiles/:id/snapshots.
+  const profilesService = new ProfilesService(profilesRepo, accountAuditService);
   const cliAuthorizeService = new CliAuthorizeService({
     store: new InMemoryCliAuthorizeStore(),
     dashboardOrigin: 'http://localhost:5173',
@@ -407,6 +414,7 @@ export async function startTestServer(): Promise<TestServer> {
     // can exercise their respective route blocks.
     statusSubscribersService,
     teamMembersService,
+    profilesService,
     profileSnapshotsService,
     cliAuthorizeService,
     permissiveCors: true,
