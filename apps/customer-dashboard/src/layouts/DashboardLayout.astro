@@ -142,10 +142,16 @@ const navSections: NavSection[] = [
                 var qs = new URLSearchParams(location.search);
                 var nextAdmin = qs.get('next-admin');
                 if (nextAdmin && t && t.length > 0) {
-                  location.replace(
-                    'https://admin.driftstack.dev' + nextAdmin + '?bounced=1#token=' +
-                      encodeURIComponent(t),
+                  // 2026-05-21 — preserve any query string already on the
+                  // admin path. `URL` parses + reassembles so a nextAdmin
+                  // like "/accounts/abc?filter=x" doesn't end up with the
+                  // broken "?filter=x?bounced=1" double-question.
+                  var u = new URL(
+                    'https://admin.driftstack.dev' + nextAdmin,
                   );
+                  u.searchParams.set('bounced', '1');
+                  u.hash = '#token=' + encodeURIComponent(t);
+                  location.replace(u.toString());
                   return;
                 }
                 if (nextAdmin && (!t || t.length === 0)) {
