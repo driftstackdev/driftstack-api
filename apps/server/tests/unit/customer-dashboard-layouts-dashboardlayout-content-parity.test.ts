@@ -43,21 +43,28 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     );
   });
 
-  it('navItems 14-entry catalog pinned: Overview + Profiles + Snapshots + Sessions + Agent sessions + API keys + Proxies + Usage + Billing + Subscription + Webhooks + Audit log + Team + Settings. Drift to dropping Agent sessions would orphan the AI-chat surface; drift to dropping Proxies would hide the EGRESS surface; drift to dropping Team would break the V-298 team-RBAC navigation', () => {
-    expect(body).toMatch(/\{ href: '\/', label: 'Overview' \},/);
-    expect(body).toMatch(/\{ href: '\/profiles', label: 'Profiles' \},/);
-    expect(body).toMatch(/\{ href: '\/snapshots', label: 'Snapshots' \},/);
-    expect(body).toMatch(/\{ href: '\/sessions', label: 'Sessions' \},/);
-    expect(body).toMatch(/\{ href: '\/agent-sessions', label: 'Agent sessions' \},/);
-    expect(body).toMatch(/\{ href: '\/api-keys', label: 'API keys' \},/);
-    expect(body).toMatch(/\{ href: '\/proxies', label: 'Proxies' \},/);
-    expect(body).toMatch(/\{ href: '\/usage', label: 'Usage' \},/);
-    expect(body).toMatch(/\{ href: '\/billing', label: 'Billing' \},/);
-    expect(body).toMatch(/\{ href: '\/subscription', label: 'Subscription' \},/);
-    expect(body).toMatch(/\{ href: '\/webhooks', label: 'Webhooks' \},/);
-    expect(body).toMatch(/\{ href: '\/audit-log', label: 'Audit log' \},/);
-    expect(body).toMatch(/\{ href: '\/team', label: 'Team' \},/);
-    expect(body).toMatch(/\{ href: '\/settings', label: 'Settings' \},/);
+  it('navItems 14-entry catalog pinned: Overview + Profiles + Snapshots + Sessions + Agent sessions + API keys + Proxies + Usage + Billing + Subscription + Webhooks + Audit log + Team + Settings. Drift to dropping Agent sessions would orphan the AI-chat surface; drift to dropping Proxies would hide the EGRESS surface; drift to dropping Team would break the V-298 team-RBAC navigation. 2026-05-21 — items now carry an `icon` field + group into navSections (Browse / Connectivity / Account); each item still matched on (href, label) but with the new `, icon: ICON.X }` suffix.', () => {
+    const items: Array<[string, string]> = [
+      ['/', 'Overview'],
+      ['/profiles', 'Profiles'],
+      ['/snapshots', 'Snapshots'],
+      ['/sessions', 'Sessions'],
+      ['/agent-sessions', 'Agent sessions'],
+      ['/api-keys', 'API keys'],
+      ['/proxies', 'Proxies'],
+      ['/usage', 'Usage'],
+      ['/billing', 'Billing'],
+      ['/subscription', 'Subscription'],
+      ['/webhooks', 'Webhooks'],
+      ['/audit-log', 'Audit log'],
+      ['/team', 'Team'],
+      ['/settings', 'Settings'],
+    ];
+    for (const [href, label] of items) {
+      expect(body, `${href} → ${label}`).toMatch(
+        new RegExp(`\\{ href: '${href}', label: '${label}', icon: ICON\\.[a-z]+ \\},`),
+      );
+    }
   });
 
   it("V-219* brand-alignment framing pinned: '- Sidebar header: D-badge (gradient-accent) + lowercase font-mono \"driftstack\" wordmark matches apps/marketing-site/src/components/Header.astro pattern.' + '- withSidebar={false} branch: minimal horizontal header so onboarding pages have brand presence (Gap 2 from the V-219* audit) + ambient radial-glow background so the auth surfaces feel cohesive with the marketing landing.' + '- Footer (signed-in dashboard) with legal-doc links (Gap 7).' — pinned so the V-219* cross-app brand consistency + Gap 2 + Gap 7 references all survive", () => {
@@ -112,9 +119,10 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     );
   });
 
-  it("active-link styling pinned: pathname === item.href OR pathname.startsWith(item.href + '/') → highlighted (bg-glow-red/10 + font-medium + text-glow-red + shadow-inset-divider). Drift to exact-match-only would break highlighting on /sessions/abc subpages; drift to startsWith without '/' suffix would highlight /sessions when on /sessions-detail-different-page", () => {
+  it("active-link styling pinned: pathname matching → highlighted (bg-glow-red/10 + font-medium + text-glow-red + shadow-inset-divider). 2026-05-21 — exact match for '/' (so Overview doesn't highlight on every nested route) + prefix match for the rest (so /sessions/abc still highlights Sessions). Drift to dropping the prefix-clause would break subpage highlighting; drift to dropping the '/' exception would re-introduce Overview-always-active.", () => {
     expect(body).toMatch(
-      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n?\s*\? 'bg-glow-red\/10 font-medium text-glow-red shadow-inset-divider'/,
+      /item\.href === '\/'\s*\n?\s*\?\s*pathname === '\/'\s*\n?\s*:\s*pathname === item\.href \|\|\s*\n?\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
+    expect(body).toMatch(/'bg-glow-red\/10 font-medium text-glow-red shadow-inset-divider'/);
   });
 });
