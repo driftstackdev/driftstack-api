@@ -115,6 +115,8 @@ import { ProfileSnapshotsService } from '../services/profile-snapshots.js';
 import { DrizzleProfileSnapshotsRepo } from '../db/profile-snapshots-repo.js';
 import type { AccountTier } from '@driftstack/api-types';
 import { BillingService, type BillingProvider } from '../services/billing.js';
+import { CryptoOrdersService } from '../services/crypto-orders.js';
+import { DrizzleCryptoOrdersRepo } from '../db/crypto-orders-repo.js';
 import { CostMonitoringService } from '../services/cost-monitoring.js';
 import { UsageAggregatorFromUsageRepo } from '../services/cost-aggregator.js';
 import { CostAlertDispatcher } from '../services/cost-alert-dispatcher.js';
@@ -923,6 +925,28 @@ export async function createProductionDeps(
     );
   }
 
+  // V-666 — CryptoOrdersService wired against the Postgres-backed
+  // DrizzleCryptoOrdersRepo (migration 0060). Activates the
+  // /v1/billing/crypto-checkout family when NOWPAYMENTS_IPN_SECRET is
+  // configured (same gate as the IPN webhook route). When IPN secret
+  // is unset, the service can still be wired safely — orders just
+  // never receive status transitions from upstream — but matches the
+  // route-gate convention by staying undefined.
+  let cryptoOrdersService: CryptoOrdersService | undefined;
+  if (config.nowpayments?.ipnSecret !== undefined && config.nowpayments.ipnSecret.length > 0) {
+    const cryptoRepo = new DrizzleCryptoOrdersRepo(dbHandle);
+    cryptoOrdersService = new CryptoOrdersService({ repo: cryptoRepo });
+    logger.info(
+      { component: 'crypto-orders' },
+      'CryptoOrdersService wired with DrizzleCryptoOrdersRepo',
+    );
+  } else {
+    logger.warn(
+      { component: 'crypto-orders' },
+      'CryptoOrdersService NOT wired (NOWPAYMENTS_IPN_SECRET required); /v1/billing/crypto-checkout routes will not register',
+    );
+  }
+
   // V-541.G — CostMonitoringService wired against the production
   // defaults from `cost-defaults.ts`. The aggregator is a stub
   // returning null until V-541.H wires a real usage_records →
@@ -1278,6 +1302,7 @@ export async function createProductionDeps(
         })()
       : {}),
     ...(billingService !== undefined ? { billingService } : {}),
+    ...(cryptoOrdersService !== undefined ? { cryptoOrdersService } : {}),
     costMonitoringService,
     readinessChecks,
     // 2026-05-20 — env-var-controlled escape hatch. Some webview

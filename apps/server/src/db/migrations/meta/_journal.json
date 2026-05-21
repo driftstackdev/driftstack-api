@@ -421,6 +421,13 @@
       "when": 1779033600000,
       "tag": "0059_atlas_priority_events_api_column",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1779392400000,
+      "tag": "0060_crypto_orders",
+      "breakpoints": true
     }
   ]
 }

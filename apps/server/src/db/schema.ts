@@ -1990,3 +1990,45 @@ export type AtlasPriorityEventApi =
   | 'transferToImageBitmap'
   | 'captureStream'
   | 'webgpuReadback';
+
+// V-666 — crypto checkout orders backing table. CryptoOrdersService
+// upserts the full envelope per state transition; the events[] array
+// is stored as JSONB so a single getById returns both the current
+// state + complete history. Idempotency tracking lives in the service
+// layer (in-memory cache); the row itself is a snapshot of
+// order_id → state.
+export const cryptoOrders = pgTable(
+  'crypto_orders',
+  {
+    orderId: text('order_id').primaryKey(),
+    /**
+     * Account that placed the order. Nullable for pre-signup checkouts
+     * (V-666 supports anonymous flow → claim on signup).
+     */
+    accountId: uuid('account_id'),
+    product: text('product').notNull(),
+    priceCents: integer('price_cents').notNull(),
+    priceCurrency: text('price_currency').notNull(),
+    paymentId: text('payment_id'),
+    status: text('status')
+      .notNull()
+      .$type<'pending' | 'confirming' | 'paid' | 'failed' | 'partial' | 'cancelled'>(),
+    customerNote: text('customer_note'),
+    internalNote: text('internal_note'),
+    /** V-666.AT — append-only state-transition log; oldest → newest. */
+    events: jsonb('events')
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => ({
+    accountIdx: index('crypto_orders_account_id_idx').on(table.accountId),
+    statusIdx: index('crypto_orders_status_idx').on(table.status),
+    createdAtIdx: index('crypto_orders_created_at_idx').on(table.createdAt),
+  }),
+);
