@@ -24,21 +24,66 @@ const pathname = Astro.url.pathname;
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
 
-const navItems = [
-  { href: '/', label: 'Overview' },
-  { href: '/profiles', label: 'Profiles' },
-  { href: '/snapshots', label: 'Snapshots' },
-  { href: '/sessions', label: 'Sessions' },
-  { href: '/agent-sessions', label: 'Agent sessions' },
-  { href: '/api-keys', label: 'API keys' },
-  { href: '/proxies', label: 'Proxies' },
-  { href: '/usage', label: 'Usage' },
-  { href: '/billing', label: 'Billing' },
-  { href: '/subscription', label: 'Subscription' },
-  { href: '/webhooks', label: 'Webhooks' },
-  { href: '/audit-log', label: 'Audit log' },
-  { href: '/team', label: 'Team' },
-  { href: '/settings', label: 'Settings' },
+// 2026-05-21 — sidebar nav restructure: group items into 4 sections
+// (Browse / Activity / Account / System) with an inline-SVG icon per
+// item. Matches the gui-client Sidebar treatment so the two operator
+// surfaces feel like one product. Iconography stays Driftstack-native
+// (Lucide-shape 14px stroke). No JS-hydration required for icons.
+type NavItem = { href: string; label: string; icon: string };
+type NavSection = { label: string; items: NavItem[] };
+
+const ICON = {
+  home: 'M3 8.5 8 4l5 4.5V13a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z',
+  layers:
+    'M8 2 1.5 5.25 8 8.5l6.5-3.25Z M1.5 8 8 11.25 14.5 8 M1.5 10.75 8 14l6.5-3.25',
+  film: 'M2.25 2.25h11.5v11.5h-11.5z M2.25 5.5h11.5 M2.25 10.5h11.5 M5.5 2.25v11.5 M10.5 2.25v11.5',
+  activity: 'M1.5 8h2.75l1.5-4.5 3 9 1.5-4.5h4.25',
+  agent: 'M3 6.75a3.25 3.25 0 1 1 6.5 0 3.25 3.25 0 0 1-6.5 0Z M12.5 11.75c-.4-1.9-1.9-3-4-3s-3.6 1.1-4 3 M12.25 4.25l1.25 1.25-1.25 1.25 M13.5 5.5h-2',
+  key: 'M9.5 8.5a3.25 3.25 0 1 1 0-1l3.5 3.5-1.5 1.5-1-1-1 1-1-1-1 1Z',
+  globe:
+    'M8 13.75A5.75 5.75 0 1 0 8 2.25 5.75 5.75 0 0 0 8 13.75Z M2.25 8h11.5 M8 2.25c1.7 2 2.5 4 2.5 5.75S9.7 12 8 13.75 5.5 9.75 5.5 8 6.3 4.25 8 2.25Z',
+  chart: 'M2 13h12 M3.5 11.5V8 M6.5 11.5V5 M9.5 11.5V7 M12.5 11.5V3',
+  card: 'M2 4.5h12v7h-12z M2 7h12',
+  receipt:
+    'M3.25 2.25h9.5v11.5l-1.75-1-1.75 1-1.5-1-1.5 1-1.5-1-1.5 1Z M5.5 5.5h5 M5.5 8h5 M5.5 10.5h3',
+  webhook:
+    'M5.25 4.5a2.75 2.75 0 1 1 5.5 0c0 1.3-.85 2.4-2 2.7L5.5 12 M3.25 8.75a2.75 2.75 0 0 0 2.5 4 2.75 2.75 0 0 0 2.4-1.5h4.6 M10.75 12a2.75 2.75 0 1 1-4.85-1.8',
+  list: 'M4.5 4.25h8 M4.5 8h8 M4.5 11.75h8',
+  users:
+    'M6 6a2.25 2.25 0 1 1 0-4.5 2.25 2.25 0 0 1 0 4.5Z M2 13c.5-2 2-3 4-3s3.5 1 4 3 M10.75 4.25a2 2 0 0 1 0 3.5 M13.5 12.75c-.25-1.5-1-2.25-2.25-2.75',
+  cog: 'M8 6.25a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5Z M8 1.75v1.5 M8 12.75v1.5 M3.75 3.75l1 1 M11.25 11.25l1 1 M1.75 8h1.5 M12.75 8h1.5 M3.75 12.25l1-1 M11.25 4.75l1-1',
+};
+
+const navSections: NavSection[] = [
+  {
+    label: 'Browse',
+    items: [
+      { href: '/', label: 'Overview', icon: ICON.home },
+      { href: '/profiles', label: 'Profiles', icon: ICON.layers },
+      { href: '/snapshots', label: 'Snapshots', icon: ICON.film },
+      { href: '/sessions', label: 'Sessions', icon: ICON.activity },
+      { href: '/agent-sessions', label: 'Agent sessions', icon: ICON.agent },
+    ],
+  },
+  {
+    label: 'Connectivity',
+    items: [
+      { href: '/api-keys', label: 'API keys', icon: ICON.key },
+      { href: '/proxies', label: 'Proxies', icon: ICON.globe },
+      { href: '/webhooks', label: 'Webhooks', icon: ICON.webhook },
+    ],
+  },
+  {
+    label: 'Account',
+    items: [
+      { href: '/usage', label: 'Usage', icon: ICON.chart },
+      { href: '/billing', label: 'Billing', icon: ICON.card },
+      { href: '/subscription', label: 'Subscription', icon: ICON.receipt },
+      { href: '/audit-log', label: 'Audit log', icon: ICON.list },
+      { href: '/team', label: 'Team', icon: ICON.users },
+      { href: '/settings', label: 'Settings', icon: ICON.cog },
+    ],
+  },
 ];
 ---
 
@@ -171,24 +216,58 @@ const navItems = [
                   </div>
                 </div>
               </div>
-              <nav class="px-4 py-6">
-                <ul class="space-y-1">
-                  {navItems.map((item) => (
-                    <li>
-                      <a
-                        href={item.href}
-                        class:list={[
-                          'block rounded-md px-3 py-2 text-sm transition-all duration-200',
-                          pathname === item.href || pathname.startsWith(item.href + '/')
-                            ? 'bg-glow-red/10 font-medium text-glow-red shadow-inset-divider'
-                            : 'text-ink-secondary hover:bg-white/5 hover:text-ink-primary',
-                        ]}
-                      >
-                        {item.label}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+              <nav class="px-3 py-4">
+                {navSections.map((section) => (
+                  <div class="mb-3">
+                    <div class="px-3 pb-1 pt-2 text-[10px] font-mono uppercase tracking-widest text-ink-muted">
+                      {section.label}
+                    </div>
+                    <ul class="space-y-px">
+                      {section.items.map((item) => {
+                        // Exact match for "/" (Overview); prefix match for
+                        // everything else so a deeper route like
+                        // /profiles/abc still highlights the Profiles tab.
+                        const active =
+                          item.href === '/'
+                            ? pathname === '/'
+                            : pathname === item.href ||
+                              pathname.startsWith(item.href + '/');
+                        return (
+                          <li>
+                            <a
+                              href={item.href}
+                              class:list={[
+                                'group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-all duration-200',
+                                active
+                                  ? 'bg-glow-red/10 font-medium text-glow-red shadow-inset-divider'
+                                  : 'text-ink-secondary hover:bg-white/5 hover:text-ink-primary',
+                              ]}
+                            >
+                              <svg
+                                viewBox="0 0 16 16"
+                                width="14"
+                                height="14"
+                                aria-hidden="true"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.6"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                class:list={[
+                                  'shrink-0',
+                                  active ? 'opacity-100' : 'opacity-70',
+                                ]}
+                              >
+                                <path d={item.icon} />
+                              </svg>
+                              <span class="flex-1 truncate">{item.label}</span>
+                            </a>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
               </nav>
             </aside>
           )

@@ -42,7 +42,7 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     expect(l).toMatch(/withSidebar = true,/);
   });
 
-  it('CRITICAL 12-item navItems roster pinned. Drift to dropping/renaming would change the dashboard primary navigation across every page. The 12 items match the dashboard surface: Overview/Profiles/Snapshots/Sessions/Agent sessions/API keys/Usage/Billing/Webhooks/Audit log/Team/Settings. Arc 4 Wave 2.C sub-slice 8.24.b added Agent sessions between Sessions and API keys.', () => {
+  it('CRITICAL nav-item roster pinned (Overview/Profiles/Snapshots/Sessions/Agent sessions/API keys/Proxies/Webhooks/Usage/Billing/Subscription/Audit log/Team/Settings). 2026-05-21 — items now carry an icon field + are grouped into navSections (Browse / Connectivity / Account), so the parity matches `{ href, label, icon }` triples rather than the legacy bare `{ href, label }` shape.', () => {
     const l = read(LAYOUT);
 
     const expected: Array<[string, string]> = [
@@ -52,9 +52,11 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
       ['/sessions', 'Sessions'],
       ['/agent-sessions', 'Agent sessions'],
       ['/api-keys', 'API keys'],
+      ['/proxies', 'Proxies'],
+      ['/webhooks', 'Webhooks'],
       ['/usage', 'Usage'],
       ['/billing', 'Billing'],
-      ['/webhooks', 'Webhooks'],
+      ['/subscription', 'Subscription'],
       ['/audit-log', 'Audit log'],
       ['/team', 'Team'],
       ['/settings', 'Settings'],
@@ -62,9 +64,16 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
 
     for (const [href, label] of expected) {
       expect(l, `nav ${href} → ${label}`).toMatch(
-        new RegExp(`\\{ href: '${href}', label: '${label}' \\}`),
+        new RegExp(`\\{ href: '${href}', label: '${label}', icon: ICON\\.[a-z]+ \\}`),
       );
     }
+  });
+
+  it('CRITICAL 3-section taxonomy pinned (Browse / Connectivity / Account). 2026-05-21 — operator-UI polish wave grouped flat navItems into navSections; the section labels are visible chrome and dropping any one collapses the IA.', () => {
+    const l = read(LAYOUT);
+    expect(l).toMatch(/label: 'Browse',/);
+    expect(l).toMatch(/label: 'Connectivity',/);
+    expect(l).toMatch(/label: 'Account',/);
   });
 
   it('CRITICAL V-219* brand-alignment framing pinned. Sidebar header gets D-badge + lowercase font-mono "driftstack" wordmark matching marketing-site Header.astro pattern. The withSidebar:false branch gets a minimal horizontal header + ambient radial-glow background.', () => {
@@ -217,10 +226,12 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     expect(l).toMatch(/define:vars=\{\{ apiBaseUrl \}\}/);
   });
 
-  it('CRITICAL active-nav-item highlighting pinned — `pathname === item.href || pathname.startsWith(item.href + "/")` for nested sub-pages. Drift to strict-equality only would let /sessions/abc123 NOT highlight the Sessions nav item.', () => {
+  it('CRITICAL active-nav-item highlighting pinned. Exact match for "/" (Overview); prefix match for everything else so /sessions/abc123 still highlights the Sessions nav item. 2026-05-21 — the prefix-match clause now lives inside a ternary that exempts "/" (the Overview anchor) from prefix-matching every nested route (which otherwise stays highlighted across the entire dashboard).', () => {
     const l = read(LAYOUT);
 
-    expect(l).toMatch(/pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)/);
+    expect(l).toMatch(
+      /item\.href === '\/'\s*\n?\s*\?\s*pathname === '\/'\s*\n?\s*:\s*pathname === item\.href \|\|\s*\n?\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
+    );
   });
 
   it('test file metadata — file exists at canonical path', () => {
