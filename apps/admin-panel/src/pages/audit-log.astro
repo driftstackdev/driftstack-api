@@ -37,12 +37,20 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <!-- Filter bar -->
     <div class="mb-6 flex flex-wrap items-center gap-3">
-      <input
-        type="search"
-        data-field="action"
-        placeholder="Filter by action (e.g. account.tier_changed)…"
-        class="w-72 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
-      />
+      <div class="relative">
+        <input
+          type="search"
+          data-field="action"
+          placeholder="Filter by action (e.g. account.tier_changed)…"
+          class="w-80 rounded-md border border-slate-300 px-3 py-2 pr-12 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+        />
+        <kbd
+          aria-hidden="true"
+          class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] text-slate-500"
+        >
+          /
+        </kbd>
+      </div>
       <input
         type="search"
         data-field="admin-id"
@@ -279,6 +287,21 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (actionEl) actionEl.addEventListener('input', scheduleLoad);
       if (adminIdEl) adminIdEl.addEventListener('input', scheduleLoad);
       if (resultEl) resultEl.addEventListener('change', scheduleLoad);
+
+      // 2026-05-22 — "/" focuses the action filter (same convention
+      // as /accounts 2fe3da4b). Skip when user is already in an
+      // input/textarea/contentEditable.
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key !== '/' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+        const target = ev.target;
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+        if (target instanceof HTMLElement && target.isContentEditable) return;
+        ev.preventDefault();
+        if (actionEl instanceof HTMLInputElement) {
+          actionEl.focus();
+          actionEl.select();
+        }
+      });
 
       load();
     })();
