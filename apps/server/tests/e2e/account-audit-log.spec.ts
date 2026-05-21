@@ -146,20 +146,27 @@ test('cursor pagination walks all pages', async ({ request }) => {
 });
 
 test('action filter narrows to matching rows only', async ({ request }) => {
+  // 2026-05-20 — `profile.updated` is NOT in the AccountAuditAction enum
+  // (it covers create/delete/exported/imported but not generic update).
+  // The DB column is text-typed so the INSERT used to succeed, but the
+  // route's ListAccountAuditLogQuerySchema validates ?action= against
+  // the enum, returning 400 — surfaced after the regex-hang CI unblock.
+  // Use `profile.deleted` instead (real enum value, still a clean
+  // filter narrow against the other two rows).
   const seed = await seedAccount(server.client);
   await insertAuditRows(server.client, seed.accountId, [
     { action: 'profile.created', targetResourceId: 'prof_a', offsetMs: 3000 },
-    { action: 'profile.updated', targetResourceId: 'prof_a', offsetMs: 2000 },
+    { action: 'profile.deleted', targetResourceId: 'prof_a', offsetMs: 2000 },
     { action: 'api_key.rotated', offsetMs: 1000 },
   ]);
 
-  const res = await request.get(`${server.baseUrl}/v1/account/audit-log?action=profile.updated`, {
+  const res = await request.get(`${server.baseUrl}/v1/account/audit-log?action=profile.deleted`, {
     headers: authHeader(seed.plaintext),
   });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as AuditListResponse;
   expect(body.data).toHaveLength(1);
-  expect(body.data[0]?.action).toBe('profile.updated');
+  expect(body.data[0]?.action).toBe('profile.deleted');
 });
 
 test('export?format=json returns all rows as JSON array', async ({ request }) => {
