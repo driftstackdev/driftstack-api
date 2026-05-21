@@ -64,14 +64,7 @@ describe('W340.B /api-keys SCOPE_LABEL parity', () => {
     }
   });
 
-  it('frontmatter rendering uses `?? scope` fallback for unknown scopes', () => {
-    // Catches accidental removal of the defensive fallback when
-    // somebody refactors to a stricter type. The page uses Astro
-    // expression `{SCOPE_LABEL[scope] ?? scope}`.
-    expect(page).toMatch(/SCOPE_LABEL\[scope\]\s*\?\?\s*scope/);
-  });
-
-  it('inline-script rendering uses `|| s` fallback for unknown scopes', () => {
+  it('inline-script rendering uses `|| s` fallback for unknown scopes. 2026-05-21 — Astro frontmatter no longer renders scope chips (skeleton-only pre-hydration; 12566e61). The defensive fallback survives in the JS side, which is now the only render path.', () => {
     expect(page).toMatch(/SCOPE_LABEL\[s\]\s*\|\|\s*s/);
   });
 

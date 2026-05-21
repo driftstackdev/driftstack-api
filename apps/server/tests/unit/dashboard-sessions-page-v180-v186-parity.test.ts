@@ -197,12 +197,10 @@ describe('W749 dashboard /sessions page V-180 + V-186 parity', () => {
     );
   });
 
-  it("CRITICAL profile_id 16-char preview pinned — `profile_id.slice(0, 16)` + '…' ellipsis. Drift to longer would crowd the row; drift to shorter would lose discrimination value across multi-profile accounts.", () => {
+  it("CRITICAL profile_id 16-char preview pinned — `profile_id.slice(0, 16)` + '…' ellipsis. Drift to longer would crowd the row; drift to shorter would lose discrimination value across multi-profile accounts. 2026-05-21 — SSR no longer renders profile_id (skeleton-only pre-hydration; c5a50f56); only the JS-side render is pinned now.", () => {
     const p = read(PAGE);
 
-    // TS frontmatter.
-    expect(p).toMatch(/session\.profile_id\.slice\(0, 16\)/);
-    // Inline script.
+    // Inline script — JS-side render still uses the 16-char preview.
     expect(p).toMatch(/escapeHtml\(s\.profile_id\.slice\(0, 16\)\) \+ '…<\/code>'/);
   });
 

@@ -201,13 +201,11 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     }
   });
 
-  it("CRITICAL Bullet-mask 24-char visual key-truncation pinned — `'•'.repeat(24)`. Drift to a different fill-char or count would change the visible key-shape on the dashboard.", () => {
+  it("CRITICAL Bullet-mask 24-char visual key-truncation pinned — `'•'.repeat(24)`. Drift to a different fill-char or count would change the visible key-shape on the dashboard. 2026-05-21 — SSR no longer renders keys (skeleton-only pre-hydration; 12566e61); only the JS-side render keeps the bullet mask.", () => {
     const p = read(PAGE);
 
-    // SSG-rendered version.
+    // Inline-script version — JS-side render still uses the 24-bullet mask.
     expect(p).toMatch(/'•'\.repeat\(24\)/);
-    // Inline-script version.
-    expect((p.match(/'•'\.repeat\(24\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 
   it('CRITICAL escapeHtml() 5-char XSS guard pinned in inline script. Every dynamically-rendered key field (id, name, scopes, key_prefix) flows through it. Drift to dropping would let a malicious key name (post compromise) inject HTML into the list.', () => {
