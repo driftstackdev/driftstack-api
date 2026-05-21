@@ -79,13 +79,18 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     expect(body).toMatch(/'idempotency-key replayed with a different request body',/);
   });
 
-  it('SUPPORTED_PRODUCTS derives from TIER_PRICE_CENTS map keys — server-side authoritative price for the 6 paid tiers (canonical AccountTier enum). 2026-05-21 — V-666.SEC: the prior 7-tuple included stale scaffold tier names (solo_automated/team_growth/team_scale/api_pro) that never matched the customer-dashboard TIERS array AND trusted customer-supplied price_cents (price-tampering vulnerability). The map is now the single source of truth; SUPPORTED_PRODUCTS is `Object.keys(TIER_PRICE_CENTS)` cast.', () => {
-    expect(body).toMatch(
-      /const TIER_PRICE_CENTS: Record<string, number> = \{\s*\n?\s*solo_manual: 7900,\s*\n?\s*team_manual: 24900,\s*\n?\s*agency_manual: 69900,\s*\n?\s*api_starter: 14900,\s*\n?\s*api_builder: 49900,\s*\n?\s*api_scale: 149900,\s*\n?\s*\};/,
-    );
+  it('SUPPORTED_PRODUCTS derives from TIER_PRICE_CENTS map keys — server-side authoritative price for trial_pack + 6 paid tiers. 2026-05-21 — V-666.SEC: the prior 7-tuple included stale scaffold tier names (solo_automated/team_growth/team_scale/api_pro) AND trusted customer-supplied price_cents (price-tampering vulnerability). The map is now the single source of truth; SUPPORTED_PRODUCTS is `Object.keys(TIER_PRICE_CENTS)` cast. trial_pack stays in the map for SDK + integration-test compatibility; the route short-circuits to stub posture when amount < NOWPAYMENTS_MIN_USD_CENTS.', () => {
+    expect(body).toMatch(/trial_pack: 299,/);
+    expect(body).toMatch(/solo_manual: 7900,/);
+    expect(body).toMatch(/team_manual: 24900,/);
+    expect(body).toMatch(/agency_manual: 69900,/);
+    expect(body).toMatch(/api_starter: 14900,/);
+    expect(body).toMatch(/api_builder: 49900,/);
+    expect(body).toMatch(/api_scale: 149900,/);
     expect(body).toMatch(
       /const SUPPORTED_PRODUCTS = Object\.keys\(TIER_PRICE_CENTS\) as \[string, \.\.\.string\[\]\];/,
     );
+    expect(body).toMatch(/const NOWPAYMENTS_MIN_USD_CENTS = 2000;/);
   });
 
   it('CreateCryptoCheckoutSchema: zod enum product + price_cents int positive max 1_000_000 + price_currency 3-letter uppercase ISO regex. 2026-05-21 — V-666.SEC inserted explanatory comments between fields; pin matched on each line independently so the comments are admitted.', () => {
@@ -153,10 +158,12 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     expect(body).toMatch(/let paymentAddress: string \| null = null;/);
     expect(body).toMatch(/let payCurrency: string \| null = null;/);
     expect(body).toMatch(/let payAmount: number \| null = null;/);
-    // Real-mint path: NowPayments client + IPN callback URL gate.
-    expect(body).toMatch(
-      /if \(deps\.nowpayments !== undefined && deps\.nowpaymentsIpnCallbackUrl !== undefined\) \{/,
-    );
+    // Real-mint path: NowPayments client + IPN callback URL gate +
+    // min-amount floor (2026-05-21 V-666.SEC short-circuit to avoid
+    // amount_too_low errors when serverPriceCents < $20).
+    expect(body).toMatch(/deps\.nowpayments !== undefined &&/);
+    expect(body).toMatch(/deps\.nowpaymentsIpnCallbackUrl !== undefined &&/);
+    expect(body).toMatch(/serverPriceCents >= NOWPAYMENTS_MIN_USD_CENTS/);
     expect(body).toMatch(/payment = await deps\.nowpayments\.createPayment\(\{/);
     expect(body).toMatch(/provider = 'nowpayments';/);
     expect(body).toMatch(/created_at: new Date\(order\.created_at\)\.toISOString\(\),/);

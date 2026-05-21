@@ -67,11 +67,15 @@ export interface CryptoCheckoutRoutesDeps {
 // price_cents is now IGNORED — server uses this table verbatim.
 //
 // Tier IDs match the canonical AccountTier enum at
-// packages/api-types/src/common.ts. Trial pack is intentionally NOT
-// here — NowPayments has a $19.16 USD-equivalent floor, so trial-pack
-// crypto checkout would always fail amount_too_low at their API.
-// Customer-dashboard hides the crypto button on trial-pack copy.
+// packages/api-types/src/common.ts. trial_pack is included for
+// backwards-compat (SDK + integration tests POST it); the handler
+// detects amounts below NOWPAYMENTS_MIN_USD_CENTS and returns the
+// stub posture WITHOUT calling NowPayments — avoids the
+// amount_too_low error customers would otherwise see. The
+// customer-dashboard hides the crypto button on trial-pack copy as
+// a UX guard.
 const TIER_PRICE_CENTS: Record<string, number> = {
+  trial_pack: 299,
   solo_manual: 7900,
   team_manual: 24900,
   agency_manual: 69900,
@@ -79,6 +83,13 @@ const TIER_PRICE_CENTS: Record<string, number> = {
   api_builder: 49900,
   api_scale: 149900,
 };
+/** NowPayments USD-equivalent floor (verified empirically against
+ *  api.nowpayments.io/v1/min-amount on 2026-05-21 — every supported
+ *  cryptocurrency returned the same $19.16 figure). Amounts below
+ *  this hit `amount_too_low` at their API; we short-circuit to the
+ *  stub posture before calling. Bumped to 2000 cents ($20) to leave
+ *  a small buffer against their floor drifting upward. */
+const NOWPAYMENTS_MIN_USD_CENTS = 2000;
 // SUPPORTED_PRODUCTS = keys of the authoritative price map. Adding
 // a new tier requires bumping both this map AND the customer-
 // dashboard's TIERS array.
@@ -238,7 +249,16 @@ export function registerCryptoCheckoutRoutes(
       let paymentAddress: string | null = null;
       let payCurrency: string | null = null;
       let payAmount: number | null = null;
-      if (deps.nowpayments !== undefined && deps.nowpaymentsIpnCallbackUrl !== undefined) {
+      // V-666.SEC: skip the NowPayments call when the amount is below
+      // their USD-equivalent floor. Avoids surfacing amount_too_low
+      // errors to customers + keeps the trial-pack flow on Stripe
+      // even if a future regression re-enables a trial-pack crypto
+      // button without UI gating.
+      if (
+        deps.nowpayments !== undefined &&
+        deps.nowpaymentsIpnCallbackUrl !== undefined &&
+        serverPriceCents >= NOWPAYMENTS_MIN_USD_CENTS
+      ) {
         try {
           const payment = await deps.nowpayments.createPayment({
             priceAmount: order.price_cents / 100,
