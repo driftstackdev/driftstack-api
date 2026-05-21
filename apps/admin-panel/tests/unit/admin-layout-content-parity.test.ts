@@ -115,8 +115,10 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     );
   });
 
-  it('renders <slot /> inside <main class="flex-1">', () => {
-    expect(body).toMatch(/<main class="flex-1">\s*\n?\s*<slot \/>\s*\n?\s*<\/main>/);
+  it('renders <slot /> inside <main class="flex-1"> (with opacity-0 hydrate gate). 2026-05-21 — <main> now carries `data-hydrate="pending"` + inline `style="opacity:0..."` so the page content fades in on JS reveal rather than flashing MOCK_X SSR data; the slot still lives inside.', () => {
+    expect(body).toMatch(
+      /<main\s*\n?\s*class="flex-1"\s*\n?\s*data-hydrate="pending"\s*\n?\s*style="opacity: 0; transition: opacity 0\.18s ease-out"\s*\n?\s*>\s*\n?\s*<slot \/>\s*\n?\s*<\/main>/,
+    );
   });
 
   it('html lang="en" + charset UTF-8 + viewport meta', () => {

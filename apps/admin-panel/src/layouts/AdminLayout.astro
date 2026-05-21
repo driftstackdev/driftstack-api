@@ -102,9 +102,44 @@ const navItems = [
           <p>Staff-only surface. All actions audit-logged.</p>
         </div>
       </aside>
-      <main class="flex-1">
+      <main
+        class="flex-1"
+        data-hydrate="pending"
+        style="opacity: 0; transition: opacity 0.18s ease-out"
+      >
         <slot />
       </main>
     </div>
+    <script is:inline>
+      {
+        /*
+         * 2026-05-21 — page-hydrate reveal. Same pattern as
+         * DashboardLayout f33fa91e: <main> renders opacity:0 so the
+         * customer doesn't see the brief flash of MOCK_ACCOUNTS /
+         * MOCK_AUDIT_LOG / MOCK_OVERRIDES / etc on first paint. The
+         * reveal fires on either DOMContentLoaded+rAF OR a 600ms
+         * safety fallback, whichever first.
+         */
+      }
+      (function () {
+        var main = document.querySelector('main[data-hydrate="pending"]');
+        if (!main) return;
+        var revealed = false;
+        function reveal() {
+          if (revealed) return;
+          revealed = true;
+          main.style.opacity = '1';
+          main.setAttribute('data-hydrate', 'ready');
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', function () {
+            requestAnimationFrame(reveal);
+          });
+        } else {
+          requestAnimationFrame(reveal);
+        }
+        setTimeout(reveal, 600);
+      })();
+    </script>
   </body>
 </html>
