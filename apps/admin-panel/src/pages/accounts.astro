@@ -41,6 +41,26 @@ const apiBaseUrl = resolveApiBaseUrl();
           per-account detail (tier change, suspend, audit log slice).
         </p>
       </div>
+      {/* 2026-05-22 — auto-poll live indicator. Same shape as the
+          overview live feed (2c24750f). Refreshes the accounts list
+          every 30s so new sign-ups appear without F5. */}
+      <div class="flex items-center gap-3 text-xs">
+        <span class="flex items-center gap-1.5 text-slate-500">
+          <span
+            aria-hidden="true"
+            data-live-dot
+            class="inline-block h-2 w-2 rounded-full bg-emerald-500"
+          ></span>
+          <span>Live · updated <span data-live-age>just now</span></span>
+        </span>
+        <button
+          type="button"
+          data-live-refresh
+          class="text-oxblood-700 hover:underline"
+        >
+          Refresh now
+        </button>
+      </div>
     </header>
 
     <!-- Filter bar -->
@@ -241,10 +261,10 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       let inFlight = 0;
       function load() {
-        if (!token) return;
+        if (!token) return Promise.resolve();
         const myReq = ++inFlight;
         const params = buildQuery();
-        fetch(apiBaseUrl + '/v1/admin/accounts?' + params.toString(), {
+        return fetch(apiBaseUrl + '/v1/admin/accounts?' + params.toString(), {
           headers: { authorization: 'Bearer ' + token },
           credentials: 'include',
         })
@@ -324,6 +344,45 @@ const apiBaseUrl = resolveApiBaseUrl();
           searchEl.select();
         }
       });
+
+      // 2026-05-22 — 30s auto-poll for new sign-ups. Same pattern as
+      // the overview live feed (2c24750f). loadWithLive() wraps the
+      // existing load() to also flip the live-dot color + record
+      // lastFetch. Timer calls it directly (bypasses scheduleLoad's
+      // 200ms debounce which is for input typing only).
+      let lastFetch = Date.now();
+      function loadWithLive() {
+        const liveDot = root.querySelector('[data-live-dot]');
+        if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+        const p = load();
+        if (p && typeof p.then === 'function') {
+          p.then(
+            () => {
+              lastFetch = Date.now();
+              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
+            },
+            () => {
+              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
+            },
+          );
+        } else {
+          lastFetch = Date.now();
+        }
+      }
+      const refreshBtn = root.querySelector('[data-live-refresh]');
+      if (refreshBtn) refreshBtn.addEventListener('click', loadWithLive);
+      setInterval(loadWithLive, 30_000);
+      function fmtAge(ms) {
+        const s = Math.floor((Date.now() - ms) / 1000);
+        if (s < 5) return 'just now';
+        if (s < 60) return s.toString() + 's ago';
+        if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
+        return Math.floor(s / 3600).toString() + 'h ago';
+      }
+      const ageEl = root.querySelector('[data-live-age]');
+      setInterval(() => {
+        if (ageEl) ageEl.textContent = fmtAge(lastFetch);
+      }, 5_000);
 
       load();
     })();
