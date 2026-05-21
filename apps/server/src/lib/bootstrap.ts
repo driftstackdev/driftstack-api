@@ -117,6 +117,7 @@ import type { AccountTier } from '@driftstack/api-types';
 import { BillingService, type BillingProvider } from '../services/billing.js';
 import { CryptoOrdersService } from '../services/crypto-orders.js';
 import { DrizzleCryptoOrdersRepo } from '../db/crypto-orders-repo.js';
+import { NowPaymentsApiClient } from './nowpayments-api.js';
 import { CostMonitoringService } from '../services/cost-monitoring.js';
 import { UsageAggregatorFromUsageRepo } from '../services/cost-aggregator.js';
 import { CostAlertDispatcher } from '../services/cost-alert-dispatcher.js';
@@ -933,6 +934,7 @@ export async function createProductionDeps(
   // never receive status transitions from upstream — but matches the
   // route-gate convention by staying undefined.
   let cryptoOrdersService: CryptoOrdersService | undefined;
+  let nowpaymentsApiClient: NowPaymentsApiClient | undefined;
   if (config.nowpayments?.ipnSecret !== undefined && config.nowpayments.ipnSecret.length > 0) {
     const cryptoRepo = new DrizzleCryptoOrdersRepo(dbHandle);
     cryptoOrdersService = new CryptoOrdersService({ repo: cryptoRepo });
@@ -940,12 +942,39 @@ export async function createProductionDeps(
       { component: 'crypto-orders' },
       'CryptoOrdersService wired with DrizzleCryptoOrdersRepo',
     );
+    // V-666.D — NowPayments HTTP client. Used by the checkout route to
+    // mint a real `pay_address` instead of the stub `null`. Only wires
+    // when NOWPAYMENTS_API_KEY is present (separate env var from
+    // IPN_SECRET — the API key authenticates outbound calls, IPN
+    // secret verifies inbound webhook signatures).
+    if (config.nowpayments?.apiKey !== undefined && config.nowpayments.apiKey.length > 0) {
+      nowpaymentsApiClient = new NowPaymentsApiClient({
+        apiKey: config.nowpayments.apiKey,
+        logger,
+      });
+      logger.info(
+        { component: 'crypto-orders' },
+        'NowPaymentsApiClient wired — /v1/billing/crypto-checkout will mint real payment addresses',
+      );
+    } else {
+      logger.warn(
+        { component: 'crypto-orders' },
+        'NOWPAYMENTS_API_KEY missing — /v1/billing/crypto-checkout returns stub posture (payment_address: null)',
+      );
+    }
   } else {
     logger.warn(
       { component: 'crypto-orders' },
       'CryptoOrdersService NOT wired (NOWPAYMENTS_IPN_SECRET required); /v1/billing/crypto-checkout routes will not register',
     );
   }
+  // IPN callback URL derives from the OAuth callback base when
+  // available (same API origin); otherwise hard-codes prod. Both
+  // app.driftstack.dev (dashboard) and api.driftstack.dev (this
+  // server) are deployed; NowPayments posts to the API origin.
+  const nowpaymentsIpnCallbackUrl: string =
+    process.env.NOWPAYMENTS_IPN_CALLBACK_URL ??
+    'https://api.driftstack.dev/v1/webhooks/nowpayments';
 
   // V-541.G — CostMonitoringService wired against the production
   // defaults from `cost-defaults.ts`. The aggregator is a stub
@@ -1303,6 +1332,9 @@ export async function createProductionDeps(
       : {}),
     ...(billingService !== undefined ? { billingService } : {}),
     ...(cryptoOrdersService !== undefined ? { cryptoOrdersService } : {}),
+    ...(nowpaymentsApiClient !== undefined
+      ? { nowpaymentsApiClient, nowpaymentsIpnCallbackUrl }
+      : {}),
     costMonitoringService,
     readinessChecks,
     // 2026-05-20 — env-var-controlled escape hatch. Some webview

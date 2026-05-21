@@ -110,6 +110,7 @@ import { registerCryptoQuoteRoutes } from '../routes/billing-crypto-quote.js';
 import { registerCustomerCryptoOrdersRoutes } from '../routes/billing-crypto-orders.js';
 import { registerAdminCryptoOrdersRoutes } from '../routes/admin-crypto-orders.js';
 import type { CryptoOrdersService } from '../services/crypto-orders.js';
+import type { NowPaymentsApiClient } from './nowpayments-api.js';
 import { registerOAuthRoutes } from '../routes/oauth.js';
 import { OAuthService, type OAuthStore } from '../services/oauth.js';
 import { registerAdminCostRoutes } from '../routes/admin-cost.js';
@@ -281,6 +282,19 @@ export interface AppDeps {
    * in-memory store.
    */
   cryptoOrdersService?: CryptoOrdersService;
+  /**
+   * V-666.D — NowPayments HTTP client. When provided alongside
+   * `cryptoOrdersService`, the checkout route mints a real
+   * pay_address; otherwise it returns the stub posture with
+   * payment_address: null.
+   */
+  nowpaymentsApiClient?: NowPaymentsApiClient;
+  /**
+   * V-666.D — IPN callback URL (https://api.driftstack.dev/v1/webhooks/
+   * nowpayments by default; overridable via NOWPAYMENTS_IPN_CALLBACK_URL).
+   * Required when `nowpaymentsApiClient` is set.
+   */
+  nowpaymentsIpnCallbackUrl?: string;
   /**
    * V-667.B — OAuth store. When provided, /v1/oauth/* + /v1/admin/oauth/*
    * routes register. When omitted, OAuth is not exposed (pre-launch
@@ -1005,7 +1019,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAccountOauthLinksRoutes(app, { links: deps.oauthLinksRepo });
   }
   if (deps.cryptoOrdersService !== undefined) {
-    registerCryptoCheckoutRoutes(app, { service: deps.cryptoOrdersService });
+    registerCryptoCheckoutRoutes(app, {
+      service: deps.cryptoOrdersService,
+      ...(deps.nowpaymentsApiClient !== undefined && deps.nowpaymentsIpnCallbackUrl !== undefined
+        ? {
+            nowpayments: deps.nowpaymentsApiClient,
+            nowpaymentsIpnCallbackUrl: deps.nowpaymentsIpnCallbackUrl,
+          }
+        : {}),
+    });
     registerCustomerCryptoOrdersRoutes(app, { service: deps.cryptoOrdersService });
     registerAdminCryptoOrdersRoutes(app, { service: deps.cryptoOrdersService });
   }

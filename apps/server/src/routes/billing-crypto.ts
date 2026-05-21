@@ -38,9 +38,24 @@ import { randomBytes } from 'node:crypto';
 import type { CryptoOrdersService } from '../services/crypto-orders.js';
 import { ValidationError } from '../lib/errors.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
+import type { NowPaymentsApiClient } from '../lib/nowpayments-api.js';
 
 export interface CryptoCheckoutRoutesDeps {
   service: CryptoOrdersService;
+  /**
+   * V-666.D — NowPayments HTTP client. When wired, the route mints a
+   * real payment address (POST /v1/payment); when omitted, returns
+   * `provider: 'stub'` + null fields (existing posture). Bootstrap
+   * passes the client only when NOWPAYMENTS_API_KEY env var is set.
+   */
+  nowpayments?: NowPaymentsApiClient;
+  /**
+   * V-666.D — NowPayments IPN callback URL (e.g.
+   * `https://api.driftstack.dev/v1/webhooks/nowpayments`). Passed as
+   * `ipn_callback_url` on every createPayment call. Required when
+   * `nowpayments` is set.
+   */
+  nowpaymentsIpnCallbackUrl?: string;
 }
 
 const SUPPORTED_PRODUCTS = [
@@ -152,18 +167,55 @@ export function registerCryptoCheckoutRoutes(
         }
       }
 
+      // V-666.D — if NowPayments is wired, mint a real payment
+      // address. We do this AFTER the local order is created so a
+      // failed NowPayments call still leaves a customer-trackable
+      // order_id in our DB. Order.payment_id stays null until the
+      // first IPN callback (which carries authoritative status).
+      // payment_id from the create call is informational only — the
+      // IPN flow is the canonical source of truth.
+      let provider: 'stub' | 'nowpayments' = 'stub';
+      let paymentAddress: string | null = null;
+      let payCurrency: string | null = null;
+      let payAmount: number | null = null;
+      if (deps.nowpayments !== undefined && deps.nowpaymentsIpnCallbackUrl !== undefined) {
+        try {
+          const payment = await deps.nowpayments.createPayment({
+            priceAmount: order.price_cents / 100,
+            priceCurrency: order.price_currency,
+            orderId: order.order_id,
+            orderDescription: `Driftstack ${order.product}`,
+            ipnCallbackUrl: deps.nowpaymentsIpnCallbackUrl,
+          });
+          provider = 'nowpayments';
+          paymentAddress = payment.payAddress;
+          payCurrency = payment.payCurrency;
+          payAmount = payment.payAmount;
+        } catch (err) {
+          // Soft-fail: the local order persists, the customer sees
+          // the stub posture, support can mint the payment manually.
+          // Log so ops sees the upstream failure.
+          req.log.error(
+            {
+              event: 'nowpayments_create_payment_failed',
+              order_id: order.order_id,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            'NowPayments create-payment call failed; returning stub posture',
+          );
+        }
+      }
+
       return reply.code(201).send({
         order_id: order.order_id,
         product: order.product,
         price_cents: order.price_cents,
         price_currency: order.price_currency,
         status: order.status,
-        // V-666.D follow-up will populate these via the NowPayments
-        // create-payment call. Stub posture: caller renders a
-        // "contact support" message.
-        provider: 'stub',
-        payment_address: null,
-        pay_currency: null,
+        provider,
+        payment_address: paymentAddress,
+        pay_currency: payCurrency,
+        pay_amount: payAmount,
         created_at: new Date(order.created_at).toISOString(),
       });
     },

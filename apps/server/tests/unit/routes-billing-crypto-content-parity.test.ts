@@ -134,16 +134,21 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     );
   });
 
-  it("Reply 201: order_id + product + price + status + V-666.D follow-up stub posture (provider:'stub' + payment_address:null + pay_currency:null) + created_at ISO", () => {
+  it("Reply 201: order_id + product + price + status + provider (nowpayments | stub) + payment_address + pay_currency + pay_amount + created_at ISO. 2026-05-21 — V-666.D landed: route now calls NowPaymentsApiClient.createPayment when wired and returns the real pay_address; falls through to the stub posture (provider:'stub' + null fields) when the client is undefined OR the upstream call throws.", () => {
     expect(body).toMatch(
       /return reply\.code\(201\)\.send\(\{\s*\n?\s*order_id: order\.order_id,\s*\n?\s*product: order\.product,\s*\n?\s*price_cents: order\.price_cents,\s*\n?\s*price_currency: order\.price_currency,\s*\n?\s*status: order\.status,/,
     );
+    // Stub-vs-real branch: both providers reachable.
+    expect(body).toMatch(/let provider: 'stub' \| 'nowpayments' = 'stub';/);
+    expect(body).toMatch(/let paymentAddress: string \| null = null;/);
+    expect(body).toMatch(/let payCurrency: string \| null = null;/);
+    expect(body).toMatch(/let payAmount: number \| null = null;/);
+    // Real-mint path: NowPayments client + IPN callback URL gate.
     expect(body).toMatch(
-      /\/\/ V-666\.D follow-up will populate these via the NowPayments\s*\n?\s*\/\/ create-payment call\. Stub posture: caller renders a\s*\n?\s*\/\/ "contact support" message\./,
+      /if \(deps\.nowpayments !== undefined && deps\.nowpaymentsIpnCallbackUrl !== undefined\) \{/,
     );
-    expect(body).toMatch(/provider: 'stub',/);
-    expect(body).toMatch(/payment_address: null,/);
-    expect(body).toMatch(/pay_currency: null,/);
+    expect(body).toMatch(/payment = await deps\.nowpayments\.createPayment\(\{/);
+    expect(body).toMatch(/provider = 'nowpayments';/);
     expect(body).toMatch(/created_at: new Date\(order\.created_at\)\.toISOString\(\),/);
   });
 
