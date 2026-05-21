@@ -270,6 +270,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         paintMode();
       } catch (err) {
         paintError(err instanceof Error ? err.message : String(err));
+      } finally {
+        // 2026-05-21 — opacity-gate hydrate signal (matches the other
+        // dashboard pages 4a15ce31 / c8ad19a4 / 661f0422).
+        if (typeof window.dashboardHydrated === 'function') {
+          window.dashboardHydrated();
+        }
       }
     }
 
