@@ -107,14 +107,11 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     );
   });
 
-  it("Sidebar 4-section taxonomy (2026-05-20 bf3b3628 — antidetect-browser restructure): 'Browse' (Profiles + Proxies) + 'History' (Session log + Recordings) + 'Diagnostics' (Raw sessions + Connectivity test) + 'Cluster' (Mac mini fleet, cloud-customers gated via isCloudBaseUrl) + 'Account' (Settings) — pinned so the IA grouping stays profile-first per the antidetect-browser paradigm", () => {
-    expect(body).toMatch(/<SidebarSection label="Browse">/);
-    expect(body).toMatch(/<SidebarSection label="History">/);
-    expect(body).toMatch(/<SidebarSection label="Diagnostics">/);
-    expect(body).toMatch(/<SidebarSection label="Cluster">/);
-    expect(body).toMatch(/<SidebarSection label="Account">/);
-    expect(body).toMatch(/Mac mini fleet/);
-    expect(body).toMatch(/Connectivity test/);
+  it('Sidebar mount pinned: imports { Sidebar, type SidebarViewKind } and renders <Sidebar current=… /> in the shell — the 4-section taxonomy itself moved to apps/gui-client/src/components/Sidebar.tsx (covered by W486.S parity), so App.tsx now only proves the mount wires up correctly + the kind cast bridges the View discriminated union', () => {
+    expect(body).toMatch(
+      /import \{ Sidebar, type SidebarViewKind \} from '\.\/components\/Sidebar';/,
+    );
+    expect(body).toMatch(/<Sidebar\s*\n?\s*current=\{view\.kind as SidebarViewKind\}/);
   });
 
   it("loading branch: while settings load, render nothing rather than flashing the wizard — pinned so customers don't see a flash-of-wizard before settings hydrate (which would happen if apiKey===null is evaluated against the pre-hydration default state); Loading… section-label rendered in a centered surface-base wrapper", () => {
