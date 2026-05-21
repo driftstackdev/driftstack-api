@@ -54,7 +54,7 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
   it("Active-link styling + pathname-match framing pinned: 'pathname === item.href && text-oxblood-700 font-medium' + Astro.url.pathname source-of-truth — pinned so the active-link styling pattern + pathname source commitment survives (drift to claiming external active state would mislead users about their current location)", () => {
     expect(body).toMatch(/const pathname = Astro\.url\.pathname;/);
     expect(body).toMatch(
-      /class:list=\{\[\s*'nav-link',\s*pathname === item\.href && 'text-glow-red font-medium',?\s*\]\}/,
+      /class:list=\{\[\s*(?:\/\/[^\n]*\n\s*)*'nav-link font-medium',\s*pathname === item\.href && 'text-glow-red',?\s*\]\}/,
     );
   });
 

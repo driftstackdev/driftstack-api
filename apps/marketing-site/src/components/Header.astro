@@ -52,9 +52,16 @@ const pathname = Astro.url.pathname;
         navItems.map((item) => (
           <a
             href={item.href}
+            aria-current={pathname === item.href ? 'page' : undefined}
             class:list={[
-              'nav-link',
-              pathname === item.href && 'text-glow-red font-medium',
+              // 2026-05-21 — font-medium on base class so width stays
+              // constant across active/inactive; active state distinguished
+              // by text-glow-red only. Same fix as the dashboard +
+              // admin-panel sidebars (50b0dd7a / 3331f410). Otherwise
+              // clicking nav items shifts neighbours horizontally as the
+              // text bolds.
+              'nav-link font-medium',
+              pathname === item.href && 'text-glow-red',
             ]}
             target={item.external ? '_blank' : undefined}
             rel={item.external ? 'noopener noreferrer' : undefined}
@@ -99,9 +106,13 @@ const pathname = Astro.url.pathname;
             [...navItems, ...mobileExtraItems].map((item) => (
               <a
                 href={item.href}
+                aria-current={pathname === item.href ? 'page' : undefined}
                 class:list={[
-                  'rounded px-3 py-2 text-sm text-ink-secondary hover:bg-white/5 hover:text-ink-primary',
-                  pathname === item.href && 'text-glow-red font-medium',
+                  // 2026-05-21 — same constant-font-weight pattern as the
+                  // desktop nav (above) so the mobile popup doesn't reflow
+                  // when the active item is tapped.
+                  'rounded px-3 py-2 text-sm font-medium text-ink-secondary hover:bg-white/5 hover:text-ink-primary',
+                  pathname === item.href && 'text-glow-red',
                 ]}
                 target={'external' in item && item.external ? '_blank' : undefined}
                 rel={'external' in item && item.external ? 'noopener noreferrer' : undefined}
