@@ -258,6 +258,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           } else {
             showBanner("Couldn't load overview (" + msg + '). Showing preview data below.');
           }
+        })
+        .finally(() => {
+          // 2026-05-21 — signal AdminLayout opacity-gate (same pattern as
+          // customer-dashboard 4a15ce31 / c8ad19a4 / 661f0422).
+          if (typeof window.dashboardHydrated === 'function') {
+            window.dashboardHydrated();
+          }
         });
     })();
   </script>
