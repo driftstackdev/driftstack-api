@@ -76,6 +76,9 @@ const navItems = [
                 <li>
                   <a
                     href={item.href}
+                    aria-current={pathname === item.href || pathname.startsWith(item.href + '/')
+                      ? 'page'
+                      : undefined}
                     class:list={[
                       // 2026-05-21 — font-medium applied unconditionally on
                       // the base class to keep text width constant across

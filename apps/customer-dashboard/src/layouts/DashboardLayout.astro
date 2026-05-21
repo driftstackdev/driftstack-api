@@ -240,6 +240,7 @@ const navSections: NavSection[] = [
                           <li>
                             <a
                               href={item.href}
+                              aria-current={active ? 'page' : undefined}
                               class:list={[
                                 // 2026-05-21 — font-weight stays constant across
                                 // active/inactive (font-medium widens text → other
