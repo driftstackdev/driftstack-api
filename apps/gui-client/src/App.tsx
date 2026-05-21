@@ -8,11 +8,11 @@
 
 import { useEffect, useState } from 'react';
 import { ConnectionPill } from './components/ConnectionPill';
+import { Sidebar, type SidebarViewKind } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import { NotificationToastStack } from './components/NotificationToastStack';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
-import { isCloudBaseUrl } from './lib/telemetry';
 import { useConnectionStatus } from './lib/use-connection-status';
 import { ConnectivityView } from './views/ConnectivityView';
 import { FirstRunWizard } from './views/FirstRunWizard';
@@ -138,7 +138,11 @@ function Shell(): JSX.Element {
         }
       />
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar current={view} onNavigate={setView} onSignOut={() => void handleSignOut()} />
+        <Sidebar
+          current={view.kind as SidebarViewKind}
+          onNavigate={(kind) => setView({ kind })}
+          onSignOut={() => void handleSignOut()}
+        />
         <main className="flex-1 overflow-auto bg-surface-base">
           <CurrentView view={view} onNavigate={setView} />
         </main>
@@ -223,149 +227,6 @@ function deploymentLabel(baseUrl: string): 'cloud' | 'self-hosted' {
     // since cloud customers wouldn't typo their base URL).
     return 'self-hosted';
   }
-}
-
-interface SidebarProps {
-  current: View;
-  onNavigate: (v: View) => void;
-  onSignOut: () => void;
-}
-
-function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.Element {
-  const { settings } = useSettings();
-  const signedIn = settings.apiKey !== null;
-  const handleSignOut = onSignOut;
-  return (
-    <aside className="flex w-56 flex-col border-r border-surface-divider bg-surface-raised">
-      <SidebarSection label="Browse">
-        {/* 2026-05-20 — antidetect-browser-style: profiles are first
-            class (Launch / Stop / status per row inside the view). */}
-        <SidebarItem
-          active={current.kind === 'profiles'}
-          onClick={() => onNavigate({ kind: 'profiles' })}
-        >
-          Profiles
-        </SidebarItem>
-        <SidebarItem
-          active={current.kind === 'proxies'}
-          onClick={() => onNavigate({ kind: 'proxies' })}
-        >
-          Proxies
-        </SidebarItem>
-      </SidebarSection>
-      <SidebarSection label="History">
-        <SidebarItem
-          active={current.kind === 'sessions-history'}
-          onClick={() => onNavigate({ kind: 'sessions-history' })}
-        >
-          Session log
-        </SidebarItem>
-        <SidebarItem
-          active={current.kind === 'recordings'}
-          onClick={() => onNavigate({ kind: 'recordings' })}
-        >
-          Recordings
-        </SidebarItem>
-      </SidebarSection>
-      <SidebarSection label="Diagnostics">
-        <SidebarItem
-          active={current.kind === 'sessions'}
-          onClick={() => onNavigate({ kind: 'sessions' })}
-        >
-          Raw sessions
-        </SidebarItem>
-        <SidebarItem
-          active={current.kind === 'connectivity'}
-          onClick={() => onNavigate({ kind: 'connectivity' })}
-        >
-          Connectivity test
-        </SidebarItem>
-      </SidebarSection>
-      {/* 2026-05-20 — Cluster / Mac mini fleet is a self-hosted-operator
-          surface (manage YOUR OWN Mac fleet); cloud customers never
-          need it. Gate on baseUrl: cloud (api.driftstack.dev) hides
-          the section entirely; self-hosted shows it. The GUI is the
-          same binary for both — this is purely a UX render gate. */}
-      {!isCloudBaseUrl(settings.baseUrl) && (
-        <SidebarSection label="Cluster">
-          <SidebarItem
-            active={current.kind === 'fleet'}
-            onClick={() => onNavigate({ kind: 'fleet' })}
-          >
-            Mac mini fleet
-          </SidebarItem>
-        </SidebarSection>
-      )}
-      <SidebarSection label="Account">
-        <SidebarItem
-          active={current.kind === 'settings'}
-          onClick={() => onNavigate({ kind: 'settings' })}
-        >
-          Settings
-        </SidebarItem>
-      </SidebarSection>
-      {signedIn && (
-        <div className="mt-auto flex flex-col gap-1 border-t border-surface-divider px-3 py-3">
-          <div className="px-2 py-0.5 text-2xs text-ink-muted">
-            <span className="block truncate font-mono" title={settings.apiKey ?? undefined}>
-              {settings.apiKey?.slice(0, 9) ?? ''}…{settings.apiKey?.slice(-6) ?? ''}
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="flex w-full items-center justify-between rounded bg-status-error/10 px-2 py-1.5 text-left text-xs font-medium text-status-error transition hover:bg-status-error/20"
-          >
-            <span>Sign out (forget key)</span>
-            <span className="text-2xs opacity-70">⌘⇧L</span>
-          </button>
-        </div>
-      )}
-    </aside>
-  );
-}
-
-function SidebarSection({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}): JSX.Element {
-  return (
-    <div className="flex flex-col gap-px py-2">
-      <div className="px-3 py-1">
-        <span className="section-label">{label}</span>
-      </div>
-      <div className="flex flex-col">{children}</div>
-    </div>
-  );
-}
-
-function SidebarItem({
-  children,
-  active,
-  onClick,
-}: {
-  children: React.ReactNode;
-  active?: boolean;
-  onClick?: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      data-tauri-no-drag
-      onClick={onClick}
-      className={
-        'flex items-center gap-2 px-3 py-1 text-sm transition-colors text-left ' +
-        (active === true
-          ? 'bg-accent-subtle text-ink-primary'
-          : 'text-ink-secondary hover:bg-surface-elevated hover:text-ink-primary')
-      }
-    >
-      {children}
-    </button>
-  );
 }
 
 function StatusFooter(): JSX.Element {
