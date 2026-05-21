@@ -293,12 +293,19 @@ const navSections: NavSection[] = [
                     >
                       —
                     </p>
-                    <a
-                      href="/settings"
-                      class="text-[11px] text-ink-muted hover:text-ink-primary"
-                    >
-                      Account settings
-                    </a>
+                    <div class="flex items-center gap-2 text-[11px] text-ink-muted">
+                      <a href="/settings" class="hover:text-ink-primary">
+                        Account settings
+                      </a>
+                      <span aria-hidden="true">·</span>
+                      <button
+                        type="button"
+                        data-signout
+                        class="hover:text-ink-primary"
+                      >
+                        Sign out
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -619,6 +626,38 @@ const navSections: NavSection[] = [
                 // up/down between page navs" reported by the founder.
                 sa.classList.remove('invisible');
                 sa.classList.remove('hidden');
+              }
+
+              // 2026-05-21 — sign-out wiring. Clears every dashboard-scoped
+              // localStorage key (session token + cached staff/team flags +
+              // acting-as override) and redirects to /login. Fire-and-forget
+              // POST to /v1/auth/logout so the server can invalidate the
+              // session row even if the request fails locally.
+              const signOutBtn = document.querySelector('[data-signout]');
+              if (signOutBtn) {
+                signOutBtn.addEventListener('click', function () {
+                  try {
+                    fetch(apiBaseUrl + '/v1/auth/logout', {
+                      method: 'POST',
+                      headers: { authorization: 'Bearer ' + (token || '') },
+                      credentials: 'include',
+                      keepalive: true,
+                    }).catch(function () {
+                      /* fire-and-forget */
+                    });
+                  } catch (_) {
+                    /* swallow */
+                  }
+                  try {
+                    localStorage.removeItem('ds_web_session_token');
+                    localStorage.removeItem('ds_is_team_user');
+                    localStorage.removeItem('ds_is_staff_user');
+                    localStorage.removeItem('ds_act_as_account');
+                  } catch (_) {
+                    /* swallow */
+                  }
+                  window.location.href = '/login';
+                });
               }
 
               // 2026-05-21 — operator-UI polish wave: fill the per-nav-item
