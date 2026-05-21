@@ -35,6 +35,7 @@ import { RedisAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { DrizzleAccountAuthRepo } from '../../../src/db/auth-repo.js';
 import { DrizzleSessionRepo } from '../../../src/db/sessions-repo.js';
+import { DrizzleProfilesRepo } from '../../../src/db/profiles-repo.js';
 import { DrizzleApiKeysRepo } from '../../../src/db/api-keys-repo.js';
 import { DrizzleUsageRepo } from '../../../src/db/usage-repo.js';
 import { DrizzleWebhooksRepo } from '../../../src/db/webhooks-repo.js';
@@ -138,6 +139,7 @@ export async function startTestServer(): Promise<TestServer> {
   const logger = createTestLogger();
   const authRepo = new DrizzleAccountAuthRepo(database);
   const sessionsRepo = new DrizzleSessionRepo(database);
+  const profilesRepo = new DrizzleProfilesRepo(database);
   const apiKeysRepo = new DrizzleApiKeysRepo(database);
   const usageRepo = new DrizzleUsageRepo(database);
   const rateLimitStore = new RedisRateLimitStore(redis);
@@ -315,6 +317,12 @@ export async function startTestServer(): Promise<TestServer> {
     oauthStore: new InMemoryOAuthStore(),
     costMonitoringService,
     rateLimitStore,
+    // 2026-05-20 — wire the V-237 repos so the /v1/account/me route
+    // registers in the test app (previously absent, causing every
+    // GET /v1/account/me + sibling routes to 404). Surfaced after the
+    // catastrophic-backtracking regex fix unblocked CI completion.
+    sessionRepo: sessionsRepo,
+    profilesRepo,
     permissiveCors: true,
   });
 
