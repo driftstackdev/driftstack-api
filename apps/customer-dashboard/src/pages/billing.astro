@@ -130,18 +130,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         <button type="button" class="btn-primary" data-action="buy-trial-pack">
           Buy trial pack — $2.99
         </button>
-        {/* 2026-05-21 — V-666.D crypto checkout option. Mints an order
-            via /v1/billing/crypto-checkout; modal shows the payment
-            address + amount. Customer sends crypto → NowPayments IPN
-            posts to the API → server transitions the order to
-            confirming → paid → trial-pack is granted. */}
-        <button
-          type="button"
-          class="text-sm text-ink-secondary hover:text-glow-red"
-          data-action="buy-trial-pack-crypto"
-        >
-          or pay with crypto →
-        </button>
+        {/* 2026-05-21 — crypto disabled on trial pack: NowPayments has
+            a $19.16 USD-equivalent floor across all currencies, so
+            the $2.99 trial would always fail amount_too_low at their
+            API. Crypto checkout is offered on /subscription tier
+            upgrades instead (Solo Manual $79+ comfortably clears
+            the floor). Customer-facing copy makes this explicit. */}
+        <p class="text-xs text-ink-muted">
+          Card only — crypto checkout requires a $20+ purchase. Available on{' '}
+          <a href="/subscription" class="text-glow-red hover:underline">subscription tiers</a>.
+        </p>
       </div>
       {/* Crypto checkout modal — hidden until the customer clicks "or
           pay with crypto". On open, the inline script posts to
