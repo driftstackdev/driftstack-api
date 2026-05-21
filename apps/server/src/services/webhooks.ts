@@ -269,6 +269,15 @@ export interface WebhooksRepo {
    * row, or null if the delivery doesn't exist.
    */
   resetDeliveryToPending(deliveryId: string, at: Date): Promise<WebhookDeliveryRow | null>;
+  /**
+   * 2026-05-22 — hard-delete a delivery row. Only meaningful from the
+   * admin DLQ surface (irrecoverable; the payload is gone). Returns
+   * true if a row was deleted, false if no row matched (already
+   * discarded by a concurrent operator, or wrong id). Implementations
+   * MUST refuse to delete rows whose status !== 'dlq' (callers should
+   * use requeue / replay for active deliveries).
+   */
+  deleteDelivery(deliveryId: string): Promise<boolean>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -768,6 +777,27 @@ export class WebhooksAdminService {
     if (!updated)
       throw new NotFoundError(`Webhook delivery "${deliveryId}" disappeared mid-requeue.`);
     return updated;
+  }
+
+  /**
+   * 2026-05-22 — hard-delete a DLQ row. The payload is unrecoverable
+   * after this; the admin-panel UI MUST confirm with the operator
+   * before invoking. Restricted to status='dlq' rows so an operator
+   * can't accidentally nuke an in-flight delivery. Returns the
+   * deleted row's id (useful for the audit log entry).
+   */
+  async discardFromDlq(ctx: AccountContext, deliveryId: string): Promise<{ discarded_id: string }> {
+    throwIfMissingScope(ctx, 'admin');
+    const current = await this.repo.findDeliveryById(deliveryId);
+    if (!current) throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
+    if (current.status !== 'dlq') {
+      throw new ConflictError(
+        `Webhook delivery "${deliveryId}" is not in DLQ (status=${current.status}). Only DLQ rows can be discarded.`,
+      );
+    }
+    const ok = await this.repo.deleteDelivery(deliveryId);
+    if (!ok) throw new NotFoundError(`Webhook delivery "${deliveryId}" disappeared mid-discard.`);
+    return { discarded_id: deliveryId };
   }
 
   listDlq(

@@ -494,6 +494,19 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     return row ? toDeliveryRow(row) : null;
   }
 
+  // 2026-05-22 — hard-delete a DLQ row. Service layer enforces the
+  // status='dlq' precondition; the SQL DELETE here matches both id
+  // AND status so a concurrent state change (e.g. a worker requeued
+  // the row between the service's findDeliveryById and this call)
+  // won't accidentally delete a non-DLQ delivery.
+  async deleteDelivery(deliveryId: string): Promise<boolean> {
+    const result = await this.database.db
+      .delete(webhookDeliveries)
+      .where(and(eq(webhookDeliveries.id, deliveryId), eq(webhookDeliveries.status, 'dlq')))
+      .returning({ id: webhookDeliveries.id });
+    return result.length > 0;
+  }
+
   async listDeliveriesForEndpoint(
     endpointId: string,
     accountId: string,

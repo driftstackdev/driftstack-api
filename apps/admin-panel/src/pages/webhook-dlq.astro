@@ -132,6 +132,16 @@ const apiBaseUrl = resolveApiBaseUrl();
                 >
                   Requeue
                 </button>
+                {/* 2026-05-22 — hard-delete; payload irrecoverable. Confirm()
+                    in the handler protects against fat-fingered clicks. */}
+                <button
+                  type="button"
+                  data-action="discard"
+                  data-id={entry.id}
+                  class="text-sm font-medium text-rose-700 hover:underline"
+                >
+                  Discard
+                </button>
               </div>
             </li>
           ))
@@ -235,6 +245,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<button type="button" data-action="requeue" data-id="' +
           escapeHtml(d.id) +
           '" class="text-sm font-medium text-oxblood-700 hover:underline">Requeue</button>' +
+          '<button type="button" data-action="discard" data-id="' +
+          escapeHtml(d.id) +
+          '" class="text-sm font-medium text-rose-700 hover:underline">Discard</button>' +
           '</div></li>'
         );
       }
@@ -312,16 +325,60 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      // Event delegation for dynamically-rendered Requeue buttons.
+      // 2026-05-22 — hard-delete a DLQ row. The payload is gone after
+      // this; the admin audit log entry (webhook_delivery.discarded)
+      // is the only forensic trace. Confirm() before firing so a
+      // mis-click doesn't destroy evidence.
+      function discard(id) {
+        if (!token) return;
+        if (
+          !window.confirm(
+            'Discard webhook delivery ' +
+              id +
+              '? This is irrecoverable — the payload + retry history are deleted. The action is audit-logged.',
+          )
+        ) {
+          return;
+        }
+        showBanner('Discarding ' + id + '…');
+        fetch(apiBaseUrl + '/v1/admin/webhook-dlq/' + encodeURIComponent(id) + '/discard', {
+          method: 'POST',
+          headers: {
+            authorization: 'Bearer ' + token,
+            'content-type': 'application/json',
+          },
+          credentials: 'include',
+          body: '{}',
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(() => {
+            showBanner('Discarded ' + id + '. Refreshing list…');
+            load();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            showBanner("Couldn't discard " + id + ' (' + msg + ').');
+          });
+      }
+
+      // Event delegation for dynamically-rendered Requeue + Discard buttons.
       if (root) {
         root.addEventListener('click', (ev) => {
           const target = ev.target;
           if (!target || !target.closest) return;
-          const btn = target.closest('[data-action="requeue"]');
-          if (!btn) return;
-          ev.preventDefault();
-          const id = btn.getAttribute('data-id');
-          if (id) requeue(id);
+          const requeueBtn = target.closest('[data-action="requeue"]');
+          if (requeueBtn) {
+            ev.preventDefault();
+            const id = requeueBtn.getAttribute('data-id');
+            if (id) requeue(id);
+            return;
+          }
+          const discardBtn = target.closest('[data-action="discard"]');
+          if (discardBtn) {
+            ev.preventDefault();
+            const id = discardBtn.getAttribute('data-id');
+            if (id) discard(id);
+          }
         });
       }
 

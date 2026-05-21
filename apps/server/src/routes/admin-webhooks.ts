@@ -55,13 +55,13 @@ export function registerAdminWebhookRoutes(
   // Wrap a mutation in audit-on-success / audit-on-error. The
   // targetResourceId is the public-prefixed delivery id (the audit row
   // captures what the admin sees, not the raw uuid).
-  async function withAudit(
+  async function withAudit<T>(
     request: FastifyRequest,
     action: AdminAuditAction,
     targetResourceId: string,
     inputPayload: Record<string, unknown>,
-    perform: () => Promise<WebhookDeliveryRow>,
-  ): Promise<WebhookDeliveryRow> {
+    perform: () => Promise<T>,
+  ): Promise<T> {
     const ctx = request.account;
     if (!ctx) throw new Error('account context missing after requireAuth');
     try {
@@ -174,6 +174,28 @@ export function registerAdminWebhookRoutes(
         () => webhooksAdmin.requeueFromDlq(ctx, id),
       );
       return publicDelivery(updated);
+    },
+  );
+
+  // ── POST /v1/admin/webhook-dlq/:id/discard ─────────────────────────────
+  // 2026-05-22 — hard-delete a DLQ row. Irrecoverable; the audit-log
+  // entry is the only record after this fires. Confined to status='dlq'
+  // rows by the service-layer precondition + the repo's status-matched
+  // DELETE so a concurrent requeue can't accidentally hard-delete an
+  // active delivery. Same scope-gating + audit-log pattern as
+  // requeue.
+  app.post<{ Params: { id: string } }>(
+    '/v1/admin/webhook-dlq/:id/discard',
+    {
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const id = uuidFromPrefixedId(request.params.id, 'wdl');
+      return withAudit(request, 'webhook_delivery.discarded', request.params.id, {}, () =>
+        webhooksAdmin.discardFromDlq(ctx, id),
+      );
     },
   );
 }

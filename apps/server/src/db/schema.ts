@@ -155,6 +155,9 @@ export const adminAuditAction = pgEnum('admin_audit_action', [
   'account.unsuspended',
   'webhook_delivery.replayed',
   'webhook_delivery.requeued',
+  // 2026-05-22 — hard-delete a DLQ row (migration 0061). Payload is
+  // irrecoverable; the audit-log entry is the only forensic trace.
+  'webhook_delivery.discarded',
   'rate_limit_override.set',
   'rate_limit_override.cleared',
   // V-100: admin force-actions on customer resources.

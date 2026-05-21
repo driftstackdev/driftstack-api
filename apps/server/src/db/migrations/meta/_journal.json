@@ -428,6 +428,13 @@
       "when": 1779392400000,
       "tag": "0060_crypto_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1779478800000,
+      "tag": "0061_webhook_delivery_discarded_audit_action",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,7 @@ export type AdminAuditAction =
   | 'account.unsuspended'
   | 'webhook_delivery.replayed'
   | 'webhook_delivery.requeued'
+  | 'webhook_delivery.discarded'
   | 'rate_limit_override.set'
   | 'rate_limit_override.cleared'
   // V-100: force actions on customer resources.
