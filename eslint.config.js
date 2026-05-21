@@ -10,6 +10,11 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/.venv/**',
       '**/site-packages/**',
+      // 2026-05-21 — Astro generates a `.astro/` build-cache dir at
+      // whatever cwd `astro check` is run from (per-workspace, but a
+      // root run pollutes the repo root). Exclude across the tree so
+      // lint doesn't trip on the auto-generated `content.d.ts` etc.
+      '**/.astro/**',
       '**/src-tauri/**',
       // Marketing site is an Astro project — it uses Astro's own
       // type-check pipeline (`astro check` via the workspace's
