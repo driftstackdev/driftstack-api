@@ -479,11 +479,22 @@ const apiBaseUrl = resolveApiBaseUrl();
       const wrap = document.createElement('div');
       wrap.className = 'flex flex-col gap-1';
       wrap.dataset.role = role;
-      const label = document.createElement('div');
+      const ts = Date.now();
+      wrap.dataset.turnTs = String(ts);
+      const labelRow = document.createElement('div');
+      labelRow.className = 'flex items-baseline justify-between gap-3';
+      const label = document.createElement('span');
       label.className =
         'text-[10px] font-mono uppercase tracking-widest ' +
         (role === 'agent' ? 'text-glow-red' : 'text-ink-muted');
       label.textContent = role === 'agent' ? 'agent' : 'you';
+      const time = document.createElement('time');
+      time.className = 'text-[10px] font-mono text-ink-muted';
+      time.dataset.turnAge = String(ts);
+      time.dateTime = new Date(ts).toISOString();
+      time.textContent = 'now';
+      labelRow.appendChild(label);
+      labelRow.appendChild(time);
       const bubble = document.createElement('div');
       bubble.className =
         'whitespace-pre-wrap break-words rounded-md px-3 py-2 text-sm ' +
@@ -491,12 +502,30 @@ const apiBaseUrl = resolveApiBaseUrl();
           ? 'bg-glow-red/5 text-ink-primary'
           : 'bg-slate-800 text-ink-primary');
       bubble.textContent = body;
-      wrap.appendChild(label);
+      wrap.appendChild(labelRow);
       wrap.appendChild(bubble);
       transcript.appendChild(wrap);
       transcript.scrollTop = transcript.scrollHeight;
       return wrap;
     }
+
+    // Tick the per-turn timestamps every 5s ("now" → "5s ago" →
+    // "30s ago" → "1m ago" → "2h ago"). Cheaper than RelativeTimeFormat
+    // for short windows + matches the admin overview live-feed style.
+    function fmtTurnAge(ms) {
+      const s = Math.floor((Date.now() - ms) / 1000);
+      if (s < 5) return 'now';
+      if (s < 60) return s.toString() + 's ago';
+      if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
+      return Math.floor(s / 3600).toString() + 'h ago';
+    }
+    setInterval(() => {
+      const els = document.querySelectorAll('[data-turn-age]');
+      els.forEach((el) => {
+        const ts = Number(el.getAttribute('data-turn-age'));
+        if (Number.isFinite(ts)) el.textContent = fmtTurnAge(ts);
+      });
+    }, 5_000);
 
     composerForm?.addEventListener('submit', async (ev) => {
       ev.preventDefault();
