@@ -30,6 +30,24 @@ const apiBaseUrl = resolveApiBaseUrl();
           fan-out). Force-unsubscribe writes admin_audit_log via V-281 dual-write.
         </p>
       </div>
+      {/* 2026-05-22 — live auto-poll. Same pattern as ab41f9d8. */}
+      <div class="flex items-center gap-3 text-xs whitespace-nowrap">
+        <span class="flex items-center gap-1.5 text-slate-500">
+          <span
+            aria-hidden="true"
+            data-live-dot
+            class="inline-block h-2 w-2 rounded-full bg-emerald-500"
+          ></span>
+          <span>Live · updated <span data-live-age>just now</span></span>
+        </span>
+        <button
+          type="button"
+          data-live-refresh
+          class="text-oxblood-700 hover:underline"
+        >
+          Refresh now
+        </button>
+      </div>
     </header>
 
     <div class="rounded-lg border border-slate-200 bg-white">
@@ -143,9 +161,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (list)
             list.innerHTML =
               '<li class="px-6 py-4 text-sm text-slate-500">Sign in with an admin key to load subscribers.</li>';
-          return;
+          return Promise.resolve();
         }
-        fetch(apiBaseUrl + '/v1/admin/status-subscribers?limit=200', {
+        return fetch(apiBaseUrl + '/v1/admin/status-subscribers?limit=200', {
           headers: { authorization: 'Bearer ' + token },
         })
           .then(function (r) {
@@ -222,6 +240,43 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
         });
       }
+
+      // 2026-05-22 — live auto-poll. Same pattern as ab41f9d8.
+      // Subscribers list refreshes every 30s so a fresh confirmed
+      // subscription appears without F5.
+      let lastFetch = Date.now();
+      function refreshWithLive() {
+        const liveDot = root.querySelector('[data-live-dot]');
+        if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+        const p = refresh();
+        if (p && typeof p.then === 'function') {
+          p.then(
+            () => {
+              lastFetch = Date.now();
+              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
+            },
+            () => {
+              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
+            },
+          );
+        } else {
+          lastFetch = Date.now();
+        }
+      }
+      const refreshBtn = root.querySelector('[data-live-refresh]');
+      if (refreshBtn) refreshBtn.addEventListener('click', refreshWithLive);
+      setInterval(refreshWithLive, 30_000);
+      function fmtAge(ms) {
+        const s = Math.floor((Date.now() - ms) / 1000);
+        if (s < 5) return 'just now';
+        if (s < 60) return s.toString() + 's ago';
+        if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
+        return Math.floor(s / 3600).toString() + 'h ago';
+      }
+      const ageEl = root.querySelector('[data-live-age]');
+      setInterval(() => {
+        if (ageEl) ageEl.textContent = fmtAge(lastFetch);
+      }, 5_000);
 
       refresh();
     })();
