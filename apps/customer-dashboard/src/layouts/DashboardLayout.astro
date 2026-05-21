@@ -143,7 +143,7 @@ const navSections: NavSection[] = [
                 var nextAdmin = qs.get('next-admin');
                 if (nextAdmin && t && t.length > 0) {
                   // 2026-05-21 — preserve any query string already on the
-                  // admin path. `URL` parses + reassembles so a nextAdmin
+                  // admin path. URL parses + reassembles so a nextAdmin
                   // like "/accounts/abc?filter=x" doesn't end up with the
                   // broken "?filter=x?bounced=1" double-question.
                   var u = new URL(
