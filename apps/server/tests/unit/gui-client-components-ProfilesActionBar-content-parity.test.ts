@@ -37,11 +37,19 @@ describe('W486.B apps/gui-client/src/components/ProfilesActionBar.tsx content pa
     expect(body).toMatch(/<option value="created">Created<\/option>/);
   });
 
-  it('search-input contract: aria-label="Search profiles", type=search, placeholder "Search profiles…", clear button aria-label="Clear search" — pinned so the keyboard-accessible search surface stays addressable for tests + screen readers (Slice C may add ⌘K wiring against the same label)', () => {
+  it('search-input contract: aria-label="Search profiles", type=search, placeholder hints the ⌘F shortcut, clear button aria-label="Clear search" — pinned so the keyboard-accessible search surface stays addressable for tests + screen readers (the placeholder reminds the user that ⌘F is wired)', () => {
     expect(body).toMatch(/aria-label="Search profiles"/);
     expect(body).toMatch(/type="search"/);
-    expect(body).toMatch(/placeholder="Search profiles…"/);
+    expect(body).toMatch(/placeholder="Search profiles… {2}⌘F"/);
     expect(body).toMatch(/aria-label="Clear search"/);
+  });
+
+  it('⌘F / Ctrl-F focuses the search input + Escape clears the query while focused — pinned so the macOS / browser "find" convention stays wired (operator workflow shortcut; same pattern as ProfilesView Cmd+, Settings hotkey)', () => {
+    expect(body).toMatch(/const cmd = e\.metaKey \|\| e\.ctrlKey;/);
+    expect(body).toMatch(/cmd && \(e\.key === 'f' \|\| e\.key === 'F'\)/);
+    expect(body).toMatch(/searchRef\.current\?\.focus\(\)/);
+    expect(body).toMatch(/searchRef\.current\?\.select\(\)/);
+    expect(body).toMatch(/e\.key === 'Escape' && document\.activeElement === searchRef\.current/);
   });
 
   it("count-display rule: '{n} of {total}' when a filter is active (search OR status !== 'all'), '{n} profile(s)' otherwise (singular at total===1) — pinned so the chrome stays honest about whether the customer is looking at a filtered slice or the whole list", () => {

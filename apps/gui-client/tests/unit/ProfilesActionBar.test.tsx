@@ -97,4 +97,30 @@ describe('ProfilesActionBar', () => {
     expect(screen.getByText(/1 profile/)).toBeInTheDocument();
     expect(screen.queryByText(/1 profiles/)).not.toBeInTheDocument();
   });
+
+  it('focuses the search input on Cmd+F / Ctrl+F', () => {
+    renderBar();
+    const input = screen.getByLabelText('Search profiles');
+    expect(document.activeElement).not.toBe(input);
+    fireEvent.keyDown(window, { key: 'f', metaKey: true });
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('clears the query when Escape is pressed while the search input is focused', () => {
+    const onSearchChange = vi.fn();
+    renderBar({ searchQuery: 'shopify', onSearchChange });
+    const input = screen.getByLabelText('Search profiles');
+    input.focus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onSearchChange).toHaveBeenCalledWith('');
+  });
+
+  it('does NOT clear the query on Escape when the input is empty (lets the surrounding view see the key)', () => {
+    const onSearchChange = vi.fn();
+    renderBar({ searchQuery: '', onSearchChange });
+    const input = screen.getByLabelText('Search profiles');
+    input.focus();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onSearchChange).not.toHaveBeenCalled();
+  });
 });

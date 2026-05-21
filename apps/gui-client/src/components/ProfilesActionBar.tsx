@@ -8,7 +8,7 @@
 // here so the ProfilesView body stays focused on row rendering +
 // launch/stop wiring.
 
-import type { ChangeEvent } from 'react';
+import { useEffect, useRef, type ChangeEvent } from 'react';
 
 export type ProfileStatusFilter = 'all' | 'running' | 'idle';
 export type ProfileSortBy = 'name' | 'last-used' | 'created';
@@ -35,6 +35,33 @@ export function ProfilesActionBar({
   totalCount,
 }: ProfilesActionBarProps): JSX.Element {
   const hasFilter = searchQuery.trim().length > 0 || statusFilter !== 'all';
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // ⌘F / Ctrl-F focuses the search input — the macOS / browser "find"
+  // convention, lifted into the antidetect-ops workflow so a power user
+  // can jump-search across long profile lists without leaving the
+  // keyboard. ⎋ (Escape) clears the query + drops focus back to the
+  // surrounding view.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      const cmd = e.metaKey || e.ctrlKey;
+      if (cmd && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+        return;
+      }
+      if (e.key === 'Escape' && document.activeElement === searchRef.current) {
+        if (searchQuery.length > 0) {
+          e.preventDefault();
+          onSearchChange('');
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onSearchChange, searchQuery]);
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative flex min-w-[14rem] flex-1 items-center">
@@ -49,10 +76,11 @@ export function ProfilesActionBar({
           <path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
         <input
+          ref={searchRef}
           type="search"
           value={searchQuery}
           onChange={(e: ChangeEvent<HTMLInputElement>) => onSearchChange(e.target.value)}
-          placeholder="Search profiles…"
+          placeholder="Search profiles…  ⌘F"
           aria-label="Search profiles"
           className="form-input pl-8 pr-7"
         />
