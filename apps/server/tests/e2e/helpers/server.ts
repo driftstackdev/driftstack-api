@@ -33,7 +33,12 @@ import { buildLegalCatalog } from '../../../src/services/legal-catalog.js';
 import { DrizzleLegalRepo } from '../../../src/db/legal-repo.js';
 import { RedisAuthCache } from '../../../src/services/auth-cache.js';
 import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
+import { MfaService } from '../../../src/services/mfa.js';
+import { InMemoryMfaChallengeStore } from '../../../src/services/mfa-challenge-store.js';
+import { AuthFlowsService } from '../../../src/services/auth-flows.js';
 import { DrizzleAccountAuthRepo } from '../../../src/db/auth-repo.js';
+import { DrizzleAuthFlowsRepo } from '../../../src/db/auth-flows-repo.js';
+import { DrizzleMfaRepo } from '../../../src/db/mfa-repo.js';
 import { DrizzleSessionRepo } from '../../../src/db/sessions-repo.js';
 import { DrizzleProfilesRepo } from '../../../src/db/profiles-repo.js';
 import { DrizzleApiKeysRepo } from '../../../src/db/api-keys-repo.js';
@@ -243,6 +248,36 @@ export async function startTestServer(): Promise<TestServer> {
     accountAuditService,
   );
 
+  // 2026-05-20 — wire MFA + AuthFlows services so the /v1/account/mfa/*
+  // and /v1/account/web-sessions routes register in e2e. Production
+  // wiring at bootstrap.ts:652 + :796. Mirror the integration helper
+  // (build-test-app.ts:949) which uses an all-zeros 32-byte key + an
+  // InMemoryMfaChallengeStore so e2e doesn't need MFA_ENCRYPTION_KEY
+  // in the runner env.
+  const mfaRepo = new DrizzleMfaRepo(database);
+  const mfaService = new MfaService(
+    mfaRepo,
+    { encryptionKey: Buffer.alloc(32, 0).toString('base64') },
+    accountAuditService,
+  );
+  const mfaChallengeStore = new InMemoryMfaChallengeStore();
+  const authFlowsRepo = new DrizzleAuthFlowsRepo(database);
+  const authFlowsService = new AuthFlowsService(
+    authFlowsRepo,
+    noopEmail,
+    logger,
+    {
+      verifyEmailUrl: 'http://localhost:5173/auth/verify-email',
+      magicLinkUrl: 'http://localhost:5173/auth/magic-link',
+      passwordResetUrl: 'http://localhost:5173/auth/password-reset',
+      exposeDebugToken: true,
+    },
+    authCache,
+    accountAuditService,
+    mfaService,
+    mfaChallengeStore,
+  );
+
   // V-541.B / V-540.B-3 — wire a cost-monitoring service backed by an
   // in-memory aggregator. Tests populate `costUsageByAccount` to drive
   // the aggregator; tier resolution reads the live accounts table.
@@ -323,6 +358,11 @@ export async function startTestServer(): Promise<TestServer> {
     // catastrophic-backtracking regex fix unblocked CI completion.
     sessionRepo: sessionsRepo,
     profilesRepo,
+    // 2026-05-20 — mfaService unlocks /v1/account/mfa/*; authFlowsService
+    // unlocks /v1/auth/* + /v1/account/web-sessions. Both gated on
+    // service presence in apps/server/src/lib/app.ts:885 + 897.
+    mfaService,
+    authFlowsService,
     permissiveCors: true,
   });
 
