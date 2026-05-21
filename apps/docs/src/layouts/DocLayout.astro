@@ -45,10 +45,15 @@ function isActive(href: string): boolean {
                   <li>
                     <a
                       href={item.href}
+                      aria-current={isActive(item.href) ? 'page' : undefined}
                       class:list={[
-                        'block rounded px-2 py-1 text-sm transition-colors',
+                        // 2026-05-21 — font-medium on the base class
+                        // keeps text width constant across active /
+                        // inactive; otherwise clicking shifted other
+                        // items (same fix as DashboardLayout 50b0dd7a).
+                        'block rounded px-2 py-1 text-sm font-medium transition-colors',
                         isActive(item.href)
-                          ? 'bg-glow-red/15 text-glow-red font-medium'
+                          ? 'bg-glow-red/15 text-glow-red'
                           : 'text-ink-secondary hover:bg-white/5 hover:text-ink-primary',
                       ]}
                     >
