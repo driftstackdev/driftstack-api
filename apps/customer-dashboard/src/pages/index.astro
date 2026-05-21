@@ -189,6 +189,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         })
         .catch(function (err) {
           showBanner('Could not load account: ' + err.message);
+        })
+        .finally(function () {
+          // 2026-05-21 — DashboardLayout opacity-gate signal. The Overview
+          // fans out 4 parallel fetches (account/me, api-keys, sessions,
+          // billing); /v1/account/me is the primary one driving the
+          // headline stats, so we reveal as soon as it resolves rather
+          // than waiting for all four.
+          if (typeof window.dashboardHydrated === 'function') {
+            window.dashboardHydrated();
+          }
         });
 
       // ─── /v1/api-keys ──────────────────────────────────────────────────
