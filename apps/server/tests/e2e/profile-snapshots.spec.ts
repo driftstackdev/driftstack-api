@@ -59,7 +59,10 @@ async function createProfile(
     headers: authHeader(seedPlaintext),
     data: { name },
   });
-  expect(res.status()).toBe(201);
+  // 2026-05-21 — POST /v1/profiles returns 200 (not 201) here; the
+  // route's existing contract + 11 integration tests + the SDK
+  // consumers all expect 200. Match it rather than diverging.
+  expect(res.status()).toBe(200);
   return (await res.json()) as ProfileResponse;
 }
 
@@ -71,7 +74,9 @@ test('POST /v1/profiles/:id/snapshots captures a snapshot', async ({ request }) 
     headers: authHeader(seed.plaintext),
     data: { label: 'before-experiment-A', description: 'baseline' },
   });
-  expect(res.status()).toBe(201);
+  // 2026-05-21 — POST snapshot returns 200 (route doesn't set 201 explicitly;
+  // matches the rest of the /v1/profiles* family).
+  expect(res.status()).toBe(200);
   const snap = (await res.json()) as SnapshotResponse;
   expect(snap.id).toMatch(/^psnap_/);
   expect(snap.parent_profile_id).toBe(profile.id);
@@ -159,7 +164,8 @@ test('POST /v1/profile-snapshots/:id/restore creates a fresh profile', async ({ 
       data: { name: 'restored-profile' },
     },
   );
-  expect(restoreRes.status()).toBe(201);
+  // 2026-05-21 — restore POST returns 200 (matches the rest of the family).
+  expect(restoreRes.status()).toBe(200);
   const restored = (await restoreRes.json()) as ProfileResponse;
   expect(restored.id).toMatch(/^prof_/);
   expect(restored.id).not.toBe(profile.id);
