@@ -1,7 +1,7 @@
 // W486.C-1 — drift guard for apps/gui-client/src/components/RelativeTime.tsx.
-// Slice C of the BlackBird-inspired GUI overhaul (2026-05-21). Pins the
-// SLICES threshold table so a refactor can't silently flip "5 min ago"
-// to "300 seconds ago" or similar; visible-text contract lives in
+// Operator-UI polish wave (2026-05-21). Pins the SLICES threshold table so
+// a refactor can't silently flip "5 min ago" to "300 seconds ago" or
+// similar; visible-text contract lives in
 // apps/gui-client/tests/unit/RelativeTime.test.tsx.
 
 import { existsSync, readFileSync } from 'node:fs';

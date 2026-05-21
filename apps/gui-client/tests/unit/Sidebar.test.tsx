@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/require-await */
 // 2026-05-21 — Sidebar count-badge + section render guards.
 //
-// Locks the visible-text contract for the BlackBird-inspired sidebar
-// rebuild so the next visual tweak (workspaces / tags / further icons)
-// doesn't silently drop a customer-facing counter.
+// Locks the visible-text contract for the 2026-05-21 sidebar rebuild
+// so the next visual tweak (further icons / workspace dividers /
+// account header) doesn't silently drop a customer-facing counter.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';

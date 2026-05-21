@@ -1,12 +1,12 @@
 // ProfilesView header action bar — search + filter + sort.
 //
-// 2026-05-21 — Slice B of the BlackBird-inspired GUI overhaul. Adds a
-// search input that matches name + description + archetype, a status-
-// filter segmented control (All / Running / Idle), and a sort
-// dropdown (last-used / name / created). Pure presentational —
-// ProfilesView owns the state + the derive-list useMemo; this
-// component is the chrome only, kept here so the ProfilesView body
-// stays focused on row rendering + launch/stop wiring.
+// 2026-05-21 — operator-UI polish wave. Adds a search input that
+// matches name + description + archetype, a status-filter segmented
+// control (All / Running / Idle), and a sort dropdown (last-used /
+// name / created). Pure presentational — ProfilesView owns the state
+// + the derive-list useMemo; this component is the chrome only, kept
+// here so the ProfilesView body stays focused on row rendering +
+// launch/stop wiring.
 
 import type { ChangeEvent } from 'react';
 

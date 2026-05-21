@@ -1,8 +1,7 @@
 // W486.B — drift guard for apps/gui-client/src/components/ProfilesActionBar.tsx.
-// Slice B of the BlackBird-inspired GUI overhaul (2026-05-21). Pins the
-// 3-segment status filter taxonomy + 3-option sort dropdown + search
-// input contract; visible-text + accessibility live in
-// apps/gui-client/tests/unit/ProfilesActionBar.test.tsx.
+// Operator-UI polish wave (2026-05-21). Pins the 3-segment status filter
+// taxonomy + 3-option sort dropdown + search input contract; visible-text +
+// accessibility live in apps/gui-client/tests/unit/ProfilesActionBar.test.tsx.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

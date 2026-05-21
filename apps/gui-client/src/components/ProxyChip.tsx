@@ -3,8 +3,8 @@
 // the profile<->proxy binding is glanceable without sacrificing the
 // detail-on-demand surface customers need when debugging connectivity.
 //
-// 2026-05-21 — Slice C of the BlackBird-inspired GUI overhaul. The
-// inline <select> for setDefaultProxy still lives in the row (binding
+// 2026-05-21 — operator-UI polish wave. The inline <select> for
+// setDefaultProxy still lives in the row (binding
 // edits keep the same UX); this chip is the read-only surface that
 // announces "this is the proxy that will be used on Launch".
 //

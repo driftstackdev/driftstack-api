@@ -91,9 +91,10 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   // because every other ProfilesView interaction is local; the modal
   // is a transient overlay scoped to this view's lifecycle.
   const [createOpen, setCreateOpen] = useState(false);
-  // 2026-05-21 — Slice B header action cluster (BlackBird-inspired).
+  // 2026-05-21 — header action cluster (operator-UI polish wave).
   // Pure-local filter/sort over `state.profiles`; no API change. Defaults
-  // match the antidetect-browser baseline (show all, sort by recent use).
+  // mirror the "what did I touch last" mental model that dominates
+  // operator usage (show all, sort by recent use).
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProfileStatusFilter>('all');
   const [sortBy, setSortBy] = useState<ProfileSortBy>('last-used');
@@ -174,10 +175,11 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     return activeSessions.find((s) => s.id === binding.currentSessionId) ?? null;
   }
 
-  // 2026-05-21 — Slice B: derive the filtered/sorted view over state.profiles.
-  // Search matches name + description + archetype; status filter joins against
-  // activeSessions via runningSessionFor; sort is recency-by-default (matches
-  // antidetect-browser ergonomics — "what did I touch last?" beats alpha).
+  // 2026-05-21 — derive the filtered/sorted view over state.profiles.
+  // Search matches name + description + archetype; status filter joins
+  // against activeSessions via runningSessionFor; sort is
+  // recency-by-default ("what did I touch last?" beats alpha for the
+  // operator workflow).
   const filteredProfiles = useMemo(() => {
     let list = state.profiles;
     const q = searchQuery.trim().toLowerCase();

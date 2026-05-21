@@ -1,8 +1,7 @@
 // W486.C-2 — drift guard for apps/gui-client/src/components/ProxyChip.tsx.
-// Slice C of the BlackBird-inspired GUI overhaul (2026-05-21). Pins the
-// no-credential-leak rule + the click-outside-to-close behavior + the
-// SOCKS5 detail-row taxonomy; visible-text contract lives in
-// apps/gui-client/tests/unit/ProxyChip.test.tsx.
+// Operator-UI polish wave (2026-05-21). Pins the no-credential-leak rule
+// + the click-outside-to-close behavior + the SOCKS5 detail-row taxonomy;
+// visible-text contract lives in apps/gui-client/tests/unit/ProxyChip.test.tsx.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

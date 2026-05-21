@@ -1,10 +1,10 @@
 // W486.S — drift guard for apps/gui-client/src/components/Sidebar.tsx.
-// Sidebar split out of App.tsx in 2026-05-21 09ffe07d (BlackBird-inspired
-// pass — per-item icons + live count badges). The 4-section taxonomy
-// invariant moved here from W486.A; the visible-text contract for the
-// Profiles/Proxies/Recordings/Sessions count badges is locked at the
-// component level by tests/unit/Sidebar.test.tsx (visible text), so this
-// file pins the source-of-truth wiring + framing.
+// Sidebar split out of App.tsx in 2026-05-21 09ffe07d (operator-UI
+// polish wave — per-item icons + live count badges). The 4-section
+// taxonomy invariant moved here from W486.A; the visible-text contract
+// for the Profiles/Proxies/Recordings/Sessions count badges is locked
+// at the component level by tests/unit/Sidebar.test.tsx, so this file
+// pins the source-of-truth wiring + framing.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +26,7 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("4-section taxonomy pinned: 'Browse' (Profiles + Proxies) + 'History' (Session log + Recordings) + 'Diagnostics' (Raw sessions + Connectivity test) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional) — the IA grouping stays profile-first per the antidetect-browser paradigm; do not collapse / rename sections without updating the GUI snapshot tests + this pin", () => {
+  it("4-section taxonomy pinned: 'Browse' (Profiles + Proxies) + 'History' (Session log + Recordings) + 'Diagnostics' (Raw sessions + Connectivity test) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional) — the IA grouping stays profile-first per Driftstack's operator-tool framing; do not collapse / rename sections without updating the GUI snapshot tests + this pin", () => {
     expect(body).toMatch(/<SidebarSection label="Browse">/);
     expect(body).toMatch(/<SidebarSection label="History">/);
     expect(body).toMatch(/<SidebarSection label="Diagnostics">/);

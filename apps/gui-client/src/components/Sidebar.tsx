@@ -1,17 +1,18 @@
 // Sidebar — primary nav chrome.
 //
-// 2026-05-21 — split out of App.tsx as part of the antidetect-style
-// visual overhaul. Adds per-item icons (Lucide-shape inline SVG, no
-// dependency) + live count badges driven by real data sources:
+// 2026-05-21 — split out of App.tsx as part of the operator-UI polish
+// pass. Adds per-item icons (Lucide-shape inline SVG, no dependency) +
+// live count badges driven by real data sources:
 //   - Profiles X/Y   ← accountMe.profile_count / .profile_cap
 //   - Proxies X      ← local proxies registry (settings.json store)
 //   - Sessions X/Y   ← accountMe.concurrent_session_active / .cap
 //   - Recordings X   ← RecordingsContext map size
 //   - Team           ← accountMe.teams.length (only when ≥1)
 //
-// Brand stays slate-base + oxblood-accent; no translucent wallpaper
-// (we're a dense ops tool, not a marketing surface). Inspiration is the
-// information density + glanceable counts, not the visual style itself.
+// Brand identity stays Driftstack — slate-base + oxblood-accent + the
+// Geist Sans / Berkeley Mono pair already locked in file 128. We are a
+// dense ops tool, not a marketing surface; the glanceable density here
+// is functional, not a stylistic borrow.
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useSettings } from '../lib/SettingsContext';

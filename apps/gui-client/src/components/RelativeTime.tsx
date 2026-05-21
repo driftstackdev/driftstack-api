@@ -1,10 +1,10 @@
 // Relative-time chip — "5 min ago" / "in 2 hr".
 //
-// 2026-05-21 — Slice C of the BlackBird-inspired GUI overhaul. Profile
-// rows previously rendered `last_used_at.toLocaleString()` which is
-// hard to scan at a glance for the antidetect-browser "what did I
-// touch most recently" workflow. Switch to Intl.RelativeTimeFormat
-// with a tooltip showing the absolute timestamp on hover.
+// 2026-05-21 — operator-UI polish wave. Profile rows previously
+// rendered `last_used_at.toLocaleString()` which is hard to scan at a
+// glance for the "what did I touch most recently" workflow that
+// dominates operator usage. Switch to Intl.RelativeTimeFormat with a
+// tooltip showing the absolute timestamp on hover.
 //
 // No timer / re-render — relative-time precision tolerates the
 // ProfilesView 15s refresh tick. If a row needs second-precision
