@@ -1,10 +1,13 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
 
 // V-312 — admin view of status-page email subscribers (V-295c3 +
 // V-295c3-tombstone). Read /v1/admin/status-subscribers; expose a
 // force-unsubscribe button per row. Audit log dual-write happens
 // server-side (V-281 pattern).
+
+const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <AdminLayout title="Status-page subscribers">
@@ -43,7 +46,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
     </p>
   </div>
 
-  <script is:inline>
+  <script is:inline define:vars={{ apiBaseUrl }}>
     (function () {
       const root = document.querySelector('[data-page="status-subscribers"]');
       if (!root) return;
@@ -139,7 +142,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
               '<li class="px-6 py-4 text-sm text-slate-500">Sign in with an admin key to load subscribers.</li>';
           return;
         }
-        fetch('/v1/admin/status-subscribers?limit=200', {
+        fetch(apiBaseUrl + '/v1/admin/status-subscribers?limit=200', {
           headers: { authorization: 'Bearer ' + token },
         })
           .then(function (r) {
@@ -189,7 +192,7 @@ import AdminLayout from '../layouts/AdminLayout.astro';
             const token = getToken();
             btn.disabled = true;
             btn.textContent = 'Unsubscribing…';
-            fetch('/v1/admin/status-subscribers/' + encodeURIComponent(id) + '/force-unsubscribe', {
+            fetch(apiBaseUrl + '/v1/admin/status-subscribers/' + encodeURIComponent(id) + '/force-unsubscribe', {
               method: 'POST',
               headers: {
                 authorization: 'Bearer ' + token,
