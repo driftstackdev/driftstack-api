@@ -62,9 +62,9 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toMatch(/data-field="dlq-depth">0<\/p>/);
   });
 
-  it("Recent admin activity card: 'See full log →' link to /audit-log (canonical audit-log page route — drift to /admin-audit or /logs would 404) + 'No admin actions recorded yet.' empty-state — pinned so the see-more link points to the real subpage", () => {
+  it("Recent admin activity card: 'See full log →' link to /audit-log (canonical audit-log page route — drift to /admin-audit or /logs would 404) + 'No admin actions recorded yet.' empty-state — pinned so the see-more link points to the real subpage. 2026-05-21 — 2c24750f wrapped the link in a text-xs flex row alongside the live-indicator + Refresh-now button; size class inherits from the row so text-sm dropped off the link itself.", () => {
     expect(body).toMatch(
-      /<a href="\/audit-log" class="text-sm text-oxblood-700 hover:underline">\s*\n?\s*See full log →\s*\n?\s*<\/a>/,
+      /<a href="\/audit-log" class="text-oxblood-700 hover:underline">\s*\n?\s*See full log →\s*\n?\s*<\/a>/,
     );
     expect(body).toMatch(
       /<li class="py-3 text-sm text-slate-500">No admin actions recorded yet\.<\/li>/,
