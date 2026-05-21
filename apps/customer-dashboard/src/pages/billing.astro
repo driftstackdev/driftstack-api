@@ -81,7 +81,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
       <div class="mt-6 flex flex-wrap gap-3">
         <button type="button" class="btn-primary" data-action="portal">Manage in Stripe portal</button>
-        <a href="#" class="btn-secondary">Change plan</a>
+        <a href="/select-tier" class="btn-secondary">Change plan</a>
         <button
           type="button"
           data-action="cancel"
@@ -141,60 +141,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           <a href="/subscription" class="text-glow-red hover:underline">subscription tiers</a>.
         </p>
       </div>
-      {/* Crypto checkout modal — hidden until the customer clicks "or
-          pay with crypto". On open, the inline script posts to
-          /v1/billing/crypto-checkout and renders the resulting
-          payment_address + pay_amount + pay_currency. */}
-      <div
-        data-crypto-modal
-        class="fixed inset-0 z-50 hidden items-center justify-center bg-surface-base/80 backdrop-blur-md p-6"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="crypto-modal-title"
-      >
-        <div class="dashboard-card max-w-md w-full">
-          <div class="flex items-start justify-between gap-4">
-            <h3 id="crypto-modal-title" class="text-lg font-semibold text-ink-primary">
-              Pay with crypto
-            </h3>
-            <button
-              type="button"
-              data-crypto-modal-close
-              aria-label="Close"
-              class="text-ink-muted hover:text-ink-primary"
-            >
-              ✕
-            </button>
-          </div>
-          <div data-crypto-modal-loading class="mt-6 text-sm text-ink-muted">
-            Minting payment address…
-          </div>
-          <div data-crypto-modal-error class="mt-6 hidden rounded-md bg-glow-red/10 px-3 py-2 text-sm text-glow-red"></div>
-          <div data-crypto-modal-ready class="mt-6 hidden">
-            <p class="text-sm text-ink-secondary">
-              Send exactly <span data-field="crypto-amount" class="font-mono text-ink-primary">—</span>
-              <span data-field="crypto-currency" class="font-mono text-ink-primary uppercase">—</span>
-              to:
-            </p>
-            <div class="mt-3 break-all rounded-md bg-surface-inset px-3 py-2 font-mono text-xs text-ink-primary">
-              <span data-field="crypto-address">—</span>
-            </div>
-            <button
-              type="button"
-              data-crypto-copy
-              class="mt-3 text-sm text-glow-red hover:underline"
-            >
-              Copy address
-            </button>
-            <p class="mt-4 text-xs text-ink-muted">
-              Order <code data-field="crypto-order-id" class="font-mono">—</code> · once your
-              transaction is detected (usually within minutes), this dashboard updates
-              automatically. You can close this window — your order is tracked even if you
-              navigate away.
-            </p>
-          </div>
-        </div>
-      </div>
+      {/* 2026-05-22 — crypto modal removed alongside the "or pay with
+          crypto →" button (81a15517 dropped the button because
+          NowPayments' $19.16 USD floor exceeds the $2.99 trial-pack
+          price). Crypto checkout lives on /select-tier for $20+ tiers
+          per a4460e2a; this billing page is card-only. */}
     </section>
 
     <!-- Invoices placeholder -->
@@ -318,114 +269,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (cancelBtn) cancelBtn.addEventListener('click', handlePortal); // cancellation goes through Stripe portal
       if (buyBtn) buyBtn.addEventListener('click', handleBuyTrialPack);
 
-      // 2026-05-21 — V-666.D crypto checkout wiring. Opens the modal,
-      // POSTs to /v1/billing/crypto-checkout, renders the address +
-      // amount the customer must send. Soft-fails to error banner
-      // inside the modal so the customer can retry.
-      const cryptoBtn = root.querySelector('[data-action="buy-trial-pack-crypto"]');
-      const cryptoModal = root.querySelector('[data-crypto-modal]');
-      const cryptoLoading = root.querySelector('[data-crypto-modal-loading]');
-      const cryptoError = root.querySelector('[data-crypto-modal-error]');
-      const cryptoReady = root.querySelector('[data-crypto-modal-ready]');
-      const cryptoCloseBtn = root.querySelector('[data-crypto-modal-close]');
-      const cryptoCopyBtn = root.querySelector('[data-crypto-copy]');
-
-      function showCryptoModal() {
-        if (!cryptoModal) return;
-        cryptoModal.classList.remove('hidden');
-        cryptoModal.classList.add('flex');
-      }
-      function hideCryptoModal() {
-        if (!cryptoModal) return;
-        cryptoModal.classList.add('hidden');
-        cryptoModal.classList.remove('flex');
-      }
-      function showCryptoError(msg) {
-        if (!cryptoLoading || !cryptoError || !cryptoReady) return;
-        cryptoLoading.classList.add('hidden');
-        cryptoReady.classList.add('hidden');
-        cryptoError.textContent = msg;
-        cryptoError.classList.remove('hidden');
-      }
-
-      async function handleCryptoCheckout() {
-        if (!token) {
-          showBanner('Sign in to buy with crypto.');
-          return;
-        }
-        if (!cryptoLoading || !cryptoError || !cryptoReady) return;
-        cryptoLoading.classList.remove('hidden');
-        cryptoError.classList.add('hidden');
-        cryptoReady.classList.add('hidden');
-        showCryptoModal();
-        try {
-          const idempotencyKey =
-            typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-              ? 'crypto-trial-' + crypto.randomUUID()
-              : 'crypto-trial-' + Date.now().toString();
-          const res = await authedFetch('/v1/billing/crypto-checkout', {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              'idempotency-key': idempotencyKey,
-            },
-            body: JSON.stringify({
-              product: 'trial_pack',
-              price_cents: 299,
-              price_currency: 'USD',
-            }),
-          });
-          const body = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            showCryptoError(body.detail || 'HTTP ' + res.status);
-            return;
-          }
-          if (body.provider === 'stub' || !body.payment_address) {
-            showCryptoError(
-              "Crypto checkout isn't live yet — please use the card option above, or email " +
-                'billing@driftstack.dev for manual crypto wire instructions. Your order_id is ' +
-                (body.order_id || 'unknown') +
-                '.',
-            );
-            return;
-          }
-          cryptoLoading.classList.add('hidden');
-          const setText = (key, value) => {
-            const el = root.querySelector('[data-field="' + key + '"]');
-            if (el && typeof value === 'string') el.textContent = value;
-          };
-          setText('crypto-amount', String(body.pay_amount));
-          setText('crypto-currency', body.pay_currency);
-          setText('crypto-address', body.payment_address);
-          setText('crypto-order-id', body.order_id);
-          cryptoReady.classList.remove('hidden');
-        } catch (err) {
-          showCryptoError(err && err.message ? err.message : 'network error');
-        }
-      }
-
-      if (cryptoBtn) cryptoBtn.addEventListener('click', handleCryptoCheckout);
-      if (cryptoCloseBtn) cryptoCloseBtn.addEventListener('click', hideCryptoModal);
-      if (cryptoModal) {
-        cryptoModal.addEventListener('click', (e) => {
-          if (e.target === cryptoModal) hideCryptoModal();
-        });
-      }
-      if (cryptoCopyBtn) {
-        cryptoCopyBtn.addEventListener('click', async () => {
-          const addr = root.querySelector('[data-field="crypto-address"]');
-          if (!addr || !addr.textContent || !navigator.clipboard) return;
-          try {
-            await navigator.clipboard.writeText(addr.textContent);
-            cryptoCopyBtn.textContent = 'Copied ✓';
-            setTimeout(() => {
-              cryptoCopyBtn.textContent = 'Copy address';
-            }, 2000);
-          } catch (_) {
-            /* swallow */
-          }
-        });
-      }
+      // 2026-05-22 — crypto modal + handlers removed alongside the
+      // trial-pack crypto button (81a15517). NowPayments' $19.16 USD
+      // floor exceeds the $2.99 trial price; the crypto flow now
+      // lives exclusively on /select-tier where every tier clears
+      // the floor (a4460e2a).
 
       if (!token) {
         showBanner('Sign in to see live billing state. Showing preview data below.');
