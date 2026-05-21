@@ -200,14 +200,14 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
     expect(p).toMatch(/STRIPE_WEBHOOK_SECRET=whsec_REDACTED/);
   });
 
-  it('CRITICAL both env-templates declare 6 auth signing secrets — SESSION + EMAIL_VERIFICATION + PASSWORD_RESET + MAGIC_LINK + MFA_AT_REST_KEY + WEBHOOK_DEFAULT_SIGNING_SEED. Each rotates independently per V-296b rotation cycle.', () => {
+  it('CRITICAL both env-templates declare 6 auth signing secrets — SESSION + EMAIL_VERIFICATION + PASSWORD_RESET + MAGIC_LINK + MFA_ENCRYPTION_KEY + WEBHOOK_DEFAULT_SIGNING_SEED. Each rotates independently per V-296b rotation cycle.', () => {
     for (const f of [ENV_PROD, ENV_STG]) {
       const p = read(f);
       expect(p).toMatch(/^SESSION_SIGNING_SECRET=REDACTED$/m);
       expect(p).toMatch(/^EMAIL_VERIFICATION_SIGNING_SECRET=REDACTED$/m);
       expect(p).toMatch(/^PASSWORD_RESET_SIGNING_SECRET=REDACTED$/m);
       expect(p).toMatch(/^MAGIC_LINK_SIGNING_SECRET=REDACTED$/m);
-      expect(p).toMatch(/^MFA_AT_REST_KEY=REDACTED$/m);
+      expect(p).toMatch(/^MFA_ENCRYPTION_KEY=REDACTED$/m);
       expect(p).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=REDACTED$/m);
     }
     expect(read(ENV_PROD)).toMatch(

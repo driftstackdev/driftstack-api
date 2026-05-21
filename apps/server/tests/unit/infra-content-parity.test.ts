@@ -437,7 +437,7 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/^EMAIL_VERIFICATION_SIGNING_SECRET=REDACTED$/m);
     expect(body).toMatch(/^PASSWORD_RESET_SIGNING_SECRET=REDACTED$/m);
     expect(body).toMatch(/^MAGIC_LINK_SIGNING_SECRET=REDACTED$/m);
-    expect(body).toMatch(/^MFA_AT_REST_KEY=REDACTED$/m);
+    expect(body).toMatch(/^MFA_ENCRYPTION_KEY=REDACTED$/m);
     expect(body).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=REDACTED$/m);
     expect(body).toMatch(/Surfaced on \/version so deploy automation can confirm what's running\./);
     expect(body).toMatch(/deploy-api\.sh writes the local HEAD SHA at deploy time\./);
@@ -533,7 +533,7 @@ describe('W614 infra/ content parity', () => {
       expect(body).toMatch(/^EMAIL_VERIFICATION_SIGNING_SECRET=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^PASSWORD_RESET_SIGNING_SECRET=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^MAGIC_LINK_SIGNING_SECRET=[0-9a-f]{64}$/m);
-      expect(body).toMatch(/^MFA_AT_REST_KEY=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^MFA_ENCRYPTION_KEY=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=[0-9a-f]{64}$/m);
       expect(body).toMatch(/# Public URLs/);
       expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.driftstack\.dev$/m);
@@ -571,7 +571,7 @@ describe('W614 infra/ content parity', () => {
       expect(body).toMatch(/^EMAIL_VERIFICATION_SIGNING_SECRET=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^PASSWORD_RESET_SIGNING_SECRET=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^MAGIC_LINK_SIGNING_SECRET=[0-9a-f]{64}$/m);
-      expect(body).toMatch(/^MFA_AT_REST_KEY=[0-9a-f]{64}$/m);
+      expect(body).toMatch(/^MFA_ENCRYPTION_KEY=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=[0-9a-f]{64}$/m);
       expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.staging\.driftstack\.dev$/m);
       expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/staging\.driftstack\.dev$/m);
