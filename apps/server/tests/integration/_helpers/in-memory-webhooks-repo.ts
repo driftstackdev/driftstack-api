@@ -388,6 +388,17 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     return Promise.resolve(updated);
   }
 
+  // 2026-05-22 — hard-delete a DLQ row. Mirrors the Drizzle repo's
+  // status='dlq' precondition: matches by id AND status so a
+  // concurrent state change can't accidentally drop an active
+  // delivery in tests.
+  deleteDelivery(deliveryId: string): Promise<boolean> {
+    const row = this.deliveries.get(deliveryId);
+    if (!row || row.status !== 'dlq') return Promise.resolve(false);
+    this.deliveries.delete(deliveryId);
+    return Promise.resolve(true);
+  }
+
   listDeliveriesForEndpoint(
     endpointId: string,
     accountId: string,

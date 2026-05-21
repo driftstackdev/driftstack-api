@@ -231,32 +231,39 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
 
-      const overviewP = authedFetch('/v1/admin/overview')
-        .then((r) => {
-          if (r.status === 403) return Promise.reject(new Error('forbidden'));
-          return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
-        })
-        .then((body) => {
-          if (body && body.accounts) {
-            setText('active-accounts', String(body.accounts.active));
-            setText('suspended-accounts', String(body.accounts.suspended));
-            // V-515 — server now returns a computed total
-            // (active + suspended + deleted). Annotate the active-
-            // accounts tile with "of N total" so the operator sees
-            // the fleet shape without doing arithmetic. Falls back
-            // gracefully if the field is missing.
-            const total =
-              body.accounts.total !== undefined
-                ? body.accounts.total
-                : (body.accounts.active || 0) +
-                  (body.accounts.suspended || 0) +
-                  (body.accounts.deleted || 0);
-            setText('total-accounts-annotation', 'of ' + total + ' total');
-          }
-          if (body && body.webhooks) {
-            setText('dlq-depth', String(body.webhooks.dlq_depth));
-          }
-        });
+      // 2026-05-22 — overview fetch extracted into a function so the
+      // 30s live-poll timer can refresh the count tiles alongside the
+      // activity feed. Previously the tiles painted once at boot then
+      // froze; an operator watching for a DLQ spike would have to F5.
+      function fetchOverview() {
+        return authedFetch('/v1/admin/overview')
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then((body) => {
+            if (body && body.accounts) {
+              setText('active-accounts', String(body.accounts.active));
+              setText('suspended-accounts', String(body.accounts.suspended));
+              // V-515 — server now returns a computed total
+              // (active + suspended + deleted). Annotate the active-
+              // accounts tile with "of N total" so the operator sees
+              // the fleet shape without doing arithmetic. Falls back
+              // gracefully if the field is missing.
+              const total =
+                body.accounts.total !== undefined
+                  ? body.accounts.total
+                  : (body.accounts.active || 0) +
+                    (body.accounts.suspended || 0) +
+                    (body.accounts.deleted || 0);
+              setText('total-accounts-annotation', 'of ' + total + ' total');
+            }
+            if (body && body.webhooks) {
+              setText('dlq-depth', String(body.webhooks.dlq_depth));
+            }
+          });
+      }
+      const overviewP = fetchOverview();
 
       // 2026-05-21 — live activity feed. The audit-log fetch is
       // extracted so we can refresh it on a 30s timer + bind to the
@@ -306,9 +313,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       // 2026-05-21 — 30s polling timer + "Refresh now" button +
       // "updated <N> ago" age-ticker. The age string updates every
       // 5s without re-fetching so the indicator feels responsive.
+      // 2026-05-22 — refresh the count tiles alongside the activity
+      // feed. fetchOverview's errors are swallowed in the .catch
+      // so a transient overview-fetch failure doesn't break the
+      // audit-feed indicator.
+      function refreshAll() {
+        void fetchAudit();
+        void fetchOverview().catch(() => {});
+      }
       const refreshBtn = root.querySelector('[data-live-refresh]');
-      if (refreshBtn) refreshBtn.addEventListener('click', () => void fetchAudit());
-      setInterval(() => void fetchAudit(), 30_000);
+      if (refreshBtn) refreshBtn.addEventListener('click', refreshAll);
+      setInterval(refreshAll, 30_000);
       function fmtAge(ms) {
         const s = Math.floor((Date.now() - ms) / 1000);
         if (s < 5) return 'just now';
