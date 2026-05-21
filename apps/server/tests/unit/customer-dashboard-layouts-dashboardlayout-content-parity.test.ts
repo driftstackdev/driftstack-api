@@ -62,7 +62,9 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     ];
     for (const [href, label] of items) {
       expect(body, `${href} → ${label}`).toMatch(
-        new RegExp(`\\{ href: '${href}', label: '${label}', icon: ICON\\.[a-z]+ \\},`),
+        new RegExp(
+          `\\{ href: '${href}', label: '${label}', icon: ICON\\.[a-z]+(?:, badgeKey: '[a-z]+')? \\},`,
+        ),
       );
     }
   });

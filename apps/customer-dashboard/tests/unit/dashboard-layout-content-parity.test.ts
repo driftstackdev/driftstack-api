@@ -70,7 +70,9 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     const block = body.match(/const navSections: NavSection\[\] = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
     const entries = Array.from(
-      block![1]!.matchAll(/\{ href: '([^']+)', label: '([^']+)', icon: ICON\.[a-z]+ \}/g),
+      block![1]!.matchAll(
+        /\{ href: '([^']+)', label: '([^']+)', icon: ICON\.[a-z]+(?:, badgeKey: '[a-z]+')? \}/g,
+      ),
     ).map((m) => ({ href: m[1], label: m[2] }));
     expect(entries).toEqual([
       { href: '/', label: 'Overview' },

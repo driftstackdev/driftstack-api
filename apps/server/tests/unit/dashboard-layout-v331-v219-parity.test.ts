@@ -64,7 +64,9 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
 
     for (const [href, label] of expected) {
       expect(l, `nav ${href} → ${label}`).toMatch(
-        new RegExp(`\\{ href: '${href}', label: '${label}', icon: ICON\\.[a-z]+ \\}`),
+        new RegExp(
+          `\\{ href: '${href}', label: '${label}', icon: ICON\\.[a-z]+(?:, badgeKey: '[a-z]+')? \\}`,
+        ),
       );
     }
   });

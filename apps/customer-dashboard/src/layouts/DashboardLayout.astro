@@ -29,7 +29,11 @@ const apiBaseUrl = resolveApiBaseUrl();
 // item. Matches the gui-client Sidebar treatment so the two operator
 // surfaces feel like one product. Iconography stays Driftstack-native
 // (Lucide-shape 14px stroke). No JS-hydration required for icons.
-type NavItem = { href: string; label: string; icon: string };
+// 2026-05-21 — `badgeKey` ties a nav item to a count slot the inline
+// account-me-hydration script fills in (Profiles X/Y, Sessions X/Y).
+// Items without a badgeKey just have a label.
+type BadgeKey = 'profiles' | 'sessions' | 'team';
+type NavItem = { href: string; label: string; icon: string; badgeKey?: BadgeKey };
 type NavSection = { label: string; items: NavItem[] };
 
 const ICON = {
@@ -59,9 +63,9 @@ const navSections: NavSection[] = [
     label: 'Browse',
     items: [
       { href: '/', label: 'Overview', icon: ICON.home },
-      { href: '/profiles', label: 'Profiles', icon: ICON.layers },
+      { href: '/profiles', label: 'Profiles', icon: ICON.layers, badgeKey: 'profiles' },
       { href: '/snapshots', label: 'Snapshots', icon: ICON.film },
-      { href: '/sessions', label: 'Sessions', icon: ICON.activity },
+      { href: '/sessions', label: 'Sessions', icon: ICON.activity, badgeKey: 'sessions' },
       { href: '/agent-sessions', label: 'Agent sessions', icon: ICON.agent },
     ],
   },
@@ -80,7 +84,7 @@ const navSections: NavSection[] = [
       { href: '/billing', label: 'Billing', icon: ICON.card },
       { href: '/subscription', label: 'Subscription', icon: ICON.receipt },
       { href: '/audit-log', label: 'Audit log', icon: ICON.list },
-      { href: '/team', label: 'Team', icon: ICON.users },
+      { href: '/team', label: 'Team', icon: ICON.users, badgeKey: 'team' },
       { href: '/settings', label: 'Settings', icon: ICON.cog },
     ],
   },
@@ -261,6 +265,17 @@ const navSections: NavSection[] = [
                                 <path d={item.icon} />
                               </svg>
                               <span class="flex-1 truncate">{item.label}</span>
+                              {item.badgeKey && (
+                                <span
+                                  data-nav-badge={item.badgeKey}
+                                  class:list={[
+                                    'hidden shrink-0 rounded px-1.5 py-px font-mono text-[10px]',
+                                    active
+                                      ? 'bg-glow-red/20 text-glow-red'
+                                      : 'bg-white/5 text-ink-muted group-hover:text-ink-secondary',
+                                  ]}
+                                />
+                              )}
                             </a>
                           </li>
                         );
@@ -468,6 +483,35 @@ const navSections: NavSection[] = [
                 }
                 sa.classList.remove('hidden');
               }
+
+              // 2026-05-21 — operator-UI polish wave: fill the per-nav-item
+              // count badges from the same /account/me payload. Profiles
+              // X/Y, Sessions X/Y, Team N. Each badge has CSS .hidden by
+              // default; we strip the class once we have data to show.
+              const setBadge = (key, text) => {
+                const el = document.querySelector('[data-nav-badge="' + key + '"]');
+                if (!el) return;
+                if (text === null) {
+                  el.classList.add('hidden');
+                  return;
+                }
+                el.textContent = text;
+                el.classList.remove('hidden');
+              };
+              const ratio = (active, cap) => {
+                if (typeof active !== 'number') return null;
+                if (typeof cap !== 'number' || cap === null) return String(active);
+                return active + '/' + cap;
+              };
+              setBadge('profiles', ratio(me.profile_count, me.profile_cap));
+              setBadge(
+                'sessions',
+                ratio(me.concurrent_session_active, me.concurrent_session_cap),
+              );
+              setBadge(
+                'team',
+                Array.isArray(me.teams) && me.teams.length > 0 ? String(me.teams.length) : null,
+              );
 
               if (!Array.isArray(me.teams) || me.teams.length === 0) return;
               // Build options: Self + each team owner.
