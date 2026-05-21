@@ -276,6 +276,13 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner("Couldn't load accounts (" + msg + '). Showing preview data below.');
             }
+          })
+          .finally(() => {
+            // 2026-05-21 — AdminLayout opacity-gate signal (same pattern
+            // as the customer-dashboard pages).
+            if (typeof window.dashboardHydrated === 'function') {
+              window.dashboardHydrated();
+            }
           });
       }
 

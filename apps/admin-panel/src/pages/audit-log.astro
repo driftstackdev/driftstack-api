@@ -256,6 +256,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             } else {
               showBanner("Couldn't load audit log (" + msg + '). Showing preview data below.');
             }
+          })
+          .finally(() => {
+            // 2026-05-21 — AdminLayout opacity-gate signal.
+            if (typeof window.dashboardHydrated === 'function') {
+              window.dashboardHydrated();
+            }
           });
       }
 
