@@ -40,7 +40,9 @@ interface SubscriptionShape {
 
 interface TrialPackShape {
   active: boolean;
-  credit_cents_remaining: number;
+  // 2026-05-20 — null for fresh accounts (no trial pack purchase),
+  // numeric once `trial_pack_credit_cents` is populated.
+  credit_cents_remaining: number | null;
   expires_at: string | null;
   redeemed: boolean;
 }
@@ -62,7 +64,12 @@ test('GET /v1/billing on a fresh account → no subscription, inactive trial pac
   expect(body.subscription).toBeNull();
   expect(body.trial_pack.active).toBe(false);
   expect(body.trial_pack.redeemed).toBe(false);
-  expect(body.trial_pack.credit_cents_remaining).toBe(0);
+  // 2026-05-20 — credit_cents_remaining is null (not 0) when no trial
+  // pack has been purchased. The service returns
+  // account.trialPackCreditCents directly (services/billing.ts:241);
+  // the column is nullable + defaults to NULL on fresh accounts.
+  // Test was expecting 0 from an earlier shape that no longer matches.
+  expect(body.trial_pack.credit_cents_remaining).toBeNull();
   expect(body.trial_pack.expires_at).toBeNull();
 });
 

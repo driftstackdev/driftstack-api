@@ -36,11 +36,21 @@ import { AuthCoalescer } from '../../../src/services/auth-coalescer.js';
 import { MfaService } from '../../../src/services/mfa.js';
 import { InMemoryMfaChallengeStore } from '../../../src/services/mfa-challenge-store.js';
 import { AuthFlowsService } from '../../../src/services/auth-flows.js';
+import { StatusSubscribersService } from '../../../src/services/status-subscribers.js';
+import { TeamMembersService } from '../../../src/services/team-members.js';
+import { ProfileSnapshotsService } from '../../../src/services/profile-snapshots.js';
+import {
+  CliAuthorizeService,
+  InMemoryCliAuthorizeStore,
+} from '../../../src/services/cli-authorize.js';
 import { DrizzleAccountAuthRepo } from '../../../src/db/auth-repo.js';
 import { DrizzleAuthFlowsRepo } from '../../../src/db/auth-flows-repo.js';
 import { DrizzleMfaRepo } from '../../../src/db/mfa-repo.js';
 import { DrizzleSessionRepo } from '../../../src/db/sessions-repo.js';
 import { DrizzleProfilesRepo } from '../../../src/db/profiles-repo.js';
+import { DrizzleStatusSubscribersRepo } from '../../../src/db/status-subscribers-repo.js';
+import { DrizzleTeamMembersRepo } from '../../../src/db/team-members-repo.js';
+import { DrizzleProfileSnapshotsRepo } from '../../../src/db/profile-snapshots-repo.js';
 import { DrizzleApiKeysRepo } from '../../../src/db/api-keys-repo.js';
 import { DrizzleUsageRepo } from '../../../src/db/usage-repo.js';
 import { DrizzleWebhooksRepo } from '../../../src/db/webhooks-repo.js';
@@ -248,6 +258,35 @@ export async function startTestServer(): Promise<TestServer> {
     accountAuditService,
   );
 
+  // 2026-05-20 — wire StatusSubscribers + TeamMembers + ProfileSnapshots +
+  // CliAuthorize services. Each gates a separate route block in
+  // apps/server/src/lib/app.ts (deps.statusSubscribersService at 798,
+  // deps.teamMembersService at 814, deps.cliAuthorizeService at 931,
+  // deps.profileSnapshotsService at 1030). Without these the
+  // corresponding e2e specs hit 404 on routes that production wires
+  // unconditionally. Mirrors the integration helper pattern.
+  const statusSubscribersRepo = new DrizzleStatusSubscribersRepo(database);
+  const statusSubscribersService = new StatusSubscribersService(statusSubscribersRepo, noopEmail, {
+    statusPageBaseUrl: 'https://status.driftstack.test',
+  });
+  const teamMembersRepo = new DrizzleTeamMembersRepo(database);
+  const teamMembersService = new TeamMembersService(
+    teamMembersRepo,
+    noopEmail,
+    { dashboardBaseUrl: 'https://app.driftstack.test' },
+    accountAuditService,
+  );
+  const profileSnapshotsRepo = new DrizzleProfileSnapshotsRepo(database);
+  const profileSnapshotsService = new ProfileSnapshotsService(
+    profileSnapshotsRepo,
+    profilesRepo,
+    accountAuditService,
+  );
+  const cliAuthorizeService = new CliAuthorizeService({
+    store: new InMemoryCliAuthorizeStore(),
+    dashboardOrigin: 'http://localhost:5173',
+  });
+
   // 2026-05-20 — wire MFA + AuthFlows services so the /v1/account/mfa/*
   // and /v1/account/web-sessions routes register in e2e. Production
   // wiring at bootstrap.ts:652 + :796. Mirror the integration helper
@@ -363,6 +402,13 @@ export async function startTestServer(): Promise<TestServer> {
     // service presence in apps/server/src/lib/app.ts:885 + 897.
     mfaService,
     authFlowsService,
+    // 2026-05-20 — wire the remaining feature services so e2e specs
+    // for status-subscribe / team / profile-snapshots / cli-authorize
+    // can exercise their respective route blocks.
+    statusSubscribersService,
+    teamMembersService,
+    profileSnapshotsService,
+    cliAuthorizeService,
     permissiveCors: true,
   });
 
