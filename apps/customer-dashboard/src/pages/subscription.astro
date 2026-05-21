@@ -48,6 +48,9 @@ const REASON_LABEL: Record<MockPlanHistoryEntry['reason'], string> = {
   downgrade: 'Downgraded',
   tier_rename: 'Tier renamed (no price change)',
 };
+
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Subscription">
@@ -66,12 +69,12 @@ const REASON_LABEL: Record<MockPlanHistoryEntry['reason'], string> = {
     <!-- Current plan -->
     <section class="dashboard-card">
       <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Current plan</p>
-      <h2 class="mt-2 text-2xl font-semibold text-ink-primary">
+      <h2 class="mt-2 text-2xl font-semibold text-ink-primary" data-field="sub-tier">
         {MOCK_SUBSCRIPTION ? MOCK_SUBSCRIPTION.tier : 'No subscription'}
       </h2>
       {
         MOCK_SUBSCRIPTION && (
-          <p class="mt-2 text-sm text-ink-secondary">
+          <p class="mt-2 text-sm text-ink-secondary" data-field="sub-summary">
             Status <span class="font-mono">{MOCK_SUBSCRIPTION.status}</span> · renews{' '}
             {MOCK_SUBSCRIPTION.current_period_end
               ? fmtIsoDay(MOCK_SUBSCRIPTION.current_period_end)
@@ -175,4 +178,76 @@ const REASON_LABEL: Record<MockPlanHistoryEntry['reason'], string> = {
       </p>
     </section>
   </div>
+
+  {/*
+    2026-05-21 — minimal real-data hydration: reads ds_web_session_token
+    from localStorage, fetches /v1/billing, and updates the "Current
+    plan" header + summary. Plan history + invoices stay MOCK for now
+    (the dashboard surfaces them but the API doesn't expose either
+    yet); they'll get their own hydration pass once /v1/billing/history
+    + /v1/billing/invoices land. Same `.finally(window.dashboardHydrated)`
+    pattern as the rest of the dashboard pages.
+  */}
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      function setText(field, value) {
+        const el = document.querySelector('[data-field="' + field + '"]');
+        if (el && typeof value === 'string') el.textContent = value;
+      }
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().slice(0, 10);
+      }
+      let token = null;
+      try {
+        token = localStorage.getItem('ds_web_session_token');
+      } catch (_) {
+        /* swallow */
+      }
+      if (!token) return;
+      fetch(apiBaseUrl + '/v1/billing', {
+        headers: {
+          authorization: 'Bearer ' + token,
+          ...(typeof window.driftstackActAsHeaders === 'function'
+            ? window.driftstackActAsHeaders()
+            : {}),
+        },
+        credentials: 'include',
+      })
+        .then((r) =>
+          r.ok
+            ? r.json()
+            : // W277.C — surface problem+json `detail` so the customer-
+              // visible error message is the server's reason, not a bare
+              // HTTP status. Falls through to "HTTP 5xx" if body isn't
+              // a Problem (e.g. infra-level error before the handler).
+              r
+                .json()
+                .catch(() => ({}))
+                .then((body) => Promise.reject(new Error(body.detail || 'HTTP ' + r.status))),
+        )
+        .then((body) => {
+          if (body.subscription) {
+            setText('sub-tier', body.subscription.tier);
+            const summary =
+              'Status ' +
+              body.subscription.status +
+              ' · renews ' +
+              fmtIso(body.subscription.current_period_end);
+            setText('sub-summary', summary);
+          } else {
+            setText('sub-tier', 'No subscription');
+            setText('sub-summary', 'Upgrade to a paid tier to unlock concurrent caps.');
+          }
+        })
+        .catch(() => {
+          /* leave MOCK as fallback */
+        })
+        .finally(() => {
+          if (typeof window.dashboardHydrated === 'function') {
+            window.dashboardHydrated();
+          }
+        });
+    })();
+  </script>
 </DashboardLayout>
