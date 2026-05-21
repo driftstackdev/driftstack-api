@@ -96,13 +96,14 @@ describe('W789 admin-panel AdminLayout + mocks content parity', () => {
     expect(p).toMatch(/>\s*\n\s+admin\s*\n\s+<\/span>/);
   });
 
-  it('CRITICAL active-nav highlight logic pinned — pathname === item.href OR pathname.startsWith(item.href + "/"). The startsWith branch is what keeps nested routes (e.g. /accounts/:id) highlighting their parent.', () => {
+  it('CRITICAL active-nav highlight logic pinned — pathname === item.href OR pathname.startsWith(item.href + "/"). The startsWith branch is what keeps nested routes (e.g. /accounts/:id) highlighting their parent. 2026-05-21 — font-medium moved to the base class (constant width across active/inactive), so active state is bg + text color only.', () => {
     const p = read(LAYOUT);
 
     expect(p).toMatch(
-      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n\s+\? 'bg-oxblood-50 font-medium text-oxblood-700'/,
+      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n\s+\? 'bg-oxblood-50 text-oxblood-700'/,
     );
     expect(p).toMatch(/: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'/);
+    expect(p).toMatch(/text-sm font-medium transition-colors/);
   });
 
   it("CRITICAL staff-only-audit-logged footer pinned. The 'Staff-only surface. All actions audit-logged.' wording is the load-bearing customer-trust contract.", () => {

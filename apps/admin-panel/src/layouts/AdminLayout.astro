@@ -77,9 +77,14 @@ const navItems = [
                   <a
                     href={item.href}
                     class:list={[
-                      'block rounded-md px-3 py-2 text-sm transition-colors',
+                      // 2026-05-21 — font-medium applied unconditionally on
+                      // the base class to keep text width constant across
+                      // active/inactive (otherwise clicking shifted other
+                      // items as the new-active item bolded). Same fix as
+                      // DashboardLayout 50b0dd7a.
+                      'block rounded-md px-3 py-2 text-sm font-medium transition-colors',
                       pathname === item.href || pathname.startsWith(item.href + '/')
-                        ? 'bg-oxblood-50 font-medium text-oxblood-700'
+                        ? 'bg-oxblood-50 text-oxblood-700'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
                     ]}
                   >

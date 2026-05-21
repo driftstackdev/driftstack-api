@@ -78,10 +78,11 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     ]);
   });
 
-  it('active-route highlighting: exact match OR startsWith href+"/" → oxblood-50 + oxblood-700', () => {
+  it('active-route highlighting: exact match OR startsWith href+"/" → oxblood-50 + oxblood-700. 2026-05-21 — font-medium moved from active-only to the base class (constant width prevents click-induced layout shift; same fix as DashboardLayout 50b0dd7a).', () => {
     expect(body).toMatch(
-      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n?\s*\?\s*'bg-oxblood-50 font-medium text-oxblood-700'/,
+      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n?\s*\?\s*'bg-oxblood-50 text-oxblood-700'/,
     );
+    expect(body).toMatch(/text-sm font-medium transition-colors/);
   });
 
   it('R15 brand mark: /driftstack-mark.svg <img> (iPhone-D logo) — replaces the prior bg-oxblood-700 + text-white "D" chip placeholder with the real SVG brand asset', () => {

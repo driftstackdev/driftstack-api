@@ -195,7 +195,7 @@ const navSections: NavSection[] = [
                   /account/me to avoid empty-state flash. */}
               <div
                 data-signed-in-as
-                class="hidden border-b border-white/10 px-4 py-4"
+                class="invisible border-b border-white/10 px-4 py-4"
               >
                 <div class="flex items-center gap-3">
                   <div
@@ -489,6 +489,12 @@ const navSections: NavSection[] = [
                   saAvatar.className =
                     'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-glow-red/10 text-xs font-medium text-glow-red';
                 }
+                // 2026-05-21 — block is rendered `invisible` (CSS
+                // visibility:hidden) in SSR so the sidebar nav below it
+                // sits at its final vertical position pre-hydration.
+                // Toggling visibility (not display) avoids the "nav jumps
+                // up/down between page navs" reported by the founder.
+                sa.classList.remove('invisible');
                 sa.classList.remove('hidden');
               }
 
