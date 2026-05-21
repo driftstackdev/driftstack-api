@@ -17,8 +17,13 @@ function read(p: string): string {
 
 describe('W291.B DashboardLayout nav-label uniqueness', () => {
   const body = read(LAYOUT);
+  // 2026-05-21 — items now carry an optional `icon: ICON.X` field after
+  // the label; the regex tolerates any trailing properties before the
+  // closing brace so the uniqueness guard survives the icon addition.
   const labels = [
-    ...body.matchAll(/\{\s*href:\s*['"][^'"]+['"]\s*,\s*label:\s*['"]([^'"]+)['"]\s*\}/g),
+    ...body.matchAll(
+      /\{\s*href:\s*['"][^'"]+['"]\s*,\s*label:\s*['"]([^'"]+)['"]\s*(?:,[^}]*)?\}/g,
+    ),
   ].map((m) => m[1]!);
 
   it('layout declares at least 5 nav items', () => {

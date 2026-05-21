@@ -63,12 +63,15 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack`;/);
   });
 
-  it('14 navItems pinned in canonical order (v2-#8 sub-slice 8.24 added /agent-sessions between /sessions and /api-keys — primary differentiator per 2026-05-17 AI-chat-+-manual-live-feature-APPROVED-for-v1.0 verdict)', () => {
-    const block = body.match(/const navItems = \[([\s\S]+?)\];/);
+  it('14 navItems pinned in canonical order (v2-#8 sub-slice 8.24 added /agent-sessions between /sessions and /api-keys — primary differentiator per 2026-05-17 AI-chat-+-manual-live-feature-APPROVED-for-v1.0 verdict). 2026-05-21 — navItems were grouped into navSections (Browse / Connectivity / Account) with an icon field per item; parser scans navSections for the same (href, label) entries.', () => {
+    // 2026-05-21 — scan the navSections array (replaces the legacy flat
+    // navItems). Items now carry an `icon` field; match (href, label)
+    // pairs across all sections, preserving the encounter order.
+    const block = body.match(/const navSections: NavSection\[\] = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
-    const entries = Array.from(block![1]!.matchAll(/\{ href: '([^']+)', label: '([^']+)' \}/g)).map(
-      (m) => ({ href: m[1], label: m[2] }),
-    );
+    const entries = Array.from(
+      block![1]!.matchAll(/\{ href: '([^']+)', label: '([^']+)', icon: ICON\.[a-z]+ \}/g),
+    ).map((m) => ({ href: m[1], label: m[2] }));
     expect(entries).toEqual([
       { href: '/', label: 'Overview' },
       { href: '/profiles', label: 'Profiles' },
@@ -77,10 +80,10 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
       { href: '/agent-sessions', label: 'Agent sessions' },
       { href: '/api-keys', label: 'API keys' },
       { href: '/proxies', label: 'Proxies' },
+      { href: '/webhooks', label: 'Webhooks' },
       { href: '/usage', label: 'Usage' },
       { href: '/billing', label: 'Billing' },
       { href: '/subscription', label: 'Subscription' },
-      { href: '/webhooks', label: 'Webhooks' },
       { href: '/audit-log', label: 'Audit log' },
       { href: '/team', label: 'Team' },
       { href: '/settings', label: 'Settings' },
@@ -206,9 +209,10 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/es\.addEventListener\(kind,/);
   });
 
-  it('active-route highlighting: pathname === href OR startsWith href+"/" → glow-red bg/text + inset-divider shadow', () => {
+  it('active-route highlighting: exact match for "/" (Overview) OR prefix match for the rest → glow-red bg/text + inset-divider shadow. 2026-05-21 — added the "/" exact-match exception so Overview no longer highlights on every nested route, while keeping the prefix-match for sub-routes (e.g. /sessions/abc still highlights Sessions).', () => {
     expect(body).toMatch(
-      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n?\s*\?\s*'bg-glow-red\/10 font-medium text-glow-red shadow-inset-divider'/,
+      /item\.href === '\/'\s*\n?\s*\?\s*pathname === '\/'\s*\n?\s*:\s*pathname === item\.href \|\|\s*\n?\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
+    expect(body).toMatch(/'bg-glow-red\/10 font-medium text-glow-red shadow-inset-divider'/);
   });
 });
