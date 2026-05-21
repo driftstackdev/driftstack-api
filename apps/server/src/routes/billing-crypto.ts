@@ -58,18 +58,39 @@ export interface CryptoCheckoutRoutesDeps {
   nowpaymentsIpnCallbackUrl?: string;
 }
 
-const SUPPORTED_PRODUCTS = [
-  'trial_pack',
-  'solo_manual',
-  'solo_automated',
-  'team_growth',
-  'team_scale',
-  'api_starter',
-  'api_pro',
-] as const;
+// 2026-05-21 — V-666.SEC: tier price-map is authoritative SERVER-SIDE.
+// Prior version trusted customer-supplied `price_cents` directly,
+// which allowed price tampering (POST {product: 'api_scale',
+// price_cents: 100} → $1 charge for the $1,499/mo tier). The map
+// below mirrors apps/customer-dashboard/src/pages/select-tier.astro's
+// `priceCents` per tier; the SDK + customer-dashboard's request body
+// price_cents is now IGNORED — server uses this table verbatim.
+//
+// Tier IDs match the canonical AccountTier enum at
+// packages/api-types/src/common.ts. Trial pack is intentionally NOT
+// here — NowPayments has a $19.16 USD-equivalent floor, so trial-pack
+// crypto checkout would always fail amount_too_low at their API.
+// Customer-dashboard hides the crypto button on trial-pack copy.
+const TIER_PRICE_CENTS: Record<string, number> = {
+  solo_manual: 7900,
+  team_manual: 24900,
+  agency_manual: 69900,
+  api_starter: 14900,
+  api_builder: 49900,
+  api_scale: 149900,
+};
+// SUPPORTED_PRODUCTS = keys of the authoritative price map. Adding
+// a new tier requires bumping both this map AND the customer-
+// dashboard's TIERS array.
+const SUPPORTED_PRODUCTS = Object.keys(TIER_PRICE_CENTS) as [string, ...string[]];
 
 const CreateCryptoCheckoutSchema = z.object({
   product: z.enum(SUPPORTED_PRODUCTS),
+  // 2026-05-21 — kept for backwards-compat with the SDK shape but
+  // IGNORED by the route handler. Server-side price is the only
+  // source of truth (see TIER_PRICE_CENTS above). Schema still
+  // validates the shape so a malformed number returns 400 instead of
+  // a TypeError later.
   price_cents: z.number().int().positive().max(1_000_000),
   price_currency: z
     .string()
@@ -108,6 +129,45 @@ export function registerCryptoCheckoutRoutes(
       const parsed = CreateCryptoCheckoutSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
+      // 2026-05-21 — V-666.SEC: server-side authoritative price lookup.
+      // The customer-supplied price_cents in parsed.data is IGNORED;
+      // we use the TIER_PRICE_CENTS map keyed by product slug. Without
+      // this, a customer could POST {product: 'api_scale',
+      // price_cents: 100} and unlock a $1,499/mo tier for $1.
+      const serverPriceCents = TIER_PRICE_CENTS[parsed.data.product];
+      if (typeof serverPriceCents !== 'number') {
+        // SUPPORTED_PRODUCTS is derived from TIER_PRICE_CENTS, so this
+        // is defensive — every Zod-accepted product slug MUST have a
+        // price entry. Reaching here means the two went out of sync.
+        throw new Error(
+          `BUG: product '${parsed.data.product}' is supported but has no TIER_PRICE_CENTS entry`,
+        );
+      }
+      // Currency is also locked server-side to USD for now. NowPayments
+      // converts to crypto using their own rate engine; we never
+      // settle in EUR / GBP / etc.
+      const serverPriceCurrency = 'USD';
+      // Log + audit-trail any customer attempt to override the price.
+      // Doesn't reject (we already ignore the value) but surfaces
+      // adversarial inputs to the operator.
+      if (
+        parsed.data.price_cents !== serverPriceCents ||
+        parsed.data.price_currency !== serverPriceCurrency
+      ) {
+        req.log.warn(
+          {
+            event: 'crypto_checkout_price_override_attempt',
+            account_id: ctx.account.id,
+            product: parsed.data.product,
+            client_price_cents: parsed.data.price_cents,
+            client_price_currency: parsed.data.price_currency,
+            server_price_cents: serverPriceCents,
+            server_price_currency: serverPriceCurrency,
+          },
+          'client-supplied price_cents/currency does not match server table; ignoring client values',
+        );
+      }
+
       const idempotency = readIdempotencyKey(req);
       if (idempotency.kind === 'invalid') {
         throw new ValidationError({
@@ -125,8 +185,8 @@ export function registerCryptoCheckoutRoutes(
           order_id: newOrderId(),
           account_id: ctx.account.id,
           product: parsed.data.product,
-          price_cents: parsed.data.price_cents,
-          price_currency: parsed.data.price_currency,
+          price_cents: serverPriceCents,
+          price_currency: serverPriceCurrency,
         });
         order = result.order;
         replayed = result.replayed;
@@ -136,8 +196,8 @@ export function registerCryptoCheckoutRoutes(
           order_id: newOrderId(),
           account_id: ctx.account.id,
           product: parsed.data.product,
-          price_cents: parsed.data.price_cents,
-          price_currency: parsed.data.price_currency,
+          price_cents: serverPriceCents,
+          price_currency: serverPriceCurrency,
         });
       }
 

@@ -79,15 +79,25 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     expect(body).toMatch(/'idempotency-key replayed with a different request body',/);
   });
 
-  it('SUPPORTED_PRODUCTS as const 7-tuple: trial_pack + solo_manual + solo_automated + team_growth + team_scale + api_starter + api_pro', () => {
+  it('SUPPORTED_PRODUCTS derives from TIER_PRICE_CENTS map keys — server-side authoritative price for the 6 paid tiers (canonical AccountTier enum). 2026-05-21 — V-666.SEC: the prior 7-tuple included stale scaffold tier names (solo_automated/team_growth/team_scale/api_pro) that never matched the customer-dashboard TIERS array AND trusted customer-supplied price_cents (price-tampering vulnerability). The map is now the single source of truth; SUPPORTED_PRODUCTS is `Object.keys(TIER_PRICE_CENTS)` cast.', () => {
     expect(body).toMatch(
-      /const SUPPORTED_PRODUCTS = \[\s*\n?\s*'trial_pack',\s*\n?\s*'solo_manual',\s*\n?\s*'solo_automated',\s*\n?\s*'team_growth',\s*\n?\s*'team_scale',\s*\n?\s*'api_starter',\s*\n?\s*'api_pro',\s*\n?\s*\] as const;/,
+      /const TIER_PRICE_CENTS: Record<string, number> = \{\s*\n?\s*solo_manual: 7900,\s*\n?\s*team_manual: 24900,\s*\n?\s*agency_manual: 69900,\s*\n?\s*api_starter: 14900,\s*\n?\s*api_builder: 49900,\s*\n?\s*api_scale: 149900,\s*\n?\s*\};/,
+    );
+    expect(body).toMatch(
+      /const SUPPORTED_PRODUCTS = Object\.keys\(TIER_PRICE_CENTS\) as \[string, \.\.\.string\[\]\];/,
     );
   });
 
-  it('CreateCryptoCheckoutSchema: zod enum product + price_cents int positive max 1_000_000 + price_currency 3-letter uppercase ISO regex', () => {
+  it('CreateCryptoCheckoutSchema: zod enum product + price_cents int positive max 1_000_000 + price_currency 3-letter uppercase ISO regex. 2026-05-21 — V-666.SEC inserted explanatory comments between fields; pin matched on each line independently so the comments are admitted.', () => {
+    // schema declaration + product field
     expect(body).toMatch(
-      /const CreateCryptoCheckoutSchema = z\.object\(\{\s*\n?\s*product: z\.enum\(SUPPORTED_PRODUCTS\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\)\.positive\(\)\.max\(1_000_000\),\s*\n?\s*price_currency: z\s*\n?\s*\.string\(\)\s*\n?\s*\.length\(3\)\s*\n?\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/, 'price_currency must be a 3-letter uppercase ISO code'\),\s*\n?\s*\}\);/,
+      /const CreateCryptoCheckoutSchema = z\.object\(\{\s*\n?\s*product: z\.enum\(SUPPORTED_PRODUCTS\),/,
+    );
+    // price_cents field (still in schema; ignored at the handler)
+    expect(body).toMatch(/price_cents: z\.number\(\)\.int\(\)\.positive\(\)\.max\(1_000_000\),/);
+    // price_currency 3-letter uppercase ISO regex
+    expect(body).toMatch(
+      /price_currency: z\s*\n?\s*\.string\(\)\s*\n?\s*\.length\(3\)\s*\n?\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/, 'price_currency must be a 3-letter uppercase ISO code'\),/,
     );
   });
 
@@ -125,12 +135,12 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     );
   });
 
-  it('Service dispatch branch: idempotency valid → createIdempotent (idempotency_key + bodyFingerprintMismatch return); else → create (fresh)', () => {
+  it('Service dispatch branch: idempotency valid → createIdempotent (idempotency_key + bodyFingerprintMismatch return); else → create (fresh). 2026-05-21 — V-666.SEC: service receives serverPriceCents + serverPriceCurrency from the TIER_PRICE_CENTS map, NOT parsed.data.price_cents/currency (client-supplied values are ignored to prevent price tampering).', () => {
     expect(body).toMatch(
-      /if \(idempotency\.kind === 'valid'\) \{\s*\n?\s*const result = await deps\.service\.createIdempotent\(\{\s*\n?\s*idempotency_key: idempotency\.key,\s*\n?\s*order_id: newOrderId\(\),\s*\n?\s*account_id: ctx\.account\.id,\s*\n?\s*product: parsed\.data\.product,\s*\n?\s*price_cents: parsed\.data\.price_cents,\s*\n?\s*price_currency: parsed\.data\.price_currency,\s*\n?\s*\}\);\s*\n?\s*order = result\.order;\s*\n?\s*replayed = result\.replayed;\s*\n?\s*bodyFingerprintMismatch = result\.bodyFingerprintMismatch;/,
+      /if \(idempotency\.kind === 'valid'\) \{\s*\n?\s*const result = await deps\.service\.createIdempotent\(\{\s*\n?\s*idempotency_key: idempotency\.key,\s*\n?\s*order_id: newOrderId\(\),\s*\n?\s*account_id: ctx\.account\.id,\s*\n?\s*product: parsed\.data\.product,\s*\n?\s*price_cents: serverPriceCents,\s*\n?\s*price_currency: serverPriceCurrency,\s*\n?\s*\}\);\s*\n?\s*order = result\.order;\s*\n?\s*replayed = result\.replayed;\s*\n?\s*bodyFingerprintMismatch = result\.bodyFingerprintMismatch;/,
     );
     expect(body).toMatch(
-      /\} else \{\s*\n?\s*order = await deps\.service\.create\(\{\s*\n?\s*order_id: newOrderId\(\),\s*\n?\s*account_id: ctx\.account\.id,\s*\n?\s*product: parsed\.data\.product,\s*\n?\s*price_cents: parsed\.data\.price_cents,\s*\n?\s*price_currency: parsed\.data\.price_currency,\s*\n?\s*\}\);/,
+      /\} else \{\s*\n?\s*order = await deps\.service\.create\(\{\s*\n?\s*order_id: newOrderId\(\),\s*\n?\s*account_id: ctx\.account\.id,\s*\n?\s*product: parsed\.data\.product,\s*\n?\s*price_cents: serverPriceCents,\s*\n?\s*price_currency: serverPriceCurrency,\s*\n?\s*\}\);/,
     );
   });
 

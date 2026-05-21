@@ -98,15 +98,16 @@ describe('W1040 routes/billing-crypto V-666.C + V-666.AO/AQ/AR cross-source inva
 
   // ─── Supported-product enum ──────────────────────────────────
 
-  it("CRITICAL supported-product enum — 7 entries 'trial_pack' / 'solo_manual' / 'solo_automated' / 'team_growth' / 'team_scale' / 'api_starter' / 'api_pro'. The enum mirrors the Stripe-side product slugs so a single 'product' field works across both rails.", () => {
+  it('CRITICAL supported-product enum — 6 entries from the canonical AccountTier set: solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale. Trial pack is excluded (NowPayments has a $19.16 USD-equivalent floor; trial-pack $2.99 would always fail amount_too_low). 2026-05-21 — V-666.SEC: enum + price table merged into TIER_PRICE_CENTS so price is server-side authoritative.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts'));
-    expect(p).toMatch(/'trial_pack',/);
-    expect(p).toMatch(/'solo_manual',/);
-    expect(p).toMatch(/'solo_automated',/);
-    expect(p).toMatch(/'team_growth',/);
-    expect(p).toMatch(/'team_scale',/);
-    expect(p).toMatch(/'api_starter',/);
-    expect(p).toMatch(/'api_pro',/);
+    expect(p).toMatch(/solo_manual: 7900,/);
+    expect(p).toMatch(/team_manual: 24900,/);
+    expect(p).toMatch(/agency_manual: 69900,/);
+    expect(p).toMatch(/api_starter: 14900,/);
+    expect(p).toMatch(/api_builder: 49900,/);
+    expect(p).toMatch(/api_scale: 149900,/);
+    // No trial_pack key (below NowPayments min).
+    expect(p).not.toMatch(/^\s*trial_pack: \d+,$/m);
   });
 
   it('CRITICAL request schema — product enum + price_cents (int positive <=1_000_000) + price_currency (3-letter uppercase ISO). The constraints catch malformed checkout-page form posts at the boundary.', () => {
