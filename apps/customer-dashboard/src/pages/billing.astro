@@ -260,8 +260,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       // Fetch live billing state.
+      // 2026-05-21 — surface the server's problem+json `detail` string
+      // (W277.C contract) AND a `status` field on the rejected error
+      // so the .catch handler can show a kinder UX for the activation-
+      // gate 503 ("Billing not configured yet") vs generic transport
+      // errors. Detail wins; status is the fallback.
       authedFetch('/v1/billing', { method: 'GET' })
-        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+        .then((r) =>
+          r.ok
+            ? r.json()
+            : r
+                .json()
+                .catch(() => ({}))
+                .then((body) => {
+                  const err = new Error(body.detail || 'HTTP ' + r.status);
+                  err.status = r.status;
+                  return Promise.reject(err);
+                }),
+        )
         .then((body) => {
           // Subscription card.
           if (body.subscription) {
@@ -318,11 +334,22 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
         })
         .catch((err) => {
-          showBanner(
-            "Couldn't load live billing (" +
-              (err && err.message ? err.message : 'network error') +
-              '). Showing preview data below.',
-          );
+          // 2026-05-21 — 503 = activation-gate (server-side: Stripe
+          // env not fully wired). User shouldn't see "HTTP 503" —
+          // soft-message it. Other failures keep the generic shape
+          // but surface body.detail via err.message.
+          if (err && err.status === 503) {
+            showBanner(
+              'Live billing is not yet available — Driftstack is finishing Stripe setup. ' +
+                'Showing preview data below. We will email you when the live billing surface ships.',
+            );
+          } else {
+            showBanner(
+              "Couldn't load live billing (" +
+                (err && err.message ? err.message : 'network error') +
+                '). Showing preview data below.',
+            );
+          }
         })
         .finally(function () {
           // 2026-05-21 — signal the layout's opacity-gate that this
