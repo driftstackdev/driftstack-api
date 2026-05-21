@@ -78,7 +78,7 @@ describe('W1040 routes/billing-crypto V-666.C + V-666.AO/AQ/AR cross-source inva
     expect(p).toMatch(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\]/);
   });
 
-  it("CRITICAL 201 response shape — order_id + product + price_cents + price_currency + status + provider + payment_address + pay_currency + created_at. The 9-field envelope is the customer-dashboard's contract for the /checkout/crypto page.", () => {
+  it("CRITICAL 201 response shape — order_id + product + price_cents + price_currency + status + provider + payment_address + pay_currency + pay_amount + created_at. 2026-05-21 — V-666.D landed: response fields are now dynamic (real `payment_address` when NowPayments client wired; null stub posture otherwise). Cross-source contract still requires the 10-field envelope so the customer-dashboard's checkout page can render both states.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts'));
     expect(p).toMatch(/reply\.code\(201\)\.send\(\{/);
     expect(p).toMatch(/order_id: order\.order_id,/);
@@ -86,9 +86,13 @@ describe('W1040 routes/billing-crypto V-666.C + V-666.AO/AQ/AR cross-source inva
     expect(p).toMatch(/price_cents: order\.price_cents,/);
     expect(p).toMatch(/price_currency: order\.price_currency,/);
     expect(p).toMatch(/status: order\.status,/);
-    expect(p).toMatch(/provider: 'stub',/);
-    expect(p).toMatch(/payment_address: null,/);
-    expect(p).toMatch(/pay_currency: null,/);
+    // V-666.D — dynamic provider + address fields. Both code paths
+    // (real-mint + stub fallback) write the same shape; the literal
+    // values come from let-bound vars.
+    expect(p).toMatch(/provider,/);
+    expect(p).toMatch(/payment_address: paymentAddress,/);
+    expect(p).toMatch(/pay_currency: payCurrency,/);
+    expect(p).toMatch(/pay_amount: payAmount,/);
     expect(p).toMatch(/created_at: new Date\(order\.created_at\)\.toISOString\(\),/);
   });
 
