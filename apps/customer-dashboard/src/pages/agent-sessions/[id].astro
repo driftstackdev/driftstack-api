@@ -723,6 +723,25 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
     });
 
+    // 2026-05-22 — auto-grow textarea so multi-line tasks don't get
+    // capped at the initial 1-row height. Resets to minimum on each
+    // input + then grows to scrollHeight (capped at 160px so a wall
+    // of text doesn't eat the transcript). After submit, the value
+    // is cleared elsewhere; reset height too so the box snaps back.
+    function autoGrowComposer() {
+      if (!composerTextarea) return;
+      composerTextarea.style.height = 'auto';
+      composerTextarea.style.height = Math.min(160, composerTextarea.scrollHeight) + 'px';
+    }
+    composerTextarea?.addEventListener('input', autoGrowComposer);
+    composerForm?.addEventListener('submit', () => {
+      // Reset after the existing submit handler clears the value (it
+      // runs first because addEventListener preserves order).
+      setTimeout(() => {
+        if (composerTextarea) composerTextarea.style.height = 'auto';
+      }, 0);
+    });
+
     // 2026-05-22 — suggestion-chip wiring. Click prefills the
     // textarea + focuses it (customer can edit before sending).
     // Bound once at boot rather than per-chip so future tweaks to the
