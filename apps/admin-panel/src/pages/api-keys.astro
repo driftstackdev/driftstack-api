@@ -60,13 +60,33 @@ const apiBaseUrl = resolveApiBaseUrl();
     >
     </div>
 
-    <header class="mb-10">
-      <h1 class="text-3xl font-semibold tracking-tight text-slate-900">API keys</h1>
-      <p class="mt-2 max-w-prose text-sm text-slate-500">
-        Cross-account key view for support cases. Manual revocation when a
-        customer reports a leak + can't reach the dashboard, or when abuse
-        signals trip a moderation flag.
-      </p>
+    <header class="mb-10 flex items-start justify-between gap-6">
+      <div>
+        <h1 class="text-3xl font-semibold tracking-tight text-slate-900">API keys</h1>
+        <p class="mt-2 max-w-prose text-sm text-slate-500">
+          Cross-account key view for support cases. Manual revocation when a
+          customer reports a leak + can't reach the dashboard, or when abuse
+          signals trip a moderation flag.
+        </p>
+      </div>
+      {/* 2026-05-22 — live auto-poll. Same pattern as be9793f8. */}
+      <div class="flex items-center gap-3 text-xs whitespace-nowrap">
+        <span class="flex items-center gap-1.5 text-slate-500">
+          <span
+            aria-hidden="true"
+            data-live-dot
+            class="inline-block h-2 w-2 rounded-full bg-emerald-500"
+          ></span>
+          <span>Live · updated <span data-live-age>just now</span></span>
+        </span>
+        <button
+          type="button"
+          data-live-refresh
+          class="text-oxblood-700 hover:underline"
+        >
+          Refresh now
+        </button>
+      </div>
     </header>
 
     <div
@@ -279,10 +299,10 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       let inFlight = 0;
       function load() {
-        if (!token) return;
+        if (!token) return Promise.resolve();
         const myReq = ++inFlight;
         const params = buildQuery();
-        fetch(apiBaseUrl + '/v1/admin/api-keys?' + params.toString(), {
+        return fetch(apiBaseUrl + '/v1/admin/api-keys?' + params.toString(), {
           headers: { authorization: 'Bearer ' + token },
           credentials: 'include',
         })
@@ -382,6 +402,41 @@ const apiBaseUrl = resolveApiBaseUrl();
         showBanner('Sign in with a staff admin account to see live data. Showing preview below.');
         return;
       }
+
+      // 2026-05-22 — live auto-poll. Same pattern as be9793f8.
+      let lastFetch = Date.now();
+      function loadWithLive() {
+        const liveDot = root.querySelector('[data-live-dot]');
+        if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-amber-500';
+        const p = load();
+        if (p && typeof p.then === 'function') {
+          p.then(
+            () => {
+              lastFetch = Date.now();
+              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-emerald-500';
+            },
+            () => {
+              if (liveDot) liveDot.className = 'inline-block h-2 w-2 rounded-full bg-red-500';
+            },
+          );
+        } else {
+          lastFetch = Date.now();
+        }
+      }
+      const refreshBtn = root.querySelector('[data-live-refresh]');
+      if (refreshBtn) refreshBtn.addEventListener('click', loadWithLive);
+      setInterval(loadWithLive, 30_000);
+      function fmtAge(ms) {
+        const s = Math.floor((Date.now() - ms) / 1000);
+        if (s < 5) return 'just now';
+        if (s < 60) return s.toString() + 's ago';
+        if (s < 3600) return Math.floor(s / 60).toString() + 'm ago';
+        return Math.floor(s / 3600).toString() + 'h ago';
+      }
+      const ageEl = root.querySelector('[data-live-age]');
+      setInterval(() => {
+        if (ageEl) ageEl.textContent = fmtAge(lastFetch);
+      }, 5_000);
 
       load();
     })();
