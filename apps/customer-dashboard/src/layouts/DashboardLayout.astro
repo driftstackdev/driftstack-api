@@ -889,14 +889,15 @@ const navSections: NavSection[] = [
           main.style.opacity = '1';
           main.setAttribute('data-hydrate', 'ready');
         }
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', function () {
-            requestAnimationFrame(reveal);
-          });
-        } else {
-          requestAnimationFrame(reveal);
-        }
-        setTimeout(reveal, 600);
+        // 2026-05-21 — pages call window.dashboardHydrated() after
+        // their primary fetch resolves so the reveal waits for real
+        // data, not just DOMContentLoaded. The 1200ms safety cap
+        // covers pages that haven't been retrofitted + pages whose
+        // network is genuinely degraded (the customer sees the
+        // pre-hydration MOCK data after the cap rather than a
+        // perpetually-blank surface).
+        window.dashboardHydrated = reveal;
+        setTimeout(reveal, 1200);
       })();
     </script>
   </body>

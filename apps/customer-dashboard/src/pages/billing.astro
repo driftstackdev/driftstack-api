@@ -323,6 +323,15 @@ const apiBaseUrl = resolveApiBaseUrl();
               (err && err.message ? err.message : 'network error') +
               '). Showing preview data below.',
           );
+        })
+        .finally(function () {
+          // 2026-05-21 — signal the layout's opacity-gate that this
+          // page's primary fetch resolved (success or failure). The
+          // gate reveals <main> once OR after the 1200ms safety cap,
+          // whichever fires first.
+          if (typeof window.dashboardHydrated === 'function') {
+            window.dashboardHydrated();
+          }
         });
     })();
   </script>

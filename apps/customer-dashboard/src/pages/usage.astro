@@ -327,6 +327,15 @@ const SPARK_H = 48;
               (err && err.message ? err.message : 'network error') +
               '). Showing preview data below.',
           );
+        })
+        .finally(function () {
+          // 2026-05-21 — signal the layout's opacity-gate that the
+          // /v1/usage + /v1/usage/series fetch resolved (success or
+          // failure). Otherwise the page sits behind the 1200ms safety
+          // cap before revealing.
+          if (typeof window.dashboardHydrated === 'function') {
+            window.dashboardHydrated();
+          }
         });
     })();
   </script>
