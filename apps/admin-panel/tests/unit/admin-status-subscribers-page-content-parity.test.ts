@@ -51,14 +51,14 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toMatch(/Force-unsubscribe writes admin_audit_log via V-281 dual-write/);
   });
 
-  it('GET /v1/admin/status-subscribers?limit=200 endpoint pinned', () => {
-    expect(body).toMatch(/fetch\('\/v1\/admin\/status-subscribers\?limit=200'/);
+  it('GET /v1/admin/status-subscribers?limit=200 endpoint pinned. 2026-05-21 — fetch URL prefixed by apiBaseUrl (admin.driftstack.dev is a static Pages origin; relative paths 404).', () => {
+    expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/admin\/status-subscribers\?limit=200'/);
     expect(body).toMatch(/authorization: 'Bearer ' \+ token/);
   });
 
-  it('POST /v1/admin/status-subscribers/{id}/force-unsubscribe endpoint pinned', () => {
+  it('POST /v1/admin/status-subscribers/{id}/force-unsubscribe endpoint pinned. 2026-05-21 — fetch URL prefixed by apiBaseUrl.', () => {
     expect(body).toMatch(
-      /fetch\('\/v1\/admin\/status-subscribers\/' \+ encodeURIComponent\(id\) \+ '\/force-unsubscribe'/,
+      /fetch\(apiBaseUrl \+ '\/v1\/admin\/status-subscribers\/' \+ encodeURIComponent\(id\) \+ '\/force-unsubscribe'/,
     );
     expect(body).toMatch(/method: 'POST'/);
   });
@@ -120,7 +120,7 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     );
   });
 
-  it('inline script is:inline (Astro convention for admin-panel pages)', () => {
-    expect(body).toMatch(/<script is:inline>/);
+  it('inline script is:inline (Astro convention for admin-panel pages). 2026-05-21 — define:vars={{ apiBaseUrl }} added so the inline script can prefix fetch() with the API origin.', () => {
+    expect(body).toMatch(/<script is:inline define:vars=\{\{ apiBaseUrl \}\}>/);
   });
 });

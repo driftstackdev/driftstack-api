@@ -75,19 +75,19 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
     );
   });
 
-  it("Auth pattern: localStorage.getItem('driftstack_admin_token') + Bearer header on /v1/admin/status-subscribers?limit=200 — pinned so the admin-token key stays in sync with the auth bootstrap (drift to a different key would silently sign every admin out)", () => {
+  it("Auth pattern: localStorage.getItem('driftstack_admin_token') + Bearer header on /v1/admin/status-subscribers?limit=200 — pinned so the admin-token key stays in sync with the auth bootstrap (drift to a different key would silently sign every admin out). 2026-05-21 — fetch URL prefixed by apiBaseUrl (admin.driftstack.dev is a static Pages origin; relative paths 404).", () => {
     expect(body).toMatch(/localStorage\.getItem\('driftstack_admin_token'\) \|\| ''/);
     expect(body).toMatch(
-      /fetch\('\/v1\/admin\/status-subscribers\?limit=200', \{\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/admin\/status-subscribers\?limit=200', \{\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)/,
     );
   });
 
-  it("Force-unsubscribe contract: POST /v1/admin/status-subscribers/{encodeURIComponent(id)}/force-unsubscribe with empty {} body + Bearer auth + content-type:application/json + window.confirm prompt referencing admin_audit_log — pinned so the destructive action requires explicit confirmation and the URL encoding doesn't break on subscriber-IDs with special chars", () => {
+  it("Force-unsubscribe contract: POST /v1/admin/status-subscribers/{encodeURIComponent(id)}/force-unsubscribe with empty {} body + Bearer auth + content-type:application/json + window.confirm prompt referencing admin_audit_log — pinned so the destructive action requires explicit confirmation and the URL encoding doesn't break on subscriber-IDs with special chars. 2026-05-21 — fetch URL prefixed by apiBaseUrl (same fix as the GET above).", () => {
     expect(body).toMatch(
       /window\.confirm\(\s*\n?\s*'Force-unsubscribe ' \+\s*\n?\s*email \+\s*\n?\s*'\? Writes admin_audit_log\. Customer can re-subscribe via the public form\.',\s*\n?\s*\);/,
     );
     expect(body).toMatch(
-      /fetch\('\/v1\/admin\/status-subscribers\/' \+ encodeURIComponent\(id\) \+ '\/force-unsubscribe', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: '\{\}',\s*\n?\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/admin\/status-subscribers\/' \+ encodeURIComponent\(id\) \+ '\/force-unsubscribe', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: '\{\}',\s*\n?\s*\}\)/,
     );
   });
 
