@@ -248,14 +248,18 @@ describe('V-666.AP GET /v1/admin/crypto-orders/idempotency-metrics', () => {
       method: 'POST',
       url: '/v1/billing/crypto-checkout',
       headers,
-      payload: { product: 'team_growth', price_cents: 4900, price_currency: 'USD' },
+      payload: { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' },
     });
-    // Same key, different price — intent mismatch.
+    // Same key, DIFFERENT PRODUCT — intent mismatch. (Prior version
+    // used same product + different price_cents to trigger the
+    // fingerprint mismatch, but V-666.SEC made the server ignore
+    // client-supplied price_cents → fingerprint only diverges via
+    // product slug now.)
     await fx.app.inject({
       method: 'POST',
       url: '/v1/billing/crypto-checkout',
       headers,
-      payload: { product: 'team_growth', price_cents: 9900, price_currency: 'USD' },
+      payload: { product: 'team_manual', price_cents: 24900, price_currency: 'USD' },
     });
     const res = await fx.app.inject({
       method: 'GET',
