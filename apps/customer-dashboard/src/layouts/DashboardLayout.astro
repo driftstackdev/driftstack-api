@@ -101,6 +101,18 @@ const navSections: NavSection[] = [
     <meta name="description" content={description} />
     <meta name="robots" content="noindex" />
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=2" />
+    <style>
+      /* 2026-05-21 — when the pre-paint script confirms the cached
+       * `ds_is_team_user` flag, override the picker wrap's default
+       * `display:none` (`.hidden`) so the slot takes layout space but
+       * stays invisible. JS removes the reserved attribute once
+       * /v1/account/me confirms teams[] and reveals the picker.
+       * Non-team users never set the flag, so the wrap stays display:none. */
+      html[data-pre-team-user='true'] [data-act-as-picker-wrap-reserved] {
+        display: block;
+        visibility: hidden;
+      }
+    </style>
     {
       withSidebar && (
         <script is:inline>
@@ -111,12 +123,21 @@ const navSections: NavSection[] = [
             // BEFORE the body parses (in <head>), so the redirect happens
             // pre-paint. Onboarding / auth pages opt out by setting
             // withSidebar={false} (this script isn't emitted on those).
+            //
+            // Same script also sets data-pre-team-user on <html> when the
+            // cached ds_is_team_user flag is present, so the acting-as
+            // picker can pre-reserve layout space (avoids vertical shift
+            // when the picker reveals post-hydration on team accounts).
             (function () {
               try {
                 var t = localStorage.getItem('ds_web_session_token');
                 if (!t || t.length === 0) {
                   var here = location.pathname + location.search;
                   location.replace('/login?next=' + encodeURIComponent(here));
+                  return;
+                }
+                if (localStorage.getItem('ds_is_team_user') === '1') {
+                  document.documentElement.setAttribute('data-pre-team-user', 'true');
                 }
               } catch (_) {
                 location.replace('/login');
@@ -198,8 +219,14 @@ const navSections: NavSection[] = [
                 downstream fetches pick up the new X-Driftstack-Account
                 header. Self-only customers never see this widget.
               */}
+              {/* 2026-05-21 — `data-act-as-picker-wrap-reserved` activates
+                  `visibility:hidden` (in <style>) when the cached
+                  ds_is_team_user flag was set pre-paint; otherwise stays
+                  `display:none` so non-team users don't see reserved
+                  space. JS removes both states once it hydrates. */}
               <div
                 data-act-as-picker-wrap
+                data-act-as-picker-wrap-reserved
                 class="hidden border-b border-white/10 px-4 py-3"
               >
                 <label
@@ -561,6 +588,19 @@ const navSections: NavSection[] = [
                 Array.isArray(me.teams) && me.teams.length > 0 ? String(me.teams.length) : null,
               );
 
+              // 2026-05-21 — cache team-membership flag so the NEXT page
+              // load can pre-reserve picker space (avoids first-render
+              // shift for team users moving between dashboard pages).
+              try {
+                if (Array.isArray(me.teams) && me.teams.length > 0) {
+                  localStorage.setItem('ds_is_team_user', '1');
+                } else {
+                  localStorage.removeItem('ds_is_team_user');
+                }
+              } catch (_) {
+                /* swallow */
+              }
+
               if (!Array.isArray(me.teams) || me.teams.length === 0) return;
               // Build options: Self + each team owner.
               const options = [{ value: '', label: 'Self (' + (me.email || me.id) + ')' }];
@@ -578,6 +618,10 @@ const navSections: NavSection[] = [
                 if (opt.value === active) el.selected = true;
                 picker.appendChild(el);
               }
+              // 2026-05-21 — clear the pre-paint reserved slot so the
+              // picker takes its natural layout (rather than the
+              // visibility:hidden CSS rule keyed on data-pre-team-user).
+              wrap.removeAttribute('data-act-as-picker-wrap-reserved');
               wrap.classList.remove('hidden');
               picker.addEventListener('change', function (e) {
                 const v = e.target.value;
