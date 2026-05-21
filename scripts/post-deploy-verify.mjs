@@ -415,14 +415,42 @@ async function checkByokAnthropicGateStub() {
   // endpoint for the BYOK customer-key storage feature. Gated on
   // MFA_ENCRYPTION_KEY being set (per Q1 verdict 2026-05-17 the
   // BYOK service reuses the MFA key for AES-256-GCM at-rest
-  // encryption). When unset, the route returns 503 + the typed
-  // "BYOK Anthropic key storage is not enabled" detail.
-  return featureGateStub(
-    'PUT',
-    '/v1/account/me/byok-anthropic-key',
-    'AI-CHAT byok-anthropic gate',
-    { api_key: 'sk-ant-noop-test' },
-  );
+  // encryption).
+  //
+  // 2026-05-21 — BYOK activation gate FLIPPED on after the env
+  // template / prod / staging .env rename from MFA_AT_REST_KEY →
+  // MFA_ENCRYPTION_KEY (commit 612b4c97). The verify check used to
+  // assert 503 (disabled stub); flip expectation to 401 (auth-
+  // gated active route). Same shape as the /v1/admin/cost/config
+  // check above — anonymous request hits requireAuth before the
+  // route handler runs.
+  const url = `${baseUrl}/v1/account/me/byok-anthropic-key`;
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ api_key: 'sk-ant-noop-test' }),
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      name: 'AI-CHAT byok-anthropic gate',
+      detail: `fetch failed: ${err.message}`,
+    };
+  }
+  if (res.status !== 401) {
+    return {
+      ok: false,
+      name: 'AI-CHAT byok-anthropic gate',
+      detail: `expected 401 (auth-gated active route), got ${res.status}`,
+    };
+  }
+  return {
+    ok: true,
+    name: 'AI-CHAT byok-anthropic gate',
+    detail: 'route ACTIVE (MFA_ENCRYPTION_KEY wired) — 401 confirms requireAuth gate',
+  };
 }
 
 // checkRecipesGateStub removed 2026-05-19 — recipesRepo wired (b165c8dd);
