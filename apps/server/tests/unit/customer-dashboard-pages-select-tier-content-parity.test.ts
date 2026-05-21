@@ -51,24 +51,24 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     );
   });
 
-  it("TIERS 6-entry catalogue with ladder taxonomy (Manual vs API): solo_manual $79/mo / team_manual $249/mo / agency_manual $699/mo / api_starter $149/mo / api_builder $499/mo / api_scale $1,499/mo — pinned so the price points + ladder categorization stay in sync with marketing-site pricing (drift to a 5-tier catalogue or swapping ladder labels would break the customer's recognition of what they signed up for)", () => {
+  it("TIERS 6-entry catalogue with ladder taxonomy (Manual vs API): solo_manual $79/mo / team_manual $249/mo / agency_manual $699/mo / api_starter $149/mo / api_builder $499/mo / api_scale $1,499/mo — pinned so the price points + ladder categorization stay in sync with marketing-site pricing (drift to a 5-tier catalogue or swapping ladder labels would break the customer's recognition of what they signed up for). 2026-05-21 — `priceCents` field added (optional in regex) to thread the exact amount through the V-666.D crypto checkout body; values must match the dollar price.", () => {
     expect(body).toMatch(
-      /\{ id: 'solo_manual', label: 'Solo Manual', price: '\$79\/mo', ladder: 'Manual' \},/,
+      /\{ id: 'solo_manual', label: 'Solo Manual', price: '\$79\/mo', ladder: 'Manual'(?:, priceCents: 7900)? \},/,
     );
     expect(body).toMatch(
-      /\{ id: 'team_manual', label: 'Team Manual', price: '\$249\/mo', ladder: 'Manual' \},/,
+      /\{ id: 'team_manual', label: 'Team Manual', price: '\$249\/mo', ladder: 'Manual'(?:, priceCents: 24900)? \},/,
     );
     expect(body).toMatch(
-      /\{ id: 'agency_manual', label: 'Agency Manual', price: '\$699\/mo', ladder: 'Manual' \},/,
+      /\{ id: 'agency_manual', label: 'Agency Manual', price: '\$699\/mo', ladder: 'Manual'(?:, priceCents: 69900)? \},/,
     );
     expect(body).toMatch(
-      /\{ id: 'api_starter', label: 'API Starter', price: '\$149\/mo', ladder: 'API' \},/,
+      /\{ id: 'api_starter', label: 'API Starter', price: '\$149\/mo', ladder: 'API'(?:, priceCents: 14900)? \},/,
     );
     expect(body).toMatch(
-      /\{ id: 'api_builder', label: 'API Builder', price: '\$499\/mo', ladder: 'API' \},/,
+      /\{ id: 'api_builder', label: 'API Builder', price: '\$499\/mo', ladder: 'API'(?:, priceCents: 49900)? \},/,
     );
     expect(body).toMatch(
-      /\{ id: 'api_scale', label: 'API Scale', price: '\$1,499\/mo', ladder: 'API' \},/,
+      /\{ id: 'api_scale', label: 'API Scale', price: '\$1,499\/mo', ladder: 'API'(?:, priceCents: 149900)? \},/,
     );
   });
 

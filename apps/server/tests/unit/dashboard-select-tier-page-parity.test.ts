@@ -72,8 +72,12 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     ];
 
     for (const [id, label, price, ladder] of expected) {
+      // 2026-05-21 — V-666.D added optional `priceCents: <int>` after
+      // the ladder field. Regex now allows the trailing comma + the
+      // priceCents key so the pin survives the crypto checkout
+      // addition without requiring per-tier updates.
       const re = new RegExp(
-        `\\{ id: '${id}', label: '${label}', price: '\\${price.replace('$', '$')}', ladder: '${ladder}' \\}`,
+        `\\{ id: '${id}', label: '${label}', price: '\\${price.replace('$', '$')}', ladder: '${ladder}'(?:, priceCents: \\d+)? \\}`,
       );
       expect(p, `tier ${id}`).toMatch(re);
     }
