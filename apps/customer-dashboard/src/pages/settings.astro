@@ -1632,6 +1632,16 @@ const EMAIL_EVENTS = [
       loadWebSessions();
       loadMfa();
       loadOauthLinks();
+      // 2026-05-21 — opacity-gate signal. Five loaders fire in parallel
+      // without returning promises (legacy shape). Fire the reveal in
+      // a microtask so the first paint happens after the network
+      // requests are scheduled; far better UX than waiting the 1200ms
+      // safety cap. Fields populate as each request resolves.
+      queueMicrotask(function () {
+        if (typeof window.dashboardHydrated === 'function') {
+          window.dashboardHydrated();
+        }
+      });
     })();
   </script>
 </DashboardLayout>
