@@ -57,8 +57,10 @@ interface BindOk {
 }
 
 test('POST /v1/auth/cli-authorize/initiate issues a code + browser URL', async ({ request }) => {
+  // 2026-05-21 — schema requires state >= 16 chars (CSRF entropy floor).
+  // Previous fixture 'state-token-abc' was 15 chars → 400. Pad.
   const res = await request.post(`${server.baseUrl}/v1/auth/cli-authorize/initiate`, {
-    data: { state: 'state-token-abc', client_label: 'driftstack-cli/0.1.0' },
+    data: { state: 'state-token-abcdef', client_label: 'driftstack-cli/0.1.0' },
   });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as InitiateResponse;
@@ -70,7 +72,7 @@ test('POST /v1/auth/cli-authorize/initiate issues a code + browser URL', async (
 
 test('initiate works without an Authorization header (CLI is pre-auth)', async ({ request }) => {
   const res = await request.post(`${server.baseUrl}/v1/auth/cli-authorize/initiate`, {
-    data: { state: 'no-auth-state' },
+    data: { state: 'no-auth-state-token' },
   });
   expect(res.status()).toBe(200);
 });
@@ -78,12 +80,12 @@ test('initiate works without an Authorization header (CLI is pre-auth)', async (
 test('exchange before bind returns status=pending', async ({ request }) => {
   const init = (await (
     await request.post(`${server.baseUrl}/v1/auth/cli-authorize/initiate`, {
-      data: { state: 'state-pending' },
+      data: { state: 'state-pending-0000' },
     })
   ).json()) as InitiateResponse;
 
   const res = await request.post(`${server.baseUrl}/v1/auth/cli-authorize/exchange`, {
-    data: { code: init.code, state: 'state-pending' },
+    data: { code: init.code, state: 'state-pending-0000' },
   });
   expect(res.status()).toBe(200);
   const body = (await res.json()) as ExchangePending;
@@ -125,19 +127,22 @@ test('full happy path: initiate → bind → exchange returns the issued API key
 test('exchange with a mismatched state returns 400 (state_mismatch)', async ({ request }) => {
   const init = (await (
     await request.post(`${server.baseUrl}/v1/auth/cli-authorize/initiate`, {
-      data: { state: 'real-state' },
+      data: { state: 'real-state-token0' },
     })
   ).json()) as InitiateResponse;
 
   const res = await request.post(`${server.baseUrl}/v1/auth/cli-authorize/exchange`, {
-    data: { code: init.code, state: 'wrong-state' },
+    data: { code: init.code, state: 'wrong-state-token' },
   });
   expect(res.status()).toBe(400);
 });
 
 test('exchange with an unknown code returns 404', async ({ request }) => {
+  // 2026-05-21 — exchange schema requires state >= 16 chars. The unknown-code
+  // assertion stays meaningful with a well-formed state — the route still
+  // looks up the code first and 404s before checking state semantics.
   const res = await request.post(`${server.baseUrl}/v1/auth/cli-authorize/exchange`, {
-    data: { code: 'definitely-not-a-real-code', state: 'x' },
+    data: { code: 'definitely-not-a-real-code', state: 'state-padded-to-16+' },
   });
   expect(res.status()).toBe(404);
 });
@@ -146,13 +151,13 @@ test('bind with a mismatched state returns 400', async ({ request }) => {
   const seed = await seedAccount(server.client);
   const init = (await (
     await request.post(`${server.baseUrl}/v1/auth/cli-authorize/initiate`, {
-      data: { state: 'right-state' },
+      data: { state: 'right-state-token' },
     })
   ).json()) as InitiateResponse;
 
   const res = await request.post(`${server.baseUrl}/v1/auth/cli-authorize/bind`, {
     headers: authHeader(seed.plaintext),
-    data: { code: init.code, state: 'wrong-state' },
+    data: { code: init.code, state: 'wrong-state-token' },
   });
   expect(res.status()).toBe(400);
 });
@@ -160,11 +165,11 @@ test('bind with a mismatched state returns 400', async ({ request }) => {
 test('bind requires auth (401 without Authorization)', async ({ request }) => {
   const init = (await (
     await request.post(`${server.baseUrl}/v1/auth/cli-authorize/initiate`, {
-      data: { state: 'no-auth-bind' },
+      data: { state: 'no-auth-bind-token0' },
     })
   ).json()) as InitiateResponse;
   const res = await request.post(`${server.baseUrl}/v1/auth/cli-authorize/bind`, {
-    data: { code: init.code, state: 'no-auth-bind' },
+    data: { code: init.code, state: 'no-auth-bind-token0' },
   });
   expect(res.status()).toBe(401);
 });
