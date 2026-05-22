@@ -51,9 +51,9 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     expect(body).toMatch(/The architecture below enforces that — not as policy, as code\./);
   });
 
-  it('6-pillar architecture: 01 Transport + 02 Egress (roadmap) + 03 API keys + 04 Webhooks + 05 Team RBAC + 06 No-customer-data-access posture — pinned so the 6-pillar security overview taxonomy stays consistent (drift to dropping a pillar would create coverage gaps; drift to renaming would break the at-a-glance pillar-list narrative)', () => {
+  it('6-pillar architecture: 01 Transport + 02 Egress (shipped per profile) + 03 API keys + 04 Webhooks + 05 Team RBAC + 06 No-customer-data-access posture — pinned so the 6-pillar security overview taxonomy stays consistent. 2026-05-22 — Pillar 02 label flipped from "(roadmap)" to plain "Egress" + body rewritten to reflect shipped SOCKS5/OpenVPN/WireGuard per-profile capability.', () => {
     expect(body).toMatch(/01 · Transport/);
-    expect(body).toMatch(/02 · Egress \(roadmap\)/);
+    expect(body).toMatch(/02 · Egress/);
     expect(body).toMatch(/03 · API keys/);
     expect(body).toMatch(/04 · Webhooks/);
     expect(body).toMatch(/05 · Team RBAC/);

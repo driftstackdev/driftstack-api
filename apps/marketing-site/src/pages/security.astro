@@ -50,20 +50,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <!-- Pillar 2 -->
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
-            02 · Egress (roadmap)
+            02 · Egress
           </p>
           <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
             Customer-configurable egress.
           </h2>
           <p class="mt-3 text-ink-secondary">
-            Customer-configurable egress (SOCKS5 / OpenVPN /
-            WireGuard) is on the roadmap — no server-side
-            implementation ships today. Until then session traffic
-            exits via Driftstack-managed infrastructure. We still
-            never store destination response bodies; the control
-            plane only persists session metadata. See
+            Each profile can attach its own egress configuration —
+            SOCKS5 (with full UDP / WebRTC / QUIC tunnelling), OpenVPN
+            (.ovpn file), or WireGuard (.conf). Sessions bound to a
+            profile dial the tunnel before launching the browser; DNS
+            leaks blocked. Without an attached config, session traffic
+            exits via Driftstack-managed infrastructure. We never
+            store destination response bodies. See
             <a href="/trust/security-overview" class="text-glow-red underline">/trust/security-overview</a>
-            for the live posture.
+            for the full posture.
           </p>
         </div>
 
