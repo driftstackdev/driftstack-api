@@ -8,14 +8,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 >
   <!-- Header -->
   <section class="relative overflow-hidden">
+    {/* 2026-05-22 — hero-glow atmosphere matches the family. */}
+    <div class="hero-glow" aria-hidden="true"></div>
     <div class="absolute inset-0 grid-bg opacity-40" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-6xl px-6 py-24 animate-fade-up">
       <p class="section-label">About</p>
       <h1
-        class="mt-6 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl lg:text-6xl"
+        class="mt-6 text-4xl font-semibold tracking-tight md:text-5xl lg:text-6xl"
         style="letter-spacing: -0.02em;"
       >
-        One engine. One product. Engineered for fidelity.
+        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+          One engine. One product. Engineered for fidelity.
+        </span>
       </h1>
       <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
         Driftstack ships iPhone Safari sessions on demand, built on
