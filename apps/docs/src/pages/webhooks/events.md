@@ -27,8 +27,8 @@ site (when it lands as a Tier 3 visual surface).
 | `quota.exceeded`                    | [DECLARED] | Account hits 100% of tier quota                                  |
 | `test.ping`                         | [LIVE]     | Synthetic test event from POST /v1/webhooks/:id/test             |
 | `session.egress_capability_changed` | [DECLARED] | Harness emitted an egress.capability_report for a SOCKS5 session |
-| `crypto.order.paid`                 | [DECLARED] | NowPayments-backed order transitioned to `paid` (V-666)          |
-| `crypto.order.failed`               | [DECLARED] | Crypto order moved to terminal `failed` (timeout/refund/expired) |
+| `crypto.order.paid`                 | [LIVE]     | NowPayments-backed order transitioned to `paid` (V-666)          |
+| `crypto.order.failed`               | [LIVE]     | Crypto order moved to terminal `failed` (timeout/refund/expired) |
 | `session.created`                   | [PLANNED]  | Session transitions `creating` → `ready`                         |
 | `session.destroyed`                 | [PLANNED]  | Distinct from `session.completed` (no semantic shift)            |
 | `profile.created`                   | [PLANNED]  | New profile created                                              |
@@ -283,7 +283,7 @@ Trial-pack-specific lifecycle events. `purchased` fires on the Stripe
 checkout completion event; `expired` fires from the trial-pack
 expiry job (which doesn't yet exist — see notes).
 
-### `crypto.order.paid` / `crypto.order.failed` [DECLARED]
+### `crypto.order.paid` / `crypto.order.failed` [LIVE]
 
 V-666 — fires when a NowPayments-backed crypto checkout order
 transitions to a terminal state.
