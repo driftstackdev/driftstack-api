@@ -984,7 +984,16 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
             if (typeof u.model === 'string' && u.model.length > 0) {
               const headerModelName = document.querySelector('[data-header-model-name]');
               if (headerModelName) {
-                headerModelName.textContent = u.model.replace(/^claude-/, '');
+                // 2026-05-22 — pretty-print the model id ("claude-
+                // opus-4-7" → "Opus 4-7"). Keeps capitalization
+                // consistent with the SSR default. Falls through to
+                // a strip-claude-prefix path if the id doesn't
+                // match a known family.
+                const FAM_RE = /(opus|sonnet|haiku)-?([\d.-]+)/i;
+                const m = FAM_RE.exec(u.model);
+                headerModelName.textContent = m
+                  ? m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() + ' ' + m[2]
+                  : u.model.replace(/^claude-/, '');
               }
             }
           }
