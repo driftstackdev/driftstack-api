@@ -636,24 +636,37 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
               return r.json();
             })
             .then((session) => {
+              // 2026-05-22 — redirect to the dedicated workbench page
+              // per founder feedback ("I think this better goes on a
+              // separate page"). The inline active-session card was
+              // legacy from Wave 2.C scaffolding before /agent-
+              // sessions/[id] existed; now that the workbench is the
+              // canonical surface, every freshly-minted session
+              // navigates there. State setters retained for the
+              // brief moment before navigate completes.
               activeSessionId = session.id;
               activeMode = session.mode;
               if (activeIdEl) activeIdEl.textContent = session.id;
               const initialState =
                 session.mode === 'pair' ? { kind: 'ai-driving' } : null;
               if (stateEl) stateEl.textContent = initialState ? initialState.kind : '';
-              renderTakeoverHandback(initialState, session.mode);
-              if (activeSection) activeSection.classList.remove('hidden');
-              // LK arc — surface the optional `livekit` field when
-              // the deployment is LK-ready. Card stays hidden when
-              // session.livekit is absent (pre-LK deployment OR no
-              // Mac registered yet).
-              renderLivekitInfo(session.livekit);
-              // Wave 2.C sub-slice 8.27 — start the SSE transcript
-              // stream now that we have a valid session id.
-              createForm.dispatchEvent(
-                new CustomEvent('agent-session-created', { detail: { id: session.id } }),
-              );
+              // Stash the customer's first task (if they typed one
+              // in the composer) so the workbench can resume it as
+              // the opening turn. localStorage survives the
+              // navigation; the workbench page clears the key after
+              // posting the message.
+              const ta = createForm.querySelector('textarea[name="initial_task"]');
+              if (ta && ta.value && ta.value.trim().length > 0) {
+                try {
+                  localStorage.setItem(
+                    'ds_pending_initial_task',
+                    JSON.stringify({ sessionId: session.id, task: ta.value.trim() }),
+                  );
+                } catch (_) {
+                  /* swallow */
+                }
+              }
+              window.location.href = '/agent-sessions/' + session.id;
             })
             .catch((err) => {
               const msg = err && err.message ? String(err.message) : '';

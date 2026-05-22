@@ -1091,5 +1091,30 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
 
     paintMode();
     void hydrateFromServer();
+
+    // 2026-05-22 — pick up a "pending initial task" stashed by the
+    // /agent-sessions create flow (founder UX feedback: the create
+    // composer's textarea content should resume as the first turn
+    // on the workbench, not get dropped). Read + clear + dispatch
+    // as a normal submit so all the existing wiring (typing dots,
+    // intent rendering, cost meter) just works.
+    try {
+      const raw = localStorage.getItem('ds_pending_initial_task');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.sessionId === sessionId && typeof parsed.task === 'string') {
+          localStorage.removeItem('ds_pending_initial_task');
+          if (composerTextarea && composerForm) {
+            composerTextarea.value = parsed.task;
+            // Defer slightly so hydrateFromServer's mode paint runs first.
+            setTimeout(() => {
+              composerForm.dispatchEvent(new Event('submit', { cancelable: true }));
+            }, 100);
+          }
+        }
+      }
+    } catch (_) {
+      /* swallow — bad stash leaves the textarea blank */
+    }
   </script>
 </DashboardLayout>
