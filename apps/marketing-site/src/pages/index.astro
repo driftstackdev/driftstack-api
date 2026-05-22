@@ -230,9 +230,19 @@ try {
       >
         Anywhere mobile Safari fidelity decides the outcome.
       </h2>
+      {/* 2026-05-22 — icons added to each use-case card; the
+          glow-red square mark gives the card a visual anchor instead
+          of opening with bare text. Same Lucide-style stroke icons
+          used throughout the dashboard. */}
       <div class="mt-10 grid gap-6 md:grid-cols-3">
         <div class="card p-6">
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">QA + testing</p>
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 11l3 3 8-8" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+          </div>
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">QA + testing</p>
           <h3 class="mt-3 text-lg font-semibold text-ink-primary">Mobile-Safari coverage</h3>
           <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
             Run end-to-end tests against the exact engine your iOS
@@ -242,7 +252,14 @@ try {
           </p>
         </div>
         <div class="card p-6">
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">Data collection</p>
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <ellipse cx="12" cy="5" rx="9" ry="3" />
+              <path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5" />
+              <path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6" />
+            </svg>
+          </div>
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">Data collection</p>
           <h3 class="mt-3 text-lg font-semibold text-ink-primary">Mobile-first scraping</h3>
           <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
             Many sites serve different content to mobile Safari than to
@@ -252,7 +269,14 @@ try {
           </p>
         </div>
         <div class="card p-6">
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">Account workflows</p>
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="8.5" cy="7" r="4" />
+              <path d="M20 8v6M23 11h-6" />
+            </svg>
+          </div>
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">Account workflows</p>
           <h3 class="mt-3 text-lg font-semibold text-ink-primary">Multi-account operations</h3>
           <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
             Keep separate identities on services that lock down by device
