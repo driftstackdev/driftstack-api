@@ -114,6 +114,10 @@ function makeAudit(): {
       calls.push({ action: args.action, payload: args.payload });
       return Promise.resolve();
     },
+    // 2026-05-22 — V-666 import-cycle quota guard. Mock returns 0 so
+    // the cap check never triggers in unit tests; integration tests
+    // can stub a real count if they want to assert the cap behavior.
+    countActionsSince: () => Promise.resolve(0),
   } as unknown as AccountAuditService;
   return { audit, calls };
 }

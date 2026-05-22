@@ -54,7 +54,7 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
       /import type \{ ProfileRecord, ProfilesService \} from '\.\.\/services\/profiles\.js';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, ForbiddenError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, ForbiddenError, NotFoundError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

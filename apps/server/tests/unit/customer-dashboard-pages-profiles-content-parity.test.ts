@@ -141,10 +141,9 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
     );
   });
 
-  it("Tier-limit dl + 'Enforced server-side at session creation. If your workload needs more, upgrade your tier:' framing — pinned so customers know the cap is server-enforced (drift to dropping 'server-side at session creation' would let customers think the dashboard cap is a soft UI hint, hiding the actual 429-at-create behavior)", () => {
-    expect(body).toMatch(
-      /Enforced server-side at session creation\. If your workload needs more, upgrade your tier:/,
-    );
+  it("Tier-limit framing pinned — 'Enforced server-side at session creation' anchor stays so customers know the cap is enforced at API boundary, not a soft UI hint. 2026-05-22 — section restructured into a tier-card grid (01b4e017); the tagline shortened to 'Enforced server-side at session creation. Upgrade if you need more headroom.' Anchor text required; surrounding copy can evolve.", () => {
+    expect(body).toMatch(/Enforced server-side at session creation\./);
+    expect(body).toMatch(/Per-tier ceiling/);
   });
 
   it('file exists at canonical path', () => {

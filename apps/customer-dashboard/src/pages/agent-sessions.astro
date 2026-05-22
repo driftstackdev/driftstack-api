@@ -145,8 +145,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         class="rounded-2xl border border-white/10 bg-surface-raised shadow-lg shadow-glow-red/5 focus-within:border-glow-red/40 focus-within:ring-1 focus-within:ring-glow-red/20 transition-colors"
       >
         <div class="px-5 pt-4">
-          {/* Mode chip-bar (was the radio form below; now inline). */}
+          {/* Mode chip-bar (was the radio form below; now inline).
+              data-section="mode-selector" preserved for the W488.A
+              parity pin — same semantic anchor as the legacy
+              section, just inline now. */}
           <div
+            data-section="mode-selector"
             class="inline-flex rounded-md border border-white/10 bg-surface-base p-0.5 text-xs"
             role="radiogroup"
             aria-label="Session mode"

@@ -38,7 +38,9 @@ describe('W442.C apps/server/src/db/account-audit-repo.ts content parity', () =>
   });
 
   it('imports: SQL type + and/desc/eq/gte/lt/lte from drizzle-orm; AccountAuditAction + AccountAuditActorType from api-types; 5 service types; Database; accountAuditLog schema', () => {
-    expect(body).toMatch(/import \{ type SQL, and, desc, eq, gte, lt, lte \} from 'drizzle-orm';/);
+    expect(body).toMatch(
+      /import \{ type SQL, and, count, desc, eq, gte, lt, lte \} from 'drizzle-orm';/,
+    );
     expect(body).toMatch(
       /import type \{ AccountAuditAction, AccountAuditActorType \} from '@driftstack\/api-types';/,
     );
