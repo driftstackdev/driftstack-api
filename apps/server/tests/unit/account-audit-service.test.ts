@@ -61,6 +61,12 @@ function makeRepo(): {
       const page: ListAccountAuditPage = { items, nextCursor: null };
       return Promise.resolve(page);
     },
+    countActionsSince: (accountId, action, since) => {
+      const n = state.rows.filter(
+        (r) => r.accountId === accountId && r.action === action && r.timestamp >= since,
+      ).length;
+      return Promise.resolve(n);
+    },
   };
   return { repo, state };
 }
