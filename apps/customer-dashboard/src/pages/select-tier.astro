@@ -83,12 +83,29 @@ const TIERS: {
       </button>
     </div>
 
+    {/* 2026-05-22 — paid tier grid: each card opens with a ladder
+        icon (manual = user, api = code-brackets) for a visual anchor. */}
     <!-- Paid tier grid -->
     <div class="mt-10 grid gap-4 md:grid-cols-2">
       {
         TIERS.map((t) => (
-          <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
-            <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">{t.ladder}</p>
+          <div class="relative rounded-lg border border-white/10 bg-surface-raised p-5 hover:border-glow-red/30 transition-colors">
+            <div class="flex items-center justify-between">
+              <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">{t.ladder}</p>
+              <div class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 text-glow-red ring-1 ring-glow-red/30">
+                {t.ladder === 'Manual' ? (
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="7" r="4" />
+                    <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <polyline points="16 18 22 12 16 6" />
+                    <polyline points="8 6 2 12 8 18" />
+                  </svg>
+                )}
+              </div>
+            </div>
             <h3 class="mt-2 text-lg font-semibold text-ink-primary">{t.label}</h3>
             <p class="mt-1 text-2xl font-semibold text-ink-primary">{t.price}</p>
             <dl class="mt-4 space-y-1 text-sm text-ink-secondary">
