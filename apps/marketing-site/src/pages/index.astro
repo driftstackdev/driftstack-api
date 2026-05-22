@@ -81,6 +81,72 @@ try {
     </div>
   </section>
 
+  {/* 2026-05-22 — stats strip between the hero + the "Two ways to
+      drive it" section. Four concrete numbers replace what would
+      otherwise be more prose-heavy claims. Visual breathing room
+      between two text-dense sections. */}
+  <section class="relative border-t border-white/10">
+    <div class="mx-auto max-w-6xl px-6 py-12 sm:py-16">
+      <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="flex items-start gap-3">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="5" y="2" width="14" height="20" rx="2" />
+              <path d="M12 18h.01" />
+            </svg>
+          </div>
+          <div>
+            <p class="bg-gradient-to-br from-ink-primary to-glow-red bg-clip-text text-2xl font-semibold text-transparent">
+              Real WebKit
+            </p>
+            <p class="mt-1 text-xs text-ink-muted">The engine every iPhone ships</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+          </div>
+          <div>
+            <p class="bg-gradient-to-br from-ink-primary to-glow-red bg-clip-text text-2xl font-semibold text-transparent">
+              iOS 18.7 / 26.x
+            </p>
+            <p class="mt-1 text-xs text-ink-muted">Safari versions Apple still ships</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="16 18 22 12 16 6" />
+              <polyline points="8 6 2 12 8 18" />
+            </svg>
+          </div>
+          <div>
+            <p class="bg-gradient-to-br from-ink-primary to-glow-red bg-clip-text text-2xl font-semibold text-transparent">
+              3 SDKs
+            </p>
+            <p class="mt-1 text-xs text-ink-muted">TypeScript · Python · Go</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+          </div>
+          <div>
+            <p class="bg-gradient-to-br from-ink-primary to-glow-red bg-clip-text text-2xl font-semibold text-transparent">
+              EU-hosted
+            </p>
+            <p class="mt-1 text-xs text-ink-muted">Hetzner · Frankfurt · GDPR-default</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- M.2 — "Two ways to drive it" section, refreshed per Plan Item 3.
        The hero above shows the imperative SDK as a real code block;
        this section now shows the AI-agent UX as a stylized visual
