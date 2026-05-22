@@ -67,7 +67,19 @@ const apiBaseUrl = resolveApiBaseUrl();
       <div class="flex-1 min-w-0">
         <div class="flex items-baseline gap-3">
           <h1 class="text-lg font-semibold text-ink-primary">AI agent workbench</h1>
-          <p class="text-xs text-ink-muted font-mono truncate">{id}</p>
+          <button
+            type="button"
+            data-copy-session-id
+            data-id={id}
+            class="group inline-flex items-center gap-1 text-xs text-ink-muted font-mono truncate hover:text-glow-red"
+            title="Copy session id"
+          >
+            <span>{id}</span>
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+          </button>
         </div>
         <p class="mt-0.5 text-xs text-ink-muted">
           Plain-English tasks → agent plans intents → your browser drives them, in real time
@@ -997,6 +1009,28 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         }
       });
     });
+
+    // 2026-05-22 — copy-session-id helper. Useful for support
+    // tickets ("my session ord_… is stuck"). Visible affordance:
+    // hover reveals the copy icon next to the truncated id.
+    const copyIdBtn = document.querySelector('[data-copy-session-id]');
+    if (copyIdBtn) {
+      copyIdBtn.addEventListener('click', async () => {
+        const id = copyIdBtn.getAttribute('data-id') ?? '';
+        if (!id || !navigator.clipboard) return;
+        try {
+          await navigator.clipboard.writeText(id);
+          const span = copyIdBtn.querySelector('span');
+          const original = span ? span.textContent : id;
+          if (span) span.textContent = 'copied ✓';
+          setTimeout(() => {
+            if (span) span.textContent = original;
+          }, 1500);
+        } catch (_) {
+          /* swallow */
+        }
+      });
+    }
 
     paintMode();
     void hydrateFromServer();
