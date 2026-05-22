@@ -127,11 +127,15 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   description="How Driftstack compares to Browserless, Bright Data, ScrapingBee, and Browserbase. WebKit source-level fork vs Chromium. iPhone Safari vs desktop. Concurrent caps vs per-call metering."
 >
   <!-- Hero -->
-  <section class="bg-gradient-to-b from-surface-base to-surface-raised">
-    <div class="mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
+  <section class="relative overflow-hidden bg-gradient-to-b from-surface-base to-surface-raised">
+    {/* 2026-05-22 — hero-glow atmosphere (matches index + pricing). */}
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
       <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Comparison</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl">
-        How Driftstack compares.
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl">
+        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+          How Driftstack compares.
+        </span>
       </h1>
       <p class="mt-6 max-w-prose text-lg text-ink-secondary">
         Driftstack and the platforms below all give code or humans a remote
