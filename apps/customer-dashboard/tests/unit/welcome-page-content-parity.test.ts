@@ -61,12 +61,13 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     expect(body).toMatch(
       /We'll send you to Stripe to confirm payment\. Your card details\s+stay between you and Stripe — we never see them/,
     );
-    // Step 2 — first session = iPhone Safari instance on the EU fleet.
-    // 2026-05-16 honesty pass: "a real iPhone Safari instance" → "an
-    // iPhone Safari instance" (drop "real" implying literal binary;
-    // surrounding context establishes WebKit-on-our-fleet posture).
+    // Step 2 — first session = iPhone Safari instance with optional
+    // proxy/VPN egress. 2026-05-16 honesty pass dropped "real"; 2026-
+    // 05-22 EU-fleet phrasing replaced with SOCKS5/OpenVPN/WireGuard
+    // capability claim (founder direction: customers care about proxy
+    // capabilities, not data-center location).
     expect(body).toMatch(
-      /you'll create your first session — an iPhone\s+Safari instance running on our EU fleet/,
+      /you'll create your first session — an iPhone\s+Safari instance with optional SOCKS5 \/ OpenVPN \/ WireGuard\s+egress per profile/,
     );
     // Step 3 — first API key auto-created + revocable.
     expect(body).toMatch(

@@ -61,10 +61,10 @@ describe('W741 dashboard first-session V-184a + V-501 parity', () => {
     );
   });
 
-  it("'iOS Safari instance' canonical product claim pinned + EU-fleet clarification (2026-05-16 honesty pass: 'a real iOS Safari instance' → 'an iOS Safari instance' since we run a WebKit fork, not the literal Safari binary; matches the welcome.astro + marketing-site rewrite). 'same WebKit, same fingerprint surface as a physical iPhone' wording preserved.", () => {
+  it("'iOS Safari instance' canonical product claim pinned (2026-05-16 honesty pass: 'a real iOS Safari instance' → 'an iOS Safari instance'; 2026-05-22 — EU-fleet phrasing dropped per founder direction). 'same WebKit, same fingerprint surface as a physical iPhone' wording preserved.", () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /A session is an iOS Safari instance running on Driftstack's\s+EU fleet — same WebKit, same fingerprint surface as a physical\s+iPhone/,
+      /A session is an iOS Safari instance running on Driftstack —\s+same WebKit, same fingerprint surface as a physical iPhone/,
     );
     expect(p).not.toMatch(/A session is a real iOS Safari instance/);
   });

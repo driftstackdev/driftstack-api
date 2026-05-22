@@ -127,8 +127,10 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
     expect(w).toMatch(
       /We'll send you to Stripe to confirm payment\. Your card details\s*\n\s+stay between you and Stripe — we never see them/,
     );
+    // 2026-05-22 — EU-fleet phrasing replaced with proxy capability
+    // claim (SOCKS5/OpenVPN/WireGuard per profile).
     expect(w).toMatch(
-      /Back here, you'll create your first session — an iPhone\s*\n\s+Safari instance running on our EU fleet/,
+      /Back here, you'll create your first session — an iPhone\s*\n\s+Safari instance with optional SOCKS5 \/ OpenVPN \/ WireGuard\s*\n\s+egress per profile/,
     );
     expect(w).toMatch(
       /We'll create your first API key automatically\. You can revoke\s*\n\s+or rotate it any time on the API keys page/,

@@ -88,12 +88,12 @@ describe('W492.C apps/customer-dashboard/src/pages/first-session.astro content p
     );
   });
 
-  it("Key-mint + session framing (2026-05-16 enhancement-review A2 + A3 + honesty pass): key-mint copy expanded with plain-English 'a secret token your code uses to call the SDK' + safe-storage hints (1Password / git-ignored .env / similar); session copy: 'an iOS Safari instance running on Driftstack's EU fleet' (drops 'a real iOS Safari instance' overclaim per the honesty pass) + 'same WebKit, same fingerprint surface as a physical iPhone' preserved.", () => {
+  it("Key-mint + session framing (2026-05-16 honesty pass + 2026-05-22 EU-fleet copy removed per founder direction). Key-mint copy: 'a secret token your code uses to call the SDK' + safe-storage hints (1Password / git-ignored .env). Session copy: 'an iOS Safari instance running on Driftstack' (drops 'real' overclaim AND drops 'EU fleet' — customers care about proxy capabilities, not data-center location).", () => {
     expect(body).toMatch(
       /We'll create your first <strong>API key<\/strong> in the background —\s*\n?\s*a secret token your code uses to call the SDK\. It's shown once on\s*\n?\s*the next page; copy it somewhere safe \(1Password, a git-ignored/,
     );
     expect(body).toMatch(
-      /A session is an iOS Safari instance running on Driftstack's\s+EU fleet — same WebKit, same fingerprint surface as a physical\s+iPhone\./,
+      /A session is an iOS Safari instance running on Driftstack —\s+same WebKit, same fingerprint surface as a physical iPhone\./,
     );
     expect(body).not.toMatch(/A session is a real iOS Safari instance/);
   });
