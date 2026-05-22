@@ -692,6 +692,41 @@ const apiBaseUrl = resolveApiBaseUrl();
           const bub = pendingTurnEl.querySelector('div:last-child');
           if (bub) bub.textContent = replyText;
         }
+        // 2026-05-22 — render the cost badge below the bubble when the
+        // response carries usage telemetry. "$0.0023 · 145 tokens"
+        // shape; pulled from body.usage (V-666.AI cost surfacing).
+        // Deterministic decomposers omit usage — badge skipped.
+        if (pendingTurnEl && body.usage && typeof body.usage === 'object') {
+          const u = body.usage;
+          const cents = typeof u.cost_usd_cents === 'number' ? u.cost_usd_cents : null;
+          const inTok = typeof u.anthropic_input_tokens === 'number' ? u.anthropic_input_tokens : 0;
+          const outTok = typeof u.anthropic_output_tokens === 'number' ? u.anthropic_output_tokens : 0;
+          const tokTotal = inTok + outTok;
+          if (cents !== null || tokTotal > 0) {
+            const meta = document.createElement('p');
+            meta.className = 'mt-1 text-[10px] font-mono text-ink-muted';
+            const parts = [];
+            if (cents !== null) parts.push('$' + (cents / 100).toFixed(4));
+            if (tokTotal > 0) parts.push(tokTotal.toString() + ' tokens');
+            if (typeof u.model === 'string' && u.model.length > 0) parts.push(u.model);
+            meta.textContent = parts.join(' · ');
+            pendingTurnEl.appendChild(meta);
+
+            // 2026-05-22 — running session-cost tally lives in the
+            // ChatHeader's ModeStatus slot. Bumps on every turn; the
+            // page refresh resets it (per-session, not per-account).
+            if (cents !== null) {
+              window.__driftstackSessionCostCents =
+                (window.__driftstackSessionCostCents || 0) + cents;
+              const statusSlot = root.querySelector('[data-component="ModeStatus"]');
+              if (statusSlot) {
+                statusSlot.textContent =
+                  'AI is driving · session cost $' +
+                  (window.__driftstackSessionCostCents / 100).toFixed(4);
+              }
+            }
+          }
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (pendingTurnEl) {

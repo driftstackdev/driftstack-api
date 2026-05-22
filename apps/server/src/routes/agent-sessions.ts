@@ -21,6 +21,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { SendInputEventRequestSchema } from '@driftstack/api-types';
 import type { AgentRuntime } from '../services/agent-runtime.js';
+import type { DecomposeUsage } from '../services/agent-decomposer.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
@@ -1190,6 +1191,36 @@ export function registerAgentSessionsRoutes(
           session: publicAgentSession(result.session),
         };
       }
+      // 2026-05-22 — V-666.AI cost telemetry per turn. The decomposer
+      // already attaches a `usage` block (input/output tokens + cost
+      // cents + model id) for Claude-backed runs; deterministic
+      // decomposers leave it undefined. Surface the block on every
+      // response shape so the customer-dashboard chat UI can render
+      // a per-turn "$0.0023 · 145 tokens" badge. Undefined-safe: the
+      // SDK + UI render '—' when usage is absent.
+      function publicUsage(u: DecomposeUsage | undefined):
+        | {
+            decomposer_kind: 'claude' | 'deterministic';
+            anthropic_input_tokens?: number;
+            anthropic_output_tokens?: number;
+            cost_usd_cents?: number;
+            model?: string;
+          }
+        | undefined {
+        if (!u) return undefined;
+        return {
+          decomposer_kind: u.decomposerKind,
+          ...(u.anthropicInputTokens !== undefined
+            ? { anthropic_input_tokens: u.anthropicInputTokens }
+            : {}),
+          ...(u.anthropicOutputTokens !== undefined
+            ? { anthropic_output_tokens: u.anthropicOutputTokens }
+            : {}),
+          ...(u.costUsdCents !== undefined ? { cost_usd_cents: u.costUsdCents } : {}),
+          ...(u.model !== undefined ? { model: u.model } : {}),
+        };
+      }
+
       if (result.kind === 'plan-executed') {
         // Narrow the decomposer to the plan variant — TS can't infer
         // it across the runTurn discriminant without a manual branch.
@@ -1197,26 +1228,32 @@ export function registerAgentSessionsRoutes(
         if (plan.kind !== 'plan') {
           throw new Error('runtime invariant: plan-executed without plan decomposer');
         }
+        const usage = publicUsage(plan.usage);
         return {
           kind: result.kind,
           session: publicAgentSession(result.session),
           intents: plan.intents,
           results: result.executor.results,
           ok: result.executor.ok,
+          ...(usage !== undefined ? { usage } : {}),
         };
       }
       if (result.kind === 'clarify') {
+        const usage = publicUsage(result.decomposer.usage);
         return {
           kind: result.kind,
           session: publicAgentSession(result.session),
           clarifying_question: result.decomposer.clarifyingQuestion,
+          ...(usage !== undefined ? { usage } : {}),
         };
       }
       // refuse
+      const usage = publicUsage(result.decomposer.usage);
       return {
         kind: result.kind,
         session: publicAgentSession(result.session),
         refuse_reason: result.decomposer.refuseReason,
+        ...(usage !== undefined ? { usage } : {}),
       };
     },
   );
