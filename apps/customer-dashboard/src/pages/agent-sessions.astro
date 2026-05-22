@@ -62,6 +62,25 @@ const apiBaseUrl = resolveApiBaseUrl();
       Sign in to start an agent session.
     </div>
 
+    {/* 2026-05-22 — recent sessions history. Auto-populated by the
+        inline script from GET /v1/agent-sessions (Slice 3 list
+        endpoint). Hidden when the customer has no sessions yet so
+        the create-form below is the primary CTA on first visit. */}
+    <section
+      data-section="recent-sessions"
+      class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised/50 p-5"
+    >
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold uppercase tracking-widest text-ink-muted">
+          Recent agent sessions
+        </h2>
+        <span data-recent-count class="text-xs text-ink-muted">—</span>
+      </div>
+      <ul data-recent-list class="mt-4 divide-y divide-white/5">
+        {/* Rows rendered by JS — see the script section. */}
+      </ul>
+    </section>
+
     <div class="grid gap-6 lg:grid-cols-3">
       <!-- Main panel (sub-slices 8.25 + 8.26 + 8.27 + 8.28.b live here). -->
       <section class="lg:col-span-2 space-y-6">
@@ -264,6 +283,93 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (typeof window.dashboardHydrated === 'function') {
             window.dashboardHydrated();
           }
+        });
+
+      // 2026-05-22 — recent agent sessions list. Fetches the new
+      // GET /v1/agent-sessions endpoint, renders each row as a
+      // clickable link to the workbench detail page. Hidden when
+      // the customer has no past sessions (lets the create form
+      // dominate on first visit).
+      const recentSection = root.querySelector('[data-section="recent-sessions"]');
+      const recentList = root.querySelector('[data-recent-list]');
+      const recentCount = root.querySelector('[data-recent-count]');
+      function escHtmlForRecent(s) {
+        return String(s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+      function fmtRecentAge(iso) {
+        if (!iso) return '—';
+        const ms = Date.now() - new Date(iso).getTime();
+        if (!Number.isFinite(ms) || ms < 0) return '—';
+        const min = Math.floor(ms / 60000);
+        if (min < 60) return min.toString() + 'm ago';
+        const hr = Math.floor(min / 60);
+        if (hr < 48) return hr.toString() + 'h ago';
+        const days = Math.floor(hr / 24);
+        return days.toString() + 'd ago';
+      }
+      const STATUS_BADGE = {
+        active: 'bg-emerald-500/15 text-emerald-300',
+        closed: 'bg-slate-700/40 text-slate-300',
+        paused: 'bg-amber-500/15 text-amber-300',
+        errored: 'bg-rose-500/15 text-rose-300',
+      };
+      fetch(apiBaseUrl + '/v1/agent-sessions', {
+        headers: { authorization: 'Bearer ' + token },
+      })
+        .then((r) => (r.ok ? r.json() : Promise.resolve({ data: [] })))
+        .then((body) => {
+          const data = Array.isArray(body.data) ? body.data : [];
+          if (data.length === 0 || !recentList || !recentSection) return;
+          if (recentCount)
+            recentCount.textContent =
+              data.length.toString() + ' session' + (data.length === 1 ? '' : 's');
+          recentList.innerHTML = data
+            .map((s) => {
+              const id = escHtmlForRecent(s.id || '');
+              const mode = escHtmlForRecent(s.mode || 'ai');
+              const status = escHtmlForRecent(s.status || 'active');
+              const badge =
+                STATUS_BADGE[status] || 'bg-slate-700/40 text-slate-300';
+              const age = escHtmlForRecent(fmtRecentAge(s.created_at));
+              const tokens =
+                typeof s.tokens_used === 'number'
+                  ? s.tokens_used.toLocaleString()
+                  : '—';
+              return (
+                '<li class="py-3 flex items-center justify-between gap-4 hover:bg-white/5 px-2 -mx-2 rounded">' +
+                '<a href="/agent-sessions/' +
+                id +
+                '" class="flex-1 min-w-0">' +
+                '<p class="font-mono text-xs text-ink-muted truncate">' +
+                id +
+                '</p>' +
+                '<p class="mt-0.5 text-xs text-ink-muted">' +
+                age +
+                ' · ' +
+                tokens +
+                ' tokens</p>' +
+                '</a>' +
+                '<span class="inline-flex items-center gap-1.5 rounded-full bg-glow-red/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-glow-red">' +
+                mode +
+                '</span>' +
+                '<span class="inline-flex items-center rounded-full ' +
+                badge +
+                ' px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide">' +
+                status +
+                '</span>' +
+                '</li>'
+              );
+            })
+            .join('');
+          recentSection.classList.remove('hidden');
+        })
+        .catch(() => {
+          /* swallow — feature might be 503 in this deployment */
         });
 
       // v2-#8 Wave 2.C sub-slice 8.25 — create-session form wiring.

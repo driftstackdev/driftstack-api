@@ -445,6 +445,30 @@ export function registerAgentSessionsRoutes(
     },
   );
 
+  // 2026-05-22 — list customer's agent sessions, newest first. Used
+  // by the dashboard's /agent-sessions page to render a history.
+  // Returns the public envelope (no transcript inline; the detail
+  // route serves that). Hard-capped at 100 results per call; the
+  // dashboard pages locally if a customer has more than that.
+  app.get(
+    '/v1/agent-sessions',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const all = await sessions.listByAccount(ctx.account.id);
+      // Sort newest-first by createdAt for the dashboard's "recent
+      // sessions" rendering. The repo doesn't guarantee order.
+      const sorted = [...all].sort((a, b) => {
+        const aT = a.createdAt instanceof Date ? a.createdAt.getTime() : 0;
+        const bT = b.createdAt instanceof Date ? b.createdAt.getTime() : 0;
+        return bT - aT;
+      });
+      return {
+        data: sorted.slice(0, 100).map((rec) => publicAgentSession(rec)),
+      };
+    },
+  );
+
   app.get<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
