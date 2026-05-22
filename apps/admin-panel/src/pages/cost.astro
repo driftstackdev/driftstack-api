@@ -221,17 +221,46 @@ const apiBaseUrl = resolveApiBaseUrl();
     const subprocessorCents =
       Number(breakdown.emailCents ?? 0) + Number(breakdown.llmCents ?? 0);
     accountResult.classList.remove('hidden');
+    // 2026-05-22 — visual breakdown. Per-dimension horizontal bars
+    // sized by share of total + threshold-state coloring. Pure HTML/
+    // CSS — no chart lib dependency. Bars sized by inline width
+    // percentage; minimum 4% so a $0.01 dimension still renders a
+    // visible sliver.
+    const total = Math.max(1, Number(breakdown.totalCents ?? 0));
+    function bar(label, value) {
+      const v = Number(value ?? 0);
+      const pct = Math.max(4, Math.round((v / total) * 100));
+      return (
+        '<div class="flex items-center gap-3 text-xs">' +
+        `<span class="w-24 shrink-0 text-slate-600">${escapeHtml(label)}</span>` +
+        '<div class="flex-1 h-4 rounded-full bg-slate-100 overflow-hidden">' +
+        `<div class="h-full bg-oxblood-700/70" style="width: ${pct.toString()}%"></div>` +
+        '</div>' +
+        `<span class="font-mono w-20 text-right text-slate-900">${cents(v)}</span>` +
+        '</div>'
+      );
+    }
+    const STATE_BADGE = {
+      'under-soft': 'bg-emerald-100 text-emerald-800',
+      between: 'bg-amber-100 text-amber-800',
+      'over-hard': 'bg-rose-100 text-rose-800',
+    };
+    const stateClass =
+      STATE_BADGE[breakdown.thresholdState] || 'bg-slate-100 text-slate-600';
     accountResult.innerHTML =
-      '<div class="space-y-2 text-sm">' +
+      '<div class="space-y-4">' +
       `<p class="font-mono text-xs text-slate-500">account_id: ${escapeHtml(body.account_id ?? body.accountId ?? '—')} · cycle: ${escapeHtml(body.billing_cycle ?? body.billingCycle ?? '—')} · tier: ${escapeHtml(body.tier ?? '—')}</p>` +
-      `<p class="text-base font-medium text-slate-900">Total: ${cents(breakdown.totalCents)}</p>` +
-      '<dl class="grid grid-cols-2 gap-2 text-xs">' +
-      `<div><dt class="text-slate-500">Compute</dt><dd class="font-mono text-slate-900">${cents(breakdown.computeCents)}</dd></div>` +
-      `<div><dt class="text-slate-500">Storage</dt><dd class="font-mono text-slate-900">${cents(breakdown.storageCents)}</dd></div>` +
-      `<div><dt class="text-slate-500">Egress</dt><dd class="font-mono text-slate-900">${cents(breakdown.egressCents)}</dd></div>` +
-      `<div><dt class="text-slate-500">Sub-processor</dt><dd class="font-mono text-slate-900">${cents(subprocessorCents)}</dd></div>` +
-      '</dl>' +
-      `<p class="text-xs text-slate-500">soft warn ${cents(thresholds.softCents)} · hard cap ${cents(thresholds.hardCents)} · state ${escapeHtml(breakdown.thresholdState ?? '—')}</p>` +
+      '<div class="flex items-baseline justify-between">' +
+      `<p class="text-2xl font-semibold text-slate-900">${cents(breakdown.totalCents)}</p>` +
+      `<span class="inline-flex items-center rounded-full ${stateClass} px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide">${escapeHtml(breakdown.thresholdState ?? '—')}</span>` +
+      '</div>' +
+      '<div class="space-y-2">' +
+      bar('Compute', breakdown.computeCents) +
+      bar('Storage', breakdown.storageCents) +
+      bar('Egress', breakdown.egressCents) +
+      bar('Sub-processor', subprocessorCents) +
+      '</div>' +
+      `<p class="text-xs text-slate-500">Soft warn ${cents(thresholds.softCents)} · hard cap ${cents(thresholds.hardCents)}</p>` +
       '</div>';
   }
 
