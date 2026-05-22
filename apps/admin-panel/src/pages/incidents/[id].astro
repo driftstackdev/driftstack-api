@@ -186,6 +186,50 @@ const isResolved = incident.status === 'resolved';
         </>
       )
     }
+
+    {/* 2026-05-22 — admin reopen flow for false-alarm correction
+        or regression on a previously-resolved issue. Only shows
+        when incident is in 'resolved' state. Same body shape as
+        the resolve form (just a message); audit-action
+        'incident.reopened' via migration 0063. */}
+    {
+      isResolved && (
+        <section class="dashboard-card mb-6 border-amber-200 bg-amber-50/30">
+          <h2 class="text-lg font-semibold text-slate-900">Reopen incident</h2>
+          <p class="mt-2 text-sm text-slate-600">
+            Reverts to <code>investigating</code> + clears
+            <code>resolved_at</code>. Use when the issue resurfaced after
+            resolution OR the original resolve was a false alarm. Audit-
+            logged.
+          </p>
+          <form id="reopen-form" class="mt-4 space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-700" for="reopen-message">
+                Reason for reopen
+              </label>
+              <textarea
+                id="reopen-message"
+                name="message"
+                rows="3"
+                required
+                minlength="3"
+                maxlength="2000"
+                placeholder="Recurrence detected: same probe failing again."
+                class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-amber-700 focus:outline-none focus:ring-1 focus:ring-amber-700"
+              />
+            </div>
+            <div class="flex justify-end">
+              <button
+                type="submit"
+                class="rounded-md bg-amber-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-amber-800"
+              >
+                Reopen incident
+              </button>
+            </div>
+          </form>
+        </section>
+      )
+    }
   </div>
 
   <script is:inline define:vars={{ apiBaseUrl, incidentId: incident.id }}>
@@ -262,6 +306,10 @@ const isResolved = incident.status === 'resolved';
 
       bind('add-update-form', '/updates', true);
       bind('resolve-form', '/resolve', false);
+      // 2026-05-22 — incident reopen handler. Same body shape as
+      // resolve (just a message field). bind() handles the POST +
+      // page reload pattern.
+      bind('reopen-form', '/reopen', false);
     })();
   </script>
 </AdminLayout>

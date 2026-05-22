@@ -170,6 +170,9 @@ export const adminAuditAction = pgEnum('admin_audit_action', [
   'incident.created',
   'incident.updated',
   'incident.resolved',
+  // 2026-05-22 — admin reopen for false-alarm correction / regression
+  // discovery (migration 0063).
+  'incident.reopened',
   // V-295c3-tombstone: status-page email subscriber admin actions.
   'status_subscriber.force_unsubscribed',
   'status_subscriber.purged',

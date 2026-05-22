@@ -174,4 +174,41 @@ export class DrizzleIncidentsRepo implements IncidentsRepo {
       return { incident: toRow(incidentRow), update: toUpdateRow(updateRow) };
     });
   }
+
+  // 2026-05-22 — admin reopen (false-alarm correction, regression
+  // discovery on a previously-resolved issue). Clears resolved_at,
+  // sets status back to 'investigating', + posts a timeline update
+  // explaining the reopen so the audit trail captures the why.
+  async reopen(input: {
+    incidentId: string;
+    message: string;
+    postedByAdminId: string;
+    postedByAdminKeyId: string;
+  }): Promise<{ incident: IncidentRow; update: IncidentUpdateRow }> {
+    return this.database.db.transaction(async (tx) => {
+      const [updateRow] = await tx
+        .insert(incidentUpdates)
+        .values({
+          incidentId: input.incidentId,
+          message: input.message,
+          status: 'investigating',
+          postedByAdminId: input.postedByAdminId,
+          postedByAdminKeyId: input.postedByAdminKeyId,
+        })
+        .returning();
+      if (!updateRow) throw new Error('incident_updates insert returned no row');
+
+      const now = new Date();
+      const [incidentRow] = await tx
+        .update(incidents)
+        .set({ status: 'investigating', resolvedAt: null, updatedAt: now })
+        .where(eq(incidents.id, input.incidentId))
+        .returning();
+      if (!incidentRow) {
+        throw new NotFoundError(`Incident ${input.incidentId} not found.`);
+      }
+
+      return { incident: toRow(incidentRow), update: toUpdateRow(updateRow) };
+    });
+  }
 }

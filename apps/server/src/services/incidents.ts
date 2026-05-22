@@ -101,6 +101,15 @@ export interface IncidentsRepo {
   resolve(
     input: ResolveIncidentInput,
   ): Promise<{ incident: IncidentRow; update: IncidentUpdateRow }>;
+  /** 2026-05-22 — admin reopen (false-alarm correction, regression
+   *  discovery on a previously-resolved issue). Clears resolved_at,
+   *  sets status back to 'investigating', + posts a timeline update. */
+  reopen(input: {
+    incidentId: string;
+    message: string;
+    postedByAdminId: string;
+    postedByAdminKeyId: string;
+  }): Promise<{ incident: IncidentRow; update: IncidentUpdateRow }>;
   /**
    * V-295b — find the open auto-incident for a given probe target,
    * or null. Used by the poller to decide auto-resolve vs. no-op.
@@ -206,6 +215,19 @@ export class IncidentsService {
       });
     }
     return result;
+  }
+
+  /** 2026-05-22 — admin reopen. No lifecycle hook (no fan-out
+   *  notifications) — the customer-visible status page will reflect
+   *  the new investigating state on next poll. Audit-log at the
+   *  route layer covers the operator trail. */
+  async reopen(input: {
+    incidentId: string;
+    message: string;
+    postedByAdminId: string;
+    postedByAdminKeyId: string;
+  }): Promise<{ incident: IncidentRow; update: IncidentUpdateRow }> {
+    return this.repo.reopen(input);
   }
 
   /** V-295b — auto-poller hook. */

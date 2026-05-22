@@ -257,6 +257,53 @@ export function registerAdminIncidentsRoutes(
     },
   );
 
+  // 2026-05-22 — admin reopen. Same body shape as resolve (just a
+  // `message` field explaining why); rejects via 409 if the incident
+  // isn't already resolved. Audit-action 'incident.reopened' added
+  // in migration 0063.
+  app.post<{ Params: { id: string } }>(
+    '/v1/admin/incidents/:id/reopen',
+    {
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+    },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const id = uuidFromPrefixedId(request.params.id, 'inc');
+      const parsed = ResolveIncidentRequestSchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+
+      // Reject reopen when incident isn't resolved — avoids accidental
+      // status churn (e.g. operator clicking the wrong button on an
+      // active incident).
+      const current = await incidentsService.get(id);
+      if (current.incident.status !== 'resolved') {
+        throw new ValidationError({
+          formErrors: [
+            `Incident is in status '${current.incident.status}'; only resolved incidents can be reopened.`,
+          ],
+          fieldErrors: {},
+        });
+      }
+
+      let result: { incident: IncidentRow; update: IncidentUpdateRow } | null = null;
+      await withAudit(request, 'incident.reopened', `inc_${id}`, parsed.data, async () => {
+        result = await incidentsService.reopen({
+          incidentId: id,
+          message: parsed.data.message,
+          postedByAdminId: ctx.account.id,
+          postedByAdminKeyId: ctx.apiKey.id,
+        });
+      });
+      if (!result) throw new Error('incident reopen produced no result');
+      const reopened = result as { incident: IncidentRow; update: IncidentUpdateRow };
+      return reply.code(200).send({
+        incident: publicIncident(reopened.incident),
+        update: publicIncidentUpdate(reopened.update),
+      });
+    },
+  );
+
   // ── PUBLIC GET /v1/status/incidents ────────────────────────────────────
   // The status page consumes this; no auth required, only public=true rows
   // surfaced. Limited to the last 30 days by default.
