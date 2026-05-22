@@ -13,16 +13,17 @@ import StatusBadge from '../../components/StatusBadge.astro';
   description="Driftstack trust center: security architecture, sub-processors, legal agreements, incident history, and live platform status. One bookmark for everything compliance-relevant."
 >
   <!-- Hero -->
-  <section class="bg-gradient-to-b from-surface-base to-surface-raised">
+  <section class="relative overflow-hidden bg-gradient-to-b from-surface-base to-surface-raised">
+    <div class="hero-glow" aria-hidden="true"></div>
     <div class="mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
       <div class="flex flex-wrap items-start justify-between gap-6">
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Trust center
           </p>
-          <h1 class="mt-3 text-4xl font-semibold tracking-tight text-ink-primary md:text-5xl">
+          <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
             One bookmark for everything compliance-relevant.
-          </h1>
+          </span></h1>
           <p class="mt-6 max-w-prose text-lg text-ink-secondary">
             Security architecture, sub-processor list, legal agreements,
             and incident history — published in one place. Buyer
