@@ -11,7 +11,8 @@
 //     events timeline + listAll() async iterator.
 //   • Cancel 409 (past-pending) / 404 (not-found-or-other-account).
 //   • Crypto non-refundable + /legal/refunds cross-reference.
-//   • crypto.order.paid / failed not yet subscribable.
+//   • crypto.order.paid / failed are now subscribable (2026-05-22 —
+//     wired end-to-end via WebhooksService emitter sink).
 //   • End-to-end example at packages/sdk-typescript/examples/
 //     crypto-checkout.ts.
 
@@ -93,12 +94,12 @@ describe('W510.A apps/marketing-site/src/pages/docs/sdk-typescript-crypto-orders
     );
   });
 
-  it("crypto.order.* not-yet-subscribable + verifyWebhookSignature for live event types pinned: 'crypto.order.paid / crypto.order.failed events are emitted server-side but not yet subscribable' + 'The SDK also ships verifyWebhookSignature for the (already-live) session + quota + api-key webhook event types.' — pinned so the not-yet-subscribable framing + the 3-live-event-domain (session + quota + api-key) verifyWebhookSignature commitment survive (drift to dropping the 3-live-domain list would let customers think other webhooks are also live)", () => {
+  it("crypto.order.* now-subscribable + verifyWebhookSignature for every live event type pinned: 'crypto.order.paid / crypto.order.failed events are emitted server-side and are now subscribable' + 'The SDK ships verifyWebhookSignature for every live event type, including the now-live crypto.order.* events alongside the session + quota + api-key + egress-capability event domains.' — pinned so the now-subscribable framing + the verifyWebhookSignature-every-domain commitment survive (drift to dropping any live-domain would let customers miss a webhook event family)", () => {
     expect(body).toMatch(
-      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*\n?\s*events are emitted server-side but not yet subscribable/,
+      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*\n?\s*events are emitted server-side and are now subscribable/,
     );
     expect(body).toMatch(
-      /<code>verifyWebhookSignature<\/code> for the \(already-live\)\s*\n?\s*session \+ quota \+ api-key webhook event types\./,
+      /<code>verifyWebhookSignature<\/code> for every live event type,\s*\n?\s*including the now-live crypto\.order\.\* events alongside the\s*\n?\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
     );
   });
 

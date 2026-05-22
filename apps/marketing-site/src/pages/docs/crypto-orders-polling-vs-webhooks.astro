@@ -2,15 +2,15 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
 // V-666.BV — practitioner guide on how to detect crypto-order state
-// changes. Webhooks for `crypto.order.*` are roadmap (not in
-// SubscribableWebhookEventTypeSchema today) so this page primarily
-// documents the polling pattern + describes the hybrid pattern as
-// the planned end-state.
+// changes. As of 2026-05-22 `crypto.order.paid` and
+// `crypto.order.failed` are in SubscribableWebhookEventTypeSchema,
+// so this page now documents both the polling pattern and the
+// (now-shipped) hybrid webhook + reconciliation pattern.
 ---
 
 <BaseLayout
   title="Detecting order state changes — Driftstack"
-  description="How to detect Driftstack crypto-order state changes today (polling) and the planned webhook-driven hybrid once crypto.order.* events graduate."
+  description="How to detect Driftstack crypto-order state changes — polling, the now-live crypto.order.paid / crypto.order.failed webhook events, and the recommended hybrid pattern."
 >
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
     <h1>Detecting order state changes</h1>
@@ -19,22 +19,25 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       A crypto order's status moves between
       <code>pending</code> → <code>confirming</code> →
       <code>paid</code> (or <code>failed</code> /
-      <code>partial</code> / <code>cancelled</code>). Today, the
-      only customer-facing way to learn about those changes is to
-      poll <code>GET /v1/billing/crypto-orders</code>. A webhook
-      surface for <code>crypto.order.*</code> events is on the
-      roadmap — see
+      <code>partial</code> / <code>cancelled</code>). Two
+      customer-facing patterns are supported: poll
+      <code>GET /v1/billing/crypto-orders</code>, or subscribe a
+      webhook endpoint to the now-live
+      <code>crypto.order.paid</code> /
+      <code>crypto.order.failed</code> events. See
       <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>
-      for status.
+      for the event payload contract.
     </p>
 
     <h2>Today: polling</h2>
     <p>
-      <code>crypto.order.paid</code> / <code>crypto.order.failed</code>
-      are emitted server-side but are <strong>not yet</strong> in
-      <code>SubscribableWebhookEventTypeSchema</code>, so they
-      cannot be the target of a <code>POST /v1/webhooks</code>
-      subscription. Until they graduate, every integration polls.
+      Polling stays a first-class path for backfill,
+      reconciliation, and any environment where you cannot accept
+      an inbound HTTPS callback. Both
+      <code>crypto.order.paid</code> and
+      <code>crypto.order.failed</code> are also subscribable via
+      <code>POST /v1/webhooks</code> — see the hybrid section
+      below for the recommended pattern.
     </p>
     <pre><code>{`// Watch a single order until it settles.
 for (;;) {
@@ -89,42 +92,48 @@ for (;;) {
       pattern.
     </p>
 
-    <h2>Roadmap: hybrid (webhooks + reconciliation polling)</h2>
+    <h2>Recommended: hybrid (webhooks + reconciliation polling)</h2>
     <p>
-      Once <code>crypto.order.*</code> events are added to
-      <code>SubscribableWebhookEventTypeSchema</code>, the
-      recommended pattern will be hybrid: webhooks for
-      sub-second notification, nightly polling for backfill.
-      Until then, integrators that need sub-second latency
-      tighten the poll interval rather than wait for the webhook
-      surface.
+      Both <code>crypto.order.paid</code> and
+      <code>crypto.order.failed</code> are in
+      <code>SubscribableWebhookEventTypeSchema</code>. The
+      recommended pattern is hybrid: webhooks for sub-second
+      notification, periodic polling as a safety net for the
+      rare delivery that does not land within the retry window.
     </p>
-    <pre><code>{`// Roadmap shape — once crypto.order.paid is subscribable.
-// Today this event is not deliverable; see /docs/webhooks-crypto-events.
+    <pre><code>{`// Subscribe both terminal-state events.
+await client.webhooks.create({
+  url: 'https://example.com/webhooks/driftstack',
+  events: ['crypto.order.paid', 'crypto.order.failed'],
+});
+
 app.post('/webhooks/driftstack', verifySignature, async (req, res) => {
   const event = req.body;
   if (event.type === 'crypto.order.paid') {
     await db.markOrderPaid(event.data.order_id);
+  } else if (event.type === 'crypto.order.failed') {
+    await db.markOrderFailed(event.data.order_id);
   }
   res.status(200).end();
 });`}</code></pre>
 
-    <h2>Idempotency planning for the hybrid future</h2>
+    <h2>Idempotency for hybrid receivers</h2>
     <p>
-      When webhook delivery for <code>crypto.order.*</code> ships,
-      receivers will need to be idempotent — the retry policy can
-      deliver the same event more than once. Key your local DB
-      upsert on <code>(order_id, status)</code> so duplicate
+      Webhook delivery for <code>crypto.order.*</code> follows the
+      same retry policy as the rest of the surface, so receivers
+      must be idempotent — the same event may be delivered more
+      than once. Key your local DB upsert on
+      <code>(order_id, status)</code> so duplicate
       <code>crypto.order.paid</code> events for the same order are
       a no-op. See
       <a href="/docs/webhooks">/docs/webhooks</a> for the signing
-      scheme + retry schedule that already applies to the live
-      session / quota / api-key events.
+      scheme + retry schedule shared across all subscribable
+      event types.
     </p>
 
     <h2>Related</h2>
     <ul>
-      <li><a href="/docs/webhooks-crypto-events">Crypto webhook events (roadmap)</a></li>
+      <li><a href="/docs/webhooks-crypto-events">Crypto webhook events</a></li>
       <li><a href="/docs/webhooks">Webhook signing + retries</a></li>
       <li><a href="/docs/sdk-typescript-crypto-orders">SDK reference — crypto orders</a></li>
       <li><a href="/docs/billing-crypto-integration-guide">Integration guide</a></li>

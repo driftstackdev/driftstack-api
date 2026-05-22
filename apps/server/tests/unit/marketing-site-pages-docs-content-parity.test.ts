@@ -75,9 +75,9 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     );
   });
 
-  it("Webhooks card framing: 'All five event types — session.completed, session.failed, api_key.revoked, quota.warning_80pct, quota.exceeded — with payload shapes and HMAC-SHA256 verification examples.' — pinned so the canonical 5-event taxonomy + the HMAC-SHA256 signature algorithm stay consistent with the customer-dashboard webhooks page (drift to dropping an event would create marketing↔dashboard inconsistency)", () => {
+  it("Webhooks card framing: 'All seven LIVE event types — session.completed, session.failed, api_key.revoked, quota.warning_80pct, quota.exceeded, crypto.order.paid, crypto.order.failed — with payload shapes and HMAC-SHA256 verification examples.' — pinned so the canonical 7-event LIVE taxonomy + the HMAC-SHA256 signature algorithm stay consistent with the customer-dashboard webhooks page (drift to dropping an event would create marketing↔dashboard inconsistency)", () => {
     expect(body).toMatch(
-      /All five event types — session\.completed, session\.failed,\s*\n?\s*api_key\.revoked, quota\.warning_80pct, quota\.exceeded — with\s*\n?\s*payload shapes and HMAC-SHA256 verification examples\./,
+      /All seven LIVE event types — session\.completed, session\.failed,\s*\n?\s*api_key\.revoked, quota\.warning_80pct, quota\.exceeded,\s*\n?\s*crypto\.order\.paid, crypto\.order\.failed — with payload shapes\s*\n?\s*and HMAC-SHA256 verification examples\./,
     );
   });
 

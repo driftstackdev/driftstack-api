@@ -111,14 +111,16 @@ console.log(receipt.paid_at, receipt.price_cents);`}</code></pre>
     <h2>Listening for settlement</h2>
     <p>
       <code>crypto.order.paid</code> / <code>crypto.order.failed</code>
-      events are emitted server-side but not yet subscribable — see
+      events are emitted server-side and are now subscribable — see
       <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>
-      for the roadmap status. Until they graduate, poll
+      for the payload contract. For integrations without an inbound
+      HTTPS endpoint, poll
       <code>client.cryptoOrders.get(order_id)</code> until
       <code>status</code> transitions to <code>paid</code> or
-      <code>failed</code>. The SDK also ships
-      <code>verifyWebhookSignature</code> for the (already-live)
-      session + quota + api-key webhook event types.
+      <code>failed</code>. The SDK ships
+      <code>verifyWebhookSignature</code> for every live event type,
+      including the now-live crypto.order.* events alongside the
+      session + quota + api-key + egress-capability event domains.
     </p>
 
     <h2>End-to-end example</h2>

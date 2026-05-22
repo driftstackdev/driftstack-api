@@ -15,7 +15,8 @@
 //   • payment_address can be null with provider: 'stub' (no merchant
 //     account yet provisioned for the pair).
 //   • Address window roughly 60 minutes.
-//   • crypto.order.paid + crypto.order.failed NOT yet subscribable.
+//   • crypto.order.paid + crypto.order.failed are now subscribable
+//     (2026-05-22 — wired end-to-end via WebhooksService emitter sink).
 //   • Grant-entitlements-only-on-status-paid commitment.
 //   • Backfill via listAll cursor (V-666.BU) + date-range (V-666.BX).
 //   • Edge-case 4-bullet: wrong amount → partial / address-window-
@@ -86,9 +87,9 @@ describe('W520.B apps/marketing-site/src/pages/docs/billing-crypto-integration-g
     );
   });
 
-  it("Step-3 observe-settlement framing pinned: 'crypto.order.paid and crypto.order.failed are emitted server-side but not yet on the subscribable webhook event list' + poll-GET /v1/billing/crypto-orders/<order_id> until status paid/failed + 5-second polling interval (setTimeout(r, 5000)) + 'Grant entitlements only after observing status === paid.' — pinned so the NOT-subscribable + 5s-poll-interval + grant-only-on-paid commitment survives (drift to granting on confirming would invite premature entitlement)", () => {
+  it("Step-3 observe-settlement framing pinned: 'crypto.order.paid and crypto.order.failed are emitted server-side and are now on the subscribable webhook event list' + poll-GET /v1/billing/crypto-orders/<order_id> until status paid/failed + 5-second polling interval (setTimeout(r, 5000)) + 'Grant entitlements only after observing status === paid.' — pinned so the now-subscribable framing + polling fallback + 5s-poll-interval + grant-only-on-paid commitment survives (drift to granting on confirming would invite premature entitlement)", () => {
     expect(body).toMatch(
-      /<code>crypto\.order\.paid<\/code> and\s*\n?\s*<code>crypto\.order\.failed<\/code> are emitted server-side but\s*\n?\s*not yet on the subscribable webhook event list/,
+      /<code>crypto\.order\.paid<\/code> and\s*\n?\s*<code>crypto\.order\.failed<\/code> are emitted server-side and\s*\n?\s*are now on the subscribable webhook event list/,
     );
     expect(body).toMatch(/async function waitForSettlement\(orderId, apiKey\) \{/);
     expect(body).toMatch(/if \(order\.status === 'paid'\) return order;/);

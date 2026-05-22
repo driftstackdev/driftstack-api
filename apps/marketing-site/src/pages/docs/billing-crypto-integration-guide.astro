@@ -88,10 +88,11 @@ const order = await res.json();`}</code></pre>
     <h2>Step 3 — observe settlement</h2>
     <p>
       <code>crypto.order.paid</code> and
-      <code>crypto.order.failed</code> are emitted server-side but
-      not yet on the subscribable webhook event list — see
+      <code>crypto.order.failed</code> are emitted server-side and
+      are now on the subscribable webhook event list — see
       <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>
-      for the status. Until they graduate, poll
+      for the payload contract. For integrations that cannot
+      accept inbound HTTPS callbacks, poll
       <code>GET /v1/billing/crypto-orders/&lt;order_id&gt;</code>
       until <code>status</code> transitions to <code>paid</code> or
       <code>failed</code>:
@@ -110,10 +111,10 @@ const order = await res.json();`}</code></pre>
 }`}</code></pre>
     <p>
       <strong>Grant entitlements only after observing
-      <code>status === 'paid'</code>.</strong> When the events
-      graduate to the subscribable list this guide will show the
-      switch to a webhook-driven listener; for now the poll is the
-      canonical settlement signal.
+      <code>status === 'paid'</code>.</strong> Whether you arrive
+      at that observation via the now-live webhook or via the
+      polling fallback, the rule is the same: never grant on
+      <code>confirming</code> or <code>partial</code>.
     </p>
 
     <h2>Step 4 — show the customer the receipt</h2>

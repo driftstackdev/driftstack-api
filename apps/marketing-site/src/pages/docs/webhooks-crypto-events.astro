@@ -4,18 +4,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // V-716 — public reference for crypto-payment webhook events.
 //
 // W220.A — accuracy pass. The crypto.order.paid / crypto.order.failed
-// events are emitted server-side (V-666.I / V-666.AN), but they are
-// NOT YET in the SubscribableWebhookEventTypeSchema enum. That means
-// POST /v1/webhooks with `events: ["crypto.order.paid"]` is rejected
-// today with a 400 validation error. The previous revision of this
-// page described the integration as if it were live; this rewrite
-// flags it as roadmap and directs integrators to poll
-// /v1/billing/crypto-orders/:id in the meantime.
+// events are emitted server-side (V-666.I / V-666.AN) AND are in
+// SubscribableWebhookEventTypeSchema as of 2026-05-22 (migration 0064
+// + WebhooksService emitter sink wired in bootstrap). POST /v1/webhooks
+// with events: ["crypto.order.paid"] is accepted today; signed deliveries
+// fire on terminal-state transitions.
 //
 // Watched by apps/server/tests/unit/webhooks-crypto-events-doc-parity.test.ts.
 ---
 
-<BaseLayout title="Crypto-order webhook events — Driftstack" description="Crypto-payment webhook events: planned shape and the polling alternative until they're subscribable.">
+<BaseLayout title="Crypto-order webhook events — Driftstack" description="Subscribe to crypto.order.paid and crypto.order.failed for sub-second notification of crypto-payment settlement.">
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
     <h1>Crypto-order webhook events</h1>
 
@@ -23,28 +21,38 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       The crypto-orders surface emits two event types server-side:
       <code>crypto.order.paid</code> when a customer's payment
       settles, and <code>crypto.order.failed</code> when an order
-      moves to a terminal failure state.
+      moves to a terminal failure state. Both are subscribable via
+      <code>POST /v1/webhooks</code>.
     </p>
 
-    <div class="rounded-md border border-amber-300 bg-amber-50 p-4 not-prose">
-      <p class="m-0 text-sm text-amber-900">
-        <strong>Heads up:</strong> these events are not yet on the
-        public webhook subscription list.
-        <code class="font-mono">POST /v1/webhooks</code> with
-        <code class="font-mono">events: ["crypto.order.paid"]</code>
-        is rejected today with a <code class="font-mono">400</code>
-        validation error. Use the polling alternative below until
-        the events graduate from internal-only.
-      </p>
-    </div>
-
-    <h2>Polling alternative (today)</h2>
+    <h2>Subscribing</h2>
     <p>
-      Poll <code>GET /v1/billing/crypto-orders/&lt;order_id&gt;</code>
-      after you mint a crypto checkout. The order's
-      <code>status</code> transitions to <code>paid</code> or
-      <code>failed</code> on the same triggers that fire the planned
-      events:
+      Subscribe an HTTPS endpoint to one or both event types in a
+      single call:
+    </p>
+    <pre><code>{`POST /v1/webhooks
+Authorization: Bearer ds_live_…
+Content-Type: application/json
+
+{
+  "url": "https://example.com/webhooks/driftstack",
+  "events": ["crypto.order.paid", "crypto.order.failed"]
+}`}</code></pre>
+    <p>
+      Deliveries are signed with the standard
+      <code>X-Driftstack-Signature</code> header described in
+      <a href="/docs/webhooks">/docs/webhooks</a>; the retry policy
+      + secret-rotation grace + DLQ semantics are identical to every
+      other live event family.
+    </p>
+
+    <h2>Polling alternative</h2>
+    <p>
+      For integrations that cannot accept inbound HTTPS callbacks,
+      poll <code>GET /v1/billing/crypto-orders/&lt;order_id&gt;</code>
+      instead. The order's <code>status</code> transitions to
+      <code>paid</code> or <code>failed</code> on the same triggers
+      that fire the webhook events:
     </p>
     <pre><code>{`GET /v1/billing/crypto-orders/ord_…
 Authorization: Bearer ds_live_…
@@ -65,22 +73,21 @@ Authorization: Bearer ds_live_…
       <a href="/docs/billing-crypto-overview">/docs/billing-crypto-overview</a>;
       a deeper polling-vs-webhooks tradeoff piece is at
       <a href="/docs/crypto-orders-polling-vs-webhooks">/docs/crypto-orders-polling-vs-webhooks</a>.
-      Currently subscribable webhook event types are listed on
+      The full subscribable event-type list is on
       <a href="/docs/webhooks#event-types">/docs/webhooks</a>.
     </p>
 
-    <h2>Planned event shape</h2>
+    <h2>Event shape</h2>
     <p>
-      When <code>crypto.order.paid</code> / <code>crypto.order.failed</code>
-      graduate to the subscribable enum, this is the shape they will
-      carry. The wire format mirrors the standard webhook envelope
-      from <a href="/docs/webhooks">/docs/webhooks</a>; the payload
-      <code>data</code> object is documented here for forward-planning.
+      The wire format mirrors the standard webhook envelope from
+      <a href="/docs/webhooks">/docs/webhooks</a>; the payload
+      <code>data</code> object for each event type is documented
+      below.
     </p>
 
     <h3><code>crypto.order.paid</code></h3>
     <p>
-      Will fire once when a pending order transitions to
+      Fires once when a pending order transitions to
       <code>paid</code> — i.e. when the NowPayments IPN reports
       <code>finished</code>. Idempotent: applying the same terminal
       IPN twice will not re-fire.
@@ -127,7 +134,7 @@ Authorization: Bearer ds_live_…
 
     <h3><code>crypto.order.failed</code></h3>
     <p>
-      Will fire once when an order transitions to <code>failed</code>
+      Fires once when an order transitions to <code>failed</code>
       — a terminal state. Three triggers, distinguished by the
       <code>reason</code> field on the payload:
     </p>
@@ -187,14 +194,6 @@ Authorization: Bearer ds_live_…
         </tr>
       </tbody>
     </table>
-
-    <h2>How to be notified when they ship</h2>
-    <p>
-      Subscribe to the <a href="/changelog">API changelog</a>; the
-      enum-expansion will land as a versioned entry with the new
-      values appearing in <code>SubscribableWebhookEventTypeSchema</code>
-      and on <a href="/api-reference">/api-reference</a>.
-    </p>
 
     <h2>Related</h2>
     <ul>

@@ -102,15 +102,15 @@ describe('W515.A apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro c
     );
   });
 
-  it("Polling-until-webhooks-graduate framing pinned: 'crypto.order.paid / crypto.order.failed events are emitted server-side but not yet subscribable' + 'poll client.CryptoOrders.Get(ctx, orderID) until status transitions to paid or failed' + 'The Go SDK ships VerifyWebhookSignature for the (already-live) session + quota + api-key webhook event types.' — pinned so the not-yet-subscribable + polling-fallback + VerifyWebhookSignature-still-works trio survives (drift to claiming the events are subscribable would create marketing↔SubscribableWebhookEventTypeSchema divergence)", () => {
+  it("Now-subscribable + polling-fallback framing pinned: 'crypto.order.paid / crypto.order.failed events are emitted server-side and are now subscribable' + 'poll client.CryptoOrders.Get(ctx, orderID) until status transitions to paid or failed' + 'The Go SDK ships VerifyWebhookSignature for every live event type including crypto.order.* alongside session + quota + api-key + egress-capability.' — pinned so the now-subscribable + polling-as-fallback + VerifyWebhookSignature-every-domain trio survives (drift to claiming the events are NOT subscribable would create marketing↔SubscribableWebhookEventTypeSchema divergence)", () => {
     expect(body).toMatch(
-      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*\n?\s*events are emitted server-side but not yet subscribable/,
+      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*\n?\s*events are emitted server-side and are now subscribable/,
     );
     expect(body).toMatch(
       /poll\s*\n?\s*<code>client\.CryptoOrders\.Get\(ctx, orderID\)<\/code> until\s*\n?\s*<code>status<\/code> transitions to <code>paid<\/code> or\s*\n?\s*<code>failed<\/code>/,
     );
     expect(body).toMatch(
-      /The Go SDK ships\s*\n?\s*<code>VerifyWebhookSignature<\/code> for the \(already-live\)\s*\n?\s*session \+ quota \+ api-key webhook event types\./,
+      /The Go SDK ships\s*\n?\s*<code>VerifyWebhookSignature<\/code> for every live event type,\s*\n?\s*including the now-live crypto\.order\.\* events alongside the\s*\n?\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
     );
   });
 

@@ -102,15 +102,15 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
     expect(body).toMatch(/receipt\["paid_at"\], receipt\["price_cents"\]/);
   });
 
-  it("Polling-until-webhooks-graduate framing pinned: 'crypto.order.paid / crypto.order.failed events are emitted server-side but not yet subscribable' + 'poll client.crypto_orders.get(order_id) until status transitions to paid or failed' + verify_webhook_signature for the already-live event types — pinned so the not-yet-subscribable + polling-fallback + verify_webhook_signature-still-works trio survives (drift to claiming the events are subscribable would create marketing↔SubscribableWebhookEventTypeSchema divergence)", () => {
+  it("Now-subscribable + polling-fallback framing pinned: 'crypto.order.paid / crypto.order.failed events are emitted server-side and are now subscribable' + 'poll client.crypto_orders.get(order_id) until status transitions to paid or failed' + verify_webhook_signature for every live event type including crypto.order.* — pinned so the now-subscribable + polling-as-fallback + verify_webhook_signature-every-domain trio survives (drift to claiming the events are NOT subscribable would create marketing↔SubscribableWebhookEventTypeSchema divergence)", () => {
     expect(body).toMatch(
-      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*\n?\s*events are emitted server-side but not yet subscribable/,
+      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*\n?\s*events are emitted server-side and are now subscribable/,
     );
     expect(body).toMatch(
       /poll\s*\n?\s*<code>client\.crypto_orders\.get\(order_id\)<\/code> until\s*\n?\s*<code>status<\/code> transitions to <code>paid<\/code> or\s*\n?\s*<code>failed<\/code>/,
     );
     expect(body).toMatch(
-      /The Python SDK ships\s*\n?\s*<code>verify_webhook_signature<\/code> for the \(already-live\)\s*\n?\s*session \+ quota \+ api-key webhook event types\./,
+      /The Python SDK ships\s*\n?\s*<code>verify_webhook_signature<\/code> for every live event type,\s*\n?\s*including the now-live crypto\.order\.\* events alongside the\s*\n?\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
     );
   });
 

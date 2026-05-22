@@ -1,18 +1,20 @@
 // W509.A — drift guard for apps/marketing-site/src/pages/docs/crypto-orders-polling-vs-webhooks.astro.
-// V-666.BV practitioner guide. Drift here either claims crypto.order.*
-// webhooks are subscribable today (would mislead customers building
-// against an unsubscribable event) or breaks the polling-cadence
-// guidance.
+// V-666.BV practitioner guide. Drift here either drops the now-LIVE
+// webhook subscription path (would silently push customers back to
+// polling-only) or breaks the polling-cadence guidance customers rely
+// on for the fallback path.
 //
-//   • V-666.BV doc-comment framing.
+//   • V-666.BV doc-comment framing (flipped 2026-05-22 alongside
+//     the schema + bootstrap wire-up).
 //   • crypto-order state machine: pending → confirming → paid /
 //     failed / partial / cancelled.
-//   • crypto.order.* not in SubscribableWebhookEventTypeSchema today.
-//   • Today: GET /v1/billing/crypto-orders polling.
+//   • crypto.order.paid + crypto.order.failed in
+//     SubscribableWebhookEventTypeSchema; polling is a fallback.
+//   • Polling fallback: GET /v1/billing/crypto-orders.
 //   • 3-cadence guidance: 1-5s + 30-60s + hourly/nightly + V-666.BU
 //     cursor + V-534 history view + V-534.BS 60s default.
-//   • Roadmap hybrid: webhooks + reconciliation polling.
-//   • Idempotency planning: (order_id, status) upsert key.
+//   • Recommended hybrid: webhooks + reconciliation polling.
+//   • Idempotency for hybrid receivers: (order_id, status) upsert key.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -33,9 +35,9 @@ function read(p: string): string {
 describe('W509.A apps/marketing-site/src/pages/docs/crypto-orders-polling-vs-webhooks.astro content parity', () => {
   const body = read(LIB);
 
-  it('V-666.BV framing pinned. Re-enabled by slice 239 after verifying the V-666.BV anchor + practitioner-guide framing exists verbatim in the page head comment at lines 4-8', () => {
+  it('V-666.BV framing pinned. Post-2026-05-22: crypto.order.paid/failed are in SubscribableWebhookEventTypeSchema; doc-comment reflects that webhook subscription is supported alongside polling.', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.BV — practitioner guide on how to detect crypto-order state\s*\n?\s*\/\/ changes\. Webhooks for `crypto\.order\.\*` are roadmap \(not in\s*\n?\s*\/\/ SubscribableWebhookEventTypeSchema today\) so this page primarily\s*\n?\s*\/\/ documents the polling pattern \+ describes the hybrid pattern as\s*\n?\s*\/\/ the planned end-state\./,
+      /\/\/ V-666\.BV — practitioner guide on how to detect crypto-order state\s*\n?\s*\/\/ changes\. As of 2026-05-22 `crypto\.order\.paid` and\s*\n?\s*\/\/ `crypto\.order\.failed` are in SubscribableWebhookEventTypeSchema,\s*\n?\s*\/\/ so this page now documents both the polling pattern and the\s*\n?\s*\/\/ \(now-shipped\) hybrid webhook \+ reconciliation pattern\./,
     );
   });
 
@@ -45,13 +47,16 @@ describe('W509.A apps/marketing-site/src/pages/docs/crypto-orders-polling-vs-web
     );
   });
 
-  it("Today-polling-only commitment pinned: 'crypto.order.paid / crypto.order.failed are emitted server-side but are not yet in SubscribableWebhookEventTypeSchema, so they cannot be the target of a POST /v1/webhooks subscription. Until they graduate, every integration polls.' — pinned so the explicit 'emitted-but-not-subscribable' nuance + the 'polls until graduates' commitment survive (drift to softening 'cannot be the target of POST /v1/webhooks' would mislead customers about the subscribability)", () => {
+  it("Now-live subscribable framing pinned: 'Two customer-facing patterns are supported: poll GET /v1/billing/crypto-orders, or subscribe a webhook endpoint to the now-live crypto.order.paid / crypto.order.failed events.' + polling-stays-first-class-fallback framing — pinned so the dual-pattern + polling-still-supported commitment survives (drift to dropping polling would orphan customers without inbound HTTPS)", () => {
     expect(body).toMatch(
-      /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*\n?\s*are emitted server-side but are <strong>not yet<\/strong> in\s*\n?\s*<code>SubscribableWebhookEventTypeSchema<\/code>, so they\s*\n?\s*cannot be the target of a <code>POST \/v1\/webhooks<\/code>\s*\n?\s*subscription\. Until they graduate, every integration polls\./,
+      /Two\s*\n?\s*customer-facing patterns are supported: poll\s*\n?\s*<code>GET \/v1\/billing\/crypto-orders<\/code>, or subscribe a\s*\n?\s*webhook endpoint to the now-live\s*\n?\s*<code>crypto\.order\.paid<\/code> \/\s*\n?\s*<code>crypto\.order\.failed<\/code> events\./,
+    );
+    expect(body).toMatch(
+      /Polling stays a first-class path for backfill,\s*\n?\s*reconciliation, and any environment where you cannot accept\s*\n?\s*an inbound HTTPS callback\./,
     );
   });
 
-  it('3-cadence polling guidance pinned. Re-enabled by slice 280 after restoring V-534 + V-666.BU anchors on the 3-cadence bullets at crypto-orders-polling-vs-webhooks.astro:57+59 (both anchors stripped; the 1-5s + 30-60s + hourly/nightly cadence bullets were intact apart from the V-anchor prefix)', () => {
+  it('3-cadence polling guidance pinned. 1-5s + 30-60s + hourly/nightly cadence bullets with V-534 + V-666.BU anchors.', () => {
     expect(body).toMatch(
       /<strong>1-5 seconds<\/strong>: user is watching a "Pay\s*\n?\s*with crypto" page\. Stop polling once status is terminal\./,
     );
@@ -63,7 +68,7 @@ describe('W509.A apps/marketing-site/src/pages/docs/crypto-orders-polling-vs-web
     );
   });
 
-  it('Customer dashboard 60s-polling + V-534.BS pattern pinned. Re-enabled by slice 239 after restoring the V-534.BS anchor on the pending-order line at crypto-orders-polling-vs-webhooks.astro:84 (anchor stripped to bare space-period in the same drift pattern as 235-238)', () => {
+  it('Customer dashboard 60s-polling + V-534.BS pattern pinned.', () => {
     expect(body).toMatch(
       /The Driftstack customer dashboard polls\s*\n?\s*<code>GET \/v1\/billing\/crypto-orders<\/code> every 60s while\s*\n?\s*any visible order is still <code>pending<\/code> \(V-534\.BS\)\./,
     );
@@ -78,22 +83,20 @@ describe('W509.A apps/marketing-site/src/pages/docs/crypto-orders-polling-vs-web
     );
   });
 
-  it("Roadmap hybrid framing: 'recommended pattern will be hybrid: webhooks for sub-second notification, nightly polling for backfill. Until then, integrators that need sub-second latency tighten the poll interval rather than wait for the webhook surface.' — pinned so the hybrid-end-state framing + 'until then tighten poll' commitment survive (drift to dropping the hybrid framing would orphan the planned end-state from the doc)", () => {
+  it("Recommended hybrid framing: 'The recommended pattern is hybrid: webhooks for sub-second notification, periodic polling as a safety net for the rare delivery that does not land within the retry window.' — pinned so the hybrid-end-state framing + polling-as-safety-net commitment survive (drift to dropping the hybrid framing would orphan the recommended end-state from the doc)", () => {
     expect(body).toMatch(
-      /recommended pattern will be hybrid: webhooks for\s*\n?\s*sub-second notification, nightly polling for backfill\.\s*\n?\s*Until then, integrators that need sub-second latency\s*\n?\s*tighten the poll interval rather than wait for the webhook\s*\n?\s*surface\./,
+      /The\s*\n?\s*recommended pattern is hybrid: webhooks for sub-second\s*\n?\s*notification, periodic polling as a safety net for the\s*\n?\s*rare delivery that does not land within the retry window\./,
     );
   });
 
-  it("Idempotency planning: '(order_id, status) so duplicate crypto.order.paid events for the same order are a no-op' — pinned so the (order_id, status) upsert-key idempotency-planning advice survives (drift to dropping the composite-key guidance would let customers build receivers that double-process retried events)", () => {
+  it("Idempotency for hybrid receivers: '(order_id, status) so duplicate crypto.order.paid events for the same order are a no-op' — pinned so the (order_id, status) upsert-key idempotency advice survives (drift to dropping the composite-key guidance would let customers build receivers that double-process retried events)", () => {
     expect(body).toMatch(
-      /Key your local DB\s*\n?\s*upsert on <code>\(order_id, status\)<\/code> so duplicate\s*\n?\s*<code>crypto\.order\.paid<\/code> events for the same order are\s*\n?\s*a no-op\./,
+      /Key your local DB upsert on\s*\n?\s*<code>\(order_id, status\)<\/code> so duplicate\s*\n?\s*<code>crypto\.order\.paid<\/code> events for the same order are\s*\n?\s*a no-op\./,
     );
   });
 
-  it('4-related-doc cluster pinned: /docs/webhooks-crypto-events (roadmap) + /docs/webhooks (signing+retries) + /docs/sdk-typescript-crypto-orders + /docs/billing-crypto-integration-guide — pinned so the 4-related-doc navigation surface stays complete (drift to dropping the roadmap cross-reference would orphan the future-feature anchor)', () => {
-    expect(body).toMatch(
-      /<a href="\/docs\/webhooks-crypto-events">Crypto webhook events \(roadmap\)<\/a>/,
-    );
+  it('4-related-doc cluster pinned: /docs/webhooks-crypto-events + /docs/webhooks (signing+retries) + /docs/sdk-typescript-crypto-orders + /docs/billing-crypto-integration-guide — pinned so the 4-related-doc navigation surface stays complete', () => {
+    expect(body).toMatch(/<a href="\/docs\/webhooks-crypto-events">Crypto webhook events<\/a>/);
     expect(body).toMatch(/<a href="\/docs\/webhooks">Webhook signing \+ retries<\/a>/);
     expect(body).toMatch(
       /<a href="\/docs\/sdk-typescript-crypto-orders">SDK reference — crypto orders<\/a>/,

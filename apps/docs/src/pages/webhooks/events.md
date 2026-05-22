@@ -235,6 +235,57 @@ moves to `[LIVE]`.
 }
 ```
 
+### `crypto.order.paid` / `crypto.order.failed` [LIVE]
+
+V-666 — fires when a NowPayments-backed crypto checkout order
+transitions to a terminal state. Wired end-to-end 2026-05-22
+(migration 0064 + bootstrap WebhooksService emitter sink).
+
+`crypto.order.paid`:
+
+```json
+{
+  "event_type": "crypto.order.paid",
+  "data": {
+    "order_id": "ord_a1b2c3d4e5f6",
+    "product": "solo_manual",
+    "price_cents": 7900,
+    "price_currency": "USD",
+    "payment_id": "12345678",
+    "paid_at": "2026-05-22T10:30:00Z"
+  }
+}
+```
+
+`crypto.order.failed`:
+
+```json
+{
+  "event_type": "crypto.order.failed",
+  "data": {
+    "order_id": "ord_a1b2c3d4e5f6",
+    "product": "solo_manual",
+    "price_cents": 7900,
+    "price_currency": "USD",
+    "payment_id": "12345678",
+    "failed_at": "2026-05-22T10:35:00Z",
+    "reason": "expired"
+  }
+}
+```
+
+`reason` is one of: `expired` (20-min payment window elapsed),
+`timeout` (NowPayments returned a terminal timeout), `refunded`
+(NowPayments marked the order refunded — full refunds map to
+`failed`; partial refunds stay `partial`), `cancelled`
+(customer-initiated abandonment), `swept` (admin cleanup of
+stuck pending orders past the staleness threshold).
+
+See [Crypto checkout API](../api/billing-crypto) for the full
+order lifecycle + status state machine. The webhook event mirrors
+the same `events[]` log shape returned by `GET /v1/billing/crypto-
+orders`.
+
 ## Planned events (not yet in enum)
 
 The following events are queued for future V-NNN entries. Adding a
@@ -282,56 +333,6 @@ dashboards).
 Trial-pack-specific lifecycle events. `purchased` fires on the Stripe
 checkout completion event; `expired` fires from the trial-pack
 expiry job (which doesn't yet exist — see notes).
-
-### `crypto.order.paid` / `crypto.order.failed` [LIVE]
-
-V-666 — fires when a NowPayments-backed crypto checkout order
-transitions to a terminal state.
-
-`crypto.order.paid`:
-
-```json
-{
-  "event_type": "crypto.order.paid",
-  "data": {
-    "order_id": "ord_a1b2c3d4e5f6",
-    "product": "solo_manual",
-    "price_cents": 7900,
-    "price_currency": "USD",
-    "payment_id": "12345678",
-    "paid_at": "2026-05-22T10:30:00Z"
-  }
-}
-```
-
-`crypto.order.failed`:
-
-```json
-{
-  "event_type": "crypto.order.failed",
-  "data": {
-    "order_id": "ord_a1b2c3d4e5f6",
-    "product": "solo_manual",
-    "price_cents": 7900,
-    "price_currency": "USD",
-    "payment_id": "12345678",
-    "failed_at": "2026-05-22T10:35:00Z",
-    "reason": "expired"
-  }
-}
-```
-
-`reason` is one of: `expired` (20-min payment window elapsed),
-`timeout` (NowPayments returned a terminal timeout), `refunded`
-(NowPayments marked the order refunded — full refunds map to
-`failed`; partial refunds stay `partial`), `cancelled`
-(customer-initiated abandonment), `swept` (admin cleanup of
-stuck pending orders past the staleness threshold).
-
-See [Crypto checkout API](../api/billing-crypto) for the full
-order lifecycle + status state machine. The webhook event mirrors
-the same `events[]` log shape returned by `GET /v1/billing/crypto-
-orders`.
 
 ### `webhook_endpoint.created` / `webhook_endpoint.deleted` / `webhook_endpoint.secret_rotated` [PLANNED]
 
@@ -438,7 +439,10 @@ POST /v1/webhooks
     "session.failed",
     "quota.warning_80pct",
     "quota.exceeded",
-    "api_key.revoked"
+    "api_key.revoked",
+    "session.egress_capability_changed",
+    "crypto.order.paid",
+    "crypto.order.failed"
   ]
 }
 ```

@@ -138,12 +138,12 @@ describe('W718 sdk-typescript-crypto-orders marketing-doc parity', () => {
     expect(doc).toMatch(/\/\/ 404: order doesn't exist or belongs to another account/);
   });
 
-  it('CRITICAL doc "crypto.order.paid / crypto.order.failed events emitted server-side but not yet subscribable" framing pinned. Drift would let customers think webhook subscriptions exist for these events.', () => {
+  it('CRITICAL doc "crypto.order.paid / crypto.order.failed events emitted server-side and are now subscribable" framing pinned. Drift would let customers miss that they can subscribe instead of polling.', () => {
     const doc = read(DOC);
     expect(doc).toMatch(/<code>crypto\.order\.paid<\/code>/);
     expect(doc).toMatch(/<code>crypto\.order\.failed<\/code>/);
-    expect(doc).toMatch(/emitted server-side but not yet subscribable/);
-    expect(doc).toMatch(/roadmap status/);
+    expect(doc).toMatch(/emitted server-side and are now subscribable/);
+    expect(doc).toMatch(/payload contract/);
   });
 
   it('CRITICAL doc references the runnable end-to-end example file at packages/sdk-typescript/examples/crypto-checkout.ts. The file MUST exist (otherwise customers following the doc hit a missing file).', () => {

@@ -151,11 +151,11 @@ describe('W719 sdk-python-crypto-orders marketing-doc parity', () => {
     expect(doc).toMatch(/# 404: order doesn't exist or belongs to another account/);
   });
 
-  it('CRITICAL "crypto.order.paid / crypto.order.failed events emitted server-side but not yet subscribable" framing pinned.', () => {
+  it('CRITICAL "crypto.order.paid / crypto.order.failed events emitted server-side and are now subscribable" framing pinned.', () => {
     const doc = read(DOC);
     expect(doc).toMatch(/<code>crypto\.order\.paid<\/code>/);
     expect(doc).toMatch(/<code>crypto\.order\.failed<\/code>/);
-    expect(doc).toMatch(/emitted server-side but not yet subscribable/);
+    expect(doc).toMatch(/emitted server-side and are now subscribable/);
   });
 
   it('CRITICAL verify_webhook_signature (snake_case Python form) framing pinned. Drift to verifyWebhookSignature (TS-style) would silently mis-document the Python API.', () => {
@@ -200,7 +200,7 @@ describe('W719 sdk-python-crypto-orders marketing-doc parity', () => {
     expect(doc).toMatch(/if cursor is None:\s*\n?\s*break/);
   });
 
-  it('Doc-parity 5-invariant cluster — W187 anchor + 7-verb roster + 6-status closed enum + sync+async parity + idempotency_key/Idempotency-Key wire mapping + crypto.order.paid/failed-not-subscribable framing + non-refundable framing.', () => {
+  it('Doc-parity 5-invariant cluster — W187 anchor + 7-verb roster + 6-status closed enum + sync+async parity + idempotency_key/Idempotency-Key wire mapping + crypto.order.paid/failed-now-subscribable framing + non-refundable framing.', () => {
     const doc = read(DOC);
 
     expect(doc).toMatch(/W187/);
