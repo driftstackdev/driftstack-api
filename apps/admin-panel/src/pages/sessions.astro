@@ -346,11 +346,20 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      function destroy(id) {
+      // 2026-05-22 — destroy button shows in-flight state to prevent
+      // double-clicks. The button is dynamically rendered so we grab
+      // a reference to the exact element clicked + restore it on
+      // success/error.
+      function destroy(id, btn) {
         if (!token) return;
         const reason = window.prompt('Reason for force-destroying ' + id + ' (optional):') || '';
         const body = {};
         if (reason.trim()) body.reason = reason.trim();
+        const originalText = btn ? btn.textContent : '';
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Destroying…';
+        }
         showBanner('Destroying ' + id + '…');
         fetch(apiBaseUrl + '/v1/admin/sessions/' + encodeURIComponent(id) + '/destroy', {
           method: 'POST',
@@ -369,6 +378,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             const msg = err && err.message ? err.message : 'network error';
             showBanner("Couldn't destroy (" + msg + ').');
+            if (btn) {
+              btn.disabled = false;
+              btn.textContent = originalText;
+            }
           });
       }
 
@@ -379,7 +392,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!btn) return;
         ev.preventDefault();
         const id = btn.getAttribute('data-id');
-        if (id) destroy(id);
+        if (id) destroy(id, btn);
       });
 
       let debounce = 0;
