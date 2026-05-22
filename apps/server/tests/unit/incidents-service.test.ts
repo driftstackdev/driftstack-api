@@ -106,6 +106,32 @@ function makeRepo(): {
       return Promise.resolve({ incident, update });
     },
     findOpenAutoIncident: () => Promise.resolve(state.autoIncident),
+    // 2026-05-22 — admin reopen (false-alarm correction). Mirrors
+    // the resolve() stub above but flips status back to
+    // 'investigating' + clears resolved_at.
+    reopen: (input: {
+      incidentId: string;
+      message: string;
+      postedByAdminId: string;
+      postedByAdminKeyId: string;
+    }) => {
+      const incident = state.incidents.find((i) => i.id === input.incidentId);
+      if (!incident) throw new Error('not found');
+      updateCounter += 1;
+      const update: IncidentUpdateRow = {
+        id: `iu_${updateCounter.toString()}`,
+        incidentId: incident.id,
+        message: input.message,
+        status: 'investigating',
+        postedByAdminId: input.postedByAdminId,
+        postedByAdminKeyId: input.postedByAdminKeyId,
+        postedAt: new Date(),
+      };
+      incident.status = 'investigating';
+      incident.resolvedAt = null;
+      state.updates.push(update);
+      return Promise.resolve({ incident, update });
+    },
   };
   return { repo, state };
 }
