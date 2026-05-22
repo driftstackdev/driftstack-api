@@ -91,9 +91,21 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/\.\.\.\(deps\.corsAllowedOrigins \?\? \[\]\),/);
     expect(body).toMatch(/credentials: true,/);
     expect(body).toMatch(/methods: \['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'\],/);
-    expect(body).toMatch(
-      /allowedHeaders: \[\s*\n?\s*'authorization',\s*\n?\s*'content-type',\s*\n?\s*'x-request-id',\s*\n?\s*'stripe-signature',\s*\n?\s*'x-nowpayments-sig',\s*\n?\s*\],/,
-    );
+    // 2026-05-22 — allowedHeaders expanded to include idempotency-key,
+    // x-byok-anthropic-api-key + x-driftstack-account. Without the
+    // first, the browser blocked crypto-checkout preflight + the
+    // POST never fired ("Failed to fetch" on /select-tier). Per-
+    // header assertions so future additions don't require
+    // rewriting the whole-block regex.
+    expect(body).toMatch(/allowedHeaders: \[/);
+    expect(body).toMatch(/'authorization',/);
+    expect(body).toMatch(/'content-type',/);
+    expect(body).toMatch(/'x-request-id',/);
+    expect(body).toMatch(/'stripe-signature',/);
+    expect(body).toMatch(/'x-nowpayments-sig',/);
+    expect(body).toMatch(/'idempotency-key',/);
+    expect(body).toMatch(/'x-byok-anthropic-api-key',/);
+    expect(body).toMatch(/'x-driftstack-account',/);
     expect(body).toMatch(
       /exposedHeaders: \[\s*\n?\s*'x-request-id',\s*\n?\s*\/\/ W199 — full RateLimit-header set documented at \/docs\/rate-limits\.\s*\n?\s*'x-ratelimit-bucket',\s*\n?\s*'x-ratelimit-limit',\s*\n?\s*'x-ratelimit-remaining',\s*\n?\s*'x-ratelimit-reset',\s*\n?\s*'retry-after',\s*\n?\s*\],/,
     );

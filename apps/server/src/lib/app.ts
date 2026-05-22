@@ -653,6 +653,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       'x-request-id',
       'stripe-signature',
       'x-nowpayments-sig',
+      // 2026-05-22 — V-666.AO + v2-#19 — `Idempotency-Key` header is
+      // sent by the customer-dashboard JS on crypto-checkout +
+      // agent-session create. Without this allowance the browser
+      // blocks the preflight + the POST never fires ("Failed to
+      // fetch" in the UI). Founder reproduced it on /select-tier
+      // → "Pay Solo Manual with crypto" path.
+      'idempotency-key',
+      // 2026-05-17 — BYOK Anthropic key per-request override header
+      // (Q.1.c verdict). The /v1/agent-sessions/:id/message route
+      // accepts it as an override over the cached/bundled key.
+      'x-byok-anthropic-api-key',
+      // V-330 — team-scoped writes use this header to act-as the
+      // team owner. Same browser preflight gap.
+      'x-driftstack-account',
     ],
     exposedHeaders: [
       'x-request-id',
