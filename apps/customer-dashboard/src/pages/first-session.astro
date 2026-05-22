@@ -12,7 +12,12 @@ const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="First session" withSidebar={false}>
-  <div class="mx-auto max-w-2xl px-6 py-16" data-page="first-session">
+  {/* 2026-05-23 — hero-glow atmosphere on first-session onboarding so
+      the brand surface stays consistent during the high-touch first
+      flow. */}
+  <div class="relative overflow-hidden">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-2xl px-6 py-16" data-page="first-session">
     <p class="font-mono text-xs uppercase tracking-widest text-glow-red">First session</p>
     <h1 class="mt-3 text-3xl font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
       Create your first session.
@@ -76,6 +81,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     <p class="mt-8 text-xs text-ink-muted">
       Skip this step? <a href="/" class="text-glow-red underline">Go to dashboard</a>.
     </p>
+    </div>
   </div>
 
   <script is:inline define:vars={{ apiBaseUrl }}>
