@@ -463,6 +463,14 @@ const apiBaseUrl = resolveApiBaseUrl();
           '" data-export-name="' +
           escapeHtml(p.name) +
           '" class="text-sm text-glow-red hover:underline">Export</button>' +
+          // 2026-05-22 — V-666 transfer-to-account. Recipient pastes
+          // their account_id from /settings; this profile moves to
+          // them (delete from source on success).
+          '<button type="button" data-transfer="' +
+          escapeHtml(p.id) +
+          '" data-transfer-name="' +
+          escapeHtml(p.name) +
+          '" class="text-sm text-glow-red hover:underline">Transfer</button>' +
           '<button type="button" data-snapshot="' +
           escapeHtml(p.id) +
           '" data-snapshot-name="' +
@@ -559,6 +567,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           wireCloneButtons();
           wireSnapshotButtons();
           wireExportButtons();
+          wireTransferButtons();
           wireLaunchButtons();
         }
       }
@@ -602,6 +611,76 @@ const apiBaseUrl = resolveApiBaseUrl();
               .catch((err) => {
                 showBanner(
                   'Export failed: ' + (err && err.message ? err.message : 'network error'),
+                );
+              })
+              .finally(() => {
+                btn.disabled = false;
+                btn.textContent = original;
+              });
+          });
+        });
+      }
+
+      // 2026-05-22 — V-666 transfer-to-account. Confirms with the
+      // operator (transfer is destructive on source) + prompts for
+      // recipient account id + POSTs the new endpoint.
+      function wireTransferButtons() {
+        const buttons = list.querySelectorAll('[data-transfer]');
+        buttons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const id = btn.getAttribute('data-transfer');
+            const name = btn.getAttribute('data-transfer-name') || 'profile';
+            if (!id) return;
+            const recipientRaw = window.prompt(
+              'Transfer "' +
+                name +
+                '" to another Driftstack account.\n\n' +
+                "Paste the recipient's account id (they can copy it from /settings).\n" +
+                'Format: acc_<uuid>',
+              '',
+            );
+            if (!recipientRaw) return;
+            const recipient = recipientRaw.trim();
+            if (!/^acc_[0-9a-f-]{36}$/.test(recipient)) {
+              showBanner('Recipient id must be in the form acc_<uuid>.');
+              return;
+            }
+            if (
+              !window.confirm(
+                'This will move "' +
+                  name +
+                  '" to ' +
+                  recipient +
+                  '.\n\n' +
+                  'The profile will be removed from YOUR account and counts toward the ' +
+                  "recipient's tier limit + monthly import quota. Continue?",
+              )
+            ) {
+              return;
+            }
+            btn.disabled = true;
+            const original = btn.textContent;
+            btn.textContent = 'Transferring…';
+            authedFetch('/v1/profiles/' + encodeURIComponent(id) + '/transfer', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ recipient_account_id: recipient }),
+            })
+              .then((r) =>
+                r.ok
+                  ? r.json()
+                  : r
+                      .json()
+                      .catch(() => ({}))
+                      .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+              )
+              .then(() => {
+                showBanner('Transferred "' + name + '" to ' + recipient + '.');
+                if (typeof load === 'function') load();
+              })
+              .catch((err) => {
+                showBanner(
+                  'Transfer failed: ' + (err && err.message ? err.message : 'network error'),
                 );
               })
               .finally(() => {
