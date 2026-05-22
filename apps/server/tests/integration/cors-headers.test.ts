@@ -108,3 +108,45 @@ describe('V-664.B CORS — actual-request response', () => {
     expect(res.headers['access-control-allow-origin']).toBeDefined();
   });
 });
+
+// 2026-05-22 — regression guard. Crypto checkout failed with
+// "Failed to fetch" in the browser because the CORS preflight
+// rejected the `Idempotency-Key` request header (the customer-
+// dashboard JS sends it on every POST /v1/billing/crypto-checkout
+// + agent-sessions create). This suite locks the allowlist for
+// every header the dashboard / SDK / extension might send so a
+// future trim of allowedHeaders can't silently re-break a flow.
+describe('V-664.B CORS — every customer-facing header is allowlisted', () => {
+  let fx: Awaited<ReturnType<typeof buildTestApp>>;
+  afterEach(async () => {
+    if (fx) await fx.app.close();
+  });
+
+  const customerHeaders = [
+    'authorization', // bearer auth
+    'content-type', // JSON body
+    'x-request-id', // V-167 client-set trace id
+    'idempotency-key', // V-666.AO + v2-#19 idempotent POSTs
+    'x-byok-anthropic-api-key', // Q.1.c BYOK per-request override
+    'x-driftstack-account', // V-330 team-scope act-as
+  ];
+
+  for (const header of customerHeaders) {
+    it(`preflight accepts ${header}`, async () => {
+      fx = await buildTestApp();
+      const res = await fx.app.inject({
+        method: 'OPTIONS',
+        url: '/v1/billing/crypto-checkout',
+        headers: {
+          origin: 'http://localhost:5173',
+          'access-control-request-method': 'POST',
+          'access-control-request-headers': header,
+        },
+      });
+      // Either 204 (preflight accepted) or 200; never 403 / 405 / 400.
+      expect([200, 204]).toContain(res.statusCode);
+      const allow = (res.headers['access-control-allow-headers'] ?? '').toString().toLowerCase();
+      expect(allow).toContain(header);
+    });
+  }
+});
