@@ -94,9 +94,24 @@ const apiBaseUrl = resolveApiBaseUrl();
           <span class="text-ink-muted">Turns</span>
           <span class="font-mono text-ink-primary" data-header-turns>0</span>
         </div>
-        <div data-header-model class="hidden items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised/40 px-3 py-1.5">
+        {/* 2026-05-22 — always-visible model badge (was hidden until
+            first turn). Shows the default Claude model the agent
+            will use; updates to the actual model on each turn. The
+            BYOK indicator next to the model tells the customer who's
+            billing for tokens. */}
+        <div data-header-model class="flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised/40 px-3 py-1.5">
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          </svg>
           <span class="text-ink-muted">Model</span>
-          <span class="font-mono text-ink-primary text-[10px]" data-header-model-name>—</span>
+          <span class="font-mono text-ink-primary text-[10px]" data-header-model-name>sonnet-4-5</span>
+          <span
+            data-header-byok-pill
+            class="hidden font-mono text-[9px] text-emerald-300"
+            title="Using your own Anthropic key (BYOK); tokens billed to your console"
+          >
+            BYOK
+          </span>
         </div>
         <div data-status-pill class="rounded-md bg-slate-800 px-3 py-1.5 font-mono uppercase tracking-wide text-slate-300">
           Loading…
@@ -107,7 +122,11 @@ const apiBaseUrl = resolveApiBaseUrl();
     {/* 2026-05-22 — chat now dominant (60%); live preview secondary
         (40%). Was 50/50 which made the chat feel cramped given how
         info-rich a turn can be. */}
-    <main class="flex-1 grid grid-cols-[1fr_42%] gap-0 overflow-hidden" data-component="SplitScreen">
+    {/* 2026-05-22 — chat dominance bump 58%→64% per founder feedback.
+        The Live preview column shrinks slightly but stays usable for
+        watching the agent's browser; chat gets the breathing room
+        the "ChatGPT-like" experience implies. */}
+    <main class="flex-1 grid grid-cols-[1fr_36%] gap-0 overflow-hidden" data-component="SplitScreen">
       {/* DOM order keeps LeftPanel first for the JS handlers that
           query by data-component name; CSS `order-2` flips it
           visually to the right (smaller) column. */}
@@ -423,6 +442,25 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
             ? body.pair_mode_state
             : null;
         paintMode();
+
+        // 2026-05-22 — surface BYOK status in the header model pill so
+        // customers know upfront which key path will be used (their
+        // own vs. bundled/fallback). Soft-fails to silent default; the
+        // model badge stays "sonnet-4-5" without the BYOK indicator
+        // if the lookup 404s.
+        fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
+          headers: { ...authHeaders() },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((b) => {
+            if (b && b.key_set === true) {
+              const pill = document.querySelector('[data-header-byok-pill]');
+              if (pill) pill.classList.remove('hidden');
+            }
+          })
+          .catch(() => {
+            /* swallow */
+          });
       } catch (err) {
         paintError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -631,18 +669,34 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       if (emptyHint && !emptyHint.classList.contains('hidden')) {
         emptyHint.classList.add('hidden');
       }
+      // 2026-05-22 — ChatGPT-style row: avatar circle on the left, name +
+      // bubble + meta stacked vertically on the right. Bigger affordance
+      // for distinguishing customer / agent turns at a glance.
       const wrap = document.createElement('div');
-      wrap.className = 'flex flex-col gap-1';
+      wrap.className = 'flex gap-3';
       wrap.dataset.role = role;
       const ts = Date.now();
       wrap.dataset.turnTs = String(ts);
+
+      const avatar = document.createElement('div');
+      avatar.className =
+        'shrink-0 flex h-8 w-8 items-center justify-center rounded-full text-xs font-mono ' +
+        (role === 'agent'
+          ? 'bg-glow-red/15 text-glow-red ring-1 ring-glow-red/30'
+          : 'bg-slate-700 text-slate-200');
+      avatar.textContent = role === 'agent' ? 'AI' : 'You';
+      avatar.setAttribute('aria-hidden', 'true');
+      wrap.appendChild(avatar);
+
+      const colWrap = document.createElement('div');
+      colWrap.className = 'flex-1 min-w-0 flex flex-col gap-1';
       const labelRow = document.createElement('div');
       labelRow.className = 'flex items-baseline justify-between gap-3';
       const label = document.createElement('span');
       label.className =
-        'text-[10px] font-mono uppercase tracking-widest ' +
-        (role === 'agent' ? 'text-glow-red' : 'text-ink-muted');
-      label.textContent = role === 'agent' ? 'agent' : 'you';
+        'text-xs font-medium ' +
+        (role === 'agent' ? 'text-glow-red' : 'text-ink-secondary');
+      label.textContent = role === 'agent' ? 'Driftstack agent' : 'You';
       const time = document.createElement('time');
       time.className = 'text-[10px] font-mono text-ink-muted';
       time.dataset.turnAge = String(ts);
@@ -651,6 +705,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       labelRow.appendChild(label);
       labelRow.appendChild(time);
       const bubble = document.createElement('div');
+      bubble.dataset.turnBubble = '1';
       // 2026-05-22 — bigger bubble (px-4 py-3 instead of px-3 py-2)
       // + thin border for visual separation between adjacent
       // bubbles. Customer bubbles get a left accent stripe; agent
@@ -706,8 +761,9 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         });
         bubble.appendChild(copyBtn);
       }
-      wrap.appendChild(labelRow);
-      wrap.appendChild(bubble);
+      colWrap.appendChild(labelRow);
+      colWrap.appendChild(bubble);
+      wrap.appendChild(colWrap);
       transcript.appendChild(wrap);
       transcript.scrollTop = transcript.scrollHeight;
       return wrap;
@@ -746,7 +802,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       // live typing indicator.
       pendingTurnEl = appendTurn('agent', '');
       if (pendingTurnEl) {
-        const bub = pendingTurnEl.querySelector('div:last-child');
+        const bub = pendingTurnEl.querySelector('[data-turn-bubble]');
         if (bub) {
           bub.innerHTML =
             '<span class="inline-flex items-center gap-1" aria-label="agent is thinking">' +
@@ -770,7 +826,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         if (!res.ok) {
           const detail = body.detail || 'HTTP ' + res.status.toString();
           if (pendingTurnEl) {
-            const bub = pendingTurnEl.querySelector('div:last-child');
+            const bub = pendingTurnEl.querySelector('[data-turn-bubble]');
             if (bub) {
               bub.textContent = '⚠ ' + detail + ' — your message above is preserved; click to retry.';
               bub.className = 'rounded-md bg-red-900/30 px-3 py-2 text-sm text-rose-300';
@@ -804,7 +860,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
           null;
 
         if (pendingTurnEl) {
-          const bub = pendingTurnEl.querySelector('div:last-child');
+          const bub = pendingTurnEl.querySelector('[data-turn-bubble]');
           if (bub) {
             if (clarifyQ !== null) {
               bub.textContent = '❓ ' + clarifyQ;
@@ -922,12 +978,9 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
               }
             }
             if (typeof u.model === 'string' && u.model.length > 0) {
-              const headerModel = document.querySelector('[data-header-model]');
               const headerModelName = document.querySelector('[data-header-model-name]');
-              if (headerModel && headerModelName) {
+              if (headerModelName) {
                 headerModelName.textContent = u.model.replace(/^claude-/, '');
-                headerModel.classList.remove('hidden');
-                headerModel.classList.add('flex');
               }
             }
           }
@@ -939,7 +992,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (pendingTurnEl) {
-          const bub = pendingTurnEl.querySelector('div:last-child');
+          const bub = pendingTurnEl.querySelector('[data-turn-bubble]');
           if (bub) {
             bub.textContent = '⚠ ' + msg + ' — click to retry.';
             bub.className = 'rounded-md bg-red-900/30 px-3 py-2 text-sm text-rose-300';
