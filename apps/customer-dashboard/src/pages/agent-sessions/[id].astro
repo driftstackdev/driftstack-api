@@ -720,27 +720,101 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
           }
           return;
         }
-        // V-666.AI-A response shape: { transcript: [...] } OR
-        // { intent_calls: [...] } — render whatever's present as the
-        // agent reply. SSE streaming is the V-666.AI-D follow-up.
-        const replyText =
+        // V-666.AI-A response shape per kind:
+        //   plan-executed → { intents: [...], results: [...], ok: bool }
+        //   clarify       → { clarifying_question: string }
+        //   refuse        → { refuse_reason: string }
+        //   logged-manual → no reply content (operator-driven turn)
+        // Render plan-executed as a richer block (numbered intents
+        // with status icons); clarify / refuse render as plain text.
+        const intents = Array.isArray(body.intents) ? body.intents : null;
+        const results = Array.isArray(body.results) ? body.results : null;
+        const clarifyQ = typeof body.clarifying_question === 'string' ? body.clarifying_question : null;
+        const refuseR = typeof body.refuse_reason === 'string' ? body.refuse_reason : null;
+        const fallbackReply =
           (typeof body.reply === 'string' && body.reply) ||
           (Array.isArray(body.transcript) &&
             body.transcript[body.transcript.length - 1] &&
             body.transcript[body.transcript.length - 1].content) ||
-          (Array.isArray(body.intent_calls) &&
-            'Planned ' +
-              body.intent_calls.length.toString() +
-              ' intent' +
-              (body.intent_calls.length === 1 ? '' : 's') +
-              ': ' +
-              body.intent_calls
-                .map((c) => (typeof c.verb === 'string' ? c.verb : 'step'))
-                .join(' → ')) ||
-          'Done.';
+          null;
+
         if (pendingTurnEl) {
           const bub = pendingTurnEl.querySelector('div:last-child');
-          if (bub) bub.textContent = replyText;
+          if (bub) {
+            if (clarifyQ !== null) {
+              bub.textContent = '❓ ' + clarifyQ;
+            } else if (refuseR !== null) {
+              bub.textContent = '⚠ ' + refuseR;
+            } else if (intents !== null && intents.length > 0) {
+              // 2026-05-22 — visual intent decomposition. Each step
+              // gets a numbered chip + status icon (✓ ok, ✗ failed,
+              // — skipped). Customer-facing copy mirrors what the
+              // executor wrote to the transcript on the server.
+              bub.innerHTML = '';
+              const headline = document.createElement('p');
+              headline.className = 'mb-2 font-medium';
+              headline.textContent =
+                (body.ok === false ? '⚠ Plan executed with errors — ' : '✓ Plan executed — ') +
+                intents.length.toString() +
+                ' intent' +
+                (intents.length === 1 ? '' : 's');
+              bub.appendChild(headline);
+              const list = document.createElement('ol');
+              list.className = 'space-y-1.5';
+              intents.forEach((it, idx) => {
+                const r = results && results[idx];
+                const ok = r && r.ok !== false;
+                const li = document.createElement('li');
+                li.className =
+                  'flex items-start gap-2 rounded-md border border-white/5 ' +
+                  (ok
+                    ? 'bg-emerald-500/5 text-ink-primary'
+                    : 'bg-rose-500/10 text-rose-200') +
+                  ' px-2.5 py-1.5 text-xs';
+                const num = document.createElement('span');
+                num.className =
+                  'shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full ' +
+                  (ok ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/30 text-rose-100') +
+                  ' font-mono text-[10px]';
+                num.textContent = ok ? '✓' : '✗';
+                const body2 = document.createElement('div');
+                body2.className = 'min-w-0 flex-1';
+                const verb = document.createElement('p');
+                verb.className = 'font-mono text-[11px] uppercase tracking-wide text-ink-muted';
+                verb.textContent = String((idx + 1).toString() + '. ' + (it.verb ?? 'step'));
+                const summary = document.createElement('p');
+                summary.className = 'mt-0.5 break-words';
+                const argsText = it.args
+                  ? Object.entries(it.args)
+                      .map(([k, v]) =>
+                        k +
+                        '=' +
+                        (typeof v === 'string'
+                          ? '"' + v.slice(0, 60) + (v.length > 60 ? '…' : '') + '"'
+                          : JSON.stringify(v)),
+                      )
+                      .join(' ')
+                  : '';
+                summary.textContent = argsText;
+                body2.appendChild(verb);
+                if (argsText) body2.appendChild(summary);
+                if (r && r.ok === false && r.error) {
+                  const err = document.createElement('p');
+                  err.className = 'mt-0.5 text-[10px] text-rose-300';
+                  err.textContent = 'error: ' + String(r.error).slice(0, 200);
+                  body2.appendChild(err);
+                }
+                li.appendChild(num);
+                li.appendChild(body2);
+                list.appendChild(li);
+              });
+              bub.appendChild(list);
+            } else if (fallbackReply !== null) {
+              bub.textContent = fallbackReply;
+            } else {
+              bub.textContent = 'Done.';
+            }
+          }
         }
         // 2026-05-22 — render the cost badge below the bubble when the
         // response carries usage telemetry. "$0.0023 · 145 tokens"
