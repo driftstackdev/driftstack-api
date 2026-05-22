@@ -46,7 +46,7 @@ describe('W323.B / index sections baseline', () => {
     });
   }
 
-  it('Customer-configurable egress framed as on roadmap (no commitment to live today)', () => {
-    expect(body).toMatch(/Customer-configurable egress/);
+  it('Customer-configurable egress mentioned somewhere on homepage. 2026-05-22 — flipped from roadmap to shipped (planning 133 Phase 1); test relaxed to a presence check only (homepage now leads with the egress section directly).', () => {
+    expect(body).toMatch(/SOCKS5|WireGuard|OpenVPN|egress/i);
   });
 });

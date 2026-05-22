@@ -120,11 +120,11 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
     expect(body).toMatch(/\(HTTPS\)/);
   });
 
-  it('egress posture pinned: WebKit sessions exit via your network (DC / VPN / roadmap BYO SOCKS5 / WG)', () => {
+  it('egress posture pinned: WebKit sessions exit via your network (DC / VPN / BYO SOCKS5 + OpenVPN + WG). 2026-05-22 — "roadmap: BYO" flipped to shipped capability per planning 133 Phase 1.', () => {
     expect(body).toMatch(/WebKit sessions exit via your network/);
     expect(body).toMatch(/DC \/ VPN \//);
-    expect(body).toMatch(/roadmap: BYO/);
-    expect(body).toMatch(/SOCKS5 \/ WG/);
+    expect(body).toMatch(/BYO SOCKS5 \+/);
+    expect(body).toMatch(/OpenVPN \+ WG/);
   });
 
   it('"Concurrent capacity bounded by your hardware, not by license" pinned (cap framing)', () => {
