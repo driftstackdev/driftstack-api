@@ -319,21 +319,51 @@ const apiBaseUrl = resolveApiBaseUrl();
       </p>
     </div>
 
-    <section class="mt-10">
-      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Profile limits</p>
-      <p class="mt-2 max-w-prose text-sm text-ink-muted">
-        Enforced server-side at session creation. If your workload needs more, upgrade your tier:
-      </p>
-      <dl class="mt-4 grid gap-x-8 gap-y-2 text-sm md:grid-cols-2">
+    {/* 2026-05-22 — profile-limits section refresh. Was a bare 2-col
+        dl; now a tier-card grid with the active tier highlighted +
+        a bar showing your current spot in the ladder. The active
+        tier is hydrated client-side from /v1/account/me; default
+        until then is no highlight. */}
+    <section class="mt-12 rounded-xl border border-white/10 bg-surface-raised/40 p-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Profile limits</p>
+          <h2 class="mt-2 text-lg font-semibold text-ink-primary">Per-tier ceiling</h2>
+          <p class="mt-1 max-w-prose text-sm text-ink-muted">
+            Enforced server-side at session creation. Upgrade if you need more headroom.
+          </p>
+        </div>
+        <a
+          href="/select-tier"
+          class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-glow-red/40 bg-glow-red/10 px-3 py-1.5 text-sm font-medium text-glow-red hover:bg-glow-red/20"
+        >
+          Compare tiers →
+        </a>
+      </div>
+      <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {
           TIER_DISPLAY_ORDER.map((entry) => (
-            <div class="flex justify-between border-b border-slate-100 pb-2">
-              <dt class="text-ink-secondary">{entry.label}</dt>
-              <dd class="font-mono text-ink-primary">{fmtLimit(PROFILES_PER_TIER[entry.id])}</dd>
+            <div
+              data-tier-card={entry.id}
+              class="rounded-lg border border-white/10 bg-surface-base p-4 transition-colors"
+            >
+              <p class="font-mono text-[10px] uppercase tracking-widest text-ink-muted">
+                {entry.label}
+              </p>
+              <p class="mt-2 text-2xl font-semibold text-ink-primary">
+                {fmtLimit(PROFILES_PER_TIER[entry.id])}
+              </p>
+              <p class="text-xs text-ink-muted">profiles</p>
             </div>
           ))
         }
-      </dl>
+      </div>
+      <p class="mt-4 text-xs text-ink-muted">
+        Enterprise tier offers custom per-workload limits —{' '}
+        <a href="mailto:sales@driftstack.dev" class="text-glow-red hover:underline">
+          contact sales
+        </a>.
+      </p>
     </section>
   </div>
 
@@ -474,7 +504,29 @@ const apiBaseUrl = resolveApiBaseUrl();
         return Promise.all([profilesP, meP])
           .then(([profiles, me]) => {
             renderProfiles(profiles);
-            if (me) renderUsage(me, profiles.length);
+            if (me) {
+              renderUsage(me, profiles.length);
+              // 2026-05-22 — highlight the customer's current tier card
+              // in the per-tier ceiling grid. Adds the glow-red accent;
+              // every other card stays neutral so the active tier
+              // jumps out visually.
+              if (me.tier) {
+                const card = root.querySelector(
+                  '[data-tier-card="' + me.tier + '"]',
+                );
+                if (card instanceof HTMLElement) {
+                  card.classList.remove('border-white/10', 'bg-surface-base');
+                  card.classList.add(
+                    'border-glow-red/50',
+                    'bg-glow-red/5',
+                    'ring-1',
+                    'ring-glow-red/30',
+                  );
+                  const label = card.querySelector('p:first-child');
+                  if (label) label.textContent += ' · current';
+                }
+              }
+            }
             hideBanner();
           })
           .catch((err) => {
