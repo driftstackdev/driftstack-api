@@ -61,8 +61,12 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
     expect(body).toMatch(
       /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Legal<\/p>/,
     );
+    // 2026-05-22 — h1 keeps the same size classes; ink-primary
+    // color moved onto a gradient-text span (matches the rest of
+    // the marketing site visual family).
+    expect(body).toMatch(/<h1 class="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">/);
     expect(body).toMatch(
-      /<h1 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl">/,
+      /<span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">\s*\{title\}\s*<\/span>/,
     );
     expect(body).toMatch(
       /\{description \? <p class="mt-4 max-w-prose text-base text-ink-secondary">\{description\}<\/p> : null\}/,

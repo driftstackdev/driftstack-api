@@ -71,13 +71,12 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
     ]);
   });
 
-  it('hero strip: mono-uppercase "Legal" chip + H1 from {title}', () => {
+  it('hero strip: mono-uppercase "Legal" chip + H1 from {title}. 2026-05-22 — H1 size/weight pinned; ink color moved onto gradient span (visual family with rest of site).', () => {
     expect(body).toMatch(
       /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Legal<\/p>/,
     );
-    expect(body).toMatch(
-      /<h1 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary md:text-4xl">\s*\n?\s*\{title\}\s*\n?\s*<\/h1>/,
-    );
+    expect(body).toMatch(/<h1 class="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">/);
+    expect(body).toMatch(/\{title\}/);
   });
 
   it('prose-h1:hidden treatment (load-bearing: hero carries the title, markdown H1 hidden)', () => {
