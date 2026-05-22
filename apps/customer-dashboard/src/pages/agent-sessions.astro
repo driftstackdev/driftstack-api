@@ -76,21 +76,6 @@ const apiBaseUrl = resolveApiBaseUrl();
         inline script from GET /v1/agent-sessions (Slice 3 list
         endpoint). Hidden when the customer has no sessions yet so
         the create-form below is the primary CTA on first visit. */}
-    <section
-      data-section="recent-sessions"
-      class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised/50 p-5"
-    >
-      <div class="flex items-center justify-between">
-        <h2 class="text-sm font-semibold uppercase tracking-widest text-ink-muted">
-          Recent agent sessions
-        </h2>
-        <span data-recent-count class="text-xs text-ink-muted">—</span>
-      </div>
-      <ul data-recent-list class="mt-4 divide-y divide-white/5">
-        {/* Rows rendered by JS — see the script section. */}
-      </ul>
-    </section>
-
     {/* 2026-05-22 — prompt suggestion cards. ChatGPT-style 4-up
         grid; click prefills the composer + focuses it (customer
         edits before submit). Real-world examples customers
@@ -177,6 +162,30 @@ const apiBaseUrl = resolveApiBaseUrl();
               <span data-mode-hint>Pair · AI plans, you can take over anytime</span>
             </span>
           </div>
+          {/* 2026-05-22 — Model chip in the composer header so the
+              customer knows which Claude model their session will
+              run on before pressing Start. BYOK pill flips to
+              emerald when /v1/account/me/byok-anthropic-key
+              reports key_set=true. */}
+          <div class="mt-3 flex items-center gap-2 text-[11px]">
+            <span class="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-base/60 px-2.5 py-1">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+              </svg>
+              <span class="text-ink-muted">Model</span>
+              <span class="font-mono text-ink-primary text-[10px]" data-create-model-name>sonnet-4-5</span>
+              <span
+                data-create-byok-pill
+                class="hidden font-mono text-[9px] text-emerald-300"
+                title="Using your own Anthropic key (BYOK); tokens billed to your console"
+              >
+                BYOK
+              </span>
+            </span>
+            <a href="/settings#byok-anthropic" class="text-ink-muted hover:text-glow-red">
+              Manage key →
+            </a>
+          </div>
         </div>
         <textarea
           name="initial_task"
@@ -207,6 +216,25 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
         Sessions live for 24h by default · billed only while active · cancel
         anytime · <a href="/select-tier" class="text-glow-red hover:underline">tier limits</a>
       </p>
+    </section>
+
+    {/* 2026-05-22 — recent agent sessions, relocated below the composer
+        per founder feedback (composer/chat is the primary thing; history
+        is reference material). Compact 3-up card grid (max 6 shown);
+        "See all" link to expand if needed in a future overflow view. */}
+    <section
+      data-section="recent-sessions"
+      class="mb-10 hidden"
+    >
+      <div class="mb-3 flex items-center justify-between">
+        <h2 class="text-sm font-semibold uppercase tracking-widest text-ink-muted">
+          Recent sessions
+        </h2>
+        <span data-recent-count class="text-xs text-ink-muted">—</span>
+      </div>
+      <ul data-recent-list class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Rows rendered by JS — see the script section. */}
+      </ul>
     </section>
 
     {/* Legacy 3-col panel preserved for active-session takeover / bundled-LLM
@@ -361,6 +389,24 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
         return;
       }
 
+      // 2026-05-22 — BYOK status hydration for the composer Model chip.
+      // Surfaces "BYOK" indicator when the customer has stored their
+      // own Anthropic key (via /settings). Soft-fail to silent
+      // default if the lookup 404s.
+      fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
+        headers: { authorization: 'Bearer ' + token },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((b) => {
+          if (b && b.key_set === true) {
+            const pill = root.querySelector('[data-create-byok-pill]');
+            if (pill) pill.classList.remove('hidden');
+          }
+        })
+        .catch(() => {
+          /* swallow */
+        });
+
       // Best-effort probe: hit the create-session disabled-stub via OPTIONS
       // semantics replacement — actually just attempt to read the
       // bundled-llm-status endpoint, which surfaces 503 in the same
@@ -424,10 +470,16 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
         .then((body) => {
           const data = Array.isArray(body.data) ? body.data : [];
           if (data.length === 0 || !recentList || !recentSection) return;
+          // Show only the 6 most-recent. "See all" CTA goes here in
+          // a future iteration once we have a full /agent-sessions/
+          // history page.
+          const recent = data.slice(0, 6);
           if (recentCount)
             recentCount.textContent =
-              data.length.toString() + ' session' + (data.length === 1 ? '' : 's');
-          recentList.innerHTML = data
+              data.length.toString() +
+              ' total · showing ' +
+              recent.length.toString();
+          recentList.innerHTML = recent
             .map((s) => {
               const id = escHtmlForRecent(s.id || '');
               const mode = escHtmlForRecent(s.mode || 'ai');
@@ -440,20 +492,12 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
                   ? s.tokens_used.toLocaleString()
                   : '—';
               return (
-                '<li class="py-3 flex items-center justify-between gap-4 hover:bg-white/5 px-2 -mx-2 rounded">' +
+                '<li>' +
                 '<a href="/agent-sessions/' +
                 id +
-                '" class="flex-1 min-w-0">' +
-                '<p class="font-mono text-xs text-ink-muted truncate">' +
-                id +
-                '</p>' +
-                '<p class="mt-0.5 text-xs text-ink-muted">' +
-                age +
-                ' · ' +
-                tokens +
-                ' tokens</p>' +
-                '</a>' +
-                '<span class="inline-flex items-center gap-1.5 rounded-full bg-glow-red/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-glow-red">' +
+                '" class="block rounded-lg border border-white/10 bg-surface-raised/50 p-3 hover:border-glow-red/40 hover:bg-surface-raised">' +
+                '<div class="flex items-center justify-between gap-2">' +
+                '<span class="inline-flex items-center rounded-full bg-glow-red/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-glow-red">' +
                 mode +
                 '</span>' +
                 '<span class="inline-flex items-center rounded-full ' +
@@ -461,6 +505,16 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
                 ' px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide">' +
                 status +
                 '</span>' +
+                '</div>' +
+                '<p class="mt-2 font-mono text-xs text-ink-muted truncate">' +
+                id +
+                '</p>' +
+                '<p class="mt-1 text-xs text-ink-muted">' +
+                age +
+                ' · ' +
+                tokens +
+                ' tokens</p>' +
+                '</a>' +
                 '</li>'
               );
             })
