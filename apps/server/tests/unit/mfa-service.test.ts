@@ -242,7 +242,10 @@ describe('V-553.B-11 MfaService.verifyCode', () => {
     expect(result).toBeNull();
   });
 
-  it('consumes a recovery code on use (single-use semantics)', async () => {
+  // 2026-05-23 — extended to 30s for scrypt-heavy recovery-code flow.
+  // Default 10s timeout was flaking under high test-parallelism CPU
+  // contention (10 scrypt calls in completeEnrollment).
+  it('consumes a recovery code on use (single-use semantics)', { timeout: 30_000 }, async () => {
     const { repo, state } = makeRepo();
     const svc = new MfaService(repo, SVC_CONFIG);
     const start = await svc.startEnrollment({ accountId: 'acc_1', email: 'u@e.test' });

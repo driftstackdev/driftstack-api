@@ -110,7 +110,9 @@ async function setupEnrolledFreshSession(
 }
 
 describe('V-353e step-up gate on DELETE /v1/account/mfa + POST disable', () => {
-  it('200/204: fresh MFA-satisfied web session passes the gate', async () => {
+  // 2026-05-23 — 30s timeout for scrypt-heavy MFA enrollment under
+  // high test-parallelism CPU contention.
+  it('200/204: fresh MFA-satisfied web session passes the gate', { timeout: 30_000 }, async () => {
     fx = await buildTestApp();
     const { token } = await setupEnrolledFreshSession(fx, 'fresh@driftstack.local');
     const res = await fx.app.inject({

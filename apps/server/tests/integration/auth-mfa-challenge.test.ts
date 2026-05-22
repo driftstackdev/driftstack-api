@@ -104,24 +104,30 @@ async function setupEnrolledAccount(
 }
 
 describe('POST /v1/auth/login when MFA enrolled (V-353d)', () => {
-  it('200 returns challenge_token + challenge_expires_at instead of session', async () => {
-    fx = await buildTestApp();
-    await setupEnrolledAccount(fx, 'mfa-login@driftstack.local', 'correct horse battery staple');
+  // 2026-05-23 — 30s timeout for scrypt-heavy MFA enrollment under
+  // high test-parallelism CPU contention.
+  it(
+    '200 returns challenge_token + challenge_expires_at instead of session',
+    { timeout: 30_000 },
+    async () => {
+      fx = await buildTestApp();
+      await setupEnrolledAccount(fx, 'mfa-login@driftstack.local', 'correct horse battery staple');
 
-    const login = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/auth/login',
-      payload: { email: 'mfa-login@driftstack.local', password: 'correct horse battery staple' },
-    });
-    expect(login.statusCode).toBe(200);
-    const body = login.json<MfaRequiredResponse | SessionEnvelope>();
-    expect('mfa_required' in body).toBe(true);
-    if ('mfa_required' in body) {
-      expect(body.mfa_required).toBe(true);
-      expect(body.challenge_token).toMatch(/^[A-Za-z0-9_-]{40,}$/);
-      expect(new Date(body.challenge_expires_at).getTime()).toBeGreaterThan(Date.now());
-    }
-  });
+      const login = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/login',
+        payload: { email: 'mfa-login@driftstack.local', password: 'correct horse battery staple' },
+      });
+      expect(login.statusCode).toBe(200);
+      const body = login.json<MfaRequiredResponse | SessionEnvelope>();
+      expect('mfa_required' in body).toBe(true);
+      if ('mfa_required' in body) {
+        expect(body.mfa_required).toBe(true);
+        expect(body.challenge_token).toMatch(/^[A-Za-z0-9_-]{40,}$/);
+        expect(new Date(body.challenge_expires_at).getTime()).toBeGreaterThan(Date.now());
+      }
+    },
+  );
 
   it('returns plain session when MFA NOT enrolled (back-compat)', async () => {
     fx = await buildTestApp();
