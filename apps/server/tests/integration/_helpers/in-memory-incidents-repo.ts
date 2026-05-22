@@ -110,6 +110,31 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
     return { incident, update };
   }
 
+  // 2026-05-22 — admin reopen. Mirrors the Drizzle repo's behavior:
+  // transition status back to 'investigating', clear resolved_at,
+  // post a timeline update.
+  async reopen(input: {
+    incidentId: string;
+    message: string;
+    postedByAdminId: string;
+    postedByAdminKeyId: string;
+  }): Promise<{ incident: IncidentRow; update: IncidentUpdateRow }> {
+    const incident = this.incidents.find((r) => r.id === input.incidentId);
+    if (!incident) throw new NotFoundError(`Incident ${input.incidentId} not found.`);
+    const update = await this.addUpdate({
+      incidentId: input.incidentId,
+      message: input.message,
+      status: 'investigating',
+      postedByAdminId: input.postedByAdminId,
+      postedByAdminKeyId: input.postedByAdminKeyId,
+    });
+    const now = new Date();
+    incident.status = 'investigating';
+    incident.resolvedAt = null;
+    incident.updatedAt = now;
+    return { incident, update };
+  }
+
   /** Test-only — exposes raw rows for assertions. */
   getAll(): { incidents: readonly IncidentRow[]; updates: readonly IncidentUpdateRow[] } {
     return { incidents: this.incidents, updates: this.updates };
