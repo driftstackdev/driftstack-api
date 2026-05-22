@@ -112,12 +112,14 @@ Authorization: Bearer $ADMIN_KEY</code></pre>
       Server-side, the <code>crypto.order.failed</code> event
       emitted by these transitions carries a <code>reason</code>
       field with one of <code>ipn</code> / <code>expired</code> /
-      <code>swept</code>. This event is not yet customer-
-      subscribable (not in
-      <code>SubscribableWebhookEventTypeSchema</code>); see
+      <code>swept</code>. This event is customer-subscribable
+      via <code>POST /v1/webhooks</code> (in
+      <code>SubscribableWebhookEventTypeSchema</code> as of
+      2026-05-22, migration 0064); see
       <a href="/docs/webhooks-crypto-events">/docs/webhooks-crypto-events</a>
-      for graduation status. Ops can read the same source via the
-      <code>/events</code> endpoint above today.
+      for the payload contract. Ops can read the same source via
+      the <code>/events</code> endpoint above for retrospective
+      audit.
     </p>
 
     <h2>"How do I bulk-export today's orders for reconciliation?"</h2>

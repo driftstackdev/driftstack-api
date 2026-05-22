@@ -87,11 +87,16 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
     expect(body).toMatch(/Webhook\s+signature verification/);
   });
 
-  it('Webhooks card: 5 event types pinned (session.completed / .failed / api_key.revoked / quota.warning_80pct / .exceeded) + HMAC-SHA256', () => {
+  it('Webhooks card: 7 LIVE event types pinned + HMAC-SHA256. 2026-05-22 — crypto-order events landed LIVE (bdb6cb7a); pin expanded from 5 to 7 to include crypto.order.paid + crypto.order.failed.', () => {
     expect(body).toMatch(/Event types \+ signature verification →/);
-    expect(body).toMatch(
-      /All five event types — session\.completed, session\.failed,\s+api_key\.revoked, quota\.warning_80pct, quota\.exceeded/,
-    );
+    expect(body).toMatch(/All seven LIVE event types/);
+    expect(body).toMatch(/session\.completed/);
+    expect(body).toMatch(/session\.failed/);
+    expect(body).toMatch(/api_key\.revoked/);
+    expect(body).toMatch(/quota\.warning_80pct/);
+    expect(body).toMatch(/quota\.exceeded/);
+    expect(body).toMatch(/crypto\.order\.paid/);
+    expect(body).toMatch(/crypto\.order\.failed/);
     expect(body).toMatch(/HMAC-SHA256 verification examples/);
   });
 

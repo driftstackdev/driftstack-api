@@ -1,11 +1,13 @@
 // W356.A — drift guard for /docs/crypto-orders-polling-vs-webhooks.
-// V-666.BV practitioner guide. The page's central claim is that
-// crypto.order.* events are NOT yet subscribable today, so
-// polling is the only customer-facing detection path. Pinned:
+// V-666.BV practitioner guide. As of 2026-05-22 migration 0064 +
+// bootstrap emitter sink, crypto.order.paid + crypto.order.failed
+// ARE in SubscribableWebhookEventTypeSchema, so the page documents
+// both polling and the now-live hybrid webhook + reconciliation
+// pattern. Pinned:
 //
-//   • crypto.order.paid + crypto.order.failed are NOT in
+//   • crypto.order.paid + crypto.order.failed ARE in
 //     SubscribableWebhookEventTypeSchema (the page's central
-//     premise — if this flips, the page needs a rewrite).
+//     premise — if this flips back, the page needs a rewrite).
 //   • The terminal-status set the polling snippet hedges
 //     (paid / failed / partial / cancelled) is a subset of
 //     CryptoOrderStatusSchema values.
@@ -13,8 +15,9 @@
 //     is registered server-side.
 //   • Polling cadence guidance (1-5s / 30-60s / hourly).
 //   • Customer-dashboard 60s poll cadence claim pinned.
-//   • Hybrid (webhooks + nightly poll) framed as roadmap; idempotency-
-//     key advice ((order_id, status)) pinned.
+//   • Hybrid (webhooks + reconciliation polling) framed as the
+//     recommended pattern; idempotency-key advice
+//     ((order_id, status)) pinned.
 //   • Cross-links to /docs/webhooks-crypto-events + /docs/webhooks
 //     + /docs/sdk-typescript-crypto-orders +
 //     /docs/billing-crypto-integration-guide all resolve.
@@ -54,12 +57,13 @@ describe('W356.A /docs/crypto-orders-polling-vs-webhooks parity', () => {
     (CryptoOrderStatusSchema._def as { values: readonly string[] }).values,
   );
 
-  it('central premise: crypto.order.paid + crypto.order.failed NOT yet subscribable', () => {
-    expect(subscribable.has('crypto.order.paid')).toBe(false);
-    expect(subscribable.has('crypto.order.failed')).toBe(false);
+  it('central premise: crypto.order.paid + crypto.order.failed ARE subscribable', () => {
+    expect(subscribable.has('crypto.order.paid')).toBe(true);
+    expect(subscribable.has('crypto.order.failed')).toBe(true);
     expect(body).toMatch(
-      /<strong>not yet<\/strong>\s*in\s*<code>SubscribableWebhookEventTypeSchema<\/code>/,
+      /<code>crypto\.order\.paid<\/code>\s*\/\s*<code>crypto\.order\.failed<\/code>\s*events/,
     );
+    expect(body).toContain('SubscribableWebhookEventTypeSchema');
   });
 
   it('polling-loop terminal-status set is a subset of CryptoOrderStatusSchema', () => {
@@ -96,12 +100,11 @@ describe('W356.A /docs/crypto-orders-polling-vs-webhooks parity', () => {
     expect(body).toMatch(/cursors internally/);
   });
 
-  it('hybrid (webhooks + reconciliation polling) framed as roadmap — not the current contract', () => {
-    expect(body).toMatch(/Roadmap: hybrid \(webhooks \+ reconciliation polling\)/);
-    expect(body).toMatch(/Once <code>crypto\.order\.\*<\/code> events are added/);
-    // Negative guard: the page must not advertise the webhook
-    // pattern as live until the schema flips.
-    expect(body).toMatch(/Today this event is not deliverable/);
+  it('hybrid (webhooks + reconciliation polling) framed as the recommended pattern (now live)', () => {
+    expect(body).toMatch(/Recommended: hybrid \(webhooks \+ reconciliation polling\)/);
+    expect(body).toMatch(
+      /Both <code>crypto\.order\.paid<\/code> and\s*<code>crypto\.order\.failed<\/code> are in\s*<code>SubscribableWebhookEventTypeSchema<\/code>/,
+    );
   });
 
   it('idempotency advice for the hybrid future pinned ((order_id, status) keying)', () => {

@@ -82,16 +82,14 @@ describe('W513.C apps/marketing-site/src/pages/docs/crypto-orders-ops-runbook.as
     );
   });
 
-  it("Failed-order 3-cause framing pinned: NowPayments terminal failure (failed/expired/refunded) + pay window elapsed + admin sweep + crypto.order.failed reason field with ipn/expired/swept + 'not yet customer-subscribable (not in SubscribableWebhookEventTypeSchema)' — pinned so the 3-cause + 3-reason-enum + SubscribableWebhookEventTypeSchema anchor survive (drift to claiming the event is subscribable would create marketing↔SubscribableWebhookEventTypeSchema divergence)", () => {
+  it('Failed-order 3-cause framing pinned: NowPayments terminal failure (failed/expired/refunded) + pay window elapsed + admin sweep + crypto.order.failed reason field with ipn/expired/swept + customer-subscribable framing — pinned so the 3-cause + 3-reason-enum + subscribable status survive. 2026-05-22 — migration 0064 + bootstrap wire (ee725ba3) flipped the event LIVE; doc + pin flipped accordingly. Anti-drift: claiming the event is NOT subscribable would re-create the pre-0064 stale framing.', () => {
     expect(body).toMatch(
       /NowPayments reported a terminal failure\s*\n?\s*\(<code>failed<\/code> \/ <code>expired<\/code> \/\s*\n?\s*<code>refunded<\/code>\)/,
     );
     expect(body).toMatch(
       /Server-side, the <code>crypto\.order\.failed<\/code> event\s*\n?\s*emitted by these transitions carries a <code>reason<\/code>\s*\n?\s*field with one of <code>ipn<\/code> \/ <code>expired<\/code> \/\s*\n?\s*<code>swept<\/code>\./,
     );
-    expect(body).toMatch(
-      /This event is not yet customer-\s*\n?\s*subscribable \(not in\s*\n?\s*<code>SubscribableWebhookEventTypeSchema<\/code>\)/,
-    );
+    expect(body).toMatch(/This event is customer-subscribable/);
   });
 
   it('V-666.BY CSV export with date-range + status filter framing pinned. Re-enabled by slice 257 after restoring the V-666.BY anchor on the date-range scoping paragraph at crypto-orders-ops-runbook.astro:131', () => {

@@ -235,7 +235,9 @@ moves to `[LIVE]`.
 }
 ```
 
-### `crypto.order.paid` / `crypto.order.failed` [LIVE]
+### `crypto.order.paid` [LIVE]
+
+### `crypto.order.failed` [LIVE]
 
 V-666 — fires when a NowPayments-backed crypto checkout order
 transitions to a terminal state. Wired end-to-end 2026-05-22

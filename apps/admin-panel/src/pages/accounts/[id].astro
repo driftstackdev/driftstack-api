@@ -454,7 +454,7 @@ const accountId = account.id;
         // doesn't show "Couldn't load account" to operators just
         // inspecting tier/status.
         const costBody = root.querySelector('[data-account-cost-body]');
-        authedFetch('/v1/admin/cost/accounts/' + encodeURIComponent(prefixedId))
+        authedFetch(`/v1/admin/cost/accounts/${encodeURIComponent(prefixedId)}`)
           .then((r) => (r.ok ? r.json() : null))
           .then((b) => {
             if (!costBody) return;

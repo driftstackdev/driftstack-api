@@ -1,25 +1,23 @@
 // W363.A — drift guard for /docs/webhooks-crypto-events. V-716.
-// The server-side W220.A parity test already pins the negative
-// claim (crypto.order.paid/failed NOT in
-// SubscribableWebhookEventTypeSchema). This complementary guard
-// pins the positive surface claims so the page stays accurate
-// about the planned event shape + the polling alternative today.
+// As of 2026-05-22 (migration 0064 + bootstrap emitter sink), the
+// crypto.order.paid + crypto.order.failed events ARE in
+// SubscribableWebhookEventTypeSchema; this guard pins the live
+// subscribe-via-POST-/v1/webhooks copy + the payload contract.
 //
 // Pinned:
-//   • Negative claim: crypto.order.paid + crypto.order.failed are
-//     NOT subscribable today (matches schema source-of-truth).
+//   • Central claim: crypto.order.paid + crypto.order.failed ARE
+//     subscribable today (matches schema source-of-truth).
 //   • Polling-alternative endpoint GET
 //     /v1/billing/crypto-orders/:id registered server-side.
-//   • Planned crypto.order.paid payload fields (order_id,
-//     product, price_cents, price_currency, payment_id, paid_at)
-//     pinned for forward-planning integrators.
-//   • Planned crypto.order.failed payload fields + reason set
+//   • crypto.order.paid payload fields (order_id, product,
+//     price_cents, price_currency, payment_id, paid_at) pinned.
+//   • crypto.order.failed payload fields + reason set
 //     (ipn / expired / swept) pinned.
 //   • failed.payment_id field type "string | null" pinned
 //     (orders swept before receiving IPN may have no payment_id).
 //   • Cross-links resolve: /docs/webhooks, /docs/billing-crypto-
 //     overview, /docs/crypto-orders-polling-vs-webhooks,
-//     /legal/refunds, /changelog, /api-reference.
+//     /legal/refunds.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -42,13 +40,11 @@ describe('W363.A /docs/webhooks-crypto-events parity', () => {
     (SubscribableWebhookEventTypeSchema._def as { values: readonly string[] }).values,
   );
 
-  it('central claim: crypto.order.paid + crypto.order.failed NOT subscribable today', () => {
-    expect(subscribable.has('crypto.order.paid')).toBe(false);
-    expect(subscribable.has('crypto.order.failed')).toBe(false);
-    expect(body).toMatch(/these events are not yet on the\s+public webhook subscription list/);
-    expect(body).toMatch(
-      /<code class="font-mono">events: \["crypto\.order\.paid"\]<\/code>\s+is rejected today/,
-    );
+  it('central claim: crypto.order.paid + crypto.order.failed ARE subscribable today', () => {
+    expect(subscribable.has('crypto.order.paid')).toBe(true);
+    expect(subscribable.has('crypto.order.failed')).toBe(true);
+    expect(body).toMatch(/Both are subscribable via\s*<code>POST \/v1\/webhooks<\/code>/);
+    expect(body).toContain('"events": ["crypto.order.paid", "crypto.order.failed"]');
   });
 
   it('polling alternative GET /v1/billing/crypto-orders/:id registered server-side', () => {
@@ -108,8 +104,6 @@ describe('W363.A /docs/webhooks-crypto-events parity', () => {
       expect(body).toContain(href);
       expect(existsSync(resolve(REPO_ROOT, path)), `missing: ${path}`).toBe(true);
     }
-    expect(body).toContain('/changelog');
-    expect(body).toContain('/api-reference');
   });
 
   it('"how to be notified" copy points at SubscribableWebhookEventTypeSchema (schema-name pinned)', () => {

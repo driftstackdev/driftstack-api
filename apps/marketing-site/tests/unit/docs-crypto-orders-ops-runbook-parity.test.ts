@@ -11,8 +11,9 @@
 //   • payment_id exact-match filter is distinct from the fuzzy
 //     search param (V-666.AY) — both stay pinned.
 //   • crypto.order.failed reason set (ipn / expired / swept)
-//     pinned; the page's claim that this event is NOT yet
-//     customer-subscribable matches SubscribableWebhookEventTypeSchema.
+//     pinned; the page's claim that this event IS customer-
+//     subscribable matches SubscribableWebhookEventTypeSchema
+//     (LIVE as of 2026-05-22 migration 0064).
 //   • Non-refundable policy + customer-credit-not-refund framing
 //     pinned (consequential decision the page is published to
 //     audit).
@@ -94,10 +95,10 @@ describe('W358.A /docs/crypto-orders-ops-runbook parity', () => {
     );
   });
 
-  it('crypto.order.failed is NOT yet customer-subscribable (matches schema)', () => {
-    expect(subscribable.has('crypto.order.failed')).toBe(false);
+  it('crypto.order.failed IS customer-subscribable (matches schema)', () => {
+    expect(subscribable.has('crypto.order.failed')).toBe(true);
     expect(body).toMatch(
-      /not yet customer-\s*subscribable.*<code>SubscribableWebhookEventTypeSchema<\/code>/s,
+      /customer-subscribable.*<code>SubscribableWebhookEventTypeSchema<\/code>/s,
     );
   });
 
