@@ -50,6 +50,32 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </header>
 
+    {/* 2026-05-22 — admin force-subscribe. Bypasses public double-
+        opt-in flow when staff has out-of-band consent (sales
+        handoff, ticket). Audit-logged via
+        admin_audit_action='status_subscriber.force_subscribed'. */}
+    <form
+      data-add-form
+      class="mb-6 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4"
+      autocomplete="off"
+    >
+      <div class="flex-1 min-w-[260px]">
+        <label for="add-email" class="block text-xs font-medium uppercase tracking-wide text-slate-500">
+          Add subscriber (force, no opt-in email)
+        </label>
+        <input
+          id="add-email"
+          name="email"
+          type="email"
+          required
+          placeholder="customer@example.com"
+          class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+        />
+      </div>
+      <button type="submit" class="btn-primary">Add subscriber</button>
+    </form>
+    <div data-add-result class="mb-6 hidden rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs"></div>
+
     <div class="rounded-lg border border-slate-200 bg-white">
       <ul data-list class="divide-y divide-slate-100">
         <li class="px-6 py-4 text-sm text-slate-500">Loading subscribers…</li>
@@ -238,6 +264,76 @@ const apiBaseUrl = resolveApiBaseUrl();
                 btn.textContent = 'Force unsubscribe';
               });
           });
+        });
+      }
+
+      // 2026-05-22 — admin force-subscribe form. POSTs the email +
+      // shows the returned unsubscribe link in the success banner so
+      // staff can copy it for the customer. Refreshes the list on
+      // success.
+      const addForm = root.querySelector('[data-add-form]');
+      const addResult = root.querySelector('[data-add-result]');
+      if (addForm) {
+        addForm.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          const token = getToken();
+          if (!token) {
+            showBanner('Sign in with a staff admin account first.', true);
+            return;
+          }
+          const emailEl = addForm.querySelector('#add-email');
+          const email = emailEl && 'value' in emailEl ? emailEl.value.trim() : '';
+          if (!email) return;
+          const submitBtn = addForm.querySelector('button[type="submit"]');
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Adding…';
+          }
+          if (addResult) addResult.classList.add('hidden');
+          fetch(apiBaseUrl + '/v1/admin/status-subscribers/force-subscribe', {
+            method: 'POST',
+            headers: {
+              authorization: 'Bearer ' + token,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({ email: email }),
+          })
+            .then((r) =>
+              r.ok
+                ? r.json()
+                : r
+                    .json()
+                    .catch(() => ({}))
+                    .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status))),
+            )
+            .then((body) => {
+              if (addResult) {
+                addResult.classList.remove('hidden');
+                addResult.innerHTML =
+                  '<p class="font-medium text-emerald-700">Added ' +
+                  escapeHtml(body.email) +
+                  ' (' +
+                  escapeHtml(body.id) +
+                  ').</p>' +
+                  '<p class="mt-1 text-emerald-700">Unsubscribe link: <code class="font-mono">' +
+                  escapeHtml(body.unsubscribe_link) +
+                  '</code></p>';
+              }
+              if (emailEl && 'value' in emailEl) emailEl.value = '';
+              refreshWithLive();
+            })
+            .catch((err) => {
+              showBanner(
+                'Add subscriber failed: ' + (err && err.message ? err.message : 'network error'),
+                true,
+              );
+            })
+            .finally(() => {
+              if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Add subscriber';
+              }
+            });
         });
       }
 

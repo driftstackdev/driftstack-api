@@ -435,6 +435,13 @@
       "when": 1779478800000,
       "tag": "0061_webhook_delivery_discarded_audit_action",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1779565200000,
+      "tag": "0062_status_subscriber_force_subscribed_audit_action",
+      "breakpoints": true
     }
   ]
 }

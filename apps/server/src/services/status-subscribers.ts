@@ -182,6 +182,64 @@ export class StatusSubscribersService {
     return this.repo.listAll({ limit: opts.limit ?? 50, offset: opts.offset ?? 0 });
   }
 
+  /** 2026-05-22 — admin force-subscribe. Bypasses the public double-
+   *  opt-in flow (no confirmation email; staff has out-of-band consent
+   *  per a ticket / sales handoff). Reuses upsertPending → markConfirmed
+   *  so the row enters the same final state a normal flow produces.
+   *  The unsubscribe token still gets minted so an admin-added
+   *  subscriber can opt out via the standard unsub link. Returns the
+   *  confirmed row + the unsubscribe link so the route can audit-log
+   *  + the staff member can copy the link to share if asked. */
+  async adminForceSubscribe(
+    rawEmail: string,
+    now: Date,
+  ): Promise<{ id: string; email: string; confirmedAt: Date; unsubscribeLink: string }> {
+    const normalized = rawEmail.trim().toLowerCase();
+    if (!normalized || !normalized.includes('@')) {
+      throw new BadRequestError('Invalid email address.');
+    }
+    // upsertPending mints / refreshes the row with a confirm token we
+    // immediately discard — admin authority replaces customer-side
+    // proof-of-control. The confirmTokenHash field is left populated
+    // but unused after markConfirmed clears the confirm_token_hash
+    // column in the standard flow's SQL.
+    const confirmPlaintext = generateAuthToken();
+    const pending = await this.repo.upsertPending({
+      email: normalized,
+      confirmTokenHash: tokenHash(confirmPlaintext),
+      confirmExpiresAt: new Date(now.getTime() + CONFIRM_TOKEN_TTL_MS),
+    });
+    if (pending.confirmedAt !== null) {
+      // Already-confirmed subscriber — admin re-adding is a no-op
+      // beyond rotating their unsubscribe token so the audit trail
+      // captures the action.
+      const fresh = generateAuthToken();
+      await this.repo.rotateUnsubscribeTokenHash({ id: pending.id, hash: tokenHash(fresh) });
+      // pending.email is non-null here — upsertPending always writes
+      // the normalized email; the only way email becomes null is
+      // after the 90d purge sweep, which we can't hit on a row we
+      // just inserted/refreshed in this call.
+      return {
+        id: pending.id,
+        email: pending.email ?? normalized,
+        confirmedAt: pending.confirmedAt,
+        unsubscribeLink: `${this.baseUrl}/unsubscribe?token=${encodeURIComponent(fresh)}`,
+      };
+    }
+    const unsubPlaintext = generateAuthToken();
+    const confirmed = await this.repo.markConfirmed({
+      id: pending.id,
+      confirmedAt: now,
+      unsubscribeTokenHash: tokenHash(unsubPlaintext),
+    });
+    return {
+      id: confirmed.id,
+      email: confirmed.email ?? normalized,
+      confirmedAt: confirmed.confirmedAt ?? now,
+      unsubscribeLink: `${this.baseUrl}/unsubscribe?token=${encodeURIComponent(unsubPlaintext)}`,
+    };
+  }
+
   /** V-295c3-tombstone — admin force-unsubscribe (no token; admin
    *  authority). Returns the row before the change so the route can
    *  audit-log the email value. */

@@ -67,6 +67,63 @@ export function registerAdminStatusSubscribersRoutes(
     },
   );
 
+  // 2026-05-22 — admin force-subscribe. Bypasses the public double-
+  // opt-in flow when staff has out-of-band consent (sales handoff,
+  // customer-support ticket, etc.). Body is just `{ email }`; the
+  // service mints a fresh unsubscribe token + returns the link so
+  // staff can copy + share if asked.
+  const ForceSubscribeSchema = z.object({
+    email: z.string().email().max(254),
+  });
+  app.post(
+    '/v1/admin/status-subscribers/force-subscribe',
+    {
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+    },
+    async (request, reply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const parsed = ForceSubscribeSchema.safeParse(request.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      let row: Awaited<ReturnType<typeof service.adminForceSubscribe>> | null = null;
+      try {
+        row = await service.adminForceSubscribe(parsed.data.email, new Date());
+        await audit.record({
+          adminAccountId: ctx.account.id,
+          adminKeyId: ctx.apiKey.id,
+          action: 'status_subscriber.force_subscribed',
+          targetAccountId: null,
+          targetResourceId: `sub_${row.id}`,
+          inputPayload: { email: parsed.data.email },
+          result: 'success',
+          ipAddress: readClientIp(request),
+        });
+      } catch (err) {
+        const code =
+          err instanceof Error && err.name
+            ? err.name.toLowerCase().replace(/error$/, '')
+            : 'unknown';
+        await audit.record({
+          adminAccountId: ctx.account.id,
+          adminKeyId: ctx.apiKey.id,
+          action: 'status_subscriber.force_subscribed',
+          targetAccountId: null,
+          targetResourceId: 'sub_pending',
+          inputPayload: { email: parsed.data.email },
+          result: `error: ${code}`,
+          ipAddress: readClientIp(request),
+        });
+        throw err;
+      }
+      return reply.code(201).send({
+        id: `sub_${row.id}`,
+        email: row.email,
+        confirmed_at: row.confirmedAt.toISOString(),
+        unsubscribe_link: row.unsubscribeLink,
+      });
+    },
+  );
+
   app.post<{ Params: { id: string } }>(
     '/v1/admin/status-subscribers/:id/force-unsubscribe',
     {

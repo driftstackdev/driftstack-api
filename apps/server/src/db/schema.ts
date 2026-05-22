@@ -173,6 +173,9 @@ export const adminAuditAction = pgEnum('admin_audit_action', [
   // V-295c3-tombstone: status-page email subscriber admin actions.
   'status_subscriber.force_unsubscribed',
   'status_subscriber.purged',
+  // 2026-05-22 — admin force-subscribe (migration 0062). Bypasses
+  // double-opt-in when staff has out-of-band consent.
+  'status_subscriber.force_subscribed',
   // LK.2: per-Mac LiveKit credential registration (migration 0057).
   'mac_node.livekit_registered',
 ]);
