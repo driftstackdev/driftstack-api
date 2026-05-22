@@ -54,9 +54,19 @@ const apiBaseUrl = resolveApiBaseUrl();
     >
     </div>
 
+    {/* 2026-05-22 — icons on each stat card for visual anchor.
+        Same glow-red square mark used across marketing surface. */}
     <section class="grid gap-6 md:grid-cols-3">
       <div class="dashboard-card">
-        <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Concurrent sessions</p>
+        <div class="flex items-start justify-between">
+          <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Concurrent sessions</p>
+          <div class="flex h-8 w-8 items-center justify-center rounded-md bg-glow-red/10 text-glow-red ring-1 ring-glow-red/30">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <path d="M8 21h8M12 17v4" />
+            </svg>
+          </div>
+        </div>
         <p class="mt-3 text-3xl font-semibold text-ink-primary">
           <span data-stat-concurrent>—</span>
           <span class="text-base font-normal text-ink-muted">
@@ -66,7 +76,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         <p class="mt-1 text-sm text-ink-muted">running now</p>
       </div>
       <div class="dashboard-card">
-        <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Profiles</p>
+        <div class="flex items-start justify-between">
+          <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Profiles</p>
+          <div class="flex h-8 w-8 items-center justify-center rounded-md bg-glow-red/10 text-glow-red ring-1 ring-glow-red/30">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="7" r="4" />
+              <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+            </svg>
+          </div>
+        </div>
         <p class="mt-3 text-3xl font-semibold text-ink-primary">
           <span data-stat-profiles>—</span>
           <span data-stat-profiles-cap class="text-base font-normal text-ink-muted"></span>
@@ -74,7 +92,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         <p class="mt-1 text-sm text-ink-muted">saved identities</p>
       </div>
       <div class="dashboard-card">
-        <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">API keys</p>
+        <div class="flex items-start justify-between">
+          <p class="text-xs font-mono uppercase tracking-widest text-ink-muted">API keys</p>
+          <div class="flex h-8 w-8 items-center justify-center rounded-md bg-glow-red/10 text-glow-red ring-1 ring-glow-red/30">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="9" cy="12" r="7" />
+              <path d="M16 12h6M19 9v6" />
+            </svg>
+          </div>
+        </div>
         <p class="mt-3 text-3xl font-semibold text-ink-primary"><span data-stat-api-keys>—</span></p>
         <p class="mt-1 text-sm text-ink-muted">active</p>
       </div>
