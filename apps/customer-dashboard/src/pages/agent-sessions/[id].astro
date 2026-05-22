@@ -200,9 +200,12 @@ const apiBaseUrl = resolveApiBaseUrl();
           </span>
         </div>
 
-        <!-- Transcript: SSE-fed in Slice 4; scaffolded with mock entries. -->
+        {/* 2026-05-22 — transcript: bigger padding + spacing + base
+            text size (was text-sm). The workbench is the AI agent's
+            primary surface; chat content should read at body-text
+            weight, not the secondary text-sm used for sidebar items. */}
         <div
-          class="flex-1 overflow-y-auto px-4 py-4 space-y-3 text-sm"
+          class="flex-1 overflow-y-auto px-6 py-6 space-y-5 text-sm leading-relaxed"
           data-component="ChatTranscript"
           aria-live="polite"
         >
@@ -615,11 +618,15 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       labelRow.appendChild(label);
       labelRow.appendChild(time);
       const bubble = document.createElement('div');
+      // 2026-05-22 — bigger bubble (px-4 py-3 instead of px-3 py-2)
+      // + thin border for visual separation between adjacent
+      // bubbles. Customer bubbles get a left accent stripe; agent
+      // bubbles get a glow-red tint that matches the brand.
       bubble.className =
-        'group whitespace-pre-wrap break-words rounded-md px-3 py-2 text-sm relative ' +
+        'group whitespace-pre-wrap break-words rounded-lg px-4 py-3 text-sm relative border ' +
         (role === 'agent'
-          ? 'bg-glow-red/5 text-ink-primary'
-          : 'bg-slate-800 text-ink-primary');
+          ? 'bg-glow-red/5 border-glow-red/20 text-ink-primary'
+          : 'bg-slate-800/60 border-slate-700/60 text-ink-primary');
       // 2026-05-21 — inline-code rendering for agent turns. Matches
       // single-backtick `code` spans and wraps them in <code> with
       // a subtle background. HTML-safe: we re-encode the body before
