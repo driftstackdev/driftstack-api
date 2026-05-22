@@ -53,13 +53,19 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
     );
   });
 
-  it('V-356 SubscribableWebhookEventType: excludes test.ping; "subscribing to test.ping is meaningless" rationale pinned', () => {
+  it('V-356 SubscribableWebhookEventType: excludes test.ping; "subscribing to test.ping is meaningless" rationale pinned. 2026-05-22 — V-666 crypto.order.paid + crypto.order.failed added (migration 0064).', () => {
     expect(body).toMatch(
       /\*\s*V-356 — events the customer is allowed to subscribe to\. Excludes\s*\n?\s*\*\s*`test\.ping`, which is only ever emitted via the explicit test\s*\n?\s*\*\s*endpoint \(subscribing to it would be meaningless — the test\s*\n?\s*\*\s*endpoint dispatches regardless of subscription\)\./,
     );
-    expect(body).toMatch(
-      /export const SubscribableWebhookEventTypeSchema = z\.enum\(\[\s*\n?\s*'session\.completed',\s*\n?\s*'session\.failed',\s*\n?\s*'quota\.warning_80pct',\s*\n?\s*'quota\.exceeded',\s*\n?\s*'api_key\.revoked',\s*\n?\s*\/\/ Arc 5 EGRESS eg\.7[\s\S]*?'session\.egress_capability_changed',\s*\n?\s*\]\);/,
-    );
+    expect(body).toMatch(/export const SubscribableWebhookEventTypeSchema = z\.enum\(\[/);
+    expect(body).toMatch(/'session\.completed',/);
+    expect(body).toMatch(/'session\.failed',/);
+    expect(body).toMatch(/'quota\.warning_80pct',/);
+    expect(body).toMatch(/'quota\.exceeded',/);
+    expect(body).toMatch(/'api_key\.revoked',/);
+    expect(body).toMatch(/'session\.egress_capability_changed',/);
+    expect(body).toMatch(/'crypto\.order\.paid',/);
+    expect(body).toMatch(/'crypto\.order\.failed',/);
   });
 
   it('WebhookDeliveryStatus enum: pending | in_flight | delivered | failed | dlq', () => {

@@ -25,6 +25,12 @@ export const WebhookEventTypeSchema = z.enum([
   // a one-off delivery regardless of subscription, so the customer
   // can verify their handler before relying on it for real events.
   'test.ping',
+  // 2026-05-22 — V-666 crypto-order events. Fired by
+  // CryptoOrdersService.applyIpnStatus on the
+  // pending/confirming/partial → paid|failed terminal transitions.
+  // Subscribable; see SubscribableWebhookEventTypeSchema below.
+  'crypto.order.paid',
+  'crypto.order.failed',
 ]);
 export type WebhookEventType = z.infer<typeof WebhookEventTypeSchema>;
 
@@ -43,6 +49,11 @@ export const SubscribableWebhookEventTypeSchema = z.enum([
   // Arc 5 EGRESS eg.7 — subscribable so customers can hook
   // proxy-health visibility into their own observability surface.
   'session.egress_capability_changed',
+  // 2026-05-22 — V-666 crypto-order events. Subscribable so
+  // customers integrating /v1/billing/crypto-checkout can react
+  // to terminal state transitions in their own accounting system.
+  'crypto.order.paid',
+  'crypto.order.failed',
 ]);
 export type SubscribableWebhookEventType = z.infer<typeof SubscribableWebhookEventTypeSchema>;
 
