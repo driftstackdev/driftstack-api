@@ -68,6 +68,76 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </section>
 
+    {/* 2026-05-22 — quick actions row. Surfaces the four most-
+        common operations as full-card buttons so a customer landing
+        on the dashboard can act in one click without hunting in
+        the side nav. */}
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-ink-primary">Quick actions</h2>
+      <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <a
+          href="/agent-sessions"
+          class="group rounded-lg border border-white/10 bg-surface-raised p-4 hover:border-glow-red/40 hover:bg-surface-raised/80"
+        >
+          <div class="flex items-center gap-2">
+            <span class="flex h-8 w-8 items-center justify-center rounded-md bg-glow-red/10 text-glow-red">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+              </svg>
+            </span>
+            <p class="font-medium text-ink-primary">Start an AI session</p>
+          </div>
+          <p class="mt-2 text-xs text-ink-muted">Plain-English task → agent runs it.</p>
+        </a>
+        <a
+          href="/profiles"
+          class="group rounded-lg border border-white/10 bg-surface-raised p-4 hover:border-glow-red/40 hover:bg-surface-raised/80"
+        >
+          <div class="flex items-center gap-2">
+            <span class="flex h-8 w-8 items-center justify-center rounded-md bg-glow-red/10 text-glow-red">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="7" r="4" />
+                <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+              </svg>
+            </span>
+            <p class="font-medium text-ink-primary">New profile</p>
+          </div>
+          <p class="mt-2 text-xs text-ink-muted">Create a reusable browser identity.</p>
+        </a>
+        <a
+          href="/api-keys"
+          class="group rounded-lg border border-white/10 bg-surface-raised p-4 hover:border-glow-red/40 hover:bg-surface-raised/80"
+        >
+          <div class="flex items-center gap-2">
+            <span class="flex h-8 w-8 items-center justify-center rounded-md bg-glow-red/10 text-glow-red">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="9" cy="12" r="7" />
+                <path d="M16 12h6M19 9v6" />
+              </svg>
+            </span>
+            <p class="font-medium text-ink-primary">Mint API key</p>
+          </div>
+          <p class="mt-2 text-xs text-ink-muted">For SDK + CLI integrations.</p>
+        </a>
+        <a
+          href="https://docs.driftstack.dev/quickstart/"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="group rounded-lg border border-white/10 bg-surface-raised p-4 hover:border-glow-red/40 hover:bg-surface-raised/80"
+        >
+          <div class="flex items-center gap-2">
+            <span class="flex h-8 w-8 items-center justify-center rounded-md bg-glow-red/10 text-glow-red">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              </svg>
+            </span>
+            <p class="font-medium text-ink-primary">Read the quickstart</p>
+          </div>
+          <p class="mt-2 text-xs text-ink-muted">10-min walkthrough on docs.</p>
+        </a>
+      </div>
+    </section>
+
     <section class="mt-10">
       <div class="flex items-center justify-between">
         <h2 class="text-lg font-semibold text-ink-primary">Active sessions</h2>
