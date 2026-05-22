@@ -56,4 +56,13 @@ export class InMemoryAccountAuditRepo implements AccountAuditRepo {
       nextCursor: hasMore && last ? last.timestamp.toISOString() : null,
     });
   }
+
+  // 2026-05-22 — V-666 profile-import cycle cap helper. Counts rows
+  // matching (accountId, action, timestamp >= since).
+  countActionsSince(accountId: string, action: string, since: Date): Promise<number> {
+    const n = this.rows.filter(
+      (r) => r.accountId === accountId && r.action === action && r.timestamp >= since,
+    ).length;
+    return Promise.resolve(n);
+  }
 }

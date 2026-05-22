@@ -64,6 +64,14 @@ export interface ListAccountAuditPage {
 export interface AccountAuditRepo {
   insert(input: RecordAccountAuditInput): Promise<AccountAuditEntryRow>;
   list(accountId: string, opts: ListAccountAuditOpts): Promise<ListAccountAuditPage>;
+  /**
+   * 2026-05-22 — count entries matching `action` since `since` (inclusive).
+   * Used by the profile-import quota guard: legit backup/restore uses
+   * are rare; abusive cycling (export → delete → import N) shows up as
+   * a high count in a short window. The repo translates this to a
+   * COUNT(*) WHERE account_id = ? AND action = ? AND ts >= ?.
+   */
+  countActionsSince(accountId: string, action: string, since: Date): Promise<number>;
 }
 
 /** Arc 7 obs.10 — bucket an AccountAuditAction (dot-separated namespace
@@ -140,6 +148,13 @@ export class AccountAuditService {
    * call sites swallow errors so audit failures never break the
    * underlying customer action.
    */
+  /** 2026-05-22 — service-internal proxy for the count-since query.
+   *  Used by ProfilesService.importProfile to enforce the per-cycle
+   *  import cap. No scope-gate (internal-only). */
+  async countActionsSince(accountId: string, action: string, since: Date): Promise<number> {
+    return this.repo.countActionsSince(accountId, action, since);
+  }
+
   async record(input: RecordAccountAuditInput): Promise<AccountAuditEntryRow> {
     const row = await this.repo.insert(input);
     // Arc 7 obs.10 — bump the audit-emit counter labelled by the

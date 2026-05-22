@@ -1,6 +1,6 @@
 // V-216 — Drizzle-backed AccountAuditRepo.
 
-import { type SQL, and, desc, eq, gte, lt, lte } from 'drizzle-orm';
+import { type SQL, and, count, desc, eq, gte, lt, lte } from 'drizzle-orm';
 import type { AccountAuditAction, AccountAuditActorType } from '@driftstack/api-types';
 import type {
   AccountAuditEntryRow,
@@ -62,6 +62,24 @@ export class DrizzleAccountAuditRepo implements AccountAuditRepo {
       items: items.map(toRow),
       nextCursor: hasMore && last ? last.timestamp.toISOString() : null,
     };
+  }
+
+  // 2026-05-22 — V-666 profile-import cycle cap helper. Counts entries
+  // matching (accountId, action) since `since`. Uses the
+  // `account_audit_log_action_idx` (account_id, action, timestamp)
+  // composite index — fully covered scan, no table touch.
+  async countActionsSince(accountId: string, action: string, since: Date): Promise<number> {
+    const [row] = await this.database.db
+      .select({ value: count() })
+      .from(accountAuditLog)
+      .where(
+        and(
+          eq(accountAuditLog.accountId, accountId),
+          eq(accountAuditLog.action, action as AccountAuditAction),
+          gte(accountAuditLog.timestamp, since),
+        ),
+      );
+    return row?.value ?? 0;
   }
 }
 

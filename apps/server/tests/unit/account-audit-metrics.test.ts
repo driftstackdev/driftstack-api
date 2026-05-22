@@ -33,6 +33,9 @@ class FakeAuditRepo implements AccountAuditRepo {
   list(): Promise<never> {
     throw new Error('unused');
   }
+  countActionsSince(): Promise<number> {
+    return Promise.resolve(0);
+  }
 }
 
 function makeRegistry(): MetricsRegistry {

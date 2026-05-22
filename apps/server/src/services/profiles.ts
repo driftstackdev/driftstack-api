@@ -306,6 +306,35 @@ export class ProfilesService {
           { limit, current, resource: 'profile', tier: args.tier },
         );
       }
+      // 2026-05-22 — V-666 per-cycle import cap. The ceiling above
+      // prevents holding more than `limit` profiles at any moment,
+      // but a customer could still cycle (export → delete → import
+      // N) to effectively bypass the tier. Cap monthly imports at
+      // 2× the tier ceiling so legit backup/restore + onboarding
+      // workflows clear easily while abuse (continuous churn) hits
+      // a clear wall.
+      if (this.accountAudit !== null) {
+        const cycleStart = new Date();
+        cycleStart.setUTCDate(1);
+        cycleStart.setUTCHours(0, 0, 0, 0);
+        const importsThisCycle = await this.accountAudit.countActionsSince(
+          args.accountId,
+          'profile.imported',
+          cycleStart,
+        );
+        const importCap = limit * 2;
+        if (importsThisCycle >= importCap) {
+          throw new TierLimitError(
+            `Tier "${args.tier}" permits at most ${importCap.toString()} profile imports per billing cycle; you've used ${importsThisCycle.toString()}. The cycle resets on the 1st of each month UTC.`,
+            {
+              limit: importCap,
+              current: importsThisCycle,
+              resource: 'profile_import',
+              tier: args.tier,
+            },
+          );
+        }
+      }
     }
 
     const targetName = args.nameOverride ?? args.payload.name;
