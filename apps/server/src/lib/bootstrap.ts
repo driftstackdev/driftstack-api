@@ -1182,8 +1182,10 @@ export async function createProductionDeps(
     // error that the route layer maps to 503). When this wire lands,
     // the W247.A drift-sweep gate flips hasEgressImpl=true and the
     // marketing copy can update from "roadmap" to "live" per the
-    // Path-1 autoflip plan (orchestrator handoff 2026-05-17).
-    sessionEgressService,
+    // Path-1 autoflip plan (orchestrator handoff 2026-05-17). 2026-05-22 —
+    // explicit `key: key` form so the W247.A regex matches (shorthand
+    // syntax silently failed the gate detection).
+    sessionEgressService: sessionEgressService,
     // AI-B4 — recipes repo. Wired unconditionally; now activates
     // because Q.1 wires agentSessionsRepo below.
     recipesRepo,

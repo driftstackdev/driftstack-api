@@ -60,12 +60,12 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).toMatch(
       /We'll send you to Stripe to confirm payment\. Your card details\s*\n?\s*stay between you and Stripe — we never see them\./,
     );
-    // Step 2 — first session = iPhone Safari instance on our EU fleet.
-    // 2026-05-16 honesty pass: "a real iPhone Safari instance" → "an
-    // iPhone Safari instance" (drop "real" implying literal binary;
-    // surrounding context establishes WebKit-on-our-fleet posture).
+    // Step 2 — first session = iPhone Safari instance with optional
+    // proxy/VPN egress. 2026-05-16 honesty pass dropped "real"; 2026-
+    // 05-22 EU-fleet phrasing replaced with proxy-capability claim
+    // per founder direction.
     expect(body).toMatch(
-      /Back here, you'll create your first session — an iPhone\s*\n?\s*Safari instance running on our EU fleet\./,
+      /Back here, you'll create your first session — an iPhone\s*\n?\s*Safari instance with optional SOCKS5 \/ OpenVPN \/ WireGuard\s*\n?\s*egress per profile\./,
     );
     // Step 3 — first API key auto-created + revocable.
     expect(body).toMatch(
