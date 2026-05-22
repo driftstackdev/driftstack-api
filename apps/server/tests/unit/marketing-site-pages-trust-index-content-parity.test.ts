@@ -48,11 +48,14 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     expect(body).toMatch(/<a\s*\n?\s*href="\/trust\/security-overview"/);
   });
 
-  it("Security card pinned: 'Architecture + posture →' + 'Four pillars shipped today: scrypt-hashed API keys at rest, HMAC-signed webhooks, no-customer-data-access enforcement, and EU-resident infrastructure.' — pinned so the 4-pillar shipped-today commitment survives (drift to dropping 'scrypt-hashed' or 'HMAC-signed' would weaken the specific-cryptography signal; drift to dropping 'EU-resident' would obscure data-residency posture)", () => {
+  it("Security card pinned: 'Architecture + posture →' + 5-pillar shipped commitment. 2026-05-22 — customer-configurable egress flipped from roadmap to shipped (planning 133 Phase 1 + SocksProxyBackend wired in bootstrap); pillar count bumped 4→5; SOCKS5/UDP/QUIC/WebRTC/OpenVPN/WireGuard added.", () => {
     expect(body).toMatch(/Architecture \+ posture →/);
-    expect(body).toMatch(
-      /Four pillars shipped today: scrypt-hashed API keys at rest,\s*\n?\s*HMAC-signed webhooks, no-customer-data-access enforcement,\s*\n?\s*and EU-resident infrastructure\./,
-    );
+    expect(body).toMatch(/Five pillars shipped today/);
+    expect(body).toMatch(/scrypt-hashed API keys at rest/);
+    expect(body).toMatch(/HMAC-signed webhooks/);
+    expect(body).toMatch(/no-customer-data-access enforcement/);
+    expect(body).toMatch(/EU-resident infrastructure/);
+    expect(body).toMatch(/customer-configurable\s+egress per profile/);
   });
 
   it("Sub-processors card pinned: 'Live list + regions →' + 'Source of truth for Article 28(2) amendment notices; mirrored in DPA Annex 3.' — pinned so the Article 28(2) + DPA-Annex-3 cross-reference survives in the hub-card too (consistent with the canonical /trust/sub-processors framing)", () => {

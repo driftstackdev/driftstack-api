@@ -131,16 +131,19 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           </div>
         </li>
         <li class="flex gap-4">
-          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-amber-100 text-center text-xs font-bold leading-5 text-amber-700">○</span>
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
           <div>
-            <p class="font-medium text-ink-primary">Customer-configurable egress (roadmap)</p>
+            <p class="font-medium text-ink-primary">Customer-configurable egress (per profile)</p>
             <p class="mt-1 text-sm text-ink-secondary">
-              Per-account egress configuration (SOCKS5 / WireGuard
-              tunnels) is on the roadmap. Today, session network
-              traffic exits via Driftstack's own EU network egress.
-              Driftstack does not log session-traffic payloads
-              (destination URLs / response bodies); the proxy layer
-              forwards bytes without persisting them.
+              Each profile can attach its own egress: SOCKS5 with full
+              UDP/WebRTC/QUIC tunnelling, OpenVPN (.ovpn), or WireGuard
+              (.conf). Sessions bound to the profile dial the tunnel
+              before launching the browser; DNS leaks blocked.
+              Without an attached config, session traffic exits via
+              Driftstack's own EU network egress. Driftstack does
+              not log session-traffic payloads (destination URLs /
+              response bodies); the proxy layer forwards bytes
+              without persisting them.
             </p>
           </div>
         </li>

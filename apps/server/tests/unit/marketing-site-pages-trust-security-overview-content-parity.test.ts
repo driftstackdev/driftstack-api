@@ -82,13 +82,16 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     );
   });
 
-  it("Customer-configurable egress roadmap pinned: 'Customer-configurable egress (roadmap)' + 'SOCKS5 / WireGuard tunnels' + 'today, session network traffic exits via Driftstack's own EU network egress' + 'Driftstack does not log session-traffic payloads (destination URLs / response bodies)' — pinned so the honest-roadmap framing + SOCKS5/WireGuard scope + EU-egress-today + no-payload-logging commitments all survive (drift to claiming customer-egress now would over-promise pre-roadmap; drift to dropping 'no payload logging' would obscure the privacy commitment)", () => {
-    expect(body).toMatch(/Customer-configurable egress \(roadmap\)/);
+  it("Customer-configurable egress SHIPPED per profile (SOCKS5 with UDP/WebRTC/QUIC + OpenVPN + WireGuard). 2026-05-22 — was '(roadmap)'; flipped to '(per profile)' + emerald checkmark per planning 133 Phase 1 + SocksProxyBackend wired in bootstrap. EU-egress-fallback + no-payload-logging commitments preserved.", () => {
+    expect(body).toMatch(/Customer-configurable egress \(per profile\)/);
+    expect(body).toMatch(/SOCKS5 with full\s*\n?\s*UDP\/WebRTC\/QUIC tunnelling/);
+    expect(body).toMatch(/OpenVPN \(\.ovpn\)/);
+    expect(body).toMatch(/WireGuard\s*\n?\s*\(\.conf\)/);
     expect(body).toMatch(
-      /Per-account egress configuration \(SOCKS5 \/ WireGuard\s*\n?\s*tunnels\) is on the roadmap\. Today, session network\s*\n?\s*traffic exits via Driftstack's own EU network egress\./,
+      /Without an attached config, session traffic exits via\s*\n?\s*Driftstack's own EU network egress/,
     );
     expect(body).toMatch(
-      /Driftstack does not log session-traffic payloads\s*\n?\s*\(destination URLs \/ response bodies\); the proxy layer\s*\n?\s*forwards bytes without persisting them\./,
+      /Driftstack does\s*\n?\s*not log session-traffic payloads \(destination URLs \/\s*\n?\s*response bodies\); the proxy layer forwards bytes\s*\n?\s*without persisting them\./,
     );
   });
 
