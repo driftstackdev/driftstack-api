@@ -8,6 +8,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 >
   <!-- Hero -->
   <section class="relative overflow-hidden">
+    {/* 2026-05-22 — atmospheric glow behind the hero. Two soft glow-
+        red radial gradients that pulse on a 12s loop. Pure CSS;
+        respects prefers-reduced-motion. */}
+    <div class="hero-glow" aria-hidden="true"></div>
     <div class="absolute inset-0 grid-bg opacity-40" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-6xl px-6 py-16 sm:pb-28 sm:pt-24 md:pt-32">
       <div class="grid gap-10 sm:gap-12 md:grid-cols-2 md:items-center">
