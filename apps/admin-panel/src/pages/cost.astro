@@ -102,13 +102,23 @@ const apiBaseUrl = resolveApiBaseUrl();
             (which already returns sorted by total cost desc).
           </p>
         </div>
-        <button
-          type="button"
-          data-button="refresh-top"
-          class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm hover:bg-slate-50"
-        >
-          Refresh
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            data-button="export-top-csv"
+            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm hover:bg-slate-50"
+            title="Download the currently-rendered top-accounts table as CSV"
+          >
+            Export CSV
+          </button>
+          <button
+            type="button"
+            data-button="refresh-top"
+            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm hover:bg-slate-50"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
       <div
         data-field="top-result"
@@ -362,6 +372,44 @@ const apiBaseUrl = resolveApiBaseUrl();
   if (refreshTopBtn) {
     refreshTopBtn.addEventListener('click', () => {
       void loadTopAccounts();
+    });
+  }
+
+  // 2026-05-22 — CSV export of the top-accounts table. Reads the
+  // rendered DOM table (so it always matches what the operator
+  // sees on-screen) + downloads as a timestamped file. Survives
+  // pagination since the page only shows 50 accounts anyway.
+  const exportCsvBtn = root.querySelector('[data-button="export-top-csv"]');
+  if (exportCsvBtn) {
+    exportCsvBtn.addEventListener('click', () => {
+      if (!topResult) return;
+      const table = topResult.querySelector('table');
+      if (!table) {
+        showBanner('Top-accounts table not loaded yet. Click Refresh first.');
+        return;
+      }
+      const rows = Array.from(table.querySelectorAll('tr'));
+      const csv = rows
+        .map((tr) =>
+          Array.from(tr.querySelectorAll('th, td'))
+            .map((cell) => {
+              const text = cell.textContent ?? '';
+              // RFC 4180 quoting: wrap in quotes, double internal quotes.
+              return '"' + text.replace(/"/g, '""') + '"';
+            })
+            .join(','),
+        )
+        .join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const ts = new Date().toISOString().slice(0, 10);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'driftstack-top-accounts-' + ts + '.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     });
   }
 
