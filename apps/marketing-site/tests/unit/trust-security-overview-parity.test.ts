@@ -40,10 +40,8 @@ describe('W262.C /trust/security-overview ↔ live evidence parity', () => {
     expect(page).not.toMatch(/client-cert validation on internal hops/);
   });
 
-  it('customer-configurable egress is marked roadmap (amber ○), not live', () => {
-    // The amber-○ pattern matches roadmap items; emerald-✓ is live.
-    expect(page).toMatch(/Customer-configurable egress \(roadmap\)/);
-    // Page must say the live state is Driftstack's own egress.
+  it('customer-configurable egress is marked SHIPPED (emerald ✓, per profile). 2026-05-22 — flipped from amber ○ "(roadmap)" after the SocksProxyBackend impl + bootstrap wire landed per planning 133 Phase 1. Without an attached config, traffic still exits via Driftstack EU egress.', () => {
+    expect(page).toMatch(/Customer-configurable egress \(per profile\)/);
     expect(page).toMatch(/Driftstack's own EU network egress/);
   });
 

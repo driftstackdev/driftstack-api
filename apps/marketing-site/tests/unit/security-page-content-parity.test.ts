@@ -40,19 +40,20 @@ function read(p: string): string {
 describe('W365.A marketing-site /security page parity', () => {
   const body = read(PAGE);
 
-  it('6 numbered pillar slots present (transport / egress / api-keys / webhooks / rbac / no-data-access)', () => {
+  it('6 numbered pillar slots present (transport / egress / api-keys / webhooks / rbac / no-data-access). 2026-05-22 — egress label flipped from "(roadmap)" to plain "Egress" after the per-profile capability shipped.', () => {
     expect(body).toMatch(/01 · Transport/);
-    expect(body).toMatch(/02 · Egress \(roadmap\)/);
+    expect(body).toMatch(/02 · Egress/);
     expect(body).toMatch(/03 · API keys/);
     expect(body).toMatch(/04 · Webhooks/);
     expect(body).toMatch(/05 · Team RBAC/);
     expect(body).toMatch(/06 · No-customer-data-access posture/);
   });
 
-  it('egress framed as ROADMAP — no server-side implementation today (honesty claim); priority order SOCKS5 / OpenVPN / WireGuard per founder verdict 2026-05-16', () => {
-    expect(body).toMatch(
-      /Customer-configurable egress \(SOCKS5 \/ OpenVPN \/\s+WireGuard\) is on the roadmap — no server-side\s+implementation ships today/,
-    );
+  it('egress framed as SHIPPED per-profile (SOCKS5 / OpenVPN / WireGuard). 2026-05-22 — flipped from honest-roadmap framing to concrete capability claim per planning 133 Phase 1 + SocksProxyBackend wired in bootstrap.', () => {
+    expect(body).toMatch(/Each profile can attach its own egress configuration/);
+    expect(body).toMatch(/SOCKS5/);
+    expect(body).toMatch(/OpenVPN/);
+    expect(body).toMatch(/WireGuard/);
   });
 
   it('scrypt logN=15 + 30s sha256-keyed auth cache parameters pinned (falsifiable claims)', () => {

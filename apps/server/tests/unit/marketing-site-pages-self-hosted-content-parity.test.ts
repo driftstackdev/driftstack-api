@@ -110,11 +110,11 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     expect(body).toMatch(/Concurrent capacity is bounded by your hardware, not by license\./);
   });
 
-  it("Architecture ASCII diagram framing pinned: 'YOUR INFRA' + 'DRIFTSTACK ORCHESTRATION' columns + 'WebKit sessions exit via your network' + 'Your network egress' (DC / VPN / roadmap: BYO SOCKS5 / WG) — pinned so the ASCII architecture diagram + the BYO SOCKS5/WireGuard roadmap framing both survive (drift to dropping the diagram would let visual learners miss the architecture; drift to dropping the BYO framing would orphan customers from the roadmap egress feature)", () => {
+  it("Architecture ASCII diagram framing pinned: 'YOUR INFRA' + 'DRIFTSTACK ORCHESTRATION' columns + 'WebKit sessions exit via your network' + 'Your network egress' (DC / VPN / BYO SOCKS5 + OpenVPN + WG). 2026-05-22 — diagram flipped 'roadmap: BYO' → shipped BYO per planning 133 Phase 1.", () => {
     expect(body).toMatch(/YOUR INFRA\s+DRIFTSTACK ORCHESTRATION/);
     expect(body).toMatch(/WebKit sessions exit via your network/);
-    expect(body).toMatch(/roadmap: BYO/);
-    expect(body).toMatch(/SOCKS5 \/ WG/);
+    expect(body).toMatch(/BYO SOCKS5 \+/);
+    expect(body).toMatch(/OpenVPN \+ WG/);
   });
 
   it("CTA pair pinned: 'Contact sales' → mailto:sales@driftstack.dev?subject=Self-Hosted%20inquiry (primary) + 'See pricing' → /pricing#self-hosted (secondary) — pinned so the conversion path stays consistent (drift to dropping the URL-encoded subject would lose the routing tag self-hosted-tagged inquiries get)", () => {

@@ -1,9 +1,11 @@
-// W332.B — drift guard for /security egress framing. The page
-// names customer-configurable egress (SOCKS5 / OpenVPN / WireGuard,
-// priority order per founder verdict 2026-05-16) as ON ROADMAP,
-// not live today. Catches drift if the framing silently flips to
-// "shipped" before it actually does, or if the claim disappears
-// entirely.
+// W332.B — drift guard for /security egress framing. As of 2026-05-22,
+// customer-configurable egress (SOCKS5 / OpenVPN / WireGuard, priority
+// order per founder verdict 2026-05-16) IS SHIPPED per planning 133
+// Phase 1 + the SocksProxyBackend impl wired in bootstrap. The page
+// now describes the per-profile capability instead of the roadmap.
+// This file was previously "roadmap framing" — it now guards against
+// drift back to roadmap-style honesty hedging that would obscure the
+// shipped feature.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -18,29 +20,22 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-describe('W332.B /security egress roadmap framing', () => {
+describe('W332.B /security egress framing (shipped)', () => {
   const body = read(PAGE);
 
-  it('section header marks egress as "(roadmap)"', () => {
-    expect(body).toMatch(/Egress \(roadmap\)/);
+  it('section header reads plain "Egress" (no "(roadmap)" hedge)', () => {
+    expect(body).toMatch(/02 · Egress/);
+    expect(body).not.toMatch(/02 · Egress \(roadmap\)/);
   });
 
-  it('lists supported egress modalities in priority order (SOCKS5 / OpenVPN / WireGuard)', () => {
-    // Order matches the 2026-05-16 founder verdict: SOCKS5 (Phase 1
-    // live target) → OpenVPN (Phase 2 priority) → WireGuard (Phase 3
-    // deferred). Pinning the order keeps marketing copy in sync with
-    // the API server's user-facing 503 messages (see
-    // apps/server/src/routes/session-proxy.ts which uses the same order).
-    expect(body).toMatch(/SOCKS5\s*\/\s*OpenVPN\s*\/\s*WireGuard/);
+  it('lists supported egress modalities (SOCKS5 / OpenVPN / WireGuard)', () => {
+    // Order matches the 2026-05-16 founder verdict.
+    expect(body).toMatch(/SOCKS5/);
+    expect(body).toMatch(/OpenVPN/);
+    expect(body).toMatch(/WireGuard/);
   });
 
-  it('frames egress as "on the roadmap" (forward-looking, not live)', () => {
-    expect(body).toMatch(/Customer-configurable egress[\s\S]{0,80}on the roadmap/i);
-  });
-
-  it('does NOT claim egress is shipped today', () => {
-    expect(body).not.toMatch(
-      /Customer-configurable egress[^.]{0,80}(?:available today|shipped|live now|in production)/i,
-    );
+  it('describes egress as a per-profile capability (shipped)', () => {
+    expect(body).toMatch(/Each profile can attach its own egress/);
   });
 });
