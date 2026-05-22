@@ -104,7 +104,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
           <span class="text-ink-muted">Model</span>
-          <span class="font-mono text-ink-primary text-[10px]" data-header-model-name>sonnet-4-5</span>
+          <span class="font-mono text-ink-primary text-[10px]" data-header-model-name>opus-4-7</span>
           <span
             data-header-byok-pill
             class="hidden font-mono text-[9px] text-emerald-300"
@@ -446,7 +446,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         // 2026-05-22 — surface BYOK status in the header model pill so
         // customers know upfront which key path will be used (their
         // own vs. bundled/fallback). Soft-fails to silent default; the
-        // model badge stays "sonnet-4-5" without the BYOK indicator
+        // model badge stays "opus-4-7" without the BYOK indicator
         // if the lookup 404s.
         fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
           headers: { ...authHeaders() },
