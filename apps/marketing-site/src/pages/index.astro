@@ -359,6 +359,80 @@ try {
     </div>
   </section>
 
+  {/* 2026-05-22 — proxy + egress differentiator section. Founder
+      feedback: customers care about SOCKS5 UDP/WebRTC/QUIC +
+      OpenVPN/WireGuard per profile — surface it on the homepage
+      instead of burying it in /docs/egress. Concrete capability
+      claims that competitors can't match. */}
+  <section class="relative border-t border-white/10">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="section-label">Egress</p>
+      <h2
+        class="mt-6 max-w-3xl text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-4xl"
+        style="letter-spacing: -0.02em;"
+      >
+        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+          Route every byte the way you need.
+        </span>
+      </h2>
+      <p class="mt-4 max-w-prose text-sm text-ink-secondary leading-relaxed sm:text-base">
+        Full proxy + VPN tunnelling per profile — not just HTTP. UDP
+        flows, WebRTC datachannels, and QUIC stay on your egress
+        path so detection systems see one consistent network identity
+        per session.
+      </p>
+
+      <div class="mt-10 grid gap-6 md:grid-cols-3">
+        <div class="card p-6">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+          </div>
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">SOCKS5</p>
+          <h3 class="mt-3 text-lg font-semibold text-ink-primary">UDP + WebRTC + QUIC</h3>
+          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+            Full SOCKS5 UDP-ASSOCIATE so WebRTC media + QUIC sessions
+            stream over your proxy, not a leaky direct path. The harness
+            reports egress capabilities live so you know when a proxy
+            quietly drops UDP.
+          </p>
+        </div>
+        <div class="card p-6">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 2L4 5v6c0 5.5 3.8 10.7 8 11.8 4.2-1.1 8-6.3 8-11.8V5l-8-3z" />
+            </svg>
+          </div>
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">OpenVPN</p>
+          <h3 class="mt-3 text-lg font-semibold text-ink-primary">.ovpn per profile</h3>
+          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+            Upload a standard OpenVPN config to a profile slot and every
+            session bound to that profile dials the tunnel before
+            launching the browser. DNS leaks blocked by default; no
+            client-side wrapper needed.
+          </p>
+        </div>
+        <div class="card p-6">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg>
+          </div>
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">WireGuard</p>
+          <h3 class="mt-3 text-lg font-semibold text-ink-primary">.conf per profile</h3>
+          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+            Paste a WireGuard interface block + peer config; sessions
+            using the profile attach to the tunnel transparently. Modern
+            kernel-level performance — single-digit-ms RTT overhead even
+            on mobile-LTE-class peers.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- R8 — Integrations strip. Outseta-style "works with your stack"
        row. Three SDK languages + four orchestration tools that
        customers commonly slot Driftstack into. Honest framing: only
