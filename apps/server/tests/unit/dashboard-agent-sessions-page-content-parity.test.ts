@@ -271,7 +271,8 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
     expect(body).toMatch(/Token is[\s\S]{0,50}intentionally NOT surfaced/);
   });
 
-  it('session-create handler calls renderLivekitInfo with session.livekit', () => {
-    expect(body).toMatch(/renderLivekitInfo\(session\.livekit\)/);
+  it('session-create handler redirects to /agent-sessions/{id} + stashes initial task. 2026-05-22 — Wave 2.C inline-card UX retired (per founder feedback the workbench page is the canonical surface). renderLivekitInfo lives on the [id] detail page now.', () => {
+    expect(body).toMatch(/window\.location\.href = '\/agent-sessions\/' \+ session\.id;/);
+    expect(body).toMatch(/ds_pending_initial_task/);
   });
 });
