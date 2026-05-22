@@ -78,9 +78,11 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
     expect(body).toMatch(/driftstack: 'None — flat within concurrent cap',/);
   });
 
-  it("Driftstack data-residency row: 'EU-only compute + storage' + customer-controlled-proxies row: 'Roadmap — see /trust/security-overview' — pinned so the EU-only compute commitment + the not-yet-shipped honest framing for customer-proxy survive (drift to claiming shipped customer-proxies would mislead privacy-driven prospects)", () => {
+  it("Driftstack data-residency row: 'EU-only compute + storage' + customer-controlled-proxies row: SOCKS5/OpenVPN/WireGuard per profile (shipped). 2026-05-22 — egress impl ships per planning 133 Phase 1; cell flipped from the prior 'Roadmap' framing now that the differentiator is real.", () => {
     expect(body).toMatch(/driftstack: 'EU-only compute \+ storage',/);
-    expect(body).toMatch(/driftstack: 'Roadmap — see \/trust\/security-overview',/);
+    expect(body).toMatch(
+      /driftstack: 'SOCKS5 \(UDP\/QUIC\/WebRTC\) \+ OpenVPN \+ WireGuard, per profile',/,
+    );
   });
 
   it("Per-competitor 4-section comparison: 'Driftstack vs Browserless' + 'Driftstack vs Bright Data' + 'Driftstack vs ScrapingBee' + 'Driftstack vs Browserbase' each with a 'Pricing shape' subhead — pinned so the per-vendor head-to-head + the explicit pricing-shape callout survives (drift to dropping pricing-shape would hide the most-comparable cost-narrative for prospects)", () => {
