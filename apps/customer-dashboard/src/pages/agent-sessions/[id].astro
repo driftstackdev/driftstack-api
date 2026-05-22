@@ -52,28 +52,59 @@ const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title={`Agent session ${id ?? ''}`}>
-  <div class="h-screen flex flex-col" data-page="agent-session-workbench" data-session-id={id}>
-    <header class="border-b border-slate-800 px-6 py-3 flex items-center gap-4">
-      <a href="/agent-sessions" class="text-sm text-ink-muted hover:text-ink-primary">
-        ← All agent sessions
+  <div class="h-screen flex flex-col bg-slate-950" data-page="agent-session-workbench" data-session-id={id}>
+    {/* 2026-05-22 — header overhaul. Richer info bar: back link +
+        session-title block + cost + intent count + model badge +
+        status pill. Replaces the single-line "Agent session / id"
+        treatment that read as a debug page. */}
+    <header class="border-b border-slate-800 bg-gradient-to-r from-slate-950 to-slate-900 px-6 py-4 flex items-center gap-6">
+      <a href="/agent-sessions" class="flex items-center gap-1 text-sm text-ink-muted hover:text-ink-primary">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        All sessions
       </a>
-      <div class="flex-1">
-        <h1 class="text-base font-semibold text-ink-primary">Agent session</h1>
-        <p class="text-xs text-ink-muted font-mono">{id}</p>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-baseline gap-3">
+          <h1 class="text-lg font-semibold text-ink-primary">AI agent workbench</h1>
+          <p class="text-xs text-ink-muted font-mono truncate">{id}</p>
+        </div>
+        <p class="mt-0.5 text-xs text-ink-muted">
+          Plain-English tasks → agent plans intents → your browser drives them, in real time
+        </p>
       </div>
-      <div data-status-pill class="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300">
-        Loading…
+      <div class="flex items-center gap-3 text-xs">
+        <div class="flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised/40 px-3 py-1.5">
+          <span class="text-ink-muted">Cost</span>
+          <span class="font-mono text-ink-primary" data-header-cost>$0.0000</span>
+        </div>
+        <div class="flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised/40 px-3 py-1.5">
+          <span class="text-ink-muted">Turns</span>
+          <span class="font-mono text-ink-primary" data-header-turns>0</span>
+        </div>
+        <div data-header-model class="hidden items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised/40 px-3 py-1.5">
+          <span class="text-ink-muted">Model</span>
+          <span class="font-mono text-ink-primary text-[10px]" data-header-model-name>—</span>
+        </div>
+        <div data-status-pill class="rounded-md bg-slate-800 px-3 py-1.5 font-mono uppercase tracking-wide text-slate-300">
+          Loading…
+        </div>
       </div>
     </header>
 
-    <main class="flex-1 grid grid-cols-2 gap-0 overflow-hidden" data-component="SplitScreen">
-      <!-- LEFT — LiveKit preview + Manual control overlay -->
+    {/* 2026-05-22 — chat now dominant (60%); live preview secondary
+        (40%). Was 50/50 which made the chat feel cramped given how
+        info-rich a turn can be. */}
+    <main class="flex-1 grid grid-cols-[1fr_42%] gap-0 overflow-hidden" data-component="SplitScreen">
+      {/* DOM order keeps LeftPanel first for the JS handlers that
+          query by data-component name; CSS `order-2` flips it
+          visually to the right (smaller) column. */}
       <section
-        class="border-r border-slate-800 bg-slate-950 flex flex-col"
+        class="order-2 border-l border-slate-800 bg-slate-950 flex flex-col"
         data-component="LeftPanel"
         aria-label="Live browser preview"
       >
-        <div class="px-4 py-2 border-b border-slate-800 text-xs uppercase tracking-wide text-ink-muted">
+        <div class="px-4 py-3 border-b border-slate-800 text-xs uppercase tracking-wide text-ink-muted font-medium">
           Live preview
         </div>
         <div
@@ -100,8 +131,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         </div>
       </section>
 
-      <!-- RIGHT — AI chat panel -->
-      <section class="bg-slate-950 flex flex-col" data-component="RightPanel" aria-label="AI chat">
+      {/* DOM second; CSS order-1 puts it left (dominant column). */}
+      <section class="order-1 bg-slate-950 flex flex-col" data-component="RightPanel" aria-label="AI chat">
         <!-- Mode toggle row -->
         <div
           class="px-4 py-3 border-b border-slate-800 flex items-center gap-3"
@@ -199,25 +230,44 @@ const apiBaseUrl = resolveApiBaseUrl();
           </div>
         </div>
 
-        <!-- Composer: POSTs to /v1/agent-sessions/:id/message in Slice 4. -->
+        {/* 2026-05-22 — composer overhaul. Taller default (rows=3
+            instead of rows=1) so multi-line tasks have room to
+            breathe; auto-grows up to 200px on input (was 160px).
+            Bigger Send button with keyboard hint chip + character
+            counter below. */}
         <form
-          class="border-t border-slate-800 p-4 flex gap-2"
+          class="border-t border-slate-800 p-5"
           data-component="ChatInput"
           data-disabled-when-mode="manual"
           autocomplete="off"
         >
-          <textarea
-            name="message"
-            rows="1"
-            placeholder="Tell the agent what to do (Cmd-Enter to send)"
-            class="flex-1 resize-none bg-slate-900 border border-slate-800 rounded-md px-3 py-2 text-sm text-ink-primary placeholder-slate-500 focus:outline-none focus:border-slate-600"
-          ></textarea>
-          <button
-            type="submit"
-            class="px-4 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:bg-slate-700 disabled:cursor-not-allowed"
-          >
-            Send
-          </button>
+          <div class="rounded-lg border border-slate-800 bg-slate-900 focus-within:border-glow-red/50 focus-within:ring-1 focus-within:ring-glow-red/20 transition-colors">
+            <textarea
+              name="message"
+              rows="3"
+              maxlength="8000"
+              placeholder="Tell the agent what to do…
+e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite acknowledgement'"
+              class="w-full resize-none bg-transparent px-4 py-3 text-sm text-ink-primary placeholder-slate-500 focus:outline-none"
+            ></textarea>
+            <div class="flex items-center justify-between gap-3 border-t border-slate-800 px-4 py-2">
+              <div class="flex items-center gap-2 text-[10px] text-ink-muted">
+                <kbd class="rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 font-mono">⌘</kbd>
+                <kbd class="rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 font-mono">↵</kbd>
+                <span>to send</span>
+                <span class="ml-3 hidden font-mono" data-composer-char-count>0 / 8000</span>
+              </div>
+              <button
+                type="submit"
+                class="inline-flex items-center gap-1.5 rounded-md bg-glow-red px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-glow-red/90 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed"
+              >
+                Send
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M13 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </form>
       </section>
     </main>
@@ -712,9 +762,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             meta.textContent = parts.join(' · ');
             pendingTurnEl.appendChild(meta);
 
-            // 2026-05-22 — running session-cost tally lives in the
-            // ChatHeader's ModeStatus slot. Bumps on every turn; the
-            // page refresh resets it (per-session, not per-account).
+            // 2026-05-22 — running session-cost tally + new header
+            // badges (header-cost / header-turns / header-model).
+            // ModeStatus slot still gets the legacy message for the
+            // mode-toggle row; the header is the more visible
+            // surface for the running total.
             if (cents !== null) {
               window.__driftstackSessionCostCents =
                 (window.__driftstackSessionCostCents || 0) + cents;
@@ -724,9 +776,27 @@ const apiBaseUrl = resolveApiBaseUrl();
                   'AI is driving · session cost $' +
                   (window.__driftstackSessionCostCents / 100).toFixed(4);
               }
+              const headerCost = document.querySelector('[data-header-cost]');
+              if (headerCost) {
+                headerCost.textContent =
+                  '$' + (window.__driftstackSessionCostCents / 100).toFixed(4);
+              }
+            }
+            if (typeof u.model === 'string' && u.model.length > 0) {
+              const headerModel = document.querySelector('[data-header-model]');
+              const headerModelName = document.querySelector('[data-header-model-name]');
+              if (headerModel && headerModelName) {
+                headerModelName.textContent = u.model.replace(/^claude-/, '');
+                headerModel.classList.remove('hidden');
+                headerModel.classList.add('flex');
+              }
             }
           }
         }
+        // Bump turn counter (independent of usage availability).
+        window.__driftstackSessionTurns = (window.__driftstackSessionTurns || 0) + 1;
+        const headerTurns = document.querySelector('[data-header-turns]');
+        if (headerTurns) headerTurns.textContent = String(window.__driftstackSessionTurns);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (pendingTurnEl) {
@@ -758,15 +828,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
     });
 
-    // 2026-05-22 — auto-grow textarea so multi-line tasks don't get
-    // capped at the initial 1-row height. Resets to minimum on each
-    // input + then grows to scrollHeight (capped at 160px so a wall
-    // of text doesn't eat the transcript). After submit, the value
-    // is cleared elsewhere; reset height too so the box snaps back.
+    // 2026-05-22 — auto-grow textarea + character counter. Min 3
+    // rows (default), max 240px before the inner scroll kicks in.
+    // Character counter shows once the customer starts typing
+    // (hidden at 0 length for cleaner empty state).
+    const charCountEl = document.querySelector('[data-composer-char-count]');
     function autoGrowComposer() {
       if (!composerTextarea) return;
       composerTextarea.style.height = 'auto';
-      composerTextarea.style.height = Math.min(160, composerTextarea.scrollHeight) + 'px';
+      composerTextarea.style.height = Math.min(240, composerTextarea.scrollHeight) + 'px';
+      if (charCountEl) {
+        const n = composerTextarea.value.length;
+        if (n > 0) {
+          charCountEl.textContent = n.toString() + ' / 8000';
+          charCountEl.classList.remove('hidden');
+        } else {
+          charCountEl.classList.add('hidden');
+        }
+      }
     }
     composerTextarea?.addEventListener('input', autoGrowComposer);
     composerForm?.addEventListener('submit', () => {
@@ -774,6 +853,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       // runs first because addEventListener preserves order).
       setTimeout(() => {
         if (composerTextarea) composerTextarea.style.height = 'auto';
+        if (charCountEl) charCountEl.classList.add('hidden');
       }, 0);
     });
 
