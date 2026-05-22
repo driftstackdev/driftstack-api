@@ -385,4 +385,106 @@ export class ProfilesService {
       { resource: 'profile', field: 'name' },
     );
   }
+
+  /**
+   * 2026-05-22 — transfer ownership of a profile to another Driftstack
+   * account. Source loses the profile; recipient gains it. Use cases:
+   * team handoff (leaving member's dedicated profiles → colleague),
+   * sales handoff (vendor account ships pre-configured profile to
+   * buyer). Tier ceiling + per-cycle import quota apply to the
+   * RECIPIENT.
+   *
+   * Atomicity: insert into recipient first, then delete from source.
+   * Reverse order would risk losing the profile if insert fails.
+   * The narrow window where both rows exist is admin-recoverable
+   * (delete the orphan via /admin/accounts).
+   */
+  async transferProfile(args: {
+    sourceProfileId: string;
+    sourceAccountId: string;
+    recipientAccountId: string;
+    recipientTier: AccountTier;
+  }): Promise<{ newProfile: ProfileRecord }> {
+    const source = await this.repo.findById({
+      id: args.sourceProfileId,
+      accountId: args.sourceAccountId,
+    });
+    if (source === null) throw new NotFoundError('Profile not found.');
+
+    const limit = profileLimitFor(args.recipientTier);
+    if (limit !== null) {
+      const current = await this.repo.countByAccount(args.recipientAccountId);
+      if (current >= limit) {
+        throw new TierLimitError(
+          `Recipient account is at tier limit (${args.recipientTier}; ${current.toString()}/${limit.toString()}).`,
+          { limit, current, resource: 'profile', tier: args.recipientTier },
+        );
+      }
+      if (this.accountAudit !== null) {
+        const cycleStart = new Date();
+        cycleStart.setUTCDate(1);
+        cycleStart.setUTCHours(0, 0, 0, 0);
+        const importsThisCycle = await this.accountAudit.countActionsSince(
+          args.recipientAccountId,
+          'profile.imported',
+          cycleStart,
+        );
+        const importCap = limit * 2;
+        if (importsThisCycle >= importCap) {
+          throw new TierLimitError(
+            `Recipient account has used ${importsThisCycle.toString()}/${importCap.toString()} profile imports this cycle.`,
+            {
+              limit: importCap,
+              current: importsThisCycle,
+              resource: 'profile_import',
+              tier: args.recipientTier,
+            },
+          );
+        }
+      }
+    }
+
+    let targetName = source.name;
+    const conflict = await this.repo.findByAccountAndName({
+      accountId: args.recipientAccountId,
+      name: targetName,
+    });
+    if (conflict !== null) {
+      targetName = source.name + ' (transferred)';
+    }
+
+    const newProfile = await this.repo.insert({
+      accountId: args.recipientAccountId,
+      name: targetName,
+      archetype: source.archetype,
+      description: source.description,
+    });
+
+    await this.repo.delete({ id: args.sourceProfileId, accountId: args.sourceAccountId });
+
+    await this.emitAuditBestEffort(
+      args.sourceAccountId,
+      'profile.deleted',
+      `profile_${args.sourceProfileId}`,
+      {
+        name: source.name,
+        archetype: source.archetype,
+        reason: 'transferred_out',
+        recipient_account_id: args.recipientAccountId,
+      },
+    );
+    await this.emitAuditBestEffort(
+      args.recipientAccountId,
+      'profile.imported',
+      `profile_${newProfile.id}`,
+      {
+        name: newProfile.name,
+        archetype: newProfile.archetype,
+        source: 'transfer',
+        source_account_id: args.sourceAccountId,
+        source_profile_id: args.sourceProfileId,
+      },
+    );
+    return { newProfile };
+  }
 }

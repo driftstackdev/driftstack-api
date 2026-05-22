@@ -20,7 +20,7 @@ import {
   UpdateProfileRequestSchema,
 } from '@driftstack/api-types';
 import type { ProfileRecord, ProfilesService } from '../services/profiles.js';
-import { BadRequestError, ForbiddenError, ValidationError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
@@ -290,6 +290,49 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
           : {}),
       });
       return publicProfile(row);
+    },
+  );
+
+  // 2026-05-22 — V-666 transfer ownership of a profile to another
+  // Driftstack account. Body shape: { recipient_account_id: "acc_<uuid>" }.
+  // The recipient's account_id is visible to them on /settings; they
+  // share it out-of-band (chat / email) + sender pastes it here.
+  // No email-leak path; the lookup is by id, not address.
+  app.post<{ Params: { id: string } }>(
+    '/v1/profiles/:id/transfer',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const body = req.body as { recipient_account_id?: unknown };
+      const raw = typeof body.recipient_account_id === 'string' ? body.recipient_account_id : '';
+      if (!/^acc_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(raw)) {
+        throw new ValidationError({
+          fieldErrors: { recipient_account_id: ['Expected "acc_<uuid>".'] },
+          formErrors: [],
+        });
+      }
+      const recipientId = raw.slice(4);
+      if (recipientId === ctx.account.id) {
+        throw new ValidationError({
+          fieldErrors: { recipient_account_id: ['Cannot transfer to your own account.'] },
+          formErrors: [],
+        });
+      }
+      const recipient = await authRepo.getAccount(recipientId);
+      if (!recipient) {
+        throw new NotFoundError(`Recipient account ${raw} not found.`);
+      }
+      const sourceId = uuidFromProfileId(req.params.id);
+      const { newProfile } = await service.transferProfile({
+        sourceProfileId: sourceId,
+        sourceAccountId: ctx.account.id,
+        recipientAccountId: recipient.id,
+        recipientTier: recipient.tier,
+      });
+      return {
+        new_profile: publicProfile(newProfile),
+        recipient_account_id: `acc_${recipient.id}`,
+      };
     },
   );
 }
