@@ -31,7 +31,12 @@ export type WebhookEventType =
   // Arc 5 EGRESS eg.7 — fires when the harness emits an
   // egress.capability_report event for a SOCKS5 session and the
   // control plane ingests it. Migration 0055 ALTERs the pgEnum.
-  | 'session.egress_capability_changed';
+  | 'session.egress_capability_changed'
+  // 2026-05-22 — V-666 crypto-order events (migration 0064).
+  // Fired by CryptoOrdersService.applyIpnStatus on the
+  // pending/confirming/partial → paid|failed terminal transitions.
+  | 'crypto.order.paid'
+  | 'crypto.order.failed';
 
 export type WebhookDeliveryStatus = 'pending' | 'in_flight' | 'delivered' | 'failed' | 'dlq';
 

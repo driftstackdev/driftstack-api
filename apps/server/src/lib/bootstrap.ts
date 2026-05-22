@@ -937,7 +937,20 @@ export async function createProductionDeps(
   let nowpaymentsApiClient: NowPaymentsApiClient | undefined;
   if (config.nowpayments?.ipnSecret !== undefined && config.nowpayments.ipnSecret.length > 0) {
     const cryptoRepo = new DrizzleCryptoOrdersRepo(dbHandle);
-    cryptoOrdersService = new CryptoOrdersService({ repo: cryptoRepo });
+    // 2026-05-22 — migration 0064 added crypto.order.paid +
+    // crypto.order.failed to the webhook_event_type enum. The
+    // CryptoOrdersService's emitter intent (V-666.I + V-666.AN)
+    // can finally land in the WebhooksService sink without the
+    // 22P02 invalid-input error that previously kept this
+    // deferred. Customers subscribed to either event get a real
+    // webhook delivery on every applyIpnStatus terminal transition.
+    cryptoOrdersService = new CryptoOrdersService({
+      repo: cryptoRepo,
+      webhooks: {
+        enqueueEvent: (accountId, eventType, data) =>
+          webhooksService.enqueueEvent(accountId, eventType, data),
+      },
+    });
     logger.info(
       { component: 'crypto-orders' },
       'CryptoOrdersService wired with DrizzleCryptoOrdersRepo',

@@ -136,6 +136,12 @@ export const webhookEventType = pgEnum('webhook_event_type', [
   // control plane ingests it. Migration 0055 ALTERs the existing
   // pgEnum to add this value.
   'session.egress_capability_changed',
+  // 2026-05-22 — V-666 crypto-order webhook events (migration 0064).
+  // CryptoOrdersService already emits intents on paid/failed
+  // transitions; the bootstrap can finally wire the WebhooksService
+  // as the emitter sink now that the enum carries these values.
+  'crypto.order.paid',
+  'crypto.order.failed',
 ]);
 
 export const webhookDeliveryStatus = pgEnum('webhook_delivery_status', [
