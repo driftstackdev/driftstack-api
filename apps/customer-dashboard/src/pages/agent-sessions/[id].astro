@@ -160,6 +160,34 @@ const apiBaseUrl = resolveApiBaseUrl();
           data-component="LiveKitPreview"
           data-session-id={id}
         >
+          {/* 2026-05-23 — actual scan-line animation behind the
+              placeholder: a thin glow-red horizontal line that
+              sweeps top→bottom on a 6s loop, signalling "live but
+              waiting" without distracting. CSS-only; respects
+              prefers-reduced-motion. */}
+          <div
+            aria-hidden="true"
+            class="pointer-events-none absolute inset-0 overflow-hidden"
+          >
+            <div
+              class="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-glow-red/40 to-transparent"
+              style="animation: workbench-scan 6s linear infinite;"
+            ></div>
+          </div>
+          <style is:global>
+            @keyframes workbench-scan {
+              0% { top: -2%; opacity: 0; }
+              10% { opacity: 1; }
+              90% { opacity: 1; }
+              100% { top: 102%; opacity: 0; }
+            }
+            @media (prefers-reduced-motion: reduce) {
+              [data-component="LiveKitPreview"] div[aria-hidden="true"] > div {
+                animation: none !important;
+                display: none;
+              }
+            }
+          </style>
           {/* Placeholder layout: branded screen-icon + subtle scan-line
               animation + dynamic status text. Replaced by the LiveKit
               video element when the harness lands. */}
