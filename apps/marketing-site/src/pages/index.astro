@@ -272,20 +272,47 @@ try {
       <p class="text-center font-mono text-xs uppercase tracking-[0.2em] text-ink-muted">
         What sets us apart
       </p>
+      {/* 2026-05-22 — icon glyphs added to each differentiator chip.
+          Replaces a 4-column text-only strip with icon-anchored
+          claims; same visual family as the use-case cards below. */}
       <div class="mt-6 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4">
-        <div class="flex flex-col items-center gap-1.5 text-center">
+        <div class="flex flex-col items-center gap-2 text-center">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 3a15.3 15.3 0 0 1 4 9 15.3 15.3 0 0 1-4 9 15.3 15.3 0 0 1-4-9 15.3 15.3 0 0 1 4-9z" />
+            </svg>
+          </div>
           <span class="text-base font-semibold text-ink-primary">Population-matched</span>
           <span class="text-xs text-ink-muted">Canvas + WebGL hashes match the real-iPhone population — not unique-per-session like every other API</span>
         </div>
-        <div class="flex flex-col items-center gap-1.5 text-center">
+        <div class="flex flex-col items-center gap-2 text-center">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <path d="M21 21l-4.35-4.35M9 9l4 4M13 9l-4 4" />
+            </svg>
+          </div>
           <span class="text-base font-semibold text-ink-primary">Zero detection surface</span>
           <span class="text-xs text-ink-muted">No runtime JS patching, no stealth bundle for fingerprinters to spot</span>
         </div>
-        <div class="flex flex-col items-center gap-1.5 text-center">
+        <div class="flex flex-col items-center gap-2 text-center">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="5" y="2" width="14" height="20" rx="2" />
+              <path d="M12 18h.01" />
+            </svg>
+          </div>
           <span class="text-base font-semibold text-ink-primary">Apple's WebKit, not Chromium</span>
           <span class="text-xs text-ink-muted">Built from Apple's WebKit source — same engine your iOS users actually run</span>
         </div>
-        <div class="flex flex-col items-center gap-1.5 text-center">
+        <div class="flex flex-col items-center gap-2 text-center">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="16 18 22 12 16 6" />
+              <polyline points="8 6 2 12 8 18" />
+            </svg>
+          </div>
           <span class="text-base font-semibold text-ink-primary">API · SDK · GUI</span>
           <span class="text-xs text-ink-muted">TypeScript, Python, Go, or the dashboard — same engine, three access paths</span>
         </div>
