@@ -23,8 +23,9 @@ function read(p: string): string {
 describe('W330.B /pricing hero baseline', () => {
   const body = read(PAGE);
 
-  it('headline reads "Two ladders. One trial pack to start."', () => {
-    expect(body).toMatch(/Two ladders\.\s+One trial pack to start\./);
+  it('headline reads "Two ladders. One trial pack to start." 2026-05-22 — split into two spans (gradient-text accent + block reflow) by the hero-glow visual treatment; check each phrase independently.', () => {
+    expect(body).toMatch(/Two ladders\./);
+    expect(body).toMatch(/One trial pack to start\./);
   });
 
   it('subhead frames Manual vs API audience split', () => {
