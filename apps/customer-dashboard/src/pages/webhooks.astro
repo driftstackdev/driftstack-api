@@ -390,11 +390,19 @@ const apiBaseUrl = resolveApiBaseUrl();
       flash treatment as profiles 3b5ccb77 / sessions c5a50f56 /
       api-keys 12566e61.
     */}
+    {/* 2026-05-22 — empty state gets an icon + warmer copy. Same
+        pattern as the workbench empty hint; visual anchor before
+        the CTA so the card doesn't feel like a dead end. */}
     <div data-empty class="dashboard-card hidden text-center">
-      <h2 class="text-lg font-semibold text-ink-primary">No webhook endpoints</h2>
+      <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+        </svg>
+      </div>
+      <h2 class="text-lg font-semibold text-ink-primary">No webhook endpoints yet</h2>
       <p class="mx-auto mt-2 max-w-prose text-sm text-ink-muted">
-        Subscribe to events when sessions complete, fail, or quota thresholds trip. POST + URL +
-        event list = endpoint.
+        Subscribe to events when sessions complete, fail, crypto orders settle,
+        or quota thresholds trip. POST + URL + event list = endpoint.
       </p>
       <a href="#new" class="btn-primary mt-6 inline-flex">Create endpoint</a>
     </div>
