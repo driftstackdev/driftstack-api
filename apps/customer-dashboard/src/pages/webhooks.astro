@@ -66,9 +66,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         <p class="text-sm text-ink-muted">
           HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance
         </p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
           Webhook endpoints
-        </h1>
+        </span></h1>
         <p class="mt-2 max-w-prose text-sm text-ink-muted">
           Subscribe to session lifecycle + quota events. Each endpoint gets
           its own signing secret; verify with the SDK's
