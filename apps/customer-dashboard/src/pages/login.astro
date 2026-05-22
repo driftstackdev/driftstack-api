@@ -19,13 +19,21 @@ const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Sign in" withSidebar={false}>
-  <div
-    class="mx-auto flex min-h-[calc(100vh-14rem)] w-full max-w-md flex-col justify-center px-6 py-16 animate-fade-up"
-    data-page="login"
-  >
+  {/* 2026-05-22 — hero-glow atmosphere on the login surface so the
+      sign-in moment shares the same visual family as the marketing
+      site (customers arriving from the marketing CTA shouldn't feel
+      a tonal jump). */}
+  <div class="relative overflow-hidden">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div
+      class="relative mx-auto flex min-h-[calc(100vh-14rem)] w-full max-w-md flex-col justify-center px-6 py-16 animate-fade-up"
+      data-page="login"
+    >
     <p class="section-label">Returning customer</p>
-    <h1 class="mt-5 text-4xl font-semibold tracking-tight text-ink-primary" style="letter-spacing: -0.02em;">
-      Sign in
+    <h1 class="mt-5 text-4xl font-semibold tracking-tight" style="letter-spacing: -0.02em;">
+      <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+        Sign in
+      </span>
     </h1>
     <p class="mt-3 text-sm text-ink-secondary">
       Welcome back. Sign in with the email and password from your Driftstack account.
@@ -148,6 +156,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft">Create one</a
         >.
       </p>
+    </div>
     </div>
   </div>
 
