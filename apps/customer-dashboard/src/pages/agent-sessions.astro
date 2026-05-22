@@ -18,13 +18,23 @@ const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Agent sessions">
-  <div class="mx-auto max-w-6xl px-6 py-10" data-page="agent-sessions">
-    <header class="mb-8">
-      <p class="text-sm text-ink-muted">AI chat + manual side-by-side</p>
-      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Agent sessions</h1>
-      <p class="mt-2 max-w-prose text-sm text-ink-muted">
-        Pair an AI agent with your manual control. AI drives by default; take over with one
-        click when you need precision, hand back when the AI should resume.
+  <div class="mx-auto max-w-4xl px-6 py-10" data-page="agent-sessions">
+    {/* 2026-05-22 — ChatGPT-style hero. Centered headline + tagline +
+        prompt-suggestion grid. The actual composer + create-session
+        form lives below, but this hero is the first thing customers
+        see and tells them clearly what the agent can do. */}
+    <header class="mb-8 text-center">
+      <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-glow-red/10 ring-1 ring-glow-red/30">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+        </svg>
+      </div>
+      <h1 class="mt-4 text-3xl font-semibold tracking-tight text-ink-primary">
+        What can I help you automate?
+      </h1>
+      <p class="mt-2 max-w-prose text-sm text-ink-muted mx-auto">
+        Describe a task in plain English. The AI plans the steps; your remote browser
+        carries them out, live. Take over with one click whenever you want.
       </p>
     </header>
 
@@ -81,42 +91,127 @@ const apiBaseUrl = resolveApiBaseUrl();
       </ul>
     </section>
 
-    <div class="grid gap-6 lg:grid-cols-3">
-      <!-- Main panel (sub-slices 8.25 + 8.26 + 8.27 + 8.28.b live here). -->
-      <section class="lg:col-span-2 space-y-6">
-        <!-- 8.25 ModeSelector -->
-        <div class="rounded-lg border border-white/10 bg-surface-raised p-5" data-section="mode-selector">
-          <h2 class="text-sm font-semibold uppercase tracking-widest text-ink-muted">Mode</h2>
-          <form data-form="create-session" class="mt-3 space-y-3">
-            <label class="flex items-start gap-3">
-              <input type="radio" name="mode" value="ai" class="mt-0.5 text-glow-red" />
-              <span>
-                <span class="block text-sm font-medium text-ink-primary">AI</span>
-                <span class="block text-xs text-ink-muted">Driftstack writes a plan + executes it.</span>
+    {/* 2026-05-22 — prompt suggestion cards. ChatGPT-style 4-up
+        grid; click prefills the composer + focuses it (customer
+        edits before submit). Real-world examples customers
+        actually run rather than generic "ask me anything". */}
+    <section class="mb-8">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <button
+          type="button"
+          data-prompt-suggestion="Log in to my Gmail and reply to messages from contact@example.com with a polite acknowledgement."
+          class="rounded-lg border border-white/10 bg-surface-raised/50 p-4 text-left hover:border-glow-red/40 hover:bg-surface-raised"
+        >
+          <p class="text-2xl">📧</p>
+          <p class="mt-2 text-sm font-medium text-ink-primary">Triage email</p>
+          <p class="mt-1 text-xs text-ink-muted">Reply to messages from a specific sender.</p>
+        </button>
+        <button
+          type="button"
+          data-prompt-suggestion="Take a full-page screenshot of https://example.com/dashboard and describe what's visible on it."
+          class="rounded-lg border border-white/10 bg-surface-raised/50 p-4 text-left hover:border-glow-red/40 hover:bg-surface-raised"
+        >
+          <p class="text-2xl">📸</p>
+          <p class="mt-2 text-sm font-medium text-ink-primary">Audit a page</p>
+          <p class="mt-1 text-xs text-ink-muted">Screenshot + describe what the agent sees.</p>
+        </button>
+        <button
+          type="button"
+          data-prompt-suggestion="Fill the contact form at https://example.com/contact with name 'Casey Demo', email 'casey@example.com', and message 'Test from Driftstack', then submit."
+          class="rounded-lg border border-white/10 bg-surface-raised/50 p-4 text-left hover:border-glow-red/40 hover:bg-surface-raised"
+        >
+          <p class="text-2xl">✍️</p>
+          <p class="mt-2 text-sm font-medium text-ink-primary">Fill a form</p>
+          <p class="mt-1 text-xs text-ink-muted">Multi-field form completion + submit.</p>
+        </button>
+        <button
+          type="button"
+          data-prompt-suggestion="Navigate to my LinkedIn inbox and tell me how many unread messages I have."
+          class="rounded-lg border border-white/10 bg-surface-raised/50 p-4 text-left hover:border-glow-red/40 hover:bg-surface-raised"
+        >
+          <p class="text-2xl">🔍</p>
+          <p class="mt-2 text-sm font-medium text-ink-primary">Quick lookup</p>
+          <p class="mt-1 text-xs text-ink-muted">Navigate + report what's there.</p>
+        </button>
+      </div>
+    </section>
+
+    {/* 2026-05-22 — ChatGPT-style centered composer card. Replaces
+        the old 3-column ModeSelector + Mode form. Mode chips
+        compact above the textarea; composer takes the focus. */}
+    <section data-section="composer" class="mb-6">
+      <form
+        data-form="create-session"
+        class="rounded-2xl border border-white/10 bg-surface-raised shadow-lg shadow-glow-red/5 focus-within:border-glow-red/40 focus-within:ring-1 focus-within:ring-glow-red/20 transition-colors"
+      >
+        <div class="px-5 pt-4">
+          {/* Mode chip-bar (was the radio form below; now inline). */}
+          <div
+            class="inline-flex rounded-md border border-white/10 bg-surface-base p-0.5 text-xs"
+            role="radiogroup"
+            aria-label="Session mode"
+          >
+            <label class="cursor-pointer">
+              <input type="radio" name="mode" value="ai" class="peer sr-only" />
+              <span class="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-ink-muted peer-checked:bg-glow-red/15 peer-checked:text-glow-red">
+                <span class="text-[10px] uppercase tracking-wide">AI</span>
               </span>
             </label>
-            <label class="flex items-start gap-3">
-              <input type="radio" name="mode" value="manual" class="mt-0.5 text-glow-red" />
-              <span>
-                <span class="block text-sm font-medium text-ink-primary">Manual</span>
-                <span class="block text-xs text-ink-muted">You drive every action via the GUI.</span>
+            <label class="cursor-pointer">
+              <input type="radio" name="mode" value="pair" class="peer sr-only" checked />
+              <span class="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-ink-muted peer-checked:bg-glow-red/15 peer-checked:text-glow-red">
+                <span class="text-[10px] uppercase tracking-wide">Pair</span>
               </span>
             </label>
-            <label class="flex items-start gap-3">
-              <input type="radio" name="mode" value="pair" class="mt-0.5 text-glow-red" checked />
-              <span>
-                <span class="block text-sm font-medium text-ink-primary">Pair</span>
-                <span class="block text-xs text-ink-muted">AI by default; take over with one click.</span>
+            <label class="cursor-pointer">
+              <input type="radio" name="mode" value="manual" class="peer sr-only" />
+              <span class="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-ink-muted peer-checked:bg-glow-red/15 peer-checked:text-glow-red">
+                <span class="text-[10px] uppercase tracking-wide">Manual</span>
               </span>
             </label>
-            <button
-              type="submit"
-              class="mt-2 rounded-md bg-glow-red px-4 py-2 text-sm font-medium text-white hover:bg-glow-red/90"
-            >
-              Start agent session
-            </button>
-          </form>
+            <span class="ml-2 inline-flex items-center text-[10px] text-ink-muted">
+              <span data-mode-hint>Pair · AI plans, you can take over anytime</span>
+            </span>
+          </div>
         </div>
+        <textarea
+          name="initial_task"
+          rows="4"
+          maxlength="8000"
+          placeholder="Describe what you want the agent to do…
+e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgement'"
+          class="w-full resize-none bg-transparent px-5 py-4 text-base text-ink-primary placeholder-slate-500 focus:outline-none"
+        ></textarea>
+        <div class="flex items-center justify-between gap-3 border-t border-white/5 px-5 py-3">
+          <div class="flex items-center gap-2 text-[11px] text-ink-muted">
+            <kbd class="rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 font-mono">⌘</kbd>
+            <kbd class="rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 font-mono">↵</kbd>
+            <span>to start the session</span>
+          </div>
+          <button
+            type="submit"
+            class="inline-flex items-center gap-1.5 rounded-md bg-glow-red px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-glow-red/90"
+          >
+            Start session
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 12h14M13 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+      </form>
+      <p class="mt-3 text-center text-xs text-ink-muted">
+        Sessions live for 24h by default · billed only while active · cancel
+        anytime · <a href="/select-tier" class="text-glow-red hover:underline">tier limits</a>
+      </p>
+    </section>
+
+    {/* Legacy 3-col panel preserved for active-session takeover / bundled-LLM
+        status / livekit-info; visually demoted below the chat-first hero
+        above + only shown when the customer has an active session. */}
+    <div class="grid gap-6 lg:grid-cols-3">
+      <!-- Main panel (active-session block; create form was lifted to the
+           ChatGPT-style composer above). -->
+      <section class="lg:col-span-2 space-y-6">
 
         <!-- 8.26 TakeoverHandbackButtons + 8.27 TranscriptStream slots; populated
              when the dashboard creates / selects a session. -->
@@ -409,6 +504,45 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       let activeSessionId = null;
       let activeMode = null;
+
+      // 2026-05-22 — ChatGPT-style prompt-suggestion chips. Click
+      // prefills the textarea + focuses it so the customer can
+      // edit before pressing Start.
+      const composerTa = root.querySelector('textarea[name="initial_task"]');
+      document.querySelectorAll('[data-prompt-suggestion]').forEach((el) => {
+        el.addEventListener('click', () => {
+          const text = el.getAttribute('data-prompt-suggestion') ?? '';
+          if (composerTa && text.length > 0) {
+            composerTa.value = text;
+            composerTa.focus();
+          }
+        });
+      });
+
+      // Mode-hint label updates as the radio chip changes. Same
+      // shape across the three modes; tells the customer in one
+      // sentence what they signed up for.
+      const modeHint = root.querySelector('[data-mode-hint]');
+      const MODE_HINT = {
+        ai: 'AI · Driftstack writes the plan + executes',
+        pair: 'Pair · AI plans, you can take over anytime',
+        manual: 'Manual · you click; agent watches',
+      };
+      root.querySelectorAll('input[name="mode"]').forEach((el) => {
+        el.addEventListener('change', () => {
+          if (modeHint && el.checked) modeHint.textContent = MODE_HINT[el.value] ?? '';
+        });
+      });
+
+      // ⌘+Enter sends the composer (same convention as the workbench).
+      if (composerTa) {
+        composerTa.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) {
+            ev.preventDefault();
+            createForm?.dispatchEvent(new Event('submit', { cancelable: true }));
+          }
+        });
+      }
 
       if (createForm) {
         createForm.addEventListener('submit', (ev) => {
