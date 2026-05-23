@@ -69,9 +69,10 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
   it('CRITICAL rotate-reveal 3-field layout pinned — Endpoint + New secret + Old secret valid until. The 3-field reveal is what tells customers WHICH endpoint rotated + WHAT secret + WHEN the old one expires (operator-critical for zero-downtime deploys).', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /<h2 class="text-lg font-semibold text-glow-red-soft">Signing secret rotated<\/h2>/,
-    );
+    // 2026-05-23 — h2 wrapped with icon (rotate-arrow); pin loosened
+    // to label-presence + heading shape.
+    expect(p).toMatch(/Signing secret rotated/);
+    expect(p).toMatch(/text-lg font-semibold text-glow-red-soft/);
     expect(p).toMatch(/data-rotate-endpoint-id/);
     expect(p).toMatch(/data-rotate-secret/);
     expect(p).toMatch(/data-rotate-grace-expires/);
