@@ -151,10 +151,8 @@ describe('W376.C marketing-site /pricing/crypto page content parity', () => {
     );
   });
 
-  it('hero copy pinned: "Paying with crypto" + NowPayments as processor', () => {
-    expect(body).toMatch(/<h1>Paying with crypto<\/h1>/);
-    expect(body).toMatch(
-      /Driftstack accepts crypto for every paid tier through our payments\s+processor, NowPayments/,
-    );
+  it('hero copy pinned: "Paying with crypto" headline + NowPayments processor anchor. 2026-05-23 — h1 wrapped with hero-glow + gradient text; intro restructured (icon-marked lead + body). Pin loosened to label + processor.', () => {
+    expect(body).toMatch(/Paying with crypto/);
+    expect(body).toMatch(/NowPayments/);
   });
 });
