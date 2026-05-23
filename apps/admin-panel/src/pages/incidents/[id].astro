@@ -84,7 +84,14 @@ const isResolved = incident.status === 'resolved';
 
     <!-- Timeline -->
     <section class="dashboard-card mb-8">
-      <h2 class="text-lg font-semibold text-slate-900">Timeline</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+              </svg>
+            </span>
+            Timeline
+          </h2>
       <ol class="mt-4 space-y-4 border-l border-slate-200 pl-5">
         {incident.updates.map((u) => (
           <li class="relative">
@@ -111,7 +118,14 @@ const isResolved = incident.status === 'resolved';
         <>
           <!-- Add-update form -->
           <section class="dashboard-card mb-6">
-            <h2 class="text-lg font-semibold text-slate-900">Post update</h2>
+            <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+              </svg>
+            </span>
+            Post update
+          </h2>
             <form id="add-update-form" class="mt-4 space-y-4">
               <div>
                 <label class="block text-sm font-medium text-slate-700" for="update-status">
@@ -152,7 +166,14 @@ const isResolved = incident.status === 'resolved';
 
           <!-- Resolve form -->
           <section class="dashboard-card border-emerald-200 bg-emerald-50/30">
-            <h2 class="text-lg font-semibold text-slate-900">Mark resolved</h2>
+            <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" />
+              </svg>
+            </span>
+            Mark resolved
+          </h2>
             <p class="mt-1 text-sm text-slate-600">
               Posts a final timeline entry with status “resolved” and stamps
               <code>resolved_at</code>. The status page will show a green banner once propagated.
@@ -193,7 +214,14 @@ const isResolved = incident.status === 'resolved';
     {
       isResolved && (
         <section class="dashboard-card mb-6 border-amber-200 bg-amber-50/30">
-          <h2 class="text-lg font-semibold text-slate-900">Reopen incident</h2>
+          <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+              </svg>
+            </span>
+            Reopen incident
+          </h2>
           <p class="mt-2 text-sm text-slate-600">
             Reverts to <code>investigating</code> + clears
             <code>resolved_at</code>. Use when the issue resurfaced after
