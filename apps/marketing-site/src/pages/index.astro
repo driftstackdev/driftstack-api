@@ -238,8 +238,31 @@ try {
             <span class="size-2 rounded-full bg-green-500"></span>
             <span class="font-mono">Live preview — &lt;livekit-room&gt;</span>
           </div>
-          <div class="relative flex min-h-[280px] flex-1 items-center justify-center bg-black/40">
-            <span class="font-mono text-xs text-ink-muted">
+          {/* 2026-05-23 — scan-line animation behind the live-preview
+              mockup so the "live" indicator reads as actually-alive.
+              Same shape as the workbench preview placeholder. */}
+          <div class="relative flex min-h-[280px] flex-1 items-center justify-center bg-black/40 overflow-hidden">
+            <div
+              aria-hidden="true"
+              class="pointer-events-none absolute inset-0 overflow-hidden"
+            >
+              <div
+                class="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-glow-red/40 to-transparent"
+                style="animation: hero-mockup-scan 6s linear infinite;"
+              ></div>
+            </div>
+            <style is:global>
+              @keyframes hero-mockup-scan {
+                0% { top: -2%; opacity: 0; }
+                10% { opacity: 1; }
+                90% { opacity: 1; }
+                100% { top: 102%; opacity: 0; }
+              }
+              @media (prefers-reduced-motion: reduce) {
+                [data-mockup-scan] { animation: none !important; display: none; }
+              }
+            </style>
+            <span class="font-mono text-xs text-ink-muted relative">
               [ iPhone Safari · live preview ]
             </span>
           </div>
