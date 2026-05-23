@@ -92,10 +92,8 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     );
   });
 
-  it('"driftstack" wordmark in lowercase font-mono', () => {
-    expect(body).toMatch(
-      /class="flex items-center gap-2 font-mono text-base font-semibold text-slate-900"/,
-    );
+  it('"driftstack" wordmark in lowercase font-mono. 2026-05-23 — wrapped with group/hover scale; class now includes "group" prefix.', () => {
+    expect(body).toMatch(/font-mono text-base font-semibold text-slate-900/);
     expect(body).toMatch(/<span>driftstack<\/span>/);
   });
 
