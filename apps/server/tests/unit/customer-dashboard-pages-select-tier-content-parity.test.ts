@@ -72,10 +72,8 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     );
   });
 
-  it("Trial-pack hero framing pinned: '16 hours of iPhone Safari sessions. 1 concurrent. 14-day window. Once per account.' — pinned so the trial-pack spec (16h / 1 concurrent / 14d window / once-per-account uniqueness) survives as the canonical customer-facing description", () => {
-    expect(body).toMatch(
-      /<h2 class="text-xl font-semibold text-ink-primary">Trial pack — \$2\.99<\/h2>/,
-    );
+  it("Trial-pack hero framing pinned: '16 hours of iPhone Safari sessions. 1 concurrent. 14-day window. Once per account.' — pinned so the trial-pack spec (16h / 1 concurrent / 14d window / once-per-account uniqueness) survives. 2026-05-23 — h2 wrapped with leading icon; pin loosened to label-presence + spec invariant.", () => {
+    expect(body).toMatch(/Trial pack — \$2\.99/);
     expect(body).toMatch(
       /16 hours of iPhone Safari sessions\. 1 concurrent\. 14-day window\.\s*\n?\s*Once per account\./,
     );

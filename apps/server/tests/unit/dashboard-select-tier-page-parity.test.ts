@@ -86,9 +86,9 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
   it('CRITICAL trial-pack card pricing + 14-day-window + 1-concurrent + once-per-account framing pinned. Matches W729 TRIAL_PACK constants.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /<h2 class="text-xl font-semibold text-ink-primary">Trial pack — \$2\.99<\/h2>/,
-    );
+    // 2026-05-23 — h2 wrapped with leading icon (lightning bolt);
+    // pin loosened to label-presence + spec invariant.
+    expect(p).toMatch(/Trial pack — \$2\.99/);
     expect(p).toMatch(
       /16 hours of iPhone Safari sessions\. 1 concurrent\. 14-day window\.\s*\n\s+Once per account/,
     );
