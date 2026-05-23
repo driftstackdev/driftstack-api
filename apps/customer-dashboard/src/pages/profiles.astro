@@ -87,7 +87,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       data-snapshot-form-wrap
       class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6"
     >
-      <h2 class="text-lg font-semibold text-ink-primary">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+        </span>
         Capture snapshot of <span data-snapshot-source-name class="font-mono"></span>
       </h2>
       <p class="mt-2 text-sm text-ink-muted">
@@ -148,7 +154,16 @@ const apiBaseUrl = resolveApiBaseUrl();
       data-import-form-wrap
       class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6"
     >
-      <h2 class="text-lg font-semibold text-ink-primary">Import profile from JSON</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </span>
+        Import profile from JSON
+      </h2>
       <p class="mt-2 text-sm text-ink-muted">
         Paste a v1 envelope (from another profile's Export action) or upload a
         <code class="font-mono text-xs">.json</code> file. Tier-cap + name-conflict
@@ -210,7 +225,16 @@ const apiBaseUrl = resolveApiBaseUrl();
       data-create-form-wrap
       class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6"
     >
-      <h2 class="text-lg font-semibold text-ink-primary">Create a new profile</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="7" r="4" />
+            <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+            <path d="M19 8v6M22 11h-6" />
+          </svg>
+        </span>
+        Create a new profile
+      </h2>
       <form data-create-form class="mt-4 space-y-4">
         <div>
           <label for="profile-name" class="block text-sm font-medium text-ink-secondary">Name</label>
