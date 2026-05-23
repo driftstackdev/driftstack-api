@@ -88,9 +88,18 @@ const EMAIL_EVENTS = [
       </p>
     </header>
 
+    {/* 2026-05-23 — icon on the Profile + Security section headers. */}
     <!-- Profile -->
     <section class="dashboard-card">
-      <h2 class="text-lg font-semibold text-ink-primary">Profile</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="7" r="4" />
+            <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+          </svg>
+        </span>
+        Profile
+      </h2>
       <p class="mt-2 text-sm text-ink-muted">
         Display name + email shown on invoices and webhook delivery audit logs.
       </p>
@@ -127,7 +136,15 @@ const EMAIL_EVENTS = [
 
     <!-- Security -->
     <section class="dashboard-card mt-6">
-      <h2 class="text-lg font-semibold text-ink-primary">Security</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+        </span>
+        Security
+      </h2>
       <p class="mt-2 text-sm text-ink-muted">Password + recovery options.</p>
       <div class="mt-6 space-y-3">
         <button type="button" data-action="change-password" class="btn-secondary inline-flex">
