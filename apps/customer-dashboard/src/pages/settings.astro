@@ -161,7 +161,15 @@ const EMAIL_EVENTS = [
     <section class="dashboard-card mt-6" data-region="mfa">
       <div class="flex items-start justify-between gap-6">
         <div>
-          <h2 class="text-lg font-semibold text-ink-primary">Two-factor authentication</h2>
+          <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z" />
+                <path d="M9 12l2 2 4-4" />
+              </svg>
+            </span>
+            Two-factor authentication
+          </h2>
           <p class="mt-2 max-w-prose text-sm text-ink-muted">
             Add a TOTP code from your authenticator app on top of your password.
             Recovery codes are issued at enrollment — store them somewhere safe;
@@ -516,7 +524,15 @@ const EMAIL_EVENTS = [
       the owner.
     */}
     <section class="dashboard-card mt-6" data-region="byok-anthropic">
-      <h2 class="text-lg font-semibold text-ink-primary">Anthropic API key (BYOK)</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="12" r="7" />
+            <path d="M16 12h6M19 9v6" />
+          </svg>
+        </span>
+        Anthropic API key (BYOK)
+      </h2>
       <p class="mt-2 text-sm text-ink-muted">
         Bring your own Anthropic key so AI agent turns bill to your Anthropic console.
         Stored encrypted at rest; we never read or log the plaintext after you submit
