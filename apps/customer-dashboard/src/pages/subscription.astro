@@ -66,12 +66,23 @@ const apiBaseUrl = resolveApiBaseUrl();
       </p>
     </header>
 
+    {/* 2026-05-23 — icon header on Current plan card. */}
     <!-- Current plan -->
     <section class="dashboard-card">
-      <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Current plan</p>
-      <h2 class="mt-2 text-2xl font-semibold text-ink-primary" data-field="sub-tier">
-        {MOCK_SUBSCRIPTION ? MOCK_SUBSCRIPTION.tier : 'No subscription'}
-      </h2>
+      <div class="flex items-start gap-3">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <path d="M2 10h20" />
+          </svg>
+        </div>
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Current plan</p>
+          <h2 class="mt-2 text-2xl font-semibold text-ink-primary" data-field="sub-tier">
+            {MOCK_SUBSCRIPTION ? MOCK_SUBSCRIPTION.tier : 'No subscription'}
+          </h2>
+        </div>
+      </div>
       {
         MOCK_SUBSCRIPTION && (
           <p class="mt-2 text-sm text-ink-secondary" data-field="sub-summary">
