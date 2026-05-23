@@ -116,10 +116,8 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
     expect(body).toMatch(/card-less anchor rather than a card linking to\s+an external host/);
   });
 
-  it('help banner: "Doc not landing?" + support@driftstack.dev mailto + same-business-day claim', () => {
-    expect(body).toMatch(
-      /<h2 class="text-xl font-semibold text-ink-primary">Doc not landing\?<\/h2>/,
-    );
+  it('help banner: "Doc not landing?" + support@driftstack.dev mailto + same-business-day claim. 2026-05-23 — h2 wrapped with help-circle icon; pin loosened to label-presence.', () => {
+    expect(body).toMatch(/Doc not landing\?/);
     expect(body).toMatch(
       /<a\s+href="mailto:support@driftstack\.dev"\s+class="text-glow-red underline">support@driftstack\.dev<\/a>/,
     );
