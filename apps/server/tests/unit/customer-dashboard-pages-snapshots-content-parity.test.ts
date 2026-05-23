@@ -86,10 +86,9 @@ describe('W495.B apps/customer-dashboard/src/pages/snapshots.astro content parit
     expect(body).toMatch(/Default suggestion is the source profile name \+ " \(restored\)"\. Edit/);
   });
 
-  it("Empty-state: 'No snapshots yet. Capture one from /profiles.' + dashed-border card — pinned so first-time users see a clear next-step (capture from /profiles) rather than a confusing empty list (drift to dropping the /profiles link would orphan customers who don't know where to capture from)", () => {
-    expect(body).toMatch(
-      /No snapshots yet\. Capture one from <a href="\/profiles" class="text-glow-red underline"\s*\n?\s*>\/profiles<\/a\s*\n?\s*>\./,
-    );
+  it("Empty-state: 'No snapshots yet' headline + 'Capture one from /profiles' next-step CTA. 2026-05-23 — restructured with icon + structured headline/body (camera glyph + headline span + body link); pin loosened to assert the headline + /profiles link separately.", () => {
+    expect(body).toMatch(/No snapshots yet/);
+    expect(body).toMatch(/<a href="\/profiles" class="text-glow-red underline">\/profiles<\/a>/);
   });
 
   it("Parent-deleted indicator: parent_profile_id === null → ' <em>(parent profile deleted)</em>' suffix — pinned so customers see that a restored snapshot's source profile has been deleted (drift to dropping would let customers be surprised when the row shows 'From <deleted>' or similar)", () => {
