@@ -49,14 +49,25 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
 ---
 
 <BaseLayout title="Crypto payments — Driftstack" description="Pay for Driftstack with bitcoin, ether, or stablecoins. Supported tiers, accepted currencies, and confirmation timing.">
-  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert">
-    <h1>Paying with crypto</h1>
+  {/* 2026-05-23 — hero-glow + gradient-text intro before the prose body. */}
+  <section class="relative overflow-hidden">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-3xl px-6 pb-6 pt-16">
+      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Pricing · Crypto</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl">
+        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+          Paying with crypto.
+        </span>
+      </h1>
+    </div>
+  </section>
+  <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert prose-headings:font-semibold">
+    <p class="lead text-lg text-ink-secondary"><strong class="text-ink-primary">Bitcoin, Ether, USDC, USDT</strong> — every paid tier accepts crypto via NowPayments.</p>
 
-    <p class="lead">
-      Driftstack accepts crypto for every paid tier through our payments
-      processor, NowPayments. Settlement is on-chain; once your transfer
-      receives the required confirmations, your account unlocks
-      automatically — no support ticket needed for the steady state.
+    <p>
+      Settlement is on-chain; once your transfer receives the required
+      confirmations, your account unlocks automatically — no support
+      ticket needed for the steady state.
     </p>
 
     <h2>Supported tiers</h2>
