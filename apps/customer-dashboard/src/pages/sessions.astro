@@ -134,11 +134,18 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
          account they can't use the SDK from (server returns the key
          ONCE then hashes it). This reveal surfaces it inline, with
          the same "shown once" framing as /api-keys. -->
+    {/* 2026-05-23 — icon on first-API-key reveal panel. */}
     <div
       data-first-key-reveal
       class="mb-8 hidden rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-6"
     >
-      <h2 class="text-lg font-semibold text-emerald-200">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-emerald-200">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-400/20 ring-1 ring-emerald-400/40">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="9" cy="12" r="7" />
+            <path d="M16 12h6M19 9v6" />
+          </svg>
+        </span>
         Your first API key — copy it now
       </h2>
       <p class="mt-2 text-sm text-emerald-200">
