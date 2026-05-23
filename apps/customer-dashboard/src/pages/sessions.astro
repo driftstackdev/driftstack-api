@@ -239,9 +239,15 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
       </div>
     </div>
 
+    {/* 2026-05-23 — icon + pulsing dot accent on Active sessions
+        header to signal liveness. */}
     <!-- Active sessions -->
     <section>
-      <h2 class="mb-4 text-lg font-semibold text-ink-primary">
+      <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="relative flex h-2 w-2" aria-hidden="true">
+          <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
+          <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
+        </span>
         Active (<span data-count="active">{activeSessions.length.toString()}</span>)
       </h2>
       {/*
@@ -276,7 +282,8 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
 
     <!-- Recent closed -->
     <section class="mt-12">
-      <h2 class="mb-4 text-lg font-semibold text-ink-primary">
+      <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="inline-block h-2 w-2 rounded-full bg-slate-500" aria-hidden="true"></span>
         Recent (<span data-count="recent">{recentClosedSessions.length.toString()}</span>)
       </h2>
       <p data-empty="recent" class="hidden text-sm text-ink-muted">No recent sessions.</p>
