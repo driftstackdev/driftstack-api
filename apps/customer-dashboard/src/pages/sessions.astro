@@ -187,11 +187,17 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
          quickstart, (2) drive the session via the GUI client, (3)
          browse the SDK reference. Dismissal persists via sessionStorage
          flag so a page reload doesn't re-show. -->
+    {/* 2026-05-23 — icon on Next-steps onboarding panel. */}
     <div
       data-next-steps
       class="mb-8 hidden rounded-lg border border-glow-red/30 bg-glow-red/5 p-6"
     >
-      <h2 class="text-lg font-semibold text-ink-primary">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/15 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 5l7 7-7 7" />
+          </svg>
+        </span>
         Next steps — your account is ready to drive
       </h2>
       <p class="mt-2 text-sm text-ink-secondary">
