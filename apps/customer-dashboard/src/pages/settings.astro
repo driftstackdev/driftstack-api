@@ -348,7 +348,14 @@ const EMAIL_EVENTS = [
 
     <!-- Sessions / devices (V-355) -->
     <section class="dashboard-card mt-6" data-region="web-sessions">
-      <h2 class="text-lg font-semibold text-ink-primary">Active sign-ins</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
+          </svg>
+        </span>
+        Active sign-ins
+      </h2>
       <p class="mt-2 text-sm text-ink-muted">
         Browser sessions where you're signed in to the dashboard. Distinct
         from your driver sessions on /sessions.
@@ -381,7 +388,14 @@ const EMAIL_EVENTS = [
 
     <!-- Profile basics (V-352 — name + timezone) -->
     <section class="dashboard-card mt-6" data-region="profile">
-      <h2 class="text-lg font-semibold text-ink-primary">Profile</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="7" r="4" /><path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+          </svg>
+        </span>
+        Profile
+      </h2>
       <p class="mt-2 text-sm text-ink-muted">
         Display name + timezone. Used by the dashboard + outbound emails to
         render timestamps in your local time.
@@ -593,7 +607,14 @@ const EMAIL_EVENTS = [
 
     <!-- Email notifications (V-204 — live-wired) -->
     <section class="dashboard-card mt-6" data-region="email-prefs">
-      <h2 class="text-lg font-semibold text-ink-primary">Email notifications</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><polyline points="22,6 12,13 2,6" />
+          </svg>
+        </span>
+        Email notifications
+      </h2>
       <p class="mt-2 text-sm text-ink-muted">
         Security + financial emails (signup verification, password reset,
         billing failure, subscription cancellation, support replies) always
@@ -626,7 +647,14 @@ const EMAIL_EVENTS = [
 
     <!-- Connected accounts (V-667.C-followup — live-wired) -->
     <section class="dashboard-card mt-6" data-region="oauth-links">
-      <h2 class="text-lg font-semibold text-ink-primary">Connected accounts</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+        </span>
+        Connected accounts
+      </h2>
       <p class="mt-2 text-sm text-ink-muted">
         IDPs (Google / GitHub) linked to your account. Each link lets you
         sign in via that provider. Revoking the link on the provider side
@@ -647,7 +675,14 @@ const EMAIL_EVENTS = [
 
     <!-- Audit log (V-216 — live-wired) -->
     <section class="dashboard-card mt-6" data-region="audit-log">
-      <h2 class="text-lg font-semibold text-ink-primary">Recent activity</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+          </svg>
+        </span>
+        Recent activity
+      </h2>
       <p class="mt-2 text-sm text-ink-muted">
         API key mints + revokes, session lifecycle events, and other account
         changes. Newest first; filtered to your own account.
