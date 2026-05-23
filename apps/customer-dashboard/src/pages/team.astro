@@ -89,7 +89,16 @@ const apiBaseUrl = resolveApiBaseUrl();
       </form>
     </div>
 
-    <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-ink-muted">Members</h2>
+    {/* 2026-05-23 — icon + count chip on Members/Invites headers. */}
+    <h2 class="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-muted">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+        <circle cx="9" cy="7" r="4" />
+        <path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+        <circle cx="17" cy="9" r="3" />
+        <path d="M16 14a4 4 0 0 1 4 4v3" />
+      </svg>
+      Members
+    </h2>
     <ul
       data-members-list
       class="divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
@@ -97,7 +106,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       <li class="px-6 py-4 text-sm text-ink-muted">Loading…</li>
     </ul>
 
-    <h2 class="mb-3 mt-10 text-sm font-semibold uppercase tracking-wide text-ink-muted">
+    <h2 class="mb-3 mt-10 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-ink-muted">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+        <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+        <polyline points="22,6 12,13 2,6" />
+      </svg>
       Pending invites
     </h2>
     <ul
