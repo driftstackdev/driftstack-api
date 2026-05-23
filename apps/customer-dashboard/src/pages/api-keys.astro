@@ -247,11 +247,20 @@ const apiBaseUrl = resolveApiBaseUrl();
     </div>
 
     <!-- V-270: Just-created key reveal (shown once, dismissible) -->
+    {/* 2026-05-23 — icon on key-created success panel. */}
     <div
       data-created-reveal
       class="mb-8 hidden rounded-lg border border-emerald-400/30 bg-emerald-400/10 p-6"
     >
-      <h2 class="text-lg font-semibold text-emerald-200">Key created — copy it now</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-emerald-200">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-emerald-400/20 ring-1 ring-emerald-400/40">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 12l2 2 4-4" />
+            <circle cx="12" cy="12" r="9" />
+          </svg>
+        </span>
+        Key created — copy it now
+      </h2>
       <p class="mt-2 text-sm text-emerald-200">
         This is the only time the full key is shown. Store it in your secret manager before
         dismissing.
@@ -283,7 +292,15 @@ const apiBaseUrl = resolveApiBaseUrl();
       data-rotate-reveal
       class="mb-8 hidden rounded-lg border border-glow-red/40 bg-glow-red/10 p-6"
     >
-      <h2 class="text-lg font-semibold text-glow-red-soft">API key rotated</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-glow-red-soft">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/15 ring-1 ring-glow-red/40">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+          </svg>
+        </span>
+        API key rotated
+      </h2>
       <p class="mt-1 text-sm text-glow-red-soft">
         Copy the new plaintext now — it won't be shown again. The previous key
         keeps working for the grace window below; deploy the new key everywhere
