@@ -94,10 +94,21 @@ const apiBaseUrl = resolveApiBaseUrl();
       </p>
     </section>
 
+    {/* 2026-05-23 — icon header on the plan-history card. */}
     <!-- Plan history -->
     <section class="dashboard-card mt-6">
-      <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Plan history</p>
-      <h2 class="mt-2 text-xl font-semibold text-ink-primary">Tier changes</h2>
+      <div class="flex items-start gap-3">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 2" />
+          </svg>
+        </div>
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Plan history</p>
+          <h2 class="mt-2 text-xl font-semibold text-ink-primary">Tier changes</h2>
+        </div>
+      </div>
       <ol class="mt-6 space-y-3">
         {
           PLAN_HISTORY.slice()
