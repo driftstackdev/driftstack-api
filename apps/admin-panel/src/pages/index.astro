@@ -45,7 +45,14 @@ const apiBaseUrl = resolveApiBaseUrl();
     <!-- Top tiles -->
     <section class="grid gap-4 md:grid-cols-4">
       <div class="dashboard-card">
-        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Active accounts</p>
+        <div class="flex items-start justify-between">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Active accounts</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="7" r="4" /><path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+            </svg>
+          </span>
+        </div>
         <p
           class="mt-3 text-3xl font-semibold text-slate-900"
           data-field="active-accounts"
@@ -57,7 +64,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         </p>
       </div>
       <div class="dashboard-card">
-        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Suspended</p>
+        <div class="flex items-start justify-between">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Suspended</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" /><path d="M9 9h6v6H9z" />
+            </svg>
+          </span>
+        </div>
         <p
           class="mt-3 text-3xl font-semibold text-slate-900"
           data-field="suspended-accounts"
@@ -66,12 +80,26 @@ const apiBaseUrl = resolveApiBaseUrl();
         </p>
       </div>
       <div class="dashboard-card">
-        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Open leads</p>
+        <div class="flex items-start justify-between">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Open leads</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><path d="M20 8v6M23 11h-6" />
+            </svg>
+          </span>
+        </div>
         <p class="mt-3 text-3xl font-semibold text-slate-900">{MOCK_LEADS.length}</p>
         <p class="mt-1 text-[11px] text-slate-400">mock — leads endpoint TBD</p>
       </div>
       <div class="dashboard-card">
-        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">DLQ depth</p>
+        <div class="flex items-start justify-between">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">DLQ depth</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+            </svg>
+          </span>
+        </div>
         <p class="mt-3 text-3xl font-semibold text-slate-900" data-field="dlq-depth">0</p>
       </div>
     </section>
