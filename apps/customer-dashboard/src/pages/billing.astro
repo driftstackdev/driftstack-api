@@ -105,10 +105,19 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </section>
 
+    {/* 2026-05-23 — icon header on the trial-pack card. */}
     <!-- Trial pack card -->
     <section class="dashboard-card mt-6">
       <div class="flex items-start justify-between gap-6">
-        <div>
+        <div class="flex items-start gap-4">
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 12V8H6a2 2 0 0 1 0-4h12v4" />
+              <path d="M4 6v12a2 2 0 0 0 2 2h14v-4" />
+              <path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
+            </svg>
+          </div>
+          <div>
           <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Trial pack</p>
           <h2 class="mt-2 text-xl font-semibold text-ink-primary" data-field="trial-state">
             {
@@ -128,6 +137,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                   : 'Buy 16 hours of iPhone Safari sessions for $2.99 — once per account.'
             }
           </p>
+          </div>
         </div>
       </div>
       <div
