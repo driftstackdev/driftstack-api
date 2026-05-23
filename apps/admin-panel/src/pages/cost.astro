@@ -50,9 +50,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </section>
 
+    {/* 2026-05-23 — icon header on cost sections. */}
     <!-- Per-account query -->
     <section class="mb-6">
-      <h2 class="text-lg font-semibold text-slate-900">Per-account breakdown</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="7" r="4" />
+            <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+          </svg>
+        </span>
+        Per-account breakdown
+      </h2>
       <form
         data-form="account-query"
         class="mt-3 flex flex-wrap items-end gap-3"
@@ -94,7 +103,14 @@ const apiBaseUrl = resolveApiBaseUrl();
     <section class="mb-6">
       <div class="flex items-end justify-between gap-3">
         <div>
-          <h2 class="text-lg font-semibold text-slate-900">Top accounts by cost</h2>
+          <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+              </svg>
+            </span>
+            Top accounts by cost
+          </h2>
           <p class="mt-1 text-sm text-slate-500">
             Sorted descending by total cents in the current cycle. Fetches the
             first <code class="font-mono text-xs">limit=50</code> accounts then
