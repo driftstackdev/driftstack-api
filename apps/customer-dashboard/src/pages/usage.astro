@@ -207,12 +207,23 @@ const SPARK_H = 48;
       </div>
     </section>
 
+    {/* 2026-05-23 — icon header on the capture-breakdown card. */}
     <!-- Capture breakdown -->
     <section class="mt-10 dashboard-card">
-      <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">
-        Capture breakdown
-      </p>
-      <h2 class="mt-2 text-xl font-semibold text-ink-primary">Captures by kind</h2>
+      <div class="flex items-start gap-3">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+        </div>
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">
+            Capture breakdown
+          </p>
+          <h2 class="mt-2 text-xl font-semibold text-ink-primary">Captures by kind</h2>
+        </div>
+      </div>
       <dl class="mt-6 grid gap-6 md:grid-cols-2">
         <div class="flex justify-between border-b border-slate-100 pb-3">
           <dt class="text-sm text-ink-muted">Screenshots</dt>
