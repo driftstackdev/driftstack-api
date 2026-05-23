@@ -243,9 +243,9 @@ describe('v2-#8 Wave 2.C sub-slice 8.24 agent-sessions page parity', () => {
 
   // LK arc — the dashboard surfaces the optional `livekit` field
   // from the session-create response as a right-rail info card.
-  it('renders a Live video right-rail card hidden by default', () => {
+  it('renders a Live video right-rail card hidden by default. 2026-05-23 — h2 wrapped with leading icon SVG; pin loosened to label-presence.', () => {
     expect(body).toMatch(/data-section="livekit-info"/);
-    expect(body).toMatch(/<h2[^>]*>\s*Live video\s*<\/h2>/);
+    expect(body).toMatch(/Live video/);
     expect(body).toMatch(/class="hidden[^"]*"[\s\S]{0,500}data-section="livekit-info"/);
   });
 
