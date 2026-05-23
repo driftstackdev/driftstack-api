@@ -281,8 +281,17 @@ const FILTER_OPTIONS = [
       <ul class="divide-y divide-slate-100" data-list>
         <li class="px-6 py-4 text-sm text-ink-muted">Loading audit log…</li>
       </ul>
-      <div class="hidden px-6 py-4 text-sm text-ink-muted" data-empty>
-        No audit entries yet. Events appear here as you take actions on your account.
+      {/* 2026-05-23 — empty state with icon for visual interest. */}
+      <div class="hidden px-6 py-12 text-center text-sm text-ink-muted" data-empty>
+        <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <path d="M14 2v6h6" />
+            <path d="M9 13h6M9 17h4" />
+          </svg>
+        </div>
+        <p class="text-ink-primary font-medium">No audit entries yet</p>
+        <p class="mt-1 text-ink-muted">Events appear here as you take actions on your account.</p>
       </div>
       <div class="hidden border-t border-slate-100 px-6 py-3" data-load-more-row>
         <button
