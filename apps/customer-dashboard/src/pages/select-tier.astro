@@ -68,12 +68,20 @@ const TIERS: {
     >
     </div>
 
+    {/* 2026-05-23 — icon header on Trial pack hero card. */}
     <!-- Trial pack hero card -->
     <div
       data-trial-card
       class="mt-8 rounded-lg border border-glow-red/30 bg-surface-raised p-6"
     >
-      <h2 class="text-xl font-semibold text-ink-primary">Trial pack — $2.99</h2>
+      <h2 class="flex items-center gap-2 text-xl font-semibold text-ink-primary">
+        <span class="flex h-8 w-8 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+        </span>
+        Trial pack — $2.99
+      </h2>
       <p class="mt-2 text-sm text-ink-secondary">
         16 hours of iPhone Safari sessions. 1 concurrent. 14-day window.
         Once per account.
