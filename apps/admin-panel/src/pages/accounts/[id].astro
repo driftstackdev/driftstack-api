@@ -125,12 +125,22 @@ const accountId = account.id;
       </dl>
     </section>
 
+    {/* 2026-05-23 — icon on Admin actions card. */}
     <!-- Admin actions -->
     <section class="dashboard-card mt-6">
-      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
-        Admin actions
-      </p>
-      <h2 class="mt-2 text-xl font-semibold text-slate-900">Manual operations</h2>
+      <div class="flex items-start gap-3">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700 mt-1">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14.7 6.3l-1.4 1.4 4 4-1.4 1.4-4-4-1.4 1.4 4 4-7 7H3v-4l9-9-4-4 1.4-1.4 4 4 1.4-1.4z" />
+          </svg>
+        </span>
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+            Admin actions
+          </p>
+          <h2 class="mt-2 text-xl font-semibold text-slate-900">Manual operations</h2>
+        </div>
+      </div>
       <p class="mt-2 text-sm text-slate-500">
         All actions audit-logged with admin id + reason. Tier change applies
         immediately; suspend revokes all sessions + keys until unsuspend.
