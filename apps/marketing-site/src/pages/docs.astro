@@ -153,12 +153,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </div>
   </section>
 
+  {/* 2026-05-23 — icon on docs help-banner h2. */}
   <!-- Help banner -->
   <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-12">
       <div class="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 class="text-xl font-semibold text-ink-primary">Doc not landing?</h2>
+          <h2 class="flex items-center gap-2 text-xl font-semibold text-ink-primary">
+            <span class="flex h-8 w-8 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <path d="M12 17h.01" />
+              </svg>
+            </span>
+            Doc not landing?
+          </h2>
           <p class="mt-2 max-w-prose text-sm text-ink-secondary">
             Email <a
               href="mailto:support@driftstack.dev"
