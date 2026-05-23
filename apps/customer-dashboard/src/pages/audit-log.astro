@@ -164,17 +164,32 @@ const FILTER_OPTIONS = [
           Export the full history at any time — your data, your file.
         </p>
       </div>
+      {/* 2026-05-24 — download icons on Export CSV / JSON buttons. */}
       <div class="flex shrink-0 gap-2">
         <button
           type="button"
-          class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-primary hover:bg-surface-base"
-          data-export-csv>Export CSV</button
+          class="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-primary hover:bg-surface-base"
+          data-export-csv
         >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Export CSV
+        </button>
         <button
           type="button"
-          class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-primary hover:bg-surface-base"
-          data-export-json>Export JSON</button
+          class="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-primary hover:bg-surface-base"
+          data-export-json
         >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Export JSON
+        </button>
       </div>
     </header>
 
