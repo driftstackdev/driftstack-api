@@ -85,20 +85,11 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
     );
   });
 
-  it("Per-competitor 4-section comparison: 'Driftstack vs Browserless' + 'Driftstack vs Bright Data' + 'Driftstack vs ScrapingBee' + 'Driftstack vs Browserbase' each with a 'Pricing shape' subhead — pinned so the per-vendor head-to-head + the explicit pricing-shape callout survives (drift to dropping pricing-shape would hide the most-comparable cost-narrative for prospects)", () => {
-    expect(body).toMatch(
-      /<h3 class="text-xl font-semibold text-ink-primary">Driftstack vs Browserless<\/h3>/,
-    );
-    expect(body).toMatch(
-      /<h3 class="text-xl font-semibold text-ink-primary">Driftstack vs Bright Data<\/h3>/,
-    );
-    expect(body).toMatch(
-      /<h3 class="text-xl font-semibold text-ink-primary">Driftstack vs ScrapingBee<\/h3>/,
-    );
-    expect(body).toMatch(
-      /<h3 class="text-xl font-semibold text-ink-primary">Driftstack vs Browserbase<\/h3>/,
-    );
-    // Pricing shape subhead appears 4 times - just confirm presence via global match
+  it("Per-competitor 4-section comparison: each h3 + 'Pricing shape' subhead. 2026-05-23 — h3 labels wrapped in gradient-text span; pin loosened to per-vendor label presence + Pricing-shape count invariant.", () => {
+    expect(body).toMatch(/Driftstack vs Browserless/);
+    expect(body).toMatch(/Driftstack vs Bright Data/);
+    expect(body).toMatch(/Driftstack vs ScrapingBee/);
+    expect(body).toMatch(/Driftstack vs Browserbase/);
     const pricingShapeMatches = body.match(/Pricing shape/g) || [];
     expect(pricingShapeMatches.length).toBeGreaterThanOrEqual(4);
   });
