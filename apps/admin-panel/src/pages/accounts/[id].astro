@@ -270,9 +270,20 @@ const accountId = account.id;
     {/* 2026-05-22 — per-account cost breakdown inline. Same 5-
         dimension shape as /admin/cost. Saves the operator the
         drill-into-/cost step when reviewing a single account. */}
+    {/* 2026-05-23 — icons on Spend + Audit slice cards. */}
     <section class="dashboard-card mt-6" data-section="account-cost">
-      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Spend (this cycle)</p>
-      <h2 class="mt-2 text-xl font-semibold text-slate-900">Cost breakdown</h2>
+      <div class="flex items-start gap-3">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700 mt-1">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="1" x2="12" y2="23" />
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          </svg>
+        </span>
+        <div class="flex-1">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Spend (this cycle)</p>
+          <h2 class="mt-2 text-xl font-semibold text-slate-900">Cost breakdown</h2>
+        </div>
+      </div>
       <div data-account-cost-body class="mt-4">
         <p class="text-sm text-slate-500">Loading…</p>
       </div>
@@ -280,8 +291,19 @@ const accountId = account.id;
 
     <!-- Per-account audit slice -->
     <section class="dashboard-card mt-6">
-      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Audit slice</p>
-      <h2 class="mt-2 text-xl font-semibold text-slate-900">Admin actions on this account</h2>
+      <div class="flex items-start gap-3">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700 mt-1">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <path d="M14 2v6h6" />
+            <path d="M9 13h6M9 17h4" />
+          </svg>
+        </span>
+        <div class="flex-1">
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Audit slice</p>
+          <h2 class="mt-2 text-xl font-semibold text-slate-900">Admin actions on this account</h2>
+        </div>
+      </div>
       <ul class="mt-4 divide-y divide-slate-100" data-list="account-audit">
         {
           auditSlice.length === 0 ? (
