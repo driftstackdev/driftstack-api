@@ -404,8 +404,15 @@ const COMPARISON_ROWS: ComparisonRow[] = [
         Where Driftstack isn't the fit
       </p>
       <h2 class="mt-3 text-3xl font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">When to pick something else.</span></h2>
+      {/* 2026-05-23 — icons on each "pick something else" card. */}
       <div class="mt-10 grid gap-8 md:grid-cols-3">
         <div>
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-slate-700/40 ring-1 ring-slate-600/40 text-slate-300">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <path d="M8 21h8M12 17v4" />
+            </svg>
+          </div>
           <h3 class="text-lg font-medium text-ink-primary">Desktop-only targets</h3>
           <p class="mt-3 text-sm text-ink-secondary">
             If your target site is a B2B dashboard or an internal tool that
@@ -415,6 +422,12 @@ const COMPARISON_ROWS: ComparisonRow[] = [
           </p>
         </div>
         <div>
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-slate-700/40 ring-1 ring-slate-600/40 text-slate-300">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path d="M14 2v6h6" />
+            </svg>
+          </div>
           <h3 class="text-lg font-medium text-ink-primary">Pure HTML scraping</h3>
           <p class="mt-3 text-sm text-ink-secondary">
             "Fetch URL, extract data, never interact" is exactly the workload
@@ -424,6 +437,12 @@ const COMPARISON_ROWS: ComparisonRow[] = [
           </p>
         </div>
         <div>
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-slate-700/40 ring-1 ring-slate-600/40 text-slate-300">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          </div>
           <h3 class="text-lg font-medium text-ink-primary">IP-pool-as-product</h3>
           <p class="mt-3 text-sm text-ink-secondary">
             If the unlock is residential / mobile / ISP IPs at scale and the
