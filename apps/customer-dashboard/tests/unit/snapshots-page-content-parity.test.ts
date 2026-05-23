@@ -75,10 +75,11 @@ describe('W364.B customer-dashboard /snapshots page content parity', () => {
     );
   });
 
-  it('cross-link to /profiles resolves + empty-state directs to /profiles for capture', () => {
+  it('cross-link to /profiles resolves + empty-state directs to /profiles for capture. 2026-05-23 — empty-state restructured with icon + headline; pin loosened to assert /profiles link without text-coupling.', () => {
     expect(body).toContain('<a href="/profiles"');
     expect(body).toMatch(/Capture from <a\s+href="\/profiles"/);
-    expect(body).toMatch(/No snapshots yet\. Capture one from <a href="\/profiles"/);
+    expect(body).toMatch(/No snapshots yet/);
+    expect(body).toMatch(/<a href="\/profiles" class="text-glow-red underline">\/profiles<\/a>/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/profiles.astro'))).toBe(
       true,
     );
