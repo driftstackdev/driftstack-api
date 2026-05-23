@@ -99,7 +99,14 @@ const SPARK_H = 48;
     <!-- Top tiles -->
     <section class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <div class="dashboard-card">
-        <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Session minutes</p>
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Session minutes</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
+            </svg>
+          </span>
+        </div>
         <p class="mt-3 text-3xl font-semibold text-ink-primary" data-stat="session_minute">
           {MOCK_USAGE_SUMMARY.totals.session_minute.toLocaleString('en-US')}
         </p>
@@ -118,7 +125,14 @@ const SPARK_H = 48;
         </svg>
       </div>
       <div class="dashboard-card">
-        <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Navigates</p>
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Navigates</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </span>
+        </div>
         <p class="mt-3 text-3xl font-semibold text-ink-primary" data-stat="navigate">
           {MOCK_USAGE_SUMMARY.totals.navigate.toLocaleString('en-US')}
         </p>
@@ -137,7 +151,14 @@ const SPARK_H = 48;
         </svg>
       </div>
       <div class="dashboard-card">
-        <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Interacts</p>
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Interacts</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 2a4 4 0 0 0-4 4v6.5a3.5 3.5 0 1 0 7 0V6" />
+            </svg>
+          </span>
+        </div>
         <p class="mt-3 text-3xl font-semibold text-ink-primary" data-stat="interact">
           {MOCK_USAGE_SUMMARY.totals.interact.toLocaleString('en-US')}
         </p>
@@ -156,7 +177,14 @@ const SPARK_H = 48;
         </svg>
       </div>
       <div class="dashboard-card">
-        <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Captures</p>
+        <div class="flex items-center justify-between gap-2">
+          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Captures</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" />
+            </svg>
+          </span>
+        </div>
         <p class="mt-3 text-3xl font-semibold text-ink-primary" data-stat="captures_total">
           {(
             MOCK_USAGE_SUMMARY.totals.state_capture +
