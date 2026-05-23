@@ -111,7 +111,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         on the dashboard can act in one click without hunting in
         the side nav. */}
     <section class="mt-10">
-      <h2 class="text-lg font-semibold text-ink-primary">Quick actions</h2>
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg>
+        </span>
+        Quick actions
+      </h2>
       <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <a
           href="/agent-sessions"
