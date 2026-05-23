@@ -90,8 +90,17 @@ const accountId = account.id;
     </header>
 
     <!-- Account facts -->
+    {/* 2026-05-23 — icon on Account facts card. */}
     <section class="dashboard-card">
-      <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Account</p>
+      <div class="flex items-start justify-between">
+        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Account</p>
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="7" r="4" />
+            <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
+          </svg>
+        </span>
+      </div>
       <dl class="mt-4 grid gap-4 md:grid-cols-2">
         <div class="flex justify-between border-b border-slate-100 pb-2">
           <dt class="text-sm text-slate-500">Tier</dt>
