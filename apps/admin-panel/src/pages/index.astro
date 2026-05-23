@@ -76,10 +76,19 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </section>
 
+    {/* 2026-05-23 — icon on Recent admin activity header. */}
     <!-- Recent admin activity -->
     <section class="mt-10 dashboard-card">
       <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-900">Recent admin activity</h2>
+        <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-900">
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+          </span>
+          Recent admin activity
+        </h2>
         <div class="flex items-center gap-3 text-xs">
           {/* 2026-05-21 — live auto-refresh indicator. JS toggles
               `data-state` to dot-green while idle, dot-amber while
