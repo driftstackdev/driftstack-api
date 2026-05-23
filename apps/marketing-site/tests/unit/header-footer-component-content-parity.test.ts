@@ -126,10 +126,10 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     expect(body).toMatch(/const year = new Date\(\)\.getUTCFullYear\(\);/);
   });
 
-  it('tagline (F-3): "Pixel-identical iPhone Safari sessions in the cloud. API, SDK, or GUI."', () => {
-    expect(body).toMatch(
-      /Pixel-identical iPhone Safari sessions in the cloud\. API, SDK, or GUI\./,
-    );
+  it('tagline (F-3): brand framing + proxy egress capability. 2026-05-23 — expanded with SOCKS5/OpenVPN/WireGuard per founder direction.', () => {
+    expect(body).toMatch(/Pixel-identical iPhone Safari sessions in the cloud\./);
+    expect(body).toMatch(/SOCKS5/);
+    expect(body).toMatch(/API, SDK, or GUI\./);
   });
 
   it('2 column headings in canonical order: Product / Company (F-3 — Trust + Legal moved to meta-link row)', () => {

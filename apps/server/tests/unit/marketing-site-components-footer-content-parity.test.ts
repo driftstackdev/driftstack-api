@@ -39,12 +39,12 @@ function read(p: string): string {
 describe('W522.B apps/marketing-site/src/components/Footer.astro content parity', () => {
   const body = read(LIB);
 
-  it("Auto-year UTC + StatusBadge import + revised brand tagline framing pinned: 'const year = new Date().getUTCFullYear();' + StatusBadge import + 'Pixel-identical iPhone Safari sessions in the cloud. API, SDK, or GUI.' tagline + '&copy; {year} Driftstack. All rights reserved.'", () => {
+  it('Auto-year UTC + StatusBadge import + brand tagline framing. 2026-05-23 — tagline expanded with proxy/VPN egress capability per founder direction (UDP/QUIC/WebRTC + OpenVPN + WireGuard); pin loosened to per-clause assertions.', () => {
     expect(body).toMatch(/import StatusBadge from '\.\/StatusBadge\.astro';/);
     expect(body).toMatch(/const year = new Date\(\)\.getUTCFullYear\(\);/);
-    expect(body).toMatch(
-      /Pixel-identical iPhone Safari sessions in the cloud\. API, SDK, or GUI\./,
-    );
+    expect(body).toMatch(/Pixel-identical iPhone Safari sessions in the cloud\./);
+    expect(body).toMatch(/SOCKS5/);
+    expect(body).toMatch(/API, SDK, or GUI\./);
     expect(body).toMatch(/&copy; \{year\} Driftstack\. All rights reserved\./);
   });
 
