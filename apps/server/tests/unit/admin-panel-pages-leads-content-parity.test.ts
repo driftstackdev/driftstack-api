@@ -30,10 +30,9 @@ function read(p: string): string {
 describe('W487.A apps/admin-panel/src/pages/leads.astro content parity', () => {
   const body = read(LIB);
 
-  it("Page-header framing pinned: 'Leads' h1 + 'Pre-signup interest captured from the marketing site, docs, and inbound email. Convert to account or archive once contacted.' — pinned so the page-purpose framing stays explicit (capture → contact → convert-or-archive workflow)", () => {
-    expect(body).toMatch(
-      /<h1 class="text-3xl font-semibold tracking-tight text-slate-900">Leads<\/h1>/,
-    );
+  it("Page-header framing: 'Leads' h1 + 'Pre-signup interest captured…' subhead. 2026-05-23 — h1 wrapped in oxblood gradient span (admin-panel visual unification); pin loosened to label-presence + subhead anchor.", () => {
+    expect(body).toMatch(/<h1 class="text-3xl font-semibold tracking-tight">/);
+    expect(body).toMatch(/>Leads</);
     expect(body).toMatch(
       /Pre-signup interest captured from the marketing site, docs, and inbound\s*\n?\s*email\. Convert to account or archive once contacted\./,
     );

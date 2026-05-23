@@ -40,10 +40,9 @@ describe('admin-panel pages/cost content parity', () => {
     );
   });
 
-  it('Cost (V-541) header anchor pinned: <h1>Cost (V-541)</h1>. Drift to dropping the V-anchor in the header would orphan operators from the V-541 provenance trail that crosses planning + commits + this page', () => {
-    expect(body).toMatch(
-      /<h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Cost \(V-541\)<\/h1>/,
-    );
+  it('Cost (V-541) header anchor pinned: h1 contains "Cost (V-541)". 2026-05-23 — h1 wrapped in oxblood gradient span (admin-panel visual unification); V-anchor preserved.', () => {
+    expect(body).toMatch(/<h1 class="mt-1 text-3xl font-semibold tracking-tight">/);
+    expect(body).toMatch(/Cost \(V-541\)/);
   });
 
   it("data-page='admin-cost' wrapper pinned (used by the inline-JS root selector). Drift to a different data-page name would silently disconnect the inline script from the DOM root and leave every tile rendering its SSG-time placeholder", () => {
