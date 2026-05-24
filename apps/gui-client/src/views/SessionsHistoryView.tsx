@@ -83,7 +83,11 @@ export function SessionsHistoryView(): JSX.Element {
       <header className="flex items-center justify-between">
         <div>
           <span className="section-label">History</span>
-          <h2 className="mt-1 text-lg font-medium text-ink-primary">Past sessions</h2>
+          <h2 className="mt-1 text-lg font-medium tracking-tight">
+            <span className="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+              Past sessions
+            </span>
+          </h2>
           <p className="mt-1 text-xs text-ink-muted">
             Sessions that have ended (destroyed or errored). Active sessions live under "Active" in
             the sidebar.

@@ -84,8 +84,9 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
   });
 
   it("Render: 'History' section-label + 'Past sessions' h2 + 'Sessions that have ended (destroyed or errored). Active sessions live under \"Active\" in the sidebar.' subline + Refresh button disabled while loading + ErrorBanner with onDismiss=clear error + empty-state 'No terminated sessions yet. They show up here once destroyed or errored.' (when error===null && !loading)", () => {
+    expect(body).toMatch(/<h2[\s\S]*?Past sessions[\s\S]*?<\/h2>/);
     expect(body).toMatch(
-      /<h2 className="mt-1 text-lg font-medium text-ink-primary">Past sessions<\/h2>\s*\n?\s*<p className="mt-1 text-xs text-ink-muted">\s*\n?\s*Sessions that have ended \(destroyed or errored\)\. Active sessions live under "Active" in\s*\n?\s*the sidebar\./,
+      /Sessions that have ended \(destroyed or errored\)\. Active sessions live under "Active" in\s*\n?\s*the sidebar\./,
     );
     expect(body).toMatch(
       /\{state\.error !== null && \(\s*\n?\s*<ErrorBanner\s*\n?\s*message=\{state\.error\}\s*\n?\s*onDismiss=\{\(\) => setState\(\(s\) => \(\{ \.\.\.s, error: null \}\)\)\}\s*\n?\s*\/>\s*\n?\s*\)\}/,
