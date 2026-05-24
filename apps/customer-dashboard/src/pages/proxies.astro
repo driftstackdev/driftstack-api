@@ -154,13 +154,13 @@ const apiBaseUrl = resolveApiBaseUrl();
          `remote` directive checks) returns useful errors at the
          API boundary instead of failing inside the per-session VM. -->
     <section class="mb-12 dashboard-card" data-create-openvpn-form>
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
+      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight">
         <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 2L4 5v6c0 5.5 3.8 10.7 8 11.8 4.2-1.1 8-6.3 8-11.8V5l-8-3z" />
           </svg>
         </span>
-        Add an OpenVPN proxy
+        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Add an OpenVPN proxy</span>
       </h2>
       <p class="mt-1 text-sm text-ink-muted">
         Paste the full <code class="font-mono">.ovpn</code> file contents.
