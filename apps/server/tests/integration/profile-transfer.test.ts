@@ -16,12 +16,15 @@ const RECIPIENT_ID = '00000000-0000-4000-8000-0000000000b2';
 
 /** Register a second (recipient) account directly in the in-memory
  *  auth repo so the transfer route's getAccount lookup resolves it. */
-function seedRecipient(fx: TestAppFixture, id = RECIPIENT_ID): void {
+function seedRecipient(
+  fx: TestAppFixture,
+  opts: { id?: string; tier?: 'api_builder' | 'trial_pack' } = {},
+): void {
   fx.authRepo.upsertAccount({
-    id,
+    id: opts.id ?? RECIPIENT_ID,
     email: 'recipient@driftstack.local',
     name: 'Recipient',
-    tier: 'api_builder',
+    tier: opts.tier ?? 'api_builder',
     status: 'active',
     timezone: null,
     avatarR2Key: null,
@@ -109,6 +112,37 @@ describe('POST /v1/profiles/:id/transfer', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.ValidationFailed);
+  });
+
+  it('429 TierLimit when the recipient is already at their profile cap', async () => {
+    fx = await buildTestApp();
+    // Recipient on trial_pack (profile cap 1) already holding 1 profile.
+    seedRecipient(fx, { tier: 'trial_pack' });
+    await fx.profilesRepo.insert({
+      accountId: RECIPIENT_ID,
+      name: 'recipient-existing',
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      description: null,
+    });
+    const profile = await seedOne(fx);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profile.id}/transfer`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { recipient_account_id: `acc_${RECIPIENT_ID}` },
+    });
+    expect(res.statusCode).toBe(429);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.TierLimit);
+
+    // The transfer must NOT have consumed the source — sender keeps it.
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const senderProfiles = list.json<{ data: Array<{ id: string }> }>().data;
+    expect(senderProfiles.some((p) => p.id === profile.id)).toBe(true);
   });
 
   it('404 when the recipient account does not exist', async () => {
