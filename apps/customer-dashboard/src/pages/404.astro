@@ -3,7 +3,10 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 ---
 
 <DashboardLayout title="404" withSidebar={false}>
-  <div class="mx-auto max-w-3xl px-6 py-32 text-center">
+  {/* 2026-05-24 — hero-glow atmosphere on /404 matches brand surface. */}
+  <div class="relative overflow-hidden">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-3xl px-6 py-32 text-center">
     <p class="font-mono text-xs uppercase tracking-widest text-glow-red">404</p>
     <h1 class="mt-4 text-4xl font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Page not found.</span></h1>
     <p class="mt-4 text-ink-secondary">
@@ -11,6 +14,7 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
     </p>
     <div class="mt-8 flex justify-center gap-4">
       <a href="/" class="btn-primary">Back to dashboard</a>
+    </div>
     </div>
   </div>
 </DashboardLayout>
