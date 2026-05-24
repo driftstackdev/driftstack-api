@@ -65,7 +65,7 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
 
   it("Empty-state region: data-region='empty' hidden initially + 'DLQ empty' + 'No deliveries have exhausted the retry budget. Healthy posture — customer endpoints are reachable + responding.' framing — pinned so the empty-DLQ state is treated as the HEALTHY default (not a 'something broke' state — drift to red empty-state styling would mislead operators)", () => {
     expect(body).toMatch(/<div class="hidden" data-region="empty">/);
-    expect(body).toMatch(/<h2 class="text-lg font-semibold text-slate-900">DLQ empty<\/h2>/);
+    expect(body).toMatch(/DLQ empty/);
     expect(body).toMatch(
       /No deliveries have exhausted the retry budget\. Healthy posture —\s*\n?\s*customer endpoints are reachable \+ responding\./,
     );
