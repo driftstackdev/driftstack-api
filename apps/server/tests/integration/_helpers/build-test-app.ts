@@ -24,6 +24,10 @@ import type { DecomposeUsage } from '../../../src/services/agent-decomposer.js';
 import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
 import { BundledLlmService, InMemoryBundledLlmRepo } from '../../../src/services/bundled-llm.js';
+import {
+  BYOKAnthropicService,
+  InMemoryBYOKAnthropicRepo,
+} from '../../../src/services/byok-anthropic.js';
 import { AgentSessionEventBus } from '../../../src/services/agent-session-event-bus.js';
 import { InMemoryPairModeTakeoverLock } from '../../../src/services/agent-pair-mode-lock.js';
 import { InMemoryPairModeHeartbeatTracker } from '../../../src/services/agent-pair-mode-heartbeat.js';
@@ -319,6 +323,16 @@ export interface TestAppOptions {
     consent: boolean;
     monthlyCapUsdCents: number;
   };
+  /**
+   * Wires the active BYOKAnthropicService (backed by
+   * InMemoryBYOKAnthropicRepo) so the GET/PUT/DELETE byok-anthropic
+   * routes register their real handlers instead of the 503
+   * activation-gate stubs. Exposes `fx.byokAnthropicRepo` for direct
+   * assertions. The /test connection-check leg still calls Anthropic,
+   * so this opt covers the storage routes (set/clear/metadata), not
+   * the live-key /test endpoint.
+   */
+  enableByokAnthropic?: boolean;
 }
 
 export interface SeedAdditionalOpts {
@@ -389,6 +403,9 @@ export interface TestAppFixture {
    * prior bundled-LLM cost rows before issuing a chat turn.
    */
   bundledLlmRepo: InMemoryBundledLlmRepo;
+  /** Exposed when `enableByokAnthropic` is set so tests can assert
+   *  stored-key state directly (findByAccount) after route calls. */
+  byokAnthropicRepo: InMemoryBYOKAnthropicRepo;
   /** V-295e — exposed for direct event-bus subscription in tests. */
   incidentEventBus: IncidentEventBus;
   /** V-295e — exposed so tests can seed probe history before calling SLA. */
@@ -771,6 +788,20 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     });
   }
   const bundledLlmService = new BundledLlmService(bundledLlmRepo);
+
+  // BYOK Anthropic — active service wired only when opts.enableByokAnthropic
+  // is set; otherwise byokAnthropicService stays undefined and the routes
+  // register their 503 activation-gate stubs. Repo is always declared so
+  // the fixture shape is stable.
+  const byokAnthropicRepo = new InMemoryBYOKAnthropicRepo();
+  const byokAnthropicService =
+    opts.enableByokAnthropic === true
+      ? new BYOKAnthropicService(byokAnthropicRepo, {
+          // 32 zero-bytes base64 — round-trip-only test key (production
+          // uses the real MFA_ENCRYPTION_KEY env).
+          encryptionKey: Buffer.alloc(32, 0).toString('base64'),
+        })
+      : undefined;
 
   // Arc 2 sub-slice 8.3 (v2-#8) — transcript event bus. Always wired
   // so AgentRuntime can publish; route registration is gated below
@@ -1254,6 +1285,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // leg on deploymentFallbackKey being set; sub-slice 6.6 GET +
     // PATCH need the service regardless.
     bundledLlmService,
+    ...(byokAnthropicService !== undefined ? { byokAnthropicService } : {}),
     // Arc 2 sub-slice 8.4 (v2-#8) — stub MFA-key for the gui_control_key
     // mint. 32 raw bytes base64-encoded. Tests assert the route works
     // round-trip; production uses the real MFA_ENCRYPTION_KEY env.
@@ -1322,6 +1354,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     broadcastFetchCalls,
     agentDecomposerUsageRecords,
     bundledLlmRepo,
+    byokAnthropicRepo,
     incidentEventBus,
     probesRepo,
     teamMembersRepo,
