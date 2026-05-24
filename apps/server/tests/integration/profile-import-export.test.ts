@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { PROBLEM_TYPES } from '@driftstack/api-types';
 
 interface ProfileResponse {
   id: string;
@@ -238,5 +239,68 @@ describe('Profile export → import round-trip', () => {
     expect(restored.name).toBe('roundtrip-restored');
     expect(restored.archetype).toBe(source.archetype);
     expect(restored.description).toBe(source.description);
+  });
+});
+
+// V-666 per-cycle import cap. The tier profile-cap stops you holding
+// more than `limit` profiles at once; this cap (2× limit imports per
+// billing cycle) is the second wall that stops the import → delete →
+// re-import churn pattern from effectively bypassing the tier. On
+// trial_pack (profile cap 1) the import cap is 2 imports/cycle, so a
+// third import — even after deleting the prior two — must 429.
+describe('POST /v1/profiles/import — per-cycle import cap', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  function envelopeFor(name: string): Record<string, unknown> {
+    return {
+      version: 1 as const,
+      exported_at: new Date().toISOString(),
+      source_profile_id: 'prof_11111111-1111-4111-8111-111111111111',
+      source_account_id: 'acc_22222222-2222-4222-8222-222222222222',
+      profile: { name, archetype: 'iphone16pro_ios18_7_safari26_4', description: null },
+    };
+  }
+
+  async function importOne(name: string) {
+    return fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles/import',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { envelope: envelopeFor(name) },
+    });
+  }
+
+  it('429 TierLimit on the (2×cap+1)th import even after deleting prior imports', async () => {
+    fx = await buildTestApp({ tier: 'trial_pack' }); // profile cap 1 → import cap 2/cycle
+
+    // Import #1, then delete to free the profile-cap slot.
+    const first = await importOne('churn-1');
+    expect(first.statusCode).toBe(200);
+    await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${first.json<ProfileResponse>().id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+
+    // Import #2, then delete again — now 2 imports recorded this cycle.
+    const second = await importOne('churn-2');
+    expect(second.statusCode).toBe(200);
+    await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${second.json<ProfileResponse>().id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+
+    // Import #3 — profile cap is clear (0 held) but the cycle import
+    // cap (2) is hit, so this must 429 rather than silently succeed.
+    const third = await importOne('churn-3');
+    expect(third.statusCode).toBe(429);
+    const body = third.json<{ type: string; detail?: string }>();
+    expect(body.type).toBe(PROBLEM_TYPES.TierLimit);
+    expect(body.detail).toMatch(/imports per billing cycle/);
   });
 });
