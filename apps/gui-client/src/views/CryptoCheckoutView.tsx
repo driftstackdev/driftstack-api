@@ -40,8 +40,10 @@ export function CryptoCheckoutView(props: CryptoCheckoutViewProps): JSX.Element 
   return (
     <section className="space-y-4 p-4" aria-labelledby="crypto-checkout-heading">
       <header>
-        <h2 id="crypto-checkout-heading" className="text-lg font-semibold text-ink-primary">
-          Pay with crypto
+        <h2 id="crypto-checkout-heading" className="text-lg font-semibold tracking-tight">
+          <span className="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+            Pay with crypto
+          </span>
         </h2>
         <p className="text-sm text-ink-secondary">
           We support BTC, ETH, and major stablecoins. Your account upgrades automatically once your
