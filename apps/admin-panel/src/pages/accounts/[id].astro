@@ -295,7 +295,21 @@ const accountId = account.id;
         </div>
       </div>
       <div data-account-cost-body class="mt-4">
-        <p class="text-sm text-slate-500">Loading…</p>
+        {/* 2026-05-24 — skeleton rows for hydrate-state polish. */}
+        <div class="space-y-3">
+          <div class="flex items-center justify-between gap-4">
+            <div class="h-3 w-32 animate-pulse rounded bg-slate-200"></div>
+            <div class="h-3 w-20 animate-pulse rounded bg-slate-200"></div>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <div class="h-3 w-28 animate-pulse rounded bg-slate-200"></div>
+            <div class="h-3 w-16 animate-pulse rounded bg-slate-200"></div>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <div class="h-3 w-36 animate-pulse rounded bg-slate-200"></div>
+            <div class="h-3 w-12 animate-pulse rounded bg-slate-200"></div>
+          </div>
+        </div>
       </div>
     </section>
 
