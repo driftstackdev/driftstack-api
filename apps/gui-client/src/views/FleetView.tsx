@@ -128,7 +128,11 @@ export function FleetView(): JSX.Element {
       <header className="flex items-start justify-between gap-4">
         <div>
           <span className="section-label">Cluster</span>
-          <h2 className="mt-1 text-lg font-medium text-ink-primary">Mac mini fleet</h2>
+          <h2 className="mt-1 text-lg font-medium tracking-tight">
+            <span className="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+              Mac mini fleet
+            </span>
+          </h2>
           <p className="mt-1 max-w-2xl text-sm text-ink-secondary">
             Local-only registry of Driftstack control-plane URLs. Add each Mac mini's API server
             URL; "Ping all" hits every member's <code className="mono">/version</code> and surfaces
