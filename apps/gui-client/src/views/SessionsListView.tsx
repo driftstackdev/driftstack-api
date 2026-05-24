@@ -26,8 +26,10 @@ export function SessionsListView(props: SessionsListViewProps): JSX.Element {
   return (
     <section className="space-y-4 p-4" aria-labelledby="sessions-list-heading">
       <header className="flex items-center justify-between gap-3">
-        <h2 id="sessions-list-heading" className="text-lg font-semibold text-ink-primary">
-          Sessions
+        <h2 id="sessions-list-heading" className="text-lg font-semibold tracking-tight">
+          <span className="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+            Sessions
+          </span>
         </h2>
         <button
           type="button"

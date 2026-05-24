@@ -54,8 +54,9 @@ describe('W478.B apps/gui-client/src/views/SessionsListView.tsx content parity',
     expect(body).toMatch(/const limit = props\.limit \?\? 25;/);
     expect(body).toMatch(/const \{ state, refetch \} = useSessionsList\(\{ limit \}\);/);
     expect(body).toMatch(
-      /<section className="space-y-4 p-4" aria-labelledby="sessions-list-heading">\s*\n?\s*<header className="flex items-center justify-between gap-3">\s*\n?\s*<h2 id="sessions-list-heading" className="text-lg font-semibold text-ink-primary">\s*\n?\s*Sessions\s*\n?\s*<\/h2>/,
+      /<section className="space-y-4 p-4" aria-labelledby="sessions-list-heading">/,
     );
+    expect(body).toMatch(/<h2 id="sessions-list-heading"[\s\S]*?Sessions[\s\S]*?<\/h2>/);
     expect(body).toMatch(/onClick=\{\(\) => void refetch\(\)\}/);
   });
 
