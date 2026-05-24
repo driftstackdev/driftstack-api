@@ -37,6 +37,17 @@ interface TransferResponse {
   recipient_account_id: string;
 }
 
+/** seedProfiles(fx, 1) with a non-undefined return (narrows past
+ *  noUncheckedIndexedAccess on the [0] element). */
+async function seedOne(
+  fx: TestAppFixture,
+  names?: string[],
+): Promise<{ id: string; name: string; archetype: string }> {
+  const [p] = await seedProfiles(fx, 1, names ? { names } : {});
+  if (!p) throw new Error('seedProfiles returned no profile');
+  return p;
+}
+
 describe('POST /v1/profiles/:id/transfer', () => {
   let fx: TestAppFixture;
 
@@ -47,7 +58,7 @@ describe('POST /v1/profiles/:id/transfer', () => {
   it('200 transfers the profile to the recipient + removes it from the sender', async () => {
     fx = await buildTestApp();
     seedRecipient(fx);
-    const [profile] = await seedProfiles(fx, 1, { names: ['shopper-acctA'] });
+    const profile = await seedOne(fx, ['shopper-acctA']);
 
     const res = await fx.app.inject({
       method: 'POST',
@@ -76,7 +87,7 @@ describe('POST /v1/profiles/:id/transfer', () => {
 
   it('400 ValidationError on a malformed recipient_account_id', async () => {
     fx = await buildTestApp();
-    const [profile] = await seedProfiles(fx, 1);
+    const profile = await seedOne(fx);
     const res = await fx.app.inject({
       method: 'POST',
       url: `/v1/profiles/${profile.id}/transfer`,
@@ -89,7 +100,7 @@ describe('POST /v1/profiles/:id/transfer', () => {
 
   it('400 ValidationError when transferring to your own account', async () => {
     fx = await buildTestApp();
-    const [profile] = await seedProfiles(fx, 1);
+    const profile = await seedOne(fx);
     const res = await fx.app.inject({
       method: 'POST',
       url: `/v1/profiles/${profile.id}/transfer`,
@@ -102,7 +113,7 @@ describe('POST /v1/profiles/:id/transfer', () => {
 
   it('404 when the recipient account does not exist', async () => {
     fx = await buildTestApp();
-    const [profile] = await seedProfiles(fx, 1);
+    const profile = await seedOne(fx);
     const res = await fx.app.inject({
       method: 'POST',
       url: `/v1/profiles/${profile.id}/transfer`,
