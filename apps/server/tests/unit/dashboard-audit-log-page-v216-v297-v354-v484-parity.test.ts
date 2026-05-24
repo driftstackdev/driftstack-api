@@ -173,11 +173,12 @@ describe('W755 dashboard /audit-log page V-216 + V-297 + V-354 + V-484 parity', 
     expect(p).toMatch(/setLoadMoreVisible\(!!nextCursor\);/);
   });
 
-  it("CRITICAL V-297 export CSV + JSON button pair pinned. Drift to dropping JSON or CSV would force customers to do format conversion themselves — defeats the GDPR Article 20 'machine-readable structured format' compliance.", () => {
+  it("CRITICAL V-297 export CSV + JSON button pair pinned. Drift to dropping either format would force customers to do format conversion themselves — defeats GDPR Article 20 'machine-readable structured format' compliance. 2026-05-24 — buttons wrap content (icon + label); pin loosened to data-attr + label.", () => {
     const p = read(PAGE);
-
-    expect(p).toMatch(/data-export-csv>Export CSV<\/button/);
-    expect(p).toMatch(/data-export-json>Export JSON<\/button/);
+    expect(p).toMatch(/data-export-csv/);
+    expect(p).toMatch(/Export CSV/);
+    expect(p).toMatch(/data-export-json/);
+    expect(p).toMatch(/Export JSON/);
   });
 
   it("CRITICAL export-via-blob-not-URL framing pinned. The 'Direct fetch + blob download — keeps the auth header out of the URL (a window.location.assign would leak the bearer in browser history if any redirect chain were involved).' framing is the load-bearing security rationale.", () => {
