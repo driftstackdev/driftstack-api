@@ -1273,9 +1273,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         const fd = new FormData(form);
         const name = (fd.get('name') || '').toString().trim();
         const description = (fd.get('description') || '').toString().trim();
+        const defaultProxyId = (fd.get('default_proxy_id') || '').toString().trim();
         if (!name) return;
         const payload = { name: name };
         if (description) payload.description = description;
+        // 2026-05-24 — forward-compat: include the chosen default proxy so it
+        // persists server-side once the saved-proxy storage + profile
+        // default-proxy field land (EG-API-1.6). The server currently strips
+        // unknown keys, so this is a harmless no-op until then; we ALSO stash
+        // the choice in localStorage (below) so the selection isn't lost.
+        if (defaultProxyId) payload.default_proxy_id = defaultProxyId;
         createSubmit.disabled = true;
         createSubmit.textContent = 'Creating…';
         authedFetch('/v1/profiles', {
@@ -1292,7 +1299,20 @@ const apiBaseUrl = resolveApiBaseUrl();
                     Promise.reject(new Error(b.detail || 'HTTP ' + r.status)),
                   ),
           )
-          .then(() => {
+          .then((created) => {
+            // Persist the default-proxy choice client-side keyed by the new
+            // profile id, mirroring the GUI's profile-bindings pattern, so
+            // the selection survives until server-side persistence lands.
+            if (defaultProxyId && created && created.id) {
+              try {
+                localStorage.setItem(
+                  'ds_profile_default_proxy_' + created.id,
+                  defaultProxyId,
+                );
+              } catch (_e) {
+                /* storage unavailable — non-fatal */
+              }
+            }
             hideCreate();
             return refresh();
           })
