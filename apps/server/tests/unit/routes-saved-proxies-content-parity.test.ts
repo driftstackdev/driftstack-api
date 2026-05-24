@@ -30,7 +30,19 @@ describe('routes/saved-proxies content parity', () => {
       /\/\/ EG-API-1\.3 — POST \+ GET \+ DELETE \/v1\/proxies \(saved reusable\s*\n?\s*\/\/ customer proxy configs\)\./,
     );
     expect(body).toMatch(
-      /\/\/\s+- POST\s+\/v1\/proxies\s+— store reusable proxy config\s*\n?\s*\/\/\s+- GET\s+\/v1\/proxies\s+— list caller's saved configs\s*\n?\s*\/\/\s+- DELETE \/v1\/proxies\/\{id\}\s+— remove a saved config/,
+      /\/\/\s+- POST\s+\/v1\/proxies\s+— store reusable proxy config\s*\n?\s*\/\/\s+- GET\s+\/v1\/proxies\s+— list caller's saved configs/,
+    );
+    expect(body).toMatch(/\/\/\s+- DELETE \/v1\/proxies\/\{id\}\s+— remove a saved config/);
+  });
+
+  it("EG-API-1.7 reachability-test verb pinned: POST /v1/proxies/{id}/test runs a Mac-fleet reachability + UDP-ASSOCIATE check, 503 FeatureUnavailable until the fleet-side runner lands — pinned so the test verb stays documented + the pre-runner 503 contract (dashboard surfaces 'scheduled, runs from a Mac node' rather than a 404) doesn't silently drift", () => {
+    expect(body).toMatch(/EG-API-1\.7 adds the reachability-test verb\./);
+    expect(body).toMatch(
+      /\/\/\s+- POST\s+\/v1\/proxies\/\{id\}\/test — reachability \+ UDP-ASSOCIATE check/,
+    );
+    expect(body).toMatch(/'\/v1\/proxies\/:id\/test'/);
+    expect(body).toMatch(
+      /throw new FeatureUnavailableError\(\s*\n?\s*'Proxy reachability testing is not yet wired on this server\./,
     );
   });
 

@@ -1,9 +1,11 @@
 // EG-API-1.3 — POST + GET + DELETE /v1/proxies (saved reusable
-// customer proxy configs).
+// customer proxy configs). EG-API-1.7 adds the reachability-test verb.
 //
 // Planning 133 §"Cross-agent split" Agent 2 scope:
 //   - POST   /v1/proxies         — store reusable proxy config
 //   - GET    /v1/proxies         — list caller's saved configs
+//   - POST   /v1/proxies/{id}/test — reachability + UDP-ASSOCIATE check
+//                                    (runs from a Mac-fleet node; EG-API-1.7)
 //   - DELETE /v1/proxies/{id}    — remove a saved config
 //
 // Activation gate matches the per-session proxy routes (EG-API-1.2):
