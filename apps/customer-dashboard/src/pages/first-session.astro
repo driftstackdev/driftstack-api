@@ -72,9 +72,20 @@ const apiBaseUrl = resolveApiBaseUrl();
           class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
         />
       </div>
-      <button type="submit" class="btn-primary w-full" data-submit>
-        <span data-label-default>Create session</span>
-        <span data-label-busy class="hidden">Creating…</span>
+      {/* 2026-05-24 — arrow icon on submit + busy state. */}
+      <button type="submit" class="btn-primary w-full inline-flex items-center justify-center gap-1.5" data-submit>
+        <span data-label-default class="inline-flex items-center gap-1.5">
+          Create session
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 5l7 7-7 7" />
+          </svg>
+        </span>
+        <span data-label-busy class="hidden inline-flex items-center gap-1.5">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+          </svg>
+          Creating…
+        </span>
       </button>
     </form>
 
