@@ -15,7 +15,10 @@ const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Snapshots">
-  <div class="mx-auto max-w-5xl px-6 py-10" data-page="snapshots">
+  {/* 2026-05-24 — hero-glow atmosphere matches brand surface. */}
+  <div class="relative overflow-hidden">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-5xl px-6 py-10" data-page="snapshots">
     <div
       data-banner
       class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
@@ -109,6 +112,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
       <p class="text-ink-primary font-medium">No snapshots yet</p>
       <p class="mt-1">Capture one from <a href="/profiles" class="text-glow-red underline">/profiles</a>.</p>
+    </div>
     </div>
   </div>
 
