@@ -24,7 +24,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
       <header className="flex items-center justify-between">
         <div className="flex flex-col gap-0.5">
           <span className="section-label">Sessions</span>
-          <h2 className="text-lg font-medium tracking-tight">
+          <h2 className="text-lg font-medium tracking-tight text-ink-primary">
             Recordings
             <span className="ml-2 mono text-ink-muted">{list.length}</span>
           </h2>
