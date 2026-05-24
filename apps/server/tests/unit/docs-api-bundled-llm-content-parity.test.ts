@@ -42,22 +42,22 @@ describe('docs/api/bundled-llm content parity', () => {
     expect(body).toMatch(/`PATCH \/v1\/account\/me\/bundled-llm-settings`/);
   });
 
-  it('Status record 5-field shape pinned: consent + monthly_cap_usd_cents + used_this_month_cents + remaining_this_month_cents + refused_count_this_month. + \'used_this_month_cents sums usage_records.cost_usd_cents over the rows where record_type = "agent_decomposer_bundled" and recorded_at >= start_of_calendar_month (UTC)\' — pinned so the 5-field status + record_type filter + UTC-calendar-month aggregation contract all stay documented (drift on aggregation would mis-bill across month boundaries)', () => {
+  it("Status record shape pinned to the SHIPPED route fields: consent + cap_cents + used_this_month_cents + remaining_cents + refused_count_this_month + month_started_at. + 'used_this_month_cents sums usage_records.cost_usd_cents over the rows where record_type = \"agent_decomposer_bundled\" and recorded_at >= start_of_calendar_month (UTC)' — pinned so the status field names match account-bundled-llm.ts (the status route returns cap_cents/remaining_cents/month_started_at, NOT the settings record's monthly_cap_usd_cents) + record_type filter + UTC-calendar-month aggregation contract all stay documented (drift on aggregation would mis-bill across month boundaries)", () => {
     expect(body).toMatch(
-      /"consent": true,\s*\n?\s*"monthly_cap_usd_cents": 2000,\s*\n?\s*"used_this_month_cents": 450,\s*\n?\s*"remaining_this_month_cents": 1550,\s*\n?\s*"refused_count_this_month": 0/,
+      /"consent": true,\s*\n?\s*"cap_cents": 2000,\s*\n?\s*"used_this_month_cents": 450,\s*\n?\s*"remaining_cents": 1550,\s*\n?\s*"refused_count_this_month": 0,\s*\n?\s*"month_started_at":/,
     );
     expect(body).toMatch(
       /`used_this_month_cents` sums `usage_records\.cost_usd_cents` over\s*\n?\s*the rows where `record_type = 'agent_decomposer_bundled'` and\s*\n?\s*`recorded_at >= start_of_calendar_month` \(UTC\)\./,
     );
   });
 
-  it("PATCH validation framing pinned: 'consent — boolean.' + 'monthly_cap_usd_cents — integer; 0 to 1,000,000 ($10,000 ceiling). Negative values rejected with 400.' + 'Partial update — either field may be omitted. When both omitted, the response is a no-op (returns the current state).' — pinned so the integer/0-to-1M range + $10k ceiling + partial-PATCH-with-no-op contract all stay documented", () => {
+  it("PATCH validation framing pinned: 'consent — boolean.' + 'monthly_cap_usd_cents — integer; 0 to 1,000,000 ($10,000 ceiling). Negative values rejected with 400.' + 'Partial update — either field may be omitted, but at least one must be present; an empty body is rejected with 400.' — pinned so the integer/0-to-1M range + $10k ceiling + empty-body-400 contract (PatchBodySchema.refine) all stay documented", () => {
     expect(body).toMatch(/- `consent` — boolean\./);
     expect(body).toMatch(
       /- `monthly_cap_usd_cents` — integer; 0 to 1,000,000 \(\$10,000 ceiling\)\.\s*\n?\s*Negative values rejected with `400`\./,
     );
     expect(body).toMatch(
-      /Partial update — either field may be omitted\. When both omitted,\s*\n?\s*the response is a no-op \(returns the current state\)\./,
+      /Partial update — either field may be omitted, but at least one of\s*\n?\s*`consent` \/ `monthly_cap_usd_cents` must be present\. An empty body\s*\n?\s*is rejected with `400`/,
     );
   });
 

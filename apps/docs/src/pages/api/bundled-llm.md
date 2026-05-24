@@ -37,12 +37,20 @@ The bundled-LLM status record (settings + month-to-date spend):
 ```json
 {
   "consent": true,
-  "monthly_cap_usd_cents": 2000,
+  "cap_cents": 2000,
   "used_this_month_cents": 450,
-  "remaining_this_month_cents": 1550,
-  "refused_count_this_month": 0
+  "remaining_cents": 1550,
+  "refused_count_this_month": 0,
+  "month_started_at": "2026-05-01T00:00:00.000Z"
 }
 ```
+
+Note the status record names the cap `cap_cents` (the settings
+record uses `monthly_cap_usd_cents` — same value, different field
+name per surface). `remaining_cents` is `max(0, cap_cents −
+used_this_month_cents)`. `month_started_at` is the UTC
+calendar-month boundary so the dashboard can render "resets on
+&lt;date&gt;" without re-deriving it.
 
 `used_this_month_cents` sums `usage_records.cost_usd_cents` over
 the rows where `record_type = 'agent_decomposer_bundled'` and
@@ -73,8 +81,9 @@ Returns the status record above. The dashboard's
 
 `PATCH /v1/account/me/bundled-llm-settings`
 
-Partial update — either field may be omitted. When both omitted,
-the response is a no-op (returns the current state).
+Partial update — either field may be omitted, but at least one of
+`consent` / `monthly_cap_usd_cents` must be present. An empty body
+is rejected with `400` (it carries no change to apply).
 
 Request body:
 
