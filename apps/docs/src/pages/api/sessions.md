@@ -48,6 +48,8 @@ their tier-default idle timeout (driver-managed).
   "purpose": "production_customer",
   "label": "login flow",
   "metadata": null,
+  "egress_capabilities": null,
+  "egress_capability_report": null,
   "created_at": "2026-05-09T22:00:00.000Z",
   "updated_at": "2026-05-09T22:00:30.000Z",
   "last_state_at": "2026-05-09T22:00:30.000Z",
@@ -73,6 +75,15 @@ customer's own bookkeeping.
 `navigate` / `interact` / `wait` ack timestamp. `updated_at`
 reflects any server-side state mutation (status changes,
 metadata writes).
+
+`egress_capabilities` and `egress_capability_report` are both
+`null` until a session routes through a SOCKS5 proxy and the
+harness completes its egress handshake (and stay `null` for
+non-proxied sessions). When populated, `egress_capabilities` is
+the typed view — `{ udp_associate, quic_route, warnings[] }` —
+and `egress_capability_report` is the opaque raw harness payload.
+Prefer `egress_capabilities` for typed access; treat both as
+nullable on every read.
 
 ## Create
 
