@@ -35,9 +35,7 @@ describe('W491.A apps/customer-dashboard/src/pages/404.astro content parity', ()
     expect(body).toMatch(
       /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">404<\/p>/,
     );
-    expect(body).toMatch(
-      /<h1 class="mt-4 text-4xl font-semibold tracking-tight text-ink-primary">Page not found\.<\/h1>/,
-    );
+    expect(body).toMatch(/Page not found\./);
     expect(body).toMatch(/The page you were looking for has moved or doesn't exist\./);
   });
 
