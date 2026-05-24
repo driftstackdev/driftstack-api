@@ -61,9 +61,9 @@ function severityClass(s: Incident['severity']): string {
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Trust · Incidents
           </p>
-          <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+          <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl">
             Incident history.
-          </span></h1>
+          </h1>
           <p class="mt-6 max-w-prose text-lg text-ink-secondary">
             Every customer-impacting outage or security event gets a public
             entry below — including ones short enough that customers might
@@ -82,7 +82,7 @@ function severityClass(s: Incident['severity']): string {
       <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
         What we publish
       </p>
-      <h2 class="mt-3 text-2xl font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Public-incident bar.</span></h2>
+      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">Public-incident bar.</h2>
       <ul class="mt-6 grid gap-4 md:grid-cols-2">
         <li class="rounded-lg border border-white/10 bg-surface-raised p-5">
           <p class="text-sm font-medium text-ink-primary">
@@ -138,7 +138,7 @@ function severityClass(s: Incident['severity']): string {
       <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
         History
       </p>
-      <h2 class="mt-3 text-2xl font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Posted incidents.</span></h2>
+      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">Posted incidents.</h2>
 
       {
         INCIDENTS.length === 0 ? (
@@ -222,7 +222,7 @@ function severityClass(s: Incident['severity']): string {
           <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
             Subscribe
           </p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Get notified when status changes.</span></h2>
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">Get notified when status changes.</h2>
           <p class="mt-3 max-w-prose text-ink-secondary">
             Customers can opt into incident emails at the dashboard's
             settings page. Future updates: status.driftstack.dev with

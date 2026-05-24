@@ -57,7 +57,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
         <p class="text-sm text-ink-muted" data-field="tier-line">{MOCK_USAGE_SUMMARY.tier} tier</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Profiles</span></h1>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight">Profiles</h1>
         <p class="mt-2 max-w-prose text-sm text-ink-muted">
           Persistent identity slots that survive across sessions. Each profile carries its own
           cookies, localStorage, and last-used timestamp. Sessions can be created against a profile
@@ -162,7 +162,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
         </span>
-        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Import profile from JSON</span>
+        Import profile from JSON
       </h2>
       <p class="mt-2 text-sm text-ink-muted">
         Paste a v1 envelope (from another profile's Export action) or upload a
@@ -233,7 +233,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             <path d="M19 8v6M22 11h-6" />
           </svg>
         </span>
-        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Create a new profile</span>
+        Create a new profile
       </h2>
       <form data-create-form class="mt-4 space-y-4">
         <div>
@@ -330,7 +330,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </svg>
       </div>
       <div class="flex flex-col gap-1">
-        <h3 class="text-base font-medium tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">No profiles yet</span></h3>
+        <h3 class="text-base font-medium tracking-tight text-ink-primary">No profiles yet</h3>
         <p class="max-w-md text-sm text-ink-secondary">
           A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across
           sessions. Bind a session to a profile to keep login state, returning-visitor signals, and
@@ -352,7 +352,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       <div class="flex items-center justify-between">
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Profile limits</p>
-          <h2 class="mt-2 text-lg font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Per-tier ceiling</span></h2>
+          <h2 class="mt-2 text-lg font-semibold tracking-tight text-ink-primary">Per-tier ceiling</h2>
           <p class="mt-1 max-w-prose text-sm text-ink-muted">
             Enforced server-side at session creation. Upgrade if you need more headroom.
           </p>

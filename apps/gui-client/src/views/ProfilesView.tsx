@@ -301,9 +301,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           <div className="flex flex-col gap-0.5">
             <span className="section-label">Profiles</span>
             <h2 className="text-lg font-medium tracking-tight">
-              <span className="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
-                Persistent identity slots
-              </span>
+              Persistent identity slots
               <span className="ml-2 mono text-ink-muted">
                 {profileCap !== null && profileCount !== null
                   ? `${profileCount.toString()} / ${profileCap.toString()}`

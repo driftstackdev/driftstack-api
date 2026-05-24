@@ -179,9 +179,7 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
         <div className="flex flex-col gap-0.5">
           <span className="section-label">Sessions</span>
           <h2 className="text-lg font-medium tracking-tight">
-            <span className="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
-              Active sessions
-            </span>
+            Active sessions
             <span className="ml-2 mono text-ink-muted">
               {concurrentCap !== null && concurrentActive !== null
                 ? `${concurrentActive.toString()} / ${concurrentCap.toString()}`

@@ -78,9 +78,9 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         class="mt-6 text-4xl font-semibold tracking-tight md:text-5xl lg:text-6xl"
         style="letter-spacing: -0.02em;"
       >
-        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+        
           Two ladders.
-        </span>
+        
         <span class="block text-ink-primary">One trial pack to start.</span>
       </h1>
       <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
@@ -109,11 +109,9 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
             </div>
             <div>
               <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Start here</p>
-              <h2 class="mt-3 text-2xl font-semibold">
-                <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+              <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
                   Trial pack — {fmtUsd(trialPack.monthlyUsd)}, one-time
-                </span>
-              </h2>
+                </h2>
             </div>
           </div>
           <p class="mt-3 max-w-prose text-ink-secondary">
@@ -187,7 +185,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
       <p class="font-mono text-xs uppercase tracking-widest text-glow-red">
         Pick your tier
       </p>
-      <h2 class="mt-3 text-2xl font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Which tier is right for me?</span></h2>
+      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">Which tier is right for me?</h2>
       <p class="mt-3 max-w-3xl text-sm text-ink-secondary">
         All tiers run the same engine and the same fingerprint surface.
         Differences are concurrent caps + profile counts + AI-agent
@@ -358,11 +356,9 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         </div>
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Manual</p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-tight">
-            <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
               Manual — for humans
-            </span>
-          </h2>
+            </h2>
           <p class="mt-3 max-w-prose text-ink-secondary">
             Persistent profiles. Drive sessions yourself in the GUI client. No code
             required.
@@ -456,11 +452,9 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         </div>
         <div>
           <p class="font-mono text-xs uppercase tracking-widest text-glow-red">API</p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-tight">
-            <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
               API — for code
-            </span>
-          </h2>
+            </h2>
         <p class="mt-3 max-w-prose text-ink-secondary">
           SDK in your language. Programmatic session creation. Concurrent caps that
           scale with your fleet.
@@ -686,7 +680,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   <section class="border-t border-white/10 bg-surface-raised">
     <div class="mx-auto max-w-4xl px-6 py-16">
       <p class="font-mono text-xs uppercase tracking-widest text-glow-red">AI agent feature</p>
-      <h2 class="mt-3 text-2xl font-semibold"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">BYOK or bundled — your call.</span></h2>
+      <h2 class="mt-3 text-2xl font-semibold text-ink-primary">BYOK or bundled — your call.</h2>
       <p class="mt-4 max-w-prose text-ink-secondary">
         BYOK means you bring your <strong>Anthropic API key</strong> from
         <a
@@ -706,7 +700,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   <!-- Mini FAQ teaser -->
   <section class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <h2 class="text-2xl font-semibold"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Common questions</span></h2>
+      <h2 class="text-2xl font-semibold text-ink-primary">Common questions</h2>
       <div class="mt-8 grid gap-8 md:grid-cols-2">
         <div>
           <h3 class="font-medium text-ink-primary">Manual or API — which one?</h3>

@@ -134,11 +134,7 @@ export function SettingsView(): JSX.Element {
     <div className="flex h-full flex-col gap-6 p-6">
       <header className="flex flex-col gap-1">
         <span className="section-label">Settings</span>
-        <h2 className="text-lg font-medium tracking-tight">
-          <span className="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
-            API connection
-          </span>
-        </h2>
+        <h2 className="text-lg font-medium tracking-tight text-ink-primary">API connection</h2>
         <p className="text-sm text-ink-secondary">
           Point the GUI at your Driftstack API server and authenticate with an API key.
         </p>

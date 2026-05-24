@@ -41,7 +41,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
         <p class="text-sm text-ink-muted">Bearer tokens · scoped + revocable</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">API keys</span></h1>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight">API keys</h1>
         <p class="mt-2 max-w-prose text-sm text-ink-muted">
           Pass as <code class="font-mono">Authorization: Bearer &lt;key&gt;</code>. Plaintext is
           shown ONCE on creation — store it now; we can't recover it later. Revocation is
@@ -63,7 +63,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             <path d="M16 12h6M19 9v6" />
           </svg>
         </span>
-        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Create a new API key</span>
+        Create a new API key
       </h2>
       <form data-create-form class="mt-4 space-y-4">
         <div>
@@ -360,7 +360,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           <path d="M16 12h6M19 9v6" />
         </svg>
       </div>
-      <h2 class="text-lg font-semibold tracking-tight"><span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">No API keys yet</span></h2>
+      <h2 class="text-lg font-semibold tracking-tight text-ink-primary">No API keys yet</h2>
       <p class="mx-auto mt-2 max-w-prose text-sm text-ink-muted">
         Create a key to start driving sessions from your code. Most customers create one key per
         environment (dev / staging / prod) — scopes are key-level, so a leaked dev key can't

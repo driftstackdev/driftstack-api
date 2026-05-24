@@ -76,11 +76,7 @@ export function ConnectivityView(): JSX.Element {
     <div className="flex h-full flex-col gap-4 p-6">
       <header className="flex flex-col gap-1">
         <span className="section-label">Network</span>
-        <h2 className="text-lg font-medium tracking-tight">
-          <span className="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
-            Connectivity test
-          </span>
-        </h2>
+        <h2 className="text-lg font-medium tracking-tight text-ink-primary">Connectivity test</h2>
         <p className="text-sm text-ink-secondary max-w-2xl">
           Authenticates against the configured server and times the round-trip. Use this when a
           session call starts failing — it isolates whether the issue is the API key, the URL, the
