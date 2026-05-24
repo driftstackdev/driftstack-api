@@ -197,6 +197,45 @@ Errors mirror create: 429 if the cap would be exceeded by the
 clone, 409 on explicit-name collision, 404 if the source isn't
 found / not owned by the caller.
 
+## Transfer
+
+`POST /v1/profiles/:id/transfer`
+
+```json
+{ "recipient_account_id": "acc_3f2b1c9d-0e4a-4b6c-8d1e-2f3a4b5c6d7e" }
+```
+
+Moves a profile to another Driftstack account. The recipient finds
+their `acc_<uuid>` account id on their **Settings** page and shares
+it with you out-of-band (chat / email); you paste it here. The
+lookup is by account id, not email — there is no address-enumeration
+path.
+
+The transfer creates a fresh profile under the recipient (inheriting
+the source's `archetype` + `description`) and deletes the source from
+your account in the same operation. Underlying browser state is not
+carried across — the recipient's profile starts with a fresh state
+slot under the same archetype. If the recipient already has a profile
+with the same name, the new one is suffixed `${name} (transferred)`.
+
+Returns:
+
+```json
+{
+  "new_profile": { "id": "prof_…", "name": "…", "archetype": "…", "...": "…" },
+  "recipient_account_id": "acc_…"
+}
+```
+
+Errors:
+
+- `400` — `recipient_account_id` is malformed (must be `acc_<uuid>`).
+- `400` — recipient is your own account (transfer to yourself is a no-op).
+- `404` — no account exists for that id, or the source profile isn't
+  found / not owned by you.
+- `429` — the recipient is at their tier's profile cap, or has hit the
+  per-billing-cycle inbound-transfer cap (twice their profile cap).
+
 ## Snapshots
 
 Snapshots are immutable point-in-time copies of a profile. The
