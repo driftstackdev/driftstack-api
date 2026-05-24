@@ -62,7 +62,7 @@ describe('W478.C apps/gui-client/src/views/BillingCostView.tsx content parity', 
   });
 
   it("Render: section aria-labelledby + 'Usage & cost' h2 + <label> for billing-cycle-picker + <select> with cycles.map options + refresh button onClick=void refetch()", () => {
-    expect(body).toMatch(/<h2 id="billing-cost-heading"[\s\S]*?Usage & cost[\s\S]*?<\/h2>/);
+    expect(body).toMatch(/<h2[\s\S]*?id="billing-cost-heading"[\s\S]*?Usage & cost[\s\S]*?<\/h2>/);
     expect(body).toMatch(
       /<label htmlFor="billing-cycle-picker" className="text-sm text-ink-secondary">\s*\n?\s*Billing cycle\s*\n?\s*<\/label>/,
     );

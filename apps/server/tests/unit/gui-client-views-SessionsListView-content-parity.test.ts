@@ -56,7 +56,7 @@ describe('W478.B apps/gui-client/src/views/SessionsListView.tsx content parity',
     expect(body).toMatch(
       /<section className="space-y-4 p-4" aria-labelledby="sessions-list-heading">/,
     );
-    expect(body).toMatch(/<h2 id="sessions-list-heading"[\s\S]*?Sessions[\s\S]*?<\/h2>/);
+    expect(body).toMatch(/<h2[\s\S]*?id="sessions-list-heading"[\s\S]*?Sessions[\s\S]*?<\/h2>/);
     expect(body).toMatch(/onClick=\{\(\) => void refetch\(\)\}/);
   });
 

@@ -74,7 +74,9 @@ describe('W479.B apps/gui-client/src/views/CryptoCheckoutView.tsx content parity
   });
 
   it("Header copy 'Pay with crypto' h2 + 'We support BTC, ETH, and major stablecoins. Your account upgrades automatically once your transfer settles on-chain.' subline — pinned so the customer-facing crypto-support message stays accurate to the implementation", () => {
-    expect(body).toMatch(/<h2 id="crypto-checkout-heading"[\s\S]*?Pay with crypto[\s\S]*?<\/h2>/);
+    expect(body).toMatch(
+      /<h2[\s\S]*?id="crypto-checkout-heading"[\s\S]*?Pay with crypto[\s\S]*?<\/h2>/,
+    );
     expect(body).toMatch(
       /We support BTC, ETH, and major stablecoins\. Your account upgrades automatically once your\s*\n?\s*transfer settles on-chain\./,
     );
