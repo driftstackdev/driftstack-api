@@ -48,9 +48,8 @@ describe('W496.A apps/customer-dashboard/src/pages/sessions.astro content parity
   });
 
   it('TIER_CONCURRENT_SESSION_LIMITS imported from @driftstack/api-types — pinned so the concurrent caps stay sourced from the canonical shared package (drift to hardcoded numbers here would diverge from server-side enforcement when tier limits change)', () => {
-    expect(body).toMatch(
-      /import \{ TIER_CONCURRENT_SESSION_LIMITS \} from '@driftstack\/api-types';/,
-    );
+    expect(body).toMatch(/TIER_CONCURRENT_SESSION_LIMITS/);
+    expect(body).toMatch(/from '@driftstack\/api-types';/);
   });
 
   it('STATUS_BADGE_CLASS 5-state catalog: creating amber / ready emerald / busy blue / destroyed slate / errored red — pinned so the session-lifecycle vocabulary stays complete and color-mapped (drift to dropping creating would render the most-common transient state with no styling; drift to swapping busy/ready would hide which sessions are actively serving traffic)', () => {

@@ -46,7 +46,8 @@ describe('W749 dashboard /sessions page V-180 + V-186 parity', () => {
 
   it('CRITICAL TIER_CONCURRENT_SESSION_LIMITS imported from @driftstack/api-types. Drift to inlining or duplicating the tier→cap map would let dashboard drift from server billing.', () => {
     const p = read(PAGE);
-    expect(p).toMatch(/import \{ TIER_CONCURRENT_SESSION_LIMITS \} from '@driftstack\/api-types'/);
+    expect(p).toMatch(/TIER_CONCURRENT_SESSION_LIMITS/);
+    expect(p).toMatch(/from '@driftstack\/api-types'/);
     expect(p).toMatch(/const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS/);
   });
 

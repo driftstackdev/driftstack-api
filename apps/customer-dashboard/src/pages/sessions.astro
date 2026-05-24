@@ -1,7 +1,7 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { MOCK_SESSIONS, MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
-import { TIER_CONCURRENT_SESSION_LIMITS } from '@driftstack/api-types';
+import { LOCKED_ARCHETYPE_DISPLAY_LABEL, TIER_CONCURRENT_SESSION_LIMITS } from '@driftstack/api-types';
 
 // V-180 — progressive-enhancement wiring against /v1/sessions, mirrors
 // the V-171 /usage pattern. SSG renders mock; inline <script> replaces
@@ -77,6 +77,14 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           Live sessions you're driving plus recent destroyed/errored ones.
           Sessions are the only billing meter — you pay for concurrent caps,
           not duration or per-call.
+        </p>
+        {/* 2026-05-24 — device chip surfaces the archetype every session runs as. */}
+        <p class="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-surface-raised px-2.5 py-1 text-xs text-ink-secondary">
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+            <rect x="6" y="2" width="12" height="20" rx="2.5" />
+            <circle cx="12" cy="18" r="0.75" fill="currentColor" />
+          </svg>
+          Every session runs on {LOCKED_ARCHETYPE_DISPLAY_LABEL}
         </p>
       </div>
       <!--
