@@ -280,7 +280,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
           <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
         </span>
-        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Active (<span data-count="active">{activeSessions.length.toString()}</span>)</span>
+        <span class="text-ink-primary">Active (<span data-count="active">{activeSessions.length.toString()}</span>)</span>
       </h2>
       {/*
         2026-05-21 — list renders skeleton placeholders SSR; JS
@@ -316,7 +316,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
     <section class="mt-12">
       <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-primary">
         <span class="inline-block h-2 w-2 rounded-full bg-slate-500" aria-hidden="true"></span>
-        <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Recent (<span data-count="recent">{recentClosedSessions.length.toString()}</span>)</span>
+        <span class="text-ink-primary">Recent (<span data-count="recent">{recentClosedSessions.length.toString()}</span>)</span>
       </h2>
       <p data-empty="recent" class="hidden text-sm text-ink-muted">No recent sessions.</p>
       <ul
