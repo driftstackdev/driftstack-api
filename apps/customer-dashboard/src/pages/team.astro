@@ -16,7 +16,10 @@ const apiBaseUrl = resolveApiBaseUrl();
 ---
 
 <DashboardLayout title="Team">
-  <div class="mx-auto max-w-4xl px-6 py-10" data-page="team">
+  {/* 2026-05-24 — hero-glow atmosphere matches brand surface. */}
+  <div class="relative overflow-hidden">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-4xl px-6 py-10" data-page="team">
     <div
       data-banner
       class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
@@ -127,6 +130,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       <code>admin</code> roles; writes require <code>admin</code>. See
       <a href="https://docs.driftstack.dev/api/team" class="text-glow-red underline" target="_blank" rel="noopener noreferrer">docs.driftstack.dev/api/team</a> for the role gating reference.
     </p>
+    </div>
   </div>
 
   <script is:inline define:vars={{ apiBaseUrl }}>
