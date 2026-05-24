@@ -39,14 +39,34 @@ const apiBaseUrl = resolveApiBaseUrl();
     <section class="mb-8 grid gap-4 md:grid-cols-2">
       <div class="dashboard-card">
         <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Rate card (per unit)</p>
-        <dl class="mt-4 space-y-2 text-sm" data-field="rate-card">
-          <div class="text-slate-500">Loading…</div>
+        <dl class="mt-4 space-y-3 text-sm" data-field="rate-card">
+          {/* 2026-05-24 — skeleton rows for hydrate-state polish. */}
+          <div class="flex items-center justify-between gap-4">
+            <div class="h-3 w-32 animate-pulse rounded bg-slate-200"></div>
+            <div class="h-3 w-16 animate-pulse rounded bg-slate-200"></div>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <div class="h-3 w-28 animate-pulse rounded bg-slate-200"></div>
+            <div class="h-3 w-20 animate-pulse rounded bg-slate-200"></div>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <div class="h-3 w-36 animate-pulse rounded bg-slate-200"></div>
+            <div class="h-3 w-12 animate-pulse rounded bg-slate-200"></div>
+          </div>
         </dl>
       </div>
       <div class="dashboard-card">
         <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Tier thresholds</p>
-        <dl class="mt-4 space-y-2 text-sm" data-field="tier-thresholds">
-          <div class="text-slate-500">Loading…</div>
+        <dl class="mt-4 space-y-3 text-sm" data-field="tier-thresholds">
+          {/* 2026-05-24 — skeleton rows for hydrate-state polish. */}
+          <div class="flex items-center justify-between gap-4">
+            <div class="h-3 w-24 animate-pulse rounded bg-slate-200"></div>
+            <div class="h-3 w-20 animate-pulse rounded bg-slate-200"></div>
+          </div>
+          <div class="flex items-center justify-between gap-4">
+            <div class="h-3 w-32 animate-pulse rounded bg-slate-200"></div>
+            <div class="h-3 w-16 animate-pulse rounded bg-slate-200"></div>
+          </div>
         </dl>
       </div>
     </section>
