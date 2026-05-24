@@ -72,7 +72,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           <span data-field="header-now">{MOCK_USAGE_SUMMARY.concurrent_now}</span> active · <span
             data-field="header-cap">{MOCK_USAGE_SUMMARY.concurrent_limit}</span> concurrent cap
         </p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight">Sessions</h1>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Sessions</h1>
         <p class="mt-2 max-w-prose text-sm text-ink-muted">
           Live sessions you're driving plus recent destroyed/errored ones.
           Sessions are the only billing meter — you pay for concurrent caps,
@@ -195,7 +195,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
       data-next-steps
       class="mb-8 hidden rounded-lg border border-glow-red/30 bg-glow-red/5 p-6"
     >
-      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight">
+      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-primary">
         <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/15 ring-1 ring-glow-red/30 text-glow-red">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M5 12h14M13 5l7 7-7 7" />
@@ -267,7 +267,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
         header to signal liveness. */}
     <!-- Active sessions -->
     <section>
-      <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight">
+      <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-primary">
         <span class="relative flex h-2 w-2" aria-hidden="true">
           <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
           <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
@@ -306,7 +306,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
 
     <!-- Recent closed -->
     <section class="mt-12">
-      <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight">
+      <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-primary">
         <span class="inline-block h-2 w-2 rounded-full bg-slate-500" aria-hidden="true"></span>
         <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">Recent (<span data-count="recent">{recentClosedSessions.length.toString()}</span>)</span>
       </h2>
