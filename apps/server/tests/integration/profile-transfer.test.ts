@@ -145,6 +145,33 @@ describe('POST /v1/profiles/:id/transfer', () => {
     expect(senderProfiles.some((p) => p.id === profile.id)).toBe(true);
   });
 
+  it('429 TierLimit when the recipient is under their profile cap but over the per-cycle import cap', async () => {
+    fx = await buildTestApp();
+    // trial_pack recipient: profile cap 1, import cap 2/cycle. Hold 0
+    // profiles (profile cap clear) but seed 2 prior profile.imported
+    // rows this cycle so the transfer (which counts as an import for
+    // the recipient) trips the cycle cap, not the profile cap.
+    seedRecipient(fx, { tier: 'trial_pack' });
+    for (let i = 0; i < 2; i += 1) {
+      await fx.accountAuditRepo.insert({
+        accountId: RECIPIENT_ID,
+        actorType: 'customer',
+        action: 'profile.imported',
+        targetResourceId: `profile_seed_${i.toString()}`,
+      });
+    }
+    const profile = await seedOne(fx);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profile.id}/transfer`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { recipient_account_id: `acc_${RECIPIENT_ID}` },
+    });
+    expect(res.statusCode).toBe(429);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.TierLimit);
+  });
+
   it('404 when the recipient account does not exist', async () => {
     fx = await buildTestApp();
     const profile = await seedOne(fx);
