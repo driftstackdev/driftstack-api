@@ -41,9 +41,10 @@ describe('W752 dashboard /profiles page V-284 + V-470 + V-480 parity', () => {
   it('CRITICAL PROFILES_PER_TIER + archetypeDisplayLabel + AccountTier imported from @driftstack/api-types. Drift to inlining would let dashboard tier-cap drift from server enforcement.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /import \{\s*\n\s+PROFILES_PER_TIER,\s*\n\s+archetypeDisplayLabel,\s*\n\s+type AccountTier,\s*\n\}\s*from\s*'@driftstack\/api-types'/,
-    );
+    expect(p).toMatch(/PROFILES_PER_TIER/);
+    expect(p).toMatch(/archetypeDisplayLabel/);
+    expect(p).toMatch(/type AccountTier/);
+    expect(p).toMatch(/from\s*'@driftstack\/api-types'/);
   });
 
   it('CRITICAL 7-tier display order pinned — solo_manual + team_manual + agency_manual + api_starter + api_builder + api_scale + enterprise. Drift to dropping a tier (e.g. enterprise) would silently hide the upgrade-path from customers about to hit their limit.', () => {

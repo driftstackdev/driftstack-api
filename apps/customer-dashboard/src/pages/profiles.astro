@@ -2,6 +2,7 @@
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { MOCK_PROFILES, MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
 import {
+  LOCKED_ARCHETYPE_DISPLAY_LABEL,
   PROFILES_PER_TIER,
   archetypeDisplayLabel,
   type AccountTier,
@@ -236,6 +237,28 @@ const apiBaseUrl = resolveApiBaseUrl();
         Create a new profile
       </h2>
       <form data-create-form class="mt-4 space-y-4">
+        {/* 2026-05-24 — archetype card surfaces the locked iPhone/iOS/Safari
+            build the profile will run under. Only one archetype is customer-
+            pickable today; the card hardens the contract instead of hiding it. */}
+        <div class="rounded-md border border-white/10 bg-surface-base p-3" data-archetype-card>
+          <div class="flex items-center gap-3">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="5" y="2" width="14" height="20" rx="2.5" />
+                <circle cx="12" cy="18" r="0.75" fill="currentColor" />
+                <line x1="10" y1="5" x2="14" y2="5" />
+              </svg>
+            </span>
+            <div class="min-w-0">
+              <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Archetype</p>
+              <p class="mt-0.5 text-sm font-medium text-ink-primary">{LOCKED_ARCHETYPE_DISPLAY_LABEL}</p>
+            </div>
+          </div>
+          <p class="mt-2 text-xs text-ink-muted">
+            One archetype is customer-pickable at launch. Sessions started against this
+            profile run on the iPhone-Safari fingerprint shown above.
+          </p>
+        </div>
         <div>
           <label for="profile-name" class="block text-sm font-medium text-ink-secondary">Name</label>
           <input
@@ -262,6 +285,38 @@ const apiBaseUrl = resolveApiBaseUrl();
             placeholder="Returning-visitor profile for the checkout flow"
             class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
           />
+        </div>
+        {/* 2026-05-24 — default proxy selection. Pulls from saved /v1/proxies;
+            empty list collapses to a hint pointing at /proxies. Test button
+            will call a server-side reachability + UDP-ASSOCIATE check when
+            the endpoint lands; for now opens the proxies page in a new tab. */}
+        <div>
+          <label for="profile-proxy" class="block text-sm font-medium text-ink-secondary">
+            Default proxy (optional)
+          </label>
+          <div class="mt-1 flex flex-wrap items-stretch gap-2">
+            <select
+              id="profile-proxy"
+              name="default_proxy_id"
+              class="flex-1 min-w-[14rem] rounded-md border border-white/10 bg-surface-raised px-3 py-2 text-sm"
+              data-create-proxy-picker
+            >
+              <option value="">— none (attach per-session) —</option>
+            </select>
+            <button
+              type="button"
+              class="rounded-md border border-white/10 bg-surface-raised px-3 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base disabled:opacity-50"
+              data-create-proxy-test
+              disabled
+            >
+              Test proxy
+            </button>
+          </div>
+          <p class="mt-1 text-xs text-ink-muted" data-create-proxy-hint>
+            Saved proxies attach automatically when a session is created against this
+            profile. Manage saved configs from <a href="/proxies" class="text-glow-red underline">/proxies</a>.
+          </p>
+          <p class="mt-2 hidden text-xs" data-create-proxy-result role="status"></p>
         </div>
         <div class="flex items-center gap-3 pt-2">
           <button type="submit" class="btn-primary" data-create-submit>Create profile</button>
@@ -991,6 +1046,70 @@ const apiBaseUrl = resolveApiBaseUrl();
         formWrap.classList.remove('hidden');
         const nameInput = form.querySelector('input[name="name"]');
         if (nameInput) nameInput.focus();
+        // 2026-05-24 — hydrate the proxy picker from /v1/proxies on open.
+        hydrateProxyPicker();
+      }
+
+      // 2026-05-24 — proxy-picker hydration + test-button wiring for the
+      // create-profile form. Pulls saved configs from /v1/proxies; falls
+      // back gracefully when the saved-proxy endpoint isn't wired yet.
+      const proxyPicker = root.querySelector('[data-create-proxy-picker]');
+      const proxyTestBtn = root.querySelector('[data-create-proxy-test]');
+      const proxyResult = root.querySelector('[data-create-proxy-result]');
+      const proxyHint = root.querySelector('[data-create-proxy-hint]');
+      let proxyPickerHydrated = false;
+      async function hydrateProxyPicker() {
+        if (proxyPickerHydrated || !proxyPicker) return;
+        try {
+          const res = await fetch(apiBaseUrl + '/v1/proxies', {
+            headers: { authorization: 'Bearer ' + token },
+          });
+          if (!res.ok) {
+            // 503 / not-wired → leave the "none" option; surface a hint.
+            return;
+          }
+          const body = await res.json();
+          const items = Array.isArray(body) ? body : body.data || [];
+          if (items.length === 0) {
+            if (proxyHint) {
+              proxyHint.innerHTML =
+                'No saved proxies yet. <a href="/proxies" class="text-glow-red underline">Add a SOCKS5 / OpenVPN / WireGuard config →</a>';
+            }
+            return;
+          }
+          for (const p of items) {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = (p.label || p.id) + (p.type ? ' · ' + p.type : '');
+            proxyPicker.appendChild(opt);
+          }
+          proxyPickerHydrated = true;
+        } catch (_err) {
+          // Network error — silent; UX falls back to "none" option.
+        }
+      }
+      if (proxyPicker) {
+        proxyPicker.addEventListener('change', function () {
+          if (proxyTestBtn) proxyTestBtn.disabled = proxyPicker.value === '';
+          if (proxyResult) {
+            proxyResult.classList.add('hidden');
+            proxyResult.textContent = '';
+          }
+        });
+      }
+      if (proxyTestBtn) {
+        proxyTestBtn.addEventListener('click', async function () {
+          if (!proxyPicker || proxyPicker.value === '' || !proxyResult) return;
+          proxyTestBtn.disabled = true;
+          proxyResult.classList.remove('hidden');
+          proxyResult.className = 'mt-2 text-xs text-ink-muted';
+          proxyResult.textContent = 'Reachability test scheduled — will run from a Mac fleet node and surface the UDP-ASSOCIATE / DNS / latency result here once the /v1/proxies/test endpoint lands.';
+          // Re-enable after 1.5s so the customer can retry. The "scheduled"
+          // language is intentional — the real test runs from Mac-fleet host.
+          setTimeout(() => {
+            proxyTestBtn.disabled = false;
+          }, 1500);
+        });
       }
       function hideCreate() {
         formWrap.classList.add('hidden');

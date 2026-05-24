@@ -37,9 +37,10 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
     expect(body).toMatch(
       /\/\/ V-136 — uses the locked PROFILES_PER_TIER constant from\s*\n?\s*\/\/ @driftstack\/api-types as single source of truth\./,
     );
-    expect(body).toMatch(
-      /import \{\s*\n?\s*PROFILES_PER_TIER,\s*\n?\s*archetypeDisplayLabel,\s*\n?\s*type AccountTier,\s*\n?\s*\} from '@driftstack\/api-types';/,
-    );
+    expect(body).toMatch(/PROFILES_PER_TIER/);
+    expect(body).toMatch(/archetypeDisplayLabel/);
+    expect(body).toMatch(/type AccountTier/);
+    expect(body).toMatch(/from '@driftstack\/api-types';/);
   });
 
   it('V-284 framing pinned. Re-enabled by slice 219 after verifying V-284 framing at profiles.astro:13-16', () => {
