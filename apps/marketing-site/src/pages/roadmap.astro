@@ -103,8 +103,10 @@ const LATER: RoadmapItem[] = [
   description="What's live now, what's landing next, and what's further out for Driftstack. iPhone Safari fingerprint platform — agent sessions (AI / manual / pair), additional archetypes, GUI streaming, recipe library."
 >
   <!-- Hero -->
-  <section class="bg-gradient-to-b from-surface-base to-surface-raised">
-    <div class="mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
+  <section class="relative overflow-hidden bg-gradient-to-b from-surface-base to-surface-raised">
+    {/* 2026-05-24 — hero-glow atmosphere matches the rest of the site. */}
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
       <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Roadmap</p>
       <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl">
         <span class="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
