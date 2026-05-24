@@ -78,6 +78,8 @@ Response (201):
   "name": "production-2025",
   "key_prefix": "ds_live_NEWKEY",
   "scopes": ["read", "write"],
+  "last_used_at": null,
+  "revoked_at": null,
   "expires_at": null,
   "created_at": "2026-05-08T10:00:00Z",
   "plaintext": "ds_live_NEWKEYsecretsecretsecretsecretsecre",
