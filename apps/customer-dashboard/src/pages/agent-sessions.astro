@@ -245,7 +245,23 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
         <span data-recent-count class="text-xs text-ink-muted">—</span>
       </div>
       <ul data-recent-list class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {/* Rows rendered by JS — see the script section. */}
+        {/* 2026-05-24 — skeleton cards for hydrate-state polish. Rows
+            rendered by JS — see the script section. */}
+        <li class="rounded-lg border border-white/10 bg-surface-raised p-4" data-recent-skeleton>
+          <div class="h-3 w-32 animate-pulse rounded bg-white/10"></div>
+          <div class="mt-3 h-3 w-48 animate-pulse rounded bg-white/10"></div>
+          <div class="mt-2 h-2 w-24 animate-pulse rounded bg-white/10"></div>
+        </li>
+        <li class="rounded-lg border border-white/10 bg-surface-raised p-4" data-recent-skeleton>
+          <div class="h-3 w-28 animate-pulse rounded bg-white/10"></div>
+          <div class="mt-3 h-3 w-40 animate-pulse rounded bg-white/10"></div>
+          <div class="mt-2 h-2 w-20 animate-pulse rounded bg-white/10"></div>
+        </li>
+        <li class="rounded-lg border border-white/10 bg-surface-raised p-4 sm:hidden lg:block" data-recent-skeleton>
+          <div class="h-3 w-36 animate-pulse rounded bg-white/10"></div>
+          <div class="mt-3 h-3 w-44 animate-pulse rounded bg-white/10"></div>
+          <div class="mt-2 h-2 w-16 animate-pulse rounded bg-white/10"></div>
+        </li>
       </ul>
     </section>
 
