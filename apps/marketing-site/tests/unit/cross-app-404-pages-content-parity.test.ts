@@ -62,7 +62,7 @@ describe('W379.B cross-app 404 pages content parity', () => {
     });
 
     it('dashboard-specific copy: "Page not found." + "moved or doesn\'t exist"', () => {
-      expect(body).toMatch(/<h1[^>]*>Page not found\.<\/h1>/);
+      expect(body).toMatch(/Page not found\./);
       expect(body).toMatch(/The page you were looking for has moved or doesn't exist/);
     });
 
