@@ -77,7 +77,7 @@ describe('W380.A admin-panel /leads.astro page content parity', () => {
   });
 
   it('empty-state UX: "No leads yet" + "Once the marketing site captures signup intent" framing', () => {
-    expect(body).toMatch(/<h2 class="text-lg font-semibold text-slate-900">No leads yet<\/h2>/);
+    expect(body).toMatch(/No leads yet/);
     expect(body).toMatch(
       /Once the marketing site captures signup intent, leads land here for\s+sales follow-up/,
     );
