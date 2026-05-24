@@ -108,7 +108,7 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     expect(body).toMatch(/Bit-identical iPhone Safari fingerprint/);
     expect(body).toMatch(/SOCKS5 · WireGuard · OpenVPN proxies/);
     expect(body).toMatch(/API · SDK · GUI access/);
-    expect(body).toMatch(/EU-hosted/);
+    expect(body).toMatch(/UDP \/ QUIC \/ WebRTC tunnelling/);
     // Old splash badges must NOT reappear in the footer prominent position.
     expect(body).not.toMatch(/Stripe-billed · SCA \/ 3DS/);
     expect(body).not.toMatch(/GDPR-aware · DPA on request/);
