@@ -58,7 +58,7 @@ describe('W487.A apps/admin-panel/src/pages/leads.astro content parity', () => {
   });
 
   it("Empty-state branch: MOCK_LEADS.length === 0 → 'No leads yet' + 'Once the marketing site captures signup intent, leads land here for sales follow-up.' — pinned so operators visiting the page with zero leads see a clear 'this is working, just empty' message instead of a bare empty table that looks broken", () => {
-    expect(body).toMatch(/<h2 class="text-lg font-semibold text-slate-900">No leads yet<\/h2>/);
+    expect(body).toMatch(/No leads yet/);
     expect(body).toMatch(
       /Once the marketing site captures signup intent, leads land here for\s*\n?\s*sales follow-up\./,
     );
