@@ -38,7 +38,7 @@ describe('W486.C apps/admin-panel/src/pages/404.astro content parity', () => {
     );
     // 2026-05-23 — h1 wrapped in oxblood gradient span (admin-panel
     // visual unification); pin loosened to label-presence.
-    expect(body).toMatch(/<h1 class="mt-4 text-4xl font-semibold tracking-tight">/);
+    expect(body).toMatch(/<h1 class="mt-4 text-4xl font-semibold tracking-tight text-slate-900">/);
     expect(body).toMatch(/Page not found\./);
     expect(body).toMatch(/The admin panel has no page at this path\. Check the sidebar links\./);
   });

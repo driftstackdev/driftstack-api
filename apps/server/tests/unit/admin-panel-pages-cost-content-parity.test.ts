@@ -41,7 +41,7 @@ describe('admin-panel pages/cost content parity', () => {
   });
 
   it('Cost (V-541) header anchor pinned: h1 contains "Cost (V-541)". 2026-05-23 — h1 wrapped in oxblood gradient span (admin-panel visual unification); V-anchor preserved.', () => {
-    expect(body).toMatch(/<h1 class="mt-1 text-3xl font-semibold tracking-tight">/);
+    expect(body).toMatch(/<h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">/);
     expect(body).toMatch(/Cost \(V-541\)/);
   });
 
