@@ -206,7 +206,7 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(body).toMatch(/Bit-identical iPhone Safari fingerprint/);
       expect(body).toMatch(/SOCKS5 · WireGuard · OpenVPN proxies/);
       expect(body).toMatch(/API · SDK · GUI access/);
-      expect(body).toMatch(/EU-hosted/);
+      expect(body).toMatch(/UDP \/ QUIC \/ WebRTC tunnelling/);
     });
 
     it('R7 compliance badges no longer in footer splash position (moved to /trust + /legal)', () => {

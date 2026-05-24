@@ -201,7 +201,7 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     expect(body).toMatch(/Bit-identical iPhone Safari fingerprint/);
     expect(body).toMatch(/SOCKS5 · WireGuard · OpenVPN proxies/);
     expect(body).toMatch(/API · SDK · GUI access/);
-    expect(body).toMatch(/EU-hosted/);
+    expect(body).toMatch(/UDP \/ QUIC \/ WebRTC tunnelling/);
   });
 
   it('<StatusBadge /> embed (live platform health on every page footer)', () => {
