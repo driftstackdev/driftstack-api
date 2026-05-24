@@ -38,8 +38,10 @@ export function BillingCostView(props: BillingCostViewProps = {}): JSX.Element {
   return (
     <section className="space-y-4 p-4" aria-labelledby="billing-cost-heading">
       <header className="flex items-center justify-between gap-3">
-        <h2 id="billing-cost-heading" className="text-lg font-semibold text-ink-primary">
-          Usage & cost
+        <h2 id="billing-cost-heading" className="text-lg font-semibold tracking-tight">
+          <span className="bg-gradient-to-br from-ink-primary via-ink-primary to-glow-red bg-clip-text text-transparent">
+            Usage & cost
+          </span>
         </h2>
         <div className="flex items-center gap-2">
           <label htmlFor="billing-cycle-picker" className="text-sm text-ink-secondary">
