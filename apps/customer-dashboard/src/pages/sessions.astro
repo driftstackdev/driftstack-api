@@ -51,7 +51,10 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
 ---
 
 <DashboardLayout title="Sessions">
-  <div class="mx-auto max-w-5xl px-6 py-10" data-page="sessions">
+  {/* 2026-05-24 — hero-glow atmosphere matches brand surface. */}
+  <div class="relative overflow-hidden">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="relative mx-auto max-w-5xl px-6 py-10" data-page="sessions">
     <!--
  — banner is hidden by default (mock-rendered SSG path);
       progressive-enhance script reveals + populates on fetch
@@ -333,6 +336,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
       access initially per ADR-006; customer-facing recording UI lands when
       the V-040 R2 mirror ships.
     </p>
+    </div>
   </div>
 
   <!--
