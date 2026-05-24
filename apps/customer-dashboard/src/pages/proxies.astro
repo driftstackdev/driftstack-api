@@ -312,11 +312,18 @@ const apiBaseUrl = resolveApiBaseUrl();
               '<code class="font-mono">' +
               escapeHtml(p.id) +
               '</code>' +
-              '</p></div>' +
+              '</p>' +
+              '<p class="mt-1 hidden text-xs" data-test-result="' +
+              escapeHtml(p.id) +
+              '" role="status"></p></div>' +
+              '<div class="flex shrink-0 items-center gap-3">' +
+              '<button type="button" data-action="test-proxy" data-id="' +
+              escapeHtml(p.id) +
+              '" class="text-sm text-ink-secondary hover:text-ink-primary hover:underline">Test</button>' +
               '<button type="button" data-action="delete-proxy" data-id="' +
               escapeHtml(p.id) +
               '" class="text-sm text-red-700 hover:underline">Delete</button>' +
-              '</li>',
+              '</div></li>',
           )
           .join('');
       }
@@ -533,6 +540,55 @@ const apiBaseUrl = resolveApiBaseUrl();
       list?.addEventListener('click', async (event) => {
         const target = event.target;
         if (!(target instanceof Element)) return;
+
+        // EG-API-1.7 — Test button: POST /v1/proxies/:id/test (runs from a
+        // Mac-fleet node). Pre-runner the endpoint 503s; surface the
+        // "scheduled / runs from a Mac node" message inline per-row.
+        const testBtn = target.closest('[data-action="test-proxy"]');
+        if (testBtn) {
+          const tid = testBtn.getAttribute('data-id');
+          if (!tid || !token) return;
+          const resultEl = root.querySelector('[data-test-result="' + tid + '"]');
+          testBtn.setAttribute('disabled', 'true');
+          if (resultEl) {
+            resultEl.classList.remove('hidden', 'text-emerald-300', 'text-red-300');
+            resultEl.classList.add('text-ink-muted');
+            resultEl.textContent = 'Testing reachability from a Mac-fleet node…';
+          }
+          try {
+            const res = await fetch(apiBaseUrl + '/v1/proxies/' + encodeURIComponent(tid) + '/test', {
+              method: 'POST',
+              headers: { authorization: 'Bearer ' + token },
+              credentials: 'include',
+            });
+            if (resultEl) {
+              if (res.ok) {
+                const b = await res.json().catch(() => ({}));
+                resultEl.classList.remove('text-ink-muted', 'text-red-300');
+                resultEl.classList.add('text-emerald-300');
+                resultEl.textContent =
+                  'Reachable' +
+                  (b.udp_associate ? ' · UDP-ASSOCIATE ok' : '') +
+                  (typeof b.latency_ms === 'number' ? ' · ' + b.latency_ms + 'ms' : '');
+              } else {
+                const e = await res.json().catch(() => ({}));
+                resultEl.classList.add('text-ink-muted');
+                resultEl.textContent =
+                  e.detail || 'Reachability testing runs from a Mac-fleet node and is not yet wired.';
+              }
+            }
+          } catch (err) {
+            if (resultEl) {
+              resultEl.classList.remove('text-ink-muted');
+              resultEl.classList.add('text-red-300');
+              resultEl.textContent = 'Could not reach the test endpoint (' + ((err && err.message) || 'network') + ').';
+            }
+          } finally {
+            testBtn.removeAttribute('disabled');
+          }
+          return;
+        }
+
         const btn = target.closest('[data-action="delete-proxy"]');
         if (!btn) return;
         const id = btn.getAttribute('data-id');
