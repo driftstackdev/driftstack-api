@@ -1,6 +1,7 @@
 ---
 import DashboardLayout from '../../layouts/DashboardLayout.astro';
 import { resolveApiBaseUrl } from '../../lib/api-base-url';
+import { LOCKED_ARCHETYPE_DISPLAY_LABEL } from '@driftstack/api-types';
 
 // v2-#8 Wave 29-NNN ARC 3 — AI chat + manual side-by-side LIVE
 // per-session workbench. Slice 2 scaffold per the design doc at
@@ -116,6 +117,20 @@ const apiBaseUrl = resolveApiBaseUrl();
           >
             BYOK
           </span>
+        </div>
+        {/* 2026-05-24 — device badge: the iPhone-Safari archetype this
+            workbench session runs as. Sits beside the model badge so the
+            customer sees both "which brain" + "which device" at a glance. */}
+        <div
+          class="flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised/40 px-3 py-1.5"
+          title={`Sessions run on ${LOCKED_ARCHETYPE_DISPLAY_LABEL} — real WebKit, real iPhone fingerprint surface.`}
+        >
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+            <rect x="6" y="2" width="12" height="20" rx="2.5" />
+            <circle cx="12" cy="18" r="0.75" fill="currentColor" />
+          </svg>
+          <span class="text-ink-muted">Device</span>
+          <span class="font-mono text-ink-primary text-[10px]">{LOCKED_ARCHETYPE_DISPLAY_LABEL}</span>
         </div>
         <div data-status-pill class="rounded-md bg-slate-800 px-3 py-1.5 font-mono uppercase tracking-wide text-slate-300">
           Loading…
