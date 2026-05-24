@@ -294,7 +294,29 @@ const FILTER_OPTIONS = [
 
     <div class="rounded-lg border border-white/10 bg-surface-raised">
       <ul class="divide-y divide-slate-100" data-list>
-        <li class="px-6 py-4 text-sm text-ink-muted">Loading audit log…</li>
+        {/* 2026-05-24 — skeleton rows replace plain "Loading…" text for parity
+            with /sessions + /api-keys hydrate-state polish. */}
+        <li class="px-6 py-4">
+          <div class="flex items-center gap-4">
+            <div class="h-3 w-24 animate-pulse rounded bg-white/10"></div>
+            <div class="h-3 w-40 animate-pulse rounded bg-white/10"></div>
+            <div class="h-3 w-16 animate-pulse rounded bg-white/10"></div>
+          </div>
+        </li>
+        <li class="px-6 py-4">
+          <div class="flex items-center gap-4">
+            <div class="h-3 w-24 animate-pulse rounded bg-white/10"></div>
+            <div class="h-3 w-32 animate-pulse rounded bg-white/10"></div>
+            <div class="h-3 w-20 animate-pulse rounded bg-white/10"></div>
+          </div>
+        </li>
+        <li class="px-6 py-4">
+          <div class="flex items-center gap-4">
+            <div class="h-3 w-24 animate-pulse rounded bg-white/10"></div>
+            <div class="h-3 w-36 animate-pulse rounded bg-white/10"></div>
+            <div class="h-3 w-12 animate-pulse rounded bg-white/10"></div>
+          </div>
+        </li>
       </ul>
       {/* 2026-05-23 — empty state with icon for visual interest. */}
       <div class="hidden px-6 py-12 text-center text-sm text-ink-muted" data-empty>
