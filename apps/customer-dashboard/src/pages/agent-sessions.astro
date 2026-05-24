@@ -1,6 +1,7 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { resolveApiBaseUrl } from '../lib/api-base-url';
+import { LOCKED_ARCHETYPE_DISPLAY_LABEL } from '@driftstack/api-types';
 
 // v2-#8 Wave 2.C sub-slice 8.24 — agent-sessions page scaffold.
 //
@@ -30,13 +31,21 @@ const apiBaseUrl = resolveApiBaseUrl();
         </svg>
       </div>
       <h1 class="mt-4 text-3xl font-semibold tracking-tight text-ink-primary">
-        
-          What can I help you automate?
-        
+        What can I help you automate?
       </h1>
       <p class="mt-2 max-w-prose text-sm text-ink-muted mx-auto">
         Describe a task in plain English. The AI plans the steps; your remote browser
         carries them out, live. Take over with one click whenever you want.
+      </p>
+      {/* 2026-05-24 — device chip surfaces the archetype the session will
+          run under so the customer sees "this is a real iPhone" not "some
+          remote thing". */}
+      <p class="mt-4 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-surface-raised px-2.5 py-1 text-xs text-ink-secondary">
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+          <rect x="6" y="2" width="12" height="20" rx="2.5" />
+          <circle cx="12" cy="18" r="0.75" fill="currentColor" />
+        </svg>
+        Runs on {LOCKED_ARCHETYPE_DISPLAY_LABEL}
       </p>
     </header>
 
