@@ -1111,12 +1111,36 @@ const apiBaseUrl = resolveApiBaseUrl();
           proxyTestBtn.disabled = true;
           proxyResult.classList.remove('hidden');
           proxyResult.className = 'mt-2 text-xs text-ink-muted';
-          proxyResult.textContent = 'Reachability test scheduled — will run from a Mac fleet node and surface the UDP-ASSOCIATE / DNS / latency result here once the /v1/proxies/test endpoint lands.';
-          // Re-enable after 1.5s so the customer can retry. The "scheduled"
-          // language is intentional — the real test runs from Mac-fleet host.
-          setTimeout(() => {
+          proxyResult.textContent = 'Testing reachability from a Mac-fleet node…';
+          // EG-API-1.7 — POST /v1/proxies/:id/test. Runs DNS + UDP-ASSOCIATE
+          // + latency from a Mac-fleet node (authentic egress path). Pre-
+          // backend the endpoint 503s; surface that as a clear "scheduled"
+          // message rather than a raw error.
+          try {
+            const res = await fetch(
+              apiBaseUrl + '/v1/proxies/' + encodeURIComponent(proxyPicker.value) + '/test',
+              { method: 'POST', headers: { authorization: 'Bearer ' + token } },
+            );
+            if (res.ok) {
+              const body = await res.json().catch(() => ({}));
+              proxyResult.className = 'mt-2 text-xs text-emerald-300';
+              proxyResult.textContent =
+                'Reachable' +
+                (body.udp_associate ? ' · UDP-ASSOCIATE ok' : '') +
+                (typeof body.latency_ms === 'number' ? ' · ' + body.latency_ms + 'ms' : '');
+            } else {
+              const err = await res.json().catch(() => ({}));
+              proxyResult.className = 'mt-2 text-xs text-ink-muted';
+              proxyResult.textContent =
+                err.detail ||
+                'Reachability testing runs from a Mac-fleet node and is not yet wired on this server.';
+            }
+          } catch (_e) {
+            proxyResult.className = 'mt-2 text-xs text-glow-red-soft';
+            proxyResult.textContent = 'Could not reach the test endpoint. Try again.';
+          } finally {
             proxyTestBtn.disabled = false;
-          }, 1500);
+          }
         });
       }
       function hideCreate() {

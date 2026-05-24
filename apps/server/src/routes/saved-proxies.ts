@@ -92,6 +92,26 @@ export function registerSavedProxiesRoutes(
     return { data: [] as Array<{ id: string; label: string; type: string }> };
   });
 
+  // EG-API-1.7 — reachability + UDP-ASSOCIATE test. The dashboard
+  // create-profile + /proxies surfaces expose a "Test proxy" button;
+  // the real check runs from a Mac-fleet node (authentic egress path,
+  // not the control-plane host) and reports DNS / UDP-ASSOCIATE /
+  // latency. Until the fleet-side runner lands the endpoint returns
+  // 503 FeatureUnavailable so the dashboard surfaces the "scheduled,
+  // runs from a Mac node" message consistently rather than a 404.
+  app.post<{ Params: { id: string } }>(
+    '/v1/proxies/:id/test',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    (req): never => {
+      requireCtx(req);
+      throw new FeatureUnavailableError(
+        'Proxy reachability testing is not yet wired on this server. The check ' +
+          'runs from a Mac-fleet node (DNS + UDP-ASSOCIATE + latency); EG-API-1.7 ' +
+          'wires the fleet-side runner.',
+      );
+    },
+  );
+
   app.delete<{ Params: { id: string } }>(
     '/v1/proxies/:id',
     { preHandler: [app.requireAuth, app.rateLimit('global')] },
@@ -136,5 +156,6 @@ export function registerSavedProxiesDisabledRoutes(app: FastifyInstance): void {
   app.get('/v1/proxies', () => ({
     data: [] as Array<{ id: string; label: string; type: string }>,
   }));
+  app.post('/v1/proxies/:id/test', stub);
   app.delete('/v1/proxies/:id', stub);
 }

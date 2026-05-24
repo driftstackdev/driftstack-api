@@ -71,4 +71,19 @@ describe('EG-API-1.3 — /v1/proxies (no backend wired)', () => {
     expect(res.statusCode).toBe(503);
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
   });
+
+  // EG-API-1.7 — reachability test endpoint. Backs the dashboard's
+  // create-profile + /proxies "Test proxy" buttons. Pre-fleet-runner it
+  // 503s; the body explains the check runs from a Mac-fleet node so the
+  // dashboard surfaces a "scheduled" message rather than a raw error.
+  it('POST /:id/test → 503 FeatureUnavailable (Mac-fleet reachability runner not yet wired)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/proxies/proxy_xxx/test',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
+  });
 });
