@@ -54,9 +54,22 @@ const apiBaseUrl = resolveApiBaseUrl();
         (passwords / private keys) is never shown after save — re-enter to
         update.
       </p>
-      <p data-empty="proxies" class="mt-4 text-sm text-ink-muted">
-        Loading…
-      </p>
+      {/* 2026-05-24 — skeleton row for hydrate-state polish. JS hides
+          this on fetch + reveals data-list (or surfaces empty state). */}
+      <div data-empty="proxies" class="mt-4 space-y-2">
+        <div class="rounded-lg border border-white/10 bg-surface-raised px-4 py-3">
+          <div class="flex items-center gap-3">
+            <div class="h-3 w-32 animate-pulse rounded bg-white/10"></div>
+            <div class="h-3 w-20 animate-pulse rounded bg-white/10"></div>
+          </div>
+        </div>
+        <div class="rounded-lg border border-white/10 bg-surface-raised px-4 py-3">
+          <div class="flex items-center gap-3">
+            <div class="h-3 w-28 animate-pulse rounded bg-white/10"></div>
+            <div class="h-3 w-24 animate-pulse rounded bg-white/10"></div>
+          </div>
+        </div>
+      </div>
       <ul
         data-list="proxies"
         class="mt-4 hidden divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
