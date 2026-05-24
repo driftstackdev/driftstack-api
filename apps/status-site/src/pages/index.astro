@@ -45,8 +45,11 @@ const R2_FALLBACK_URL =
       Incidents — last 30 days
     </h2>
     <div id="incidents-list" class="space-y-3">
-      <div class="rounded-lg border border-white/10 bg-surface-raised p-5 text-sm text-ink-muted">
-        Loading…
+      {/* 2026-05-24 — skeleton row for hydrate-state polish; JS replaces
+          innerHTML on fetch (or surfaces the all-clear state). */}
+      <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
+        <div class="h-3 w-40 animate-pulse rounded bg-white/10"></div>
+        <div class="mt-3 h-3 w-64 animate-pulse rounded bg-white/10"></div>
       </div>
     </div>
   </section>
