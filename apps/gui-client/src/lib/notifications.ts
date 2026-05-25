@@ -41,7 +41,7 @@ export type NotificationEvent =
       kind: 'incident.broadcast';
       accountId: string;
       incidentId: string;
-      severity: 'minor' | 'major' | 'critical';
+      severity: 'minor' | 'major' | 'outage';
       title: string;
       at: string;
     }
