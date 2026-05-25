@@ -20,12 +20,16 @@ defaults table, see [/reference/rate-limits](/reference/rate-limits).
 `GET /v1/account/rate-limits`
 
 Returns the rate-limit config that's actually being applied to
-this account. Three bucket keys exist: `global` (every
+this account. Four bucket keys exist: `global` (every
 authenticated `/v1/*` call), `sessions:create`
 (`POST /v1/sessions` only — lower cap because session creation is
-expensive), and `agent_sessions:message`
+expensive), `agent_sessions:message`
 (`POST /v1/agent-sessions/:id/message` — separate cap so an
-LLM-driven message loop can't drain the global bucket).
+LLM-driven message loop can't drain the global bucket), and
+`agent_sessions:input_event`
+(`POST /v1/agent-sessions/:id/input-event` — separate cap sized for
+high-frequency live input so input streams don't drain the global
+bucket).
 
 Response (200):
 
@@ -51,6 +55,13 @@ Response (200):
       "bucket_key": "agent_sessions:message",
       "capacity": 300,
       "refill_per_second": 3,
+      "source": "tier_default",
+      "override_expires_at": null
+    },
+    {
+      "bucket_key": "agent_sessions:input_event",
+      "capacity": 600,
+      "refill_per_second": 150,
       "source": "tier_default",
       "override_expires_at": null
     }
@@ -81,11 +92,12 @@ Required scope: `read` or `account_owner`.
 
 ## Bucket reference
 
-| Bucket key               | Consumed by                           | Why a separate bucket?                                                          |
-| ------------------------ | ------------------------------------- | ------------------------------------------------------------------------------- |
-| `global`                 | Every authenticated `/v1/*`           | Coarse anti-abuse cap — protects against runaway scripts                        |
-| `sessions:create`        | `POST /v1/sessions` only              | Lower cap because session creation is the most expensive op (driver allocation) |
-| `agent_sessions:message` | `POST /v1/agent-sessions/:id/message` | Isolated from `global` so an LLM-driven message loop can't drain the global cap |
+| Bucket key                   | Consumed by                               | Why a separate bucket?                                                                                        |
+| ---------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `global`                     | Every authenticated `/v1/*`               | Coarse anti-abuse cap — protects against runaway scripts                                                      |
+| `sessions:create`            | `POST /v1/sessions` only                  | Lower cap because session creation is the most expensive op (driver allocation)                               |
+| `agent_sessions:message`     | `POST /v1/agent-sessions/:id/message`     | Isolated from `global` so an LLM-driven message loop can't drain the global cap                               |
+| `agent_sessions:input_event` | `POST /v1/agent-sessions/:id/input-event` | High-frequency live input (sized for ≤120Hz mouseMove) — isolated so input streams can't drain the global cap |
 
 A `POST /v1/sessions` consumes from BOTH buckets — hitting either
 cap returns 429.

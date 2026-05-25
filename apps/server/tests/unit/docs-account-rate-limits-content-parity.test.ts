@@ -28,10 +28,11 @@ describe('docs api/account-rate-limits content parity', () => {
     expect(body).toMatch(/description: Read your account's effective per-bucket rate-limit config/);
   });
 
-  it("three-bucket-key contract pinned: global + sessions:create + agent_sessions:message (v2-#8 sub-slice 8.20 isolated cap so LLM-driven message loops can't drain global)", () => {
-    expect(body).toMatch(/Three bucket keys exist: `global`/);
+  it('four-bucket-key contract pinned: global + sessions:create + agent_sessions:message + agent_sessions:input_event (GET /v1/account/rate-limits returns all four; TIER_RATE_LIMIT_DEFAULTS has four buckets per tier)', () => {
+    expect(body).toMatch(/Four bucket keys exist: `global`/);
     expect(body).toMatch(/sessions:create/);
     expect(body).toMatch(/agent_sessions:message/);
+    expect(body).toMatch(/agent_sessions:input_event/);
     expect(body).toMatch(/lower cap because session creation is\s*\n?expensive/);
     expect(body).toMatch(/LLM-driven message loop can't drain the global bucket/);
   });
