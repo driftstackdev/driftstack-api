@@ -256,6 +256,37 @@ describe('V-530.B generateScrollVelocityProfile — properties', () => {
     ).toThrow(/tickIntervalMs/);
   });
 
+  it('rejects a non-positive initialVelocityPxPerSec override', () => {
+    expect(() =>
+      generateScrollVelocityProfile({
+        direction: 'down',
+        elementClass: 'scroll-container',
+        initialVelocityPxPerSec: 0,
+      }),
+    ).toThrow(/initialVelocityPxPerSec must be > 0/);
+  });
+
+  it('rejects a negative decayRate override (would accelerate, not decay)', () => {
+    expect(() =>
+      generateScrollVelocityProfile({
+        direction: 'down',
+        elementClass: 'scroll-container',
+        decayRate: -1,
+      }),
+    ).toThrow(/decayRate must be >= 0/);
+  });
+
+  it('allows decayRate 0 (constant-velocity scroll, no decay)', () => {
+    const profile = generateScrollVelocityProfile({
+      direction: 'down',
+      elementClass: 'scroll-container',
+      initialVelocityPxPerSec: 1000,
+      decayRate: 0,
+    });
+    expect(profile.decayRate).toBe(0);
+    expect(profile.ticks.length).toBeGreaterThan(0);
+  });
+
   it('regression pin — deterministic shape for fixed inputs', () => {
     const profile = generateScrollVelocityProfile({
       direction: 'down',

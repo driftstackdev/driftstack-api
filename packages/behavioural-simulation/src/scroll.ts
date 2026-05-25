@@ -187,6 +187,23 @@ export function generateScrollVelocityProfile(
       `generateScrollVelocityProfile: tickIntervalMs must be > 0 (got ${tickIntervalMs})`,
     );
   }
+  // Override inputs bypass the default-branch clamps (Math.max(1, v0) /
+  // Math.max(0.1, decayRate)), so validate them here. A non-positive
+  // initial velocity yields a dead/reverse scroll; a negative decay rate
+  // makes v(t) GROW — a physically-impossible accelerating flick that no
+  // real finger produces (a behavioural tell). decayRate 0 is allowed:
+  // it's the intentional constant-velocity case handled below.
+  if (opts.initialVelocityPxPerSec !== undefined && opts.initialVelocityPxPerSec <= 0) {
+    throw new Error(
+      `generateScrollVelocityProfile: initialVelocityPxPerSec must be > 0 when set ` +
+        `(got ${opts.initialVelocityPxPerSec})`,
+    );
+  }
+  if (opts.decayRate !== undefined && opts.decayRate < 0) {
+    throw new Error(
+      `generateScrollVelocityProfile: decayRate must be >= 0 when set (got ${opts.decayRate})`,
+    );
+  }
 
   const seed = opts.seed ?? defaultSeed(opts);
   const rng = mulberry32(hashSeed(seed));
