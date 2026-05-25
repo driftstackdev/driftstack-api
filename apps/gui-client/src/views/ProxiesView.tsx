@@ -5,18 +5,20 @@
 // integration coordination). Until then this view lets the founder
 // curate the proxy list so it's ready when the contract lands.
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { RelativeTime } from '../components/RelativeTime';
 import {
   addProxy,
   listProxies,
   removeProxy,
+  testProxy,
   updateProxy,
   validateDraft,
   type DraftValidation,
   type ProxyConfig,
   type ProxyDraft,
+  type ProxyTestResult,
 } from '../lib/proxies';
 
 interface ListState {
@@ -39,6 +41,10 @@ export function ProxiesView(): JSX.Element {
     { kind: 'idle' } | { kind: 'add' } | { kind: 'edit'; id: string }
   >({ kind: 'idle' });
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Native SOCKS5 probe per saved proxy — reachability + UDP-associate
+  // support. Keyed by proxy id so each row keeps its own last result.
+  const [testingId, setTestingId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, ProxyTestResult>>({});
 
   const refresh = useCallback(async (): Promise<void> => {
     setState((s) => ({ ...s, loading: true }));
@@ -80,6 +86,32 @@ export function ProxiesView(): JSX.Element {
     }
   }
 
+  async function handleTest(p: ProxyConfig): Promise<void> {
+    setTestingId(p.id);
+    try {
+      const result = await testProxy({
+        host: p.host,
+        port: p.port,
+        username: p.username,
+        password: p.password,
+      });
+      setTestResults((r) => ({ ...r, [p.id]: result }));
+    } catch (err) {
+      setTestResults((r) => ({
+        ...r,
+        [p.id]: {
+          reachable: false,
+          auth_ok: false,
+          udp_associate: false,
+          latency_ms: 0,
+          message: err instanceof Error ? err.message : String(err),
+        },
+      }));
+    } finally {
+      setTestingId(null);
+    }
+  }
+
   const editing =
     editor.kind === 'edit' ? (state.proxies.find((p) => p.id === editor.id) ?? null) : null;
 
@@ -115,8 +147,11 @@ export function ProxiesView(): JSX.Element {
         <ProxyTable
           proxies={state.proxies}
           busyId={busyId}
+          testingId={testingId}
+          testResults={testResults}
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
+          onTest={(p) => void handleTest(p)}
         />
       )}
 
@@ -178,13 +213,19 @@ function Empty({ loading }: { loading: boolean }): JSX.Element {
 function ProxyTable({
   proxies,
   busyId,
+  testingId,
+  testResults,
   onEdit,
   onRemove,
+  onTest,
 }: {
   proxies: ProxyConfig[];
   busyId: string | null;
+  testingId: string | null;
+  testResults: Record<string, ProxyTestResult>;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
+  onTest: (p: ProxyConfig) => void;
 }): JSX.Element {
   return (
     <div className="overflow-auto rounded border border-surface-divider">
@@ -199,46 +240,93 @@ function ProxyTable({
           </tr>
         </thead>
         <tbody>
-          {proxies.map((p) => (
-            <tr
-              key={p.id}
-              className="border-b border-surface-divider last:border-0 hover:bg-surface-elevated/40"
-            >
-              <Td>
-                <span className="text-ink-primary">{p.label}</span>
-              </Td>
-              <Td>
-                <span className="mono text-ink-secondary">
-                  {p.host}:{p.port}
-                </span>
-              </Td>
-              <Td>
-                <span className="text-ink-secondary">
-                  {p.username !== null && p.username.length > 0 ? p.username : '—'}
-                </span>
-              </Td>
-              <Td>
-                <span className="text-ink-muted">
-                  <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
-                </span>
-              </Td>
-              <Td>
-                <div className="flex justify-end gap-2">
-                  <button type="button" className="btn-secondary" onClick={() => onEdit(p.id)}>
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-danger"
-                    onClick={() => onRemove(p.id)}
-                    disabled={busyId === p.id}
-                  >
-                    {busyId === p.id ? 'Removing…' : 'Remove'}
-                  </button>
-                </div>
-              </Td>
-            </tr>
-          ))}
+          {proxies.map((p) => {
+            const result = testResults[p.id];
+            const testing = testingId === p.id;
+            return (
+              <Fragment key={p.id}>
+                <tr
+                  className={`hover:bg-surface-elevated/40 ${
+                    result === undefined ? 'border-b border-surface-divider last:border-0' : ''
+                  }`}
+                >
+                  <Td>
+                    <span className="text-ink-primary">{p.label}</span>
+                  </Td>
+                  <Td>
+                    <span className="mono text-ink-secondary">
+                      {p.host}:{p.port}
+                    </span>
+                  </Td>
+                  <Td>
+                    <span className="text-ink-secondary">
+                      {p.username !== null && p.username.length > 0 ? p.username : '—'}
+                    </span>
+                  </Td>
+                  <Td>
+                    <span className="text-ink-muted">
+                      <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
+                    </span>
+                  </Td>
+                  <Td>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => onTest(p)}
+                        disabled={testing}
+                      >
+                        {testing ? 'Testing…' : 'Test'}
+                      </button>
+                      <button type="button" className="btn-secondary" onClick={() => onEdit(p.id)}>
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-danger"
+                        onClick={() => onRemove(p.id)}
+                        disabled={busyId === p.id}
+                      >
+                        {busyId === p.id ? 'Removing…' : 'Remove'}
+                      </button>
+                    </div>
+                  </Td>
+                </tr>
+                {result !== undefined && (
+                  <tr className="border-b border-surface-divider last:border-0">
+                    <td colSpan={5} className="px-3 pb-2">
+                      <div
+                        role="status"
+                        className={`flex flex-wrap items-center gap-2 text-2xs ${
+                          result.reachable && result.auth_ok
+                            ? 'text-status-success'
+                            : 'text-status-error'
+                        }`}
+                      >
+                        <span className="font-medium">
+                          {result.reachable && result.auth_ok
+                            ? `Reachable · ${result.latency_ms} ms`
+                            : 'Not reachable'}
+                        </span>
+                        {result.reachable && (
+                          <span
+                            className={`rounded-sm px-1 py-0.5 ${
+                              result.udp_associate
+                                ? 'bg-status-success/20'
+                                : 'bg-surface-divider text-ink-muted'
+                            }`}
+                          >
+                            {result.udp_associate ? 'UDP ✓' : 'UDP ✗'}
+                          </span>
+                        )}
+                        <span className="text-ink-secondary">{result.message}</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>

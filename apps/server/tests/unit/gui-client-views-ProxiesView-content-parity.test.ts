@@ -69,9 +69,9 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     );
   });
 
-  it("CRUD lib delegation: addProxy / listProxies / removeProxy / updateProxy / validateDraft + DraftValidation / ProxyConfig / ProxyDraft type imports from '../lib/proxies' — pinned so the CRUD layer stays delegated to lib/proxies (view stays presentation-only)", () => {
+  it("CRUD lib delegation: addProxy / listProxies / removeProxy / testProxy / updateProxy / validateDraft + DraftValidation / ProxyConfig / ProxyDraft / ProxyTestResult type imports from '../lib/proxies' — pinned so the CRUD + native-probe layer stays delegated to lib/proxies (view stays presentation-only)", () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*addProxy,\s*\n?\s*listProxies,\s*\n?\s*removeProxy,\s*\n?\s*updateProxy,\s*\n?\s*validateDraft,\s*\n?\s*type DraftValidation,\s*\n?\s*type ProxyConfig,\s*\n?\s*type ProxyDraft,\s*\n?\s*\} from '\.\.\/lib\/proxies';/,
+      /import \{\s*\n?\s*addProxy,\s*\n?\s*listProxies,\s*\n?\s*removeProxy,\s*\n?\s*testProxy,\s*\n?\s*updateProxy,\s*\n?\s*validateDraft,\s*\n?\s*type DraftValidation,\s*\n?\s*type ProxyConfig,\s*\n?\s*type ProxyDraft,\s*\n?\s*type ProxyTestResult,\s*\n?\s*\} from '\.\.\/lib\/proxies';/,
     );
   });
 
