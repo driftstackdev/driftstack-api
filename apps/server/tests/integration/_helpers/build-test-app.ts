@@ -7,6 +7,7 @@
 // Returns the app, plain-text key, and helpers for direct repo manipulation.
 
 import { buildApp } from '../../../src/lib/app.js';
+import type { NowPaymentsApiClient } from '../../../src/lib/nowpayments-api.js';
 import type { R2 } from '../../../src/lib/r2.js';
 import { createTestLogger } from '../../../src/lib/logger.js';
 import { CostMonitoringService } from '../../../src/services/cost-monitoring.js';
@@ -262,6 +263,15 @@ export interface TestAppOptions {
    * posture.
    */
   nowpaymentsIpnSecret?: string;
+  /**
+   * Pass a (mock) NowPayments API client so the crypto-checkout route
+   * mints real payment context instead of the stub posture. Wired with
+   * a fixed test IPN-callback URL so the route's `nowpayments !==
+   * undefined && ipnCallbackUrl !== undefined` gate is satisfied. Lets
+   * tests exercise the V-666.SEC below-floor short-circuit + the
+   * NowPayments happy path. Omitted → checkout stays stub.
+   */
+  nowpaymentsClient?: NowPaymentsApiClient;
   /**
    * V-667.C — pass through to AppDeps.{oauthClient,oauthClientService}
    * so /v1/auth/oauth-client/* registers. When omitted, the routes
@@ -1331,6 +1341,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(opts.livekit !== undefined ? { livekit: opts.livekit } : {}),
     ...(opts.nowpaymentsIpnSecret !== undefined
       ? { nowpaymentsIpnSecret: opts.nowpaymentsIpnSecret }
+      : {}),
+    ...(opts.nowpaymentsClient !== undefined
+      ? {
+          nowpaymentsApiClient: opts.nowpaymentsClient,
+          nowpaymentsIpnCallbackUrl: 'https://test.driftstack.dev/v1/webhooks/nowpayments',
+        }
       : {}),
     ...(opts.oauthClient !== undefined && oauthClientService !== undefined
       ? { oauthClient: opts.oauthClient, oauthClientService, oauthLinksRepo }
