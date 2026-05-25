@@ -12,6 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { WebhookEventTypeSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -123,16 +124,20 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).toMatch(/\[PLANNED\] \(not yet in the enum; queued for V-NNN\)/);
   });
 
-  it('CRITICAL quick-index 17-event catalog pinned. Drift to dropping any row would let SDK consumers miss subscription opportunities or fail to model planned events.', () => {
+  it('CRITICAL quick-index catalog completeness — every WebhookEventTypeSchema value is documented as a table row (enum-derived source-of-truth guard so additive enum values cannot ship undocumented), plus the forward-looking [PLANNED] queue. Drift to dropping any row would let SDK consumers miss subscription opportunities or fail to model planned events.', () => {
     const p = read(EV);
 
-    const events = [
-      'session.completed',
-      'session.failed',
-      'api_key.revoked',
-      'quota.warning_80pct',
-      'quota.exceeded',
-      'test.ping',
+    // Source of truth: every emittable event type MUST appear in the
+    // catalog. Deriving from the enum (rather than a hardcoded copy that
+    // silently drifts) means a future additive enum value — e.g. the
+    // 2026-05-22 crypto.order.* pair — fails this test until documented.
+    for (const ev of WebhookEventTypeSchema.options) {
+      expect(p, `enum event ${ev}`).toMatch(new RegExp(`\\| \`${ev.replace(/\./g, '\\.')}\``));
+    }
+
+    // [PLANNED] events are intentionally not yet in the enum; pin them
+    // separately so the forward-looking catalog rows can't silently drop.
+    const plannedEvents = [
       'session.created',
       'session.destroyed',
       'profile.created',
@@ -145,8 +150,8 @@ describe('W787 docs webhooks/ triplet content parity', () => {
       'webhook_endpoint.created',
       'webhook_endpoint.deleted',
     ];
-    for (const ev of events) {
-      expect(p, `event ${ev}`).toMatch(new RegExp(`\\| \`${ev.replace(/\./g, '\\.')}\``));
+    for (const ev of plannedEvents) {
+      expect(p, `planned event ${ev}`).toMatch(new RegExp(`\\| \`${ev.replace(/\./g, '\\.')}\``));
     }
   });
 
