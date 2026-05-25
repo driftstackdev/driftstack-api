@@ -39,7 +39,8 @@ Request:
 
 ```json
 {
-  "name": "post-login-known-good"
+  "label": "post-login-known-good",
+  "description": "optional, max 2048 chars"
 }
 ```
 
@@ -48,18 +49,25 @@ Response (201):
 ```json
 {
   "id": "psnap_<uuid>",
-  "profile_id": "prof_<uuid>",
-  "name": "post-login-known-good",
-  "captured_at": "2026-05-10T18:00:00Z",
-  "size_bytes": 482133
+  "parent_profile_id": "prof_<uuid>",
+  "label": "post-login-known-good",
+  "description": null,
+  "parent_archetype": "iphone16pro_ios18_7_safari26_4",
+  "parent_name": "main-account",
+  "captured_at": "2026-05-10T18:00:00Z"
 }
 ```
+
+`parent_profile_id`, `parent_archetype`, and `parent_name` are
+frozen at capture time — they record the source profile's id,
+archetype, and name as they were, even if the profile is later
+renamed, re-archetyped, or deleted.
 
 Errors:
 
 - `404 not-found` — the profile id doesn't belong to the calling
   account.
-- `409 conflict` — a snapshot with this `name` already exists for
+- `409 conflict` — a snapshot with this `label` already exists for
   this profile.
 
 Required scope: `write` or `write:profiles`.
@@ -77,18 +85,21 @@ Response (200):
   "data": [
     {
       "id": "psnap_<uuid>",
-      "profile_id": "prof_<uuid>",
-      "name": "post-login-known-good",
-      "captured_at": "2026-05-10T18:00:00Z",
-      "size_bytes": 482133
+      "parent_profile_id": "prof_<uuid>",
+      "label": "post-login-known-good",
+      "description": null,
+      "parent_archetype": "iphone16pro_ios18_7_safari26_4",
+      "parent_name": "main-account",
+      "captured_at": "2026-05-10T18:00:00Z"
     }
   ],
+  "has_more": false,
   "next_cursor": null
 }
 ```
 
 Pagination via `?cursor=…&limit=…` follows the standard cursor
-shape used elsewhere in the API.
+shape used elsewhere in the API (`data` / `has_more` / `next_cursor`).
 
 Required scope: `read` or `read:profiles`.
 
@@ -107,20 +118,22 @@ Response (200):
   "data": [
     {
       "id": "psnap_<uuid>",
-      "profile_id": "prof_<uuid>",
-      "profile_name": "main-account",
-      "name": "post-login-known-good",
-      "captured_at": "2026-05-10T18:00:00Z",
-      "size_bytes": 482133
+      "parent_profile_id": "prof_<uuid>",
+      "label": "post-login-known-good",
+      "description": null,
+      "parent_archetype": "iphone16pro_ios18_7_safari26_4",
+      "parent_name": "main-account",
+      "captured_at": "2026-05-10T18:00:00Z"
     }
   ],
+  "has_more": false,
   "next_cursor": null
 }
 ```
 
-Note the additional `profile_name` field — handy when listing
-across profiles so you don't have to issue a second fetch per
-row.
+Each row carries `parent_name` (the source profile's name frozen
+at capture) — handy when listing across profiles so you don't have
+to issue a second fetch per row to identify the origin.
 
 Required scope: `read` or `read:profiles`.
 
@@ -128,7 +141,7 @@ Required scope: `read` or `read:profiles`.
 
 `GET /v1/profile-snapshots/:id`
 
-Returns one snapshot. Includes the `profile_id` so callers can
+Returns one snapshot. Includes `parent_profile_id` so callers can
 follow up to fetch the underlying profile if it still exists.
 
 Response (200):
@@ -136,10 +149,12 @@ Response (200):
 ```json
 {
   "id": "psnap_<uuid>",
-  "profile_id": "prof_<uuid>",
-  "name": "post-login-known-good",
-  "captured_at": "2026-05-10T18:00:00Z",
-  "size_bytes": 482133
+  "parent_profile_id": "prof_<uuid>",
+  "label": "post-login-known-good",
+  "description": null,
+  "parent_archetype": "iphone16pro_ios18_7_safari26_4",
+  "parent_name": "main-account",
+  "captured_at": "2026-05-10T18:00:00Z"
 }
 ```
 
@@ -231,11 +246,11 @@ profile first or upgrade tier.
 ## Storage characteristics
 
 Snapshots are stored separately from live profiles in the
-underlying driver-managed storage layer. The `size_bytes` field
-on every snapshot is the on-disk size at capture time — useful
-for understanding the ballpark cost of holding many snapshots.
-There is no per-account snapshot quota at v1; very-high-snapshot
-accounts will see the size figure in audit context.
+underlying driver-managed storage layer. Each snapshot freezes the
+source profile's archetype + name (`parent_archetype` /
+`parent_name`) at capture time, so a snapshot stays meaningful even
+after the parent profile is renamed, re-archetyped, or deleted.
+There is no per-account snapshot quota at v1.
 
 ## SDK access
 

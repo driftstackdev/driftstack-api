@@ -65,14 +65,17 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).toMatch(/"id": "psnap_<uuid>"/);
   });
 
-  it('CRITICAL capture POST /v1/profiles/:id/snapshots body shape — { name } only. The response shape includes id/profile_id/name/captured_at/size_bytes — drift to dropping a field would break SDK consumer typings.', () => {
+  it('CRITICAL capture POST /v1/profiles/:id/snapshots body shape — { label, description? }. The response is the publicSnapshot shape: id/parent_profile_id/label/description/parent_archetype/parent_name/captured_at (matches apps/server/src/routes/profile-snapshots.ts + all 3 SDKs; NOT the stale profile_id/name/size_bytes shape).', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`POST \/v1\/profiles\/:id\/snapshots`/);
-    expect(p).toMatch(/"name": "post-login-known-good"/);
-    expect(p).toMatch(/"profile_id": "prof_<uuid>"/);
+    expect(p).toMatch(/"label": "post-login-known-good"/);
+    expect(p).toMatch(/"parent_profile_id": "prof_<uuid>"/);
+    expect(p).toMatch(/"parent_archetype":/);
+    expect(p).toMatch(/"parent_name":/);
     expect(p).toMatch(/"captured_at":/);
-    expect(p).toMatch(/"size_bytes":/);
+    // Guard against regressing to the stale shape.
+    expect(p).not.toMatch(/"size_bytes":/);
   });
 
   it('CRITICAL capture 404+409 error pair pinned. 404 = not-yours profile id; 409 = duplicate snapshot name for this profile. Drift would let SDK consumers misclassify failures.', () => {
@@ -81,7 +84,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).toMatch(/`404 not-found` — the profile id doesn't belong to the calling/);
     expect(p).toMatch(/account\./);
     expect(p).toMatch(
-      /`409 conflict` — a snapshot with this `name` already exists for\s*\n?\s+this profile\./,
+      /`409 conflict` — a snapshot with this `label` already exists for\s*\n?\s+this profile\./,
     );
   });
 
@@ -96,12 +99,12 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     );
   });
 
-  it("CRITICAL cross-account list includes profile_name framing pinned. The 'Note the additional profile_name field — handy when listing across profiles so you don\\'t have to issue a second fetch per row' wording is the load-bearing N+1-avoidance comm.", () => {
+  it("CRITICAL cross-account list per-row parent_name framing pinned. The 'Each row carries parent_name … handy when listing across profiles so you don\\'t have to issue a second fetch per row' wording is the load-bearing N+1-avoidance comm (field is parent_name, matching publicSnapshot — NOT the stale profile_name).", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /Note the additional `profile_name` field — handy when listing\s*\n?across profiles so you don't have to issue a second fetch per\s*\n?row\./,
-    );
+    expect(p).toMatch(/Each row carries `parent_name`/);
+    expect(p).toMatch(/handy when listing across profiles/);
+    expect(p).not.toMatch(/`profile_name`/);
   });
 
   it('CRITICAL restore POST /v1/profile-snapshots/:id/restore creates new profile pinned. Response shape includes the new prof_ id + archetype + last_used_at:null. Drift to dropping the new-profile-shape would let SDK consumers crash on the response.', () => {
@@ -168,20 +171,20 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     );
   });
 
-  it("CRITICAL no-per-account-snapshot-quota framing pinned. The 'There is no per-account snapshot quota at v1; very-high-snapshot accounts will see the size figure in audit context' wording explains the unbounded-snapshot model.", () => {
+  it("CRITICAL no-per-account-snapshot-quota framing pinned. The 'There is no per-account snapshot quota at v1' wording explains the unbounded-snapshot model.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /There is no per-account snapshot quota at v1; very-high-snapshot\s*\n?accounts will see the size figure in audit context\./,
-    );
+    expect(p).toMatch(/There is no per-account snapshot quota at v1\./);
   });
 
-  it("CRITICAL size_bytes-on-capture framing pinned. The 'The size_bytes field on every snapshot is the on-disk size at capture time — useful for understanding the ballpark cost of holding many snapshots' wording is the load-bearing customer-comms about storage.", () => {
+  it('CRITICAL storage-characteristics framing pinned: snapshots stored separately + frozen parent_archetype/parent_name + no per-account quota at v1. (Drops the stale `size_bytes` field claim — publicSnapshot does not return size_bytes; route + 3 SDKs confirm.)', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /The `size_bytes` field\s*\n?on every snapshot is the on-disk size at capture time — useful\s*\n?for understanding the ballpark cost of holding many snapshots\./,
-    );
+    expect(p).toMatch(/Snapshots are stored separately from live profiles/);
+    expect(p).toMatch(/freezes the\s*\n?source profile's archetype \+ name/);
+    expect(p).toMatch(/There is no per-account snapshot quota at v1\./);
+    // Guard against the stale size_bytes field claim returning.
+    expect(p).not.toMatch(/`size_bytes`/);
   });
 
   it('CRITICAL scope set — read|read:profiles + write|write:profiles framing pinned. The 2-shape (broad + granular) matches W750 dashboard /api-keys V-481 granular-scope picker.', () => {

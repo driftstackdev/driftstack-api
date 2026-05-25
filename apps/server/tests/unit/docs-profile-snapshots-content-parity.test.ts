@@ -49,11 +49,10 @@ describe('docs api/profile-snapshots content parity', () => {
     expect(body).toMatch(/Snapshot restore counts against\s+the same cap as profile-create/);
   });
 
-  it('profile_name extra field on across-account list pinned — saves a per-row second fetch when listing snapshots from multiple profiles; drift to dropping would force N+1 fetches in customer dashboards', () => {
-    expect(body).toMatch(/Note the additional `profile_name` field/);
-    expect(body).toMatch(
-      /handy when listing\s+across profiles so you don't have to issue a second fetch per\s+row/,
-    );
+  it('parent_name per-row pinned on across-account list — saves a per-row second fetch when listing snapshots from multiple profiles; drift to dropping would force N+1 fetches in customer dashboards (the field is parent_name, matching publicSnapshot — NOT the stale profile_name)', () => {
+    expect(body).toMatch(/Each row carries `parent_name`/);
+    expect(body).toMatch(/handy when listing across profiles/);
+    expect(body).not.toMatch(/`profile_name`/);
   });
 
   it('cross-link to /api/audit-log pinned (snapshot lifecycle events land in the customer audit log; drift to dropping would orphan the audit-trail visibility from this doc)', () => {
