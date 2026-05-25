@@ -43,7 +43,7 @@ describe('V-666.H POST /v1/billing/crypto-checkout/quote', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<QuoteResponse>();
     expect(body.product).toBe('solo_manual');
-    expect(body.price_cents).toBe(2500);
+    expect(body.price_cents).toBe(7900);
     expect(body.price_currency).toBe('EUR');
     expect(body.provider).toBe('stub');
     expect(body.pay_currency).toBeNull();
@@ -60,7 +60,7 @@ describe('V-666.H POST /v1/billing/crypto-checkout/quote', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<QuoteResponse>();
     expect(body.price_currency).toBe('USD');
-    expect(body.price_cents).toBe(8000);
+    expect(body.price_cents).toBe(24900);
   });
 
   it('400 on unsupported product', async () => {
@@ -94,6 +94,6 @@ describe('V-666.H POST /v1/billing/crypto-checkout/quote', () => {
       payload: { product: 'api_scale' },
     });
     const body = res.json<QuoteResponse>();
-    expect(body.price_cents).toBe(100000);
+    expect(body.price_cents).toBe(149900);
   });
 });

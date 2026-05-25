@@ -15,7 +15,13 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AccountTier } from '@driftstack/api-types';
 import { z } from 'zod';
 import { ValidationError } from '../lib/errors.js';
-import { TIER_MONTHLY_PRICE_CENTS } from '../lib/cost-defaults.js';
+// Source the quote price from the SAME authoritative table the
+// crypto-checkout charges from (billing-crypto.ts TIER_PRICE_CENTS), so
+// the quoted amount always equals what the order will be created for.
+// NOT cost-defaults' TIER_MONTHLY_PRICE_CENTS — that table feeds
+// cost-monitoring threshold derivation and carries different (lower)
+// figures, which previously made the quote under-quote vs the charge.
+import { TIER_PRICE_CENTS } from './billing-crypto.js';
 
 const SUPPORTED_PRODUCTS: AccountTier[] = [
   'solo_manual',
@@ -43,7 +49,7 @@ export function registerCryptoQuoteRoutes(app: FastifyInstance): void {
       const parsed = QuoteSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       const product = parsed.data.product;
-      const priceCents = TIER_MONTHLY_PRICE_CENTS[product];
+      const priceCents = TIER_PRICE_CENTS[product];
       if (priceCents === undefined) {
         // Defensive: schema gated on a fixed list that lines up with
         // the price table. A new tier added to one but not the other

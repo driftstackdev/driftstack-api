@@ -15,7 +15,7 @@
 //   • Auth + rate-limit posture: requireAuth + global rate-limit bucket.
 //   • QuoteSchema: zod product enum cast + optional price_currency 3-
 //     letter uppercase ISO with regex validator.
-//   • Defensive 400 (not 500) when product not in TIER_MONTHLY_PRICE_CENTS
+//   • Defensive 400 (not 500) when product not in TIER_PRICE_CENTS
 //     — "schema-vs-table desync" guard rationale.
 //   • Reply shape: {product, price_cents, price_currency (default EUR),
 //     provider:'stub', pay_currency:null, pay_min_amount:null,
@@ -101,17 +101,15 @@ describe('W411.C apps/server/src/routes/billing-crypto-quote.ts content parity',
     expect(body).toMatch(
       /if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
     );
-    expect(body).toMatch(/const priceCents = TIER_MONTHLY_PRICE_CENTS\[product\];/);
+    expect(body).toMatch(/const priceCents = TIER_PRICE_CENTS\[product\];/);
   });
 
-  it('imports: FastifyInstance/FastifyRequest + AccountTier (SDK mirror) + zod + ValidationError + TIER_MONTHLY_PRICE_CENTS', () => {
+  it('imports: FastifyInstance/FastifyRequest + AccountTier (SDK mirror) + zod + ValidationError + TIER_PRICE_CENTS (the checkout-authoritative price table, so quote == charge)', () => {
     expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
     expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(/import \{ ValidationError \} from '\.\.\/lib\/errors\.js';/);
-    expect(body).toMatch(
-      /import \{ TIER_MONTHLY_PRICE_CENTS \} from '\.\.\/lib\/cost-defaults\.js';/,
-    );
+    expect(body).toMatch(/import \{ TIER_PRICE_CENTS \} from '\.\/billing-crypto\.js';/);
   });
 
   it('file exists at canonical path', () => {

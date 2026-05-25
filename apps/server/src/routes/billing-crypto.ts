@@ -74,7 +74,7 @@ export interface CryptoCheckoutRoutesDeps {
 // amount_too_low error customers would otherwise see. The
 // customer-dashboard hides the crypto button on trial-pack copy as
 // a UX guard.
-const TIER_PRICE_CENTS: Record<string, number> = {
+export const TIER_PRICE_CENTS: Record<string, number> = {
   trial_pack: 299,
   solo_manual: 7900,
   team_manual: 24900,
