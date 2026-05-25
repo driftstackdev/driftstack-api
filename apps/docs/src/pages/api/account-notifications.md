@@ -70,14 +70,14 @@ in either direction).
 
 Fires when a customer-visible incident is opened or status-changed.
 
-| field        | type                               | notes          |
-| ------------ | ---------------------------------- | -------------- |
-| `kind`       | `"incident.broadcast"`             |                |
-| `accountId`  | `string`                           |                |
-| `incidentId` | `string`                           |                |
-| `severity`   | `"minor" \| "major" \| "critical"` |                |
-| `title`      | `string`                           | short headline |
-| `at`         | `string`                           | ISO8601        |
+| field        | type                             | notes          |
+| ------------ | -------------------------------- | -------------- |
+| `kind`       | `"incident.broadcast"`           |                |
+| `accountId`  | `string`                         |                |
+| `incidentId` | `string`                         |                |
+| `severity`   | `"minor" \| "major" \| "outage"` |                |
+| `title`      | `string`                         | short headline |
+| `at`         | `string`                         | ISO8601        |
 
 ### `audit.high_severity`
 
