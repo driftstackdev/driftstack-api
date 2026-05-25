@@ -56,7 +56,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(/- \*\*`global`\*\* — every authenticated `\/v1\/\*` call\./);
     expect(body).toMatch(/- \*\*`sessions:create`\*\* — `POST \/v1\/sessions` only\./);
     expect(body).toMatch(
-      /- \*\*`agent_sessions:message`\*\* —\s*\n?\s*`POST \/v1\/agent-sessions\/:id\/messages` only/,
+      /- \*\*`agent_sessions:message`\*\* —\s*\n?\s*`POST \/v1\/agent-sessions\/:id\/message` only/,
     );
     expect(body).toMatch(/A `POST \/v1\/sessions` consumes from BOTH `global` and/);
     expect(body).toMatch(/\| `trial_pack`\s+\| 60\s+\| 1\s+\|/);

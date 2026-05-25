@@ -21,12 +21,12 @@ Every authenticated request consumes from one or more buckets:
   system (driver allocation, archetype hydration, fingerprint
   pinning).
 - **`agent_sessions:message`** —
-  `POST /v1/agent-sessions/:id/messages` only. Isolated from
+  `POST /v1/agent-sessions/:id/message` only. Isolated from
   `global` so an LLM-driven message loop can't drain the
   global cap (v2-#8 sub-slice 8.20).
 
 A `POST /v1/sessions` consumes from BOTH `global` and
-`sessions:create`. A `POST /v1/agent-sessions/:id/messages`
+`sessions:create`. A `POST /v1/agent-sessions/:id/message`
 consumes from `agent_sessions:message` only — hitting any cap
 returns 429.
 
