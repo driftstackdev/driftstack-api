@@ -1922,7 +1922,7 @@ function buildRegistry(): OpenAPIRegistry {
     id: z.string(),
     title: z.string(),
     body: z.string(),
-    severity: z.enum(['minor', 'major', 'critical']),
+    severity: z.enum(['minor', 'major', 'outage']),
     status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']),
     started_at: z.string(),
     resolved_at: z.string().nullable(),
@@ -1932,7 +1932,7 @@ function buildRegistry(): OpenAPIRegistry {
   const AdminIncidentCreateRequestOpenApi = z.object({
     title: z.string().min(1).max(200),
     body: z.string().min(1).max(10_000),
-    severity: z.enum(['minor', 'major', 'critical']),
+    severity: z.enum(['minor', 'major', 'outage']),
     status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']).optional(),
     started_at: z.string().optional(),
     components_affected: z.array(z.string()).optional(),
