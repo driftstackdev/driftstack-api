@@ -6,7 +6,7 @@ description: Full reference of API key scopes — broad, granular, and the broad
 
 # API key scopes
 
-reference. Every Driftstack API key carries a set of
+Every Driftstack API key carries a set of
 scopes. Each `/v1/*` endpoint declares the scope it requires,
 and the request is allowed only if the key's scope set
 satisfies that requirement.

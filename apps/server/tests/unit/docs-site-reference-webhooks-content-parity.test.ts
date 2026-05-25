@@ -20,10 +20,10 @@ function read(p: string): string {
 }
 
 describe('W604 apps/docs reference + webhooks pages content parity', () => {
-  it('reference/errors.md: RFC 9457 problem-details + every problem-type URI + 3-language matrix + retryable column (rate-limited yes / internal yes / TransportError yes; everything else no). Re-enabled by slice 305 — the V-507 anchor was R4-scrubbed (commit b46b8d4124b "V-NNN session-log scrub from customer-facing surfaces"); the doc now leads with the bare "reference." sentence', () => {
+  it('reference/errors.md: RFC 9457 problem-details + every problem-type URI + 3-language matrix + retryable column (rate-limited yes / internal yes / TransportError yes; everything else no). Re-enabled by slice 305 — the V-507 anchor was R4-scrubbed (commit b46b8d4124b "V-NNN session-log scrub from customer-facing surfaces"), which left an orphaned "reference." lead-in; that residue has since been removed so the intro reads as the intended sentence', () => {
     const body = read(ERR);
     expect(body).toMatch(/^title: Error reference$/m);
-    expect(body).toMatch(/^reference\. Every error response from the Driftstack API is$/m);
+    expect(body).toMatch(/^Every error response from the Driftstack API is$/m);
     expect(body).toMatch(/RFC 9457 Problem Details/);
     expect(body).toMatch(/"type": "https:\/\/errors\.driftstack\.dev\/rate-limited"/);
     expect(body).toMatch(/"retry_after_seconds": 12/);
@@ -45,10 +45,10 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(existsSync(ERR)).toBe(true);
   });
 
-  it('reference/rate-limits.md: token-bucket anti-abuse-not-pricing-meter (concurrent-only per ADR-004) + 3 bucket keys (global + sessions:create + agent_sessions:message) + 8-tier defaults pinned. Re-enabled by slice 306 — the V-505 anchor was R4-scrubbed; the doc now leads with the bare "reference." sentence. v2-#8 sub-slice 8.20 added the agent_sessions:message bucket so LLM-driven message loops can\'t drain global.', () => {
+  it('reference/rate-limits.md: token-bucket anti-abuse-not-pricing-meter (concurrent-only per ADR-004) + 3 bucket keys (global + sessions:create + agent_sessions:message) + 8-tier defaults pinned. Re-enabled by slice 306 — the V-505 anchor was R4-scrubbed, which left an orphaned "reference." lead-in; that residue has since been removed so the intro reads as the intended sentence. v2-#8 sub-slice 8.20 added the agent_sessions:message bucket so LLM-driven message loops can\'t drain global.', () => {
     const body = read(RL);
     expect(body).toMatch(/^title: Rate limits$/m);
-    expect(body).toMatch(/^reference\. Driftstack enforces per-tier token-bucket rate$/m);
+    expect(body).toMatch(/^Driftstack enforces per-tier token-bucket rate$/m);
     expect(body).toMatch(/Driftstack enforces per-tier token-bucket rate/);
     expect(body).toMatch(/intentional anti-abuse caps \(runaway scripts, accidental DoS\),/);
     expect(body).toMatch(/not the pricing meter\. Pricing is concurrent-only per ADR-004\./);
@@ -70,7 +70,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
   it('reference/scopes.md: 3 categories (Broad read/write/admin + Account-control account_owner/driftstack_internal_admin + Granular verb:resource) + L-001 gui_control special scope pinned. Re-enabled by slice 307 — V-505 (header anchor), V-481 (Granular subtitle), and V-174 (admin-legacy table cell) were all R4-scrubbed; the table cell now says "Pre-alias" instead of "Pre-V-174 alias"', () => {
     const body = read(SC);
     expect(body).toMatch(/^title: API key scopes$/m);
-    expect(body).toMatch(/^reference\. Every Driftstack API key carries a set of$/m);
+    expect(body).toMatch(/^Every Driftstack API key carries a set of$/m);
     expect(body).toMatch(/Every Driftstack API key carries a set of/);
     expect(body).toMatch(/scopes\./);
     expect(body).toMatch(/^## Scope categories$/m);

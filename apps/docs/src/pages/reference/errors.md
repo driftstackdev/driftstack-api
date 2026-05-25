@@ -6,7 +6,7 @@ description: Every Driftstack RFC 9457 problem-type — what it means, the SDK e
 
 # Error reference
 
-reference. Every error response from the Driftstack API is
+Every error response from the Driftstack API is
 an [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457)
 JSON document. The `type` URI uniquely identifies the error class;
 the `status` carries the HTTP status code; the `detail` field

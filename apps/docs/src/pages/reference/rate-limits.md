@@ -6,7 +6,7 @@ description: Per-tier rate limit defaults — token-bucket capacity, refill rate
 
 # Rate limits
 
-reference. Driftstack enforces per-tier token-bucket rate
+Driftstack enforces per-tier token-bucket rate
 limits on every authenticated `/v1/*` call. The limits are
 intentional anti-abuse caps (runaway scripts, accidental DoS),
 not the pricing meter. Pricing is concurrent-only per ADR-004.
