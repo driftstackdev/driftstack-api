@@ -48,7 +48,7 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     );
   });
 
-  it("CRITICAL 3 bucket-key framing pinned — global (every /v1/*) + sessions:create (POST /v1/sessions only — lower cap) + agent_sessions:message (POST /v1/agent-sessions/:id/messages — isolated cap so LLM loops can't drain global). Matches W786 reference/rate-limits 3-bucket model.", () => {
+  it("CRITICAL 3 bucket-key framing pinned — global (every /v1/*) + sessions:create (POST /v1/sessions only — lower cap) + agent_sessions:message (POST /v1/agent-sessions/:id/message — isolated cap so LLM loops can't drain global). Matches W786 reference/rate-limits 3-bucket model.", () => {
     const p = read(PAGE);
 
     // v2-#8 sub-slice 8.20 added agent_sessions:message as the 3rd
@@ -56,7 +56,7 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     // third bucket isolated from global so an LLM-driven message
     // loop can't drain the global cap.
     expect(p).toMatch(
-      /Three bucket keys exist: `global` \(every\s*\n?authenticated `\/v1\/\*` call\), `sessions:create`\s*\n?\(`POST \/v1\/sessions` only — lower cap because session creation is\s*\n?expensive\), and `agent_sessions:message`\s*\n?\(`POST \/v1\/agent-sessions\/:id\/messages` — separate cap so an\s*\n?LLM-driven message loop can't drain the global bucket\)\./,
+      /Three bucket keys exist: `global` \(every\s*\n?authenticated `\/v1\/\*` call\), `sessions:create`\s*\n?\(`POST \/v1\/sessions` only — lower cap because session creation is\s*\n?expensive\), and `agent_sessions:message`\s*\n?\(`POST \/v1\/agent-sessions\/:id\/message` — separate cap so an\s*\n?LLM-driven message loop can't drain the global bucket\)\./,
     );
   });
 

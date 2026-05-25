@@ -24,7 +24,7 @@ this account. Three bucket keys exist: `global` (every
 authenticated `/v1/*` call), `sessions:create`
 (`POST /v1/sessions` only — lower cap because session creation is
 expensive), and `agent_sessions:message`
-(`POST /v1/agent-sessions/:id/messages` — separate cap so an
+(`POST /v1/agent-sessions/:id/message` — separate cap so an
 LLM-driven message loop can't drain the global bucket).
 
 Response (200):
@@ -81,11 +81,11 @@ Required scope: `read` or `account_owner`.
 
 ## Bucket reference
 
-| Bucket key               | Consumed by                            | Why a separate bucket?                                                          |
-| ------------------------ | -------------------------------------- | ------------------------------------------------------------------------------- |
-| `global`                 | Every authenticated `/v1/*`            | Coarse anti-abuse cap — protects against runaway scripts                        |
-| `sessions:create`        | `POST /v1/sessions` only               | Lower cap because session creation is the most expensive op (driver allocation) |
-| `agent_sessions:message` | `POST /v1/agent-sessions/:id/messages` | Isolated from `global` so an LLM-driven message loop can't drain the global cap |
+| Bucket key               | Consumed by                           | Why a separate bucket?                                                          |
+| ------------------------ | ------------------------------------- | ------------------------------------------------------------------------------- |
+| `global`                 | Every authenticated `/v1/*`           | Coarse anti-abuse cap — protects against runaway scripts                        |
+| `sessions:create`        | `POST /v1/sessions` only              | Lower cap because session creation is the most expensive op (driver allocation) |
+| `agent_sessions:message` | `POST /v1/agent-sessions/:id/message` | Isolated from `global` so an LLM-driven message loop can't drain the global cap |
 
 A `POST /v1/sessions` consumes from BOTH buckets — hitting either
 cap returns 429.
