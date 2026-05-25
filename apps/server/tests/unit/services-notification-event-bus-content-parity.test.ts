@@ -54,7 +54,7 @@ describe('services/notification-event-bus.ts content parity', () => {
     expect(body).toMatch(/currentState: ThresholdState;/);
 
     expect(body).toMatch(/kind: 'incident\.broadcast';/);
-    expect(body).toMatch(/severity: 'minor' \| 'major' \| 'critical';/);
+    expect(body).toMatch(/severity: 'minor' \| 'major' \| 'outage';/);
 
     expect(body).toMatch(/kind: 'audit\.high_severity';/);
     expect(body).toMatch(/actorType: 'customer' \| 'admin' \| 'system';/);
