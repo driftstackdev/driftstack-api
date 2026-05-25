@@ -62,8 +62,8 @@ Headers:
   surfaces in HTTP logs without parsing the body.
 - `Driftstack-Delivery-Attempt: <n>` — increments on each retry.
 
-Retry policy: 5 attempts with exponential backoff at 1m, 5m, 30m,
-2h, 12h. Final failures land in DLQ
+Retry policy: 5 attempts with exponential backoff at 1m, 5m, 15m,
+30m, 60m. Final failures land in DLQ
 (see `docs/api/webhooks.md` and the admin /webhook-dlq page).
 
 Idempotency: every delivery includes the same `evt_<uuid>`. Customers

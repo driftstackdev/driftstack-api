@@ -10,7 +10,7 @@
 //   • 11 [PLANNED]: session.created/destroyed + profile.created/deleted
 //     + api_key.minted + subscription.changed/cancelled +
 //     trial_pack.purchased/expired + webhook_endpoint.created/deleted.
-//   • Retry: 5 attempts, 1m/5m/30m/2h/12h backoff → DLQ.
+//   • Retry: 5 attempts, 1m/5m/15m/30m/60m backoff → DLQ.
 //   • 10s timeout, plaintext secret returned ONCE on create.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -113,8 +113,8 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
     expect(body).toMatch(/- `Driftstack-Event-Id: evt_<uuid>` — duplicate of `data\.id`,/);
     expect(body).toMatch(/surfaces in HTTP logs without parsing the body\./);
     expect(body).toMatch(/- `Driftstack-Delivery-Attempt: <n>` — increments on each retry\./);
-    expect(body).toMatch(/Retry policy: 5 attempts with exponential backoff at 1m, 5m, 30m,/);
-    expect(body).toMatch(/2h, 12h\. Final failures land in DLQ/);
+    expect(body).toMatch(/Retry policy: 5 attempts with exponential backoff at 1m, 5m, 15m,/);
+    expect(body).toMatch(/30m, 60m\. Final failures land in DLQ/);
     expect(body).toMatch(/\(see `docs\/api\/webhooks\.md` and the admin \/webhook-dlq page\)\./);
     expect(body).toMatch(/Idempotency: every delivery includes the same `evt_<uuid>`\./);
     expect(body).toMatch(/Customers/);

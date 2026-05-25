@@ -178,11 +178,11 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).toMatch(/`Driftstack-Delivery-Attempt: <n>` — increments on each retry\./);
   });
 
-  it('CRITICAL retry-policy 5-attempt exponential backoff pinned — 1m + 5m + 30m + 2h + 12h. The 5-step backoff schedule is the canonical retry contract; drift would mismatch V-273 + V-475 server-side.', () => {
+  it('CRITICAL retry-policy 5-attempt exponential backoff pinned — 1m + 5m + 15m + 30m + 60m (matches webhook-worker BACKOFF_MS_BY_ATTEMPT). The 5-step backoff schedule is the canonical retry contract; drift would mismatch V-273 + V-475 server-side.', () => {
     const p = read(EV);
 
     expect(p).toMatch(
-      /Retry policy: 5 attempts with exponential backoff at 1m, 5m, 30m,\s*\n?2h, 12h\./,
+      /Retry policy: 5 attempts with exponential backoff at 1m, 5m, 15m,\s*\n?30m, 60m\./,
     );
     expect(p).toMatch(/Final failures land in DLQ/);
   });
