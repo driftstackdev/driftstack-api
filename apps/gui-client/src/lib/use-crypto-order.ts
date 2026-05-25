@@ -2,8 +2,8 @@
 //
 // Polls GET /v1/billing/crypto-orders/:id for the given order id and
 // transitions the state machine each tick. Polling stops automatically
-// once the order reaches a terminal status (paid / failed). Callers
-// can pass `pollIntervalMs` to override the default cadence.
+// once the order reaches a terminal status (paid / failed / cancelled).
+// Callers can pass `pollIntervalMs` to override the default cadence.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { readApiErrorMessage } from './api-errors';
@@ -51,7 +51,7 @@ export interface UseCryptoOrderResult {
   refetch: () => Promise<void>;
 }
 
-const TERMINAL_STATUSES = new Set(['paid', 'failed']);
+const TERMINAL_STATUSES = new Set(['paid', 'failed', 'cancelled']);
 const DEFAULT_POLL_MS = 5_000;
 
 export function useCryptoOrder(

@@ -11,8 +11,8 @@
 //     'Polls GET /v1/billing/crypto-orders/:id for the given order
 //     id and transitions the state machine each tick. Polling stops
 //     automatically once the order reaches a terminal status (paid
-//     / failed). Callers can pass `pollIntervalMs` to override the
-//     default cadence.'
+//     / failed / cancelled). Callers can pass `pollIntervalMs` to
+//     override the default cadence.'
 //   • CryptoOrderEvent 3-field with V-666.AU source 4-value union
 //     ('create' | 'ipn' | 'cancel' | 'expired' — 'swept' mapped to
 //     'expired' server-side).
@@ -21,7 +21,7 @@
 //     events optional CryptoOrderEvent[] (V-666.AU append-only
 //     timeline, optional so older builds parse) + expires_at?
 //     string|null (V-666.AV) + created_at + updated_at.
-//   • TERMINAL_STATUSES Set('paid','failed') + DEFAULT_POLL_MS 5_000
+//   • TERMINAL_STATUSES Set('paid','failed','cancelled') + DEFAULT_POLL_MS 5_000
 //     constants (off-module so polling cadence is pinned).
 //   • lastStatusRef tracks last-seen status; setInterval terminates
 //     once TERMINAL_STATUSES has it.
@@ -43,10 +43,10 @@ function read(p: string): string {
 describe('W473.C apps/gui-client/src/lib/use-crypto-order.ts content parity', () => {
   const body = read(LIB);
 
-  it("V-534.T framing pinned: 'V-534.T — useCryptoOrder polling hook.' + 'Polls GET /v1/billing/crypto-orders/:id for the given order id and transitions the state machine each tick. Polling stops automatically once the order reaches a terminal status (paid / failed). Callers can pass `pollIntervalMs` to override the default cadence.'", () => {
+  it("V-534.T framing pinned: 'V-534.T — useCryptoOrder polling hook.' + 'Polls GET /v1/billing/crypto-orders/:id for the given order id and transitions the state machine each tick. Polling stops automatically once the order reaches a terminal status (paid / failed / cancelled). Callers can pass `pollIntervalMs` to override the default cadence.'", () => {
     expect(body).toMatch(/\/\/ V-534\.T — useCryptoOrder polling hook\./);
     expect(body).toMatch(
-      /\/\/ Polls GET \/v1\/billing\/crypto-orders\/:id for the given order id and\s*\n?\s*\/\/ transitions the state machine each tick\. Polling stops automatically\s*\n?\s*\/\/ once the order reaches a terminal status \(paid \/ failed\)\. Callers\s*\n?\s*\/\/ can pass `pollIntervalMs` to override the default cadence\./,
+      /\/\/ Polls GET \/v1\/billing\/crypto-orders\/:id for the given order id and\s*\n?\s*\/\/ transitions the state machine each tick\. Polling stops automatically\s*\n?\s*\/\/ once the order reaches a terminal status \(paid \/ failed \/ cancelled\)\.\s*\n?\s*\/\/ Callers can pass `pollIntervalMs` to override the default cadence\./,
     );
   });
 
@@ -77,8 +77,8 @@ describe('W473.C apps/gui-client/src/lib/use-crypto-order.ts content parity', ()
     );
   });
 
-  it("TERMINAL_STATUSES = new Set(['paid', 'failed']) + DEFAULT_POLL_MS = 5_000 module-level constants — pinned so polling cadence + terminal-stop logic aren't reverted to a hard-coded interior literal", () => {
-    expect(body).toMatch(/const TERMINAL_STATUSES = new Set\(\['paid', 'failed'\]\);/);
+  it("TERMINAL_STATUSES = new Set(['paid', 'failed', 'cancelled']) + DEFAULT_POLL_MS = 5_000 module-level constants — pinned so polling cadence + terminal-stop logic aren't reverted to a hard-coded interior literal (cancelled is terminal — the IPN flow won't transition out of it, so polling must stop)", () => {
+    expect(body).toMatch(/const TERMINAL_STATUSES = new Set\(\['paid', 'failed', 'cancelled'\]\);/);
     expect(body).toMatch(/const DEFAULT_POLL_MS = 5_000;/);
   });
 
