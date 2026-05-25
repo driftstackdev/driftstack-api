@@ -40,18 +40,21 @@ export const DEFAULT_COST_RATES: CostRates = {
 };
 
 /**
- * V-541.F — tier monthly prices used to derive default thresholds.
- * Mirrors `packages/api-types` tier-pricing where it exists; tiers
+ * V-541.F — tier monthly prices used to derive default cost-alert
+ * thresholds (softCents/hardCents per the runbook formula). These MUST
+ * be the real subscription selling prices (the runbook's threshold math
+ * treats P as monthly revenue), so they mirror billing-crypto's
+ * TIER_PRICE_CENTS + the customer-facing tier matrix ($/mo); tiers
  * not on Stripe (e.g. the future api_pro tier) get a placeholder
  * so the derive helper doesn't break.
  */
 export const TIER_MONTHLY_PRICE_CENTS: Partial<Record<AccountTier, number>> = {
-  solo_manual: 2500, // €25/mo
-  team_manual: 8000, // €80/mo
-  agency_manual: 30000, // €300/mo
-  api_starter: 5000, // €50/mo
-  api_builder: 25000, // €250/mo
-  api_scale: 100000, // €1000/mo
+  solo_manual: 7900, // $79/mo
+  team_manual: 24900, // $249/mo
+  agency_manual: 69900, // $699/mo
+  api_starter: 14900, // $149/mo
+  api_builder: 49900, // $499/mo
+  api_scale: 149900, // $1,499/mo
 };
 
 /**

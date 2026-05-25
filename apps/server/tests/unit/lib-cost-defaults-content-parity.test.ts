@@ -69,12 +69,12 @@ describe('W390.C apps/server/src/lib/cost-defaults.ts content parity', () => {
     expect(body).toMatch(
       /export const TIER_MONTHLY_PRICE_CENTS: Partial<Record<AccountTier, number>> = \{/,
     );
-    expect(body).toMatch(/solo_manual: 2500, \/\/ €25\/mo/);
-    expect(body).toMatch(/team_manual: 8000, \/\/ €80\/mo/);
-    expect(body).toMatch(/agency_manual: 30000, \/\/ €300\/mo/);
-    expect(body).toMatch(/api_starter: 5000, \/\/ €50\/mo/);
-    expect(body).toMatch(/api_builder: 25000, \/\/ €250\/mo/);
-    expect(body).toMatch(/api_scale: 100000, \/\/ €1000\/mo/);
+    expect(body).toMatch(/solo_manual: 7900, \/\/ \$79\/mo/);
+    expect(body).toMatch(/team_manual: 24900, \/\/ \$249\/mo/);
+    expect(body).toMatch(/agency_manual: 69900, \/\/ \$699\/mo/);
+    expect(body).toMatch(/api_starter: 14900, \/\/ \$149\/mo/);
+    expect(body).toMatch(/api_builder: 49900, \/\/ \$499\/mo/);
+    expect(body).toMatch(/api_scale: 149900, \/\/ \$1,499\/mo/);
   });
 
   it('deriveThresholdsFromMonthlyPrice: 0.6 soft + 0.9 hard multipliers (runbook formula)', () => {

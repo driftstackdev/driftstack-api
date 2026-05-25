@@ -37,12 +37,12 @@
 //
 //   TIER_MONTHLY_PRICE_CENTS (Partial<Record<AccountTier, number>>)
 //     6-tier inventory:
-//       - solo_manual: 2500 (€25/mo).
-//       - team_manual: 8000 (€80/mo).
-//       - agency_manual: 30000 (€300/mo).
-//       - api_starter: 5000 (€50/mo).
-//       - api_builder: 25000 (€250/mo).
-//       - api_scale: 100000 (€1000/mo).
+//       - solo_manual: 7900 ($79/mo).
+//       - team_manual: 24900 ($249/mo).
+//       - agency_manual: 69900 ($699/mo).
+//       - api_starter: 14900 ($149/mo).
+//       - api_builder: 49900 ($499/mo).
+//       - api_scale: 149900 ($1,499/mo).
 //
 //   deriveThresholdsFromMonthlyPrice formula — softCents = round(P
 //     × 0.6), hardCents = round(P × 0.9).
@@ -183,13 +183,13 @@ describe('W973 V-541.F cost-defaults cross-source invariant', () => {
     );
   });
 
-  it('CRITICAL TIER_MONTHLY_PRICE_CENTS has 6 priced tiers — solo_manual 2500 + team_manual 8000 + agency_manual 30000 + api_starter 5000 + api_builder 25000 + api_scale 100000. The 6-tier price-card matches the Stripe price-list + customer-facing tier matrix.', () => {
-    expect(TIER_MONTHLY_PRICE_CENTS.solo_manual).toBe(2500);
-    expect(TIER_MONTHLY_PRICE_CENTS.team_manual).toBe(8000);
-    expect(TIER_MONTHLY_PRICE_CENTS.agency_manual).toBe(30000);
-    expect(TIER_MONTHLY_PRICE_CENTS.api_starter).toBe(5000);
-    expect(TIER_MONTHLY_PRICE_CENTS.api_builder).toBe(25000);
-    expect(TIER_MONTHLY_PRICE_CENTS.api_scale).toBe(100000);
+  it('CRITICAL TIER_MONTHLY_PRICE_CENTS has 6 priced tiers — solo_manual 7900 + team_manual 24900 + agency_manual 69900 + api_starter 14900 + api_builder 49900 + api_scale 149900. The 6-tier price-card matches billing-crypto TIER_PRICE_CENTS + the customer-facing tier matrix ($/mo).', () => {
+    expect(TIER_MONTHLY_PRICE_CENTS.solo_manual).toBe(7900);
+    expect(TIER_MONTHLY_PRICE_CENTS.team_manual).toBe(24900);
+    expect(TIER_MONTHLY_PRICE_CENTS.agency_manual).toBe(69900);
+    expect(TIER_MONTHLY_PRICE_CENTS.api_starter).toBe(14900);
+    expect(TIER_MONTHLY_PRICE_CENTS.api_builder).toBe(49900);
+    expect(TIER_MONTHLY_PRICE_CENTS.api_scale).toBe(149900);
   });
 
   it("CRITICAL future-tier api_pro placeholder framing — 'tiers not on Stripe (e.g. the future api_pro tier) get a placeholder so the derive helper doesn't break'. The placeholder design keeps the derive-helper total-coverage even when a tier is not-yet-priced.", () => {
@@ -244,28 +244,28 @@ describe('W973 V-541.F cost-defaults cross-source invariant', () => {
   it('CRITICAL runtime — DEFAULT_TIER_THRESHOLDS_DERIVED has 6 entries matching TIER_MONTHLY_PRICE_CENTS. Each entry is the 60%/90% derived threshold pair.', () => {
     expect(Object.keys(DEFAULT_TIER_THRESHOLDS_DERIVED).length).toBe(6);
     expect(DEFAULT_TIER_THRESHOLDS_DERIVED.solo_manual).toEqual({
-      softCents: 1500,
-      hardCents: 2250,
+      softCents: 4740,
+      hardCents: 7110,
     });
     expect(DEFAULT_TIER_THRESHOLDS_DERIVED.team_manual).toEqual({
-      softCents: 4800,
-      hardCents: 7200,
+      softCents: 14940,
+      hardCents: 22410,
     });
     expect(DEFAULT_TIER_THRESHOLDS_DERIVED.agency_manual).toEqual({
-      softCents: 18000,
-      hardCents: 27000,
+      softCents: 41940,
+      hardCents: 62910,
     });
     expect(DEFAULT_TIER_THRESHOLDS_DERIVED.api_starter).toEqual({
-      softCents: 3000,
-      hardCents: 4500,
+      softCents: 8940,
+      hardCents: 13410,
     });
     expect(DEFAULT_TIER_THRESHOLDS_DERIVED.api_builder).toEqual({
-      softCents: 15000,
-      hardCents: 22500,
+      softCents: 29940,
+      hardCents: 44910,
     });
     expect(DEFAULT_TIER_THRESHOLDS_DERIVED.api_scale).toEqual({
-      softCents: 60000,
-      hardCents: 90000,
+      softCents: 89940,
+      hardCents: 134910,
     });
   });
 

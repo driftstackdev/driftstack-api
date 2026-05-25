@@ -66,13 +66,13 @@ describe('V-541.F DEFAULT_TIER_THRESHOLDS_DERIVED — derivation matches price t
     }
   });
 
-  it('solo_manual derives to (1500, 2250) — a sanity-check on the table', () => {
-    // €25/mo × 0.6 = €15 soft, × 0.9 = €22.50 hard. Catches accidental
+  it('solo_manual derives to (4740, 7110) — a sanity-check on the table', () => {
+    // $79/mo × 0.6 = $47.40 soft, × 0.9 = $71.10 hard. Catches accidental
     // edits to TIER_MONTHLY_PRICE_CENTS that would silently re-anchor
     // the soft/hard alert bands for every existing customer.
     expect(DEFAULT_TIER_THRESHOLDS_DERIVED.solo_manual).toEqual({
-      softCents: 1500,
-      hardCents: 2250,
+      softCents: 4740,
+      hardCents: 7110,
     });
   });
 });

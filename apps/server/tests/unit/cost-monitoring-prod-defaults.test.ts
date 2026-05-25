@@ -55,13 +55,13 @@ describe('V-541.G — production cost-monitoring wiring', () => {
     expect(summary?.breakdown.totalCents).toBe(208);
   });
 
-  it('uses DEFAULT_TIER_THRESHOLDS_DERIVED → solo_manual carries (1500, 2250) — derived-from-price, not hand-tuned', async () => {
+  it('uses DEFAULT_TIER_THRESHOLDS_DERIVED → solo_manual carries (4740, 7110) — derived-from-price, not hand-tuned', async () => {
     const svc = makeService({ acc_solo: 'solo_manual' });
     const summary = await svc.getAccountSummary({
       accountId: 'acc_solo',
       billingCycle: '2026-05',
     });
-    expect(summary?.thresholds).toEqual({ softCents: 1500, hardCents: 2250 });
+    expect(summary?.thresholds).toEqual({ softCents: 4740, hardCents: 7110 });
   });
 
   it('returns null when the account has no usage (stub aggregator behaviour)', async () => {
