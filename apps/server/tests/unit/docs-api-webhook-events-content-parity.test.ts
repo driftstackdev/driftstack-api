@@ -2,7 +2,7 @@
 // V-203 webhook event catalog. Drift here either reorders the 3-state
 // LIVE/DECLARED/PLANNED taxonomy, drops a [LIVE] event from the 3-event
 // fired set (session.completed/failed + api_key.revoked), or unsets
-// the Driftstack-Signature t=...,v1=... HMAC-SHA256 verification.
+// the X-Driftstack-Signature t=...,v1=... HMAC-SHA256 verification.
 //
 //   • V-203. Webhook event catalog.
 //   • 3 [LIVE]: session.completed + session.failed + api_key.revoked.
@@ -104,15 +104,15 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
     expect(body).toMatch(/"emitted_at": "2026-05-05T12:34:56\.789Z",/);
     expect(body).toMatch(/"data": \{/);
     expect(body).toMatch(/- `Content-Type: application\/json`/);
-    expect(body).toMatch(/- `Driftstack-Signature: t=<unix-seconds>,v1=<hex>` —/);
+    expect(body).toMatch(/- `X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>` —/);
     expect(body).toMatch(/HMAC-SHA256\(`<emitted_at_seconds>\.<raw body>`\) keyed by the/);
     expect(body).toMatch(/endpoint signing secret\. Verification reference:/);
     expect(body).toMatch(/`packages\/sdk-typescript\/src\/webhook-signature\.ts` \(TS\),/);
     expect(body).toMatch(/`packages\/sdk-go\/webhook_signature\.go` \(Go\),/);
     expect(body).toMatch(/`packages\/sdk-python\/src\/driftstack\/webhook_signature\.py` \(Py\)\./);
-    expect(body).toMatch(/- `Driftstack-Event-Id: evt_<uuid>` — duplicate of `data\.id`,/);
+    expect(body).toMatch(/- `X-Driftstack-Event-Id: evt_<uuid>` — duplicate of `data\.id`,/);
     expect(body).toMatch(/surfaces in HTTP logs without parsing the body\./);
-    expect(body).toMatch(/- `Driftstack-Delivery-Attempt: <n>` — increments on each retry\./);
+    expect(body).toMatch(/- `X-Driftstack-Event-Type: <event-type>` — the delivered event/);
     expect(body).toMatch(/Retry policy: 5 attempts with exponential backoff at 1m, 5m, 15m,/);
     expect(body).toMatch(/30m, 60m\. Final failures land in DLQ/);
     expect(body).toMatch(/\(see `docs\/api\/webhooks\.md` and the admin \/webhook-dlq page\)\./);

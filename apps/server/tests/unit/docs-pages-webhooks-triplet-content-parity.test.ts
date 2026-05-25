@@ -159,11 +159,11 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).toMatch(/"emitted_at": "2026-05-05T12:34:56\.789Z",/);
   });
 
-  it("CRITICAL Driftstack-Signature header format pinned — 'Driftstack-Signature: t=<unix-seconds>,v1=<hex> — HMAC-SHA256(<emitted_at_seconds>.<raw body>) keyed by the endpoint signing secret'. Matches W753 + V-273 webhook-delivery toolkit.", () => {
+  it("CRITICAL X-Driftstack-Signature header format pinned — 'X-Driftstack-Signature: t=<unix-seconds>,v1=<hex> — HMAC-SHA256(<emitted_at_seconds>.<raw body>) keyed by the endpoint signing secret'. Matches W753 + V-273 webhook-delivery toolkit + the canonical x-driftstack-signature header set by webhook-worker.", () => {
     const p = read(EV);
 
     expect(p).toMatch(
-      /`Driftstack-Signature: t=<unix-seconds>,v1=<hex>` —\s*\n?\s+HMAC-SHA256\(`<emitted_at_seconds>\.<raw body>`\) keyed by the\s*\n?\s+endpoint signing secret\./,
+      /`X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>` —\s*\n?\s+HMAC-SHA256\(`<emitted_at_seconds>\.<raw body>`\) keyed by the\s*\n?\s+endpoint signing secret\./,
     );
     expect(p).toMatch(/Verification reference:/);
     expect(p).toMatch(/`packages\/sdk-typescript\/src\/webhook-signature\.ts`/);
@@ -171,11 +171,11 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).toMatch(/`packages\/sdk-python\/src\/driftstack\/webhook_signature\.py`/);
   });
 
-  it('CRITICAL Driftstack-Event-Id + Driftstack-Delivery-Attempt headers pinned. Drift to dropping would lose log-correlation utility.', () => {
+  it('CRITICAL X-Driftstack-Event-Id + X-Driftstack-Event-Type headers pinned (the canonical set webhook-worker sends alongside x-driftstack-signature). Drift to dropping would lose log-correlation + handler-routing utility.', () => {
     const p = read(EV);
 
-    expect(p).toMatch(/`Driftstack-Event-Id: evt_<uuid>`/);
-    expect(p).toMatch(/`Driftstack-Delivery-Attempt: <n>` — increments on each retry\./);
+    expect(p).toMatch(/`X-Driftstack-Event-Id: evt_<uuid>`/);
+    expect(p).toMatch(/`X-Driftstack-Event-Type: <event-type>` — the delivered event/);
   });
 
   it('CRITICAL retry-policy 5-attempt exponential backoff pinned — 1m + 5m + 15m + 30m + 60m (matches webhook-worker BACKOFF_MS_BY_ATTEMPT). The 5-step backoff schedule is the canonical retry contract; drift would mismatch V-273 + V-475 server-side.', () => {

@@ -61,15 +61,17 @@ with the following envelope:
 Headers:
 
 - `Content-Type: application/json`
-- `Driftstack-Signature: t=<unix-seconds>,v1=<hex>` —
+- `X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>` —
   HMAC-SHA256(`<emitted_at_seconds>.<raw body>`) keyed by the
   endpoint signing secret. Verification reference:
   `packages/sdk-typescript/src/webhook-signature.ts` (TS),
   `packages/sdk-go/webhook_signature.go` (Go),
   `packages/sdk-python/src/driftstack/webhook_signature.py` (Py).
-- `Driftstack-Event-Id: evt_<uuid>` — duplicate of `data.id`,
+- `X-Driftstack-Event-Id: evt_<uuid>` — duplicate of `data.id`,
   surfaces in HTTP logs without parsing the body.
-- `Driftstack-Delivery-Attempt: <n>` — increments on each retry.
+- `X-Driftstack-Event-Type: <event-type>` — the delivered event
+  type (e.g. `session.completed`), so handlers can route without
+  parsing the body.
 
 Retry policy: 5 attempts with exponential backoff at 1m, 5m, 15m,
 30m, 60m. Final failures land in DLQ
