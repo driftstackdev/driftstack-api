@@ -33,12 +33,12 @@ class RetryConfig:
     initial_delay_ms: int = 200
     max_delay_ms: int = 10_000
     backoff_multiplier: float = 2.0
-    """If True, retry on TransportError + RateLimitError. If False, never retry."""
     enabled: bool = True
-    """Errors that ARE retryable when retries are enabled."""
+    """If True, retry on TransportError + RateLimitError. If False, never retry."""
     retryable_errors: tuple[type[BaseException], ...] = field(
         default_factory=lambda: (TransportError, RateLimitError)
     )
+    """Errors that ARE retryable when retries are enabled."""
 
 
 def _backoff_delay_ms(attempt: int, cfg: RetryConfig, retry_after_seconds: int | None) -> int:

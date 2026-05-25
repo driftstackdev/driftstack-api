@@ -51,13 +51,14 @@ describe('W586.A packages/sdk-python/src/driftstack/retry.py content parity', ()
     expect(body).toMatch(/^\s*initial_delay_ms: int = 200$/m);
     expect(body).toMatch(/^\s*max_delay_ms: int = 10_000$/m);
     expect(body).toMatch(/^\s*backoff_multiplier: float = 2\.0$/m);
+    // Field docstrings must sit directly BELOW the field they describe
+    // (Python attributes a bare string literal to the preceding assignment).
+    // `enabled` documents the on/off switch; `retryable_errors` documents the set.
     expect(body).toMatch(
-      /"""If True, retry on TransportError \+ RateLimitError\. If False, never retry\."""/,
+      /enabled: bool = True\n\s*"""If True, retry on TransportError \+ RateLimitError\. If False, never retry\."""/,
     );
-    expect(body).toMatch(/^\s*enabled: bool = True$/m);
-    expect(body).toMatch(/"""Errors that ARE retryable when retries are enabled\."""/);
     expect(body).toMatch(
-      /retryable_errors: tuple\[type\[BaseException\], \.\.\.\] = field\(\s*\n\s*default_factory=lambda: \(TransportError, RateLimitError\)\s*\n\s*\)/,
+      /retryable_errors: tuple\[type\[BaseException\], \.\.\.\] = field\(\s*\n\s*default_factory=lambda: \(TransportError, RateLimitError\)\s*\n\s*\)\n\s*"""Errors that ARE retryable when retries are enabled\."""/,
     );
   });
 
