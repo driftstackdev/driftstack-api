@@ -1,6 +1,6 @@
 // Drift guard for apps/gui-client/src/components/AgentSessionPanel.tsx.
 // Pins the LK.6.b doc-comment + the LiveKit subscriber lifecycle +
-// the iPhone 17 Pro aspect-ratio default + the onStateChange
+// the iPhone 16 Pro aspect-ratio default + the onStateChange
 // callback contract.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -51,11 +51,11 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/onStateChange\?: \(state: LivekitConnectionState\) => void;/);
   });
 
-  it('iPhone 17 Pro aspect-ratio default pinned: 1320/2868 ≈ 0.46 (per the orchestrator-brief locked-archetype). Drift to a different default would render a wrong-aspect video frame when callers omit aspectRatio', () => {
-    expect(body).toMatch(/const IPHONE_17_PRO_ASPECT_RATIO = 1320 \/ 2868; \/\/ ≈ 0\.46/);
-    expect(body).toMatch(
-      /iPhone 17\s*\n?\s*\*\s+Pro \(1320×2868 logical px\) since that's the locked archetype\s*\n?\s*\*\s+for v1\.0 per the orchestrator brief/,
-    );
+  it('iPhone 16 Pro aspect-ratio default pinned: 1206/2622 ≈ 0.46 (the locked archetype iphone16pro_ios18_7_safari26_4). Drift to a different default would render a wrong-aspect video frame when callers omit aspectRatio', () => {
+    expect(body).toMatch(/const IPHONE_16_PRO_ASPECT_RATIO = 1206 \/ 2622; \/\/ ≈ 0\.46/);
+    expect(body).toMatch(/Defaults to iPhone 16/);
+    expect(body).toMatch(/Pro \(1206×2622 px\) since that's the locked archetype/);
+    expect(body).toMatch(/\(iphone16pro_ios18_7_safari26_4\) for v1\.0 per the orchestrator brief/);
   });
 
   it('LiveKitInfo import from @driftstack/sdk pinned: drift to a local-only type would break the cross-package single-source-of-truth for the LiveKit join-info wire shape', () => {

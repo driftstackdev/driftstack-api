@@ -54,8 +54,8 @@ describe('LK.6.b — AgentSessionPanel React component', () => {
     expect(body).toMatch(/return \(\) => \{[\s\S]+?room as any\)\.disconnect\(\)/);
   });
 
-  it('default aspectRatio matches iPhone 17 Pro (locked archetype for v1.0)', () => {
-    expect(body).toMatch(/1320 \/ 2868/);
+  it('default aspectRatio matches iPhone 16 Pro (locked archetype for v1.0)', () => {
+    expect(body).toMatch(/1206 \/ 2622/);
   });
 
   it('video element has aria-label for screen readers', () => {
