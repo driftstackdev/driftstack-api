@@ -79,11 +79,13 @@ describe('W763 docs /api/profiles content parity', () => {
     );
   });
 
-  it('CRITICAL name shape constraints pinned — unique-within-account + lowercase + hyphen recommended + max 64 chars + no whitespace/control chars. Drift would let SDK consumers send invalid names that the server then rejects.', () => {
+  it('CRITICAL name shape constraints pinned — unique-within-account + lowercase + hyphen recommended + max 120 chars + start/end alphanumeric + allowed inner chars (letters/digits/space/underscore/hyphen/dot). Matches ProfileNameSchema; drift would mis-state the constraint and make SDK consumers avoid valid names or send rejected ones.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`name` — unique within the account\. Lowercase \+ hyphen recommended;/);
-    expect(p).toMatch(/max 64 chars; cannot contain whitespace or control characters\./);
+    expect(p).toMatch(/max 120 chars\. Must start and end with an alphanumeric character;/);
+    expect(p).toMatch(/allowed inner characters are letters, digits, spaces, underscore,/);
+    expect(p).toMatch(/hyphen, and dot\. Leading\/trailing whitespace is trimmed\./);
   });
 
   it("CRITICAL archetype-is-sticky-for-lifetime framing pinned. The 'Once set, the archetype is sticky for that profile\\'s lifetime' wording + the 'repin via POST /v1/profiles/:id/clone with a new archetype' fallback explains the no-archetype-edit contract.", () => {

@@ -54,7 +54,9 @@ The cap on enterprise tier is negotiated; the API returns
 ```
 
 - `name` — unique within the account. Lowercase + hyphen recommended;
-  max 64 chars; cannot contain whitespace or control characters.
+  max 120 chars. Must start and end with an alphanumeric character;
+  allowed inner characters are letters, digits, spaces, underscore,
+  hyphen, and dot. Leading/trailing whitespace is trimmed.
 - `archetype` — the pinned device + OS + Safari version triple. New
   profiles default to `iphone16pro_ios18_7_safari26_4`. You can
   pin to an older archetype for behavioural-stability reasons (e.g.
