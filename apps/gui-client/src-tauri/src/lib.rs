@@ -14,6 +14,15 @@
 //!   * Live viewport (polling screenshots → WebRTC if scope allows).
 
 use keyring::Entry;
+use std::io::{Read, Write};
+use std::net::{TcpStream, ToSocketAddrs};
+use std::time::{Duration, Instant};
+
+/// Wall-clock ceiling on each blocking socket op in the SOCKS5 probe.
+/// Eight seconds is generous for a reachable proxy yet short enough
+/// that the GUI's "Test proxy" spinner doesn't feel hung when a host
+/// is dead.
+const PROXY_PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// Service identifier surfaced in OS-native keychain UI. Matches the
 /// Tauri bundle identifier so the stored secrets show under the app's
@@ -50,6 +59,7 @@ pub fn run() {
             secret_save,
             secret_load,
             secret_delete,
+            proxy_test,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -113,6 +123,197 @@ fn secret_delete(key: String) -> Result<(), String> {
     }
 }
 
+/// Structured result of a SOCKS5 proxy probe. Serialized straight to
+/// the React side, so field names are the camel/snake the GUI reads.
+#[derive(serde::Serialize)]
+struct ProxyTestResult {
+    /// TCP connect + SOCKS5 greeting handshake succeeded.
+    reachable: bool,
+    /// Username/password auth (RFC 1929) was accepted, or no auth was
+    /// required. `false` only when credentials were offered + rejected.
+    auth_ok: bool,
+    /// Server answered a `UDP ASSOCIATE` request with success — i.e. it
+    /// can relay UDP, so QUIC / WebRTC / HTTP-3 route through it instead
+    /// of leaking over the host's direct connection.
+    udp_associate: bool,
+    /// Round-trip wall-clock to complete the handshake, in milliseconds.
+    latency_ms: u64,
+    /// Human-readable summary the GUI shows verbatim under the button.
+    message: String,
+}
+
+/// Build the SOCKS5 greeting (RFC 1928 §3): version 5, the method
+/// count, then the offered methods. We always offer `0x00` (no auth)
+/// and additionally `0x02` (username/password) when credentials are
+/// present, letting the server pick.
+fn socks5_greeting(use_auth: bool) -> Vec<u8> {
+    let methods: &[u8] = if use_auth { &[0x00, 0x02] } else { &[0x00] };
+    let mut greeting = vec![0x05u8, methods.len() as u8];
+    greeting.extend_from_slice(methods);
+    greeting
+}
+
+/// Build the RFC 1929 username/password sub-negotiation packet:
+/// version `0x01`, ULEN, username, PLEN, password.
+fn socks5_userpass(user: &str, pass: &str) -> Vec<u8> {
+    let mut auth = vec![0x01u8, user.len() as u8];
+    auth.extend_from_slice(user.as_bytes());
+    auth.push(pass.len() as u8);
+    auth.extend_from_slice(pass.as_bytes());
+    auth
+}
+
+/// Probe a SOCKS5 proxy: TCP connect → greeting → optional RFC 1929
+/// auth → `UDP ASSOCIATE` capability check. Native (not WebView) so we
+/// can open the raw socket the browser sandbox forbids.
+fn run_socks5_probe(
+    host: &str,
+    port: u16,
+    username: Option<&str>,
+    password: Option<&str>,
+) -> Result<ProxyTestResult, String> {
+    let start = Instant::now();
+    let addr = (host, port)
+        .to_socket_addrs()
+        .map_err(|e| format!("DNS resolution failed: {e}"))?
+        .next()
+        .ok_or_else(|| "Host resolved to no addresses.".to_string())?;
+    let mut stream = TcpStream::connect_timeout(&addr, PROXY_PROBE_TIMEOUT)
+        .map_err(|e| format!("TCP connect failed: {e}"))?;
+    stream.set_read_timeout(Some(PROXY_PROBE_TIMEOUT)).ok();
+    stream.set_write_timeout(Some(PROXY_PROBE_TIMEOUT)).ok();
+
+    let use_auth = username.is_some();
+    stream
+        .write_all(&socks5_greeting(use_auth))
+        .map_err(|e| format!("write greeting: {e}"))?;
+
+    let mut sel = [0u8; 2];
+    stream
+        .read_exact(&mut sel)
+        .map_err(|e| format!("read method selection: {e}"))?;
+    if sel[0] != 0x05 {
+        return Err(format!("Not a SOCKS5 server (version byte {:#x}).", sel[0]));
+    }
+
+    let mut auth_ok = true;
+    match sel[1] {
+        0x00 => {} // no auth required
+        0x02 => {
+            let user = username.unwrap_or("");
+            let pass = password.unwrap_or("");
+            if user.len() > 255 || pass.len() > 255 {
+                return Err("Username/password exceed the 255-byte SOCKS5 limit.".into());
+            }
+            stream
+                .write_all(&socks5_userpass(user, pass))
+                .map_err(|e| format!("write auth: {e}"))?;
+            let mut auth_reply = [0u8; 2];
+            stream
+                .read_exact(&mut auth_reply)
+                .map_err(|e| format!("read auth reply: {e}"))?;
+            auth_ok = auth_reply[1] == 0x00;
+            if !auth_ok {
+                return Ok(ProxyTestResult {
+                    reachable: true,
+                    auth_ok: false,
+                    udp_associate: false,
+                    latency_ms: start.elapsed().as_millis() as u64,
+                    message: "Connected, but the proxy rejected the username/password.".into(),
+                });
+            }
+        }
+        0xFF => {
+            return Ok(ProxyTestResult {
+                reachable: true,
+                auth_ok: false,
+                udp_associate: false,
+                latency_ms: start.elapsed().as_millis() as u64,
+                message: if use_auth {
+                    "Server rejected all offered authentication methods.".into()
+                } else {
+                    "Server requires authentication — add a username + password.".into()
+                },
+            });
+        }
+        other => {
+            return Err(format!(
+                "Server selected unsupported auth method {other:#x}."
+            ))
+        }
+    }
+
+    // UDP ASSOCIATE (RFC 1928 §4, CMD 0x03) with DST 0.0.0.0:0 — the
+    // standard "do you support UDP relay?" probe. ATYP 0x01 (IPv4).
+    let udp_req = [0x05u8, 0x03, 0x00, 0x01, 0, 0, 0, 0, 0, 0];
+    stream
+        .write_all(&udp_req)
+        .map_err(|e| format!("write UDP associate: {e}"))?;
+    let mut reply_head = [0u8; 4]; // VER REP RSV ATYP
+    let udp_associate = match stream.read_exact(&mut reply_head) {
+        Ok(()) => reply_head[1] == 0x00,
+        Err(_) => false,
+    };
+    // Drain the bound-address + port that follows a success reply so we
+    // leave the stream tidy before drop. Best-effort; ignore errors.
+    if udp_associate {
+        let addr_bytes = match reply_head[3] {
+            0x01 => 4 + 2,  // IPv4 + port
+            0x04 => 16 + 2, // IPv6 + port
+            0x03 => {
+                let mut len = [0u8; 1];
+                if stream.read_exact(&mut len).is_ok() {
+                    len[0] as usize + 2
+                } else {
+                    0
+                }
+            }
+            _ => 0,
+        };
+        if addr_bytes > 0 {
+            let mut sink = vec![0u8; addr_bytes];
+            let _ = stream.read_exact(&mut sink);
+        }
+    }
+
+    let latency_ms = start.elapsed().as_millis() as u64;
+    let message = if udp_associate {
+        "SOCKS5 reachable. UDP ASSOCIATE supported — QUIC / WebRTC / HTTP-3 route through the proxy.".to_string()
+    } else {
+        "SOCKS5 reachable, but UDP ASSOCIATE is not supported — UDP traffic (QUIC / WebRTC) can't be tunnelled.".to_string()
+    };
+    Ok(ProxyTestResult {
+        reachable: true,
+        auth_ok,
+        udp_associate,
+        latency_ms,
+        message,
+    })
+}
+
+/// Test a saved SOCKS5 proxy from the desktop host (raw sockets are
+/// unavailable inside the WebView, so the GUI invokes this). Never
+/// throws to the JS side — a failed probe is returned as a
+/// `reachable: false` result carrying the diagnostic in `message`.
+#[tauri::command]
+fn proxy_test(
+    host: String,
+    port: u16,
+    username: Option<String>,
+    password: Option<String>,
+) -> ProxyTestResult {
+    match run_socks5_probe(&host, port, username.as_deref(), password.as_deref()) {
+        Ok(result) => result,
+        Err(message) => ProxyTestResult {
+            reachable: false,
+            auth_ok: false,
+            udp_associate: false,
+            latency_ms: 0,
+            message,
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Note on test strategy: keyring-rs hits real OS keychains, which
@@ -140,5 +341,33 @@ mod tests {
         // Visual verification of this happens via `tauri:dev` on each
         // platform; this test catches the constant-drift case.
         assert_eq!(KEYRING_SERVICE, "dev.driftstack.gui");
+    }
+
+    #[test]
+    fn greeting_offers_no_auth_only_when_credentials_absent() {
+        // VER 5, NMETHODS 1, METHOD 0x00 (no auth).
+        assert_eq!(socks5_greeting(false), vec![0x05, 0x01, 0x00]);
+    }
+
+    #[test]
+    fn greeting_offers_both_methods_when_credentials_present() {
+        // VER 5, NMETHODS 2, then 0x00 (no auth) + 0x02 (user/pass).
+        assert_eq!(socks5_greeting(true), vec![0x05, 0x02, 0x00, 0x02]);
+    }
+
+    #[test]
+    fn userpass_packet_matches_rfc1929_layout() {
+        // VER 0x01, ULEN, username bytes, PLEN, password bytes.
+        let packet = socks5_userpass("ab", "xyz");
+        assert_eq!(packet, vec![0x01, 0x02, b'a', b'b', 0x03, b'x', b'y', b'z']);
+    }
+
+    #[test]
+    fn userpass_length_prefixes_track_byte_length() {
+        let packet = socks5_userpass("user", "");
+        // ULEN 4 then the 4 username bytes, then PLEN 0 with no password.
+        assert_eq!(packet[1], 4);
+        assert_eq!(packet[2 + 4], 0);
+        assert_eq!(packet.len(), 2 + 4 + 1);
     }
 }

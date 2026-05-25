@@ -15,6 +15,7 @@
 // surfaced to founder for coordination with the WebKit fork's SOCKS5
 // support).
 
+import { invoke } from '@tauri-apps/api/core';
 import { LazyStore } from '@tauri-apps/plugin-store';
 
 export interface ProxyConfig {
@@ -138,4 +139,40 @@ export function validateDraft(d: ProxyDraft): DraftValidation {
   // username/password are optional; if one is set the other isn't required
   // (some SOCKS5 servers accept username-only auth).
   return { ok: Object.keys(errors).length === 0, errors };
+}
+
+// ─── live connectivity probe (native) ─────────────────────────────
+
+/** Result of the native `proxy_test` Tauri command. Field names match
+ *  the Rust `ProxyTestResult` serialization exactly. */
+export interface ProxyTestResult {
+  /** TCP connect + SOCKS5 greeting handshake succeeded. */
+  reachable: boolean;
+  /** Auth accepted, or none required. `false` only on rejected creds. */
+  auth_ok: boolean;
+  /** `UDP ASSOCIATE` answered with success — QUIC / WebRTC tunnel works. */
+  udp_associate: boolean;
+  /** Handshake round-trip in milliseconds. */
+  latency_ms: number;
+  /** Human-readable summary, safe to render verbatim. */
+  message: string;
+}
+
+/** Test a SOCKS5 proxy from the desktop host. Raw sockets are
+ *  unavailable inside the WebView, so the probe runs natively in Rust
+ *  (see `src-tauri` `proxy_test`). Resolves to a structured result even
+ *  when the proxy is unreachable — `reachable: false` carries the
+ *  diagnostic in `message` rather than throwing. */
+export async function testProxy(input: {
+  host: string;
+  port: number;
+  username: string | null;
+  password: string | null;
+}): Promise<ProxyTestResult> {
+  return invoke<ProxyTestResult>('proxy_test', {
+    host: input.host,
+    port: input.port,
+    username: input.username,
+    password: input.password,
+  });
 }
