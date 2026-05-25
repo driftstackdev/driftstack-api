@@ -52,7 +52,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(/Driftstack enforces per-tier token-bucket rate/);
     expect(body).toMatch(/intentional anti-abuse caps \(runaway scripts, accidental DoS\),/);
     expect(body).toMatch(/not the pricing meter\. Pricing is concurrent-only per ADR-004\./);
-    expect(body).toMatch(/^## Three bucket keys$/m);
+    expect(body).toMatch(/^## Four bucket keys$/m);
     expect(body).toMatch(/- \*\*`global`\*\* — every authenticated `\/v1\/\*` call\./);
     expect(body).toMatch(/- \*\*`sessions:create`\*\* — `POST \/v1\/sessions` only\./);
     expect(body).toMatch(

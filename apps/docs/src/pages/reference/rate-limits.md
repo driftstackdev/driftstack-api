@@ -11,7 +11,7 @@ limits on every authenticated `/v1/*` call. The limits are
 intentional anti-abuse caps (runaway scripts, accidental DoS),
 not the pricing meter. Pricing is concurrent-only per ADR-004.
 
-## Three bucket keys
+## Four bucket keys
 
 Every authenticated request consumes from one or more buckets:
 
@@ -24,6 +24,10 @@ Every authenticated request consumes from one or more buckets:
   `POST /v1/agent-sessions/:id/message` only. Isolated from
   `global` so an LLM-driven message loop can't drain the
   global cap (v2-#8 sub-slice 8.20).
+- **`agent_sessions:input_event`** —
+  `POST /v1/agent-sessions/:id/input-event` only. Sized for
+  high-frequency live input (≤120Hz `mouseMove`); isolated so an
+  input stream can't drain the `global` cap.
 
 A `POST /v1/sessions` consumes from BOTH `global` and
 `sessions:create`. A `POST /v1/agent-sessions/:id/message`
@@ -46,6 +50,11 @@ returns 429.
 Capacity = max burst size before the next refill kicks in.
 Refill = sustained rate (tokens per second). Effective sustained
 RPS for a default-cost call is the `refill` column.
+
+`agent_sessions:input_event` scales per tier too (capacity / refill):
+`trial_pack` 240 / 60, `solo_manual` 360 / 90, `team_manual` 480 / 120,
+`agency_manual` 600 / 150, `api_starter` 360 / 90, `api_builder`
+600 / 150, `api_scale` 1,200 / 300, `enterprise` 12,000 / 3,000.
 
 ## What happens when you hit the cap
 
