@@ -75,9 +75,9 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     );
   });
 
-  it("Webhooks card framing: 'All seven LIVE event types — session.completed, session.failed, api_key.revoked, quota.warning_80pct, quota.exceeded, crypto.order.paid, crypto.order.failed — with payload shapes and HMAC-SHA256 verification examples.' — pinned so the canonical 7-event LIVE taxonomy + the HMAC-SHA256 signature algorithm stay consistent with the customer-dashboard webhooks page (drift to dropping an event would create marketing↔dashboard inconsistency)", () => {
+  it("Webhooks card framing: 'All seven subscribable event types — session.completed, session.failed, api_key.revoked, quota.warning_80pct, quota.exceeded, crypto.order.paid, crypto.order.failed — with payload shapes and HMAC-SHA256 verification examples.' — pinned so the canonical 7-event subscribable taxonomy + the HMAC-SHA256 signature algorithm stay consistent with the customer-dashboard webhooks page. 'subscribable' not 'LIVE': only 5 of the 7 have a production emitter today (quota.warning_80pct + quota.exceeded are declared/not-yet-firing per the webhook-events catalog), so the card describes what you can subscribe to, not what fires.", () => {
     expect(body).toMatch(
-      /All seven LIVE event types — session\.completed, session\.failed,\s*\n?\s*api_key\.revoked, quota\.warning_80pct, quota\.exceeded,\s*\n?\s*crypto\.order\.paid, crypto\.order\.failed — with payload shapes\s*\n?\s*and HMAC-SHA256 verification examples\./,
+      /All seven subscribable event types — session\.completed, session\.failed,\s*\n?\s*api_key\.revoked, quota\.warning_80pct, quota\.exceeded,\s*\n?\s*crypto\.order\.paid, crypto\.order\.failed — with payload shapes\s*\n?\s*and HMAC-SHA256 verification examples\./,
     );
   });
 
