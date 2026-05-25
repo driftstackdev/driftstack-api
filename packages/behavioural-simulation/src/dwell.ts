@@ -249,6 +249,32 @@ export function generateRegionAwareTouchEvent(
     );
   }
 
+  // Each region must lie fully within the element (center ± radius in 0..1)
+  // with a positive radius. A region spilling past the element edge would
+  // generate a touch OUTSIDE the targeted element — a behavioural tell the
+  // simulation exists to avoid. The default CLICK_REGIONS all satisfy this;
+  // the check guards caller-supplied custom regions. Small epsilon absorbs
+  // float rounding at the 0/1 boundaries (e.g. center 0.5 + radius 0.5).
+  const EPS = 1e-9;
+  for (let i = 0; i < regions.length; i += 1) {
+    const r = regions[i];
+    if (r === undefined) continue;
+    if (
+      r.radius.x <= 0 ||
+      r.radius.y <= 0 ||
+      r.center.x - r.radius.x < -EPS ||
+      r.center.x + r.radius.x > 1 + EPS ||
+      r.center.y - r.radius.y < -EPS ||
+      r.center.y + r.radius.y > 1 + EPS
+    ) {
+      throw new Error(
+        `generateRegionAwareTouchEvent: region ${i.toString()} must lie within the element ` +
+          `(center ± radius within 0..1, radius > 0); got center=${JSON.stringify(r.center)}, ` +
+          `radius=${JSON.stringify(r.radius)}`,
+      );
+    }
+  }
+
   const seed = opts.seed ?? `region-touch:${opts.elementClass}:${JSON.stringify(opts.bounds)}`;
   const rng = mulberry32(hashSeed(seed));
 

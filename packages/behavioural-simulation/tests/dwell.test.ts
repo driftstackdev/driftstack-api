@@ -255,6 +255,36 @@ describe('V-530.C region-aware touch generator — properties', () => {
     ).toThrow(/positive width/);
   });
 
+  it('rejects a custom region that spills past the element edge (would touch off-element)', () => {
+    expect(() =>
+      generateRegionAwareTouchEvent({
+        elementClass: 'button',
+        bounds: SAMPLE_BOUNDS,
+        // center 0.9 + radius 0.3 → 1.2, past the right edge.
+        regions: [{ center: { x: 0.9, y: 0.5 }, radius: { x: 0.3, y: 0.2 }, weight: 1 }],
+      }),
+    ).toThrow(/must lie within the element/);
+  });
+
+  it('rejects a custom region with non-positive radius', () => {
+    expect(() =>
+      generateRegionAwareTouchEvent({
+        elementClass: 'button',
+        bounds: SAMPLE_BOUNDS,
+        regions: [{ center: { x: 0.5, y: 0.5 }, radius: { x: 0, y: 0.2 }, weight: 1 }],
+      }),
+    ).toThrow(/must lie within the element/);
+  });
+
+  it('accepts a custom region exactly filling the element (center 0.5, radius 0.5)', () => {
+    const ev = generateRegionAwareTouchEvent({
+      elementClass: 'button',
+      bounds: SAMPLE_BOUNDS,
+      regions: [{ center: { x: 0.5, y: 0.5 }, radius: { x: 0.5, y: 0.5 }, weight: 1 }],
+    });
+    expect(ev.selectedRegionIndex).toBe(0);
+  });
+
   it('regression pin — deterministic shape for fixed inputs', () => {
     const ev = generateRegionAwareTouchEvent({
       elementClass: 'button',
