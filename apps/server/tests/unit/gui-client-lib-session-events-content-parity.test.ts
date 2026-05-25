@@ -11,7 +11,7 @@
 //     'Sessions don't yet have a server-side SSE feed; that needs
 //     a control-plane slice to add a `/v1/sessions/stream`
 //     endpoint (sister-tooling to the existing /v1/status/stream).
-//     Until that lands, the GUI polls /v1/sessions/list and diffs
+//     Until that lands, the GUI polls /v1/sessions and diffs
 //     against the previous snapshot.'
 //   • Drop-in-replacement framing pinned: 'Same shape as a real
 //     SSE consumer would have, so swapping to a real SSE source
@@ -59,10 +59,10 @@ function read(p: string): string {
 describe('W468.C apps/gui-client/src/lib/session-events.ts content parity', () => {
   const body = read(LIB);
 
-  it("V-534.C framing pinned: 'V-534.C — session-event detection layer.' + 'Sessions don't yet have a server-side SSE feed; that needs a control-plane slice to add a `/v1/sessions/stream` endpoint (sister-tooling to the existing /v1/status/stream). Until that lands, the GUI polls /v1/sessions/list and diffs against the previous snapshot.'", () => {
+  it("V-534.C framing pinned: 'V-534.C — session-event detection layer.' + 'Sessions don't yet have a server-side SSE feed; that needs a control-plane slice to add a `/v1/sessions/stream` endpoint (sister-tooling to the existing /v1/status/stream). Until that lands, the GUI polls /v1/sessions and diffs against the previous snapshot.'", () => {
     expect(body).toMatch(/\/\/ V-534\.C — session-event detection layer\./);
     expect(body).toMatch(
-      /\/\/ Sessions don't yet have a server-side SSE feed; that needs a control-\s*\n?\s*\/\/ plane slice to add a `\/v1\/sessions\/stream` endpoint \(sister-tooling\s*\n?\s*\/\/ to the existing \/v1\/status\/stream\)\. Until that lands, the GUI polls\s*\n?\s*\/\/ \/v1\/sessions\/list and diffs against the previous snapshot\./,
+      /\/\/ Sessions don't yet have a server-side SSE feed; that needs a control-\s*\n?\s*\/\/ plane slice to add a `\/v1\/sessions\/stream` endpoint \(sister-tooling\s*\n?\s*\/\/ to the existing \/v1\/status\/stream\)\. Until that lands, the GUI polls\s*\n?\s*\/\/ \/v1\/sessions and diffs against the previous snapshot\./,
     );
   });
 

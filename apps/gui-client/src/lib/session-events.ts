@@ -3,7 +3,7 @@
 // Sessions don't yet have a server-side SSE feed; that needs a control-
 // plane slice to add a `/v1/sessions/stream` endpoint (sister-tooling
 // to the existing /v1/status/stream). Until that lands, the GUI polls
-// /v1/sessions/list and diffs against the previous snapshot. This
+// /v1/sessions and diffs against the previous snapshot. This
 // module is the diff layer: caller hands in successive `Session[]`
 // snapshots, gets back a typed event list describing what changed.
 //
