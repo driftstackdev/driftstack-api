@@ -13,6 +13,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { SubscribableWebhookEventTypeSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -163,17 +164,13 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     expect(p).toMatch(/Adding a delivery-aggregation endpoint is a separate V-NNN/);
   });
 
-  it('CRITICAL 5-event subscription set pinned — session.completed/session.failed/api_key.revoked/quota.warning_80pct/quota.exceeded. Drift to dropping an event would silently break subscribers expecting it.', () => {
+  it('CRITICAL every subscribable webhook event has a create-form checkbox — driven by SubscribableWebhookEventTypeSchema so the dashboard can never silently fall behind the API subscribable set. Was a hardcoded 5, which left crypto.order.paid/failed + session.egress_capability_changed unguarded; a new subscribable event now fails this test until the dashboard offers it.', () => {
     const p = read(PAGE);
 
-    for (const ev of [
-      'session.completed',
-      'session.failed',
-      'api_key.revoked',
-      'quota.warning_80pct',
-      'quota.exceeded',
-    ]) {
-      expect(p, `event ${ev}`).toMatch(new RegExp(`value="${ev.replace(/\./g, '\\.')}"`));
+    for (const ev of SubscribableWebhookEventTypeSchema.options) {
+      expect(p, `subscribable event missing a checkbox: ${ev}`).toMatch(
+        new RegExp(`value="${ev.replace(/\./g, '\\.')}"`),
+      );
     }
   });
 
