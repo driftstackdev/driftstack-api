@@ -40,6 +40,7 @@ Three operational modes:
   "transcript_length": 12,
   "created_by_user_id": "<user-uuid> | null",
   "mode": "ai | manual | pair",
+  "pair_mode_state": "{ \"kind\": ... } | null",
   "created_at": "<ISO-8601>",
   "updated_at": "<ISO-8601>",
   "livekit": {
