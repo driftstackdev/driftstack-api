@@ -95,6 +95,27 @@ describe('V-534.AD CryptoOrderDetailView', () => {
     expect(screen.getByText(/contact support/i)).toBeTruthy();
   });
 
+  it('shows neither Cancel nor the payment-activity note for a cancelled order', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(orderPayload({ status: 'cancelled' })),
+        } as unknown as Response),
+      ),
+    );
+    render(<CryptoOrderDetailView orderId="ord_42" />);
+    await waitFor(() => {
+      expect(screen.getByText('ord_42')).toBeTruthy();
+    });
+    // 'cancelled' is terminal with no payment received, so neither the
+    // Cancel action nor the "payment activity detected" note applies.
+    expect(screen.queryByRole('button', { name: /Cancel order/i })).toBeNull();
+    expect(screen.queryByText(/Payment activity has been detected/i)).toBeNull();
+  });
+
   it('shows the receipt inline when status is paid', async () => {
     let call = 0;
     vi.stubGlobal(

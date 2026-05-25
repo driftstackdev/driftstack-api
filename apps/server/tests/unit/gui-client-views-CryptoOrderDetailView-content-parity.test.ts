@@ -93,7 +93,7 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
     );
   });
 
-  it("Cancel button: only inside cancellable branch + disabled when cancel.state.kind === 'submitting' + label 'Cancelling…' during submit else 'Cancel order' + on 'failed' state surfaces cancel.state.message inline below the button; non-cancellable non-terminal explanatory copy: 'Payment activity has been detected on-chain. Cancellation is no longer self-service — contact support to reconcile or refund.' (excludes 'paid' and 'failed' status)", () => {
+  it("Cancel button: only inside cancellable branch + disabled when cancel.state.kind === 'submitting' + label 'Cancelling…' during submit else 'Cancel order' + on 'failed' state surfaces cancel.state.message inline below the button; payment-seen non-terminal explanatory copy: 'Payment activity has been detected on-chain. Cancellation is no longer self-service — contact support to reconcile or refund.' (shown only for 'confirming'/'partial' — NOT 'cancelled', which is terminal with no payment received)", () => {
     expect(body).toMatch(
       /\{cancellable && \(\s*\n?\s*<div className="flex flex-col gap-2">\s*\n?\s*<button\s*\n?\s*type="button"\s*\n?\s*onClick=\{\(\) => void onCancel\(\)\}\s*\n?\s*disabled=\{cancel\.state\.kind === 'submitting'\}/,
     );
@@ -104,7 +104,7 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
       /\{cancel\.state\.kind === 'failed' && \(\s*\n?\s*<p className="text-xs text-status-error">\{cancel\.state\.message\}<\/p>\s*\n?\s*\)\}/,
     );
     expect(body).toMatch(
-      /\{!cancellable && order\.status !== 'paid' && order\.status !== 'failed' && \(\s*\n?\s*<p className="text-xs text-ink-secondary">\s*\n?\s*Payment activity has been detected on-chain\. Cancellation is no longer self-service —\s*\n?\s*contact support to reconcile or refund\.\s*\n?\s*<\/p>\s*\n?\s*\)\}/,
+      /\{\(order\.status === 'confirming' \|\| order\.status === 'partial'\) && \(\s*\n?\s*<p className="text-xs text-ink-secondary">\s*\n?\s*Payment activity has been detected on-chain\. Cancellation is no longer self-service —\s*\n?\s*contact support to reconcile or refund\.\s*\n?\s*<\/p>\s*\n?\s*\)\}/,
     );
   });
 

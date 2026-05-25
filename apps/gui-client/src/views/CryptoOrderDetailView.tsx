@@ -97,7 +97,7 @@ export function CryptoOrderDetailView(props: CryptoOrderDetailViewProps): JSX.El
           )}
         </div>
       )}
-      {!cancellable && order.status !== 'paid' && order.status !== 'failed' && (
+      {(order.status === 'confirming' || order.status === 'partial') && (
         <p className="text-xs text-ink-secondary">
           Payment activity has been detected on-chain. Cancellation is no longer self-service —
           contact support to reconcile or refund.
