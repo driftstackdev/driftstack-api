@@ -942,8 +942,10 @@ function CreateProfileModal({
                   >
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="font-medium">
-                        {testResult.reachable && testResult.auth_ok
-                          ? `Reachable · ${testResult.latency_ms} ms`
+                        {testResult.reachable
+                          ? testResult.auth_ok
+                            ? `Reachable · ${testResult.latency_ms} ms`
+                            : 'Auth failed'
                           : 'Not reachable'}
                       </span>
                       {testResult.reachable && (

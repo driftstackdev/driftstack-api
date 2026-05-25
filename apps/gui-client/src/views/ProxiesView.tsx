@@ -304,8 +304,10 @@ function ProxyTable({
                         }`}
                       >
                         <span className="font-medium">
-                          {result.reachable && result.auth_ok
-                            ? `Reachable · ${result.latency_ms} ms`
+                          {result.reachable
+                            ? result.auth_ok
+                              ? `Reachable · ${result.latency_ms} ms`
+                              : 'Auth failed'
                             : 'Not reachable'}
                         </span>
                         {result.reachable && (
