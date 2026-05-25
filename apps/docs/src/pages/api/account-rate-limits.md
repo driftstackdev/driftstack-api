@@ -6,7 +6,7 @@ description: Read your account's effective per-bucket rate-limit config — tier
 
 # Account rate limits
 
-reference. Driftstack enforces per-tier token-bucket rate
+Driftstack enforces per-tier token-bucket rate
 limits on every authenticated `/v1/*` call. The
 `/v1/account/rate-limits` endpoint exposes the **effective** config
 your account is hitting right now — tier defaults merged with any

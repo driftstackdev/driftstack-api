@@ -6,7 +6,7 @@ description: Manage which transactional emails Driftstack sends — opt out of w
 
 # Email preferences
 
-reference. Driftstack sends two categories of email:
+Driftstack sends two categories of email:
 
 1. **Operational** — non-optional. Required for the service to
    work (signup verification, password reset, billing-failure

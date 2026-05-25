@@ -6,7 +6,7 @@ description: List the legal document catalog, see which documents your account m
 
 # Legal documents + acceptance
 
-reference. Driftstack records customer acceptance of every
+Driftstack records customer acceptance of every
 versioned legal document (Terms of Service, Privacy Policy, DPA,
 Acceptable Use Policy, etc.) with a content-hash binding. When a
 document version bumps — typically a sub-processor amendment or a

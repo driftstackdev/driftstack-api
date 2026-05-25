@@ -6,7 +6,7 @@ description: Capture, list, and restore immutable point-in-time copies of saved 
 
 # Profile snapshots
 
-reference. A **profile snapshot** is an immutable
+A **profile snapshot** is an immutable
 point-in-time copy of a saved profile. Snapshots let you freeze a
 known-good profile state — for example, after a successful
 account-creation flow or before a risky session — so you can
