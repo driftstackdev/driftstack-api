@@ -276,12 +276,13 @@ transitions to a terminal state. Wired end-to-end 2026-05-22
 }
 ```
 
-`reason` is one of: `expired` (20-min payment window elapsed),
-`timeout` (NowPayments returned a terminal timeout), `refunded`
-(NowPayments marked the order refunded — full refunds map to
-`failed`; partial refunds stay `partial`), `cancelled`
-(customer-initiated abandonment), `swept` (admin cleanup of
-stuck pending orders past the staleness threshold).
+`reason` is one of: `ipn` (a NowPayments IPN reported a terminal
+non-paid status — a failed, refunded, or timed-out payment all surface
+here), `expired` (the 20-minute payment window elapsed before payment
+landed), or `swept` (admin / cron cleanup of a stuck pending order past
+the staleness threshold). These are the three values
+`CryptoOrdersService` emits; the underlying NowPayments sub-status
+(timeout / refunded / cancelled) is collapsed into `ipn`.
 
 See [Crypto checkout API](../api/billing-crypto) for the full
 order lifecycle + status state machine. The webhook event mirrors
