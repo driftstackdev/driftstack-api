@@ -34,6 +34,20 @@ describe('V-553.B-33 escapeCsvCell', () => {
     expect(escapeCsvCell('one\rtwo')).toBe('"one\rtwo"');
     expect(escapeCsvCell('one\r\ntwo')).toBe('"one\r\ntwo"');
   });
+
+  it('neutralises string cells that a spreadsheet would treat as a formula (CWE-1236)', () => {
+    expect(escapeCsvCell('=1+1')).toBe("'=1+1");
+    expect(escapeCsvCell('+1')).toBe("'+1");
+    expect(escapeCsvCell('-cmd')).toBe("'-cmd");
+    expect(escapeCsvCell('@SUM(A1)')).toBe("'@SUM(A1)");
+    // Combined with quote-wrapping when the cell also needs it.
+    expect(escapeCsvCell('=HYPERLINK("http://x","a")')).toBe('"\'=HYPERLINK(""http://x"",""a"")"');
+  });
+
+  it('does NOT prefix negative numbers (guard is string-only)', () => {
+    expect(escapeCsvCell(-3.5)).toBe('-3.5');
+    expect(escapeCsvCell(-42)).toBe('-42');
+  });
 });
 
 describe('V-553.B-33 formatCsvRow', () => {

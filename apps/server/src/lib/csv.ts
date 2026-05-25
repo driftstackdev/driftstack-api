@@ -11,13 +11,20 @@
 //   - Each row ends with CRLF.
 //   - Values of type null / undefined render as an empty cell.
 //   - Numbers + booleans stringify the obvious way.
+//
+// Beyond RFC 4180 — CSV formula-injection guard (CWE-1236): a string
+// cell that a spreadsheet would evaluate as a formula/command when the
+// export is opened (leading = + - @, or a leading TAB/CR Excel strips
+// before the trigger) is prefixed with an apostrophe. Admin exports
+// carry customer-controlled free-text (e.g. crypto-order customer_note)
+// and an internal operator is the one opening the file.
 
 export type CsvCell = string | number | boolean | null | undefined;
 
 /** Escape a single cell. Returns the cell ready for joining with commas. */
 export function escapeCsvCell(value: CsvCell): string {
   if (value === null || value === undefined) return '';
-  const str =
+  let str =
     typeof value === 'string'
       ? value
       : typeof value === 'number'
@@ -25,6 +32,11 @@ export function escapeCsvCell(value: CsvCell): string {
         : value
           ? 'true'
           : 'false';
+  // Formula-injection guard (CWE-1236). Scoped to string cells so a
+  // negative number like -3.5 (also "-"-leading) is left intact.
+  if (typeof value === 'string' && /^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
   if (/[",\r\n]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }

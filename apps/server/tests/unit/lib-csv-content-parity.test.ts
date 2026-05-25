@@ -63,7 +63,7 @@ describe('W393.B apps/server/src/lib/csv.ts content parity', () => {
     expect(body).toMatch(/export function escapeCsvCell\(value: CsvCell\): string/);
     expect(body).toMatch(/if \(value === null \|\| value === undefined\) return '';/);
     expect(body).toMatch(
-      /const str =\s*\n?\s*typeof value === 'string'\s*\n?\s*\?\s*value\s*\n?\s*:\s*typeof value === 'number'\s*\n?\s*\?\s*value\.toString\(\)\s*\n?\s*:\s*value\s*\n?\s*\?\s*'true'\s*\n?\s*:\s*'false';/,
+      /let str =\s*\n?\s*typeof value === 'string'\s*\n?\s*\?\s*value\s*\n?\s*:\s*typeof value === 'number'\s*\n?\s*\?\s*value\.toString\(\)\s*\n?\s*:\s*value\s*\n?\s*\?\s*'true'\s*\n?\s*:\s*'false';/,
     );
   });
 
