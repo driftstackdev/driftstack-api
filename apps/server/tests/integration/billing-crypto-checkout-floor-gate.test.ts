@@ -70,4 +70,27 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     expect(body.payment_address).toBe('0xPAYADDRESS');
     expect(createPayment).toHaveBeenCalledTimes(1);
   });
+
+  it('above-floor product but NowPayments createPayment throws → soft-fails to stub, order still persists (V-666.D)', async () => {
+    const createPayment = vi.fn(
+      (): Promise<CreatePaymentResult> => Promise.reject(new Error('nowpayments 502')),
+    );
+    const client = { createPayment } as unknown as NowPaymentsApiClient;
+    fx = await buildTestApp({ nowpaymentsClient: client });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' },
+    });
+    // The upstream failure must not break checkout: the local order is
+    // created (customer-trackable order_id) and the response degrades to
+    // the stub posture rather than 5xx-ing.
+    expect(res.statusCode).toBe(201);
+    expect(createPayment).toHaveBeenCalledTimes(1);
+    const body = res.json<{ provider: string; payment_address: string | null; order_id: string }>();
+    expect(body.provider).toBe('stub');
+    expect(body.payment_address).toBeNull();
+    expect(body.order_id).toMatch(/^ord_/);
+  });
 });
