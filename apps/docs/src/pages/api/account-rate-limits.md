@@ -138,7 +138,7 @@ even after a hard error.
 
 | Header                  | Meaning                                                                     |
 | ----------------------- | --------------------------------------------------------------------------- |
-| `x-ratelimit-bucket`    | Which bucket the call drained (`global` or `sessions:create`).              |
+| `x-ratelimit-bucket`    | Which bucket the call drained — see the bucket reference above.             |
 | `x-ratelimit-limit`     | Bucket capacity — same as `capacity` from this endpoint.                    |
 | `x-ratelimit-remaining` | Tokens left in the bucket _after_ this call (integer, floor of fractional). |
 | `x-ratelimit-reset`     | Unix-seconds timestamp when the bucket refills to full capacity.            |

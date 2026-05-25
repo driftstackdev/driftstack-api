@@ -120,7 +120,7 @@ headers reflecting the bucket consumed:
 
 | Header                  | Meaning                                                                     |
 | ----------------------- | --------------------------------------------------------------------------- |
-| `x-ratelimit-bucket`    | Which bucket the call drained (`global` or `sessions:create`).              |
+| `x-ratelimit-bucket`    | Which bucket the call drained — see the bucket keys above.                  |
 | `x-ratelimit-limit`     | Bucket capacity (matches the `capacity` row from the read endpoint).        |
 | `x-ratelimit-remaining` | Tokens left in the bucket _after_ this call (integer, floor of fractional). |
 | `x-ratelimit-reset`     | Unix-seconds timestamp when the bucket refills to full capacity.            |
