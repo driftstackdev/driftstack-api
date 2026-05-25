@@ -116,7 +116,12 @@ export class EncodePipeline {
   }
 
   private encode(frame: VideoFrame): EncodedChunk {
-    const isKeyframe = frame.sequence === 1 || frame.sequence % this.keyframeIntervalFrames === 1;
+    // Mark every Nth frame starting from the first. `(sequence - 1) % N === 0`
+    // is correct for all N: N=1 (intra-only) marks every frame, and for N>=2
+    // it reduces to the same keyframes (1, N+1, 2N+1, ...) the prior
+    // `sequence % N === 1` form produced. The old form silently broke N=1
+    // (`sequence % 1` is always 0, so only the first frame was a keyframe).
+    const isKeyframe = (frame.sequence - 1) % this.keyframeIntervalFrames === 0;
     return {
       sequence: frame.sequence,
       timestampMicros: frame.timestampMicros,

@@ -1,8 +1,9 @@
 // W458.C — drift guard for packages/webrtc-streaming/src/encode-pipeline.ts.
 // V-531 server-side encode pipeline (V-531.A pass-through shell).
-// Drift here either drops the keyframe-on-first-frame guard
-// (sequence===1 special-case) — consumers can't decode from start
-// without a keyframe to anchor reconstruction — or breaks the
+// Drift here either drops the keyframe-on-first-frame guarantee
+// ((sequence - 1) % N === 0 is always true at sequence 1) — consumers
+// can't decode from start without a keyframe to anchor reconstruction
+// — or breaks the
 // EOS handling (source returning null counts as framesDropped+=1
 // + state→stopped + endHandler fires).
 //
@@ -33,8 +34,8 @@
 //     chunkHandler emit; endHandler fires post-loop.
 //   • stop: sets state to 'stopped'.
 //   • getStats: returns spread copy (defensive).
-//   • encode: pass-through raw codec; isKeyframe = sequence===1 ||
-//     sequence % keyframeIntervalFrames === 1.
+//   • encode: pass-through raw codec; isKeyframe =
+//     (sequence - 1) % keyframeIntervalFrames === 0.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -119,10 +120,14 @@ describe('W458.C packages/webrtc-streaming/src/encode-pipeline.ts content parity
     );
   });
 
-  it('encode: pass-through raw codec; isKeyframe = sequence===1 || sequence % keyframeIntervalFrames === 1; payload = frame.data unchanged; sequence + timestampMicros copy through', () => {
+  it('encode: pass-through raw codec; isKeyframe = (sequence - 1) % keyframeIntervalFrames === 0; payload = frame.data unchanged; sequence + timestampMicros copy through', () => {
     expect(body).toMatch(
-      /private encode\(frame: VideoFrame\): EncodedChunk \{\s*\n?\s*const isKeyframe = frame\.sequence === 1 \|\| frame\.sequence % this\.keyframeIntervalFrames === 1;\s*\n?\s*return \{\s*\n?\s*sequence: frame\.sequence,\s*\n?\s*timestampMicros: frame\.timestampMicros,\s*\n?\s*codec: 'raw',\s*\n?\s*payload: frame\.data,\s*\n?\s*isKeyframe,\s*\n?\s*\};\s*\n?\s*\}/,
+      /const isKeyframe = \(frame\.sequence - 1\) % this\.keyframeIntervalFrames === 0;/,
     );
+    expect(body).toMatch(/codec: 'raw',/);
+    expect(body).toMatch(/payload: frame\.data,/);
+    expect(body).toMatch(/sequence: frame\.sequence,/);
+    expect(body).toMatch(/timestampMicros: frame\.timestampMicros,/);
   });
 
   it("getState public accessor: returns 'idle'|'running'|'stopped'; onChunk + onEnd registration single-handler (not Set-of-handlers)", () => {

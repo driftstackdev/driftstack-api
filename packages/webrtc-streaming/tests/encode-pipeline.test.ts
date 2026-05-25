@@ -122,6 +122,17 @@ describe('V-531.A EncodePipeline', () => {
     expect(chunks[61].isKeyframe).toBe(false);
   });
 
+  it('keyframeIntervalFrames=1 marks every chunk as a keyframe (intra-only)', async () => {
+    const source = new MockFrameSource({ maxFrames: 8 });
+    await source.start(STD_CONFIG);
+    const pipeline = new EncodePipeline({ source, keyframeIntervalFrames: 1 });
+    const chunks: EncodedChunk[] = [];
+    pipeline.onChunk((c) => chunks.push(c));
+    await pipeline.start();
+    expect(chunks).toHaveLength(8);
+    expect(chunks.every((c) => c.isKeyframe)).toBe(true);
+  });
+
   it('calls onEnd when the source drains', async () => {
     const source = new MockFrameSource({ maxFrames: 3 });
     await source.start(STD_CONFIG);
