@@ -15,7 +15,7 @@ you left off.
 The profile model is intentionally light at the metadata layer —
 profile rows hold a name, archetype, optional description, and
 last-used timestamp. The underlying browser state is managed by
-the driver layer (+ and isn't directly exposed
+the driver layer and isn't directly exposed
 through this API.
 
 ## Tier caps
@@ -307,7 +307,7 @@ Returns `204 No Content`. Idempotent on already-deleted profiles
 Read endpoints (GET) accept any valid bearer with `read` scope;
 write endpoints (POST, PATCH, DELETE) require admin scope on the
 calling key. Team RBAC: `X-Driftstack-Account` is honored for
-both reads and writes per the — member roles cannot write on
+both reads and writes — member roles cannot write on
 the owner's account; admin members can.
 
 ## Lifecycle interaction
