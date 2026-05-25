@@ -49,7 +49,7 @@ Response (`200`):
 - `operational` — probe succeeded within timeout
 - `degraded` — probe failed (transient error or timeout)
 - `major_outage` — currently reserved for future use by the
-  incidents service when an incident's `severity` is `critical` and
+  incidents service when an incident's `severity` is `outage` and
   it spans multiple components
 
 Aggregation: any `major_outage` → overall `major_outage`; otherwise
@@ -80,7 +80,7 @@ Response (`200`):
       "id": "inc_<uuid>",
       "title": "<string>",
       "description": "<string>",
-      "severity": "critical | major | minor",
+      "severity": "minor | major | outage",
       "status": "investigating | identified | monitoring | resolved",
       "affected_components": ["postgres", "redis"],
       "public": true,
