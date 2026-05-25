@@ -26,7 +26,12 @@ their tier's soft / hard cap.
 `GET /v1/account/cost?billing_cycle=YYYY-MM`
 
 ```ts
-const cost = await client.account.cost({ billingCycle: '2026-05' });
+// The typed SDK helper for this endpoint lands in V-541.E; until then
+// call it directly with the same base URL + API key as the SDK client:
+const res = await fetch(`${baseUrl}/v1/account/cost?billing_cycle=2026-05`, {
+  headers: { authorization: `Bearer ${apiKey}` },
+});
+const cost = await res.json();
 ```
 
 `billing_cycle` is optional; omitted requests use the current
