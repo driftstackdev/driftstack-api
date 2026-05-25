@@ -175,7 +175,7 @@ for accidental key reuse.
 ## Pricing notes
 
 - All amounts are in USD cents; NowPayments converts to crypto
-  using their rate engine at the moment of `pay_address` mint.
+  using their rate engine at the moment of `payment_address` mint.
 - The `pay_amount` returned to your customer locks the exchange
   rate for the duration of the payment window (~20 minutes per
   NowPayments default). Outside that window the customer may need
