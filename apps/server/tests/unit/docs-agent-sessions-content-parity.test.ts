@@ -102,6 +102,14 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     expect(body).toMatch(/PairModeStateInvalidTransitionError/);
   });
 
+  it('error table + takeover section document pair-mode-conflict (the lock race), distinct from invalid-transition', () => {
+    // The concurrent-takeover lock race returns PairModeConflictError
+    // (winner_client_id), NOT PairModeStateInvalidTransitionError.
+    expect(body).toMatch(/pair-mode-conflict/);
+    expect(body).toMatch(/PairModeConflictError/);
+    expect(body).toMatch(/winner_client_id/);
+  });
+
   it('error table includes byok-anthropic-required + bundled-llm error types', () => {
     expect(body).toMatch(/byok-anthropic-required/);
     expect(body).toMatch(/bundled-llm-budget-exhausted/);

@@ -405,9 +405,12 @@ Response (200):
 }
 ```
 
-A second concurrent takeover from a different client returns
-`409 PairModeStateInvalidTransitionError` with `from` +
-`transition` extension fields naming the conflict precisely.
+A second concurrent takeover from a different client (while one is
+mid-flight) returns `409 PairModeConflictError` with a
+`winner_client_id` extension field naming the client that holds the
+in-flight takeover. (Distinct from `PairModeStateInvalidTransitionError`,
+which fires when the state machine refuses a transition — e.g. a
+`handback` from `ai-driving` — and carries `from` + `transition`.)
 
 ### Request handback
 
@@ -461,6 +464,7 @@ Filter via
 |    404 | not-found                    | session id unknown to the calling account                            |
 |    409 | conflict                     | mode mismatch (e.g. takeover on `mode: 'ai'`)                        |
 |    409 | pair-mode-invalid-transition | state-machine refused the transition (carries `from` + `transition`) |
+|    409 | pair-mode-conflict           | concurrent takeover lost the lock race (carries `winner_client_id`)  |
 |    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                      |
 |    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in              |
 |    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                   |
