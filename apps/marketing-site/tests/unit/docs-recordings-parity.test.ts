@@ -16,9 +16,10 @@
 //     Enterprise custom) pinned — these are the "budget for" values
 //     customers integrate against.
 //   • "What works today" event list (session.completed,
-//     session.failed, quota.warning_80pct, quota.exceeded,
-//     api_key.revoked, test.ping) is a subset of
-//     WebhookEventTypeSchema source-of-truth.
+//     session.failed, api_key.revoked, crypto.order.paid,
+//     crypto.order.failed, test.ping) is a subset of
+//     WebhookEventTypeSchema source-of-truth; quota.* excluded
+//     ([DECLARED], no emitter — they don't fire today).
 //   • Capture-bytes-yourself workaround cross-link to
 //     /docs/sessions resolves.
 //   • Notification cross-links (/changelog +
@@ -80,13 +81,18 @@ describe('W359.A /docs/recordings parity', () => {
     for (const ev of [
       'session.completed',
       'session.failed',
-      'quota.warning_80pct',
-      'quota.exceeded',
       'api_key.revoked',
+      'crypto.order.paid',
+      'crypto.order.failed',
       'test.ping',
     ]) {
       expect(events.has(ev), `event missing from WebhookEventTypeSchema: ${ev}`).toBe(true);
       expect(body).toContain(`<code>${ev}</code>`);
+    }
+    // quota.* are [DECLARED] (no production emitter) — excluded from the
+    // "what works today" list since they don't fire yet.
+    for (const ev of ['quota.warning_80pct', 'quota.exceeded']) {
+      expect(body).not.toContain(`<code>${ev}</code>`);
     }
   });
 

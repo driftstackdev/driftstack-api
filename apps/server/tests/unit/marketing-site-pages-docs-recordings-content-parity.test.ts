@@ -70,16 +70,20 @@ describe('W507.A apps/marketing-site/src/pages/docs/recordings.astro content par
     );
   });
 
-  it("'What works today' fallback 2-state: Sessions API capture (screenshot/dom_snapshot/pdf) + 6 live webhook event types (session.completed + session.failed + quota.warning_80pct + quota.exceeded + api_key.revoked + test.ping synthetic) — pinned so the existing-today surface stays explicit + the 6-webhook-event-type enumeration stays consistent with the canonical webhook enum (drift to dropping any event type would create marketing↔webhook-enum divergence)", () => {
+  it("'What works today' fallback 2-state: Sessions API capture (screenshot/dom_snapshot/pdf) + the webhook event types that FIRE today (session.completed + session.failed + api_key.revoked + crypto.order.paid + crypto.order.failed) plus the test.ping synthetic — pinned so the 'what works today' surface lists only events with a production emitter. quota.warning_80pct + quota.exceeded are [DECLARED] (no emitter) so they're excluded here, though they stay in the full /docs/webhooks taxonomy", () => {
     expect(body).toMatch(
       /<code>POST \/v1\/sessions\/:id\/capture<\/code> with\s*\n?\s*<code>\{`\{ "kind": "screenshot" \}`\}<\/code>,\s*\n?\s*<code>"dom_snapshot"<\/code>, or <code>"pdf"<\/code>/,
     );
     expect(body).toMatch(/<code>session\.completed<\/code>/);
     expect(body).toMatch(/<code>session\.failed<\/code>/);
-    expect(body).toMatch(/<code>quota\.warning_80pct<\/code>/);
-    expect(body).toMatch(/<code>quota\.exceeded<\/code>/);
     expect(body).toMatch(/<code>api_key\.revoked<\/code>/);
+    expect(body).toMatch(/<code>crypto\.order\.paid<\/code>/);
+    expect(body).toMatch(/<code>crypto\.order\.failed<\/code>/);
     expect(body).toMatch(/<code>test\.ping<\/code>/);
+    // quota.* are [DECLARED] (no production emitter) — they do NOT fire today,
+    // so they must not appear in this "what works today" list.
+    expect(body).not.toMatch(/<code>quota\.warning_80pct<\/code>/);
+    expect(body).not.toMatch(/<code>quota\.exceeded<\/code>/);
   });
 
   it('Subscribe-to-shipping framing pinned. Re-enabled by slice 248 after verifying the 3-channel framing (API changelog RSS + status-page subscriptions + /api-reference) still exists at recordings.astro:83+', () => {

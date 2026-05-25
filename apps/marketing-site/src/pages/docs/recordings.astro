@@ -70,12 +70,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <code>"dom_snapshot"</code>, or <code>"pdf"</code> returns
         inline base64 bytes you can persist on your side.</li>
       <li>The <a href="/docs/webhooks#event-types">webhook event
-        types</a> available today —
+        types</a> that fire today —
         <code>session.completed</code>, <code>session.failed</code>,
-        <code>quota.warning_80pct</code>,
-        <code>quota.exceeded</code>, <code>api_key.revoked</code> —
-        plus the <code>test.ping</code> synthetic for endpoint
-        verification.</li>
+        <code>api_key.revoked</code>, <code>crypto.order.paid</code>,
+        <code>crypto.order.failed</code> — plus the
+        <code>test.ping</code> synthetic for endpoint verification.</li>
     </ul>
 
     <h2>How to be notified when recordings ship</h2>
