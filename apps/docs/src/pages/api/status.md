@@ -79,11 +79,15 @@ Response (`200`):
     {
       "id": "inc_<uuid>",
       "title": "<string>",
+      "description": "<string>",
       "severity": "critical | major | minor",
       "status": "investigating | identified | monitoring | resolved",
+      "affected_components": ["postgres", "redis"],
+      "public": true,
       "started_at": "<ISO-8601>",
       "resolved_at": "<ISO-8601> | null",
-      "components": ["postgres", "redis"]
+      "created_at": "<ISO-8601>",
+      "updated_at": "<ISO-8601>"
     }
   ]
 }
@@ -105,10 +109,11 @@ Response (`200`):
   },
   "updates": [
     {
-      "id": "iu_<uuid>",
-      "posted_at": "<ISO-8601>",
+      "id": "incu_<uuid>",
+      "incident_id": "inc_<uuid>",
+      "message": "<string>",
       "status": "investigating | identified | monitoring | resolved",
-      "body": "<string>"
+      "posted_at": "<ISO-8601>"
     }
   ]
 }
