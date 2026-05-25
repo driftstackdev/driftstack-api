@@ -30,20 +30,20 @@ export interface AgentSessionPanelProps {
    *  `livekit` field on session-create OR from POST /v1/agent-
    *  sessions/:id/livekit-token. */
   info: LiveKitInfo;
-  /** Optional: archetype-driven aspect ratio. Defaults to iPhone 17
-   *  Pro (1320×2868 logical px) since that's the locked archetype
-   *  for v1.0 per the orchestrator brief. */
+  /** Optional: archetype-driven aspect ratio. Defaults to iPhone 16
+   *  Pro (1206×2622 px) since that's the locked archetype
+   *  (iphone16pro_ios18_7_safari26_4) for v1.0 per the orchestrator brief. */
   aspectRatio?: number;
   /** Callback fired on every connection-state transition. LK.6.c
    *  wires the chrome badge to this. */
   onStateChange?: (state: LivekitConnectionState) => void;
 }
 
-const IPHONE_17_PRO_ASPECT_RATIO = 1320 / 2868; // ≈ 0.46
+const IPHONE_16_PRO_ASPECT_RATIO = 1206 / 2622; // ≈ 0.46
 
 export function AgentSessionPanel({
   info,
-  aspectRatio = IPHONE_17_PRO_ASPECT_RATIO,
+  aspectRatio = IPHONE_16_PRO_ASPECT_RATIO,
   onStateChange,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);

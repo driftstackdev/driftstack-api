@@ -124,8 +124,9 @@ type InputEvent =
   | { type: 'ping'; timestamp: number };
 ```
 
-Coordinates are viewport-space logical pixels (iPhone 17 Pro is
-1320×2868 by default). Send via the LocalParticipant:
+Coordinates are viewport-space logical pixels (the locked iPhone 16 Pro
+archetype is 402×874 logical points / 1206×2622 physical pixels by
+default). Send via the LocalParticipant:
 
 ```ts
 async function sendInput(event: InputEvent, reliable = true): Promise<void> {
