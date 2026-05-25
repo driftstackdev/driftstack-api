@@ -180,11 +180,11 @@ describe('W765 docs /api/billing content parity', () => {
     expect(p).toMatch(/Returns `\{ checkout_url, checkout_session_id \}`/);
   });
 
-  it('CRITICAL TS SDK example uses client.billing.getState() + client.billing.startPortalSession() method names. Drift to a different SDK method name would force documentation/typedef-regen mismatches.', () => {
+  it('CRITICAL TS SDK example uses client.billing.getState() + client.billing.createPortalSession() method names — matching BillingResource (the SDK has no startPortalSession; createPortalSession is the real method). Drift to a different SDK method name would force documentation/typedef-regen mismatches.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/const state = await client\.billing\.getState\(\);/);
-    expect(p).toMatch(/const \{ portal_url \} = await client\.billing\.startPortalSession\(\);/);
+    expect(p).toMatch(/const \{ portal_url \} = await client\.billing\.createPortalSession\(\);/);
   });
 
   it("CRITICAL Stripe-handles-card-collection-3DS-tax framing pinned. The 'Stripe handles card collection + 3DS + tax compliance and posts the result back to your success_url' wording is the load-bearing PCI/compliance attribution.", () => {

@@ -22,7 +22,7 @@ equivalent floor (~$19.16) below which payments are rejected as
 `POST /v1/billing/crypto-checkout`
 
 ```ts
-const order = await client.billing.createCryptoCheckout({
+const order = await client.cryptoOrders.createCheckout({
   product: 'solo_manual',
   // price_cents + price_currency are accepted for API compatibility
   // but IGNORED by the server. The price is derived server-side

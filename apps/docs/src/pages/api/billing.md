@@ -101,7 +101,7 @@ hour); ~16 hours of use. Once-per-account.
 `POST /v1/billing/portal-session`
 
 ```ts
-const { portal_url } = await client.billing.startPortalSession();
+const { portal_url } = await client.billing.createPortalSession();
 ```
 
 Returns a short-lived one-time URL into Stripe's hosted Customer
