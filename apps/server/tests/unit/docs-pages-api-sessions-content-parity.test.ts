@@ -197,7 +197,7 @@ describe('W761 docs /api/sessions content parity', () => {
     expect(p).toMatch(/member roles can read \+ write on the owner's sessions\./);
   });
 
-  it('CRITICAL 7-row common-errors table pinned — 401/403/404/410/408/502/503. Drift to dropping a row would hide an error class from SDK consumers.', () => {
+  it('CRITICAL 7-row common-errors table pinned — 401/403/404/410/504/502/503. session-timeout is 504 (matches SessionTimeoutError + the errors reference), not 408. Drift to dropping a row would hide an error class from SDK consumers.', () => {
     const p = read(PAGE);
 
     const errors: Array<[string, string]> = [
@@ -205,7 +205,7 @@ describe('W761 docs /api/sessions content parity', () => {
       ['403', 'forbidden'],
       ['404', 'not-found'],
       ['410', 'session-destroyed'],
-      ['408', 'session-timeout'],
+      ['504', 'session-timeout'],
       ['502', 'driver-error'],
       ['503', 'driver-not-integrated'],
     ];

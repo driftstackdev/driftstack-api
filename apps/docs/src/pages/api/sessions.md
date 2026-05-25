@@ -253,6 +253,6 @@ member roles can read + write on the owner's sessions.
 | 403    | `forbidden`             | Scope missing (write on a read-only key)                        |
 | 404    | `not-found`             | Session not found / not owned                                   |
 | 410    | `session-destroyed`     | Session is `destroyed`; recreate                                |
-| 408    | `session-timeout`       | Idle timeout reached mid-call                                   |
+| 504    | `session-timeout`       | Idle timeout reached mid-call                                   |
 | 502    | `driver-error`          | Driver-level failure (network, crash)                           |
 | 503    | `driver-not-integrated` | Real WebKit driver unavailable; the server is configured for it |
