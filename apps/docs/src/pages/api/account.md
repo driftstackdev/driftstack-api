@@ -27,7 +27,7 @@ Returns the account's full self-visible state:
 | `id`                        | string         | Public id, prefixed `acc_`.                                                                                                                                      |
 | `email`                     | string         | Login email.                                                                                                                                                     |
 | `name`                      | string \| null | Display name; null falls back to email in the UI.                                                                                                                |
-| `tier`                      | enum           | One of the seven tier slugs.                                                                                                                                     |
+| `tier`                      | enum           | One of the eight tier slugs.                                                                                                                                     |
 | `status`                    | enum           | `active` / `suspended` / `deleted`.                                                                                                                              |
 | `timezone`                  | string \| null | IANA name (`Europe/Amsterdam`); null means UTC fallback for client renders.                                                                                      |
 | `slug`                      | string \| null | — readable handle (lowercase a-z + 0-9 + hyphen, 3-32 chars). Null when unset.                                                                                   |

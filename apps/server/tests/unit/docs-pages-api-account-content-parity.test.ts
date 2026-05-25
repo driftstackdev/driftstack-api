@@ -10,6 +10,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AccountTierSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -29,6 +30,13 @@ describe('W770 docs /api/account content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: Account\n/);
+  });
+
+  it('CRITICAL tier-count claim matches AccountTierSchema cardinality — the `tier` field doc says "eight tier slugs" and the enum has exactly eight options. Tied together so adding/removing a tier forces a doc update (this drifted to "seven" once).', () => {
+    const p = read(PAGE);
+
+    expect(p).toMatch(/One of the eight tier slugs\./);
+    expect(AccountTierSchema.options).toHaveLength(8);
   });
 
   it("CRITICAL /me-NEVER-honors-X-Driftstack-Account framing pinned. The 'it never honours the team-RBAC X-Driftstack-Account header — /me always operates on the caller\\'s own account, even when the caller has admin role on a team owner\\'s account' wording matches W766 /api/team non-honoring endpoint list.", () => {
