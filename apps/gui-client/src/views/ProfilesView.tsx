@@ -28,7 +28,13 @@ import {
   setDefaultProxy,
   type ProfileBinding,
 } from '../lib/profile-bindings';
-import { addProxy, listProxies, type ProxyConfig as LocalProxyConfig } from '../lib/proxies';
+import {
+  addProxy,
+  listProxies,
+  testProxy,
+  type ProxyConfig as LocalProxyConfig,
+  type ProxyTestResult,
+} from '../lib/proxies';
 
 // 2026-05-20 — match SessionsView: slow background poll + skip the
 // visible loading flicker on tick refreshes so the panel doesn't
@@ -602,6 +608,13 @@ function CreateProfileModal({
     username: string;
     password: string;
   }>({ label: '', host: '', port: '1080', username: '', password: '' });
+  // Native proxy probe (SOCKS5 reachability + UDP-associate detection).
+  // Runs against the inline create-new draft so the customer can confirm
+  // the proxy works — and whether UDP/QUIC/WebRTC will tunnel — before
+  // minting the profile. Cleared whenever the draft host/port changes so
+  // a stale "reachable" badge can't outlive its inputs.
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<ProxyTestResult | null>(null);
   useEffect(() => {
     void (async () => {
       const list = await listProxies();
@@ -609,6 +622,46 @@ function CreateProfileModal({
       if (list.length === 0) setProxyChoice('create-new');
     })();
   }, []);
+
+  async function handleTestDraftProxy(): Promise<void> {
+    const portNum = Number.parseInt(newProxy.port, 10);
+    if (
+      newProxy.host.trim().length === 0 ||
+      Number.isNaN(portNum) ||
+      portNum < 1 ||
+      portNum > 65535
+    ) {
+      setTestResult({
+        reachable: false,
+        auth_ok: false,
+        udp_associate: false,
+        latency_ms: 0,
+        message: 'Enter a host and a port between 1–65535 before testing.',
+      });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testProxy({
+        host: newProxy.host.trim(),
+        port: portNum,
+        username: newProxy.username.trim().length > 0 ? newProxy.username.trim() : null,
+        password: newProxy.password.length > 0 ? newProxy.password : null,
+      });
+      setTestResult(result);
+    } catch (err) {
+      setTestResult({
+        reachable: false,
+        auth_ok: false,
+        udp_associate: false,
+        latency_ms: 0,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
 
   function randomizeArchetype(): void {
     if (KNOWN_ARCHETYPES.length === 0) return;
@@ -820,7 +873,10 @@ function CreateProfileModal({
                   <input
                     type="text"
                     value={newProxy.host}
-                    onChange={(e) => setNewProxy((p) => ({ ...p, host: e.target.value }))}
+                    onChange={(e) => {
+                      setNewProxy((p) => ({ ...p, host: e.target.value }));
+                      setTestResult(null);
+                    }}
                     placeholder="Host (e.g. proxy.example.com)"
                     disabled={submitting}
                     className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
@@ -830,7 +886,10 @@ function CreateProfileModal({
                     min={1}
                     max={65535}
                     value={newProxy.port}
-                    onChange={(e) => setNewProxy((p) => ({ ...p, port: e.target.value }))}
+                    onChange={(e) => {
+                      setNewProxy((p) => ({ ...p, port: e.target.value }));
+                      setTestResult(null);
+                    }}
                     placeholder="Port"
                     disabled={submitting}
                     className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
@@ -838,7 +897,10 @@ function CreateProfileModal({
                   <input
                     type="text"
                     value={newProxy.username}
-                    onChange={(e) => setNewProxy((p) => ({ ...p, username: e.target.value }))}
+                    onChange={(e) => {
+                      setNewProxy((p) => ({ ...p, username: e.target.value }));
+                      setTestResult(null);
+                    }}
                     placeholder="Username (optional)"
                     disabled={submitting}
                     className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
@@ -846,12 +908,59 @@ function CreateProfileModal({
                   <input
                     type="password"
                     value={newProxy.password}
-                    onChange={(e) => setNewProxy((p) => ({ ...p, password: e.target.value }))}
+                    onChange={(e) => {
+                      setNewProxy((p) => ({ ...p, password: e.target.value }));
+                      setTestResult(null);
+                    }}
                     placeholder="Password (optional)"
                     disabled={submitting}
                     className="col-span-2 rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
                   />
                 </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleTestDraftProxy()}
+                    disabled={submitting || testing || newProxy.host.trim().length === 0}
+                    className="btn-secondary text-xs"
+                  >
+                    {testing ? 'Testing…' : 'Test proxy'}
+                  </button>
+                  <span className="text-2xs text-ink-muted">
+                    Runs a SOCKS5 handshake from this Mac — checks reachability, auth, and UDP
+                    support.
+                  </span>
+                </div>
+                {testResult !== null && (
+                  <div
+                    role="status"
+                    className={`flex flex-col gap-1 rounded-sm border px-2 py-1.5 text-2xs ${
+                      testResult.reachable && testResult.auth_ok
+                        ? 'border-status-success/40 bg-status-success/10 text-status-success'
+                        : 'border-status-error/40 bg-status-error/10 text-status-error'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-medium">
+                        {testResult.reachable && testResult.auth_ok
+                          ? `Reachable · ${testResult.latency_ms} ms`
+                          : 'Not reachable'}
+                      </span>
+                      {testResult.reachable && (
+                        <span
+                          className={`rounded-sm px-1 py-0.5 ${
+                            testResult.udp_associate
+                              ? 'bg-status-success/20'
+                              : 'bg-surface-divider text-ink-muted'
+                          }`}
+                        >
+                          {testResult.udp_associate ? 'UDP ✓' : 'UDP ✗'}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-ink-secondary">{testResult.message}</span>
+                  </div>
+                )}
                 <span className="text-2xs text-ink-muted">
                   Stored locally in this app — credentials never go to the Driftstack control plane.
                 </span>
