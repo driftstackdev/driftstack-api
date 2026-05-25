@@ -145,11 +145,11 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  it("CRITICAL state-read 4-field shape pinned — url + title + ready_state + viewport. The 'Cheap; safe to poll at low frequency' framing is the canonical heartbeat-safety claim.", () => {
+  it("CRITICAL state-read shape pinned — url + title + cookies + local_storage + captured_at (matches SessionStateSchema + the GET /state serializer; NOT ready_state/viewport, which the endpoint does not return). The 'Cheap; safe to poll at low frequency' framing is the canonical heartbeat-safety claim.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /read-only introspection: current `url`, `title`, `ready_state`, `viewport`\. Cheap; safe to poll at low frequency\./,
+      /read-only introspection: current `url`, `title`, persisted `cookies` \+ `local_storage`, and a `captured_at` timestamp\. Cheap; safe to poll at low frequency\./,
     );
   });
 

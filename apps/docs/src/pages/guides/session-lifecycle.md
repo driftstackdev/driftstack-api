@@ -93,7 +93,7 @@ console.log(result.final_url, result.status, result.duration_ms);
 
 **`POST /v1/sessions/:id/wait`** — block until a selector appears, a URL pattern is reached, or a timeout elapses.
 
-**`GET /v1/sessions/:id/state`** — read-only introspection: current `url`, `title`, `ready_state`, `viewport`. Cheap; safe to poll at low frequency.
+**`GET /v1/sessions/:id/state`** — read-only introspection: current `url`, `title`, persisted `cookies` + `local_storage`, and a `captured_at` timestamp. Cheap; safe to poll at low frequency.
 
 ## Capture
 

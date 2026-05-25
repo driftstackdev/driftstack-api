@@ -208,9 +208,10 @@ discriminated union in `packages/api-types/src/sessions.ts`:
 
 ## Get state
 
-`GET /v1/sessions/:id/state` — returns the current DOM HTML +
-viewport size + URL + cookies (subject to a payload-size cap).
-Useful for checkpoint-like reads without a full screenshot.
+`GET /v1/sessions/:id/state` — returns the session's current `url`,
+`title`, `cookies`, and `local_storage`, plus a `captured_at`
+timestamp (subject to a payload-size cap). Useful for checkpoint-like
+reads without a full screenshot.
 
 ## Capture
 
