@@ -198,7 +198,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     const token = adminToken();
     if (!token) {
       showBanner(
-        'No admin token in localStorage. Mint via /v1/admin/login then localStorage.setItem("driftstack:admin_token", "<token>").',
+        'No admin token found. Sign in with a staff admin account via the dashboard (app.driftstack.dev) — the SSO bridge stores it in localStorage as "driftstack:admin_token".',
       );
       throw new Error('no admin token');
     }
