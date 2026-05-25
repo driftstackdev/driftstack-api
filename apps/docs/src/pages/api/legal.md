@@ -65,7 +65,7 @@ Response (200):
       "version": "2026.05",
       "effective_date": "2026-05-01",
       "content_hash": "…",
-      "source_path": "docs/legal/aup.md",
+      "source_path": "docs/legal/acceptable-use-policy.md",
       "byte_size": 8193
     }
   ]

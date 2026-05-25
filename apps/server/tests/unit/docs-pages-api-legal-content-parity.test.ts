@@ -74,13 +74,13 @@ describe('W773 docs /api/legal content parity', () => {
     }
   });
 
-  it('CRITICAL source_path canonical-repo paths pinned — docs/legal/terms-of-service.md / privacy-policy.md / dpa.md / aup.md. Matches the canonical repo source-of-truth.', () => {
+  it('CRITICAL source_path canonical-repo paths pinned — docs/legal/terms-of-service.md / privacy-policy.md / dpa.md / acceptable-use-policy.md. Matches legal-catalog.ts filePath (the source-of-truth the route returns); aup uses the long-form filename, NOT aup.md.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/"source_path": "docs\/legal\/terms-of-service\.md"/);
     expect(p).toMatch(/"source_path": "docs\/legal\/privacy-policy\.md"/);
     expect(p).toMatch(/"source_path": "docs\/legal\/dpa\.md"/);
-    expect(p).toMatch(/"source_path": "docs\/legal\/aup\.md"/);
+    expect(p).toMatch(/"source_path": "docs\/legal\/acceptable-use-policy\.md"/);
   });
 
   it("CRITICAL content-hash-binding rejection framing pinned. The 'Customers ship a hash with their acceptance; if the document text has changed in any way — even a typo fix — the hash differs and the acceptance is rejected with 409 (the customer must re-fetch + re-accept)' wording is the load-bearing tamper-resistance contract.", () => {
