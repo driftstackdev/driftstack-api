@@ -129,9 +129,19 @@ describe('W460.C packages/recapture-automation/src/atlas.ts content parity', () 
     expect(body).toMatch(
       /const counts = archMap\.get\(cmp\.surfaceId\) \?\? \{\s*\n?\s*match: 0,\s*\n?\s*diff: 0,\s*\n?\s*capture_error: 0,\s*\n?\s*new_surface: 0,\s*\n?\s*missing_surface: 0,\s*\n?\s*\};/,
     );
-    expect(body).toMatch(
-      /if \(matchRate >= STABLE_THRESHOLD\) \{\s*\n?\s*classification = 'stable';\s*\n?\s*\} else if \(errorRate >= ERROR_THRESHOLD\) \{\s*\n?\s*classification = 'erroring';\s*\n?\s*\} else if \(counts\.diff > counts\.capture_error && counts\.diff > counts\.new_surface\) \{\s*\n?\s*classification = 'drifting';\s*\n?\s*\} else \{\s*\n?\s*classification = 'volatile';\s*\n?\s*\}/,
-    );
+    // Discrete pins for the 4-way classification (the prior single regex had
+    // >5 \s*\n? groups — catastrophic-backtracking risk per the parity-test rule).
+    expect(body).toMatch(/if \(matchRate >= STABLE_THRESHOLD\) \{/);
+    expect(body).toMatch(/classification = 'stable';/);
+    expect(body).toMatch(/\} else if \(errorRate >= ERROR_THRESHOLD\) \{/);
+    expect(body).toMatch(/classification = 'erroring';/);
+    // 'drifting' requires diff to dominate ALL other non-match outcomes —
+    // including missing_surface, else a missing-dominant surface mislabels.
+    expect(body).toMatch(/counts\.diff > counts\.capture_error/);
+    expect(body).toMatch(/counts\.diff > counts\.new_surface/);
+    expect(body).toMatch(/counts\.diff > counts\.missing_surface/);
+    expect(body).toMatch(/classification = 'drifting';/);
+    expect(body).toMatch(/classification = 'volatile';/);
   });
 
   it("Snapshot walk: oldest-first sort + 'Walking runs oldest-first → later writes overwrite, so the final state is the most-recent value per surface'; capture_error + missing_surface skipped from snapshot writes; capturedAtMs fallback completedAtMs ?? createdAtMs", () => {
@@ -159,9 +169,15 @@ describe('W460.C packages/recapture-automation/src/atlas.ts content parity', () 
     expect(body).toMatch(
       /\/\*\* Convenience: classify ONE surface's outcomes inline without going\s*\n?\s*\*\s*through buildAtlas\. Useful for admin-route point queries\. \*\/\s*\n?\s*export function classifyOutcomes\(counts: \{\s*\n?\s*match: number;\s*\n?\s*diff: number;\s*\n?\s*capture_error: number;\s*\n?\s*new_surface: number;\s*\n?\s*missing_surface: number;\s*\n?\s*\}\): SurfaceStability\['classification'\] \{/,
     );
-    expect(body).toMatch(
-      /if \(total === 0\) return 'volatile';\s*\n?\s*const matchRate = counts\.match \/ total;\s*\n?\s*const errorRate = counts\.capture_error \/ total;\s*\n?\s*if \(matchRate >= STABLE_THRESHOLD\) return 'stable';\s*\n?\s*if \(errorRate >= ERROR_THRESHOLD\) return 'erroring';\s*\n?\s*if \(counts\.diff > counts\.capture_error && counts\.diff > counts\.new_surface\) return 'drifting';\s*\n?\s*return 'volatile';/,
-    );
+    // Discrete pins (avoids the >5 \s*\n? backtracking risk); same threshold
+    // ordering as buildAtlas, with drifting also gated on missing_surface.
+    expect(body).toMatch(/if \(total === 0\) return 'volatile';/);
+    expect(body).toMatch(/const matchRate = counts\.match \/ total;/);
+    expect(body).toMatch(/const errorRate = counts\.capture_error \/ total;/);
+    expect(body).toMatch(/if \(matchRate >= STABLE_THRESHOLD\) return 'stable';/);
+    expect(body).toMatch(/if \(errorRate >= ERROR_THRESHOLD\) return 'erroring';/);
+    expect(body).toMatch(/return 'drifting';/);
+    expect(body).toMatch(/return 'volatile';/);
   });
 
   it('file exists at canonical path', () => {

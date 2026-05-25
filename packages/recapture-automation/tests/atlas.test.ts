@@ -516,4 +516,18 @@ describe('V-533.B classifyOutcomes — direct point-query helper', () => {
       classifyOutcomes({ match: 1, diff: 1, capture_error: 4, new_surface: 0, missing_surface: 0 }),
     ).toBe('erroring');
   });
+
+  it("classifies a missing-dominant surface as 'volatile', not 'drifting'", () => {
+    // diff (3) beats capture_error (0) and new_surface (0), but missing_surface
+    // (5) dominates the gap — drift does NOT account for it, so it's volatile.
+    expect(
+      classifyOutcomes({ match: 0, diff: 3, capture_error: 0, new_surface: 0, missing_surface: 5 }),
+    ).toBe('volatile');
+  });
+
+  it("classifies a truly diff-dominant surface as 'drifting' (diff beats every other non-match)", () => {
+    expect(
+      classifyOutcomes({ match: 0, diff: 6, capture_error: 1, new_surface: 1, missing_surface: 2 }),
+    ).toBe('drifting');
+  });
 });

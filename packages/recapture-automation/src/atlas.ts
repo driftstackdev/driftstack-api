@@ -156,7 +156,11 @@ export function buildAtlas(opts: BuildAtlasOpts): Atlas {
         classification = 'stable';
       } else if (errorRate >= ERROR_THRESHOLD) {
         classification = 'erroring';
-      } else if (counts.diff > counts.capture_error && counts.diff > counts.new_surface) {
+      } else if (
+        counts.diff > counts.capture_error &&
+        counts.diff > counts.new_surface &&
+        counts.diff > counts.missing_surface
+      ) {
         classification = 'drifting';
       } else {
         classification = 'volatile';
@@ -260,6 +264,11 @@ export function classifyOutcomes(counts: {
   const errorRate = counts.capture_error / total;
   if (matchRate >= STABLE_THRESHOLD) return 'stable';
   if (errorRate >= ERROR_THRESHOLD) return 'erroring';
-  if (counts.diff > counts.capture_error && counts.diff > counts.new_surface) return 'drifting';
+  if (
+    counts.diff > counts.capture_error &&
+    counts.diff > counts.new_surface &&
+    counts.diff > counts.missing_surface
+  )
+    return 'drifting';
   return 'volatile';
 }
