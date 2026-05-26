@@ -34,7 +34,8 @@
 //     + thresholdState.
 //
 //   estimateCost framing — 'All arithmetic is rounded to the nearest
-//   cent (banker's rounding via Math.round). Negative inputs are
+//   cent via Math.round, which is round-half-up (ties toward
+//   +Infinity), NOT banker's round-half-to-even. Negative inputs are
 //   clamped to 0 — usage data should never be negative, but a
 //   corrupt input shouldn't produce nonsense negative cost'.
 //
@@ -175,12 +176,13 @@ describe('W958 V-658 cost-estimator cross-source invariant', () => {
 
   // ─── estimateCost rounding + clamp framing ───────────────────
 
-  it("CRITICAL estimateCost framing — 'All arithmetic is rounded to the nearest cent (banker's rounding via Math.round). Negative inputs are clamped to 0 — usage data should never be negative, but a corrupt input shouldn't produce nonsense negative cost'. The Math.round + clamp-to-0 is the integer-cents + corruption-defense contract.", () => {
+  it("CRITICAL estimateCost framing — 'All arithmetic is rounded to the nearest cent via Math.round, which is round-half-up (ties toward +Infinity), NOT banker's round-half-to-even. Negative inputs are clamped to 0 — usage data should never be negative, but a corrupt input shouldn't produce nonsense negative cost'. The Math.round + clamp-to-0 is the integer-cents + corruption-defense contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/cost-estimator.ts'));
-    expect(p).toMatch(/All arithmetic is rounded to the nearest cent \(banker's rounding via/);
-    expect(p).toMatch(/Math\.round\)\. Negative inputs are clamped to 0 — usage data should/);
-    expect(p).toMatch(/never be negative, but a corrupt input shouldn't produce nonsense/);
-    expect(p).toMatch(/negative cost\./);
+    expect(p).toMatch(/All arithmetic is rounded to the nearest cent via `Math\.round`/);
+    expect(p).toMatch(/round-half-up \(ties round toward \+Infinity\), NOT banker's/);
+    expect(p).toMatch(/Negative inputs are clamped to 0 — usage data/);
+    expect(p).toMatch(/should never be negative, but a corrupt input shouldn't produce/);
+    expect(p).toMatch(/nonsense negative cost\./);
   });
 
   // ─── LLM cost split (input + output per 1k tokens) ───────────

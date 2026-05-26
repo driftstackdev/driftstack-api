@@ -8,7 +8,7 @@
 //   • V-658 / V-541.B framing pinned.
 //   • Rates passed in by caller (admin UI is source of truth — V-541
 //     design "operator maintains this multiplier in admin config").
-//   • All arithmetic in cents (integer math) + banker's rounding via
+//   • All arithmetic in cents (integer math) + round-half-up via
 //     Math.round + negative-input clamping.
 //   • CostRates: 6 fields (compute / storage / egress / email / LLM
 //     input / LLM output).
@@ -111,10 +111,10 @@ describe('W390.B apps/server/src/lib/cost-estimator.ts content parity', () => {
     expect(body).toMatch(/thresholdState: ThresholdState;/);
   });
 
-  it("estimateCost: banker's rounding (Math.round) + negative-input clamping framing", () => {
-    expect(body).toMatch(
-      /All arithmetic is rounded to the nearest cent \(banker's rounding via\s*\n?\s*\*\s*Math\.round\)\. Negative inputs are clamped to 0 — usage data should\s*\n?\s*\*\s*never be negative, but a corrupt input shouldn't produce nonsense\s*\n?\s*\*\s*negative cost/,
-    );
+  it("estimateCost: round-half-up (Math.round, NOT banker's) + negative-input clamping framing", () => {
+    expect(body).toMatch(/rounded to the nearest cent via `Math\.round`/);
+    expect(body).toMatch(/round-half-up \(ties round toward \+Infinity\), NOT banker's/);
+    expect(body).toMatch(/Negative inputs are clamped to 0/);
   });
 
   it('estimateCost signature: (usage, rates, thresholds) → CostBreakdown', () => {

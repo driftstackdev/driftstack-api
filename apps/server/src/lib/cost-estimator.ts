@@ -66,10 +66,11 @@ export interface CostBreakdown {
 /**
  * Compute a per-account cost breakdown for one billing cycle.
  *
- * All arithmetic is rounded to the nearest cent (banker's rounding via
- * Math.round). Negative inputs are clamped to 0 — usage data should
- * never be negative, but a corrupt input shouldn't produce nonsense
- * negative cost.
+ * All arithmetic is rounded to the nearest cent via `Math.round`,
+ * which is round-half-up (ties round toward +Infinity), NOT banker's
+ * round-half-to-even. Negative inputs are clamped to 0 — usage data
+ * should never be negative, but a corrupt input shouldn't produce
+ * nonsense negative cost.
  */
 export function estimateCost(
   usage: UsageInputs,
