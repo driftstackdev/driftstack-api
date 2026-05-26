@@ -48,7 +48,7 @@ class WebhooksResource:
         """Create a webhook subscription.
 
         Plaintext signing secret is returned ONCE; store it now — it
-        cannot be retrieved later. Requires the ``admin`` scope.
+        cannot be retrieved later. Requires the ``account_owner`` scope.
         """
         data = self._http.request("POST", "/v1/webhooks", json_body=coerce_body(body))
         return CreateWebhookResponse.model_validate(data)

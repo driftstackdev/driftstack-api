@@ -89,9 +89,9 @@ describe('W584.A packages/sdk-python/src/driftstack/resources/webhooks.py conten
     );
   });
 
-  it('Sync create — POST /v1/webhooks with CreateWebhookRequest body via coerce_body. CRITICAL: "Plaintext signing secret is returned ONCE; store it now — it cannot be retrieved later." This is the load-bearing claim — the customer cannot re-read the secret later, only rotate it via V-359. "Requires the admin scope" framing pinned because list/get/delete are read-only-scope-tolerable; create writes a new endpoint with a brand-new secret.', () => {
+  it('Sync create — POST /v1/webhooks with CreateWebhookRequest body via coerce_body. CRITICAL: "Plaintext signing secret is returned ONCE; store it now — it cannot be retrieved later." This is the load-bearing claim — the customer cannot re-read the secret later, only rotate it via V-359. "Requires the account_owner scope" framing pinned (V-174) because list/get/delete are read-only-scope-tolerable; create writes a new endpoint with a brand-new secret.', () => {
     expect(body).toMatch(
-      /def create\(self, body: CreateWebhookRequest \| dict\[str, Any\]\) -> CreateWebhookResponse:\s*\n\s*"""Create a webhook subscription\.\s*\n\s*\n\s*Plaintext signing secret is returned ONCE; store it now — it\s*\n\s*cannot be retrieved later\. Requires the ``admin`` scope\.\s*\n\s*"""/,
+      /def create\(self, body: CreateWebhookRequest \| dict\[str, Any\]\) -> CreateWebhookResponse:\s*\n\s*"""Create a webhook subscription\.\s*\n\s*\n\s*Plaintext signing secret is returned ONCE; store it now — it\s*\n\s*cannot be retrieved later\. Requires the ``account_owner`` scope\.\s*\n\s*"""/,
     );
     expect(body).toMatch(
       /data = self\._http\.request\("POST", "\/v1\/webhooks", json_body=coerce_body\(body\)\)/,

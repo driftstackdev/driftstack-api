@@ -14,7 +14,7 @@ type WebhooksResource struct {
 
 // Create a webhook subscription. Plaintext signing secret is returned
 // ONCE in CreateWebhookResponse.Secret — store it immediately.
-// Requires the admin scope.
+// Requires the account_owner scope.
 func (r *WebhooksResource) Create(ctx context.Context, body *CreateWebhookRequest) (*CreateWebhookResponse, error) {
 	var out CreateWebhookResponse
 	if err := r.client.do(ctx, requestOptions{
@@ -120,7 +120,7 @@ type RotateWebhookSecretResponse struct {
 // plaintext is returned ONCE. The previous secret stays active for 24h
 // (GraceExpiresAt) during which Driftstack dual-signs every outbound
 // delivery. Roll the new secret across your verifier infra inside that
-// window. Requires the admin scope on the calling key.
+// window. Requires the account_owner scope on the calling key.
 func (r *WebhooksResource) RotateSecret(ctx context.Context, webhookID string) (*RotateWebhookSecretResponse, error) {
 	var out RotateWebhookSecretResponse
 	if err := r.client.do(ctx, requestOptions{
@@ -147,7 +147,7 @@ type SendTestWebhookResponse struct {
 // of URL / Events / Description / Active must be non-nil; otherwise
 // the server returns 400. The signing secret is NOT rotated by
 // Update; use RotateSecret for that. Disabled endpoints can't be
-// updated (returns 409). Requires the admin scope on the calling key.
+// updated (returns 409). Requires the account_owner scope on the calling key.
 func (r *WebhooksResource) Update(ctx context.Context, webhookID string, body *UpdateWebhookRequest) (*WebhookEndpoint, error) {
 	var out WebhookEndpoint
 	if err := r.client.do(ctx, requestOptions{
@@ -165,7 +165,7 @@ func (r *WebhooksResource) Update(ctx context.Context, webhookID string, body *U
 // endpoint. Bypasses subscription so customers can verify their
 // handler is reachable + signature-valid before depending on it for
 // real events. Returns 202 + the synthetic delivery id. Requires
-// the admin scope on the calling key.
+// the account_owner scope on the calling key.
 func (r *WebhooksResource) SendTest(ctx context.Context, webhookID string) (*SendTestWebhookResponse, error) {
 	var out SendTestWebhookResponse
 	if err := r.client.do(ctx, requestOptions{

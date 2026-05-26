@@ -29,7 +29,7 @@ export class WebhooksResource {
   /**
    * Create a webhook subscription. Plaintext signing secret is returned
    * once; store it now — it cannot be retrieved later. Requires the
-   * `admin` scope on the calling key.
+   * `account_owner` scope on the calling key.
    */
   create(body: CreateWebhookRequest): Promise<CreateWebhookResponse> {
     return this.http.request<CreateWebhookResponse>({
@@ -68,7 +68,7 @@ export class WebhooksResource {
    * `events`, `description`, or `active` must be present. The
    * signing secret is NOT rotated by update; use `rotateSecret` for
    * that. Disabled endpoints cannot be updated (returns 409).
-   * Requires the `admin` scope on the calling key.
+   * Requires the `account_owner` scope on the calling key.
    */
   update(id: string, body: UpdateWebhookRequest): Promise<WebhookEndpoint> {
     return this.http.request<WebhookEndpoint>({
@@ -132,7 +132,7 @@ export class WebhooksResource {
    * (`grace_expires_at`) during which Driftstack dual-signs every
    * outbound delivery (both the new + old HMAC). Roll the new secret
    * across your verifier infra inside that window. Requires the
-   * `admin` scope on the calling key.
+   * `account_owner` scope on the calling key.
    */
   rotateSecret(id: string): Promise<RotateWebhookSecretResponse> {
     return this.http.request<RotateWebhookSecretResponse>({
@@ -148,7 +148,7 @@ export class WebhooksResource {
    * which event types it's subscribed to), so customers can verify
    * their handler is reachable + signature-valid before depending on
    * it for real events. Returns 202 + the synthetic delivery id.
-   * Requires the `admin` scope on the calling key.
+   * Requires the `account_owner` scope on the calling key.
    */
   sendTest(id: string): Promise<{
     delivery_id: string;

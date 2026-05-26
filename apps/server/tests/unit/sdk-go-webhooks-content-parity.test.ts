@@ -45,7 +45,7 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
       /\/\/ Create a webhook subscription\. Plaintext signing secret is returned/,
     );
     expect(body).toMatch(/\/\/ ONCE in CreateWebhookResponse\.Secret — store it immediately\./);
-    expect(body).toMatch(/\/\/ Requires the admin scope\./);
+    expect(body).toMatch(/\/\/ Requires the account_owner scope\./);
     expect(body).toMatch(
       /func \(r \*WebhooksResource\) Create\(ctx context\.Context, body \*CreateWebhookRequest\) \(\*CreateWebhookResponse, error\)/,
     );
@@ -141,7 +141,7 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
     expect(body).toMatch(
       /\/\/ delivery\. Roll the new secret across your verifier infra inside that/,
     );
-    expect(body).toMatch(/\/\/ window\. Requires the admin scope on the calling key\./);
+    expect(body).toMatch(/\/\/ window\. Requires the account_owner scope on the calling key\./);
     expect(body).toMatch(
       /func \(r \*WebhooksResource\) RotateSecret\(ctx context\.Context, webhookID string\) \(\*RotateWebhookSecretResponse, error\)/,
     );
@@ -179,7 +179,7 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
     expect(body).toMatch(/\/\/ the server returns 400\. The signing secret is NOT rotated by/);
     expect(body).toMatch(/\/\/ Update; use RotateSecret for that\. Disabled endpoints can't be/);
     expect(body).toMatch(
-      /\/\/ updated \(returns 409\)\. Requires the admin scope on the calling key\./,
+      /\/\/ updated \(returns 409\)\. Requires the account_owner scope on the calling key\./,
     );
     expect(body).toMatch(
       /func \(r \*WebhooksResource\) Update\(ctx context\.Context, webhookID string, body \*UpdateWebhookRequest\) \(\*WebhookEndpoint, error\)/,

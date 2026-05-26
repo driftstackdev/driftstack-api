@@ -86,9 +86,9 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
     expect(body).toMatch(/constructor\(private readonly http: HttpClient\) \{\}/);
   });
 
-  it('create verb — POST /v1/webhooks. CRITICAL: "Plaintext signing secret is returned once; store it now — it cannot be retrieved later." + "Requires the `admin` scope on the calling key." Two load-bearing invariants — plaintext-once + admin-scope. Drift to dropping admin-scope would let any key create new endpoints (privilege escalation).', () => {
+  it('create verb — POST /v1/webhooks. CRITICAL: "Plaintext signing secret is returned once; store it now — it cannot be retrieved later." + "Requires the `account_owner` scope on the calling key." Two load-bearing invariants — plaintext-once + admin-scope. Drift to dropping admin-scope would let any key create new endpoints (privilege escalation).', () => {
     expect(body).toMatch(
-      /\*\s*Create a webhook subscription\. Plaintext signing secret is returned\s*\n?\s*\*\s*once; store it now — it cannot be retrieved later\. Requires the\s*\n?\s*\*\s*`admin` scope on the calling key\./,
+      /\*\s*Create a webhook subscription\. Plaintext signing secret is returned\s*\n?\s*\*\s*once; store it now — it cannot be retrieved later\. Requires the\s*\n?\s*\*\s*`account_owner` scope on the calling key\./,
     );
     expect(body).toMatch(
       /create\(body: CreateWebhookRequest\): Promise<CreateWebhookResponse> \{\s*\n?\s*return this\.http\.request<CreateWebhookResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: '\/v1\/webhooks',\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
@@ -120,7 +120,7 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
 
   it('V-351 update verb — PATCH /v1/webhooks/${encodeURIComponent(id)}. CRITICAL 3 stacked invariants pinned per-line: (1) "At least one of `url`, `events`, `description`, or `active` must be present" (drift to allowing zero fields lets no-op PATCH succeed silently). (2) "The signing secret is NOT rotated by update; use `rotateSecret` for that" (drift to rotating-on-update would force rotation on every UI tweak). (3) "Disabled endpoints cannot be updated (returns 409)" (after soft-delete the endpoint is read-only). + admin-scope requirement.', () => {
     expect(body).toMatch(
-      /\*\s*V-351 — partial-update a webhook endpoint\. At least one of `url`,\s*\n?\s*\*\s*`events`, `description`, or `active` must be present\. The\s*\n?\s*\*\s*signing secret is NOT rotated by update; use `rotateSecret` for\s*\n?\s*\*\s*that\. Disabled endpoints cannot be updated \(returns 409\)\.\s*\n?\s*\*\s*Requires the `admin` scope on the calling key\./,
+      /\*\s*V-351 — partial-update a webhook endpoint\. At least one of `url`,\s*\n?\s*\*\s*`events`, `description`, or `active` must be present\. The\s*\n?\s*\*\s*signing secret is NOT rotated by update; use `rotateSecret` for\s*\n?\s*\*\s*that\. Disabled endpoints cannot be updated \(returns 409\)\.\s*\n?\s*\*\s*Requires the `account_owner` scope on the calling key\./,
     );
     expect(body).toMatch(
       /update\(id: string, body: UpdateWebhookRequest\): Promise<WebhookEndpoint> \{\s*\n?\s*return this\.http\.request<WebhookEndpoint>\(\{\s*\n?\s*method: 'PATCH',\s*\n?\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}`,\s*\n?\s*body,\s*\n?\s*\}\);\s*\n?\s*\}/,
@@ -156,7 +156,7 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
 
   it('CRITICAL V-359 rotateSecret verb — POST /v1/webhooks/${encodeURIComponent(id)}/rotate-secret. 6-line grace-window claim pinned per-line: fresh plaintext ONCE + 24h via grace_expires_at + Driftstack DUAL-SIGNS every outbound delivery (both new + old HMAC) + customer rolls verifier infra inside the window + admin-scope. Drift to a different window OR dropping dual-sign would silently change rotation semantics customers anchor their verifier-rollout timelines on.', () => {
     expect(body).toMatch(
-      /\*\s*V-359 — rotate the webhook signing secret\. The fresh plaintext is\s*\n?\s*\*\s*returned ONCE\. The previous secret stays active for 24h\s*\n?\s*\*\s*\(`grace_expires_at`\) during which Driftstack dual-signs every\s*\n?\s*\*\s*outbound delivery \(both the new \+ old HMAC\)\. Roll the new secret\s*\n?\s*\*\s*across your verifier infra inside that window\. Requires the\s*\n?\s*\*\s*`admin` scope on the calling key\./,
+      /\*\s*V-359 — rotate the webhook signing secret\. The fresh plaintext is\s*\n?\s*\*\s*returned ONCE\. The previous secret stays active for 24h\s*\n?\s*\*\s*\(`grace_expires_at`\) during which Driftstack dual-signs every\s*\n?\s*\*\s*outbound delivery \(both the new \+ old HMAC\)\. Roll the new secret\s*\n?\s*\*\s*across your verifier infra inside that window\. Requires the\s*\n?\s*\*\s*`account_owner` scope on the calling key\./,
     );
     expect(body).toMatch(
       /rotateSecret\(id: string\): Promise<RotateWebhookSecretResponse> \{\s*\n?\s*return this\.http\.request<RotateWebhookSecretResponse>\(\{\s*\n?\s*method: 'POST',\s*\n?\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}\/rotate-secret`,\s*\n?\s*body: \{\},\s*\n?\s*\}\);\s*\n?\s*\}/,
@@ -165,7 +165,7 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
 
   it("V-356 sendTest verb — POST /v1/webhooks/${encodeURIComponent(id)}/test. CRITICAL: \"Bypasses subscription (the endpoint receives it regardless of which event types it's subscribed to)\" — drift to requiring test.ping in the subscription would break first-time-setup verification (chicken-and-egg). Response carries 3-field shape with `event_type: 'test.ping'` as TS LITERAL type (not `string`) — drift to widening would lose compile-time enforcement that the synthetic event NEVER claims a real event_type from the customer's subscription.", () => {
     expect(body).toMatch(
-      /\*\s*V-356 — send a synthetic `test\.ping` event to the endpoint\.\s*\n?\s*\*\s*Bypasses subscription \(the endpoint receives it regardless of\s*\n?\s*\*\s*which event types it's subscribed to\), so customers can verify\s*\n?\s*\*\s*their handler is reachable \+ signature-valid before depending on\s*\n?\s*\*\s*it for real events\. Returns 202 \+ the synthetic delivery id\.\s*\n?\s*\*\s*Requires the `admin` scope on the calling key\./,
+      /\*\s*V-356 — send a synthetic `test\.ping` event to the endpoint\.\s*\n?\s*\*\s*Bypasses subscription \(the endpoint receives it regardless of\s*\n?\s*\*\s*which event types it's subscribed to\), so customers can verify\s*\n?\s*\*\s*their handler is reachable \+ signature-valid before depending on\s*\n?\s*\*\s*it for real events\. Returns 202 \+ the synthetic delivery id\.\s*\n?\s*\*\s*Requires the `account_owner` scope on the calling key\./,
     );
     expect(body).toMatch(
       /sendTest\(id: string\): Promise<\{\s*\n?\s*delivery_id: string;\s*\n?\s*event_id: string;\s*\n?\s*event_type: 'test\.ping';\s*\n?\s*\}> \{/,
@@ -174,11 +174,11 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
   });
 
   it('admin-scope-on-mutations invariant pinned across EXACTLY 4 verbs (create + update + rotateSecret + sendTest). Read-only verbs (list + get + listDeliveries + iterateDeliveries) MUST NOT carry the admin requirement so dashboards can render webhook state for any team member. delete is interestingly NOT in the admin list — soft-delete is allowed without admin (the calling key still must own the endpoint, but no admin-scope check).', () => {
-    // The "Requires the `admin` scope on the calling key" framing
+    // The "Requires the `account_owner` scope on the calling key" framing
     // wraps across lines in 2 of the 4 JSDocs, so allow optional
     // newline+`* ` between "the" and "`admin`".
     const adminMatches =
-      body.match(/Requires the(?:\s|\s*\n\s*\*\s*)`admin` scope on the calling key/g) ?? [];
+      body.match(/Requires the(?:\s|\s*\n\s*\*\s*)`account_owner` scope on the calling key/g) ?? [];
     expect(
       adminMatches.length,
       'expected admin-scope on exactly 4 verbs (create + update + rotateSecret + sendTest)',

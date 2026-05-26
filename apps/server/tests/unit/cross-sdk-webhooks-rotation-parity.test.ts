@@ -206,9 +206,10 @@ describe('W702 cross-SDK V-359/V-307/V-351/V-356 webhooks rotation + replay pari
   it('CRITICAL admin-scope requirement pinned on 4 mutating verbs in sdk-typescript — create + update + rotateSecret + sendTest. The admin-scope gating is what prevents read-keys from chain-escalating to full webhook control.', () => {
     const ts = read(TS_WH);
 
-    // sdk-typescript: 4 "admin scope" mentions (create + update + rotateSecret + sendTest).
-    const tsAdminScope = (ts.match(/`admin` scope\s*\n?\s*\*?\s*on the calling key/g) ?? []).length;
-    expect(tsAdminScope, 'sdk-typescript admin-scope mentions').toBeGreaterThanOrEqual(4);
+    // sdk-typescript: 4 "account_owner scope" mentions (create + update + rotateSecret + sendTest).
+    const tsAdminScope = (ts.match(/`account_owner` scope\s*\n?\s*\*?\s*on the calling key/g) ?? [])
+      .length;
+    expect(tsAdminScope, 'sdk-typescript account_owner-scope mentions').toBeGreaterThanOrEqual(4);
   });
 
   it("CRITICAL RotateWebhookSecretResponse 5-field shape pinned in sdk-go — id + secret + secret_prefix + prev_secret_prefix + grace_expires_at. The 5 fields carry the full rotation receipt including BOTH prefixes (so dashboards can render 'rotating from sk_old... to sk_new...').", () => {
