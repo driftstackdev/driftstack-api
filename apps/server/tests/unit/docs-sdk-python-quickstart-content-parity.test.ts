@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/sdk/python-quickstart.md');
+const PY_SDK_ERRORS = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/errors.py');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -20,6 +21,17 @@ describe('docs sdk/python-quickstart content parity', () => {
 
   it('file exists at canonical path', () => {
     expect(existsSync(PAGE)).toBe(true);
+  });
+
+  it('tier-limit subclass name is QuotaExceededError, NOT TierLimitError. The Python SDK names the tier-limit error class QuotaExceededError (only the TS SDK kept the historical TierLimitError name). A doc telling Python users to catch TierLimitError would raise ImportError/AttributeError (regression: the granular-handling list once named TierLimitError).', () => {
+    // Source of truth: the Python SDK defines QuotaExceededError and NOT TierLimitError.
+    const sdk = read(PY_SDK_ERRORS);
+    expect(sdk).toMatch(/class QuotaExceededError\(/);
+    expect(sdk).not.toMatch(/class TierLimitError\b/);
+
+    // The doc must reference the class the Python SDK actually exports.
+    expect(body).toMatch(/`QuotaExceededError`/);
+    expect(body).not.toMatch(/`TierLimitError`/);
   });
 
   it('title + description front-matter pinned', () => {

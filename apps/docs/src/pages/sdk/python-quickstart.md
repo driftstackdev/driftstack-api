@@ -122,7 +122,7 @@ except DriftstackError as err:
 ```
 
 For granular handling, catch the subclass directly
-(`RateLimitError`, `ConcurrencyLimitError`, `TierLimitError`,
+(`RateLimitError`, `ConcurrencyLimitError`, `QuotaExceededError`,
 `SessionDestroyedError`, …). The full mapping lives at
 [/reference/errors](/reference/errors/).
 
