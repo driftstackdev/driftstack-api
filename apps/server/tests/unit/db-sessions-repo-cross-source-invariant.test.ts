@@ -128,24 +128,19 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
 
   // ─── listSessions cursor framing ─────────────────────────────
 
-  it("CRITICAL listSessions cursor framing — 'Cursor format: ISO timestamp of the last seen createdAt (descending order)'. The ISO-cursor + desc(createdAt) is the standard keyset-pagination pattern.", () => {
+  it('CRITICAL listSessions keyset cursor — account-scoped conds + (createdAt,id) compound; cursor row looked up by (id, accountId).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
-    expect(p).toMatch(
-      /\/\/ Cursor format: ISO timestamp of the last seen createdAt \(descending order\)\./,
-    );
-    expect(p).toMatch(/const cursorDate = opts\.cursor \? new Date\(opts\.cursor\) : null;/);
-    expect(p).toMatch(
-      /\? and\(eq\(sessions\.accountId, accountId\), lt\(sessions\.createdAt, cursorDate\)\)/,
-    );
-    expect(p).toMatch(/: eq\(sessions\.accountId, accountId\);/);
+    expect(p).toMatch(/const conds: SQL\[\] = \[eq\(sessions\.accountId, accountId\)\];/);
+    expect(p).toMatch(/lt\(sessions\.createdAt, c\.createdAt\),/);
+    expect(p).toMatch(/and\(eq\(sessions\.createdAt, c\.createdAt\), lt\(sessions\.id, c\.id\)\),/);
   });
 
-  it("CRITICAL listSessions limit+1 hasMore probe + ISO cursor — '.limit(opts.limit + 1)' + 'nextCursor = hasMore && last ? last.createdAt.toISOString() : null'. The +1 probe is the standard keyset-pagination idiom.", () => {
+  it("CRITICAL listSessions limit+1 hasMore probe + (createdAt desc, id desc) keyset — '.limit(opts.limit + 1)' + 'nextCursor = hasMore && last ? last.id : null'.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
-    expect(p).toMatch(/\.orderBy\(desc\(sessions\.createdAt\)\)/);
+    expect(p).toMatch(/\.orderBy\(desc\(sessions\.createdAt\), desc\(sessions\.id\)\)/);
     expect(p).toMatch(/\.limit\(opts\.limit \+ 1\);/);
     expect(p).toMatch(/const hasMore = rows\.length > opts\.limit;/);
-    expect(p).toMatch(/nextCursor: hasMore && last \? last\.createdAt\.toISOString\(\) : null,/);
+    expect(p).toMatch(/nextCursor: hasMore && last \? last\.id : null,/);
   });
 
   // ─── recordEvent 4-field values ──────────────────────────────
@@ -162,7 +157,7 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
 
   it('CRITICAL listAllSessions admin 3-filter — cursor (lt createdAt) + status (eq) + accountId (eq). The admin-side filter set covers cross-tenant lookup with optional status/account narrowing.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
-    expect(p).toMatch(/if \(cursorDate\) filters\.push\(lt\(sessions\.createdAt, cursorDate\)\);/);
+    expect(p).toMatch(/and\(eq\(sessions\.createdAt, c\.createdAt\), lt\(sessions\.id, c\.id\)\),/);
     expect(p).toMatch(/if \(opts\.status\) filters\.push\(eq\(sessions\.status, opts\.status\)\);/);
     expect(p).toMatch(
       /if \(opts\.accountId\) filters\.push\(eq\(sessions\.accountId, opts\.accountId\)\);/,

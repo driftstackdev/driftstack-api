@@ -82,17 +82,25 @@ export class InMemorySessionsRepo implements SessionRepo {
     accountId: string,
     opts: { limit: number; cursor?: string },
   ): Promise<SessionListPage> {
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
-    const all = Array.from(this.sessions.values())
+    // Keyset (createdAt desc, id desc): stable sort then resume after
+    // the cursor row's position — mirrors the Drizzle repo.
+    let all = Array.from(this.sessions.values())
       .filter((s) => s.accountId === accountId)
-      .filter((s) => (cursorDate ? s.createdAt < cursorDate : true))
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort((a, b) => {
+        const dt = b.createdAt.getTime() - a.createdAt.getTime();
+        if (dt !== 0) return dt;
+        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+      });
+    if (opts.cursor !== undefined) {
+      const idx = all.findIndex((s) => s.id === opts.cursor);
+      if (idx >= 0) all = all.slice(idx + 1);
+    }
     const items = all.slice(0, opts.limit);
     const last = items[items.length - 1];
     const hasMore = all.length > opts.limit;
     return Promise.resolve({
       items,
-      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+      nextCursor: hasMore && last ? last.id : null,
     });
   }
 
@@ -102,18 +110,25 @@ export class InMemorySessionsRepo implements SessionRepo {
     status?: SessionRecord['status'];
     accountId?: string;
   }): Promise<SessionListPage> {
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
-    const all = Array.from(this.sessions.values())
+    // Keyset (createdAt desc, id desc) — see listSessions.
+    let all = Array.from(this.sessions.values())
       .filter((s) => (opts.accountId ? s.accountId === opts.accountId : true))
       .filter((s) => (opts.status ? s.status === opts.status : true))
-      .filter((s) => (cursorDate ? s.createdAt < cursorDate : true))
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort((a, b) => {
+        const dt = b.createdAt.getTime() - a.createdAt.getTime();
+        if (dt !== 0) return dt;
+        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+      });
+    if (opts.cursor !== undefined) {
+      const idx = all.findIndex((s) => s.id === opts.cursor);
+      if (idx >= 0) all = all.slice(idx + 1);
+    }
     const items = all.slice(0, opts.limit);
     const last = items[items.length - 1];
     const hasMore = all.length > opts.limit;
     return Promise.resolve({
       items,
-      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+      nextCursor: hasMore && last ? last.id : null,
     });
   }
 

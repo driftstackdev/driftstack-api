@@ -2,7 +2,7 @@
 // SessionsService expectations exactly; tests use an in-memory impl from
 // `tests/integration/_helpers/in-memory-sessions-repo.ts`.
 
-import { and, desc, eq, isNull, lt, sql } from 'drizzle-orm';
+import { type SQL, and, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
 import type {
   NewSessionInput,
   SessionEventInput,
@@ -79,17 +79,31 @@ export class DrizzleSessionRepo implements SessionRepo {
     accountId: string,
     opts: { limit: number; cursor?: string },
   ): Promise<SessionListPage> {
-    // Cursor format: ISO timestamp of the last seen createdAt (descending order).
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
-    const where = cursorDate
-      ? and(eq(sessions.accountId, accountId), lt(sessions.createdAt, cursorDate))
-      : eq(sessions.accountId, accountId);
+    // Keyset cursor on (createdAt desc, id desc). Cursor = last row id;
+    // look up its (createdAt, id) and select strictly-after rows so
+    // same-createdAt rows aren't dropped at a page boundary. Mirrors the
+    // profiles-repo keyset pattern.
+    const conds: SQL[] = [eq(sessions.accountId, accountId)];
+    if (opts.cursor !== undefined) {
+      const [c] = await this.database.db
+        .select({ createdAt: sessions.createdAt, id: sessions.id })
+        .from(sessions)
+        .where(and(eq(sessions.id, opts.cursor), eq(sessions.accountId, accountId)))
+        .limit(1);
+      if (c) {
+        const keyset = or(
+          lt(sessions.createdAt, c.createdAt),
+          and(eq(sessions.createdAt, c.createdAt), lt(sessions.id, c.id)),
+        );
+        if (keyset) conds.push(keyset);
+      }
+    }
 
     const rows = await this.database.db
       .select()
       .from(sessions)
-      .where(where)
-      .orderBy(desc(sessions.createdAt))
+      .where(and(...conds))
+      .orderBy(desc(sessions.createdAt), desc(sessions.id))
       .limit(opts.limit + 1);
 
     const hasMore = rows.length > opts.limit;
@@ -97,7 +111,7 @@ export class DrizzleSessionRepo implements SessionRepo {
     const last = items[items.length - 1];
     return {
       items: items.map(toSessionRecord),
-      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+      nextCursor: hasMore && last ? last.id : null,
     };
   }
 
@@ -138,9 +152,22 @@ export class DrizzleSessionRepo implements SessionRepo {
     status?: SessionRecord['status'];
     accountId?: string;
   }): Promise<SessionListPage> {
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
-    const filters = [];
-    if (cursorDate) filters.push(lt(sessions.createdAt, cursorDate));
+    // Keyset cursor on (createdAt desc, id desc) — see listSessions.
+    const filters: SQL[] = [];
+    if (opts.cursor !== undefined) {
+      const [c] = await this.database.db
+        .select({ createdAt: sessions.createdAt, id: sessions.id })
+        .from(sessions)
+        .where(eq(sessions.id, opts.cursor))
+        .limit(1);
+      if (c) {
+        const keyset = or(
+          lt(sessions.createdAt, c.createdAt),
+          and(eq(sessions.createdAt, c.createdAt), lt(sessions.id, c.id)),
+        );
+        if (keyset) filters.push(keyset);
+      }
+    }
     if (opts.status) filters.push(eq(sessions.status, opts.status));
     if (opts.accountId) filters.push(eq(sessions.accountId, opts.accountId));
     const whereClause = filters.length === 0 ? undefined : and(...filters);
@@ -149,7 +176,7 @@ export class DrizzleSessionRepo implements SessionRepo {
       .select()
       .from(sessions)
       .where(whereClause)
-      .orderBy(desc(sessions.createdAt))
+      .orderBy(desc(sessions.createdAt), desc(sessions.id))
       .limit(opts.limit + 1);
 
     const hasMore = rows.length > opts.limit;
@@ -157,7 +184,7 @@ export class DrizzleSessionRepo implements SessionRepo {
     const last = items[items.length - 1];
     return {
       items: items.map(toSessionRecord),
-      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+      nextCursor: hasMore && last ? last.id : null,
     };
   }
 }

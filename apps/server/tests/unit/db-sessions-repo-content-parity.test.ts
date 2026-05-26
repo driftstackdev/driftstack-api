@@ -46,7 +46,9 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
   });
 
   it('imports: and/desc/eq/isNull/lt/sql from drizzle-orm; 5 service types; Database; sessionEvents + sessions schemas', () => {
-    expect(body).toMatch(/import \{ and, desc, eq, isNull, lt, sql \} from 'drizzle-orm';/);
+    expect(body).toMatch(
+      /import \{ type SQL, and, desc, eq, isNull, lt, or, sql \} from 'drizzle-orm';/,
+    );
     expect(body).toMatch(
       /import type \{\s*\n?\s*NewSessionInput,\s*\n?\s*SessionEventInput,\s*\n?\s*SessionListPage,\s*\n?\s*SessionRecord,\s*\n?\s*SessionRepo,\s*\n?\s*\} from '\.\.\/services\/sessions\.js';/,
     );
@@ -80,16 +82,14 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
-  it("listSessions framing pinned: 'Cursor format: ISO timestamp of the last seen createdAt (descending order).' + cursor parsed via new Date() + where account-scoped + lt(createdAt, cursor)", () => {
+  it('listSessions: keyset cursor (createdAt desc, id desc) — account-scoped conds; cursor row looked up by (id, accountId); nextCursor = last.id', () => {
+    expect(body).toMatch(/const conds: SQL\[\] = \[eq\(sessions\.accountId, accountId\)\];/);
+    expect(body).toMatch(/lt\(sessions\.createdAt, c\.createdAt\),/);
     expect(body).toMatch(
-      /\/\/ Cursor format: ISO timestamp of the last seen createdAt \(descending order\)\./,
+      /and\(eq\(sessions\.createdAt, c\.createdAt\), lt\(sessions\.id, c\.id\)\),/,
     );
-    expect(body).toMatch(
-      /const cursorDate = opts\.cursor \? new Date\(opts\.cursor\) : null;\s*\n?\s*const where = cursorDate\s*\n?\s*\? and\(eq\(sessions\.accountId, accountId\), lt\(sessions\.createdAt, cursorDate\)\)\s*\n?\s*: eq\(sessions\.accountId, accountId\);/,
-    );
-    expect(body).toMatch(
-      /\.orderBy\(desc\(sessions\.createdAt\)\)\s*\n?\s*\.limit\(opts\.limit \+ 1\);\s*\n?\s*const hasMore = rows\.length > opts\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toSessionRecord\),\s*\n?\s*nextCursor: hasMore && last \? last\.createdAt\.toISOString\(\) : null,\s*\n?\s*\};/,
-    );
+    expect(body).toMatch(/\.orderBy\(desc\(sessions\.createdAt\), desc\(sessions\.id\)\)/);
+    expect(body).toMatch(/nextCursor: hasMore && last \? last\.id : null,/);
   });
 
   it('recordEvent: append-only insert into sessionEvents with 4-field values (sessionId + type + payload + durationMs)', () => {
@@ -98,9 +98,16 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
-  it('listAllSessions admin variant: status + accountId filters; cursor lt(createdAt); whereClause undefined when no filters; same nextCursor=last.createdAt.toISOString() convention', () => {
+  it('listAllSessions admin variant: keyset cursor (createdAt,id) + status + accountId filters; whereClause undefined when no filters; nextCursor = last.id', () => {
+    expect(body).toMatch(/async listAllSessions\(opts: \{/);
     expect(body).toMatch(
-      /async listAllSessions\(opts: \{\s*\n?\s*limit: number;\s*\n?\s*cursor\?: string;\s*\n?\s*status\?: SessionRecord\['status'\];\s*\n?\s*accountId\?: string;\s*\n?\s*\}\): Promise<SessionListPage> \{\s*\n?\s*const cursorDate = opts\.cursor \? new Date\(opts\.cursor\) : null;\s*\n?\s*const filters = \[\];\s*\n?\s*if \(cursorDate\) filters\.push\(lt\(sessions\.createdAt, cursorDate\)\);\s*\n?\s*if \(opts\.status\) filters\.push\(eq\(sessions\.status, opts\.status\)\);\s*\n?\s*if \(opts\.accountId\) filters\.push\(eq\(sessions\.accountId, opts\.accountId\)\);\s*\n?\s*const whereClause = filters\.length === 0 \? undefined : and\(\.\.\.filters\);/,
+      /if \(opts\.status\) filters\.push\(eq\(sessions\.status, opts\.status\)\);/,
+    );
+    expect(body).toMatch(
+      /if \(opts\.accountId\) filters\.push\(eq\(sessions\.accountId, opts\.accountId\)\);/,
+    );
+    expect(body).toMatch(
+      /const whereClause = filters\.length === 0 \? undefined : and\(\.\.\.filters\);/,
     );
   });
 
