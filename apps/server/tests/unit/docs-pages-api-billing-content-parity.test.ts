@@ -163,6 +163,10 @@ describe('W765 docs /api/billing content parity', () => {
     expect(p).toMatch(
       /All `\/v1\/billing\/\*` endpoints are bearer-authenticated and scoped\s*\n?to the calling account\. They do NOT honor the team-RBAC\s*\n?`X-Driftstack-Account` header — billing is always per-account, not\s*\n?per-team-context\. Team owners manage their own billing; team\s*\n?members never see the owner's billing state\./,
     );
+    // Mutation endpoints require admin:billing (broad admin / account_owner satisfy).
+    expect(p).toMatch(
+      /mutation\s*\n?endpoints \(start trial, checkout, manage-portal\) require the\s*\n?`admin:billing` scope \(a broad `admin` or `account_owner` key also\s*\n?satisfies it\)\./,
+    );
   });
 
   it('CRITICAL 4-endpoint canonical action set pinned — GET /v1/billing + POST /v1/billing/checkout-session + POST /v1/billing/trial-pack + POST /v1/billing/portal-session.', () => {

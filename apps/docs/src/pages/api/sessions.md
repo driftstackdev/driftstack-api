@@ -243,9 +243,10 @@ flips to `destroyed`.
 
 Read endpoints (GET) accept any valid bearer with `read` scope.
 Write endpoints (POST navigate / interact / wait / capture; DELETE)
-require `write`. Team RBAC: `X-Driftstack-Account` is honored — a
-`member` can read the owner's sessions, but writes require the `admin`
-role (a `member` write returns 403).
+require the `write:sessions` scope (a broad `write` key also satisfies
+it). Team RBAC: `X-Driftstack-Account` is honored — a `member` can read
+the owner's sessions, but writes require the `admin` role (a `member`
+write returns 403).
 
 ## Errors common to every endpoint
 

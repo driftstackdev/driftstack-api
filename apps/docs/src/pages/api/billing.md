@@ -133,3 +133,8 @@ to the calling account. They do NOT honor the team-RBAC
 `X-Driftstack-Account` header — billing is always per-account, not
 per-team-context. Team owners manage their own billing; team
 members never see the owner's billing state.
+
+Read endpoints (GET) accept a bearer with `read` scope; mutation
+endpoints (start trial, checkout, manage-portal) require the
+`admin:billing` scope (a broad `admin` or `account_owner` key also
+satisfies it).
