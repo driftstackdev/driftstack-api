@@ -82,7 +82,7 @@ Errors:
 
 - `400 ValidationFailed` — URL not https://, or events array empty
   / >10 entries / contains `test.ping`.
-- `403 Forbidden` — `admin` scope missing on the calling key.
+- `403 Forbidden` — `account_owner` scope missing on the calling key.
 - `429 TierLimit` — account at the max-endpoints-per-account cap.
 
 ## List + get
@@ -183,7 +183,7 @@ Steps to roll:
    deliveries arrive with only the new-secret header.
 
 `409 Conflict` if the endpoint is disabled. `403 Forbidden` if
-`admin` scope is missing.
+`account_owner` scope is missing.
 
 ## Delivery introspection
 
@@ -202,6 +202,7 @@ For replay see [/webhooks/replay](/webhooks/replay/).
 
 Read endpoints (GET) accept any valid bearer with `read` scope.
 Write endpoints (POST, PATCH, DELETE, send-test, rotate-secret)
-require admin scope. Team RBAC (`X-Driftstack-Account` header)
-is honored: member roles can read the owner's endpoints; admin
-members can also write.
+require `account_owner` scope (the dashboard scope; a broad `admin`
+key also satisfies it via the V-174 alias). Team RBAC
+(`X-Driftstack-Account` header) is honored: member roles can read
+the owner's endpoints; admin members can also write.
