@@ -1,0 +1,118 @@
+// Drizzle-backed integration test for DrizzleApiKeysRepo.listAllApiKeys
+// keyset pagination — same-timestamp completeness against a REAL Postgres.
+//
+// Part of the cursor-class real-PG guard family (account-audit / admin-
+// audit / sessions). listAllApiKeys is the admin cross-account key list;
+// it pages on a compound (createdAt, id) keyset. Keys minted in a burst
+// share an identical created_at, so a timestamp-only cursor would drop
+// the tie-group overflow at a page boundary. This validates the shipped
+// Drizzle keyset SQL (this repo's specific columns/filters) on real PG.
+// Seeding is scoped to a throwaway account via the accountId filter, so
+// it's deterministic regardless of other rows in the CI database.
+//
+// Run scope: CI postgres:17-alpine (always); skips locally without
+// DATABASE_URL.
+
+import { randomUUID } from 'node:crypto';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DrizzleApiKeysRepo } from '../../src/db/api-keys-repo.js';
+import type * as schema from '../../src/db/schema.js';
+
+const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
+const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+
+let dbReachable = false;
+let client: ReturnType<typeof postgres> | null = null;
+const seededAccountIds: string[] = [];
+
+beforeAll(async () => {
+  const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+  try {
+    await probe`SELECT 1`;
+    dbReachable = true;
+    await probe.end({ timeout: 1 });
+  } catch {
+    await probe.end({ timeout: 1 }).catch(() => {});
+    return;
+  }
+  client = postgres(DB_URL, { max: 1 });
+  try {
+    await client`SELECT 1 FROM api_keys LIMIT 0`;
+  } catch {
+    dbReachable = false;
+    await client.end({ timeout: 1 }).catch(() => {});
+    client = null;
+  }
+});
+
+afterAll(async () => {
+  if (client) {
+    for (const id of seededAccountIds) {
+      await client`DELETE FROM api_keys WHERE account_id = ${id}`.catch(() => {});
+      await client`DELETE FROM accounts WHERE id = ${id}`.catch(() => {});
+    }
+    await client.end({ timeout: 5 });
+  }
+});
+
+describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
+  'DrizzleApiKeysRepo.listAllApiKeys keyset (Drizzle path against real Postgres)',
+  () => {
+    it('pages a same-timestamp tie group larger than the page size WITHOUT dropping rows (accountId-scoped, deterministic)', async () => {
+      if (!dbReachable || !client) {
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleApiKeysRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seededAccountIds.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`keyset-keys-${accountId}@test.local`})`;
+
+      // 2 newest, 5 in a tie group (> page size), 2 oldest.
+      const base = Date.UTC(2026, 0, 1, 0, 0, 0);
+      const groups: Array<{ ts: Date; n: number }> = [
+        { ts: new Date(base + 2000), n: 2 },
+        { ts: new Date(base + 1000), n: 5 },
+        { ts: new Date(base), n: 2 },
+      ];
+      const inserted: string[] = [];
+      for (const g of groups) {
+        for (let i = 0; i < g.n; i++) {
+          const kid = randomUUID();
+          const [row] = await client`
+            INSERT INTO api_keys (account_id, name, key_prefix, key_hash, created_at)
+            VALUES (${accountId}, 'keyset', ${`dsk_${kid.slice(0, 8)}`}, ${`hash_${kid}`}, ${g.ts})
+            RETURNING id`;
+          inserted.push(row?.id as string);
+        }
+      }
+      expect(inserted).toHaveLength(9);
+
+      const collected: Array<{ id: string; createdAt: Date }> = [];
+      let cursor: string | undefined;
+      for (let guard = 0; guard < 50; guard++) {
+        const page = await repo.listAllApiKeys(
+          cursor === undefined ? { limit: 2, accountId } : { limit: 2, accountId, cursor },
+        );
+        collected.push(...page.items.map((r) => ({ id: r.id, createdAt: r.createdAt })));
+        if (page.nextCursor === null) break;
+        cursor = page.nextCursor;
+      }
+
+      // Completeness: every seeded key returned exactly once.
+      expect(collected).toHaveLength(9);
+      expect(new Set(collected.map((r) => r.id)).size).toBe(9);
+      expect([...collected].map((r) => r.id).sort()).toEqual([...inserted].sort());
+
+      // Ordering: non-increasing createdAt (desc) across the full walk.
+      for (let i = 1; i < collected.length; i++) {
+        expect(collected[i]!.createdAt.getTime()).toBeLessThanOrEqual(
+          collected[i - 1]!.createdAt.getTime(),
+        );
+      }
+    });
+  },
+);
