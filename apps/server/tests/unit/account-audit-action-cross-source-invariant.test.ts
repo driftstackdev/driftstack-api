@@ -1,18 +1,10 @@
-// W863 — AccountAuditAction 27-value cross-source invariant. One-
-// hundred-eighty-ninth in the drift-guard series. Pins the V-216
-// customer-facing audit-log action roster (27 values across 8
-// resource categories):
-//
-//   account (7):   email_verified, login, logout, password_changed,
-//                  mfa_enrolled, mfa_disabled, recovery_code_used.
-//   api_key (3):   minted, revoked, rotated.
-//   session (2):   created, destroyed.
-//   profile (4):   created, deleted, exported, imported.
-//   subscription (1): tier_changed.
-//   webhook_endpoint (4): created, updated, deleted, secret_rotated.
-//   webhook_delivery (1): replayed.
-//   team (3):      member_invited, invite_accepted, member_removed.
-//   admin (2):     refund_recorded, support_note.
+// W863 — AccountAuditAction cross-source invariant. One-hundred-
+// eighty-ninth in the drift-guard series. Pins the V-216 customer-
+// facing audit-log action roster — derived from AccountAuditActionSchema
+// (the Zod source-of-truth) rather than a hardcoded copy, so every
+// action (including the agent_session.* / byok / proxy / bundled_llm /
+// email_preferences additions made after launch) is automatically
+// covered across every surface below.
 //
 // stays in lockstep across:
 //   - packages/api-types/src/accounts.ts (Zod canonical source).
@@ -30,6 +22,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AccountAuditActionSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -38,49 +31,20 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-const ACCOUNT_AUDIT_ACTIONS = [
-  // account (7)
-  'account.email_verified',
-  'account.login',
-  'account.logout',
-  'account.password_changed',
-  'account.mfa_enrolled',
-  'account.mfa_disabled',
-  'account.recovery_code_used',
-  // api_key (3)
-  'api_key.minted',
-  'api_key.revoked',
-  'api_key.rotated',
-  // session (2)
-  'session.created',
-  'session.destroyed',
-  // profile (4)
-  'profile.created',
-  'profile.deleted',
-  'profile.exported',
-  'profile.imported',
-  // subscription (1)
-  'subscription.tier_changed',
-  // webhook_endpoint (4)
-  'webhook_endpoint.created',
-  'webhook_endpoint.updated',
-  'webhook_endpoint.deleted',
-  'webhook_endpoint.secret_rotated',
-  // webhook_delivery (1)
-  'webhook_delivery.replayed',
-  // team (3)
-  'team.member_invited',
-  'team.invite_accepted',
-  'team.member_removed',
-  // admin (2)
-  'admin.refund_recorded',
-  'admin.support_note',
-] as const;
+// Derived from the Zod source-of-truth so the cross-source checks below
+// automatically cover EVERY audit action — including ones added after
+// this guard was written. The prior hardcoded 27-value list silently
+// under-covered the 15 actions added 2026-05-17..20 (agent.decompose.*,
+// agent_session.*, account.byok_anthropic_key_*, proxy.*,
+// account.bundled_llm_consent_changed, account.email_preferences_changed),
+// meaning the dashboard ACTION_LABEL / FILTER_OPTIONS completeness for
+// those was unguarded.
+const ACCOUNT_AUDIT_ACTIONS = AccountAuditActionSchema.options;
 
 describe('W863 AccountAuditAction cross-source invariant', () => {
   // ─── api-types canonical source ──────────────────────────────
 
-  it('CRITICAL packages/api-types/src/accounts.ts AccountAuditActionSchema = z.enum([27 values]). The V-216 customer-facing audit-log roster across 8 resource categories.', () => {
+  it('CRITICAL packages/api-types/src/accounts.ts AccountAuditActionSchema = z.enum([...]). Every enum value is the V-216 customer-facing audit-log roster (checked enum-derived, not against a hardcoded copy).', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     expect(p).toMatch(/export const AccountAuditActionSchema = z\.enum\(\[/);
     const m = p.match(/AccountAuditActionSchema = z\.enum\(\[([\s\S]+?)\]\)/);
@@ -114,7 +78,7 @@ describe('W863 AccountAuditAction cross-source invariant', () => {
 
   // ─── Customer-dashboard ACTION_LABEL map ─────────────────────
 
-  it('CRITICAL apps/customer-dashboard/src/pages/audit-log.astro ACTION_LABEL map has an entry for ALL 27 audit actions. Drift would render an audit row with a blank/raw action string instead of a human-readable label.', () => {
+  it('CRITICAL apps/customer-dashboard/src/pages/audit-log.astro ACTION_LABEL map has an entry for every AccountAuditAction enum value. Drift would render an audit row with a blank/raw action string instead of a human-readable label.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/audit-log.astro'));
     expect(p).toMatch(/const ACTION_LABEL: Record<string, string> = \{/);
     for (const a of ACCOUNT_AUDIT_ACTIONS) {
@@ -126,7 +90,7 @@ describe('W863 AccountAuditAction cross-source invariant', () => {
 
   // ─── Customer-dashboard FILTER_OPTIONS dropdown ──────────────
 
-  it("CRITICAL apps/customer-dashboard/src/pages/audit-log.astro FILTER_OPTIONS dropdown has a filter for ALL 27 audit actions + 'All events' (empty string). Drift to missing a filter would silently hide that action category from the dashboard filter.", () => {
+  it("CRITICAL apps/customer-dashboard/src/pages/audit-log.astro FILTER_OPTIONS dropdown has a filter for every AccountAuditAction enum value + 'All events' (empty string). Drift to missing a filter would silently hide that action category from the dashboard filter.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/audit-log.astro'));
     expect(p).toMatch(/const FILTER_OPTIONS = \[/);
     // The 'All events' empty-string sentinel.
@@ -152,24 +116,28 @@ describe('W863 AccountAuditAction cross-source invariant', () => {
 
   // ─── 27-value cardinality + 9-category split ──────────────────
 
-  it('CRITICAL AccountAuditAction = EXACTLY 27 values across 9 resource categories. The 7/3/2/4/1/4/1/3/2 split (account / api_key / session / profile / subscription / webhook_endpoint / webhook_delivery / team / admin) is what the audit-log filter UI grouping depends on.', () => {
-    expect(ACCOUNT_AUDIT_ACTIONS.length).toBe(27);
-    const countByPrefix = (prefix: string): number =>
-      ACCOUNT_AUDIT_ACTIONS.filter((a) => a.startsWith(`${prefix}.`)).length;
-    expect(countByPrefix('account')).toBe(7);
-    expect(countByPrefix('api_key')).toBe(3);
-    expect(countByPrefix('session')).toBe(2);
-    expect(countByPrefix('profile')).toBe(4);
-    expect(countByPrefix('subscription')).toBe(1);
-    expect(countByPrefix('webhook_endpoint')).toBe(4);
-    expect(countByPrefix('webhook_delivery')).toBe(1);
-    expect(countByPrefix('team')).toBe(3);
-    expect(countByPrefix('admin')).toBe(2);
+  it('CRITICAL AccountAuditAction roster stays >= the 27-value V-216 launch baseline and keeps every launch category represented (no accidental truncation; new categories like agent_session / proxy only add).', () => {
+    expect(ACCOUNT_AUDIT_ACTIONS.length).toBeGreaterThanOrEqual(27);
+    const hasPrefix = (prefix: string): boolean =>
+      ACCOUNT_AUDIT_ACTIONS.some((a) => a.startsWith(`${prefix}.`));
+    for (const prefix of [
+      'account',
+      'api_key',
+      'session',
+      'profile',
+      'subscription',
+      'webhook_endpoint',
+      'webhook_delivery',
+      'team',
+      'admin',
+    ]) {
+      expect(hasPrefix(prefix), `launch category '${prefix}' must remain represented`).toBe(true);
+    }
   });
 
   // ─── 'resource.verb' naming convention ───────────────────────
 
-  it("CRITICAL all 27 actions follow the 'resource.verb' naming convention (account.email_verified, api_key.minted, session.created, etc.). The dot-delimiter is what dashboard filter parsing depends on.", () => {
+  it("CRITICAL every action follows the 'resource.verb' naming convention (account.email_verified, api_key.minted, session.created, etc.). The dot-delimiter is what dashboard filter parsing depends on.", () => {
     for (const a of ACCOUNT_AUDIT_ACTIONS) {
       expect(a, `Action '${a}' must contain a dot separator`).toMatch(/\./);
       const [resource, verb] = a.split('.');
