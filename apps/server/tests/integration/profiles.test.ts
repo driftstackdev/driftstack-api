@@ -38,6 +38,19 @@ describe('POST /v1/profiles', () => {
     expect(body.description).toBeNull();
   });
 
+  it('403 when the key lacks write:profiles scope (read-only key)', async () => {
+    fx = await buildTestApp({ scopes: ['read'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'work-laptop' },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ detail: string }>();
+    expect(body.detail).toContain('write:profiles');
+  });
+
   it('200 honors explicit archetype + description', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

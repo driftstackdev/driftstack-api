@@ -87,7 +87,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   // accountId derive from the OWNER. Member role gets 403.
   app.post(
     '/v1/profiles',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const parsed = CreateProfileRequestSchema.safeParse(req.body);
@@ -161,7 +161,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   // V-326e4 — admin-only on team scope.
   app.patch<{ Params: { id: string } }>(
     '/v1/profiles/:id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const id = uuidFromProfileId(req.params.id);
@@ -183,7 +183,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   // V-326e4 — admin-only on team scope.
   app.delete<{ Params: { id: string } }>(
     '/v1/profiles/:id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
       const id = uuidFromProfileId(req.params.id);
@@ -201,7 +201,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   // conflicting `${source} (copy)` if omitted.
   app.post<{ Params: { id: string } }>(
     '/v1/profiles/:id/clone',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const id = uuidFromProfileId(req.params.id);
@@ -262,7 +262,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   // (transfer between teammate accounts via the file).
   app.post(
     '/v1/profiles/import',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const parsed = ProfileImportRequestSchema.safeParse(req.body);
@@ -300,7 +300,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   // No email-leak path; the lookup is by id, not address.
   app.post<{ Params: { id: string } }>(
     '/v1/profiles/:id/transfer',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const body = req.body as { recipient_account_id?: unknown };
