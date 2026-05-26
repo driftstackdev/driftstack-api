@@ -4,7 +4,7 @@
 //   • a docs page file under apps/docs/src/pages/ (md or astro), OR
 //   • a known marketing-site prefix (/legal/, /security, etc.) that
 //     ships on the marketing site rather than the docs site.
-// Anchor fragments (#payload-reference-v-399) are not checked — the
+// Anchor fragments (#payload-reference) are not checked — the
 // presence of the target page is enough; per-anchor coverage is
 // already handled by per-page parity tests.
 

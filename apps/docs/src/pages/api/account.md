@@ -162,7 +162,7 @@ MFA management is on `client.mfa.*` — `status`,
 `enroll`, `verify`, `disable`, `regenerateRecoveryCodes`. The
 login-time MFA exchange + step-up are on `client.auth.*` —
 `mfaChallenge` + `mfaStepUp` . Full walkthrough
-at [`/api/auth#mfa-challenge-v-353d`](/api/auth/#mfa-challenge-v-353d).
+at [`/api/auth#mfa-challenge`](/api/auth/#mfa-challenge).
 
 ## Why `/me` ignores team-RBAC
 

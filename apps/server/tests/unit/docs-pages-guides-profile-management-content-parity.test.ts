@@ -166,7 +166,7 @@ describe('W782 docs /guides/profile-management content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The audit-log entry for the new profile carries `payload\.cloned_from: "profile_<uuid>"` \(the internal `profile_` prefix; see \[audit-log payload reference\]\(\/api\/audit-log\/#payload-reference-v-399\) for the format\)\./,
+      /The audit-log entry for the new profile carries `payload\.cloned_from: "profile_<uuid>"` \(the internal `profile_` prefix; see \[audit-log payload reference\]\(\/api\/audit-log\/#payload-reference\) for the format\)\./,
     );
   });
 
@@ -198,7 +198,7 @@ describe('W782 docs /guides/profile-management content parity', () => {
 
     expect(p).toMatch(/Creates a NEW profile \(the original is never modified\)\./);
     expect(p).toMatch(
-      /The audit-log entry on the new profile carries `payload\.restored_from_snapshot: "psnap_<uuid>"` \(the public `psnap_` prefix; see \[audit-log payload reference\]\(\/api\/audit-log\/#payload-reference-v-399\)\)\./,
+      /The audit-log entry on the new profile carries `payload\.restored_from_snapshot: "psnap_<uuid>"` \(the public `psnap_` prefix; see \[audit-log payload reference\]\(\/api\/audit-log\/#payload-reference\)\)\./,
     );
   });
 

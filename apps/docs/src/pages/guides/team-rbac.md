@@ -161,7 +161,7 @@ curl -H "Authorization: Bearer $OWNER_KEY" \
   > team-history.csv
 ```
 
-(See [GDPR Article 20 portability](/api/api-keys/#audit-log-export)
+(See [GDPR Article 20 portability](/api/audit-log/#export)
 for the export ceiling + cursor pagination beyond 10K rows.)
 
 ## Removing a member (owner)

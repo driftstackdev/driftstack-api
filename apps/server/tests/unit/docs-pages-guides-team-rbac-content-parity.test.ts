@@ -180,9 +180,7 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/https:\/\/api\.driftstack\.dev\/v1\/account\/audit-log\/export\?format=csv/);
-    expect(p).toMatch(
-      /\(See \[GDPR Article 20 portability\]\(\/api\/api-keys\/#audit-log-export\)/,
-    );
+    expect(p).toMatch(/\(See \[GDPR Article 20 portability\]\(\/api\/audit-log\/#export\)/);
     expect(p).toMatch(/for the export ceiling \+ cursor pagination beyond 10K rows\.\)/);
   });
 
