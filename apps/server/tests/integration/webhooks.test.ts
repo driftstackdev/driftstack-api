@@ -46,6 +46,21 @@ describe('POST /v1/webhooks', () => {
     expect(res.statusCode).toBe(403);
   });
 
+  it('201 with account_owner scope (V-174 — dashboard web sessions carry account_owner, not admin)', async () => {
+    // Web-session synthetic keys (auth.ts V-174) carry
+    // ['read','write','account_owner'] with NO 'admin'. Webhook
+    // management is account-owner-level — same posture as the rest
+    // of /v1/account/* and replayDeliveryAsCustomer.
+    fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/webhooks',
+      headers: auth(fx),
+      payload: { url: 'https://owner.test/h', events: ['session.completed'] },
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
   it('400 when URL is not https://', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

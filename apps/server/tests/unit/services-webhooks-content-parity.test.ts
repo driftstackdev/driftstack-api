@@ -16,9 +16,10 @@
 //   • V-326e5 effective-account: when set, route layer enforces team-
 //     admin role; service skips api-key scope check (member's own
 //     apiKey may carry account_owner not admin).
-//   • create + update + delete + rotateSecret: admin scope when
-//     self-account; route-side team-admin gate when effective-
-//     account override.
+//   • create + update + delete + rotateSecret: account_owner scope
+//     when self-account (V-174 — web sessions carry account_owner,
+//     not admin; admin still satisfies via alias); route-side team-
+//     admin gate when effective-account override.
 //   • V-359 rotateSecret: 24h grace default; secretPrev=oldSecret +
 //     secretPrevExpiresAt=now+grace; cannot rotate on disabled.
 //   • parseHttpsUrl: https only (http:// rejected for security);
@@ -88,12 +89,12 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     expect(body).toMatch(/const MAX_ENDPOINTS_PER_ACCOUNT = 10;/);
   });
 
-  it("V-326e5 create: when effectiveAccountId set → trust route's team-admin gate; else throwIfMissingScope 'admin'", () => {
+  it("V-326e5/V-174 create: when effectiveAccountId set → trust route's team-admin gate; else throwIfMissingScope 'account_owner'", () => {
     expect(body).toMatch(
-      /\/\/ V-326e5 — when effectiveAccountId is set, the route layer has\s*\n?\s*\/\/ already enforced team admin role on the OWNER's team\. Trust\s*\n?\s*\/\/ that decision and skip the 'admin' apiKey-scope check/,
+      /\/\/ V-326e5 — when effectiveAccountId is set, the route layer has\s*\n?\s*\/\/ already enforced team admin role on the OWNER's team\. Trust\s*\n?\s*\/\/ that decision and skip the account_owner apiKey-scope check/,
     );
     expect(body).toMatch(
-      /if \(opts\.effectiveAccountId === undefined\) \{\s*\n?\s*throwIfMissingScope\(ctx, 'admin'\);/,
+      /if \(opts\.effectiveAccountId === undefined\) \{\s*\n?\s*throwIfMissingScope\(ctx, 'account_owner'\);/,
     );
   });
 

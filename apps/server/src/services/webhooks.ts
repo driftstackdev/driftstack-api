@@ -347,11 +347,14 @@ export class WebhooksService {
   ): Promise<CreatedWebhookEndpoint> {
     // V-326e5 — when effectiveAccountId is set, the route layer has
     // already enforced team admin role on the OWNER's team. Trust
-    // that decision and skip the 'admin' apiKey-scope check (the
+    // that decision and skip the account_owner apiKey-scope check (the
     // member's own apiKey may only carry account_owner scope; being
     // a team admin is the authorization for the OWNER's resource).
+    // V-174 — self-account webhook management is account_owner-level
+    // (web sessions carry account_owner, not admin; admin satisfies
+    // account_owner via alias).
     if (opts.effectiveAccountId === undefined) {
-      throwIfMissingScope(ctx, 'admin');
+      throwIfMissingScope(ctx, 'account_owner');
     }
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
 
@@ -442,7 +445,7 @@ export class WebhooksService {
     opts: { effectiveAccountId?: string } = {},
   ): Promise<WebhookEndpointRow> {
     if (opts.effectiveAccountId === undefined) {
-      throwIfMissingScope(ctx, 'admin');
+      throwIfMissingScope(ctx, 'account_owner');
     }
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const before = await this.repo.findEndpoint(id, accountId);
@@ -487,9 +490,9 @@ export class WebhooksService {
    * can roll the new secret across their verifier infra without a
    * window of dropped deliveries.
    *
-   * Same admin-only gate as create / update / delete: literal
-   * `admin` scope when self-account; route-side team-admin gate
-   * when targeting a team owner via `effectiveAccountId`.
+   * Same gate as create / update / delete: `account_owner` scope
+   * when self-account (V-174); route-side team-admin gate when
+   * targeting a team owner via `effectiveAccountId`.
    */
   async rotateSecret(
     ctx: AccountContext,
@@ -497,7 +500,7 @@ export class WebhooksService {
     opts: { effectiveAccountId?: string; graceMs?: number } = {},
   ): Promise<{ row: WebhookEndpointRow; plaintextSecret: string }> {
     if (opts.effectiveAccountId === undefined) {
-      throwIfMissingScope(ctx, 'admin');
+      throwIfMissingScope(ctx, 'account_owner');
     }
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const before = await this.repo.findEndpoint(id, accountId);
@@ -543,9 +546,9 @@ export class WebhooksService {
   ): Promise<void> {
     // V-326e5 — same pattern as create(): trust the route's team-
     // admin gate when effectiveAccountId is set; otherwise enforce
-    // the literal 'admin' api-key scope.
+    // the account_owner api-key scope (V-174).
     if (opts.effectiveAccountId === undefined) {
-      throwIfMissingScope(ctx, 'admin');
+      throwIfMissingScope(ctx, 'account_owner');
     }
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const row = await this.repo.findEndpoint(id, accountId);
@@ -637,10 +640,11 @@ export class WebhooksService {
     endpointId: string,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<{ deliveryId: string; eventId: string }> {
-    // Admin scope or team-admin gate — same posture as create/update,
-    // since "send test event" can be used to fish for endpoint-state.
+    // account_owner scope or team-admin gate — same posture as
+    // create/update (V-174), since "send test event" can be used to
+    // fish for endpoint-state.
     if (opts.effectiveAccountId === undefined) {
-      throwIfMissingScope(ctx, 'admin');
+      throwIfMissingScope(ctx, 'account_owner');
     }
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const row = await this.repo.findEndpoint(endpointId, accountId);

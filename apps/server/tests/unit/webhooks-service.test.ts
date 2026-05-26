@@ -153,10 +153,10 @@ const BASE_CREATE = {
 };
 
 describe('V-553.B-14 WebhooksService.create', () => {
-  it('requires admin scope on the calling key', async () => {
+  it('requires account_owner scope on the calling key (V-174 — admin still satisfies via alias)', async () => {
     const { repo } = makeRepo();
     const svc = new WebhooksService(repo);
-    await expect(svc.create(ctxWith(['read']), BASE_CREATE)).rejects.toThrow(/admin/);
+    await expect(svc.create(ctxWith(['read']), BASE_CREATE)).rejects.toThrow(/account_owner/);
   });
 
   it('mints a plaintext secret + persists a row + records audit', async () => {
@@ -226,11 +226,11 @@ describe('V-553.B-14 WebhooksService.get', () => {
 });
 
 describe('V-553.B-14 WebhooksService.update', () => {
-  it('requires admin scope', async () => {
+  it('requires account_owner scope', async () => {
     const { repo } = makeRepo([baseRow()]);
     const svc = new WebhooksService(repo);
     await expect(svc.update(ctxWith(['read']), 'wh_1', { url: 'https://x.test' })).rejects.toThrow(
-      /admin/,
+      /account_owner/,
     );
   });
 
@@ -266,10 +266,10 @@ describe('V-553.B-14 WebhooksService.update', () => {
 });
 
 describe('V-553.B-14 WebhooksService.delete', () => {
-  it('requires admin scope', async () => {
+  it('requires account_owner scope', async () => {
     const { repo } = makeRepo([baseRow()]);
     const svc = new WebhooksService(repo);
-    await expect(svc.delete(ctxWith(['write']), 'wh_1')).rejects.toThrow(/admin/);
+    await expect(svc.delete(ctxWith(['write']), 'wh_1')).rejects.toThrow(/account_owner/);
   });
 
   it('soft-deletes by setting disabledAt + records audit', async () => {
@@ -298,10 +298,10 @@ describe('V-553.B-14 WebhooksService.delete', () => {
 });
 
 describe('V-553.B-14 WebhooksService.rotateSecret', () => {
-  it('requires admin scope', async () => {
+  it('requires account_owner scope', async () => {
     const { repo } = makeRepo([baseRow()]);
     const svc = new WebhooksService(repo);
-    await expect(svc.rotateSecret(ctxWith(['read']), 'wh_1')).rejects.toThrow(/admin/);
+    await expect(svc.rotateSecret(ctxWith(['read']), 'wh_1')).rejects.toThrow(/account_owner/);
   });
 
   it('rejects rotation on a disabled endpoint', async () => {
