@@ -251,7 +251,16 @@ describe('W763 docs /api/profiles content parity', () => {
   it("CRITICAL team-RBAC admin-required-for-writes framing pinned. The 'member roles cannot write on the owner\\'s account; admin members can' wording matches W757 /team page member-vs-admin contract.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/member roles cannot write on\s*\n?the owner's account; admin members can\./);
+    expect(p).toMatch(
+      /member roles cannot write on\s*\n?\s*the owner's account; admin\s*\n?\s*members can\./,
+    );
+  });
+
+  it("CRITICAL write-scope framing — profile write endpoints require the `write:profiles` scope (NOT `admin`). Matches the route-level requireScope('write:profiles') guard; drift back to 'admin scope' would mis-document the actual gate and mislead least-privilege key minting.", () => {
+    const p = read(PAGE);
+    expect(p).toMatch(
+      /write endpoints \(POST, PATCH, DELETE\) require the `write:profiles`\s*\n?\s*scope on the calling key \(a broad `write` key also satisfies it\)\./,
+    );
   });
 
   it('CRITICAL 404-on-cross-account no-existence-leak framing pinned. The "we don\'t leak existence cross-account" wording is the load-bearing privacy contract.', () => {

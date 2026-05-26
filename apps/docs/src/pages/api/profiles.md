@@ -307,10 +307,11 @@ Returns `204 No Content`. Idempotent on already-deleted profiles
 ## Auth + scoping
 
 Read endpoints (GET) accept any valid bearer with `read` scope;
-write endpoints (POST, PATCH, DELETE) require admin scope on the
-calling key. Team RBAC: `X-Driftstack-Account` is honored for
-both reads and writes — member roles cannot write on
-the owner's account; admin members can.
+write endpoints (POST, PATCH, DELETE) require the `write:profiles`
+scope on the calling key (a broad `write` key also satisfies it).
+Team RBAC: `X-Driftstack-Account` is honored for both reads and
+writes — member roles cannot write on the owner's account; admin
+members can.
 
 ## Lifecycle interaction
 
