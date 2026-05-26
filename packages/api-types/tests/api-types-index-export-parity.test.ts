@@ -7,11 +7,13 @@
 //
 //   • Zod-source-of-truth + breaking-change framing in module
 //     comment.
-//   • 14 sub-module re-exports in canonical order: common /
+//   • 17 sub-module re-exports in canonical order: common /
 //     problem / sessions / api-keys / accounts / usage / webhooks
 //     / admin / auth / cli-authorize / incidents / profiles /
-//     billing / crypto-orders.
-//   • All 14 source files exist on disk (no dangling re-exports).
+//     billing / crypto-orders / egress / livekit / agent-input-event.
+//   • All 17 source files exist on disk (no dangling re-exports).
+//   • The roster is complete — index.ts re-exports EXACTLY these
+//     modules and no unpinned extras (count-parity guard).
 //   • Server-internal-shapes-live-elsewhere framing pinned (load-
 //     bearing convention: server-internal types stay in apps/server
 //     /src/schemas/, NOT in packages/api-types).
@@ -44,6 +46,9 @@ const EXPECTED_REEXPORTS = [
   'profiles',
   'billing',
   'crypto-orders',
+  'egress',
+  'livekit',
+  'agent-input-event',
 ] as const;
 
 describe('W384.C packages/api-types/src/index.ts public-surface content parity', () => {
@@ -66,7 +71,7 @@ describe('W384.C packages/api-types/src/index.ts public-surface content parity',
     );
   });
 
-  it('14 sub-module re-exports pinned in canonical order', () => {
+  it('17 sub-module re-exports pinned in canonical order', () => {
     let lastIdx = -1;
     for (const m of EXPECTED_REEXPORTS) {
       const expected = `export * from './${m}.js';`;
@@ -76,7 +81,16 @@ describe('W384.C packages/api-types/src/index.ts public-surface content parity',
     }
   });
 
-  it('14 source files exist on disk (no dangling re-exports)', () => {
+  it('roster is complete — index.ts re-exports EXACTLY the pinned modules (no unpinned extras)', () => {
+    const actual = Array.from(body.matchAll(/export \* from '\.\/([^']+)\.js';/g)).map((m) => m[1]);
+    // Count-parity: a new `export * from './foo.js'` added without
+    // updating EXPECTED_REEXPORTS would slip through the ordering loop
+    // above (it only checks the pinned set is present + ordered, not
+    // that nothing extra exists). This catches that drift.
+    expect(actual).toEqual([...EXPECTED_REEXPORTS]);
+  });
+
+  it('17 source files exist on disk (no dangling re-exports)', () => {
     for (const m of EXPECTED_REEXPORTS) {
       const file = resolve(REPO_ROOT, `packages/api-types/src/${m}.ts`);
       expect(existsSync(file), `re-exported source file missing: ${m}.ts`).toBe(true);
