@@ -156,6 +156,30 @@ describe('InMemoryWebhookDeliveryService.enqueue + get + list', () => {
     const ids2 = new Set(page2.data.map((r) => r.id));
     for (const id of ids2) expect(ids1.has(id)).toBe(false);
   });
+
+  it('pages through same-timestamp deliveries without dropping any (keyset completeness)', async () => {
+    // All five enqueue at the same fixed `now`, so they share an
+    // identical createdAtMs — the case a createdAt-only cursor silently
+    // drops at a page boundary. Page exhaustively and assert every id
+    // comes back exactly once. (Locks the contract the Drizzle durable
+    // impl's keyset cursor must also satisfy.)
+    const created = new Set<string>();
+    for (let i = 0; i < 5; i += 1) {
+      const r = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+      created.add(r.id);
+    }
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    // Bounded guard so a pagination bug can't spin this forever.
+    for (let guard = 0; guard < 10; guard += 1) {
+      const page = await handles.deliveries.list({ endpointId: ENDPOINT.id, limit: 2, cursor });
+      for (const r of page.data) seen.add(r.id);
+      if (page.nextCursor === null) break;
+      cursor = page.nextCursor;
+    }
+    expect(seen).toEqual(created);
+    expect(seen.size).toBe(5);
+  });
 });
 
 describe('processTick — happy path delivery', () => {

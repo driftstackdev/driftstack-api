@@ -24,7 +24,7 @@
 // stores the count.
 
 import { createHmac } from 'node:crypto';
-import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import type {
   DlqManager,
   EnqueueDeliveryOpts,
@@ -156,17 +156,30 @@ export class DurableWebhookDeliveryService implements WebhookDeliveryService {
     }
     if (opts.cursor !== undefined) {
       // Cursor is the last id from the prior page. With newest-first
-      // ordering by createdAt desc + id desc, "after cursor" means
-      // (createdAt < cursor.createdAt) OR (createdAt == cursor.createdAt
-      // AND id > cursor.id). Simpler: lookup cursor's createdAt and
-      // filter strictly older.
+      // ordering by (createdAt desc, id desc), "after cursor" is the
+      // full keyset comparison: (createdAt < cursor.createdAt) OR
+      // (createdAt == cursor.createdAt AND id < cursor.id). The
+      // createdAt-only filter used previously silently dropped every
+      // row sharing the cursor's createdAt — and deliveries fanned out
+      // in one batch share an identical createdAt — so a page boundary
+      // landing inside such a batch lost rows. Mirrors the in-memory
+      // reference impl (packages/webhook-delivery in-memory.ts), which
+      // slices after the cursor on a (createdAt, id)-sorted list.
       const [cursorRow] = await this.database.db
         .select({ createdAt: webhookDeliveries.createdAt })
         .from(webhookDeliveries)
         .where(eq(webhookDeliveries.id, opts.cursor))
         .limit(1);
       if (cursorRow) {
-        conditions.push(lt(webhookDeliveries.createdAt, cursorRow.createdAt));
+        conditions.push(
+          or(
+            lt(webhookDeliveries.createdAt, cursorRow.createdAt),
+            and(
+              eq(webhookDeliveries.createdAt, cursorRow.createdAt),
+              lt(webhookDeliveries.id, opts.cursor),
+            ),
+          )!,
+        );
       }
     }
 
@@ -222,13 +235,25 @@ export class DurableDlqManager implements DlqManager {
     const limit = Math.min(opts.limit ?? 50, 200);
     const conditions = [eq(webhookDeliveries.status, 'dlq' as DeliveryStatus)];
     if (opts.cursor !== undefined) {
+      // Full keyset comparison against (updatedAt desc, id desc) — see
+      // DurableWebhookDeliveryService.list. An updatedAt-only filter
+      // drops DLQ rows sharing the cursor's updatedAt (common when a
+      // batch enters the DLQ together) at the page boundary.
       const [cursorRow] = await this.database.db
         .select({ updatedAt: webhookDeliveries.updatedAt })
         .from(webhookDeliveries)
         .where(eq(webhookDeliveries.id, opts.cursor))
         .limit(1);
       if (cursorRow) {
-        conditions.push(lt(webhookDeliveries.updatedAt, cursorRow.updatedAt));
+        conditions.push(
+          or(
+            lt(webhookDeliveries.updatedAt, cursorRow.updatedAt),
+            and(
+              eq(webhookDeliveries.updatedAt, cursorRow.updatedAt),
+              lt(webhookDeliveries.id, opts.cursor),
+            ),
+          )!,
+        );
       }
     }
 

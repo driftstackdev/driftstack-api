@@ -198,9 +198,11 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).toMatch(/const now = deps\.now \?\? \(\(\) => Date\.now\(\)\);/);
   });
 
-  it('imports: createHmac + drizzle-orm helpers (and/asc/desc/eq/inArray/lt/sql) + webhook-delivery package types + Database + schema', () => {
+  it('imports: createHmac + drizzle-orm helpers (and/asc/desc/eq/inArray/lt/or/sql) + webhook-delivery package types + Database + schema', () => {
     expect(body).toMatch(/import \{ createHmac \} from 'node:crypto';/);
-    expect(body).toMatch(/import \{ and, asc, desc, eq, inArray, lt, sql \} from 'drizzle-orm';/);
+    expect(body).toMatch(
+      /import \{ and, asc, desc, eq, inArray, lt, or, sql \} from 'drizzle-orm';/,
+    );
     expect(body).toMatch(
       /import type \{\s*\n?\s*DlqManager,\s*\n?\s*EnqueueDeliveryOpts,\s*\n?\s*ListDeliveriesOpts,\s*\n?\s*ListDeliveriesPage,\s*\n?\s*RequeueDlqOpts,\s*\n?\s*WebhookDeliveryService,\s*\n?\s*\} from '@driftstack\/webhook-delivery';/,
     );
