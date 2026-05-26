@@ -44,6 +44,14 @@ Response (201):
 }
 ```
 
+> **Scope de-escalation.** A key can only grant scopes its own key
+> already holds. An `account_owner` key can mint keys with any
+> customer-level scope (`read`, `write`, `account_owner`, or a granular
+> `verb:resource`), but cannot grant the staff-only
+> `driftstack_internal_admin` (or legacy `admin`) scope. Requesting a
+> scope the calling key does not hold returns `403 Forbidden`:
+> `Cannot grant the "<scope>" scope: the calling key does not hold it.`
+
 ## List keys
 
 `GET /v1/api-keys` returns all active and revoked keys for the calling
