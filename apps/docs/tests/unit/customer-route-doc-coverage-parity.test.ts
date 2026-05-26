@@ -24,17 +24,26 @@ function read(p: string): string {
 // Map each route file to the docs slug(s) that should cover it.
 const ROUTE_TO_DOC: Record<string, string[]> = {
   'account-audit.ts': ['api/audit-log.md'],
+  'account-bundled-llm.ts': ['api/bundled-llm.md'],
+  'account-byok-anthropic.ts': ['api/byok-anthropic.md'],
+  'account-cost.ts': ['api/cost-monitoring.md'],
   'account-me.ts': ['api/account.md'],
   'account-mfa.ts': ['api/mfa.md'],
+  'account-notifications.ts': ['api/account-notifications.md'],
   'account-rate-limits.ts': ['api/account-rate-limits.md'],
   'account-web-sessions.ts': ['api/account.md'],
+  'agent-sessions.ts': ['api/agent-sessions.md'],
   'auth.ts': ['api/auth.md'],
   'billing.ts': ['api/billing.md'],
+  'billing-crypto.ts': ['api/billing-crypto.md'],
   'email-preferences.ts': ['api/email-preferences.md'],
   'legal.ts': ['api/legal.md'],
+  'oauth.ts': ['api/oauth.md'],
   'profile-snapshots.ts': ['api/profile-snapshots.md'],
   'profiles.ts': ['api/profiles.md'],
+  'recipes.ts': ['api/recipes.md'],
   'sessions.ts': ['api/sessions.md'],
+  'status.ts': ['api/status.md'],
   'team.ts': ['api/team.md'],
   // Usage endpoints live in admin.ts (despite the name) — see W269.A.
   // We cover usage docs via api/usage.md instead of asserting a usage.ts file.
