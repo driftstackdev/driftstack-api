@@ -310,6 +310,30 @@ function oauthProviderDisplay(provider: unknown): string {
   return typeof provider === 'string' ? provider : '';
 }
 
+// HTML-escape interpolated values before they reach an email HTML body.
+// Templates interpolate plain-text data (URLs, dates, ids, session error
+// messages, customer-registered webhook URLs) into HTML; escaping at the
+// single render chokepoint in send() neutralises HTML injection without
+// touching any template string. URLs escape correctly too (`&` → `&amp;`
+// is proper href-attribute encoding). Text bodies are NOT escaped.
+const HTML_ESCAPE_MAP: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch] ?? ch);
+}
+function escapeVarsForHtml(vars: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const key of Object.keys(vars)) {
+    out[key] = escapeHtml(vars[key]!);
+  }
+  return out;
+}
+
 const TEMPLATES = {
   'signup-verification': {
     subject: 'Verify your Driftstack account',
@@ -622,7 +646,7 @@ export function createEmailService({
         To: to,
         Subject: tpl.subject,
         TextBody: tpl.text(vars),
-        HtmlBody: tpl.html(vars),
+        HtmlBody: tpl.html(escapeVarsForHtml(vars)),
         ReplyTo: config!.replyTo,
         MessageStream: messageStream,
       });

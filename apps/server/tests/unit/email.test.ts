@@ -81,6 +81,24 @@ describe('createEmailService — configured', () => {
     expect(c.MessageStream).toBe('outbound');
   });
 
+  it('HTML-escapes interpolated values (injection guard); leaves the text body raw', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    await svc.sendSessionFailedFirst({
+      to: 'user@example.com',
+      sessionId: 'ses_x',
+      errorMessage: 'boom <img src=x onerror="alert(1)"> & done',
+      docsUrl: 'https://docs.driftstack.dev/errors',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    // HTML body: dangerous characters are entity-escaped, no live markup.
+    expect(c.HtmlBody).toContain('boom &lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; done');
+    expect(c.HtmlBody).not.toContain('<img src=x');
+    // Text body: plain text, left exactly as supplied.
+    expect(c.TextBody).toContain('boom <img src=x onerror="alert(1)"> & done');
+  });
+
   it('password reset template', async () => {
     const logger = makeLogger();
     const client = makeStubClient();
