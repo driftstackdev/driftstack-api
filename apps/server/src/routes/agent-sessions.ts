@@ -355,7 +355,7 @@ export function registerAgentSessionsRoutes(
 
   app.post(
     '/v1/agent-sessions',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
       const parsed = CreateAgentSessionRequestSchema.safeParse(req.body ?? {});
@@ -631,6 +631,7 @@ export function registerAgentSessionsRoutes(
     {
       preHandler: [
         app.requireAuth,
+        app.requireScope('write'),
         // Dedicated bucket — separate from the generic 'global' so
         // a customer's 120Hz input stream doesn't burn through their
         // generic-API quota. Tier-derived burst when B3 ships; today
@@ -797,7 +798,7 @@ export function registerAgentSessionsRoutes(
   // routes are the ones that fight over WITHIN-pair state).
   app.post<{ Params: { id: string }; Body: unknown }>(
     '/v1/agent-sessions/:id/mode',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const parsed = SetModeRequestSchema.safeParse(req.body);
@@ -855,7 +856,7 @@ export function registerAgentSessionsRoutes(
     const TakeoverBodySchema = z.object({ client_id: z.string().min(1).max(128) });
     app.post<{ Params: { id: string } }>(
       '/v1/agent-sessions/:id/takeover',
-      { preHandler: [app.requireAuth, app.rateLimit('global')] },
+      { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
       async (req, reply) => {
         const ctx = requireCtx(req);
         const parsed = TakeoverBodySchema.safeParse(req.body);
@@ -959,7 +960,7 @@ export function registerAgentSessionsRoutes(
 
     app.post<{ Params: { id: string } }>(
       '/v1/agent-sessions/:id/handback',
-      { preHandler: [app.requireAuth, app.rateLimit('global')] },
+      { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
       async (req, reply) => {
         const ctx = requireCtx(req);
         const rec = await sessions.get(req.params.id);
@@ -1041,7 +1042,13 @@ export function registerAgentSessionsRoutes(
     // 'global' so a customer hammering chat doesn't burn through
     // their generic API quota). Bucket capacity scales per tier;
     // see TIER_RATE_LIMIT_DEFAULTS in @driftstack/api-types.
-    { preHandler: [app.requireAuth, app.rateLimit('agent_sessions:message')] },
+    {
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('write'),
+        app.rateLimit('agent_sessions:message'),
+      ],
+    },
     async (req) => {
       const ctx = requireCtx(req);
       const parsed = RunTurnRequestSchema.safeParse(req.body);
@@ -1284,7 +1291,7 @@ export function registerAgentSessionsRoutes(
 
   app.delete<{ Params: { id: string } }>(
     '/v1/agent-sessions/:id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
       const pre = await sessions.get(req.params.id);

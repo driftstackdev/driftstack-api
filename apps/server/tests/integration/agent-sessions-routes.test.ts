@@ -123,6 +123,19 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     if (fx) await fx.cleanup();
   });
 
+  it('403 when the key lacks write scope (read-only key)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, scopes: ['read'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000 },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ detail: string }>();
+    expect(body.detail).toContain('write');
+  });
+
   it('full lifecycle: create → message (plan) → get → close', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
 
