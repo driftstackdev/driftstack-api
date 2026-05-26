@@ -39,7 +39,7 @@ describe('W442.C apps/server/src/db/account-audit-repo.ts content parity', () =>
 
   it('imports: SQL type + and/desc/eq/gte/lt/lte from drizzle-orm; AccountAuditAction + AccountAuditActorType from api-types; 5 service types; Database; accountAuditLog schema', () => {
     expect(body).toMatch(
-      /import \{ type SQL, and, count, desc, eq, gte, lt, lte \} from 'drizzle-orm';/,
+      /import \{ type SQL, and, count, desc, eq, gte, lt, lte, or \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(
       /import type \{ AccountAuditAction, AccountAuditActorType \} from '@driftstack\/api-types';/,
@@ -56,9 +56,18 @@ describe('W442.C apps/server/src/db/account-audit-repo.ts content parity', () =>
     );
   });
 
-  it('list(): cursor decoded as Date from ISO string; filters seeded with eq(accountId); cursor pushes lt(timestamp); action pushes eq(action)', () => {
+  it('list(): keyset cursor — filters seeded with eq(accountId); cursor row looked up by id then compound (timestamp,id) keyset; action pushes eq(action)', () => {
     expect(body).toMatch(
-      /const cursorDate = opts\.cursor \? new Date\(opts\.cursor\) : null;\s*\n?\s*const filters: SQL\[\] = \[eq\(accountAuditLog\.accountId, accountId\)\];\s*\n?\s*if \(cursorDate\) filters\.push\(lt\(accountAuditLog\.timestamp, cursorDate\)\);\s*\n?\s*if \(opts\.action\) filters\.push\(eq\(accountAuditLog\.action, opts\.action\)\);/,
+      /const filters: SQL\[\] = \[eq\(accountAuditLog\.accountId, accountId\)\];/,
+    );
+    // Keyset cursor (mirrors profiles-repo): look up the cursor row's
+    // (timestamp, id), then select strictly-after rows.
+    expect(body).toMatch(/const keyset = or\(/);
+    expect(body).toMatch(/lt\(accountAuditLog\.timestamp, cursorRow\.timestamp\),/);
+    expect(body).toMatch(/eq\(accountAuditLog\.timestamp, cursorRow\.timestamp\),/);
+    expect(body).toMatch(/lt\(accountAuditLog\.id, cursorRow\.id\),/);
+    expect(body).toMatch(
+      /if \(opts\.action\) filters\.push\(eq\(accountAuditLog\.action, opts\.action\)\);/,
     );
   });
 
@@ -73,10 +82,10 @@ describe('W442.C apps/server/src/db/account-audit-repo.ts content parity', () =>
 
   it('Query: select * from accountAuditLog where and(...filters) order by desc(timestamp) limit(opts.limit+1); hasMore = rows.length > opts.limit; items = slice(0, opts.limit) on hasMore else rows; nextCursor = last.timestamp.toISOString() on hasMore else null', () => {
     expect(body).toMatch(
-      /const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(accountAuditLog\)\s*\n?\s*\.where\(and\(\.\.\.filters\)\)\s*\n?\s*\.orderBy\(desc\(accountAuditLog\.timestamp\)\)\s*\n?\s*\.limit\(opts\.limit \+ 1\);/,
+      /const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(accountAuditLog\)\s*\n?\s*\.where\(and\(\.\.\.filters\)\)\s*\n?\s*\.orderBy\(desc\(accountAuditLog\.timestamp\), desc\(accountAuditLog\.id\)\)\s*\n?\s*\.limit\(opts\.limit \+ 1\);/,
     );
     expect(body).toMatch(
-      /const hasMore = rows\.length > opts\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toRow\),\s*\n?\s*nextCursor: hasMore && last \? last\.timestamp\.toISOString\(\) : null,\s*\n?\s*\};/,
+      /const hasMore = rows\.length > opts\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toRow\),\s*\n?\s*nextCursor: hasMore && last \? last\.id : null,\s*\n?\s*\};/,
     );
   });
 

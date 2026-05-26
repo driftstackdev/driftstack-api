@@ -36,24 +36,34 @@ export class InMemoryAccountAuditRepo implements AccountAuditRepo {
   }
 
   list(accountId: string, opts: ListAccountAuditOpts): Promise<ListAccountAuditPage> {
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
-    const filtered = this.rows
+    // Keyset cursor on (timestamp desc, id desc) — mirrors the Drizzle
+    // repo. Stable sort, then resume strictly after the cursor row's
+    // position so same-timestamp rows aren't dropped at a page boundary.
+    let ordered = this.rows
       .filter((r) => r.accountId === accountId)
       .filter((r) => (opts.action ? r.action === opts.action : true))
-      .filter((r) => (cursorDate ? r.timestamp < cursorDate : true))
       // V-484 — date range + actor + target_resource_id filters.
       .filter((r) => (opts.from ? r.timestamp >= opts.from : true))
       .filter((r) => (opts.to ? r.timestamp <= opts.to : true))
       .filter((r) => (opts.actorType ? r.actorType === opts.actorType : true))
       .filter((r) => (opts.targetResourceId ? r.targetResourceId === opts.targetResourceId : true))
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+      .sort((a, b) => {
+        const dt = b.timestamp.getTime() - a.timestamp.getTime();
+        if (dt !== 0) return dt;
+        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+      });
 
-    const items = filtered.slice(0, opts.limit);
+    if (opts.cursor !== undefined) {
+      const idx = ordered.findIndex((r) => r.id === opts.cursor);
+      if (idx >= 0) ordered = ordered.slice(idx + 1);
+    }
+
+    const items = ordered.slice(0, opts.limit);
     const last = items[items.length - 1];
-    const hasMore = filtered.length > opts.limit;
+    const hasMore = ordered.length > opts.limit;
     return Promise.resolve({
       items,
-      nextCursor: hasMore && last ? last.timestamp.toISOString() : null,
+      nextCursor: hasMore && last ? last.id : null,
     });
   }
 

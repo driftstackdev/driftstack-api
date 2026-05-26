@@ -1,6 +1,6 @@
 // V-216 — Drizzle-backed AccountAuditRepo.
 
-import { type SQL, and, count, desc, eq, gte, lt, lte } from 'drizzle-orm';
+import { type SQL, and, count, desc, eq, gte, lt, lte, or } from 'drizzle-orm';
 import type { AccountAuditAction, AccountAuditActorType } from '@driftstack/api-types';
 import type {
   AccountAuditEntryRow,
@@ -35,9 +35,30 @@ export class DrizzleAccountAuditRepo implements AccountAuditRepo {
   }
 
   async list(accountId: string, opts: ListAccountAuditOpts): Promise<ListAccountAuditPage> {
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
     const filters: SQL[] = [eq(accountAuditLog.accountId, accountId)];
-    if (cursorDate) filters.push(lt(accountAuditLog.timestamp, cursorDate));
+    // Keyset cursor on (timestamp desc, id desc). The cursor is the
+    // last row's id; we look up its timestamp and select strictly-after
+    // rows. A timestamp-only cursor dropped every row sharing the
+    // cursor's timestamp at a page boundary — and audit rows written in
+    // one transaction share an identical timestamp, so the drop was
+    // real. Mirrors the profiles-repo keyset pattern.
+    if (opts.cursor !== undefined) {
+      const [cursorRow] = await this.database.db
+        .select({ timestamp: accountAuditLog.timestamp, id: accountAuditLog.id })
+        .from(accountAuditLog)
+        .where(and(eq(accountAuditLog.id, opts.cursor), eq(accountAuditLog.accountId, accountId)))
+        .limit(1);
+      if (cursorRow) {
+        const keyset = or(
+          lt(accountAuditLog.timestamp, cursorRow.timestamp),
+          and(
+            eq(accountAuditLog.timestamp, cursorRow.timestamp),
+            lt(accountAuditLog.id, cursorRow.id),
+          ),
+        );
+        if (keyset) filters.push(keyset);
+      }
+    }
     if (opts.action) filters.push(eq(accountAuditLog.action, opts.action));
     // V-484 — additional filters: from/to date range, actor_type,
     // target_resource_id (exact match).
@@ -52,7 +73,7 @@ export class DrizzleAccountAuditRepo implements AccountAuditRepo {
       .select()
       .from(accountAuditLog)
       .where(and(...filters))
-      .orderBy(desc(accountAuditLog.timestamp))
+      .orderBy(desc(accountAuditLog.timestamp), desc(accountAuditLog.id))
       .limit(opts.limit + 1);
 
     const hasMore = rows.length > opts.limit;
@@ -60,7 +81,7 @@ export class DrizzleAccountAuditRepo implements AccountAuditRepo {
     const last = items[items.length - 1];
     return {
       items: items.map(toRow),
-      nextCursor: hasMore && last ? last.timestamp.toISOString() : null,
+      nextCursor: hasMore && last ? last.id : null,
     };
   }
 

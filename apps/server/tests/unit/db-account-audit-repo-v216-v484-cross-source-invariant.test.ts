@@ -81,9 +81,10 @@ describe('W1007 db/account-audit-repo V-216 + V-484 cross-source invariant', () 
   it('CRITICAL list anchor on accountId tenant scope + 5 V-484 optional filters (cursor + action + from + to + actorType + targetResourceId).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/account-audit-repo.ts'));
     expect(p).toMatch(/const filters: SQL\[\] = \[eq\(accountAuditLog\.accountId, accountId\)\];/);
-    expect(p).toMatch(
-      /if \(cursorDate\) filters\.push\(lt\(accountAuditLog\.timestamp, cursorDate\)\);/,
-    );
+    // Keyset cursor (timestamp, id) — looked up by cursor id, compound filter.
+    expect(p).toMatch(/const keyset = or\(/);
+    expect(p).toMatch(/lt\(accountAuditLog\.timestamp, cursorRow\.timestamp\),/);
+    expect(p).toMatch(/lt\(accountAuditLog\.id, cursorRow\.id\),/);
     expect(p).toMatch(
       /if \(opts\.action\) filters\.push\(eq\(accountAuditLog\.action, opts\.action\)\);/,
     );
@@ -108,12 +109,14 @@ describe('W1007 db/account-audit-repo V-216 + V-484 cross-source invariant', () 
     expect(p).toMatch(/\/\/ target_resource_id \(exact match\)\./);
   });
 
-  it('CRITICAL list orderBy desc(timestamp) + limit+1 hasMore + ISO cursor.', () => {
+  it('CRITICAL list orderBy (timestamp desc, id desc) + limit+1 hasMore + id keyset cursor.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/account-audit-repo.ts'));
-    expect(p).toMatch(/\.orderBy\(desc\(accountAuditLog\.timestamp\)\)/);
+    expect(p).toMatch(
+      /\.orderBy\(desc\(accountAuditLog\.timestamp\), desc\(accountAuditLog\.id\)\)/,
+    );
     expect(p).toMatch(/\.limit\(opts\.limit \+ 1\);/);
     expect(p).toMatch(/const hasMore = rows\.length > opts\.limit;/);
-    expect(p).toMatch(/nextCursor: hasMore && last \? last\.timestamp\.toISOString\(\) : null,/);
+    expect(p).toMatch(/nextCursor: hasMore && last \? last\.id : null,/);
   });
 
   it('CRITICAL toRow 11-field shape with actorType + action enum casts. payload ?? null normalization.', () => {
