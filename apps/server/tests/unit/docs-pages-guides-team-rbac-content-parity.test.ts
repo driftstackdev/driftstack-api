@@ -240,7 +240,7 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /A team member is a separate Data Subject from the owner\. Their\s*\n?account email is processed under \[Privacy §3\.1\]\(\/legal\/privacy\/#account-data\)\s*\n?on the same legal basis as any other Customer contact\./,
+      /A team member is a separate Data Subject from the owner\. Their\s*\n?account email is processed under \[Privacy §3\.1\]\(https:\/\/driftstack\.dev\/legal\/privacy\/#account-data\)\s*\n?on the same legal basis as any other Customer contact\./,
     );
     expect(p).toMatch(
       /Removing the\s*\n?member from the team does not delete their Driftstack account; only\s*\n?the membership relationship\./,

@@ -35,7 +35,7 @@ describe('docs/api/email-preferences content parity', () => {
 
   it("DPA-affirmative-choice legal posture framing pinned: 'The endpoint surface is intentionally narrow: list current preferences, set one preference. Per-event opt-in is the unit; there's no \"opt out of everything optional\" shorthand because the legal posture (per the DPA) requires that we deliver each opt-out as an affirmative customer choice.' — pinned so the per-event-unit + no-bulk-opt-out + DPA-affirmative-choice-rationale contract all stay documented (drift to a bulk opt-out would weaken the GDPR-compliant affirmative-choice posture)", () => {
     expect(body).toMatch(
-      /Per-event opt-in is the unit;\s*\n?\s*there's no "opt out of everything optional" shorthand because\s*\n?\s*the legal posture \(per the \[DPA\]\(\/legal\/dpa\)\) requires that we\s*\n?\s*deliver each opt-out as an affirmative customer choice\./,
+      /Per-event opt-in is the unit;\s*\n?\s*there's no "opt out of everything optional" shorthand because\s*\n?\s*the legal posture \(per the \[DPA\]\(https:\/\/driftstack\.dev\/legal\/dpa\)\) requires that we\s*\n?\s*deliver each opt-out as an affirmative customer choice\./,
     );
   });
 

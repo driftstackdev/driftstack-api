@@ -218,7 +218,7 @@ role + `X-Driftstack-Account` header pointing at the owner.
 ## Privacy note
 
 A team member is a separate Data Subject from the owner. Their
-account email is processed under [Privacy §3.1](/legal/privacy/#account-data)
+account email is processed under [Privacy §3.1](https://driftstack.dev/legal/privacy/#account-data)
 on the same legal basis as any other Customer contact. Removing the
 member from the team does not delete their Driftstack account; only
 the membership relationship.

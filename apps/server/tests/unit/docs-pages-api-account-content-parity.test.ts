@@ -105,7 +105,7 @@ describe('W770 docs /api/account content parity', () => {
 
     expect(p).toMatch(/stated infrastructure-region preference \(`us` \/ `eu` \/ `apac`\)\./);
     expect(p).toMatch(
-      /Informational for v1; routing is governed by \[DPA Annex 3\]\(\/legal\/dpa#annex-3-sub-processors\)/,
+      /Informational for v1; routing is governed by \[DPA Annex 3\]\(https:\/\/driftstack\.dev\/legal\/dpa#annex-3-sub-processors\)/,
     );
   });
 

@@ -49,7 +49,7 @@ describe('W771 docs /api/email-preferences content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Per-event opt-in is the unit;\s*\n?there's no "opt out of everything optional" shorthand because\s*\n?the legal posture \(per the \[DPA\]\(\/legal\/dpa\)\) requires that we\s*\n?deliver each opt-out as an affirmative customer choice\./,
+      /Per-event opt-in is the unit;\s*\n?there's no "opt out of everything optional" shorthand because\s*\n?the legal posture \(per the \[DPA\]\(https:\/\/driftstack\.dev\/legal\/dpa\)\) requires that we\s*\n?deliver each opt-out as an affirmative customer choice\./,
     );
   });
 
