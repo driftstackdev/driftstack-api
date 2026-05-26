@@ -94,7 +94,10 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     expect(body).toMatch(
       /\| `concurrency-limit`\s+\| `ConcurrencyLimitError`\s+\| `ConcurrencyLimitError`\s+\| `\*ConcurrencyLimitError`\s+\| no\s+\|/,
     );
-    expect(body).toMatch(/\| `tier-limit`\s+\| `QuotaExceededError`/);
+    // TS uses TierLimitError (historical 0.1.x name); Python + Go use QuotaExceededError.
+    expect(body).toMatch(
+      /\| `tier-limit`\s+\| `TierLimitError`\s+\| `QuotaExceededError`\s+\| `\*QuotaExceededError`\s+\| no\s+\|/,
+    );
     expect(body).toMatch(/\| `legal-acceptance-required`/);
     expect(body).toMatch(/\| `session-destroyed`/);
     expect(body).toMatch(/\| `session-timeout`/);

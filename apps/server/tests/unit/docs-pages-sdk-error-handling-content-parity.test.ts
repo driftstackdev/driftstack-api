@@ -19,6 +19,7 @@ function read(p: string): string {
 }
 
 const PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/sdk/error-handling.md');
+const TS_SDK_ERRORS = resolve(REPO_ROOT, 'packages/sdk-typescript/src/errors.ts');
 
 describe('W776 docs /sdk/error-handling content parity', () => {
   it('sdk/error-handling.md file exists', () => {
@@ -85,6 +86,24 @@ describe('W776 docs /sdk/error-handling content parity', () => {
     }
     // Transport is the special non-slug row.
     expect(p).toMatch(/\| transport \(network \/ parse \/ timeout\) \| `TransportError`/);
+  });
+
+  it('CRITICAL tier-limit TS class is TierLimitError, NOT QuotaExceededError. The TS SDK kept the historical 0.1.x `TierLimitError` name while Python/Go expose `QuotaExceededError` for the same `tier-limit` problem type. The doc table + TS code example must import/catch the class the TS SDK actually exports, or the snippet fails to compile (regression: docs once showed QuotaExceededError in the TS column + example).', () => {
+    // Source of truth: TS SDK exports TierLimitError and has NO QuotaExceededError class.
+    const sdk = read(TS_SDK_ERRORS);
+    expect(sdk).toMatch(/export class TierLimitError extends DriftstackError/);
+    expect(sdk).not.toMatch(/export class QuotaExceededError/);
+
+    const p = read(PAGE);
+    // Table row: TS column = TierLimitError; Python + Go columns = QuotaExceededError.
+    expect(p).toMatch(
+      /\| `tier-limit`\s+\| `TierLimitError`\s+\| `QuotaExceededError`\s+\| `\*QuotaExceededError`\s+\| no\s+\|/,
+    );
+    // TS example imports + catches the real export (single-line discrete pins — no backtracking chains).
+    expect(p).toMatch(/\n {2}TierLimitError,\n/);
+    expect(p).toMatch(/} else if \(err instanceof TierLimitError\) \{/);
+    // And does NOT reintroduce a TS `instanceof QuotaExceededError`.
+    expect(p).not.toMatch(/instanceof QuotaExceededError/);
   });
 
   it('CRITICAL 3-AuthError-slug aggregation pinned — invalid-key/expired-key/revoked-key all map to AuthError. Drift would let SDK consumers fail to consolidate auth-style retry/re-mint logic.', () => {

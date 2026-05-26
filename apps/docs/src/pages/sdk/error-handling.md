@@ -34,7 +34,7 @@ not on HTTP status.
 | `conflict`                            | `ConflictError`                | `ConflictError`                | `*ConflictError`                | no        |
 | `rate-limited`                        | `RateLimitError`               | `RateLimitError`               | `*RateLimitError`               | yes       |
 | `concurrency-limit`                   | `ConcurrencyLimitError`        | `ConcurrencyLimitError`        | `*ConcurrencyLimitError`        | no        |
-| `tier-limit`                          | `QuotaExceededError`           | `QuotaExceededError`           | `*QuotaExceededError`           | no        |
+| `tier-limit`                          | `TierLimitError`               | `QuotaExceededError`           | `*QuotaExceededError`           | no        |
 | `legal-acceptance-required`           | `LegalAcceptanceRequiredError` | `LegalAcceptanceRequiredError` | `*LegalAcceptanceRequiredError` | no        |
 | `driver-not-integrated`               | `DriverError`                  | `DriverError`                  | `*DriverError`                  | no        |
 | `session-timeout`                     | `SessionTimeoutError`          | `SessionTimeoutError`          | `*SessionTimeoutError`          | no        |
@@ -43,6 +43,12 @@ not on HTTP status.
 
 All extend `DriftstackError` (TS) / `DriftstackError` (Python) /
 `*DriftstackError` (Go base struct embedded in every typed error).
+
+> **Naming note:** for the `tier-limit` problem type the TypeScript SDK
+> exports `TierLimitError` (the original name, shipped since 0.1.x),
+> whereas the Python and Go SDKs name it `QuotaExceededError`. All three
+> surface the same payload fields (`current` / `limit` / `recordType`,
+> snake_case in Python).
 
 ## TypeScript
 
@@ -53,7 +59,7 @@ import {
   AuthError,
   RateLimitError,
   ConcurrencyLimitError,
-  QuotaExceededError,
+  TierLimitError,
   ValidationError,
 } from '@driftstack/sdk';
 
@@ -67,7 +73,7 @@ try {
     // re-mint key + retry, or surface to ops
   } else if (err instanceof ConcurrencyLimitError) {
     console.warn(`at concurrent ceiling: ${err.currentSessions}/${err.limit}`);
-  } else if (err instanceof QuotaExceededError) {
+  } else if (err instanceof TierLimitError) {
     console.warn(`quota exceeded for ${err.recordType}: ${err.current}/${err.limit}`);
   } else if (err instanceof RateLimitError) {
     await sleep((err.retryAfterSeconds ?? 1) * 1000);
