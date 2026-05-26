@@ -38,8 +38,8 @@
 //     even if repo returned them.
 //   • V-225 emitAuditBestEffort: 4-action union (webhook_endpoint.
 //     created/updated/deleted/secret_rotated).
-//   • WebhooksAdminService: admin scope-gated; requeueFromDlq
-//     refuses non-DLQ status.
+//   • WebhooksAdminService: driftstack_internal_admin scope-gated (V-174);
+//     requeueFromDlq refuses non-DLQ status.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -201,10 +201,10 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     );
   });
 
-  it('WebhooksAdminService: admin scope-gated everywhere; requeueFromDlq refuses non-DLQ status via ConflictError', () => {
+  it('WebhooksAdminService: driftstack_internal_admin scope-gated everywhere (V-174 — matches the /v1/admin route gate; legacy admin still satisfies via alias); requeueFromDlq refuses non-DLQ status via ConflictError', () => {
     expect(body).toMatch(/export class WebhooksAdminService \{/);
     expect(body).toMatch(
-      /async requeueFromDlq\(ctx: AccountContext, deliveryId: string\): Promise<WebhookDeliveryRow> \{\s*\n?\s*throwIfMissingScope\(ctx, 'admin'\);/,
+      /async requeueFromDlq\(ctx: AccountContext, deliveryId: string\): Promise<WebhookDeliveryRow> \{\s*\n?\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/,
     );
     expect(body).toMatch(/if \(current\.status !== 'dlq'\) \{\s*\n?\s*throw new ConflictError\(/);
   });

@@ -147,10 +147,13 @@ describe('W931 rate-limit-overrides V-016 centi-quantum cross-source invariant',
 
   // ─── set/clear/listAll scope requirements ────────────────────
 
-  it("CRITICAL set() + clear() require 'admin' scope; listAll() requires 'driftstack_internal_admin' (stricter cross-account scope). The 2-tier scope split keeps cross-account listing internal-only.", () => {
+  it("CRITICAL set() + clear() + listAll() all require 'driftstack_internal_admin' (V-174 — this is staff cross-account tooling; the routes gate on driftstack_internal_admin, and a literal 'admin' check would 403 staff SSO sessions that carry driftstack_internal_admin not legacy admin). Legacy 'admin' keys still pass via the alias.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/rate-limit-overrides.ts'));
-    expect(p).toMatch(/throwIfMissingScope\(ctx, 'admin'\);/);
-    expect(p).toMatch(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/);
+    // No literal-'admin' gate remains — all three methods use the staff scope.
+    expect(p).not.toMatch(/throwIfMissingScope\(ctx, 'admin'\);/);
+    expect(
+      (p.match(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/g) ?? []).length,
+    ).toBe(3);
   });
 
   // ─── clear() returns 404 when no override exists ─────────────

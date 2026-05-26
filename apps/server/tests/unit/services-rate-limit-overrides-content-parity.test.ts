@@ -94,8 +94,8 @@ describe('W397.C apps/server/src/services/rate-limit-overrides.ts content parity
     );
   });
 
-  it('set: requires "admin" scope', () => {
-    expect(body).toMatch(/throwIfMissingScope\(ctx, 'admin'\);/);
+  it('set: requires "driftstack_internal_admin" scope (V-174 — matches the route gate + listAll; legacy admin still satisfies via alias)', () => {
+    expect(body).toMatch(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/);
   });
 
   it('set validation: capacity≥1 + finite → ConflictError', () => {
@@ -123,9 +123,9 @@ describe('W397.C apps/server/src/services/rate-limit-overrides.ts content parity
     expect(body).toMatch(/await this\.invalidateCache\(input\.accountId\);/);
   });
 
-  it('clear: admin scope, NotFoundError when no row removed, then invalidate cache', () => {
+  it('clear: driftstack_internal_admin scope, NotFoundError when no row removed, then invalidate cache', () => {
     expect(body).toMatch(
-      /async clear\(ctx: AccountContext, accountId: string, bucketKey: string\): Promise<void> \{\s*\n?\s*throwIfMissingScope\(ctx, 'admin'\);\s*\n?\s*const removed = await this\.repo\.clear\(accountId, bucketKey\);\s*\n?\s*if \(!removed\) \{\s*\n?\s*throw new NotFoundError\(\s*\n?\s*`No active override for account "\$\{accountId\}" bucket "\$\{bucketKey\}"\.`,\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*await this\.invalidateCache\(accountId\);/,
+      /async clear\(ctx: AccountContext, accountId: string, bucketKey: string\): Promise<void> \{\s*\n?\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*\n?\s*const removed = await this\.repo\.clear\(accountId, bucketKey\);\s*\n?\s*if \(!removed\) \{\s*\n?\s*throw new NotFoundError\(\s*\n?\s*`No active override for account "\$\{accountId\}" bucket "\$\{bucketKey\}"\.`,\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*await this\.invalidateCache\(accountId\);/,
     );
   });
 

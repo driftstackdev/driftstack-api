@@ -81,7 +81,7 @@ export class RateLimitOverridesService {
       reason?: string;
     },
   ): Promise<RateLimitOverrideRecord> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
 
     if (input.capacity < 1 || !Number.isFinite(input.capacity)) {
       throw new ConflictError('capacity must be a positive integer.');
@@ -110,7 +110,7 @@ export class RateLimitOverridesService {
   }
 
   async clear(ctx: AccountContext, accountId: string, bucketKey: string): Promise<void> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     const removed = await this.repo.clear(accountId, bucketKey);
     if (!removed) {
       throw new NotFoundError(

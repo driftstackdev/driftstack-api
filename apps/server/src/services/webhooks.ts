@@ -747,7 +747,7 @@ export class WebhooksAdminService {
   constructor(private readonly repo: WebhooksRepo) {}
 
   async getDelivery(ctx: AccountContext, deliveryId: string): Promise<WebhookDeliveryRow> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     const row = await this.repo.findDeliveryById(deliveryId);
     if (!row) throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
     return row;
@@ -759,7 +759,7 @@ export class WebhooksAdminService {
    * /webhook-deliveries/:id/replay.
    */
   async replayDelivery(ctx: AccountContext, deliveryId: string): Promise<WebhookDeliveryRow> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     const updated = await this.repo.resetDeliveryToPending(deliveryId, new Date());
     if (!updated) throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
     return updated;
@@ -771,7 +771,7 @@ export class WebhooksAdminService {
    * matters even though the underlying mutation is identical.
    */
   async requeueFromDlq(ctx: AccountContext, deliveryId: string): Promise<WebhookDeliveryRow> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     const current = await this.repo.findDeliveryById(deliveryId);
     if (!current) throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
     if (current.status !== 'dlq') {
@@ -796,7 +796,7 @@ export class WebhooksAdminService {
    * deleted row's id (useful for the audit log entry).
    */
   async discardFromDlq(ctx: AccountContext, deliveryId: string): Promise<{ discarded_id: string }> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     const current = await this.repo.findDeliveryById(deliveryId);
     if (!current) throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
     if (current.status !== 'dlq') {
@@ -813,12 +813,12 @@ export class WebhooksAdminService {
     ctx: AccountContext,
     opts: { limit: number; cursor?: string; endpointId?: string },
   ): Promise<ListDeliveriesPage> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     return this.repo.listDlqDeliveries(opts);
   }
 
   countDlq(ctx: AccountContext): Promise<number> {
-    throwIfMissingScope(ctx, 'admin');
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
     return this.repo.countDlqDeliveries();
   }
 }

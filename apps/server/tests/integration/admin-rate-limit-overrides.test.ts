@@ -148,6 +148,27 @@ describe('POST /v1/admin/accounts/:id/quota-override', () => {
     expect(res.statusCode).toBe(403);
   });
 
+  it('200 with driftstack_internal_admin scope (V-174 — staff SSO sessions carry driftstack_internal_admin, NOT legacy admin)', async () => {
+    // The route gates on driftstack_internal_admin; the service must
+    // accept the same scope. Pre-fix the service required literal
+    // 'admin', so staff sessions got 403 despite passing the route gate.
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/accounts/${accId(fx)}/quota-override`,
+      headers: auth(fx),
+      payload: {
+        bucket_key: 'global',
+        capacity: 100,
+        refill_per_second: 1,
+        duration_seconds: 600,
+      },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
   it('404 unknown account', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

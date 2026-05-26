@@ -94,6 +94,23 @@ describe('GET /v1/admin/webhook-deliveries/:id', () => {
     });
     expect(res.statusCode).toBe(403);
   });
+
+  it('200 with driftstack_internal_admin scope (V-174 — staff SSO sessions carry driftstack_internal_admin, NOT legacy admin)', async () => {
+    // The route gates on driftstack_internal_admin; the service must
+    // accept the same scope. Pre-fix the service required literal
+    // 'admin', which driftstack_internal_admin does NOT satisfy, so
+    // staff sessions got 403 here even though the route let them in.
+    fx = await buildTestApp({
+      scopes: ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
+    });
+    const { id } = await seedDelivery(fx);
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/admin/webhook-deliveries/wdl_${id}`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+  });
 });
 
 describe('POST /v1/admin/webhook-deliveries/:id/replay', () => {
