@@ -174,14 +174,21 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
     expect(body).toMatch(/await this\.emitFailedTransition\(updated, 'expired'\);/);
   });
 
-  it('V-666.K sweepExpiredOrders: default limit=500 + capped=(expired===limit) honest signal; per-row emitFailedTransition source=swept', () => {
+  it('V-666.K sweepExpiredOrders: default limit=500 + oldest-first listPendingOlderThan scan + capped=(scan filled limit) honest signal; per-row emitFailedTransition source=swept', () => {
     expect(body).toMatch(/V-666\.K — bulk-sweep pending orders older than `olderThanMs`,/);
     expect(body).toMatch(/const limit = opts\.limit \?\? 500;/);
+    // Oldest-first scan via listPendingOlderThan — a newest-first
+    // listAll scan would never reach stale old orders at scale.
+    expect(body).toMatch(
+      /this\.opts\.repo\.listPendingOlderThan\(\{ olderThan: cutoff, limit \}\)/,
+    );
     expect(body).toMatch(
       /events: \[\.\.\.o\.events, \{ status: 'failed', at: now, source: 'swept' \}\],/,
     );
     expect(body).toMatch(/await this\.emitFailedTransition\(updated, 'swept'\);/);
-    expect(body).toMatch(/return \{ expired, capped: expired === limit \};/);
+    // `capped` keys off whether the scan filled the limit (more may
+    // remain), not the flip count — so the cron re-runs correctly.
+    expect(body).toMatch(/return \{ expired, capped: candidates\.length === limit \};/);
   });
 
   it('applyIpnStatus: forward-only state machine via isTerminalForward; same-state no-event-append (idempotent refresh); record payment_id on no-op', () => {

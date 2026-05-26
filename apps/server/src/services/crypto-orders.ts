@@ -95,6 +95,14 @@ export interface CryptoOrdersRepo {
    * `limit` rows (default 50) ordered by created_at DESC.
    */
   listAll(opts?: { accountId?: string; limit?: number }): Promise<CryptoOrder[]>;
+  /**
+   * Sweep support — pending orders created at or before `olderThan`
+   * (epoch ms), ordered OLDEST-FIRST, capped at `limit`. Distinct from
+   * `listAll` (newest-first) on purpose: the sweep must drain the
+   * oldest stale orders, and a newest-first scan never reaches them
+   * once the table holds more than `limit` rows.
+   */
+  listPendingOlderThan(opts: { olderThan: number; limit: number }): Promise<CryptoOrder[]>;
 }
 
 export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
@@ -114,6 +122,13 @@ export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
     const filtered =
       opts.accountId !== undefined ? all.filter((o) => o.account_id === opts.accountId) : all;
     return filtered.sort((a, b) => b.created_at - a.created_at).slice(0, limit);
+  }
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async listPendingOlderThan(opts: { olderThan: number; limit: number }): Promise<CryptoOrder[]> {
+    return Array.from(this.orders.values())
+      .filter((o) => o.status === 'pending' && o.created_at <= opts.olderThan)
+      .sort((a, b) => a.created_at - b.created_at)
+      .slice(0, opts.limit);
   }
 }
 
@@ -933,13 +948,18 @@ export class CryptoOrdersService {
     limit?: number;
   }): Promise<{ expired: number; capped: boolean }> {
     const limit = opts.limit ?? 500;
-    const candidates = await this.opts.repo.listAll({ limit });
     const now = this.nowFn();
-    const eligible = candidates.filter(
-      (o) => o.status === 'pending' && now - o.created_at >= opts.olderThanMs,
-    );
+    const cutoff = now - opts.olderThanMs;
+    // Oldest-first among eligible rows. A newest-first listAll scan
+    // would never reach stale OLD orders once newer orders exceed the
+    // limit, leaving them stuck pending forever.
+    const candidates = await this.opts.repo.listPendingOlderThan({ olderThan: cutoff, limit });
     let expired = 0;
-    for (const o of eligible) {
+    for (const o of candidates) {
+      // Defensive re-check: the repo query already filters to pending +
+      // past-cutoff, but guard against a race with a concurrent IPN
+      // transition between the query and the upsert below.
+      if (o.status !== 'pending' || now - o.created_at < opts.olderThanMs) continue;
       const updated: CryptoOrder = {
         ...o,
         status: 'failed',
@@ -954,7 +974,10 @@ export class CryptoOrdersService {
       await this.emitFailedTransition(updated, 'swept');
       expired += 1;
     }
-    return { expired, capped: expired === limit };
+    // `capped` reflects whether the SCAN filled the limit (more stale
+    // orders may remain beyond this batch), not the flip count — so the
+    // nightly cron knows to re-run until it comes back false.
+    return { expired, capped: candidates.length === limit };
   }
 
   /**

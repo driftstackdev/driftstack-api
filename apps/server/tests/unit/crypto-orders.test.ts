@@ -622,6 +622,56 @@ describe('V-666.K expireOrder + sweepExpiredOrders', () => {
     expect(result.capped).toBe(true); // cron should re-run
   });
 
+  it('sweepExpiredOrders drains the OLDEST stale orders even when newer orders crowd the scan window', async () => {
+    // Regression: the sweep used to scan listAll (newest-first) then
+    // filter in memory. Once newer (still-fresh) orders outnumber the
+    // per-tick limit, a newest-first scan never reaches the genuinely
+    // stale OLD orders, so they were never swept at scale. The sweep
+    // must select oldest-first among eligible (pending + past-cutoff)
+    // rows.
+    const { svc, setNow } = makeService();
+    setNow(1_000_000);
+    // Three genuinely stale orders created first (oldest).
+    for (let i = 0; i < 3; i += 1) {
+      await svc.create({
+        order_id: `ord_old_${i.toString()}`,
+        account_id: 'a',
+        product: 'p',
+        price_cents: 100,
+        price_currency: 'EUR',
+      });
+    }
+    // A burst of newer pending orders created 23h later — still fresh
+    // at sweep time, and enough of them to fill a small scan window.
+    setNow(1_000_000 + 23 * 60 * 60 * 1000);
+    for (let i = 0; i < 5; i += 1) {
+      await svc.create({
+        order_id: `ord_fresh_${i.toString()}`,
+        account_id: 'a',
+        product: 'p',
+        price_cents: 100,
+        price_currency: 'EUR',
+      });
+    }
+    // 25h after the old ones: the 3 old orders are past the 24h cutoff;
+    // the 5 fresh ones (2h old) are not.
+    setNow(1_000_000 + 25 * 60 * 60 * 1000);
+    const result = await svc.sweepExpiredOrders({
+      olderThanMs: 24 * 60 * 60 * 1000,
+      // Limit smaller than the fresh burst: a newest-first scan of this
+      // many rows would return only fresh orders and sweep nothing.
+      limit: 3,
+    });
+    expect(result.expired).toBe(3);
+    expect(result.capped).toBe(true); // full batch — cron re-runs
+    for (let i = 0; i < 3; i += 1) {
+      expect((await svc.getById(`ord_old_${i.toString()}`))?.status).toBe('failed');
+    }
+    for (let i = 0; i < 5; i += 1) {
+      expect((await svc.getById(`ord_fresh_${i.toString()}`))?.status).toBe('pending');
+    }
+  });
+
   it('sweepExpiredOrders ignores orders past pending (already terminal/in-flight)', async () => {
     const { svc, setNow } = makeService();
     await svc.create({

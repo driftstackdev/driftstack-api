@@ -14,7 +14,7 @@
 // claim flow). The CryptoOrder envelope uses string|null; we pass
 // through unchanged.
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, lte, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { cryptoOrders } from './schema.js';
 import type { CryptoOrder, CryptoOrderEvent, CryptoOrdersRepo } from '../services/crypto-orders.js';
@@ -97,6 +97,21 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
       .where(where ?? sql`true`)
       .orderBy(desc(cryptoOrders.createdAt))
       .limit(limit);
+    return rows.map(rowToEnvelope);
+  }
+
+  async listPendingOlderThan(opts: { olderThan: number; limit: number }): Promise<CryptoOrder[]> {
+    const rows = await this.database.db
+      .select()
+      .from(cryptoOrders)
+      .where(
+        and(
+          eq(cryptoOrders.status, 'pending'),
+          lte(cryptoOrders.createdAt, new Date(opts.olderThan)),
+        ),
+      )
+      .orderBy(asc(cryptoOrders.createdAt))
+      .limit(opts.limit);
     return rows.map(rowToEnvelope);
   }
 }
