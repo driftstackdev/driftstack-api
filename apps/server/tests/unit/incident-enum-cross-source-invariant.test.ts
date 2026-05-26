@@ -11,6 +11,8 @@
 //     MockIncidentStatus union types — mock-mode mirrors enum shape).
 //   - apps/status-site/src/pages/history.astro (SEVERITY_BADGE +
 //     status colour-map — public status page renders all enum keys).
+//   - apps/status-site/src/pages/index.astro (its own SEVERITY_BADGE +
+//     STATUS_BADGE maps — main status page renders all enum keys).
 //
 // Drift to adding/removing an enum value without coordinated
 // admin-panel + status-site updates would silently break:
@@ -98,6 +100,32 @@ describe('W851 incident enum cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/status-site/src/pages/history.astro'));
     for (const status of INCIDENT_STATUSES) {
       expect(p, `status colour-map missing entry for '${status}'`).toMatch(
+        new RegExp(`\\s${status}: \\[`),
+      );
+    }
+  });
+
+  // index.astro has its OWN SEVERITY_BADGE + STATUS_BADGE maps (separate
+  // from history.astro). The existing checks above only covered
+  // history.astro, leaving index.astro's maps unguarded — a 5th status /
+  // 4th severity would render with no badge styling (the `?? []` fallback)
+  // on the main status page. Mirror the defense-in-depth here.
+
+  it('CRITICAL apps/status-site/src/pages/index.astro SEVERITY_BADGE map has entries for ALL 3 severities. index.astro keeps its own badge maps; drift here renders an unstyled severity badge on the main public status page.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/status-site/src/pages/index.astro'));
+    expect(p).toMatch(/const SEVERITY_BADGE = \{/);
+    for (const sev of INCIDENT_SEVERITIES) {
+      expect(p, `index.astro SEVERITY_BADGE missing entry for '${sev}'`).toMatch(
+        new RegExp(`\\s${sev}: \\[`),
+      );
+    }
+  });
+
+  it('CRITICAL apps/status-site/src/pages/index.astro STATUS_BADGE map has entries for ALL 4 statuses. The main status page badges each incident by status; a status with no STATUS_BADGE entry falls back to `?? []` and renders unstyled.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/status-site/src/pages/index.astro'));
+    expect(p).toMatch(/const STATUS_BADGE = \{/);
+    for (const status of INCIDENT_STATUSES) {
+      expect(p, `index.astro STATUS_BADGE missing entry for '${status}'`).toMatch(
         new RegExp(`\\s${status}: \\[`),
       );
     }
