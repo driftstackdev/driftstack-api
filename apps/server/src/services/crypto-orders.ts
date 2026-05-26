@@ -813,9 +813,11 @@ export class CryptoOrdersService {
    * over_24h. The over_24h bucket is the most operationally
    * interesting — those are candidates for sweepExpiredOrders.
    *
-   * Pure read-only; does not mutate orders. The scanLimit / truncated
-   * pattern mirrors getStatsForAdmin so an oversized backlog doesn't
-   * blow the response time.
+   * Pure read-only; does not mutate orders. Scans pending orders
+   * oldest-first via listPendingOlderThan(olderThan = now) and caps at
+   * scanLimit, so when the backlog is truncated it drops the freshest
+   * orders, never the stale over_24h sweep candidates — the bucket
+   * operators actually act on.
    */
   async getPendingAgeHistogram(opts: { scanLimit?: number } = {}): Promise<{
     buckets: {
@@ -832,8 +834,13 @@ export class CryptoOrdersService {
     scanned: number;
   }> {
     const scanLimit = opts.scanLimit ?? 10_000;
-    const rows = await this.opts.repo.listAll({ limit: scanLimit });
     const now = this.nowFn();
+    // Pending-only, oldest-first. listAll is newest-first across ALL
+    // statuses, so a backlog of newer terminal/fresh orders used to
+    // crowd the old pending orders out of the scan window and
+    // under-count the over_24h bucket. olderThan = now matches every
+    // pending order (none are created in the future).
+    const rows = await this.opts.repo.listPendingOlderThan({ olderThan: now, limit: scanLimit });
     const buckets = {
       under_1h: 0,
       h1_to_6h: 0,
@@ -843,7 +850,7 @@ export class CryptoOrdersService {
     const pendingValueCents: Record<string, number> = {};
     let total = 0;
     for (const o of rows) {
-      if (o.status !== 'pending') continue;
+      // All rows are pending by construction (listPendingOlderThan).
       total += 1;
       const ageMs = now - o.created_at;
       if (ageMs < 60 * 60_000) buckets.under_1h += 1;

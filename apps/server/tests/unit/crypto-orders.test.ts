@@ -1655,6 +1655,52 @@ describe('V-666.AC getPendingAgeHistogram', () => {
     expect(histo.scanned).toBe(3);
   });
 
+  it('counts OLD pending orders even when newer terminal orders would crowd a newest-first scan window', async () => {
+    // Regression: getPendingAgeHistogram used to scan listAll (newest-
+    // first, all statuses). A backlog of newer paid/failed orders pushed
+    // the old pending orders out of the scanLimit window, so the
+    // over_24h bucket — the sweep-candidate count operators rely on —
+    // read zero. It must scan pending-only, oldest-first.
+    const repo = new InMemoryCryptoOrdersRepo();
+    let now = NOW;
+    const svc = new CryptoOrdersService({ repo, nowFn: () => now });
+    // Two genuinely stale pending orders, created first (>24h ago).
+    for (let i = 0; i < 2; i += 1) {
+      now = NOW - 48 * HOUR;
+      await svc.create({
+        order_id: `old_pending_${i.toString()}`,
+        account_id: 'acc',
+        product: 'x',
+        price_cents: 100,
+        price_currency: 'EUR',
+      });
+    }
+    // A burst of NEWER orders that resolve to paid — these would fill a
+    // newest-first scan window and hide the old pending ones.
+    for (let i = 0; i < 5; i += 1) {
+      now = NOW - 10 * 60_000;
+      await svc.create({
+        order_id: `new_paid_${i.toString()}`,
+        account_id: 'acc',
+        product: 'x',
+        price_cents: 100,
+        price_currency: 'EUR',
+      });
+      await svc.applyIpnStatus({
+        order_id: `new_paid_${i.toString()}`,
+        payment_id: `np_${i.toString()}`,
+        provider_status: 'finished',
+      });
+    }
+    now = NOW;
+    // Scan window smaller than the newer-paid burst: a newest-first scan
+    // would see only paid orders and report over_24h = 0.
+    const histo = await svc.getPendingAgeHistogram({ scanLimit: 3 });
+    expect(histo.buckets.over_24h).toBe(2);
+    expect(histo.total).toBe(2);
+    expect(histo.pendingValueCents).toEqual({ EUR: 200 });
+  });
+
   it('uses < 1h boundary exclusively (an exactly-1h-old order goes to h1_to_6h)', async () => {
     const svc = await seedAtAges([{ id: 'edge', ageMs: HOUR }]);
     const histo = await svc.getPendingAgeHistogram();
