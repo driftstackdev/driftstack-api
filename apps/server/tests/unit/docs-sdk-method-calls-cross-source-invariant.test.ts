@@ -25,6 +25,14 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const DOCS_DIR = resolve(REPO_ROOT, 'apps/docs/src/pages');
+const MARKETING_DIR = resolve(REPO_ROOT, 'apps/marketing-site/src/pages');
+
+// The Browserless migration guide intentionally references methods that do
+// NOT exist in the Driftstack SDK (`client.sessions.start(...)`,
+// `waitUntilTerminal(...)`) to contrast the two APIs — every such mention is
+// explicitly annotated "doesn't exist". Excluded from the existence sweep so
+// those deliberate counter-examples don't read as drift.
+const MARKETING_SCAN_EXCLUDE = new Set(['docs/migration-from-browserless.astro']);
 
 function walkDocs(dir: string): string[] {
   const out: string[] = [];
@@ -59,7 +67,9 @@ function buildUnionInventory(): Set<string> {
     const prop = f.replace(/\.ts$/, '').replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
     addMatches(
       readFileSync(join(tsDir, f), 'utf8'),
-      /^ {2}(?:async )?([a-zA-Z][a-zA-Z0-9]*)\s*[(<]/gm,
+      // `\*?\s*` captures `async *listAll(` generator methods too (the
+      // bare form missed them, leaving e.g. cryptoOrders.listAll out).
+      /^ {2}(?:async )?\*?\s*([a-zA-Z][a-zA-Z0-9]*)\s*[(<]/gm,
       (m) => `${prop}.${m[1]}`,
       set,
     );
@@ -121,6 +131,32 @@ describe('docs ↔ SDK method-call cross-source invariant', () => {
     expect(
       missing,
       `doc client.<resource>.<method>() calls with no matching SDK method (TS/Python/Go):\n${missing.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('every client.<resource>.<method>() in the MARKETING site exists on a real SDK', () => {
+    const callRe = /client\.([A-Za-z][A-Za-z0-9_]*)\.([A-Za-z][A-Za-z0-9_]*)\(/g;
+    const missing: string[] = [];
+    let scanned = 0;
+    for (const file of walkDocs(MARKETING_DIR)) {
+      const rel = file.slice(REPO_ROOT.length + 1).replace('apps/marketing-site/src/pages/', '');
+      if (MARKETING_SCAN_EXCLUDE.has(rel)) continue;
+      const body = readFileSync(file, 'utf8');
+      let m: RegExpExecArray | null;
+      const re = new RegExp(callRe.source, 'g');
+      while ((m = re.exec(body)) !== null) {
+        scanned += 1;
+        const key = `${m[1]}.${m[2]}`;
+        if (!inventory.has(key)) missing.push(`${key}  (${file.slice(REPO_ROOT.length + 1)})`);
+      }
+    }
+    expect(
+      scanned,
+      'expected the marketing site to contain SDK method-call examples',
+    ).toBeGreaterThan(20);
+    expect(
+      missing,
+      `marketing client.<resource>.<method>() calls with no matching SDK method (TS/Python/Go):\n${missing.join('\n')}`,
     ).toEqual([]);
   });
 });
