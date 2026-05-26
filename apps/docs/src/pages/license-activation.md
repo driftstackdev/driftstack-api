@@ -50,7 +50,7 @@ Alternatively, edit `settings.json` (Tauri's app data dir) directly to change `b
 For self-hosted deployments (Driftstack Self-Hosted Solo / Pro / Enterprise):
 
 1. Stand up the control plane on your own hardware per the [self-hosted runbook](https://github.com/driftstackdev/driftstack-api/tree/main/docs/operations) (publishes with the first SH release).
-2. Create an API key against your local control plane (same `/v1/api-keys` flow — local admin scope).
+2. Create an API key against your local control plane (same `/v1/api-keys` flow — requires the `account_owner` scope).
 3. In the GUI client wizard, choose **Self-hosted**, paste the URL of your control plane (e.g. `https://drift.your-company.internal`), paste the key.
 
 The same GUI binary works against any control plane — there is no "self-hosted edition" of the desktop app. The deployment-mode toggle is the only switch.

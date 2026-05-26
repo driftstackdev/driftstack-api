@@ -115,9 +115,9 @@ describe('W778 docs /sdk/installation content parity', () => {
   it('CRITICAL TS apiKeys 24h-grace + admin-scope framing pinned. Matches W762 /api/api-keys + W766 /api/team role-gating contract.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/client\.apiKeys\.create\(body\); \/\/ requires admin scope/);
+    expect(p).toMatch(/client\.apiKeys\.create\(body\); \/\/ requires account_owner scope/);
     expect(p).toMatch(/client\.apiKeys\.rotate\(id\); \/\/ 24-hour grace on prior key/);
-    expect(p).toMatch(/client\.apiKeys\.revoke\(id\); \/\/ requires admin scope/);
+    expect(p).toMatch(/client\.apiKeys\.revoke\(id\); \/\/ requires account_owner scope/);
   });
 
   it('CRITICAL TS webhooks rotateSecret 24h-grace-dual-sign framing pinned. Matches W753 dashboard /webhooks + W766 /api/team header-honoring + V-475 dual-sign contract.', () => {

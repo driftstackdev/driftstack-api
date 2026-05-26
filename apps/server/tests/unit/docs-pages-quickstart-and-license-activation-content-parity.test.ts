@@ -232,7 +232,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
 
     expect(p).toMatch(/1\. Stand up the control plane on your own hardware per the/);
     expect(p).toMatch(
-      /2\. Create an API key against your local control plane \(same `\/v1\/api-keys` flow — local admin scope\)\./,
+      /2\. Create an API key against your local control plane \(same `\/v1\/api-keys` flow — requires the `account_owner` scope\)\./,
     );
     expect(p).toMatch(
       /3\. In the GUI client wizard, choose \*\*Self-hosted\*\*, paste the URL of your control plane/,

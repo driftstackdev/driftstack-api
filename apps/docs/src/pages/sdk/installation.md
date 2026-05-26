@@ -77,10 +77,10 @@ client.profileSnapshots.get(snapshotId);
 client.profileSnapshots.restore(snapshotId, body?);
 client.profileSnapshots.delete(snapshotId);
 
-client.apiKeys.create(body); // requires admin scope
+client.apiKeys.create(body); // requires account_owner scope
 client.apiKeys.list();
 client.apiKeys.rotate(id); // 24-hour grace on prior key
-client.apiKeys.revoke(id); // requires admin scope
+client.apiKeys.revoke(id); // requires account_owner scope
 
 client.webhooks.create(body);
 client.webhooks.list();

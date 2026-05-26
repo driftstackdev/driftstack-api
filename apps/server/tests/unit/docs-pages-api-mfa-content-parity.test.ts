@@ -180,7 +180,7 @@ describe('W767 docs /api/mfa content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /1\. Web-session bearer \(API-key callers bypass the step-up gate but\s*\n?\s+still need admin scope on the calling key\)\./,
+      /1\. Web-session bearer \(API-key callers bypass the step-up gate but\s*\n?\s+still need account_owner scope on the calling key\)\./,
     );
     expect(p).toMatch(/2\. A fresh MFA proof \(15-minute window\)/);
     expect(p).toMatch(

@@ -238,7 +238,7 @@ refresh).
 Both endpoints require:
 
 1. Web-session bearer (API-key callers bypass the step-up gate but
-   still need admin scope on the calling key).
+   still need account_owner scope on the calling key).
 2. A fresh MFA proof (15-minute window). On stale, the response is
    the 403 step-up envelope above.
 3. The `confirm: "disable-mfa"` body field — defensive layer beneath
