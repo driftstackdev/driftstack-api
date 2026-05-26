@@ -194,7 +194,9 @@ describe('W761 docs /api/sessions content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Team RBAC: `X-Driftstack-Account` is honored —/);
-    expect(p).toMatch(/member roles can read \+ write on the owner's sessions\./);
+    expect(p).toMatch(/`member` can read the owner's sessions/);
+    expect(p).toMatch(/writes require the\s+`admin`\s+role/);
+    expect(p).toMatch(/a `member` write returns 403/);
   });
 
   it('CRITICAL 7-row common-errors table pinned — 401/403/404/410/504/502/503. session-timeout is 504 (matches SessionTimeoutError + the errors reference), not 408. Drift to dropping a row would hide an error class from SDK consumers.', () => {
