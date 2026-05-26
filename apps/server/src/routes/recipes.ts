@@ -64,7 +64,7 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
 
   app.post(
     '/v1/recipes',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
       const parsed = CreateRecipeRequestSchema.safeParse(req.body);

@@ -60,6 +60,19 @@ describe('AI-B4 POST /v1/recipes — wired', () => {
     expect(body.intent_count).toBe(0);
   });
 
+  it('403 when the key lacks write scope (read-only key)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, scopes: ['read'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/recipes',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { agent_session_id: 'ags_whatever', label: 'x' },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ detail: string }>();
+    expect(body.detail).toContain('write');
+  });
+
   it('description omitted → recipe.description is null on the wire', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const agentSessionId = await createAgentSession();
