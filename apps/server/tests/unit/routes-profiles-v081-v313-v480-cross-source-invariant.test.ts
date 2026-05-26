@@ -162,10 +162,18 @@ describe('W1051 routes/profiles V-081 + V-313 + V-480 + V-326e4 cross-source inv
 
   // ─── Auth + rate-limit on every route ───────────────────────
 
-  it('CRITICAL requireAuth + global rate-limit on every profile route (5 core + 3 supplemental = 8 occurrences).', () => {
+  it('CRITICAL requireAuth + global rate-limit on every profile route; write:profiles on the 6 mutations.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profiles.ts'));
-    const refs = p.match(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\]/g) ?? [];
-    expect(refs.length, 'requireAuth + global rate-limit chain count').toBeGreaterThanOrEqual(8);
+    // Count requireAuth + rateLimit('global') independently — the 6
+    // mutations now carry app.requireScope('write:profiles') between
+    // them (V-481 scope enforcement), so the old adjacent-pair regex no
+    // longer matches those routes.
+    const authRefs = p.match(/app\.requireAuth/g) ?? [];
+    expect(authRefs.length, 'requireAuth on every route').toBeGreaterThanOrEqual(8);
+    const rateRefs = p.match(/app\.rateLimit\('global'\)/g) ?? [];
+    expect(rateRefs.length, 'global rate-limit on every route').toBeGreaterThanOrEqual(8);
+    const scopeRefs = p.match(/app\.requireScope\('write:profiles'\)/g) ?? [];
+    expect(scopeRefs.length, 'write:profiles on the profile mutations').toBe(6);
   });
 
   // ─── 204 on delete ───────────────────────────────────────────

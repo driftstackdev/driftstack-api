@@ -110,8 +110,11 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ V-326e1 — when X-Driftstack-Account is set, the new session is\s*\n?\s*\/\/ created on the OWNER's account\. Caller's role MUST be 'admin' on\s*\n?\s*\/\/ that team \(Q1 verdict — member is read-only on writes\); 'member'\s*\n?\s*\/\/ role gets 403\. Tier-derived concurrent cap uses the OWNER's tier\./,
     );
+    expect(body).toMatch(/app\.post\(\s*\n?\s*'\/v1\/sessions',/);
+    // prettier may wrap the preHandler array multi-line once requireScope
+    // is added; \s* spans the newlines either way.
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/sessions',\s*\n?\s*\{\s*\n?\s*preHandler: \[app\.requireAuth, app\.requireScope\('write:sessions'\), app\.rateLimit\('sessions:create'\)\],\s*\n?\s*\},/,
+      /preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('write:sessions'\),\s*app\.rateLimit\('sessions:create'\),?\s*\]/,
     );
     expect(body).toMatch(
       /throw new ForbiddenError\(\s*\n?\s*'Creating a session on a team owner requires admin role on that team\.',\s*\n?\s*\);/,
