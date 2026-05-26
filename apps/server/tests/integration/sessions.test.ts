@@ -94,6 +94,31 @@ describe('POST /v1/sessions', () => {
     const body = res.json<Record<string, unknown>>();
     expect(body.type).toBe(PROBLEM_TYPES.ValidationFailed);
   });
+
+  it('403 when the key lacks write:sessions scope (read-only key)', async () => {
+    fx = await buildTestApp({ scopes: ['read'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { label: 'demo' },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.type).toBe(PROBLEM_TYPES.Forbidden);
+    expect(body.detail).toContain('write:sessions');
+  });
+
+  it('201 with a granular write:sessions key (granular satisfies the route)', async () => {
+    fx = await buildTestApp({ scopes: ['read:sessions', 'write:sessions'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth(fx),
+      payload: { label: 'demo' },
+    });
+    expect(res.statusCode).toBe(201);
+  });
 });
 
 describe('GET /v1/sessions', () => {

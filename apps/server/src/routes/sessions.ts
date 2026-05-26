@@ -176,7 +176,11 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   app.post(
     '/v1/sessions',
     {
-      preHandler: [app.requireAuth, app.rateLimit('sessions:create')],
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('write:sessions'),
+        app.rateLimit('sessions:create'),
+      ],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const ctx = requireCtx(request);
@@ -257,7 +261,11 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   app.post<{ Params: { id: string } }>(
     '/v1/profiles/:id/launch',
     {
-      preHandler: [app.requireAuth, app.rateLimit('sessions:create')],
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('write:sessions'),
+        app.rateLimit('sessions:create'),
+      ],
     },
     async (request, reply) => {
       const ctx = requireCtx(request);
@@ -355,7 +363,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/navigate',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = requireCtx(request);
@@ -382,7 +390,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/interact',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = requireCtx(request);
@@ -503,7 +511,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/capture',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = requireCtx(request);
@@ -532,7 +540,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   app.delete<{ Params: { id: string } }>(
     '/v1/sessions/:id',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
     async (request, reply) => {
       const ctx = requireCtx(request);
