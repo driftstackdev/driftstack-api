@@ -20,6 +20,7 @@ function read(p: string): string {
 
 const PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/sdk/error-handling.md');
 const TS_SDK_ERRORS = resolve(REPO_ROOT, 'packages/sdk-typescript/src/errors.ts');
+const TS_SDK_RETRY = resolve(REPO_ROOT, 'packages/sdk-typescript/src/retry.ts');
 
 describe('W776 docs /sdk/error-handling content parity', () => {
   it('sdk/error-handling.md file exists', () => {
@@ -151,13 +152,19 @@ describe('W776 docs /sdk/error-handling content parity', () => {
     );
   });
 
-  it('CRITICAL TS retry-config 4-field shape pinned — maxAttempts/initialDelayMs/maxDelayMs/backoffMultiplier. Drift to a different shape would break SDK consumer configuration.', () => {
+  it('CRITICAL TS retry-config 3-field shape pinned — maxAttempts/initialDelayMs/maxDelayMs. The TS RetryConfig has NO backoffMultiplier (the multiplier is fixed at 2× internally; only Python/Go expose it as a config field). A doc example setting backoffMultiplier on the TS RetryConfig would be a TS excess-property compile error (regression: it once did).', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/maxAttempts: 5,/);
     expect(p).toMatch(/initialDelayMs: 500,/);
     expect(p).toMatch(/maxDelayMs: 10_000,/);
-    expect(p).toMatch(/backoffMultiplier: 2,/);
+
+    // Source of truth: the TS RetryConfig interface has no backoffMultiplier field.
+    const retrySrc = read(TS_SDK_RETRY);
+    expect(retrySrc).toMatch(/interface RetryConfig/);
+    expect(retrySrc).not.toMatch(/backoffMultiplier/);
+    // So the TS example must NOT set it (Python/Go RetryConfig examples may).
+    expect(p).not.toMatch(/backoffMultiplier: 2,/);
   });
 
   it('CRITICAL Python RetryConfig 3-field shape pinned — max_retries/initial_delay_ms/max_delay_ms + enabled=False disable. Drift to inconsistent field names cross-language would mismatch SDK contract.', () => {

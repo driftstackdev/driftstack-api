@@ -192,7 +192,8 @@ const client = new Driftstack({
     maxAttempts: 5,
     initialDelayMs: 500,
     maxDelayMs: 10_000,
-    backoffMultiplier: 2,
+    // Backoff multiplier is fixed at 2× in the TS SDK (it is not a config
+    // field; Python and Go expose it as backoff_multiplier / BackoffMultiplier).
   },
 });
 ```
