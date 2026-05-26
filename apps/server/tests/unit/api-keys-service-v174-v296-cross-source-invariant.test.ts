@@ -170,13 +170,13 @@ describe('W950 api-keys service V-174 + V-296 cross-source invariant', () => {
 
   // ─── Error class imports ─────────────────────────────────────
 
-  it('CRITICAL imports 4 error/helper symbols — BadRequestError + LegalAcceptanceRequiredError + NotFoundError + requireScope (aliased as throwIfMissingScope). The 4-import surface covers input-validation / legal-gate / 404 / scope check.', () => {
+  it('CRITICAL imports error/helper symbols — BadRequestError + ForbiddenError + LegalAcceptanceRequiredError from errors.js; NotFoundError + hasScope + requireScope (aliased throwIfMissingScope) from errors-helpers.js. ForbiddenError + hasScope back the V-174 scope de-escalation on mint.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
     expect(p).toMatch(
-      /import \{ BadRequestError, LegalAcceptanceRequiredError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, ForbiddenError, LegalAcceptanceRequiredError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(p).toMatch(
-      /import \{ NotFoundError, requireScope as throwIfMissingScope \} from '\.\.\/lib\/errors-helpers\.js';/,
+      /import \{\s*\n?\s*NotFoundError,\s*\n?\s*hasScope,\s*\n?\s*requireScope as throwIfMissingScope,\s*\n?\s*\} from '\.\.\/lib\/errors-helpers\.js';/,
     );
   });
 

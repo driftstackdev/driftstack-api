@@ -101,6 +101,15 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     );
   });
 
+  it('create: V-174 privilege de-escalation — ELEVATED_SCOPES = [admin, driftstack_internal_admin]; a requested elevated scope the caller lacks (per hasScope) → ForbiddenError. Closes the account_owner → mint driftstack_internal_admin escalation.', () => {
+    expect(body).toMatch(
+      /const ELEVATED_SCOPES: ApiKeyScope\[\] = \['admin', 'driftstack_internal_admin'\];/,
+    );
+    expect(body).toMatch(
+      /for \(const scope of input\.scopes\) \{\s*\n?\s*if \(ELEVATED_SCOPES\.includes\(scope\) && !hasScope\(ctx, scope\)\) \{\s*\n?\s*throw new ForbiddenError\(\s*\n?\s*`Cannot grant the "\$\{scope\}" scope: the calling key does not hold it\.`,/,
+    );
+  });
+
   it("create: tier 'trial_pack' → 'test' env else 'live'; generateApiKey + hashApiKey + keyPrefixFromPlaintext; emits api_key.minted audit", () => {
     expect(body).toMatch(/const env = tier === 'trial_pack' \? 'test' : 'live';/);
     expect(body).toMatch(/const plaintext = generateApiKey\(env\);/);
@@ -180,7 +189,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     );
   });
 
-  it('imports: AccountTier+ApiKeyScope from api-types + AccountContext/ApiKeyRow from auth.js + AuthCache + api-keys helpers + errors (BadRequest+Legal+NotFound+requireScope)', () => {
+  it('imports: AccountTier+ApiKeyScope from api-types + AccountContext/ApiKeyRow from auth.js + AuthCache + api-keys helpers + errors (BadRequest+Forbidden+Legal from errors.js; NotFound+hasScope+requireScope from errors-helpers.js)', () => {
     expect(body).toMatch(
       /import type \{ AccountTier, ApiKeyScope \} from '@driftstack\/api-types';/,
     );
@@ -191,10 +200,10 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
       /import \{ generateApiKey, hashApiKey, keyPrefixFromPlaintext \} from '\.\.\/lib\/api-keys\.js';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, LegalAcceptanceRequiredError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, ForbiddenError, LegalAcceptanceRequiredError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
-      /import \{ NotFoundError, requireScope as throwIfMissingScope \} from '\.\.\/lib\/errors-helpers\.js';/,
+      /import \{\s*\n?\s*NotFoundError,\s*\n?\s*hasScope,\s*\n?\s*requireScope as throwIfMissingScope,\s*\n?\s*\} from '\.\.\/lib\/errors-helpers\.js';/,
     );
   });
 

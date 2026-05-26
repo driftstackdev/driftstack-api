@@ -170,6 +170,61 @@ describe('V-553.B-20 ApiKeysService.create', () => {
     ).rejects.toThrow(/account_owner/);
   });
 
+  // Privilege de-escalation (V-174): a caller may not grant an elevated
+  // scope it does not itself hold. Without this, an account_owner
+  // dashboard session could mint a driftstack_internal_admin / legacy
+  // 'admin' key that satisfies the /v1/admin/* route guards
+  // (cross-account escalation). Customer-level scopes stay grantable.
+  it('rejects an account_owner caller granting driftstack_internal_admin', async () => {
+    const { repo } = makeRepo();
+    const svc = new ApiKeysService(repo);
+    await expect(
+      svc.create(ctxWith(['read', 'write', 'account_owner']), {
+        name: 'escalate',
+        scopes: ['driftstack_internal_admin'],
+        expiresAt: null,
+      }),
+    ).rejects.toThrow(
+      /driftstack_internal_admin.*does not hold|does not hold.*driftstack_internal_admin/,
+    );
+  });
+
+  it('rejects an account_owner caller granting legacy admin', async () => {
+    const { repo } = makeRepo();
+    const svc = new ApiKeysService(repo);
+    await expect(
+      svc.create(ctxWith(['read', 'write', 'account_owner']), {
+        name: 'escalate',
+        scopes: ['admin'],
+        expiresAt: null,
+      }),
+    ).rejects.toThrow(/does not hold/);
+  });
+
+  it('allows a caller that holds driftstack_internal_admin to grant it (staff minting a staff key)', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new ApiKeysService(repo);
+    const result = await svc.create(
+      ctxWith(['read', 'write', 'account_owner', 'driftstack_internal_admin'], {
+        tier: 'solo_manual',
+      }),
+      { name: 'staff-key', scopes: ['driftstack_internal_admin'], expiresAt: null },
+    );
+    expect(result.plaintext).toMatch(/^ds_(live|test)_/);
+    expect(state.rows.at(-1)?.scopes).toEqual(['driftstack_internal_admin']);
+  });
+
+  it('still lets an account_owner caller grant customer-level scopes (no regression)', async () => {
+    const { repo, state } = makeRepo();
+    const svc = new ApiKeysService(repo);
+    await svc.create(ctxWith(['read', 'write', 'account_owner'], { tier: 'solo_manual' }), {
+      name: 'app-key',
+      scopes: ['read', 'write', 'write:sessions', 'account_owner'],
+      expiresAt: null,
+    });
+    expect(state.rows.at(-1)?.scopes).toEqual(['read', 'write', 'write:sessions', 'account_owner']);
+  });
+
   it('blocks on pending legal acceptances', async () => {
     const { repo } = makeRepo();
     const gate = makeLegalGate([{ documentKey: 'tos', currentVersion: '2026-05-01' }]);

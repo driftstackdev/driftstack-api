@@ -20,8 +20,12 @@ import type { AccountContext } from './auth.js';
 import type { ApiKeyRow } from './auth.js';
 import type { AuthCache } from './auth-cache.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../lib/api-keys.js';
-import { BadRequestError, LegalAcceptanceRequiredError } from '../lib/errors.js';
-import { NotFoundError, requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
+import { BadRequestError, ForbiddenError, LegalAcceptanceRequiredError } from '../lib/errors.js';
+import {
+  NotFoundError,
+  hasScope,
+  requireScope as throwIfMissingScope,
+} from '../lib/errors-helpers.js';
 
 /**
  * Gate interface for blocking API key issuance on pending legal
@@ -128,6 +132,26 @@ export class ApiKeysService {
     opts: { effectiveAccountId?: string; effectiveTier?: AccountTier } = {},
   ): Promise<CreatedApiKey> {
     throwIfMissingScope(ctx, 'account_owner');
+
+    // V-174 privilege de-escalation. The account_owner gate above lets a
+    // customer dashboard session mint keys, but a caller must not be able
+    // to grant an ELEVATED scope it does not itself hold — otherwise an
+    // account_owner key could mint a `driftstack_internal_admin` (or
+    // legacy `admin`, which aliases to it) key that satisfies the
+    // `/v1/admin/*` route guards and acts cross-account. Customer-level
+    // scopes (read / write / account_owner / granular verb:resource /
+    // gui_control) stay grantable under account_owner; only the
+    // staff/legacy-admin scopes require the caller to already hold them.
+    // A staff session (which carries driftstack_internal_admin) and any
+    // legacy `admin` key still mint freely.
+    const ELEVATED_SCOPES: ApiKeyScope[] = ['admin', 'driftstack_internal_admin'];
+    for (const scope of input.scopes) {
+      if (ELEVATED_SCOPES.includes(scope) && !hasScope(ctx, scope)) {
+        throw new ForbiddenError(
+          `Cannot grant the "${scope}" scope: the calling key does not hold it.`,
+        );
+      }
+    }
 
     // V-326e6 — when team-scoped, mint the key on the OWNER's
     // account. Route layer has already enforced 'admin' team role

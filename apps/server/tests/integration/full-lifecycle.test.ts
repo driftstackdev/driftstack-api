@@ -21,8 +21,10 @@
 //      destroy → usage read (production session lifecycle).
 //   4. revoking the sub-key invalidates the auth cache (D-020 / D-025
 //      invariant — symmetric to test 2 but for API keys).
-//   5. web session can mint admin-scoped sub-key (V-168 scope model:
-//      web sessions get full customer-account control).
+//   5. web session can mint a customer-scoped sub-key but is blocked
+//      from minting an elevated (admin/driftstack_internal_admin) key
+//      (V-174 scope model + de-escalation: account_owner control, no
+//      privilege escalation).
 //
 // DEFERRED to follow-on V-NNN: Stripe trial-pack webhook simulation
 // + post-purchase tier transition + session-create-on-trial-pack
@@ -258,7 +260,7 @@ describe('Full customer lifecycle (V-166)', () => {
     expect(invalidRes.statusCode).toBe(400);
   });
 
-  it('web session can mint admin-scoped sub-key (full customer-account control)', async () => {
+  it('web session mints a customer-scoped sub-key but is blocked from elevated scopes (V-174 de-escalation)', async () => {
     fx = await buildTestApp();
 
     const signup = await fx.app.inject({
@@ -274,19 +276,34 @@ describe('Full customer lifecycle (V-166)', () => {
     const sessionToken = verify.json<SessionEnvelope>().session.token;
     await acceptAllLegalDocs(fx, sessionToken);
 
-    // V-168 — web sessions get ['read', 'write', 'admin'] scope so the
-    // dashboard user has full customer-account control (mint sub-keys
-    // including ones with admin scope, revoke any of their keys, etc).
-    // The pre-existing /v1/admin/* cross-account exposure for any
-    // 'admin'-scoped key is documented inline in slowPathWebSession.
+    // V-174 — web sessions get ['read', 'write', 'account_owner'] (no
+    // legacy 'admin'). The dashboard user has full customer-account
+    // control (mint customer-scoped sub-keys, revoke any of their keys)
+    // but CANNOT escalate by minting an elevated (admin /
+    // driftstack_internal_admin) key — ApiKeysService de-escalation
+    // rejects granting an elevated scope the caller doesn't hold.
+    const mintCustomerKey = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/api-keys',
+      headers: { authorization: `Bearer ${sessionToken}` },
+      payload: { name: 'sub-app-key', scopes: ['read', 'write', 'account_owner'] },
+    });
+    expect(mintCustomerKey.statusCode).toBe(201);
+    expect(mintCustomerKey.json<ApiKeyResponse>().scopes).toEqual([
+      'read',
+      'write',
+      'account_owner',
+    ]);
+
+    // Privilege escalation blocked: account_owner web session cannot
+    // mint an 'admin' (or driftstack_internal_admin) key.
     const mintAdminKey = await fx.app.inject({
       method: 'POST',
       url: '/v1/api-keys',
       headers: { authorization: `Bearer ${sessionToken}` },
       payload: { name: 'sub-admin-key', scopes: ['admin'] },
     });
-    expect(mintAdminKey.statusCode).toBe(201);
-    expect(mintAdminKey.json<ApiKeyResponse>().scopes).toEqual(['admin']);
+    expect(mintAdminKey.statusCode).toBe(403);
   });
 
   it('admin key → scoped sub-key → session lifecycle → /v1/usage round-trip', async () => {
