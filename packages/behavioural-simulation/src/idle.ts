@@ -181,6 +181,16 @@ export function generateIdlePeriod(opts: GenerateIdlePeriodOpts): IdlePeriod {
 
   let durationMs: number;
   if (opts.durationMs !== undefined) {
+    // An explicit override bypasses the default-branch Math.max(50, …)
+    // clamp below, so validate it here — mirror the scroll-override
+    // guard. A non-positive duration yields a degenerate zero/negative-
+    // length idle that collapses every micro-movement onto t=0 (and
+    // breaks the Math.min(durationMs, …) time clamp).
+    if (opts.durationMs <= 0) {
+      throw new Error(
+        `generateIdlePeriod: durationMs must be > 0 when set (got ${opts.durationMs})`,
+      );
+    }
     durationMs = opts.durationMs;
   } else {
     // Triangular-style jitter around the class mean: rng() in [0,1)

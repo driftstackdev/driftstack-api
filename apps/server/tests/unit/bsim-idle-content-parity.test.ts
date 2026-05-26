@@ -104,9 +104,12 @@ describe('W453.B packages/behavioural-simulation/src/idle.ts content parity', ()
     expect(body).toMatch(
       /durationMs = Math\.max\(50, Math\.round\(defaults\.meanDurationMs \+ jitter\)\);/,
     );
-    expect(body).toMatch(
-      /if \(opts\.durationMs !== undefined\) \{\s*\n?\s*durationMs = opts\.durationMs;\s*\n?\s*\}/,
-    );
+    expect(body).toMatch(/if \(opts\.durationMs !== undefined\) \{/);
+    expect(body).toMatch(/durationMs = opts\.durationMs;/);
+    // Override-validation guard (mirrors the scroll-override guard):
+    // a non-positive explicit duration bypasses the 50ms-min clamp.
+    expect(body).toMatch(/if \(opts\.durationMs <= 0\) \{/);
+    expect(body).toMatch(/durationMs must be > 0 when set \(got \$\{opts\.durationMs\}\)/);
   });
 
   it('Micro-movement generation: Poisson-ish round(mean + small jitter); per-event time jitter prevents perfect-interval placement; even spread via (i+0.5)/microCount', () => {

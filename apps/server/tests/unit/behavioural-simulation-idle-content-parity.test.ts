@@ -68,9 +68,12 @@ describe('W597.B packages/behavioural-simulation/src/idle.ts content parity', ()
       /export function generateIdlePeriod\(opts: GenerateIdlePeriodOpts\): IdlePeriod \{/,
     );
     expect(body).toMatch(/const defaults = IDLE_DEFAULTS\[opts\.idleClass\];/);
-    expect(body).toMatch(
-      /if \(opts\.durationMs !== undefined\) \{\s*\n\s*durationMs = opts\.durationMs;/,
-    );
+    expect(body).toMatch(/if \(opts\.durationMs !== undefined\) \{/);
+    expect(body).toMatch(/durationMs = opts\.durationMs;/);
+    // Override-validation guard: non-positive explicit duration bypasses
+    // the 50ms-min clamp, so it throws (mirrors the scroll-override guard).
+    expect(body).toMatch(/if \(opts\.durationMs <= 0\) \{/);
+    expect(body).toMatch(/durationMs must be > 0 when set \(got \$\{opts\.durationMs\}\)/);
     expect(body).toMatch(/\/\/ Triangular-style jitter around the class mean: rng\(\) in \[0,1\)/);
     expect(body).toMatch(/\/\/ mapped to ±durationJitterMs\. Clamp at 50ms minimum so callers/);
     expect(body).toMatch(/\/\/ never get a degenerate zero-length idle when they ask for one\./);

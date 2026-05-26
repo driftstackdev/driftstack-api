@@ -63,6 +63,15 @@ describe('V-530.D generateIdlePeriod — seeded determinism', () => {
     const idle = generateIdlePeriod({ idleClass: 'reading', durationMs: 1234, seed: 's' });
     expect(idle.durationMs).toBe(1234);
   });
+
+  it('rejects a non-positive durationMs override (bypasses the default 50ms-min clamp)', () => {
+    expect(() => generateIdlePeriod({ idleClass: 'reading', durationMs: 0, seed: 's' })).toThrow(
+      /durationMs must be > 0/,
+    );
+    expect(() => generateIdlePeriod({ idleClass: 'reading', durationMs: -100, seed: 's' })).toThrow(
+      /durationMs must be > 0/,
+    );
+  });
 });
 
 describe('V-530.D generateIdleSequence', () => {
