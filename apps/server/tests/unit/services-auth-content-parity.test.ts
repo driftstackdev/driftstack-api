@@ -176,12 +176,15 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     );
   });
 
-  it('Web session known-gap framing: pre-V-168 cross-account admin risk + V-135 Cloudflare-Access mitigation', () => {
+  it('Web session V-174 framing: legacy admin scope removed (cross-account exposure closed), /v1/admin/* requires driftstack_internal_admin + V-135 Cloudflare-Access defense-in-depth', () => {
     expect(body).toMatch(
-      /KNOWN GAP \(pre-existing, not introduced by V-168\):\s*\n?\s*\*\s*`requireScope\('admin'\)` on `\/v1\/admin\/\*` routes also fires for\s*\n?\s*\*\s*any 'admin'-scoped customer key, including web sessions\./,
+      /V-174 \(shipped\) closed the prior cross-account exposure: web sessions\s*\n?\s*\*\s*no longer carry the legacy `admin` scope/,
     );
     expect(body).toMatch(
-      /Operationally mitigated\s*\n?\s*\*\s*today by `admin\.driftstack\.dev` being a separate Cloudflare-Access-\s*\n?\s*\*\s*gated origin per V-135/,
+      /`\/v1\/admin\/\*` now requires\s*\n?\s*\*\s*`driftstack_internal_admin`, granted only to staff-allowlisted/,
+    );
+    expect(body).toMatch(
+      /`admin\.driftstack\.dev` remains a separate Cloudflare-Access-\s*\n?\s*\*\s*gated origin \(V-135\) as defense-in-depth\./,
     );
   });
 

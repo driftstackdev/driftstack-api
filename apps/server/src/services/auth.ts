@@ -351,25 +351,21 @@ async function slowPathApiKey(
  * `ctx.apiKey.id` / `.scopes` / `.accountId` continues to work
  * uniformly.
  *
- * SCOPE: web sessions get `['read', 'write', 'admin']` — full
- * customer-account control. The 'admin' scope is required by
- * `/v1/api-keys` POST + DELETE (a customer logged into their own
- * dashboard expects to mint + revoke their own API keys without
- * a pre-existing admin key).
+ * SCOPE: web sessions get `['read', 'write', 'account_owner']` — full
+ * customer-account control (mint + revoke their own API keys, manage
+ * subscription, `/v1/account/*`) without a pre-existing API key.
+ * Staff-allowlisted emails additionally get `driftstack_internal_admin`
+ * for `/v1/admin/*`. See the scope assignment + staff-bump rationale at
+ * the `baseScopes` declaration below.
  *
- * KNOWN GAP (pre-existing, not introduced by V-168):
- * `requireScope('admin')` on `/v1/admin/*` routes also fires for
- * any 'admin'-scoped customer key, including web sessions. A
- * customer with admin scope on their own account could theoretically
- * call `/v1/admin/accounts` and act on OTHER customers' accounts.
- * This was true pre-V-168 (any customer-minted admin key could do
- * the same); V-168 makes it true for every dashboard user. Surfaced
- * for a separate scope-architecture refactor (split 'admin' into
- * 'account_owner' + 'driftstack_internal_admin', OR add an
- * isDriftstackInternal flag on accounts). Operationally mitigated
- * today by `admin.driftstack.dev` being a separate Cloudflare-Access-
- * gated origin per V-135 — the route handlers are not reachable from
- * customer dashboard origin without crossing the SSO gate.
+ * V-174 (shipped) closed the prior cross-account exposure: web sessions
+ * no longer carry the legacy `admin` scope, which had conflated
+ * customer-account control with Driftstack-staff `/v1/admin/*` access
+ * (any 'admin'-scoped dashboard user could otherwise act on OTHER
+ * customers' accounts). `/v1/admin/*` now requires
+ * `driftstack_internal_admin`, granted only to staff-allowlisted
+ * logins; `admin.driftstack.dev` remains a separate Cloudflare-Access-
+ * gated origin (V-135) as defense-in-depth.
  */
 async function slowPathWebSession(
   repo: AccountAuthRepo,
