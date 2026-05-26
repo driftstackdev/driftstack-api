@@ -1,6 +1,6 @@
 // Drizzle-backed implementation of ApiKeysRepo.
 
-import { and, desc, eq, isNotNull, isNull, lt } from 'drizzle-orm';
+import { type SQL, and, desc, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
 import type { ApiKeyRow } from '../services/auth.js';
 import type { ApiKeysRepo, NewApiKeyInput } from '../services/api-keys.js';
 import type { Database } from './client.js';
@@ -62,9 +62,23 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
     accountId?: string;
     revoked?: boolean;
   }): Promise<{ items: ApiKeyRow[]; nextCursor: string | null }> {
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
-    const filters = [];
-    if (cursorDate) filters.push(lt(apiKeys.createdAt, cursorDate));
+    // Keyset cursor on (createdAt desc, id desc) — cursor = last row id.
+    // Mirrors profiles-repo; avoids dropping same-createdAt rows.
+    const filters: SQL[] = [];
+    if (opts.cursor !== undefined) {
+      const [c] = await this.database.db
+        .select({ createdAt: apiKeys.createdAt, id: apiKeys.id })
+        .from(apiKeys)
+        .where(eq(apiKeys.id, opts.cursor))
+        .limit(1);
+      if (c) {
+        const keyset = or(
+          lt(apiKeys.createdAt, c.createdAt),
+          and(eq(apiKeys.createdAt, c.createdAt), lt(apiKeys.id, c.id)),
+        );
+        if (keyset) filters.push(keyset);
+      }
+    }
     if (opts.accountId) filters.push(eq(apiKeys.accountId, opts.accountId));
     if (opts.revoked === true) filters.push(isNotNull(apiKeys.revokedAt));
     if (opts.revoked === false) filters.push(isNull(apiKeys.revokedAt));
@@ -74,7 +88,7 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
       .select()
       .from(apiKeys)
       .where(whereClause)
-      .orderBy(desc(apiKeys.createdAt))
+      .orderBy(desc(apiKeys.createdAt), desc(apiKeys.id))
       .limit(opts.limit + 1);
 
     const hasMore = rows.length > opts.limit;
@@ -82,7 +96,7 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
     const last = items[items.length - 1];
     return {
       items: items.map(toApiKeyRow),
-      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+      nextCursor: hasMore && last ? last.id : null,
     };
   }
 }

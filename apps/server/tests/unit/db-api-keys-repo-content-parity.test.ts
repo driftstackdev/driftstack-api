@@ -36,7 +36,9 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
   });
 
   it('imports: and/desc/eq/isNotNull/isNull/lt from drizzle-orm; ApiKeyRow + ApiKeysRepo/NewApiKeyInput; Database; apiKeys schema', () => {
-    expect(body).toMatch(/import \{ and, desc, eq, isNotNull, isNull, lt \} from 'drizzle-orm';/);
+    expect(body).toMatch(
+      /import \{ type SQL, and, desc, eq, isNotNull, isNull, lt, or \} from 'drizzle-orm';/,
+    );
     expect(body).toMatch(/import type \{ ApiKeyRow \} from '\.\.\/services\/auth\.js';/);
     expect(body).toMatch(
       /import type \{ ApiKeysRepo, NewApiKeyInput \} from '\.\.\/services\/api-keys\.js';/,
@@ -78,14 +80,19 @@ describe('W444.C apps/server/src/db/api-keys-repo.ts content parity', () => {
     expect(body).toMatch(
       /if \(opts\.revoked === true\) filters\.push\(isNotNull\(apiKeys\.revokedAt\)\);\s*\n?\s*if \(opts\.revoked === false\) filters\.push\(isNull\(apiKeys\.revokedAt\)\);/,
     );
+    // Keyset cursor (createdAt, id) — looked up by cursor id.
+    expect(body).toMatch(/lt\(apiKeys\.createdAt, c\.createdAt\),/);
     expect(body).toMatch(
-      /if \(cursorDate\) filters\.push\(lt\(apiKeys\.createdAt, cursorDate\)\);\s*\n?\s*if \(opts\.accountId\) filters\.push\(eq\(apiKeys\.accountId, opts\.accountId\)\);/,
+      /and\(eq\(apiKeys\.createdAt, c\.createdAt\), lt\(apiKeys\.id, c\.id\)\),/,
+    );
+    expect(body).toMatch(
+      /if \(opts\.accountId\) filters\.push\(eq\(apiKeys\.accountId, opts\.accountId\)\);/,
     );
   });
 
   it('listAllApiKeys query: orderBy desc(createdAt) + limit(limit+1); hasMore + slice; nextCursor = last.createdAt.toISOString()', () => {
     expect(body).toMatch(
-      /const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(apiKeys\)\s*\n?\s*\.where\(whereClause\)\s*\n?\s*\.orderBy\(desc\(apiKeys\.createdAt\)\)\s*\n?\s*\.limit\(opts\.limit \+ 1\);\s*\n?\s*const hasMore = rows\.length > opts\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toApiKeyRow\),\s*\n?\s*nextCursor: hasMore && last \? last\.createdAt\.toISOString\(\) : null,\s*\n?\s*\};/,
+      /const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(apiKeys\)\s*\n?\s*\.where\(whereClause\)\s*\n?\s*\.orderBy\(desc\(apiKeys\.createdAt\), desc\(apiKeys\.id\)\)\s*\n?\s*\.limit\(opts\.limit \+ 1\);\s*\n?\s*const hasMore = rows\.length > opts\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toApiKeyRow\),\s*\n?\s*nextCursor: hasMore && last \? last\.id : null,\s*\n?\s*\};/,
     );
   });
 

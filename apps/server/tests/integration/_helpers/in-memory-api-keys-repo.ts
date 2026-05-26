@@ -82,22 +82,30 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
     accountId?: string;
     revoked?: boolean;
   }): Promise<{ items: ApiKeyRow[]; nextCursor: string | null }> {
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
-    const all = Array.from(this.byId.values())
+    // Keyset (createdAt desc, id desc) — stable sort + resume after the
+    // cursor row's position; mirrors the Drizzle repo.
+    let all = Array.from(this.byId.values())
       .filter((r) => (opts.accountId ? r.accountId === opts.accountId : true))
       .filter((r) => {
         if (opts.revoked === true) return r.revokedAt !== null;
         if (opts.revoked === false) return r.revokedAt === null;
         return true;
       })
-      .filter((r) => (cursorDate ? r.createdAt < cursorDate : true))
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      .sort((a, b) => {
+        const dt = b.createdAt.getTime() - a.createdAt.getTime();
+        if (dt !== 0) return dt;
+        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+      });
+    if (opts.cursor !== undefined) {
+      const idx = all.findIndex((r) => r.id === opts.cursor);
+      if (idx >= 0) all = all.slice(idx + 1);
+    }
     const items = all.slice(0, opts.limit);
     const last = items[items.length - 1];
     const hasMore = all.length > opts.limit;
     return Promise.resolve({
       items,
-      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+      nextCursor: hasMore && last ? last.id : null,
     });
   }
 }

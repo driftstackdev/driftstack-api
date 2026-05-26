@@ -118,8 +118,9 @@ describe('W991 db/api-keys-repo cross-source invariant', () => {
 
   it('CRITICAL listAllApiKeys 4 filters — cursor → lt(createdAt) + accountId → eq + revoked=true → isNotNull(revokedAt) + revoked=false → isNull(revokedAt). The 4-filter ladder is the V-666.B admin-API-keys paged-list shape.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/api-keys-repo.ts'));
-    expect(p).toMatch(/const cursorDate = opts\.cursor \? new Date\(opts\.cursor\) : null;/);
-    expect(p).toMatch(/if \(cursorDate\) filters\.push\(lt\(apiKeys\.createdAt, cursorDate\)\);/);
+    // Keyset cursor (createdAt, id) — looked up by cursor id, compound filter.
+    expect(p).toMatch(/lt\(apiKeys\.createdAt, c\.createdAt\),/);
+    expect(p).toMatch(/and\(eq\(apiKeys\.createdAt, c\.createdAt\), lt\(apiKeys\.id, c\.id\)\),/);
     expect(p).toMatch(
       /if \(opts\.accountId\) filters\.push\(eq\(apiKeys\.accountId, opts\.accountId\)\);/,
     );
@@ -136,7 +137,7 @@ describe('W991 db/api-keys-repo cross-source invariant', () => {
     expect(p).toMatch(/\.limit\(opts\.limit \+ 1\);/);
     expect(p).toMatch(/const hasMore = rows\.length > opts\.limit;/);
     expect(p).toMatch(/const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;/);
-    expect(p).toMatch(/nextCursor: hasMore && last \? last\.createdAt\.toISOString\(\) : null,/);
+    expect(p).toMatch(/nextCursor: hasMore && last \? last\.id : null,/);
   });
 
   it('CRITICAL listAllApiKeys empty-filter clause → undefined whereClause. The undefined-when-empty pattern lets drizzle skip emitting WHERE entirely.', () => {
