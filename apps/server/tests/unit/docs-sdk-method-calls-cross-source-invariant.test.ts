@@ -44,6 +44,23 @@ function walkDocs(dir: string): string[] {
   return out;
 }
 
+// Python SDK example programs. TS + Go examples are compile-checked in CI
+// (tsc / `go build ./examples/...`), so a renamed method breaks the build.
+// Python is dynamically typed — a stale `client.x.y()` in an example only
+// fails at runtime, which nothing in CI exercises — so sweep it for method
+// existence the same way docs + marketing are swept.
+const PY_EXAMPLES_DIR = resolve(REPO_ROOT, 'packages/sdk-python/examples');
+
+function walkPy(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const p = join(dir, entry);
+    if (statSync(p).isDirectory()) out.push(...walkPy(p));
+    else if (p.endsWith('.py')) out.push(p);
+  }
+  return out;
+}
+
 function addMatches(
   src: string,
   re: RegExp,
@@ -157,6 +174,32 @@ describe('docs ↔ SDK method-call cross-source invariant', () => {
     expect(
       missing,
       `marketing client.<resource>.<method>() calls with no matching SDK method (TS/Python/Go):\n${missing.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('every client.<resource>.<method>() in the PYTHON SDK examples exists on a real SDK', () => {
+    // `client` and the async `aclient` both end in "client.", so this matches
+    // sync + async example calls alike.
+    const callRe = /client\.([A-Za-z][A-Za-z0-9_]*)\.([A-Za-z][A-Za-z0-9_]*)\(/g;
+    const missing: string[] = [];
+    let scanned = 0;
+    for (const file of walkPy(PY_EXAMPLES_DIR)) {
+      const body = readFileSync(file, 'utf8');
+      let m: RegExpExecArray | null;
+      const re = new RegExp(callRe.source, 'g');
+      while ((m = re.exec(body)) !== null) {
+        scanned += 1;
+        const key = `${m[1]}.${m[2]}`;
+        if (!inventory.has(key)) missing.push(`${key}  (${file.slice(REPO_ROOT.length + 1)})`);
+      }
+    }
+    expect(
+      scanned,
+      'expected the Python examples to contain SDK method-call examples',
+    ).toBeGreaterThan(15);
+    expect(
+      missing,
+      `Python-example client.<resource>.<method>() calls with no matching SDK method:\n${missing.join('\n')}`,
     ).toEqual([]);
   });
 });
