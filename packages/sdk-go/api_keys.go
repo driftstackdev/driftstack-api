@@ -11,8 +11,8 @@ type APIKeysResource struct {
 }
 
 // Create generates an API key. Plaintext is in the response — store it
-// now, it cannot be retrieved later. Requires the admin scope on the
-// calling key.
+// now, it cannot be retrieved later. Requires the account_owner scope
+// on the calling key.
 func (r *APIKeysResource) Create(ctx context.Context, body *CreateAPIKeyRequest) (*CreateAPIKeyResponse, error) {
 	var out CreateAPIKeyResponse
 	if err := r.client.do(ctx, requestOptions{

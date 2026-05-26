@@ -18,7 +18,7 @@
 //     (preserve old name)"; pass &RotateAPIKeyRequest{Name: "..."}
 //     to rename in flight) — the SDK ergonomics that let callers
 //     skip request-body construction for the common case.
-//   • Admin-scope on the calling key for Create (the privilege
+//   • account_owner-scope on the calling key for Create (the privilege
 //     escalation surface).
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -44,14 +44,13 @@ describe('W590.A packages/sdk-go/api_keys.go content parity', () => {
     expect(body).toMatch(/^type APIKeysResource struct \{\s*\n\s*client \*Client\s*\n\}/m);
   });
 
-  it('Create — POST /v1/api-keys with body, returns plaintext ONCE + admin-scope on calling key required. Drift to dropping the plaintext-once warning would silently weaken the customer-facing security contract that makes hash-at-rest credible.', () => {
+  it('Create — POST /v1/api-keys with body, returns plaintext ONCE + account_owner-scope on calling key required. Drift to dropping the plaintext-once warning would silently weaken the customer-facing security contract that makes hash-at-rest credible.', () => {
     expect(body).toMatch(
       /\/\/ Create generates an API key\. Plaintext is in the response — store it/,
     );
     expect(body).toMatch(
-      /\/\/ now, it cannot be retrieved later\. Requires the admin scope on the/,
+      /\/\/ now, it cannot be retrieved later\. Requires the account_owner scope\s*\n?\s*\/\/\s*on the calling key\./,
     );
-    expect(body).toMatch(/\/\/ calling key\./);
     expect(body).toMatch(
       /func \(r \*APIKeysResource\) Create\(ctx context\.Context, body \*CreateAPIKeyRequest\) \(\*CreateAPIKeyResponse, error\)/,
     );

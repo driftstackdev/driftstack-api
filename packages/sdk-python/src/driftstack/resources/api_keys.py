@@ -40,7 +40,7 @@ class ApiKeysResource:
         """Create an API key.
 
         Plaintext is in the response — store it now, it cannot be
-        retrieved later. Requires the ``admin`` scope on the calling key.
+        retrieved later. Requires the ``account_owner`` scope on the calling key.
         """
         data = self._http.request("POST", "/v1/api-keys", json_body=coerce_body(body))
         return CreateApiKeyResponse.model_validate(data)

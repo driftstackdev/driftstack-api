@@ -190,19 +190,19 @@ describe('W701 cross-SDK V-296 api-keys lifecycle parity', () => {
     );
   });
 
-  it('CRITICAL `admin` scope requirement on create framing pinned in TS + Go + Python. The admin-scope is what prevents read-scoped keys from minting new keys; drift to dropping would let a leaked read-key chain-escalate to admin.', () => {
+  it('CRITICAL `account_owner` scope requirement on create framing pinned in TS + Go + Python (V-174). The scope is what prevents read-scoped keys from minting new keys; drift to dropping would let a leaked read-key chain-escalate to account control.', () => {
     const ts = read(TS_KEYS);
     const go = read(GO_KEYS);
     const py = read(PY_KEYS);
 
-    // sdk-typescript: "Requires the `admin` scope\n   * on the calling key"
-    expect(ts).toMatch(/Requires the `admin` scope\s*\n?\s*\*?\s*on the calling key/);
+    // sdk-typescript: "Requires the\n   * `account_owner` scope on the calling key"
+    expect(ts).toMatch(/Requires the\s*\n?\s*\*?\s*`account_owner` scope on the calling key/);
 
-    // sdk-go: "Requires the admin scope on the\n// calling key"
-    expect(go).toMatch(/Requires the admin scope on the\s*\n?\s*\/\/\s*calling key/);
+    // sdk-go: "Requires the account_owner scope\n// on the calling key"
+    expect(go).toMatch(/Requires the account_owner scope\s*\n?\s*\/\/\s*on the calling key/);
 
-    // sdk-python: "Requires the ``admin`` scope on the calling key"
-    expect(py).toMatch(/Requires the ``admin`` scope on the calling key/);
+    // sdk-python: "Requires the ``account_owner`` scope on the calling key"
+    expect(py).toMatch(/Requires the ``account_owner`` scope on the calling key/);
   });
 
   it('CRITICAL "auto-revokes at the grace boundary via the existing expires_at-driven auth gate" pinned in all 3 SDKs. The expires_at-driven implementation is the load-bearing detail — drift to a separate rotation table would let the grace logic diverge from the auth gate.', () => {

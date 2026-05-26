@@ -78,13 +78,15 @@ describe('W581.A packages/sdk-python/src/driftstack/resources/api_keys.py conten
     );
   });
 
-  it('create (sync) — POST /v1/api-keys with body type `CreateApiKeyRequest | dict[str, Any]` (pydantic-or-dict polymorphism via coerce_body). Plaintext-once-only contract pinned: "store it now, it cannot be retrieved later." Admin-scope on the calling key required. model_validate-at-boundary returns CreateApiKeyResponse.', () => {
+  it('create (sync) — POST /v1/api-keys with body type `CreateApiKeyRequest | dict[str, Any]` (pydantic-or-dict polymorphism via coerce_body). Plaintext-once-only contract pinned: "store it now, it cannot be retrieved later." account_owner-scope on the calling key required. model_validate-at-boundary returns CreateApiKeyResponse.', () => {
     expect(body).toMatch(
       /def create\(self, body: CreateApiKeyRequest \| dict\[str, Any\]\) -> CreateApiKeyResponse:/,
     );
     expect(body).toMatch(/"""Create an API key\./);
     expect(body).toMatch(/Plaintext is in the response — store it now, it cannot be/);
-    expect(body).toMatch(/retrieved later\. Requires the ``admin`` scope on the calling key\./);
+    expect(body).toMatch(
+      /retrieved later\. Requires the ``account_owner`` scope on the calling key\./,
+    );
     expect(body).toMatch(
       /data = self\._http\.request\("POST", "\/v1\/api-keys", json_body=coerce_body\(body\)\)\s*\n\s*return CreateApiKeyResponse\.model_validate\(data\)/,
     );

@@ -28,8 +28,8 @@ export class ApiKeysResource {
 
   /**
    * Create a new API key. The plaintext is returned ONCE in the response;
-   * store it now — it cannot be retrieved later. Requires the `admin` scope
-   * on the calling key.
+   * store it now — it cannot be retrieved later. Requires the
+   * `account_owner` scope on the calling key.
    */
   create(body: CreateApiKeyRequest): Promise<CreateApiKeyResponse> {
     return this.http.request<CreateApiKeyResponse>({

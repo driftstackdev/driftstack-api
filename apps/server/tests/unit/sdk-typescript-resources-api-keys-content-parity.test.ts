@@ -94,9 +94,9 @@ describe('W428.A packages/sdk-typescript/src/resources/api-keys.ts content parit
     expect(body).toMatch(/constructor\(private readonly http: HttpClient\) \{\}/);
   });
 
-  it('create verb JSDoc — CRITICAL plaintext-once invariant: "The plaintext is returned ONCE in the response; store it now — it cannot be retrieved later." Also pinned: "Requires the `admin` scope on the calling key." The admin-scope check is what prevents a non-admin key from minting new keys (privilege escalation guard).', () => {
+  it('create verb JSDoc — CRITICAL plaintext-once invariant: "The plaintext is returned ONCE in the response; store it now — it cannot be retrieved later." Also pinned: "Requires the `account_owner` scope on the calling key" (V-174). The scope check is what prevents a non-owner key from minting new keys (privilege escalation guard).', () => {
     expect(body).toMatch(
-      /\*\s*Create a new API key\. The plaintext is returned ONCE in the response;\s*\n?\s*\*\s*store it now — it cannot be retrieved later\. Requires the `admin` scope\s*\n?\s*\*\s*on the calling key\./,
+      /\*\s*Create a new API key\. The plaintext is returned ONCE in the response;\s*\n?\s*\*\s*store it now — it cannot be retrieved later\. Requires the\s*\n?\s*\*\s*`account_owner` scope on the calling key\./,
     );
   });
 
