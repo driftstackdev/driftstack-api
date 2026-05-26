@@ -1,7 +1,7 @@
 // Drizzle-backed RateLimitOverridesRepo. Upsert by (account_id,
 // bucket_key) — re-setting the same bucket replaces the prior override.
 
-import { type SQL, and, desc, eq, gt, lt } from 'drizzle-orm';
+import { type SQL, and, desc, eq, gt, lt, or } from 'drizzle-orm';
 import type {
   RateLimitOverrideRecord,
   RateLimitOverridesRepo,
@@ -61,9 +61,23 @@ export class DrizzleRateLimitOverridesRepo implements RateLimitOverridesRepo {
     accountId?: string;
     includeExpired?: boolean;
   }): Promise<{ items: RateLimitOverrideRecord[]; nextCursor: string | null }> {
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    // Keyset cursor on (createdAt desc, id desc) — cursor = last row id.
+    // Mirrors profiles-repo; avoids dropping same-createdAt rows.
     const filters: SQL[] = [];
-    if (cursorDate) filters.push(lt(rateLimitOverrides.createdAt, cursorDate));
+    if (opts.cursor !== undefined) {
+      const [c] = await this.database.db
+        .select({ createdAt: rateLimitOverrides.createdAt, id: rateLimitOverrides.id })
+        .from(rateLimitOverrides)
+        .where(eq(rateLimitOverrides.id, opts.cursor))
+        .limit(1);
+      if (c) {
+        const keyset = or(
+          lt(rateLimitOverrides.createdAt, c.createdAt),
+          and(eq(rateLimitOverrides.createdAt, c.createdAt), lt(rateLimitOverrides.id, c.id)),
+        );
+        if (keyset) filters.push(keyset);
+      }
+    }
     if (opts.accountId) filters.push(eq(rateLimitOverrides.accountId, opts.accountId));
     if (!opts.includeExpired) filters.push(gt(rateLimitOverrides.expiresAt, new Date()));
     const whereClause = filters.length === 0 ? undefined : and(...filters);
@@ -72,7 +86,7 @@ export class DrizzleRateLimitOverridesRepo implements RateLimitOverridesRepo {
       .select()
       .from(rateLimitOverrides)
       .where(whereClause)
-      .orderBy(desc(rateLimitOverrides.createdAt))
+      .orderBy(desc(rateLimitOverrides.createdAt), desc(rateLimitOverrides.id))
       .limit(opts.limit + 1);
 
     const hasMore = rows.length > opts.limit;
@@ -80,7 +94,7 @@ export class DrizzleRateLimitOverridesRepo implements RateLimitOverridesRepo {
     const last = items[items.length - 1];
     return {
       items: items.map(toRecord),
-      nextCursor: hasMore && last ? last.createdAt.toISOString() : null,
+      nextCursor: hasMore && last ? last.id : null,
     };
   }
 }

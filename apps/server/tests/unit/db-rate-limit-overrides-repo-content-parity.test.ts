@@ -39,7 +39,7 @@ describe('W444.B apps/server/src/db/rate-limit-overrides-repo.ts content parity'
   });
 
   it('imports: SQL type + and/desc/eq/gt/lt; RateLimitOverrideRecord/Repo + SetOverrideInput; Database; rateLimitOverrides schema', () => {
-    expect(body).toMatch(/import \{ type SQL, and, desc, eq, gt, lt \} from 'drizzle-orm';/);
+    expect(body).toMatch(/import \{ type SQL, and, desc, eq, gt, lt, or \} from 'drizzle-orm';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*RateLimitOverrideRecord,\s*\n?\s*RateLimitOverridesRepo,\s*\n?\s*SetOverrideInput,\s*\n?\s*\} from '\.\.\/services\/rate-limit-overrides\.js';/,
     );
@@ -64,13 +64,23 @@ describe('W444.B apps/server/src/db/rate-limit-overrides-repo.ts content parity'
     );
   });
 
-  it('listAll filters: cursor lt(createdAt, parsed-date) + accountId eq + !includeExpired → gt(expiresAt, new Date()); whereClause undefined when no filters; orderBy desc(createdAt); limit+1 hasMore; nextCursor = last.createdAt.toISOString()', () => {
+  it('listAll: keyset cursor (createdAt,id) + accountId eq + !includeExpired → gt(expiresAt, new Date()); orderBy (createdAt desc, id desc); nextCursor = last.id', () => {
+    expect(body).toMatch(/const filters: SQL\[\] = \[\];/);
+    // Keyset cursor (createdAt, id) — looked up by cursor id.
+    expect(body).toMatch(/lt\(rateLimitOverrides\.createdAt, c\.createdAt\),/);
     expect(body).toMatch(
-      /const cursorDate = opts\.cursor \? new Date\(opts\.cursor\) : null;\s*\n?\s*const filters: SQL\[\] = \[\];\s*\n?\s*if \(cursorDate\) filters\.push\(lt\(rateLimitOverrides\.createdAt, cursorDate\)\);\s*\n?\s*if \(opts\.accountId\) filters\.push\(eq\(rateLimitOverrides\.accountId, opts\.accountId\)\);\s*\n?\s*if \(!opts\.includeExpired\) filters\.push\(gt\(rateLimitOverrides\.expiresAt, new Date\(\)\)\);\s*\n?\s*const whereClause = filters\.length === 0 \? undefined : and\(\.\.\.filters\);/,
+      /and\(eq\(rateLimitOverrides\.createdAt, c\.createdAt\), lt\(rateLimitOverrides\.id, c\.id\)\),/,
     );
     expect(body).toMatch(
-      /const hasMore = rows\.length > opts\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, opts\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toRecord\),\s*\n?\s*nextCursor: hasMore && last \? last\.createdAt\.toISOString\(\) : null,\s*\n?\s*\};/,
+      /if \(opts\.accountId\) filters\.push\(eq\(rateLimitOverrides\.accountId, opts\.accountId\)\);/,
     );
+    expect(body).toMatch(
+      /if \(!opts\.includeExpired\) filters\.push\(gt\(rateLimitOverrides\.expiresAt, new Date\(\)\)\);/,
+    );
+    expect(body).toMatch(
+      /\.orderBy\(desc\(rateLimitOverrides\.createdAt\), desc\(rateLimitOverrides\.id\)\)/,
+    );
+    expect(body).toMatch(/nextCursor: hasMore && last \? last\.id : null,/);
   });
 
   it('toRecord: read-side divides centi by 100 (refillPerSecond: r.refillPerSecondCenti / 100); 9-field record', () => {

@@ -98,8 +98,10 @@ describe('W1009 db/rate-limit-overrides-repo V-016 cross-source invariant', () =
 
   it('CRITICAL listAll 3-filter — cursor (lt createdAt) + accountId (eq) + !includeExpired → gt(expiresAt, new Date()). The default-exclude-expired design.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/rate-limit-overrides-repo.ts'));
+    // Keyset cursor (createdAt, id) — looked up by cursor id, compound filter.
+    expect(p).toMatch(/lt\(rateLimitOverrides\.createdAt, c\.createdAt\),/);
     expect(p).toMatch(
-      /if \(cursorDate\) filters\.push\(lt\(rateLimitOverrides\.createdAt, cursorDate\)\);/,
+      /and\(eq\(rateLimitOverrides\.createdAt, c\.createdAt\), lt\(rateLimitOverrides\.id, c\.id\)\),/,
     );
     expect(p).toMatch(
       /if \(opts\.accountId\) filters\.push\(eq\(rateLimitOverrides\.accountId, opts\.accountId\)\);/,
@@ -109,11 +111,13 @@ describe('W1009 db/rate-limit-overrides-repo V-016 cross-source invariant', () =
     );
   });
 
-  it('CRITICAL listAll orderBy desc(createdAt) + limit+1 hasMore + ISO cursor.', () => {
+  it('CRITICAL listAll orderBy (createdAt desc, id desc) + limit+1 hasMore + id keyset cursor.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/rate-limit-overrides-repo.ts'));
-    expect(p).toMatch(/\.orderBy\(desc\(rateLimitOverrides\.createdAt\)\)/);
+    expect(p).toMatch(
+      /\.orderBy\(desc\(rateLimitOverrides\.createdAt\), desc\(rateLimitOverrides\.id\)\)/,
+    );
     expect(p).toMatch(/\.limit\(opts\.limit \+ 1\);/);
-    expect(p).toMatch(/nextCursor: hasMore && last \? last\.createdAt\.toISOString\(\) : null,/);
+    expect(p).toMatch(/nextCursor: hasMore && last \? last\.id : null,/);
   });
 
   it('CRITICAL toRecord 10-field shape with V-016 refillPerSecond = centi/100 dequantization.', () => {
