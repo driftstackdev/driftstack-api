@@ -104,6 +104,33 @@ describe('GET /v1/account/audit-log/export', () => {
     expect(csv).toContain('\\""quotes\\""');
   });
 
+  it('CSV neutralises formula injection (CWE-1236) in client-controlled fields', async () => {
+    fx = await buildTestApp();
+    // user_agent is attacker-controlled (a request header) and flows
+    // verbatim into the audit log; a leading '=' would be evaluated as a
+    // formula when the export is opened in a spreadsheet.
+    await fx.accountAuditRepo.insert({
+      accountId: fx.accountId,
+      actorType: 'customer',
+      actorAccountId: fx.accountId,
+      actorKeyId: fx.apiKeyId,
+      action: 'api_key.minted',
+      userAgent: '=SUM(1+1)',
+      payload: null,
+    });
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log/export?format=csv',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const csv = res.body;
+    // Prefixed with an apostrophe so a spreadsheet treats it as text.
+    expect(csv).toContain("'=SUM(1+1)");
+    // The raw formula must never appear at a cell boundary.
+    expect(csv).not.toMatch(/(^|,)=SUM\(1\+1\)/);
+  });
+
   it('defaults to JSON when format query is missing', async () => {
     fx = await buildTestApp();
     await seedEntry(fx, 'api_key.minted');

@@ -140,13 +140,13 @@ describe('W1037 routes/account-audit V-216 + V-297 + V-330b/c + V-484 cross-sour
     expect(p).toMatch(/'payload',/);
   });
 
-  it("CRITICAL CSV uses '\\r\\n' separator + RFC 4180 csvEscape — 'V-297 — CSV cell escape per RFC 4180. Quote when the cell contains comma / quote / newline; double up internal quotes'.", () => {
+  it('CRITICAL CSV export goes through the shared buildCsv helper (RFC 4180 + CWE-1236 formula-injection guard), not a local RFC-only escaper.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-audit.ts'));
-    expect(p).toMatch(/\.join\(','\)\)\.join\('\\r\\n'\);/);
-    expect(p).toMatch(/V-297 — CSV cell escape per RFC 4180\. Quote when the cell contains/);
-    expect(p).toMatch(/comma \/ quote \/ newline; double up internal quotes\./);
-    expect(p).toMatch(/if \(\/\[",\\r\\n\]\/\.test\(cell\)\) \{/);
-    expect(p).toMatch(/return `"\$\{cell\.replace\(\/"\/g, '""'\)\}"`;/);
+    expect(p).toMatch(/import \{ buildCsv \} from '\.\.\/lib\/csv\.js';/);
+    expect(p).toMatch(/const csv = buildCsv\(\{ header, rows \}\);/);
+    // The local RFC-4180-only csvEscape (no formula guard) was removed;
+    // audit free-text like user_agent is client-controlled.
+    expect(p).not.toMatch(/function csvEscape\(/);
   });
 
   it("CRITICAL CSV response 3 headers — content-type 'text/csv; charset=utf-8' + content-disposition 'attachment; filename=driftstack-audit-log-YYYY-MM-DD.csv' + x-driftstack-export-truncated 'true'|'false'.", () => {

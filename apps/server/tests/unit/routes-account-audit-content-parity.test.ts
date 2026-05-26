@@ -148,9 +148,7 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     expect(body).toMatch(/row\.actorAccountId \? `acc_\$\{row\.actorAccountId\}` : '',/);
     expect(body).toMatch(/row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : '',/);
     expect(body).toMatch(/row\.payload === null \? '' : JSON\.stringify\(row\.payload\)/);
-    expect(body).toMatch(
-      /const csv = \[header, \.\.\.rows\]\.map\(\(cells\) => cells\.map\(csvEscape\)\.join\(','\)\)\.join\('\\r\\n'\);/,
-    );
+    expect(body).toMatch(/const csv = buildCsv\(\{ header, rows \}\);/);
   });
 
   it('Export CSV headers: content-type text/csv utf-8 + content-disposition attachment filename .csv + x-driftstack-export-truncated header', () => {
@@ -173,13 +171,13 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     );
   });
 
-  it('csvEscape: RFC 4180 — quote when comma/quote/newline; double up internal quotes', () => {
-    expect(body).toMatch(
-      /\/\*\*\s*\n?\s*\*\s*V-297 — CSV cell escape per RFC 4180\. Quote when the cell contains\s*\n?\s*\*\s*comma \/ quote \/ newline; double up internal quotes\.\s*\n?\s*\*\//,
-    );
-    expect(body).toMatch(
-      /function csvEscape\(cell: string\): string \{\s*\n?\s*if \(\/\[",\\r\\n\]\/\.test\(cell\)\) \{\s*\n?\s*return `"\$\{cell\.replace\(\/"\/g, '""'\)\}"`;\s*\n?\s*\}\s*\n?\s*return cell;/,
-    );
+  it('CSV export uses the shared buildCsv helper (RFC 4180 + CWE-1236 formula-injection guard), not a local escaper', () => {
+    expect(body).toMatch(/import \{ buildCsv \} from '\.\.\/lib\/csv\.js';/);
+    // The local RFC-4180-only csvEscape was removed — buildCsv applies
+    // the formula-injection guard that audit free-text (user_agent)
+    // needs.
+    expect(body).not.toMatch(/function csvEscape\(/);
+    expect(body).toMatch(/buildCsv applies the shared CSV formula-injection guard/);
   });
 
   it('imports: FastifyInstance/FastifyRequest + ListAccountAuditLogQuerySchema + AccountAuditEntryRow/AccountAuditService + BadRequestError + resolveEffectiveAccount + zod', () => {

@@ -13,6 +13,7 @@ import type { FastifyInstance } from 'fastify';
 import { ListAccountAuditLogQuerySchema } from '@driftstack/api-types';
 import type { AccountAuditEntryRow, AccountAuditService } from '../services/account-audit.js';
 import { BadRequestError } from '../lib/errors.js';
+import { buildCsv } from '../lib/csv.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { z } from 'zod';
@@ -141,7 +142,11 @@ export function registerAccountAuditRoutes(
           row.userAgent ?? '',
           row.payload === null ? '' : JSON.stringify(row.payload),
         ]);
-        const csv = [header, ...rows].map((cells) => cells.map(csvEscape).join(',')).join('\r\n');
+        // buildCsv applies the shared CSV formula-injection guard
+        // (CWE-1236) — audit rows carry client-controlled free text
+        // (user_agent especially) that a spreadsheet would otherwise
+        // evaluate as a formula on open.
+        const csv = buildCsv({ header, rows });
         return reply
           .header('content-type', 'text/csv; charset=utf-8')
           .header('content-disposition', `attachment; filename="${filenameBase}.csv"`)
@@ -163,15 +168,4 @@ export function registerAccountAuditRoutes(
         });
     },
   );
-}
-
-/**
- * V-297 — CSV cell escape per RFC 4180. Quote when the cell contains
- * comma / quote / newline; double up internal quotes.
- */
-function csvEscape(cell: string): string {
-  if (/[",\r\n]/.test(cell)) {
-    return `"${cell.replace(/"/g, '""')}"`;
-  }
-  return cell;
 }
