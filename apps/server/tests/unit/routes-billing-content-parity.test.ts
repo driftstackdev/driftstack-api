@@ -103,9 +103,15 @@ describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
     );
   });
 
-  it("Auth posture: requireAuth + rateLimit('global') on all billing routes (5 today — 4 core + 1 added during the 2026-05-XX billing surface grow)", () => {
-    const matches = body.match(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/g);
-    expect(matches?.length).toBe(5);
+  it("Auth posture: requireAuth + rateLimit('global') on all billing routes; admin:billing on the 4 mutations", () => {
+    // requireAuth + rateLimit('global') on every route (5). The 4
+    // mutations (checkout-session / trial-pack / portal-session /
+    // billing-portal) now carry app.requireScope('admin:billing')
+    // between them (V-481 scope enforcement), so count each guard
+    // independently rather than as an adjacent pair.
+    expect((body.match(/app\.requireAuth/g) ?? []).length).toBeGreaterThanOrEqual(5);
+    expect((body.match(/app\.rateLimit\('global'\)/g) ?? []).length).toBeGreaterThanOrEqual(5);
+    expect((body.match(/app\.requireScope\('admin:billing'\)/g) ?? []).length).toBe(4);
   });
 
   it('Checkout-session: V-248 allowlist gate on customer-supplied success/cancel URLs; service.createCheckoutSession with snake→camel; reply checkout_url + checkout_session_id', () => {

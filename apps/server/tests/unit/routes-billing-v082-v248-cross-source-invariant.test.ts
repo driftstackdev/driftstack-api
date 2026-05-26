@@ -66,10 +66,14 @@ describe('W1044 routes/billing V-082 + V-248 cross-source invariant', () => {
     expect(p).toMatch(/GET\s+\/v1\/billing\s+— current subscription \+ trial state/);
   });
 
-  it('CRITICAL all 4 routes preHandler — requireAuth + global rate-limit. The unified preHandler chain is the canonical customer-auth-gated billing posture.', () => {
+  it('CRITICAL every billing route is requireAuth + global rate-limit; the 4 mutations also require admin:billing (V-481).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts'));
-    const refs = p.match(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\]/g) ?? [];
-    expect(refs.length, 'requireAuth + global rate-limit chain count').toBeGreaterThanOrEqual(4);
+    // The 4 billing mutations carry app.requireScope('admin:billing')
+    // between requireAuth and rateLimit, so count each guard
+    // independently rather than as an adjacent pair.
+    expect((p.match(/app\.requireAuth/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    expect((p.match(/app\.rateLimit\('global'\)/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    expect((p.match(/app\.requireScope\('admin:billing'\)/g) ?? []).length).toBe(4);
   });
 
   // ─── V-248 open-redirect gate ────────────────────────────────

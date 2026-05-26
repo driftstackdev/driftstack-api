@@ -85,7 +85,7 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
 
   app.post(
     '/v1/billing/checkout-session',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const parsed = CreateCheckoutSessionRequestSchema.safeParse(req.body);
@@ -116,7 +116,7 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
 
   app.post(
     '/v1/billing/trial-pack',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const parsed = StartTrialPackRequestSchema.safeParse(req.body ?? {});
@@ -145,7 +145,7 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
 
   app.post(
     '/v1/billing/portal-session',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const result = await service.createPortalSession(ctx.account.id);
@@ -162,7 +162,7 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
   // isn't wired (mirrors the POST behaviour).
   app.get(
     '/v1/account/me/billing-portal',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
       const result = await service.createPortalSession(ctx.account.id);

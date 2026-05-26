@@ -50,6 +50,19 @@ describe('POST /v1/billing/checkout-session', () => {
     expect(fx.billingProvider.state.checkoutSessions[0]?.priceId).toBe('price_api_builder_monthly');
   });
 
+  it('403 when the key lacks admin:billing scope (write-only key)', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/checkout-session',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { tier: 'api_builder', billing_period: 'monthly' },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ detail: string }>();
+    expect(body.detail).toContain('admin:billing');
+  });
+
   it('400 ValidationFailed for tier=trial_pack', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
