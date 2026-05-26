@@ -106,13 +106,15 @@ describe('W1035 routes/account-mfa V-353b cross-source invariant', () => {
     expect(p).toMatch(/\/\/ same handler\. Some clients prefer POST for non-idempotent ops\./);
   });
 
-  it("CRITICAL DELETE + POST disable both have preHandler [requireAuth, requireMfaFresh(), rateLimit('global')] + share disableHandler.", () => {
+  it('CRITICAL DELETE + POST disable both step-up-gated (requireMfaFresh) + account_owner-scoped + share disableHandler.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-mfa.ts'));
-    const matches =
-      p.match(
-        /preHandler: \[app\.requireAuth, app\.requireMfaFresh\(\), app\.rateLimit\('global'\)\]/g,
-      ) ?? [];
-    expect(matches.length).toBe(2);
+    // V-481 added app.requireScope('account_owner') to the disable/delete
+    // preHandler arrays (now multi-line under prettier), so count each
+    // guard independently rather than as the old adjacent triple.
+    expect((p.match(/app\.requireMfaFresh\(\)/g) ?? []).length).toBe(2);
+    expect((p.match(/app\.requireScope\('account_owner'\)/g) ?? []).length).toBeGreaterThanOrEqual(
+      2,
+    );
     expect(p).toMatch(/const disableHandler = async/);
     expect(p).toMatch(/disableHandler,/);
   });

@@ -108,7 +108,7 @@ export function registerAccountBundledLlmRoutes(
 
   app.patch(
     '/v1/account/me/bundled-llm-settings',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');

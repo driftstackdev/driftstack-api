@@ -54,9 +54,13 @@ describe('W418.A apps/server/src/routes/legal.ts content parity', () => {
     );
   });
 
-  it("Auth posture: requireAuth + rateLimit('global') on all 3 routes", () => {
-    const matches = body.match(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\],/g);
-    expect(matches?.length).toBe(3);
+  it("Auth posture: requireAuth + rateLimit('global') on all 3 routes; account_owner on the accept mutation", () => {
+    // POST /v1/legal/accept now carries app.requireScope('account_owner')
+    // between requireAuth and rateLimit (V-481), so count each guard
+    // independently. The two GET routes keep the bare pair.
+    expect((body.match(/app\.requireAuth/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect((body.match(/app\.rateLimit\('global'\)/g) ?? []).length).toBeGreaterThanOrEqual(3);
+    expect((body.match(/app\.requireScope\('account_owner'\)/g) ?? []).length).toBe(1);
   });
 
   it('GET /v1/legal/documents: catalog list with 7-field public shape (document_key, title, version, effective_date, content_hash, source_path, byte_size)', () => {

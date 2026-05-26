@@ -68,7 +68,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
       /\/\/ V-353f — POST alias per founder-named canonical shape\. Same gate,\s*\n?\s*\/\/ same handler\. Some clients prefer POST for non-idempotent ops\./,
     );
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/account\/mfa\/disable',\s*\n?\s*\{\s*\n?\s*preHandler: \[app\.requireAuth, app\.requireMfaFresh\(\), app\.rateLimit\('global'\)\],\s*\n?\s*\},\s*\n?\s*disableHandler,/,
+      /app\.post\(\s*'\/v1\/account\/mfa\/disable',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},\s*disableHandler,/,
     );
   });
 
@@ -77,7 +77,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
       /\/\/ DELETE retains the original verb for back-compat with the V-353b\s*\n?\s*\/\/ tests \+ clients\./,
     );
     expect(body).toMatch(
-      /app\.delete\(\s*\n?\s*'\/v1\/account\/mfa',\s*\n?\s*\{\s*\n?\s*preHandler: \[app\.requireAuth, app\.requireMfaFresh\(\), app\.rateLimit\('global'\)\],\s*\n?\s*\},\s*\n?\s*disableHandler,/,
+      /app\.delete\(\s*'\/v1\/account\/mfa',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},\s*disableHandler,/,
     );
   });
 
@@ -98,7 +98,7 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
 
   it('Enroll: POST /v1/account/mfa/enroll wire shape — otpauth_uri + secret_base32 + algorithm SHA1 + digits 6 + period_seconds 30', () => {
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/account\/mfa\/enroll',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+      /app\.post\(\s*\n?\s*'\/v1\/account\/mfa\/enroll',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('account_owner'\), app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(
       /const result = await service\.startEnrollment\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*email: ctx\.account\.email,\s*\n?\s*\}\);/,
@@ -120,9 +120,9 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
     );
   });
 
-  it('Recovery codes regen: POST /v1/account/mfa/recovery-codes/regenerate; no step-up gate (only auth + rateLimit); returns { recovery_codes }', () => {
+  it('Recovery codes regen: POST /v1/account/mfa/recovery-codes/regenerate; account_owner-scoped, no step-up gate (no requireMfaFresh); returns { recovery_codes }', () => {
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/account\/mfa\/recovery-codes\/regenerate',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+      /app\.post\(\s*\n?\s*'\/v1\/account\/mfa\/recovery-codes\/regenerate',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('account_owner'\), app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(
       /const \{ recoveryCodes \} = await service\.regenerateRecoveryCodes\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*\}\);\s*\n?\s*return \{ recovery_codes: recoveryCodes \};/,

@@ -36,7 +36,7 @@ export function registerAccountMfaRoutes(
 
   app.post(
     '/v1/account/mfa/enroll',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
@@ -56,7 +56,7 @@ export function registerAccountMfaRoutes(
 
   app.post(
     '/v1/account/mfa/verify',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
@@ -100,7 +100,12 @@ export function registerAccountMfaRoutes(
   app.delete(
     '/v1/account/mfa',
     {
-      preHandler: [app.requireAuth, app.requireMfaFresh(), app.rateLimit('global')],
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('account_owner'),
+        app.requireMfaFresh(),
+        app.rateLimit('global'),
+      ],
     },
     disableHandler,
   );
@@ -110,14 +115,19 @@ export function registerAccountMfaRoutes(
   app.post(
     '/v1/account/mfa/disable',
     {
-      preHandler: [app.requireAuth, app.requireMfaFresh(), app.rateLimit('global')],
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('account_owner'),
+        app.requireMfaFresh(),
+        app.rateLimit('global'),
+      ],
     },
     disableHandler,
   );
 
   app.post(
     '/v1/account/mfa/recovery-codes/regenerate',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');

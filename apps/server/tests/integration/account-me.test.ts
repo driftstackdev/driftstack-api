@@ -137,6 +137,19 @@ describe('GET /v1/account/me', () => {
 });
 
 describe('PATCH /v1/account/me (V-352)', () => {
+  it('403 when the key lacks account_owner scope (read/write key)', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: 'Updated' },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ detail: string }>();
+    expect(body.detail).toContain('account_owner');
+  });
+
   it('200 updates name + timezone', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

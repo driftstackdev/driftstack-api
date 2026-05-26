@@ -186,7 +186,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   // surprising; if needed, lands in V-352c with explicit semantics.
   app.patch(
     '/v1/account/me',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
@@ -270,7 +270,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   app.post(
     '/v1/account/me/avatar',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')],
       bodyLimit: 3.5 * 1024 * 1024,
     },
     async (request, reply) => {
@@ -339,7 +339,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   // than the public bucket already is). Returns 204.
   app.delete(
     '/v1/account/me/avatar',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');

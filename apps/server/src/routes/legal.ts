@@ -90,7 +90,7 @@ export function registerLegalRoutes(app: FastifyInstance, service: LegalService)
   app.post(
     '/v1/legal/accept',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')],
     },
     async (request, reply) => {
       const ctx = requireCtx(request);
