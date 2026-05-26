@@ -3,7 +3,7 @@
 // Insert + paginated list only. No update, no delete — see D-025 for
 // the append-only invariant.
 
-import { and, desc, eq, gte, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, lt, or } from 'drizzle-orm';
 import type {
   AdminAuditLogRepo,
   AdminAuditLogRow,
@@ -51,13 +51,31 @@ export class DrizzleAdminAuditLogRepo implements AdminAuditLogRepo {
     if (filters.targetResourceId) {
       conds.push(eq(adminAuditLog.targetResourceId, filters.targetResourceId));
     }
-    if (filters.cursor) conds.push(lt(adminAuditLog.timestamp, new Date(filters.cursor)));
+    // Keyset cursor on (timestamp desc, id desc) — the cursor is the
+    // last row's id. A timestamp-only cursor dropped every row sharing
+    // the cursor timestamp at a page boundary, and bulk admin actions
+    // written in one transaction share an identical timestamp. Mirrors
+    // the profiles-repo keyset pattern.
+    if (filters.cursor) {
+      const [cursorRow] = await this.database.db
+        .select({ timestamp: adminAuditLog.timestamp, id: adminAuditLog.id })
+        .from(adminAuditLog)
+        .where(eq(adminAuditLog.id, filters.cursor))
+        .limit(1);
+      if (cursorRow) {
+        const keyset = or(
+          lt(adminAuditLog.timestamp, cursorRow.timestamp),
+          and(eq(adminAuditLog.timestamp, cursorRow.timestamp), lt(adminAuditLog.id, cursorRow.id)),
+        );
+        if (keyset) conds.push(keyset);
+      }
+    }
 
     const rows = await this.database.db
       .select()
       .from(adminAuditLog)
       .where(conds.length > 0 ? and(...conds) : undefined)
-      .orderBy(desc(adminAuditLog.timestamp))
+      .orderBy(desc(adminAuditLog.timestamp), desc(adminAuditLog.id))
       .limit(filters.limit + 1);
 
     const hasMore = rows.length > filters.limit;
@@ -65,7 +83,7 @@ export class DrizzleAdminAuditLogRepo implements AdminAuditLogRepo {
     const last = items[items.length - 1];
     return {
       items: items.map(toRow),
-      nextCursor: hasMore && last ? last.timestamp.toISOString() : null,
+      nextCursor: hasMore && last ? last.id : null,
     };
   }
 }

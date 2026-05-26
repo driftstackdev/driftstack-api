@@ -41,7 +41,7 @@ describe('W443.A apps/server/src/db/admin-audit-repo.ts content parity', () => {
   });
 
   it('imports: and/desc/eq/gte/lt from drizzle-orm; 5 service types; Database; adminAuditLog schema', () => {
-    expect(body).toMatch(/import \{ and, desc, eq, gte, lt \} from 'drizzle-orm';/);
+    expect(body).toMatch(/import \{ and, desc, eq, gte, lt, or \} from 'drizzle-orm';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*AdminAuditLogRepo,\s*\n?\s*AdminAuditLogRow,\s*\n?\s*ListAuditFilters,\s*\n?\s*ListAuditPage,\s*\n?\s*NewAdminAuditLogInput,\s*\n?\s*\} from '\.\.\/services\/admin-audit\.js';/,
     );
@@ -54,13 +54,14 @@ describe('W443.A apps/server/src/db/admin-audit-repo.ts content parity', () => {
     );
   });
 
-  it('list() filters: adminAccountId eq + targetAccountId eq + action eq + from gte + to lt + V-521 targetResourceId eq + cursor lt new Date(cursor)', () => {
+  it('list() filters: adminAccountId eq + targetAccountId eq + action eq + from gte + to lt + V-521 targetResourceId eq + keyset cursor (timestamp,id)', () => {
     expect(body).toMatch(
       /if \(filters\.adminAccountId\) \{\s*\n?\s*conds\.push\(eq\(adminAuditLog\.adminAccountId, filters\.adminAccountId\)\);\s*\n?\s*\}\s*\n?\s*if \(filters\.targetAccountId\) \{\s*\n?\s*conds\.push\(eq\(adminAuditLog\.targetAccountId, filters\.targetAccountId\)\);\s*\n?\s*\}\s*\n?\s*if \(filters\.action\) conds\.push\(eq\(adminAuditLog\.action, filters\.action\)\);\s*\n?\s*if \(filters\.from\) conds\.push\(gte\(adminAuditLog\.timestamp, filters\.from\)\);\s*\n?\s*if \(filters\.to\) conds\.push\(lt\(adminAuditLog\.timestamp, filters\.to\)\);/,
     );
-    expect(body).toMatch(
-      /if \(filters\.cursor\) conds\.push\(lt\(adminAuditLog\.timestamp, new Date\(filters\.cursor\)\)\);/,
-    );
+    // Keyset cursor: look up cursor row's (timestamp, id), compound filter.
+    expect(body).toMatch(/const keyset = or\(/);
+    expect(body).toMatch(/lt\(adminAuditLog\.timestamp, cursorRow\.timestamp\),/);
+    expect(body).toMatch(/lt\(adminAuditLog\.id, cursorRow\.id\)/);
   });
 
   it("V-521 framing pinned: 'drill-down by resource id (parity with V-484 customer-side filter)' + targetResourceId eq filter", () => {
@@ -74,10 +75,10 @@ describe('W443.A apps/server/src/db/admin-audit-repo.ts content parity', () => {
 
   it('Query: select * from adminAuditLog where (conds.length>0 ? and(...conds) : undefined) orderBy desc(timestamp) limit(filters.limit+1); same hasMore + slice + nextCursor=last.timestamp.toISOString() pattern as account-audit-repo', () => {
     expect(body).toMatch(
-      /const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(adminAuditLog\)\s*\n?\s*\.where\(conds\.length > 0 \? and\(\.\.\.conds\) : undefined\)\s*\n?\s*\.orderBy\(desc\(adminAuditLog\.timestamp\)\)\s*\n?\s*\.limit\(filters\.limit \+ 1\);/,
+      /const rows = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(adminAuditLog\)\s*\n?\s*\.where\(conds\.length > 0 \? and\(\.\.\.conds\) : undefined\)\s*\n?\s*\.orderBy\(desc\(adminAuditLog\.timestamp\), desc\(adminAuditLog\.id\)\)\s*\n?\s*\.limit\(filters\.limit \+ 1\);/,
     );
     expect(body).toMatch(
-      /const hasMore = rows\.length > filters\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, filters\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toRow\),\s*\n?\s*nextCursor: hasMore && last \? last\.timestamp\.toISOString\(\) : null,\s*\n?\s*\};/,
+      /const hasMore = rows\.length > filters\.limit;\s*\n?\s*const items = hasMore \? rows\.slice\(0, filters\.limit\) : rows;\s*\n?\s*const last = items\[items\.length - 1\];\s*\n?\s*return \{\s*\n?\s*items: items\.map\(toRow\),\s*\n?\s*nextCursor: hasMore && last \? last\.id : null,\s*\n?\s*\};/,
     );
   });
 

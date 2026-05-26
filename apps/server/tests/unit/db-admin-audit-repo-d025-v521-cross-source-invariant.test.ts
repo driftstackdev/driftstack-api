@@ -105,9 +105,9 @@ describe('W995 db/admin-audit-repo D-025 + V-521 cross-source invariant', () => 
     expect(p).toMatch(
       /if \(filters\.to\) conds\.push\(lt\(adminAuditLog\.timestamp, filters\.to\)\);/,
     );
-    expect(p).toMatch(
-      /if \(filters\.cursor\) conds\.push\(lt\(adminAuditLog\.timestamp, new Date\(filters\.cursor\)\)\);/,
-    );
+    // Keyset cursor (timestamp, id) — looked up by cursor id, compound filter.
+    expect(p).toMatch(/lt\(adminAuditLog\.timestamp, cursorRow\.timestamp\),/);
+    expect(p).toMatch(/lt\(adminAuditLog\.id, cursorRow\.id\)/);
   });
 
   // ─── V-521 targetResourceId drill-down ───────────────────────
@@ -124,19 +124,19 @@ describe('W995 db/admin-audit-repo D-025 + V-521 cross-source invariant', () => 
 
   // ─── limit+1 hasMore probe ───────────────────────────────────
 
-  it('CRITICAL list uses limit(filters.limit + 1) hasMore probe + nextCursor = last.timestamp.toISOString(). The +1 probe is the standard keyset-pagination pattern.', () => {
+  it('CRITICAL list uses limit(filters.limit + 1) hasMore probe + nextCursor = last.id (keyset). The +1 probe is the standard keyset-pagination pattern.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/admin-audit-repo.ts'));
     expect(p).toMatch(/\.limit\(filters\.limit \+ 1\);/);
     expect(p).toMatch(/const hasMore = rows\.length > filters\.limit;/);
     expect(p).toMatch(/const items = hasMore \? rows\.slice\(0, filters\.limit\) : rows;/);
-    expect(p).toMatch(/nextCursor: hasMore && last \? last\.timestamp\.toISOString\(\) : null,/);
+    expect(p).toMatch(/nextCursor: hasMore && last \? last\.id : null,/);
   });
 
   // ─── orderBy desc(timestamp) ─────────────────────────────────
 
   it('CRITICAL list orders by desc(timestamp) — newest first. The newest-first ordering matches admin-dashboard expectations.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/admin-audit-repo.ts'));
-    expect(p).toMatch(/\.orderBy\(desc\(adminAuditLog\.timestamp\)\)/);
+    expect(p).toMatch(/\.orderBy\(desc\(adminAuditLog\.timestamp\), desc\(adminAuditLog\.id\)\)/);
   });
 
   // ─── No-filter undefined whereClause ─────────────────────────

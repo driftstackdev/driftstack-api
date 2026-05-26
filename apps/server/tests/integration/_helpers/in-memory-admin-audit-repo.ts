@@ -51,18 +51,25 @@ export class InMemoryAdminAuditLogRepo implements AdminAuditLogRepo {
     if (filters.targetResourceId) {
       filtered = filtered.filter((r) => r.targetResourceId === filters.targetResourceId);
     }
+    // Keyset: stable (timestamp desc, id desc) sort, then resume
+    // strictly after the cursor row's position — mirrors the Drizzle
+    // repo so same-timestamp rows aren't dropped at a page boundary.
+    filtered.sort((a, b) => {
+      const dt = b.timestamp.getTime() - a.timestamp.getTime();
+      if (dt !== 0) return dt;
+      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+    });
     if (filters.cursor) {
-      const cursorMs = new Date(filters.cursor).getTime();
-      filtered = filtered.filter((r) => r.timestamp.getTime() < cursorMs);
+      const idx = filtered.findIndex((r) => r.id === filters.cursor);
+      if (idx >= 0) filtered = filtered.slice(idx + 1);
     }
-    filtered.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
     const items = filtered.slice(0, filters.limit);
     const hasMore = filtered.length > filters.limit;
     const last = items[items.length - 1];
     return Promise.resolve({
       items,
-      nextCursor: hasMore && last ? last.timestamp.toISOString() : null,
+      nextCursor: hasMore && last ? last.id : null,
     });
   }
 
