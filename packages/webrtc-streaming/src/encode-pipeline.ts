@@ -67,7 +67,18 @@ export class EncodePipeline {
 
   constructor(opts: EncodePipelineOpts) {
     this.source = opts.source;
-    this.keyframeIntervalFrames = opts.keyframeIntervalFrames ?? 30;
+    const keyframeIntervalFrames = opts.keyframeIntervalFrames ?? 30;
+    // The interval indexes integer modulo ((sequence - 1) % N) for the
+    // keyframe marker. N = 0 makes `% 0` → NaN, so NO frame is ever
+    // marked a keyframe — a silently keyframeless, undecodable stream;
+    // negative or non-integer N marks frames nonsensically. Require a
+    // positive integer.
+    if (!Number.isInteger(keyframeIntervalFrames) || keyframeIntervalFrames < 1) {
+      throw new Error(
+        `EncodePipeline: keyframeIntervalFrames must be a positive integer (got ${keyframeIntervalFrames})`,
+      );
+    }
+    this.keyframeIntervalFrames = keyframeIntervalFrames;
   }
 
   onChunk(handler: (chunk: EncodedChunk) => void): void {

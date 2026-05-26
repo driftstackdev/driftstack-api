@@ -94,7 +94,15 @@ describe('W458.C packages/webrtc-streaming/src/encode-pipeline.ts content parity
     expect(body).toMatch(
       /private stats: EncodePipelineStats = \{\s*\n?\s*framesIn: 0,\s*\n?\s*chunksOut: 0,\s*\n?\s*bytesOut: 0,\s*\n?\s*framesDropped: 0,\s*\n?\s*\};/,
     );
-    expect(body).toMatch(/this\.keyframeIntervalFrames = opts\.keyframeIntervalFrames \?\? 30;/);
+    expect(body).toMatch(/const keyframeIntervalFrames = opts\.keyframeIntervalFrames \?\? 30;/);
+    expect(body).toMatch(/this\.keyframeIntervalFrames = keyframeIntervalFrames;/);
+    // Positive-integer guard: N=0 makes `% 0` → NaN (keyframeless stream).
+    expect(body).toMatch(
+      /if \(!Number\.isInteger\(keyframeIntervalFrames\) \|\| keyframeIntervalFrames < 1\) \{/,
+    );
+    expect(body).toMatch(
+      /keyframeIntervalFrames must be a positive integer \(got \$\{keyframeIntervalFrames\}\)/,
+    );
   });
 
   it("start framing pinned: 'Runs an internal pull loop until the source returns null or stop() is called.' + idle→running guard 'throw EncodePipeline.start: invalid state X' + while-running pull loop + null-frame→framesDropped+=1 + state→stopped + break + endHandler fires post-loop", () => {

@@ -133,6 +133,19 @@ describe('V-531.A EncodePipeline', () => {
     expect(chunks.every((c) => c.isKeyframe)).toBe(true);
   });
 
+  it('rejects a non-positive or non-integer keyframeIntervalFrames (0 → NaN modulo → keyframeless stream)', () => {
+    const source = new MockFrameSource({ maxFrames: 1 });
+    expect(() => new EncodePipeline({ source, keyframeIntervalFrames: 0 })).toThrow(
+      /keyframeIntervalFrames must be a positive integer/,
+    );
+    expect(() => new EncodePipeline({ source, keyframeIntervalFrames: -5 })).toThrow(
+      /keyframeIntervalFrames must be a positive integer/,
+    );
+    expect(() => new EncodePipeline({ source, keyframeIntervalFrames: 1.5 })).toThrow(
+      /keyframeIntervalFrames must be a positive integer/,
+    );
+  });
+
   it('calls onEnd when the source drains', async () => {
     const source = new MockFrameSource({ maxFrames: 3 });
     await source.start(STD_CONFIG);
