@@ -5,7 +5,7 @@
 // design.
 //
 //   • V-704 doc-comment framing + V-703 companion.
-//   • Install: pip install driftstack + poetry/uv variants.
+//   • Install: pip install driftstack-sdk + poetry/uv variants.
 //   • Python ≥ 3.10 + mypy --strict ready.
 //   • Construct: Driftstack(api_key=os.environ[...]) + base_url override.
 //   • Reuse client across process (httpx-pooled + thread/asyncio-safe).
@@ -39,10 +39,13 @@ describe('W511.C apps/marketing-site/src/pages/docs/sdk-python.astro content par
     );
   });
 
-  it('Install path 3-tool pinned: pip install driftstack + poetry add driftstack + uv add driftstack — pinned so the 3-tool install matrix stays consistent (drift to dropping uv would orphan modern-Python users; drift to a different package name would create marketing↔PyPI divergence)', () => {
-    expect(body).toMatch(/pip install driftstack/);
-    expect(body).toMatch(/poetry add driftstack/);
-    expect(body).toMatch(/uv add driftstack/);
+  it('Install path 3-tool pinned: pip install driftstack-sdk + poetry add driftstack-sdk + uv add driftstack-sdk — pinned so the 3-tool install matrix stays consistent (drift to dropping uv would orphan modern-Python users). The PyPI DIST name is driftstack-sdk (the bare `driftstack` is only the IMPORT name); pinning the `-sdk` suffix prevents the marketing↔PyPI divergence that would make every install command fail. Anchored with a word boundary so a bare `driftstack` regresses the test.', () => {
+    expect(body).toMatch(/pip install driftstack-sdk\b/);
+    expect(body).toMatch(/poetry add driftstack-sdk\b/);
+    expect(body).toMatch(/uv add driftstack-sdk\b/);
+    // Guard the regression directly: no install command may target the bare
+    // import name (would install the wrong/nonexistent PyPI package).
+    expect(body).not.toMatch(/(pip install|poetry add|uv add) driftstack(?!-sdk)/);
   });
 
   it("Python ≥ 3.10 + mypy --strict + type-stubs commitment pinned: 'Python ≥ 3.10 is supported. The package ships type stubs; mypy --strict works against the public surface without further config.' — pinned so the 3.10-minimum + mypy-strict commitments survive (drift to a different Python floor would create marketing↔setup.cfg divergence; drift to dropping mypy --strict would let typed users question type completeness)", () => {

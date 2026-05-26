@@ -41,9 +41,19 @@ const FORBIDDEN_PACKAGES: { pattern: RegExp; canonical: string }[] = [
   { pattern: /@driftstack\/api(?![-/\w])/g, canonical: '@driftstack/sdk' },
   { pattern: /@driftstack\/client(?![-/\w])/g, canonical: '@driftstack/sdk' },
   { pattern: /@driftstack\/node(?![-/\w])/g, canonical: '@driftstack/sdk' },
+  // TS — directory-name-as-scope confusion. The npm package is
+  // @driftstack/sdk; the per-language SUFFIX (sdk-typescript / sdk-python /
+  // sdk-go) is the monorepo DIRECTORY, not a published scope.
+  { pattern: /@driftstack\/sdk-(?:typescript|python|go|js|node)\b/g, canonical: '@driftstack/sdk' },
   // Python — fictional PyPI distributions
   { pattern: /\bpip install driftstack-api\b/g, canonical: 'pip install driftstack-sdk' },
   { pattern: /\bpip install driftstack-client\b/g, canonical: 'pip install driftstack-sdk' },
+  // Python — bare IMPORT name used as the install target. The PyPI dist is
+  // driftstack-sdk; `pip install driftstack` (or poetry/uv) installs the
+  // wrong/nonexistent package. `(?!-sdk)` allows the correct form.
+  { pattern: /\bpip install driftstack(?!-sdk)\b/g, canonical: 'pip install driftstack-sdk' },
+  { pattern: /\bpoetry add driftstack(?!-sdk)\b/g, canonical: 'poetry add driftstack-sdk' },
+  { pattern: /\buv add driftstack(?!-sdk)\b/g, canonical: 'uv add driftstack-sdk' },
   // Go — fictional module paths
   {
     pattern: /github\.com\/driftstack\/sdk-go/g,
