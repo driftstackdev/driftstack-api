@@ -81,7 +81,7 @@ recipe is still useful as a transcript-only snapshot.
 |    400 | validation          | body fails schema (missing label, label > 120 chars, description > 2000) |
 |    404 | not-found           | `agent_session_id` doesn't exist or belongs to another account           |
 |    401 | unauthorized        | missing or invalid bearer token                                          |
-|    503 | feature-unavailable | activation gate off (no agent-sessions repo wired in this deployment)    |
+|    503 | feature-unavailable | activation gate off (recipe library or agent-sessions repo not wired)    |
 
 ## Upcoming (v1.1)
 

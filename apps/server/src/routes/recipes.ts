@@ -100,8 +100,9 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
   );
 }
 
-// Disabled stub — registered when recipesRepo is undefined in
-// AppDeps. Same activation-gate pattern as agent-sessions / billing /
+// Disabled stub — registered when recipesRepo OR agentSessionsRepo is
+// undefined in AppDeps (the gate requires both; see app.ts).
+// Same activation-gate pattern as agent-sessions / billing /
 // session-egress. Surfaces 503 FeatureUnavailable so SDK + dashboard
 // get a machine-readable signal vs 404.
 export function registerRecipesDisabledRoutes(app: FastifyInstance): void {
