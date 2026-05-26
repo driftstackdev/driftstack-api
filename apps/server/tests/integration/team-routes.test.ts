@@ -34,6 +34,19 @@ describe('POST /v1/team/invites', () => {
     expect(invites[0]!.role).toBe('admin');
   });
 
+  it('403 when the key lacks account_owner scope (read/write key)', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/team/invites',
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}` },
+      payload: { email: 'invitee@example.test', role: 'admin' },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<{ detail: string }>();
+    expect(body.detail).toContain('account_owner');
+  });
+
   it('400 on malformed email', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

@@ -176,9 +176,14 @@ describe('W1050 routes/team V-298c + V-326c cross-source invariant', () => {
 
   // ─── Auth + rate-limit on every route ────────────────────────
 
-  it('CRITICAL requireAuth + global rate-limit on every team route. The uniform chain prevents anonymous or unrate-limited callers from spamming the invite system.', () => {
+  it('CRITICAL requireAuth + global rate-limit on every team route; account_owner on create-invite + remove-member (V-481).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/team.ts'));
-    const refs = p.match(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\]/g) ?? [];
-    expect(refs.length, 'requireAuth + global rate-limit chain count').toBeGreaterThanOrEqual(6);
+    // create-invite + remove-member now carry app.requireScope('account_owner')
+    // between requireAuth and rateLimit, so count each guard independently
+    // rather than as an adjacent pair. (accept-invite stays scope-free —
+    // the invitee uses their own key.)
+    expect((p.match(/app\.requireAuth/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    expect((p.match(/app\.rateLimit\('global'\)/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    expect((p.match(/app\.requireScope\('account_owner'\)/g) ?? []).length).toBe(2);
   });
 });

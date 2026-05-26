@@ -73,7 +73,7 @@ export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions
 
   app.post(
     '/v1/team/invites',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
@@ -151,7 +151,7 @@ export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions
 
   app.delete<{ Params: { id: string } }>(
     '/v1/team/members/:id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
