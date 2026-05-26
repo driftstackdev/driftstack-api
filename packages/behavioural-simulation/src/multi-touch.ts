@@ -91,8 +91,10 @@ export interface GenerateTwoFingerScrollOpts {
 }
 
 export interface GenerateThreeFingerSwipeOpts {
-  /** Starting position of finger 1 (middle finger); other two
-   *  fingers are `fingerSeparationPx` to either side. */
+  /** Starting position of the MIDDLE finger. Fingers are laid out
+   *  left→right as fingerId 1/2/3, so the middle finger is `fingerId 2`
+   *  (`fingers[1]`) — NOT finger 1. The other two fingers start
+   *  `fingerSeparationPx` to either side. */
   start: { x: number; y: number };
   /** Distance between adjacent fingers (CSS px). Default 60. */
   fingerSeparationPx?: number;
