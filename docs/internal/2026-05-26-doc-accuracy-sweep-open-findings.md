@@ -8,6 +8,31 @@ note surfaces the items that need a **human decision** — they were
 deliberately NOT auto-fixed because the correct resolution depends on
 intent or touches untestable/external state.
 
+## Priority triage (read this first)
+
+Fast index over the 14 open findings, grouped by urgency. Full detail in
+the numbered list below.
+
+- **Do before launch / now (security + go-live gates):**
+  - #4 — rotate the exposed staging Neon password + fix malformed staging `.env` (security).
+  - #6 — trial-pack credit granted but never decremented; "~16h" email + "decrements at session_end" copy are unenforced (LAUNCH GATE before trial-pack goes LIVE).
+  - #8 — profile-snapshot write ops (capture/restore/delete) don't enforce `write:profiles`; a read-scope key can mutate a profile via snapshot restore (security; pre-launch so no break yet).
+- **Live customer-impact (wrong behavior today):**
+  - #13 — webhook rotation-grace dual-`v1=` signing breaks SDK verification for customers who adopt the new secret during grace (LIVE path).
+  - #14 — BYOK-key rotation email links to a 404 dashboard route; no BYOK management UI exists (management is API-only).
+- **Latent, high-impact on a planned event:**
+  - #12 — V-173 forward-path webhook delivery signs bare-hex; breaks ALL SDK verification on the durable-impl cutover. (Fix #12 + #13 together — one webhook-signature pass; both rooted in a missing server-sign→SDK-verify e2e test.)
+- **Contract / intent decisions (pick a direction, then align sources):**
+  - #5 — webhook retry count: code does 4 retries, docs + rationale promise 5; the guard is toothless.
+  - #10 — crypto checkout accepts `trial_pack` but crypto quote 400s it.
+  - #1 — idempotency reference doc describes a TTL-sweep job that doesn't exist.
+  - #3 — TS SDK User-Agent frozen at 0.0.1 vs package.json 0.1.6 (contradictory pin vs W834).
+- **UI / ops / completeness (lower urgency):**
+  - #7 — `pointerToViewport` object-contain mis-mapping (multi-archetype blocker, latent).
+  - #2 — runbook references a one-shot sweep script that was never built.
+  - #9 — env-vars doc completeness.
+  - #11 — OpenAPI spec is a curated subset of the documented customer surface (decide complete vs curated).
+
 ## Open — need your call
 
 1. **idempotency reference doc describes a TTL mechanism that doesn't
