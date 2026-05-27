@@ -39,16 +39,15 @@ describe('W248.B /pricing/comparison doc parity', () => {
     // The page should use the fmtUsd helper exclusively for pricing.
     const stripped = doc.replace(/^---[\s\S]*?---/, '');
     const numeric = Array.from(stripped.matchAll(/\$(\d[\d,]*(?:\.\d+)?)/g)).map((m) => m[1]!);
-    // The page may legitimately reference the trial pack's $2.99 in
-    // narrative copy (it's a one-time price talked about in prose).
-    // Allow that exact literal; flag any other hard-coded price.
-    const offenders = numeric.filter((v) => v !== '2.99');
+    // The free tier ($0) and every paid tier render via the fmtUsd
+    // helper, so no hard-coded price literal should appear at all.
+    const offenders = numeric;
     expect(offenders).toEqual([]);
   });
 
   it('renders rows for every paid tier in API_TIERS', () => {
-    // The doc filters out trial_pack but renders every other tier.
-    expect(doc).toMatch(/paidTiers = API_TIERS\.filter\(\(t\) => t\.id !== 'trial_pack'\)/);
+    // The doc filters out the free tier but renders every other tier.
+    expect(doc).toMatch(/paidTiers = API_TIERS\.filter\(\(t\) => t\.id !== 'free'\)/);
     // Tiers must include the locked list.
     const ids = new Set(API_TIERS.map((t) => t.id));
     for (const id of [

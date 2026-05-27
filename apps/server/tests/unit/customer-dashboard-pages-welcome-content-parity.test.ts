@@ -30,15 +30,15 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).not.toMatch(/Driftstack runs real iPhone Safari sessions/);
   });
 
-  it('Trial-pack framing pinned: $2.99 · one-time + 16h + 14d + recommended-first-step language', () => {
+  it('Start-free card framing pinned: $0 · no card + already-on-free-plan + create-first-session CTA', () => {
     expect(body).toMatch(
-      /<span class="font-mono text-sm text-glow-red-soft">\$2\.99 · one-time<\/span>/,
+      /<span class="font-mono text-sm text-glow-red-soft">\$0 · no card<\/span>/,
     );
     expect(body).toMatch(
-      /16 hours of session time\. No subscription, no auto-renewal\.\s*\n?\s*14-day window\. The best way to try Driftstack before committing —\s*\n?\s*most first-time customers start here\./,
+      /Your account is already on the free plan: 1 profile, 1 concurrent\s*\n?\s*session, manual-only\. No subscription, no expiry — the best way to\s*\n?\s*try Driftstack before committing\./,
     );
     expect(body).toMatch(
-      /<a href="\/select-tier\?focus=trial" class="btn-primary mt-4 inline-flex">\s*\n?\s*Start trial pack\s*\n?\s*<\/a>/,
+      /<a href="\/first-session" class="btn-primary mt-4 inline-flex">\s*\n?\s*Create your first session\s*\n?\s*<\/a>/,
     );
   });
 
@@ -47,7 +47,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
       /<span class="font-mono text-sm text-ink-muted">\$79–\$1,499 \/ mo<\/span>/,
     );
     expect(body).toMatch(
-      /Skip the trial and subscribe right away — Solo Manual for hand-\s*\n?\s*driven sessions, all the way up to API Scale for high-volume\s*\n?\s*automation\. Cancel anytime\./,
+      /Upgrade to a paid plan for more concurrency, more profiles, and API\s*\n?\s*access — Solo Manual for hand-\s*\n?\s*driven sessions, all the way up to API Scale for high-volume\s*\n?\s*automation\. Cancel anytime\./,
     );
     expect(body).toMatch(
       /<a href="\/select-tier" class="btn-secondary mt-4 inline-flex">View tiers<\/a>/,
@@ -56,9 +56,12 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
 
   it("'What happens next' 3-step framing pinned (R6 numbered-circle visual + simpler copy)", () => {
     expect(body).toMatch(/aria-label="What happens next"/);
-    // Step 1 — Stripe redirect + "we never see them" reassurance.
+    // Step 1 — start-free-or-pick-paid + Stripe redirect + "we never see them" reassurance.
     expect(body).toMatch(
-      /We'll send you to Stripe to confirm payment\. Your card details\s*\n?\s*stay between you and Stripe — we never see them\./,
+      /Start free with no card — or pick a paid tier and we'll send you\s*\n?\s*to Stripe to confirm payment\./,
+    );
+    expect(body).toMatch(
+      /Your card details stay between you\s*\n?\s*and Stripe — we never see them\./,
     );
     // Step 2 — first session = iPhone Safari instance with optional
     // proxy/VPN egress. 2026-05-16 honesty pass dropped "real"; 2026-

@@ -25,7 +25,7 @@
 //     which is the opposite of the now-shipped reality.)
 //   • 'concrete demand reorders the deck' CTA framing.
 //   • 2-button bottom CTA: Email us (mailto) + Try the platform
-//     (/pricing#trial-pack).
+//     (/pricing#free).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -145,13 +145,11 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
     expect(body).toMatch(/On the deck\./);
   });
 
-  it("Bottom CTA 2-button row: 'Email us' → mailto:support@driftstack.dev (primary) + 'Try the platform' → /pricing#trial-pack (secondary) — pinned so the influence-channel + the conversion-path both stay visible at page bottom (drift to dropping Try the platform would lose the trial-pack funnel pull from a roadmap reader who's evaluating)", () => {
+  it("Bottom CTA 2-button row: 'Email us' → mailto:support@driftstack.dev (primary) + 'Try the platform' → /pricing#free (secondary) — pinned so the influence-channel + the conversion-path both stay visible at page bottom (drift to dropping Try the platform would lose the free-tier funnel pull from a roadmap reader who's evaluating)", () => {
     expect(body).toMatch(
       /<a href="mailto:support@driftstack\.dev" class="btn-primary">Email us<\/a>/,
     );
-    expect(body).toMatch(
-      /<a href="\/pricing#trial-pack" class="btn-secondary">Try the platform<\/a>/,
-    );
+    expect(body).toMatch(/<a href="\/pricing#free" class="btn-secondary">Try the platform<\/a>/);
   });
 
   it('file exists at canonical path', () => {

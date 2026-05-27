@@ -4,10 +4,10 @@
 //
 // Pins apps/marketing-site/src/data/pricing.ts as the single source
 // of truth for marketing-site pricing copy. ADR-004 (two-ladder
-// concurrent-only restructure) + ADR-003 (trial-pack mechanics)
-// jointly lock these numbers — drift here would silently mismatch
-// what the customer sees vs what Stripe / server-side actually
-// charges + enforces.
+// concurrent-only restructure) locks these numbers — drift here would
+// silently mismatch what the customer sees vs what Stripe / server-
+// side actually charges + enforces. The one-time trial pack was
+// retired 2026-05-27 and replaced by the perpetual free tier.
 //
 // Tier roster MUST match AccountTier enum from W728 (api-types).
 
@@ -30,10 +30,10 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(existsSync(PRICING)).toBe(true);
   });
 
-  it('CRITICAL ADR-004 + ADR-003 + V-073 anchors pinned in pricing.ts header. ADR-004 = two-ladder restructure; ADR-003 = trial-pack mechanics; V-073 = server-side TIER_CONCURRENT_SESSION_LIMITS sync.', () => {
+  it('CRITICAL ADR-004 + V-073 anchors pinned in pricing.ts header + free-tier-replaces-trial-pack note. ADR-004 = two-ladder restructure; V-073 = server-side TIER_CONCURRENT_SESSION_LIMITS sync; the perpetual free tier replaced the one-time trial pack 2026-05-27.', () => {
     const p = read(PRICING);
     expect(p).toMatch(/Per ADR-004 \(two-ladder concurrent-only restructure/);
-    expect(p).toMatch(/Trial pack mechanics survive intact per ADR-003/);
+    expect(p).toMatch(/The perpetual free tier replaced the one-time trial pack 2026-05-27\./);
     expect(p).toMatch(
       /Backend equivalent at apps\/server\/src\/services\/sessions\.ts\s*\n\/\/\s*\(TIER_CONCURRENT_SESSION_LIMITS, PROFILES_PER_TIER\) per V-073/,
     );
@@ -182,19 +182,10 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     }
   });
 
-  it('CRITICAL TRIAL_PACK constants pinned as `as const` — $2.99 + 299 cents + $0.18/hr meter rate + 16 hrs approx + 14-day window + 1 concurrent + once-per-account. Matches ADR-003 trial-pack mechanic.', () => {
+  it('CRITICAL TRIAL_PACK const removed — the one-time trial pack was retired 2026-05-27 (replaced by the perpetual free tier). No TRIAL_PACK export may return.', () => {
     const p = read(PRICING);
-
-    expect(p).toMatch(/export const TRIAL_PACK = \{[\s\S]+?\} as const;/);
-    expect(p).toMatch(/priceUsd: 2\.99,/);
-    expect(p).toMatch(/creditCents: 299,/);
-    expect(p).toMatch(
-      /meterRate: '\$0\.18 per concurrent-hour \(per ADR-003 trial-pack mechanic\)',/,
-    );
-    expect(p).toMatch(/hoursApprox: 16,/);
-    expect(p).toMatch(/windowDays: 14,/);
-    expect(p).toMatch(/concurrent: 1,/);
-    expect(p).toMatch(/oncePerAccount: true,/);
+    expect(p).not.toMatch(/export const TRIAL_PACK/);
+    expect(p).not.toMatch(/oncePerAccount/);
   });
 
   it("CRITICAL ANNUAL_DISCOUNT_LABEL pinned at '20% off annual'. Drift would mismatch the discount-line copy on /pricing.", () => {
@@ -250,14 +241,20 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/self_hosted_enterprise: 'Build artifacts \+ read-only repo audit'/);
   });
 
-  it('CRITICAL all 7 paid API_TIERS use the trial-funnel CTA — "Start with $2.99" → /pricing#trial-pack. The funnel design forces every paid signup through the trial pack first (matches ADR-003).', () => {
+  it('CRITICAL paid manual + API tiers use the "Get started" → /signup CTA (trial-funnel CTA retired with the trial pack 2026-05-27). The 6 non-enterprise paid tiers send signups straight to /signup; the free tier uses "Get started — free".', () => {
     const p = read(PRICING);
 
-    // 6 paid tiers (excluding enterprise + trial_pack itself) use the trial-funnel CTA.
-    const trialCtaMatches = (
-      p.match(/cta: \{ label: 'Start with \$2\.99', href: '\/pricing#trial-pack' \}/g) ?? []
-    ).length;
-    expect(trialCtaMatches, 'paid tiers using trial-funnel CTA').toBeGreaterThanOrEqual(6);
+    // 6 paid non-enterprise tiers use the direct /signup CTA.
+    const signupCtaMatches = (p.match(/cta: \{ label: 'Get started', href: '\/signup' \}/g) ?? [])
+      .length;
+    expect(signupCtaMatches, 'paid tiers using the /signup CTA').toBeGreaterThanOrEqual(6);
+
+    // The free tier uses its own free-framed CTA.
+    expect(p).toMatch(/cta: \{ label: 'Get started — free', href: '\/signup' \}/);
+
+    // The retired trial-funnel CTA must NOT return.
+    expect(p).not.toMatch(/Start with \$2\.99/);
+    expect(p).not.toMatch(/\/pricing#trial-pack/);
   });
 
   it('CRITICAL ApiTier interface 16+ field shape pinned — id + tierType + name + monthly/annual triple + profiles + hoursLabel + overagePerHourUsd + concurrent + archetypeAccess + support + audience + aiAgent + llmBilling + cta + highlight? + oneTime?. Drift to dropping a field would break the marketing pricing table render.', () => {
@@ -292,11 +289,11 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     }
   });
 
-  it('Pricing 6-invariant cluster — ADR-004 + ADR-003 + V-073 anchors + 8-tier roster matching W728 + TRIAL_PACK $2.99/16h/14d + ANNUAL_DISCOUNT 20% + SELF_HOSTED 3-tier + V-131 differentiators + trial-funnel CTA on every paid tier.', () => {
+  it('Pricing invariant cluster — ADR-004 + V-073 anchors + 8-tier roster matching W728 + free-tier-replaces-trial-pack note + ANNUAL_DISCOUNT 20% + SELF_HOSTED 3-tier + V-131 differentiators + /signup CTA on every paid tier.', () => {
     const p = read(PRICING);
 
     expect(p).toMatch(/ADR-004/);
-    expect(p).toMatch(/ADR-003/);
+    expect(p).toMatch(/The perpetual free tier replaced the one-time trial pack 2026-05-27\./);
     expect(p).toMatch(/V-073/);
     expect(p).toMatch(/V-131/);
 

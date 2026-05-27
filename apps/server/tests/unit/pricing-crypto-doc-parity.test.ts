@@ -39,10 +39,9 @@ describe('W247.C /pricing/crypto doc parity', () => {
     expect(byId.get('api_scale')!.monthlyUsd).toBe(1_499);
   });
 
-  it('crypto-payable list still references the six paid tiers + trial', () => {
+  it('crypto-payable list references the six paid tiers (free not purchasable; trial pack retired)', () => {
     expect(doc).toMatch(/CRYPTO_PAYABLE_TIER_IDS/);
     for (const id of [
-      'trial_pack',
       'solo_manual',
       'team_manual',
       'agency_manual',
@@ -52,6 +51,7 @@ describe('W247.C /pricing/crypto doc parity', () => {
     ]) {
       expect(doc).toContain(`'${id}'`);
     }
+    expect(doc).not.toContain(`'trial_pack'`);
   });
 
   it('keeps the accepted currencies list', () => {

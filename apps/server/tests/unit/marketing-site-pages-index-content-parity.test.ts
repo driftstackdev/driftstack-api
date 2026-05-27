@@ -21,7 +21,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
 
   it("F-2 (Issue 4) BaseLayout title='Driftstack' + revised SEO description leads with 'Pixel-identical' outcome (drops 'Real iPhone Safari' implementation-leak claim) and lists API/SDK/GUI access paths", () => {
     expect(body).toMatch(
-      /<BaseLayout\s*\n?\s*title="Driftstack"\s*\n?\s*description="Pixel-identical iPhone Safari sessions in the cloud\. Bit-identical canvas, WebGL, audio, and user-agent — no runtime patching, no stealth plugins, nothing for detection to find\. API, SDK, or GUI\. Try it for \$2\.99\."/,
+      /<BaseLayout\s*\n?\s*title="Driftstack"\s*\n?\s*description="Pixel-identical iPhone Safari sessions in the cloud\. Bit-identical canvas, WebGL, audio, and user-agent — no runtime patching, no stealth plugins, nothing for detection to find\. API, SDK, or GUI\. Start free\."/,
     );
   });
 
@@ -64,14 +64,12 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     );
   });
 
-  it("Hero CTAs + trial-pack subline (R5: 'Start for $2.99' + M.3 Plan Item 2 'Compare the alternatives' generic CTA — replaces 'Why not Browserless?' which gave free SEO to a competitor and read defensive). The 2026-05-19 polish stripped the mobile-responsive w-full sm:w-auto wrappers since the hero already uses flex-wrap; the buttons relax to their natural width on small screens via the parent container.", () => {
-    expect(body).toMatch(
-      /<a href="\/pricing#trial-pack" class="btn-primary">Start for \$2\.99<\/a>/,
-    );
+  it("Hero CTAs + free-tier subline (R5: 'Start free' → /pricing#free + M.3 Plan Item 2 'Compare the alternatives' generic CTA — replaces 'Why not Browserless?' which gave free SEO to a competitor and read defensive). The 2026-05-19 polish stripped the mobile-responsive w-full sm:w-auto wrappers since the hero already uses flex-wrap; the buttons relax to their natural width on small screens via the parent container.", () => {
+    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
     expect(body).toMatch(
       /<a href="\/comparison" class="btn-secondary">Compare the alternatives<\/a>/,
     );
-    expect(body).toMatch(/16 hours of session time · 14-day window · one trial per account\./);
+    expect(body).toMatch(/One profile · unlimited manual sessions · no card required\./);
     // The defensive "Why not Browserless?" CTA must NOT return.
     expect(body).not.toMatch(/Why not Browserless\?/);
   });
@@ -132,8 +130,8 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     );
   });
 
-  it("Pricing teaser: 'Two ladders. One trial pack to start.' + 20% annual savings", () => {
-    expect(body).toMatch(/Two ladders\. One trial pack to start\./);
+  it("Pricing teaser: 'Two ladders. A free tier to start.' + 20% annual savings", () => {
+    expect(body).toMatch(/Two ladders\. A free tier to start\./);
     expect(body).toMatch(/Annual contracts save 20%\./);
   });
 
@@ -156,8 +154,8 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/Multi-account operations/);
   });
 
-  it('R12 final-CTA pinned: "See it for yourself. $2.99." headline + Read the docs secondary CTA — replaces the prior "Try Driftstack for $2.99." copy', () => {
-    expect(body).toMatch(/See it for yourself\. \$2\.99\./);
+  it('R12 final-CTA pinned: "See it for yourself. Free." headline + Read the docs secondary CTA', () => {
+    expect(body).toMatch(/See it for yourself\. Free\./);
     expect(body).toMatch(/Read the docs/);
     expect(body).toMatch(/<a href="https:\/\/docs\.driftstack\.dev" class="btn-secondary">/);
   });

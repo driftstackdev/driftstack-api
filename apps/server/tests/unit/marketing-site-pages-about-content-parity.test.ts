@@ -15,8 +15,8 @@
 //   • Company facts 6-entry dl: Entity Dutch BV / HQ Netherlands /
 //     Team solo founder + contractors / Funding bootstrapped no VC /
 //     Sub-processors link / Contact hello@driftstack.dev.
-//   • Trial-pack bottom CTA: $2.99 / 16 hours / once per account /
-//     14-day window.
+//   • Free-tier bottom CTA: one profile / unlimited manual sessions /
+//     no card / perpetual.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -142,14 +142,12 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     expect(body).toMatch(/<dd class="text-sm text-ink-primary">hello@driftstack\.dev<\/dd>/);
   });
 
-  it("Trial-pack bottom CTA: 'Want to try it?' + '$2.99 buys 16 hours of iPhone Safari sessions to evaluate. Used once per account, 14-day window, no card-charging surprises.' + 'Get started — $2.99' button → /pricing#trial-pack — pinned so the trial-pack value-prop (16h / once-per-account / 14d) + the no-card-surprises reassurance + the CTA destination all survive (drift to dropping 'no card-charging surprises' would lose the 'this is not a subscription trap' framing)", () => {
+  it("Free-tier bottom CTA: 'Want to try it?' + 'Start free — one profile, unlimited manual sessions on real iPhone Safari, no card required. Perpetual, no expiry.' + 'Start free' button → /pricing#free — pinned so the free-tier value-prop (one profile / unlimited manual / no card / perpetual) + the CTA destination all survive (drift would re-introduce the retired trial-pack framing)", () => {
     expect(body).toMatch(/Want to try it\?/);
     expect(body).toMatch(
-      /\$2\.99 buys 16 hours of iPhone Safari sessions to evaluate\.\s*\n?\s*Used once per account, 14-day window, no card-charging surprises\./,
+      /Start free — one profile, unlimited manual sessions on real\s*\n?\s*iPhone Safari, no card required\. Perpetual, no expiry\./,
     );
-    expect(body).toMatch(
-      /<a href="\/pricing#trial-pack" class="btn-primary">Get started — \$2\.99<\/a>/,
-    );
+    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
   });
 
   it('file exists at canonical path', () => {

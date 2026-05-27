@@ -15,7 +15,7 @@
 //     drift-correction path.
 //   • When NOT Driftstack 3-card: Desktop-only / Pure HTML scraping /
 //     IP-pool-as-product.
-//   • $2.99 / 16 hours / used once trial-pack CTA.
+//   • Free-tier CTA: one profile / manual / perpetual.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -119,11 +119,9 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
     );
   });
 
-  it("Bottom CTA: '$2.99 trial pack — 16 hours, used once.' + 'Start trial — $2.99' → /pricing#trial-pack — pinned so the canonical trial-pack copy (16h / used once) + the conversion path stays consistent across pages (drift would create cross-page mechanic divergence)", () => {
-    expect(body).toMatch(/\$2\.99 trial pack — 16 hours, used once\./);
-    expect(body).toMatch(
-      /<a href="\/pricing#trial-pack" class="btn-primary">Start trial — \$2\.99<\/a>/,
-    );
+  it("Bottom CTA: 'Free tier — one profile, manual, perpetual.' + 'Start free' → /pricing#free — pinned so the canonical free-tier copy (one profile / manual / perpetual) + the conversion path stays consistent across pages (drift would create cross-page mechanic divergence)", () => {
+    expect(body).toMatch(/Free tier — one profile, manual, perpetual\./);
+    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
   });
 
   it('file exists at canonical path', () => {

@@ -47,15 +47,14 @@ describe('W504.C apps/marketing-site/src/pages/legal/refunds.md content parity',
     expect(body).toMatch(/\*\*Mistaken duplicate charge\.\*\*/);
   });
 
-  it("4-scenario refund DENIAL: 'Mid-cycle cancellation of a monthly Subscription' + 'Tier downgrade' + 'Usage that exceeded customer expectations' + 'Trial Pack credit not consumed within its 14-day window' — pinned so the 4-denial-scenarios stay explicit (drift to dropping any denial scenario would let customers reasonably expect a refund where the policy says no, creating dispute volume)", () => {
+  it("3-scenario refund DENIAL: 'Mid-cycle cancellation of a monthly Subscription' + 'Tier downgrade' + 'Usage that exceeded customer expectations' — pinned so the denial scenarios stay explicit (drift to dropping any denial scenario would let customers reasonably expect a refund where the policy says no, creating dispute volume)", () => {
     expect(body).toMatch(/Mid-cycle cancellation of a monthly Subscription/);
     expect(body).toMatch(
       /- Tier downgrade\. The downgrade takes effect at the next renewal;\s*\n?\s*no proration is issued for the unused portion of the current tier\./,
     );
     expect(body).toMatch(/Usage that exceeded customer expectations/);
-    expect(body).toMatch(
-      /Trial Pack credit not consumed within its 14-day window\. The\s*\n?\s*credit forfeits at expiry; the Trial Pack itself is non-refundable\./,
-    );
+    // The retired trial-pack non-consumed denial scenario must NOT return.
+    expect(body).not.toMatch(/Trial Pack/);
   });
 
   it('Card refund mechanics: support@driftstack.dev → Stripe → 5–10 business days — pinned so the 3-step card-refund flow + the 5–10-business-day-timing stays consistent (drift to a different processor would create marketing↔operational divergence; drift to changing the timing would create unrealistic customer expectations)', () => {

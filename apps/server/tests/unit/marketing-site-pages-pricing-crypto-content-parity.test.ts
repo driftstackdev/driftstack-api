@@ -7,7 +7,7 @@
 //
 //   • V-674 doc-comment framing + NowPayments stub posture description.
 //   • W247.C — API_TIERS sourced labels.
-//   • CRYPTO_PAYABLE_TIER_IDS 7-tier list: trial_pack + 3 Manual + 3 API
+//   • CRYPTO_PAYABLE_TIER_IDS 6-tier list: 3 Manual + 3 API (free not purchasable)
 //     (no Enterprise — that lands in a wire/invoice flow).
 //   • ACCEPTED_CURRENCIES 5-currency list: BTC / ETH / USDC ERC-20 /
 //     USDT ERC-20 / USDC Polygon.
@@ -52,10 +52,18 @@ describe('W502.B apps/marketing-site/src/pages/pricing/crypto.astro content pari
     expect(body).toMatch(/import \{ API_TIERS \} from '\.\.\/\.\.\/data\/pricing\.ts';/);
   });
 
-  it("CRYPTO_PAYABLE_TIER_IDS 7-tier list: trial_pack + solo_manual + team_manual + agency_manual + api_starter + api_builder + api_scale — pinned so the crypto-payable tier scope stays consistent (drift to adding 'enterprise' would over-promise crypto for the wire/invoice tier; drift to dropping a self-serve tier would block crypto for that-tier customers)", () => {
-    expect(body).toMatch(
-      /const CRYPTO_PAYABLE_TIER_IDS = \[\s*\n?\s*'trial_pack',\s*\n?\s*'solo_manual',\s*\n?\s*'team_manual',\s*\n?\s*'agency_manual',\s*\n?\s*'api_starter',\s*\n?\s*'api_builder',\s*\n?\s*'api_scale',\s*\n?\s*\];/,
-    );
+  it("CRYPTO_PAYABLE_TIER_IDS 6-tier list: solo_manual + team_manual + agency_manual + api_starter + api_builder + api_scale (free tier is not purchasable; trial pack retired) — pinned so the crypto-payable tier scope stays consistent (drift to adding 'enterprise' would over-promise crypto for the wire/invoice tier; drift to dropping a self-serve tier would block crypto for that-tier customers)", () => {
+    const block = body.match(/const CRYPTO_PAYABLE_TIER_IDS = \[([\s\S]*?)\];/);
+    expect(block).not.toBeNull();
+    const ids = Array.from(block![1]!.matchAll(/'([a-z_]+)'/g)).map((m) => m[1] as string);
+    expect(ids).toEqual([
+      'solo_manual',
+      'team_manual',
+      'agency_manual',
+      'api_starter',
+      'api_builder',
+      'api_scale',
+    ]);
   });
 
   it('ACCEPTED_CURRENCIES 5-asset list: BTC + ETH + USDC (ERC-20) + USDT (ERC-20) + USDC (Polygon) — pinned so the 5-currency scope stays consistent (drift to dropping USDC Polygon would lose the fast-settle option; drift to adding an unsupported asset would mislead customers about what NowPayments will actually accept)', () => {

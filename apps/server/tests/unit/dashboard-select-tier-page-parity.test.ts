@@ -31,10 +31,10 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     expect(p).toMatch(/highlights, AI-agent gating row, etc\.\) lands in V-184b draft/);
   });
 
-  it('CRITICAL "Change plan" reuse framing pinned. The page is reachable BOTH from V-184a onboarding AND from /billing "Change plan" — trial-pack CTA hidden when account has active subscription.', () => {
+  it('CRITICAL "Change plan" reuse framing pinned. The page is reachable BOTH from V-184a onboarding AND from /billing "Change plan" — every account starts on the perpetual free tier; cards upgrade to a paid tier.', () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /"Change plan" reuse: this same page is reachable from \/billing\s*\n\/\/\s+"Change plan" link \(post-onboarding\) — the trial-pack CTA is\s*\n\/\/\s+hidden when the account already has an active subscription/,
+      /"Change plan" reuse: this same page is reachable from \/billing\s*\n\/\/\s+"Change plan" link \(post-onboarding\)\. Every account starts on the\s*\n\/\/\s+perpetual free tier; the cards below upgrade to a paid tier/,
     );
   });
 
@@ -83,14 +83,12 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     }
   });
 
-  it('CRITICAL trial-pack card pricing + 14-day-window + 1-concurrent + once-per-account framing pinned. Matches W729 TRIAL_PACK constants.', () => {
+  it('CRITICAL free-plan note pinned — $0 perpetual / 1 profile / 1 concurrent / manual-only / no card / never expires.', () => {
     const p = read(PAGE);
 
-    // 2026-05-23 — h2 wrapped with leading icon (lightning bolt);
-    // pin loosened to label-presence + spec invariant.
-    expect(p).toMatch(/Trial pack — \$2\.99/);
+    expect(p).toMatch(/You're on the free plan/);
     expect(p).toMatch(
-      /16 hours of iPhone Safari sessions\. 1 concurrent\. 14-day window\.\s*\n\s+Once per account/,
+      /Free includes 1 profile, 1 concurrent session, and manual-only\s*\n\s+sessions — no card required, and it never expires/,
     );
   });
 
@@ -105,14 +103,6 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     expect(p).not.toMatch(/Cancel anytime; pro-rated refunds within the first 14 days/);
   });
 
-  it('CRITICAL trial-pack POST /v1/billing/trial-pack contract pinned — body {success_url, cancel_url}. success_url lands on /first-session?trial=ok; cancel_url returns to /select-tier. Drift would break the post-checkout return path.', () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(
-      /authedFetch\('\/v1\/billing\/trial-pack', \{\s*\n\s+method: 'POST',\s*\n\s+body: JSON\.stringify\(\{\s*\n\s+success_url: window\.location\.origin \+ '\/first-session\?trial=ok',\s*\n\s+cancel_url: window\.location\.origin \+ '\/select-tier',/,
-    );
-  });
-
   it("CRITICAL paid-tier POST /v1/billing/checkout-session contract pinned — body {tier, billing_period:'monthly', success_url, cancel_url}. success_url lands on /first-session?subscribed=<tier>; cancel_url returns to /select-tier.", () => {
     const p = read(PAGE);
 
@@ -124,11 +114,12 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
   it('CRITICAL on-checkout-response redirect to body.checkout_url. The redirect IS the Stripe handoff; drift to dropping would leave customers stuck on /select-tier with no path forward.', () => {
     const p = read(PAGE);
 
-    // Both trial-pack + paid-tier flows redirect to body.checkout_url.
+    // The paid-tier checkout-session flow redirects to body.checkout_url
+    // (the one-time trial-pack flow was retired; crypto uses a modal).
     const redirects = (
       p.match(/if \(body\.checkout_url\) window\.location\.href = body\.checkout_url/g) ?? []
     ).length;
-    expect(redirects, 'body.checkout_url redirects').toBe(2);
+    expect(redirects, 'body.checkout_url redirects').toBe(1);
   });
 
   it("CRITICAL authedFetch helper bundles Bearer auth + content-type + credentials:'include'. Every billing-route call goes through this helper. Drift to inlining would let some calls miss the auth header.", () => {
@@ -139,12 +130,12 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     );
   });
 
-  it("CRITICAL Sign-up-first guard pinned on both buttons. When localStorage.ds_web_session_token is missing, the button shows 'Sign up first.' banner instead of firing the API call. Drift to skipping would let unauthed clicks hit /v1/billing/* with no Bearer + return 401.", () => {
+  it("CRITICAL Sign-up-first guard pinned on the paid-tier checkout button. When localStorage.ds_web_session_token is missing, the button shows 'Sign up first.' banner instead of firing the API call. Drift to skipping would let unauthed clicks hit /v1/billing/* with no Bearer + return 401.", () => {
     const p = read(PAGE);
 
     const guards = (p.match(/if \(!token\) \{\s*\n\s+showBanner\('Sign up first\.'\)/g) ?? [])
       .length;
-    expect(guards, 'Sign-up-first guard on trial + paid tiers').toBe(2);
+    expect(guards, 'Sign-up-first guard on the paid-tier checkout').toBe(1);
   });
 
   it('CRITICAL Enterprise tier contact-sales mailto pinned. The Enterprise tier ($4,000/mo) is OUT of the self-service grid — customers contact sales@driftstack.dev. Matches W729 enterprise sales-only design.', () => {

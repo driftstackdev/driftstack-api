@@ -83,7 +83,7 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     const p = read(PAGE);
 
     const tierCaps: Array<[string, string]> = [
-      ['Trial pack', '1'],
+      ['Free', '1'],
       ['Solo Manual', '1'],
       ['Team Manual', '3'],
       ['Agency Manual', '8'],

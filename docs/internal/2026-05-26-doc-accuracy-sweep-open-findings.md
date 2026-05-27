@@ -15,7 +15,7 @@ the numbered list below.
 
 - **Do before launch / now (security + go-live gates):**
   - #4 — rotate the exposed staging Neon password + fix malformed staging `.env` (security).
-  - #6 — trial-pack credit granted but never decremented; "~16h" email + "decrements at session_end" copy are unenforced (LAUNCH GATE before trial-pack goes LIVE).
+  - #6 — [RESOLVED 2026-05-27, e6cb9b99] resolved by deletion: trial_pack replaced entirely by a perpetual FREE tier (no credit/expiry/metering); credit columns + applyTrialPackPurchase dropped, so "granted but never decremented" is moot and the "~16h" copy is gone. Launch gate satisfied (purchase path retired).
   - #8 — [RESOLVED 2026-05-27] profile-snapshot write ops now enforce `write:profiles` (route-level requireScope on capture/restore/delete) + proof tests; closed the read-scope→profile-mutation gap.
 - **Live customer-impact (wrong behavior today):**
   - #13 — RESOLVED 2026-05-27: webhook rotation-grace dual-`v1=` verification fixed across all 3 SDKs (collect-all-`v1`, accept any). Was a LIVE-path bug.
@@ -25,7 +25,7 @@ the numbered list below.
   - #15 — LLM cost rate card models 4o-mini but the agent runs Opus 4.7 (~100× under-estimate); inert until LLM usage metering lands, then (a) under-reports bundled-LLM margin alerts AND (b) makes the customer-facing bundled-LLM budget soft-cap deplete ~100× too slowly (customers get ~100× more bundled Opus than the cap intends). Rate must be right in the writer BEFORE bundled-LLM goes LIVE. (Fix with #6 / V-541.J/K — same deferred metering subsystem.)
 - **Contract / intent decisions (pick a direction, then align sources):**
   - #5 — [RESOLVED 2026-05-27, 0a3e5cca] webhook retry count fixed to the documented 5 retries / 6 attempts (founder approved option a); all 3 impls bumped to MAX=6, customer docs reconciled, the toothless guard now asserts numeric cross-source equality.
-  - #10 — crypto checkout accepts `trial_pack` but crypto quote 400s it.
+  - #10 — [RESOLVED 2026-05-27, e6cb9b99] resolved by deletion: `trial_pack` removed from `TIER_PRICE_CENTS`, so crypto checkout no longer accepts it — matching the quote route. Both agree now; the free tier is $0/not purchasable.
   - #1 — [RESOLVED 2026-05-27] idempotency reference doc described a TTL-sweep job that doesn't exist; rewritten to real per-subsystem behaviour.
   - #3 — TS SDK User-Agent frozen at 0.0.1 vs package.json 0.1.6 (contradictory pin vs W834).
 - **UI / ops / completeness (lower urgency):**
@@ -161,31 +161,23 @@ MAX_ATTEMPTS` with `MAX_ATTEMPTS = 5` (`apps/server/src/services/
      advertise, but still a prod behaviour change. Founder one-line approve of
      (a) unblocks it.
 
-6. **Trial-pack credit is granted but never consumed — the "~16 hours"
-   promise + "decrements at session_end" comments are unenforced (launch
-   gate).** `trial_pack_credit_cents` is granted at purchase
-   (`stripe-webhooks-repo.ts:146` = `DEFAULT_TRIAL_PACK_CREDIT_CENTS`) and
-   read for the `active` check + `creditCentsRemaining` display
-   (`billing.ts:235,241`), but **nothing decrements it** — exhaustive grep
-   finds no decrement in any service/repo/session-end hook. This is a known
-   downstream consequence of the deferred usage-metering subsystem:
-   `usage.ts:216` states "the buckets are all empty because usage_records
-   writers aren't wired in production code", and `cost-aggregator.ts:14,17`
-   mark the writers as **V-541.J/K follow-ups**. So the missing decrement is
-   deferred-by-design, NOT a stray bug. BUT two surfaces overstate
-   enforcement: (a) the trial email (`email.ts:422,424`) tells customers
-   "Credit remaining: N cents (~16 hours of iPhone Safari sessions at
-   $0.18/hr)" — an hours-cap that is not metered; (b) `usage.ts:46` and
-   `migrations/0010_billing.sql:6` say the credit "decrements at session_end"
-   in the **present tense**, which is false today. Trial-pack is pre-LIVE
-   (Stripe test mode until post-BV/KvK), so no paying customer is misled yet.
-   **Launch gate / decide:** before trial-pack goes LIVE, either (a) land the
-   usage_records writers + session-end credit decrement (V-541.J/K) so the
-   16h/$0.18-hr cap is actually enforced, or (b) soften the email copy +
-   make the "decrements at session_end" comments future-tense if the real
-   bound is the 14-day expiry, not the credit cap. NOT auto-fixed: which
-   bound is the product intent is a founder call, and the email copy is
-   parity-pinned.
+6. **[RESOLVED 2026-05-27, e6cb9b99 — by deletion]** The original finding
+   was that `trial_pack_credit_cents` was granted at purchase but nothing
+   ever decremented it, while the trial email + `migrations/0010_billing.sql`
+   promised "~16 hours" / "decrements at session_end" — unenforced, a launch
+   gate before trial-pack went LIVE. Founder resolution: replace the one-time
+   trial_pack ENTIRELY with a perpetual FREE tier (1 profile, manual-only, no
+   AI, no credit, no expiry, no metering). The structural commit dropped the
+   `trial_pack_purchased_at` / `trial_pack_credit_cents` / `trial_pack_expires_at`
+   / `trial_pack_redeemed` columns (migration `0065_retire_trial_pack_free_tier.sql`),
+   removed `applyTrialPackPurchase` + `DEFAULT_TRIAL_PACK_CREDIT_CENTS`, and
+   renamed the `trial_pack` tier enum value to `free`. With no credit ever
+   granted, "granted but never decremented" is moot and the "~16h" copy is
+   gone; the launch gate is satisfied because the purchase path is retired
+   (`/v1/billing/trial-pack` is now a disabled-route stub). Residual (cosmetic,
+   non-gating): the disabled stub + the dead trial-pack email template + dead
+   account-lifecycle trial events can be removed in a later "retire trial-pack
+   billing product" cleanup; they grant no credit and send to no one.
 
 7. **`pointerToViewport` assumes `object-fill` but the `<video>` is
    `object-contain` — latent click mis-mapping, a multi-archetype blocker.**
@@ -280,24 +272,17 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
    the central config Zod schema (DATABASE_URL etc., already documented) were
    not re-swept — the 6 above were the known operator-facing gap.
 
-10. **Crypto quote vs checkout product lists disagree on `trial_pack`
-    (minor).** Crypto **checkout** derives its accepted-product enum from
-    `TIER_PRICE_CENTS` keys (`billing-crypto.ts:96` —
-    `Object.keys(TIER_PRICE_CENTS)`), which includes 7 products **incl.
-    `trial_pack`**. But the crypto **quote** route hardcodes a 6-product list
-    (`billing-crypto-quote.ts:26`) — the recurring tiers only, **omitting
-    `trial_pack`** (and enterprise). So `POST /v1/billing/crypto-checkout`
-    accepts `product: 'trial_pack'`, but `POST
-/v1/billing/crypto-checkout/quote` 400s for it. Both routes price from
-    the same `TIER_PRICE_CENTS` (no price divergence), and the quote 400 is
-    graceful (not a crash), so impact is low — a customer can crypto-checkout
-    the $2.99 trial but can't get a crypto _quote_ for it first. **Decide:**
-    either `trial_pack` should be crypto-quotable (derive the quote list from
-    `TIER_PRICE_CENTS` too, matching checkout), or the $2.99 one-time trial
-    should NOT be crypto-checkout-able (Stripe-only) and should be excluded
-    from `TIER_PRICE_CENTS` / the checkout enum. NOT auto-fixed: which is the
-    product intent (is the trial crypto-purchasable?) is a founder call, and
-    deriving the quote list vs trimming checkout are opposite resolutions.
+10. **[RESOLVED 2026-05-27, e6cb9b99 — by deletion]** The original finding
+    was that crypto **checkout** derived its accepted-product enum from
+    `TIER_PRICE_CENTS` (7 products incl. `trial_pack`) while the crypto
+    **quote** route hardcoded a 6-product list omitting `trial_pack`, so
+    checkout accepted `product: 'trial_pack'` but quote 400'd it. Founder
+    resolution (the "trial should NOT be crypto-checkout-able" direction):
+    `trial_pack` was removed from `TIER_PRICE_CENTS`, so the checkout enum no
+    longer includes it — matching the quote route. Both now agree (neither
+    offers `trial_pack`), and the perpetual free tier is $0 / not purchasable,
+    so it appears in neither. Marketing `CRYPTO_PAYABLE_TIER_IDS` updated to
+    the 6 paid tiers in lockstep.
 
 11. **OpenAPI spec is a subset of the documented customer surface (low).**
     Several customer endpoints that have a Markdown doc page on

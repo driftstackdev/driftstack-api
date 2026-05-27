@@ -43,10 +43,10 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
     );
   });
 
-  it("API_TIERS import + trialPack/paidTiers split pinned — pinned so the 'derived from API_TIERS' single-source-of-truth + the trial-pack-separate-from-paid-tiers data split survive (drift to hardcoding here would diverge from /pricing when the tier table changes; drift to dropping the trial-pack split would mix the one-time evaluation tier into the recurring-pricing table)", () => {
+  it("API_TIERS import + freeTier/paidTiers split pinned — pinned so the 'derived from API_TIERS' single-source-of-truth + the free-tier-separate-from-paid-tiers data split survive (drift to hardcoding here would diverge from /pricing when the tier table changes; drift to dropping the free-tier split would mix the $0 evaluation tier into the recurring-pricing table)", () => {
     expect(body).toMatch(/import \{ API_TIERS \} from '\.\.\/\.\.\/data\/pricing\.ts';/);
-    expect(body).toMatch(/const trialPack = API_TIERS\.find\(\(t\) => t\.id === 'trial_pack'\);/);
-    expect(body).toMatch(/const paidTiers = API_TIERS\.filter\(\(t\) => t\.id !== 'trial_pack'\);/);
+    expect(body).toMatch(/const freeTier = API_TIERS\.find\(\(t\) => t\.id === 'free'\);/);
+    expect(body).toMatch(/const paidTiers = API_TIERS\.filter\(\(t\) => t\.id !== 'free'\);/);
   });
 
   it("fmtAiAgent 4-state map: !aiAgent → 'Not on this tier' / byok_only → 'BYOK only' / byok_or_bundled → 'BYOK or bundled' / byok_or_bundled_custom → 'BYOK or bundled (custom)' — pinned so the per-tier AI-agent availability display strings stay consistent (drift to dropping 'Not on this tier' would lose the explicit-absence signal customers scan for; drift to dropping 'custom' on Enterprise would lose the dedicated-rate signal)", () => {
@@ -84,9 +84,9 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
     expect(body).toMatch(/label: 'Support',/);
   });
 
-  it("Trial pack standalone card pinned: '({fmtUsd(trialPack.monthlyUsd)}, one-time)' + 'ideal for a real-API evaluation before committing to a tier' — pinned so the trial-pack-as-separate-evaluation-tier framing survives (drift to merging it into the paid-tier table would lose the 'evaluate before committing' positioning)", () => {
-    expect(body).toMatch(/Trial pack \(\{fmtUsd\(trialPack\.monthlyUsd\)\}, one-time\)/);
-    expect(body).toMatch(/ideal for a real-API\s*\n?\s*evaluation before committing to a tier\./);
+  it("Free-tier standalone card pinned: 'Free ({fmtUsd(freeTier.monthlyUsd)}, forever)' + 'manual-only evaluation, no card required, before committing to a paid tier' — pinned so the free-tier-as-separate-evaluation-tier framing survives (drift to merging it into the paid-tier table would lose the 'evaluate before committing' positioning)", () => {
+    expect(body).toMatch(/Free \(\{fmtUsd\(freeTier\.monthlyUsd\)\}, forever\)/);
+    expect(body).toMatch(/manual-only evaluation, no card required/);
   });
 
   it("★ popular-tier framing pinned: '★ = team's most popular tier in active evaluations. Not a sales push — just the current cohort signal.' — pinned so the honest 'cohort signal, not sales pressure' framing survives (drift to dropping 'Not a sales push' would let the highlight read as upsell rather than data signal)", () => {

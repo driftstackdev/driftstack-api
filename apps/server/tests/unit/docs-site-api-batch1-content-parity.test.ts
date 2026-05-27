@@ -60,7 +60,7 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(body).toMatch(/^## Concurrency$/m);
     expect(body).toMatch(/`TIER_CONCURRENT_SESSION_LIMITS` constant in/);
     expect(body).toMatch(/`@driftstack\/api-types`/);
-    expect(body).toMatch(/\| `trial_pack`\s+\|\s+1 \|/);
+    expect(body).toMatch(/\| `free`\s+\|\s+1 \|/);
     expect(body).toMatch(/\| `api_scale`\s+\|\s+24 \|/);
     expect(body).toMatch(/\| `enterprise`\s+\|\s+32 \|/);
     expect(body).toMatch(/Hitting the cap on `POST \/v1\/sessions` returns `429 Too Many/);

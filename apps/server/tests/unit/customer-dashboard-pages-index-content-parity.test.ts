@@ -71,17 +71,16 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     expect(body).toMatch(/active\s*\n?\s*\.slice\(0, 5\)/);
   });
 
-  it("Subscription 3-state render: sub present → card.remove('hidden') + 'tier · status' line + 'Period ends {date}' / sub absent → empty.remove('hidden') / trial_pack present + active → trial card with '$N.NN credit remaining. Expires {date}.' — pinned so the 3 states stay mutually-exclusive in display (drift to showing both subscription + no-sub would surface contradictory UI; drift to dropping trial-pack would hide active credit balance from the dashboard)", () => {
+  it("Subscription 2-state render: sub present → card.remove('hidden') + 'tier · status' line + 'Period ends {date}' / sub absent → empty.remove('hidden') — pinned so the two states stay mutually-exclusive in display (drift to showing both subscription + no-sub would surface contradictory UI). The retired trial-pack credit card was removed alongside the trial tier.", () => {
     expect(body).toMatch(/if \(sub\) \{\s*\n?\s*if \(card\) card\.classList\.remove\('hidden'\);/);
     expect(body).toMatch(
       /if \(line\) line\.textContent = String\(sub\.tier\) \+ ' · ' \+ String\(sub\.status\);/,
     );
     expect(body).toMatch(
-      /if \(trial && trial\.active\) \{\s*\n?\s*const tEl = root\.querySelector\('\[data-trial-pack\]'\);\s*\n?\s*const tLine = root\.querySelector\('\[data-trial-pack-line\]'\);\s*\n?\s*if \(tEl\) tEl\.classList\.remove\('hidden'\);/,
+      /if \(period\) period\.textContent = 'Period ends ' \+ fmtIsoDay\(sub\.current_period_end\) \+ '\.';/,
     );
-    expect(body).toMatch(
-      /if \(tLine\) tLine\.textContent = '\$' \+ dollars \+ ' credit remaining\.' \+ exp;/,
-    );
+    // No trial-pack credit branch anymore.
+    expect(body).not.toMatch(/data-trial-pack/);
   });
 
   it("Concurrent + profile cap rendering: me.concurrent_session_active ?? 0 + me.concurrent_session_cap ?? '—' + me.profile_cap != null → ' / ' + cap — pinned so a null cap (enterprise / unlimited) renders as '—' instead of the literal 'null' and active counts default to 0 (drift to dropping the ?? would crash on undefined or surface 'undefined' as text)", () => {
@@ -105,12 +104,6 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     );
     expect(body).toMatch(
       /empty\.textContent = 'Could not load billing\.';\s*\n?\s*empty\.classList\.remove\('hidden'\);/,
-    );
-  });
-
-  it("Trial-pack credit dollars formatting: Number(trial.credit_cents_remaining || 0) / 100 + .toFixed(2) — pinned so the cents → dollars conversion stays consistent (drift to bare division would show '4.9' instead of '4.90'; drift to dropping the || 0 fallback would render 'NaN' on missing field)", () => {
-    expect(body).toMatch(
-      /const cents = Number\(trial\.credit_cents_remaining \|\| 0\);\s*\n?\s*const dollars = \(cents \/ 100\)\.toFixed\(2\);/,
     );
   });
 

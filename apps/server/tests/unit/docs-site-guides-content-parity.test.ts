@@ -58,7 +58,7 @@ describe('W603 apps/docs/guides pages content parity', () => {
     expect(body).toMatch(
       /Exceeding the cap returns `429` with an RFC 9457 `https:\/\/errors\.driftstack\.dev\/tier-limit` problem body/,
     );
-    expect(body).toMatch(/\| Trial pack\s+\| 1\s+\|/);
+    expect(body).toMatch(/\| Free\s+\| 1\s+\|/);
     expect(body).toMatch(/\| Solo Manual\s+\| 10\s+\|/);
     expect(body).toMatch(/\| Team Manual\s+\| 50\s+\|/);
     expect(body).toMatch(/\| Agency Manual \| 200\s+\|/);
@@ -94,7 +94,7 @@ describe('W603 apps/docs/guides pages content parity', () => {
     expect(existsSync(TEAM)).toBe(true);
   });
 
-  it('session-lifecycle.md: creating/ready/busy/destroyed/errored state diagram + concurrent caps (Trial 1 / Solo 1 / Team 3 / Agency 8 / Starter 2 / Builder 8 / Scale 24) + idle_timeout + 429 Retry-After on cap-exceeded + concurrent-caps-only-metering (no hour caps no overage) pinned', () => {
+  it('session-lifecycle.md: creating/ready/busy/destroyed/errored state diagram + concurrent caps (Free 1 / Solo 1 / Team 3 / Agency 8 / Starter 2 / Builder 8 / Scale 24) + idle_timeout + 429 Retry-After on cap-exceeded + concurrent-caps-only-metering (no hour caps no overage) pinned', () => {
     const body = read(SESSION);
     expect(body).toMatch(/^title: Session lifecycle$/m);
     expect(body).toMatch(/^# Session lifecycle$/m);
@@ -119,7 +119,7 @@ describe('W603 apps/docs/guides pages content parity', () => {
     expect(body).toMatch(
       /`429 Too Many Requests` on `sessions\.create\(\)`, with a `Retry-After` header/,
     );
-    expect(body).toMatch(/\| Trial pack\s+\| 1\s+\|/);
+    expect(body).toMatch(/\| Free\s+\| 1\s+\|/);
     expect(body).toMatch(/\| Solo Manual\s+\| 1\s+\|/);
     expect(body).toMatch(/\| Team Manual\s+\| 3\s+\|/);
     expect(body).toMatch(/\| Agency Manual \| 8\s+\|/);

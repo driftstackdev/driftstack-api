@@ -91,7 +91,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
       /`client\.sessions\.create\(\)` reserved one of your account's concurrent session slots\./,
     );
     expect(p).toMatch(
-      /Each tier has a concurrent cap \(Trial pack: 1, API Starter: 2, API Builder: 8, API Scale: 24 — see \[pricing\]\(https:\/\/driftstack\.dev\/pricing\)\)\. Exceeding the cap returns 429\./,
+      /Each tier has a concurrent cap \(Free: 1, API Starter: 2, API Builder: 8, API Scale: 24 — see \[pricing\]\(https:\/\/driftstack\.dev\/pricing\)\)\. Exceeding the cap returns 429\./,
     );
     expect(p).toMatch(
       /`client\.sessions\.navigate\(\)` drove the iPhone Safari runtime to the URL on Driftstack's WebKit build\. The runtime is built from Apple's WebKit source directly — not a Chromium-stealth shim pretending to be Safari\./,

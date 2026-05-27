@@ -49,7 +49,7 @@ describe('W763 docs /api/profiles content parity', () => {
     expect(p).toMatch(/Values\s*\n?mirror `PROFILES_PER_TIER` in `@driftstack\/api-types`:/);
 
     const tierCaps: Array<[string, string]> = [
-      ['trial_pack', '1'],
+      ['free', '1'],
       ['solo_manual', '10'],
       ['team_manual', '50'],
       ['agency_manual', '200'],

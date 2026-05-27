@@ -1,19 +1,19 @@
 // W502.A — drift guard for apps/marketing-site/src/pages/pricing.astro.
 // Pricing landing page — the canonical $79/$249/$699 Manual + $149/$499/$1,499
-// API ladder + Enterprise-from-$4k + self-hosted SKUs + the $2.99 trial pack.
+// API ladder + Enterprise-from-$4k + self-hosted SKUs + the perpetual free tier.
 // Drift here either changes a tier price (would create marketing↔Stripe
 // invoice divergence) or breaks the 'pay per concurrent session, no surprise
 // overage' framing that the entire pricing narrative rests on.
 //
-//   • 5-import set from pricing.ts: API_TIERS + SELF_HOSTED_* + TRIAL_PACK.
+//   • 5-import set from pricing.ts: API_TIERS + SELF_HOSTED_* (TRIAL_PACK retired).
 //   • fmtUsd helper (whole vs decimal formatting branch).
 //   • fmtAiAgent 3-state: byok_only / byok_or_bundled / byok_or_bundled_custom.
-//   • Trial pack hero card: $2.99 one-time, hoursApprox + concurrent +
-//     windowDays + creditCents + meterRate from TRIAL_PACK.
+//   • Free-tier hero card: $0 perpetual, data-bound profiles/concurrent,
+//     manual-only (no API), never expires.
 //   • Positioning band: 'Pay per concurrent session.' + 'No surprise
 //     overage bills.' framing.
-//   • V-502 'Which tier is right for me?' decision-tree section: Trial
-//     pack $2.99 / Solo Manual $79 / Team Manual $249 / Agency Manual $699
+//   • V-502 'Which tier is right for me?' decision-tree section: Free
+//     $0 / Solo Manual $79 / Team Manual $249 / Agency Manual $699
 //     / API Starter $149 / API Builder $499 / API Scale $1,499 /
 //     Enterprise from $4,000.
 //   • Monthly/annual toggle with −20% annual savings badge.
@@ -36,10 +36,19 @@ function read(p: string): string {
 describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', () => {
   const body = read(LIB);
 
-  it('5-import set from pricing.ts: API_TIERS + SELF_HOSTED_ARCHETYPE_UPDATES + SELF_HOSTED_SKUS + SELF_HOSTED_SOFTWARE_UPDATES + SELF_HOSTED_SOURCE_ACCESS + TRIAL_PACK — pinned so the tier-data import stays sourced from the canonical pricing.ts (drift to hardcoding here would diverge from the pricing-page comparison + checkout + FAQ when the tier table changes)', () => {
-    expect(body).toMatch(
-      /import \{\s*\n?\s*API_TIERS,\s*\n?\s*SELF_HOSTED_ARCHETYPE_UPDATES,\s*\n?\s*SELF_HOSTED_SKUS,\s*\n?\s*SELF_HOSTED_SOFTWARE_UPDATES,\s*\n?\s*SELF_HOSTED_SOURCE_ACCESS,\s*\n?\s*TRIAL_PACK,\s*\n?\s*\} from '\.\.\/data\/pricing\.ts';/,
-    );
+  it('5-import set from pricing.ts: API_TIERS + SELF_HOSTED_ARCHETYPE_UPDATES + SELF_HOSTED_SKUS + SELF_HOSTED_SOFTWARE_UPDATES + SELF_HOSTED_SOURCE_ACCESS (TRIAL_PACK retired) — pinned so the tier-data import stays sourced from the canonical pricing.ts (drift to hardcoding here would diverge from the pricing-page comparison + checkout + FAQ when the tier table changes)', () => {
+    const imp = body.match(/import \{([\s\S]*?)\} from '\.\.\/data\/pricing\.ts';/);
+    expect(imp).not.toBeNull();
+    for (const sym of [
+      'API_TIERS',
+      'SELF_HOSTED_ARCHETYPE_UPDATES',
+      'SELF_HOSTED_SKUS',
+      'SELF_HOSTED_SOFTWARE_UPDATES',
+      'SELF_HOSTED_SOURCE_ACCESS',
+    ]) {
+      expect(imp![1]!).toContain(sym);
+    }
+    expect(imp![1]!).not.toContain('TRIAL_PACK');
   });
 
   it("fmtAiAgent 3-state LLM-billing map: byok_only → 'BYOK (Anthropic key required)' / byok_or_bundled → 'BYOK or bundled (your choice)' / byok_or_bundled_custom → 'BYOK or bundled (custom rate)' — pinned so the 3-state AI-agent column display strings stay consistent (drift to dropping 'Anthropic key required' would obscure which model provider; drift to dropping 'custom rate' would lose the Enterprise-tier signal)", () => {
@@ -52,22 +61,17 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     );
   });
 
-  it("Trial pack hero card pinned: '$2.99 buys ~{TRIAL_PACK.hoursApprox} hours of iPhone Safari sessions to evaluate the platform.' + 'concurrent session, {TRIAL_PACK.windowDays}-day window from purchase, used once per account.' — pinned so the $2.99 / iPhone Safari / windowDays / used-once-per-account 4-state framing survives (drift to dropping 'used once per account' would invite trial-pack abuse; drift to dropping iPhone Safari would obscure what the trial actually runs)", () => {
-    expect(body).toMatch(
-      /\$2\.99 buys ~\{TRIAL_PACK\.hoursApprox\} hours of iPhone Safari\s*\n?\s*sessions to evaluate the platform\./,
-    );
-    expect(body).toMatch(
-      /concurrent session, \{TRIAL_PACK\.windowDays\}-day window from\s*\n?\s*purchase, used once per account\./,
-    );
+  it("Free-tier hero card pinned: 'A perpetual free tier to evaluate the platform' + data-bound profiles/concurrent + 'manual control only (no API access)' + 'never expires' — pinned so the perpetual / 1-profile / 1-concurrent / manual-only / no-API / no-expiry framing survives (drift to dropping 'no API access' would over-promise programmatic access on the free tier)", () => {
+    expect(body).toMatch(/A perpetual free tier to evaluate the platform/);
+    expect(body).toMatch(/\{freeTier\.profiles\} profile/);
+    expect(body).toMatch(/\{freeTier\.concurrent\}/);
+    expect(body).toMatch(/manual control only \(no API access\)/);
+    expect(body).toMatch(/it never expires/);
   });
 
-  it("Trial pack mechanics framing pinned (R6 plain-English rewrite): '$2.99 of pre-paid credit, billed at {TRIAL_PACK.meterRate}' + 'The trial is our only product that charges by the hour — paid tiers don't meter usage at all'", () => {
-    expect(body).toMatch(
-      /\$2\.99 of pre-paid credit, billed at\s*\n?\s*\{TRIAL_PACK\.meterRate\}\./,
-    );
-    expect(body).toMatch(
-      /The trial is our only product that\s*\n?\s*charges by the hour — paid tiers don't meter usage at all/,
-    );
+  it("Free-tier mechanics framing pinned: 'No usage metering at all' + 'Upgrade to a paid tier when you need the API' — pinned so the no-metering / upgrade-for-API framing survives (drift here would blur the free↔paid boundary)", () => {
+    expect(body).toMatch(/No usage metering at all/);
+    expect(body).toMatch(/Upgrade to a paid tier when you need the\s+API/);
   });
 
   it("Positioning band pinned: 'Pay per concurrent session.' + 'Run as many hours as you want within your concurrent cap.' + 'No surprise overage bills.' — pinned so the 3-part flat-pricing-no-surprise narrative survives (drift to dropping 'No surprise overage bills' would weaken the central differentiation against per-hour vendors like Browserless)", () => {
@@ -76,8 +80,8 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(/No surprise overage bills\./);
   });
 
-  it("V-502 decision-tree section 8 tier cards: Trial pack $2.99 + Solo Manual $79 + Team Manual $249 + Agency Manual $699 + API Starter $149 + API Builder $499 + API Scale $1,499 + Enterprise from $4,000 — pinned so the 8-tier 'which is right for me' decision-tree stays complete (drift to dropping any tier would orphan that-tier prospects; drift to changing a price would create marketing↔Stripe-invoice divergence)", () => {
-    expect(body).toMatch(/Trial pack — \$2\.99/);
+  it("V-502 decision-tree section 8 tier cards: Free $0 + Solo Manual $79 + Team Manual $249 + Agency Manual $699 + API Starter $149 + API Builder $499 + API Scale $1,499 + Enterprise from $4,000 — pinned so the 8-tier 'which is right for me' decision-tree stays complete (drift to dropping any tier would orphan that-tier prospects; drift to changing a price would create marketing↔Stripe-invoice divergence)", () => {
+    expect(body).toMatch(/Free — \$0, forever/);
     expect(body).toMatch(/Solo Manual — \$79\/mo/);
     expect(body).toMatch(/Team Manual — \$249\/mo/);
     expect(body).toMatch(/Agency Manual — \$699\/mo/);
@@ -128,11 +132,11 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     );
   });
 
-  it("Mini FAQ teaser 4 questions: 'Manual or API — which one?' + 'Why concurrent caps and not hours?' + 'Can I switch tiers mid-month?' + 'What happens when the trial pack runs out?' + 'See full FAQ' → /faq — pinned so the 4-question pricing-FAQ teaser stays complete (drift to dropping the concurrent-caps explainer would lose the why-not-hourly answer; drift to dropping the trial-pack-runs-out answer would orphan trial-pack customers facing 402)", () => {
+  it("Mini FAQ teaser 4 questions: 'Manual or API — which one?' + 'Why concurrent caps and not hours?' + 'Can I switch tiers mid-month?' + 'Does the free tier expire?' + 'See full FAQ' → /faq — pinned so the 4-question pricing-FAQ teaser stays complete (drift to dropping the concurrent-caps explainer would lose the why-not-hourly answer; drift to dropping the free-tier answer would orphan free-tier prospects)", () => {
     expect(body).toMatch(/Manual or API — which one\?/);
     expect(body).toMatch(/Why concurrent caps and not hours\?/);
     expect(body).toMatch(/Can I switch tiers mid-month\?/);
-    expect(body).toMatch(/What happens when the trial pack runs out\?/);
+    expect(body).toMatch(/Does the free tier expire\?/);
     expect(body).toMatch(/<a href="\/faq" class="btn-secondary">See full FAQ<\/a>/);
   });
 

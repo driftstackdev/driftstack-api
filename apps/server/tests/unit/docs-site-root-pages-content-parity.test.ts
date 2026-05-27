@@ -90,7 +90,7 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(
       /driftstack "github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go"/,
     );
-    expect(body).toMatch(/Trial pack: 1, API Starter: 2, API Builder: 8, API Scale: 24/);
+    expect(body).toMatch(/Free: 1, API Starter: 2, API Builder: 8, API Scale: 24/);
     expect(body).toMatch(/Exceeding the cap returns 429\./);
     expect(body).toMatch(/\(returned in the `x-request-id` header\)/);
     expect(existsSync(QUICK)).toBe(true);

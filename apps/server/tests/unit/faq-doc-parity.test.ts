@@ -33,9 +33,10 @@ describe('W247.B faq doc parity', () => {
     expect(doc).not.toMatch(/HTTP 409/);
   });
 
-  it('trial pack uses the documented 14-day window + $0.18/hr decrement', () => {
-    expect(doc).toMatch(/14 days after purchase/);
-    expect(doc).toMatch(/\$0\.18 per concurrent-hour/);
+  it('free tier framed as $0 forever, no metering, manual-only', () => {
+    expect(doc).toMatch(/The free tier is \$0 forever/);
+    expect(doc).toMatch(/The free tier has no metering at all/);
+    expect(doc).toMatch(/The free tier is manual-only/);
   });
 
   it('does not assert customer-controlled egress as a shipped pricing pillar', () => {

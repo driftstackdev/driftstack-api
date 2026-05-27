@@ -41,7 +41,7 @@ describe('W761 docs /api/sessions content parity', () => {
     expect(p).toMatch(/`@driftstack\/api-types`/);
 
     const tierCaps: Array<[string, string]> = [
-      ['trial_pack', '1'],
+      ['free', '1'],
       ['solo_manual', '1'],
       ['team_manual', '3'],
       ['agency_manual', '8'],

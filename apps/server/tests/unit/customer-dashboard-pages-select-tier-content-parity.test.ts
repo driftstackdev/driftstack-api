@@ -10,12 +10,12 @@
 //     agency_manual / api_starter / api_builder / api_scale.
 //   • Imports from @driftstack/api-types: PROFILES_PER_TIER +
 //     TIER_CONCURRENT_SESSION_LIMITS + AccountTier type.
-//   • Trial-pack hero: $2.99 / 16 hours / 1 concurrent / 14-day
-//     window / once per account.
+//   • Free-plan note: $0 perpetual / 1 profile / 1 concurrent /
+//     manual-only / no card / never expires.
 //   • V-501 withBusy wrapper: disable button + 'Redirecting…'
 //     label + restore on error.
-//   • POST /v1/billing/trial-pack + POST /v1/billing/checkout-
-//     session contracts with success_url + cancel_url.
+//   • POST /v1/billing/checkout-session contract with success_url +
+//     cancel_url (the one-time trial-pack checkout was retired).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -33,12 +33,12 @@ function read(p: string): string {
 describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-184a + V-501 framing pinned: 'onboarding step 4. Tier picker. Tier 1 minimal placeholder surface — full Tier 3 visual (feature comparison table, tier highlights, AI-agent gating row, etc.) lands in V-184b draft.' + 'Change plan reuse: this same page is reachable from /billing Change plan link (post-onboarding) — the trial-pack CTA is hidden when the account already has an active subscription.' + 'disabled-while-pending guards on checkout buttons; copy micro-polish (cancel-anytime line, clearer what changes framing).' — pinned so the dual use-case (onboarding + post-billing change-plan) + V-501 anti-double-click framing survive", () => {
+  it("V-184a + V-501 framing pinned: 'onboarding step 4. Tier picker. Tier 1 minimal placeholder surface — full Tier 3 visual (feature comparison table, tier highlights, AI-agent gating row, etc.) lands in V-184b draft.' + 'Change plan reuse: this same page is reachable from /billing Change plan link (post-onboarding). Every account starts on the perpetual free tier; the cards below upgrade to a paid tier.' + 'disabled-while-pending guards on checkout buttons; copy micro-polish (cancel-anytime line, clearer what changes framing).' — pinned so the dual use-case (onboarding + post-billing change-plan) + V-501 anti-double-click framing survive", () => {
     expect(body).toMatch(
       /\/\/ V-184a — onboarding step 4\. Tier picker\. Tier 1 minimal placeholder\s*\n?\s*\/\/ surface — full Tier 3 visual \(feature comparison table, tier\s*\n?\s*\/\/ highlights, AI-agent gating row, etc\.\) lands in V-184b draft\./,
     );
     expect(body).toMatch(
-      /\/\/ "Change plan" reuse: this same page is reachable from \/billing\s*\n?\s*\/\/ "Change plan" link \(post-onboarding\) — the trial-pack CTA is\s*\n?\s*\/\/ hidden when the account already has an active subscription\./,
+      /\/\/ "Change plan" reuse: this same page is reachable from \/billing\s*\n?\s*\/\/ "Change plan" link \(post-onboarding\)\. Every account starts on the\s*\n?\s*\/\/ perpetual free tier; the cards below upgrade to a paid tier\./,
     );
     expect(body).toMatch(
       /\/\/ V-501 — disabled-while-pending guards on checkout buttons; copy\s*\n?\s*\/\/ micro-polish \(cancel-anytime line, clearer "what changes" framing\)\./,
@@ -72,10 +72,10 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     );
   });
 
-  it("Trial-pack hero framing pinned: '16 hours of iPhone Safari sessions. 1 concurrent. 14-day window. Once per account.' — pinned so the trial-pack spec (16h / 1 concurrent / 14d window / once-per-account uniqueness) survives. 2026-05-23 — h2 wrapped with leading icon; pin loosened to label-presence + spec invariant.", () => {
-    expect(body).toMatch(/Trial pack — \$2\.99/);
+  it("Free-plan note pinned: 'You're on the free plan' + '1 profile, 1 concurrent session, and manual-only sessions — no card required, and it never expires' — pinned so the perpetual free-tier framing (1 profile / 1 concurrent / manual-only / no card / no expiry) survives on the tier picker.", () => {
+    expect(body).toMatch(/You're on the free plan/);
     expect(body).toMatch(
-      /16 hours of iPhone Safari sessions\. 1 concurrent\. 14-day window\.\s*\n?\s*Once per account\./,
+      /Free includes 1 profile, 1 concurrent session, and manual-only\s*\n?\s*sessions — no card required, and it never expires\./,
     );
   });
 
@@ -92,12 +92,6 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     );
     expect(body).toMatch(
       /\.catch\(\(err\) => \{\s*\n?\s*btn\.disabled = false;\s*\n?\s*btn\.textContent = original;\s*\n?\s*throw err;\s*\n?\s*\}\);/,
-    );
-  });
-
-  it('POST /v1/billing/trial-pack contract: success_url + cancel_url + redirect to body.checkout_url — pinned so the Stripe-checkout success/cancel handoff stays correct (success goes to /first-session?trial=ok; cancel returns to /select-tier so customer can try a different tier)', () => {
-    expect(body).toMatch(
-      /authedFetch\('\/v1\/billing\/trial-pack', \{\s*\n?\s*method: 'POST',\s*\n?\s*body: JSON\.stringify\(\{\s*\n?\s*success_url: window\.location\.origin \+ '\/first-session\?trial=ok',\s*\n?\s*cancel_url: window\.location\.origin \+ '\/select-tier',\s*\n?\s*\}\),\s*\n?\s*\}\)/,
     );
   });
 
@@ -118,7 +112,7 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     );
   });
 
-  it("No-token guard: !token → showBanner('Sign up first.') + early-bail on BOTH trial-pack + tier buttons — pinned so customers landing on /select-tier from a deep-link without auth see a clear 'sign up first' message instead of an unhelpful 401 (drift would surface the raw server error)", () => {
+  it("No-token guard: !token → showBanner('Sign up first.') + early-bail on the tier checkout buttons — pinned so customers landing on /select-tier from a deep-link without auth see a clear 'sign up first' message instead of an unhelpful 401 (drift would surface the raw server error)", () => {
     expect(body).toMatch(
       /if \(!token\) \{\s*\n?\s*showBanner\('Sign up first\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
     );

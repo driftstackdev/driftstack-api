@@ -148,18 +148,10 @@ describe('W748 dashboard index/overview V-316 live-data parity', () => {
     expect(i).toMatch(/\} else if \(empty\) \{\s*\n\s+empty\.classList\.remove\('hidden'\);/);
   });
 
-  it("CRITICAL trial-pack credit display pinned — cents/100 to 2 decimal + 'Expires <day>' suffix when expires_at present. Matches W729 TRIAL_PACK 14-day window + credit_cents_remaining contract.", () => {
+  it('trial-pack credit display removed — the perpetual free tier carries no credit, so the dashboard overview no longer reads b.trial_pack.', () => {
     const i = read(INDEX);
-
-    expect(i).toMatch(/const trial = b\.trial_pack;/);
-    expect(i).toMatch(/if \(trial && trial\.active\) \{/);
-    expect(i).toMatch(
-      /const cents = Number\(trial\.credit_cents_remaining \|\| 0\);\s*\n\s+const dollars = \(cents \/ 100\)\.toFixed\(2\)/,
-    );
-    expect(i).toMatch(
-      /const exp = trial\.expires_at \? ' Expires ' \+ fmtIsoDay\(trial\.expires_at\) \+ '\.' : ''/,
-    );
-    expect(i).toMatch(/tLine\.textContent = '\$' \+ dollars \+ ' credit remaining\.' \+ exp/);
+    expect(i).not.toMatch(/b\.trial_pack/);
+    expect(i).not.toMatch(/credit_cents_remaining/);
   });
 
   it('CRITICAL graceful-failure pattern across all 4 endpoints. .catch() handlers either show a banner (account/me) or silently leave dash (api-keys) or show a section-specific empty (sessions/billing). Drift to throwing globally would blank the whole page on partial failure.', () => {

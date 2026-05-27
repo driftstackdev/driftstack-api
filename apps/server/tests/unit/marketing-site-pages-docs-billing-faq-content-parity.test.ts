@@ -5,8 +5,8 @@
 // the two paths).
 //
 //   • V-694 doc-comment framing.
-//   • Trial Pack: 1 concurrent / 1 profile + no card required + single
-//     ds_live_… prefix (no ds_test_ namespace) + read-only-after-expiry.
+//   • Free tier: 1 concurrent / 1 profile + manual-only + no card +
+//     perpetual + no metering + single ds_live_… prefix (no ds_test_).
 //   • Crypto vs Stripe: prorate on upgrade (Stripe) vs full + cycle
 //     reset (NowPayments) + downgrade at cycle end (both, no refund).
 //   • 14-day card-refund window.
@@ -39,15 +39,18 @@ describe('W511.B apps/marketing-site/src/pages/docs/billing-faq.astro content pa
     );
   });
 
-  it("Trial Pack framing pinned: '1 concurrent session and 1 profile. No card is required to start. All API keys — trial or paid — use the ds_live_… prefix; there is no separate ds_test_ namespace today. Trial keys continue to authenticate after the trial expires but the account is downgraded to a read-only state until you pick a paid tier.' — pinned so the 1-concurrent/1-profile + no-card-required + single-ds_live_-prefix + read-only-after-expiry 4-state Trial Pack framing survives (drift to claiming a separate ds_test_ namespace would mislead customers building against env-detection on the key prefix)", () => {
+  it("Free-tier framing pinned: '1 concurrent session and 1 profile, manual-only (no API/SDK access). No card is required, and it never expires. Subscribe to a paid tier when you need higher limits or programmatic access.' — pinned so the 1-concurrent/1-profile + manual-only + no-card + perpetual + no-metering free-tier framing survives (drift would re-introduce the retired metered trial-pack framing)", () => {
     expect(body).toMatch(
-      /<strong>1 concurrent\s*\n?\s*session<\/strong> and <strong>1 profile<\/strong>\. No card is\s*\n?\s*required to start\./,
+      /<strong>1 concurrent\s*\n?\s*session<\/strong> and <strong>1 profile<\/strong>, manual-only\s*\n?\s*\(no API\/SDK access\)\. No card is required, and it never expires\./,
     );
     expect(body).toMatch(
-      /All API keys — trial or paid — use the\s*\n?\s*<code>ds_live_…<\/code> prefix; there is no separate\s*\n?\s*<code>ds_test_<\/code> namespace today\./,
+      /Sessions are driven by hand from the desktop GUI client; there\s*\n?\s*is no usage metering, no credit, and no auto-charge\./,
     );
     expect(body).toMatch(
-      /Trial keys continue to\s*\n?\s*authenticate after the trial expires but the account is\s*\n?\s*downgraded to a read-only state until you pick a paid tier\./,
+      /All API keys\s*\n?\s*use the <code>ds_live_…<\/code> prefix; there is no separate\s*\n?\s*<code>ds_test_<\/code> namespace today\./,
+    );
+    expect(body).toMatch(
+      /Subscribe to a paid tier\s*\n?\s*when you need higher limits or programmatic access\./,
     );
   });
 
@@ -66,9 +69,9 @@ describe('W511.B apps/marketing-site/src/pages/docs/billing-faq.astro content pa
     );
   });
 
-  it("Card-refund 14-day-window framing pinned: 'Card payments: full refund within 14 days of payment if you haven't used more than the trial pack's session minutes. Past the 14-day window we do not refund unless the issue is on our side (extended outage, billing error).' — pinned so the 14-day-no-usage-refund + outage/billing-error-carve-out 2-state card-refund policy survives (drift to a different window would create marketing↔legal-refunds-policy divergence)", () => {
+  it("Card-refund 14-day-window framing pinned: 'Card payments: full refund within 14 days of payment if you haven't run sessions beyond a brief evaluation. Past the 14-day window we do not refund unless the issue is on our side (extended outage, billing error).' — pinned so the 14-day-no-usage-refund + outage/billing-error-carve-out 2-state card-refund policy survives (drift to a different window would create marketing↔legal-refunds-policy divergence)", () => {
     expect(body).toMatch(
-      /Card payments: full refund within <strong>14 days of payment<\/strong>\s*\n?\s*if you haven't used more than the trial pack's session minutes\./,
+      /Card payments: full refund within <strong>14 days of payment<\/strong>\s*\n?\s*if you haven't run sessions beyond a brief evaluation\./,
     );
     expect(body).toMatch(
       /Past the 14-day window we do not refund unless the issue is on\s*\n?\s*our side \(extended outage, billing error\)\./,
@@ -106,12 +109,12 @@ describe('W511.B apps/marketing-site/src/pages/docs/billing-faq.astro content pa
     );
   });
 
-  it('Cycle-end 3-phase framing: 7-day reminder + 48h grace + 7-day read-only state before Trial-Pack downgrade — pinned so the 3-phase cycle-end cascade survives (drift to a different reminder window would let crypto customers miss their renewal; drift to dropping the 7-day read-only-grace would force immediate downgrade)', () => {
+  it('Cycle-end 3-phase framing: 7-day reminder + 48h grace + 7-day read-only state before Free-tier downgrade — pinned so the 3-phase cycle-end cascade survives (drift to a different reminder window would let crypto customers miss their renewal; drift to dropping the 7-day read-only-grace would force immediate downgrade)', () => {
     expect(body).toMatch(
       /Crypto customers receive\s*\n?\s*a renewal reminder 7 days before the cycle ends/,
     );
     expect(body).toMatch(
-      /If a crypto renewal is not paid within\s*\n?\s*48 hours of cycle end, the account drops to a read-only\s*\n?\s*grace state for 7 days, then is downgraded to the Trial Pack\s*\n?\s*tier until renewal\./,
+      /If a crypto renewal is not paid within\s*\n?\s*48 hours of cycle end, the account drops to a read-only\s*\n?\s*grace state for 7 days, then is downgraded to the Free\s*\n?\s*tier until renewal\./,
     );
   });
 

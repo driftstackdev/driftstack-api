@@ -105,19 +105,17 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
     expect(w).toMatch(/Onboarding step 3 — brief intro \+ CTA to tier-select/);
   });
 
-  it('CRITICAL welcome 2-tier-choice card-pair pinned — Trial pack ($2.99 one-time) + Pick a tier ($79-$1,499/mo). The 2-card layout matches W729 ADR-004 (trial_pack + 7-tier paid ladder). Drift would change the canonical onboarding-step-3 CTA.', () => {
+  it('CRITICAL welcome 2-choice card-pair pinned — Start free ($0 · no card) + Pick a tier ($79-$1,499/mo). The perpetual free tier replaced the one-time trial pack; the free card routes to /first-session, the paid card to /select-tier.', () => {
     const w = read(WELCOME);
 
-    // Trial pack card.
-    expect(w).toMatch(/<h2 class="text-lg font-semibold text-ink-primary">Trial pack<\/h2>/);
-    expect(w).toMatch(/\$2\.99 · one-time/);
-    expect(w).toMatch(/16 hours of session time\. No subscription, no auto-renewal\./);
-    expect(w).toMatch(/14-day window\. The best way to try Driftstack/);
-    expect(w).toMatch(/<a href="\/select-tier\?focus=trial" class="btn-primary/);
+    // Free card.
+    expect(w).toMatch(/<h2 class="text-lg font-semibold text-ink-primary">Start free<\/h2>/);
+    expect(w).toMatch(/\$0 · no card/);
+    expect(w).toMatch(/Your account is already on the free plan: 1 profile, 1 concurrent/);
+    expect(w).toMatch(/<a href="\/first-session" class="btn-primary/);
 
     // Paid-tier card.
     expect(w).toMatch(/<h2 class="text-lg font-semibold text-ink-primary">Pick a tier<\/h2>/);
-    expect(w).toMatch(/\$79–\$1,499 \/ mo/);
     expect(w).toMatch(/<a href="\/select-tier" class="btn-secondary/);
   });
 
@@ -125,7 +123,7 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
     const w = read(WELCOME);
 
     expect(w).toMatch(
-      /We'll send you to Stripe to confirm payment\. Your card details\s*\n\s+stay between you and Stripe — we never see them/,
+      /Start free with no card — or pick a paid tier and we'll send you\s*\n\s+to Stripe to confirm payment\. Your card details stay between you\s*\n\s+and Stripe — we never see them/,
     );
     // 2026-05-22 — EU-fleet phrasing replaced with proxy capability
     // claim (SOCKS5/OpenVPN/WireGuard per profile).
@@ -158,7 +156,7 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
 
   it('CRITICAL welcome PCI-out-of-scope framing pinned. The wording — "Your card details stay between you and Stripe — we never see them" — is the customer-facing PCI claim. Matches ADR-002 (W733) Stripe-only fiat rail.', () => {
     const w = read(WELCOME);
-    expect(w).toMatch(/Your card details\s*\n\s+stay between you and Stripe — we never see them/);
+    expect(w).toMatch(/Your card details stay between you\s*\n\s+and Stripe — we never see them/);
   });
 
   it('CRITICAL welcome skip-to-dashboard escape pinned. The "Already know what you want?" link lets repeat customers bypass the onboarding cards.', () => {

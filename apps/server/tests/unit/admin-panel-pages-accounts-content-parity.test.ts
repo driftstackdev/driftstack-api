@@ -9,7 +9,7 @@
 //   • STATUS_BADGE 3-tone (active/suspended/deleted) — pinned in
 //     both the Astro frontmatter Record AND the inline-script
 //     const (the inline script can't import from frontmatter).
-//   • Tier filter 8-option catalogue (trial_pack / solo_manual /
+//   • Tier filter 8-option catalogue (free / solo_manual /
 //     team_manual / agency_manual / api_starter / api_builder /
 //     api_scale / enterprise).
 //   • email_contains server-side filter (substring match).
@@ -47,8 +47,8 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
     );
   });
 
-  it('Tier filter 8-option catalogue: trial_pack / solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale / enterprise — pinned so the customer-tier vocabulary stays in sync with TierEnum in the schema (drift to 7 options would make the missing tier unfilterable from the admin panel, hiding accounts on that tier from operators)', () => {
-    expect(body).toMatch(/<option value="trial_pack">Trial pack<\/option>/);
+  it('Tier filter 8-option catalogue: free / solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale / enterprise — pinned so the customer-tier vocabulary stays in sync with TierEnum in the schema (drift to 7 options would make the missing tier unfilterable from the admin panel, hiding accounts on that tier from operators)', () => {
+    expect(body).toMatch(/<option value="free">Free<\/option>/);
     expect(body).toMatch(/<option value="solo_manual">Solo Manual<\/option>/);
     expect(body).toMatch(/<option value="team_manual">Team Manual<\/option>/);
     expect(body).toMatch(/<option value="agency_manual">Agency Manual<\/option>/);

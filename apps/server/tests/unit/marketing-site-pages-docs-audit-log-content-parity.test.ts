@@ -140,8 +140,8 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
     expect(body).not.toMatch(/\(V-330b\s/);
   });
 
-  it("5-tier retention table pinned: Trial Pack 30 days + Solo / API Starter 90 days + Team / API Builder 1 year + Agency / API Scale 3 years + Enterprise Custom (default 7 years for compliance) + 'Past the retention window, entries are pruned by a nightly sweep.' + SIEM-cron pattern framing — pinned so the 5-tier retention + nightly-prune + daily-cron-into-SIEM canonical-pattern survives (drift to a different retention window would create marketing↔billing-tier-feature divergence)", () => {
-    expect(body).toMatch(/<tr><td>Trial Pack<\/td><td>30 days<\/td><\/tr>/);
+  it("5-tier retention table pinned: Free 30 days + Solo / API Starter 90 days + Team / API Builder 1 year + Agency / API Scale 3 years + Enterprise Custom (default 7 years for compliance) + 'Past the retention window, entries are pruned by a nightly sweep.' + SIEM-cron pattern framing — pinned so the 5-tier retention + nightly-prune + daily-cron-into-SIEM canonical-pattern survives (drift to a different retention window would create marketing↔billing-tier-feature divergence)", () => {
+    expect(body).toMatch(/<tr><td>Free<\/td><td>30 days<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>Solo \/ API Starter<\/td><td>90 days<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>Team \/ API Builder<\/td><td>1 year<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>Agency \/ API Scale<\/td><td>3 years<\/td><\/tr>/);

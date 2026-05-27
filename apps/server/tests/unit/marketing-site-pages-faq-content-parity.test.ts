@@ -5,14 +5,14 @@
 // (which customers reading the FAQ compare against the actual
 // product config).
 //
-//   • 10-group taxonomy (Pricing model + Trial pack + Tiers + upgrades
+//   • 10-group taxonomy (Pricing model + Free tier + Tiers + upgrades
 //     + Billing + payments + Bundled LLM + BYOK + EU stack + compliance
 //     + V-500 Architecture + sessions + V-500 Migrating + V-500
 //     Acceptable use + Support + reliability).
 //   • Concurrent caps: Solo/Team/Agency Manual 1/3/8 + API
 //     Starter/Builder/Scale 2/8/24.
-//   • Trial pack mechanic: 299¢ credit + $0.18/hr + 14-day window +
-//     once-per-account.
+//   • Free-tier mechanic: $0 forever + one profile + one concurrent +
+//     manual-only (no API) + perpetual + no metering.
 //   • Enterprise from $4,000/mo.
 //   • Stripe payment processor + EU VAT/BTW reverse-charge.
 //   • Support SLA ladder: 48h/24h/12h+Slack/4h+Slack/1h+CSM.
@@ -36,9 +36,9 @@ function read(p: string): string {
 describe('W500.A apps/marketing-site/src/pages/faq.astro content parity', () => {
   const body = read(LIB);
 
-  it('10-group taxonomy pinned: Pricing model + Trial pack + Tiers + upgrades + Billing + payments + Bundled LLM + BYOK + EU stack + compliance + V-500 Architecture + sessions + V-500 Migrating from another vendor + V-500 Acceptable use + Support + reliability — pinned so the 10-bucket structure stays consistent (drift to dropping V-500 groups would re-orphan customers from architecture / migration / AUP self-service answers)', () => {
+  it('10-group taxonomy pinned: Pricing model + Free tier + Tiers + upgrades + Billing + payments + Bundled LLM + BYOK + EU stack + compliance + V-500 Architecture + sessions + V-500 Migrating from another vendor + V-500 Acceptable use + Support + reliability — pinned so the 10-bucket structure stays consistent (drift to dropping V-500 groups would re-orphan customers from architecture / migration / AUP self-service answers)', () => {
     expect(body).toMatch(/title: 'Pricing model',/);
-    expect(body).toMatch(/title: 'Trial pack',/);
+    expect(body).toMatch(/title: 'Free tier',/);
     expect(body).toMatch(/title: 'Tiers \+ upgrades',/);
     expect(body).toMatch(/title: 'Billing \+ payments',/);
     expect(body).toMatch(/title: 'Bundled LLM \+ BYOK',/);
@@ -61,10 +61,13 @@ describe('W500.A apps/marketing-site/src/pages/faq.astro content parity', () => 
     );
   });
 
-  it("Trial-pack mechanic pinned: 'The trial pack credits 299¢ to your account; sessions decrement at $0.18 per concurrent-hour (per ADR-003 trial-pack mechanic). 299 ÷ 18 ≈ 16.6 hours of usage. Unused credit expires 14 days after purchase.' — pinned so the canonical numbers (299¢ + $0.18/hr + ~16.6h + 14d expiry) + ADR-003 reference all survive (drift would create marketing↔ADR drift)", () => {
+  it("Free-tier mechanic pinned: 'One persistent profile, one concurrent session, and unlimited manual sessions driven from the desktop GUI client — $0 forever, no card required.' + perpetual (no expiry) + manual-only (no API) + no metering — pinned so the founder-locked free-tier shape survives (drift would re-introduce the retired trial-pack mechanics)", () => {
     expect(body).toMatch(
-      /The trial pack credits 299¢ to your account; sessions decrement at \$0\.18 per concurrent-hour \(per ADR-003 trial-pack mechanic\)\. 299 ÷ 18 ≈ 16\.6 hours of usage\. Unused credit expires 14 days after purchase\./,
+      /One persistent profile, one concurrent session, and unlimited manual sessions driven from the desktop GUI client — \$0 forever, no card required\./,
     );
+    expect(body).toMatch(/The free tier is perpetual/);
+    expect(body).toMatch(/The free tier is manual-only/);
+    expect(body).toMatch(/No per-hour metering, no credit decrement, no overage/);
   });
 
   it("Enterprise pricing framing: 'from $4,000/mo on annual contracts only' — pinned so the Enterprise baseline-price + annual-only restriction stay consistent across marketing pages (drift to dropping the 'annual contracts only' would let prospects expect monthly Enterprise contracts that don't exist)", () => {

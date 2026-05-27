@@ -59,7 +59,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
       /- \*\*`agent_sessions:message`\*\* —\s*\n?\s*`POST \/v1\/agent-sessions\/:id\/message` only/,
     );
     expect(body).toMatch(/A `POST \/v1\/sessions` consumes from BOTH `global` and/);
-    expect(body).toMatch(/\| `trial_pack`\s+\| 60\s+\| 1\s+\|/);
+    expect(body).toMatch(/\| `free`\s+\| 60\s+\| 1\s+\|/);
     expect(body).toMatch(/\| `api_starter`\s+\| 240\s+\| 4\s+\|/);
     expect(body).toMatch(/\| `api_builder`\s+\| 1,800\s+\| 30\s+\|/);
     expect(body).toMatch(/\| `api_scale`\s+\| 6,000\s+\| 100\s+\|/);

@@ -95,10 +95,16 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
     expect(body).toMatch(/10K-row ceiling per export with cursor pagination beyond\./);
   });
 
-  it("2026-05-03 'Two-ladder pricing live' entry: Manual ($79 Solo / $249 Team / $699 Agency) + API ($149 Starter / $499 Builder / $1,499 Scale + Enterprise) + $2.99/16h trial pack — pinned so the canonical pricing structure stays consistent with the customer-dashboard select-tier and the marketing-site pricing pages (drift would create cross-page price-point divergence)", () => {
+  it("2026-05-03 'Two-ladder pricing live' entry: Manual ($79 Solo / $249 Team / $699 Agency) + API ($149 Starter / $499 Builder / $1,499 Scale + Enterprise) + free entry tier below both ladders — pinned so the canonical pricing structure stays consistent with the customer-dashboard select-tier and the marketing-site pricing pages (drift would create cross-page price-point divergence)", () => {
     expect(body).toMatch(
-      /Manual \(\$79\/mo Solo \/ \$249\/mo Team \/ \$699\/mo Agency\) and API \(\$149\/mo Starter \/ \$499\/mo Builder \/ \$1,499\/mo Scale \+ custom Enterprise\)\. Trial pack stays \$2\.99 \/ 16 hours\./,
+      /Manual \(\$79\/mo Solo \/ \$249\/mo Team \/ \$699\/mo Agency\) and API \(\$149\/mo Starter \/ \$499\/mo Builder \/ \$1,499\/mo Scale \+ custom Enterprise\)\. A free entry tier sits below both ladders\./,
     );
+  });
+
+  it("2026-05-27 'Perpetual free tier replaces the one-time trial pack' pricing entry — pinned so the founder-locked free-tier replacement announcement survives (drift would re-introduce the retired trial-pack copy)", () => {
+    expect(body).toMatch(/title: 'Perpetual free tier replaces the one-time trial pack',/);
+    expect(body).toMatch(/The entry tier is now a perpetual free tier: \$0 forever/);
+    expect(body).toMatch(/This replaces the previous one-time \$2\.99 trial pack entirely\./);
   });
 
   it("2026-05-03 'Crypto payment rail deferred to post-launch' security entry: 'Coinbase Commerce closed for non-US/Singapore merchants 2026-03-31. Stripe is sole launch payment rail (fiat-only). Crypto re-evaluates against actual transaction volume.' — pinned so the why-no-crypto-at-launch rationale + the Stripe-only + the post-launch re-evaluation framing all survive (drift to dropping would orphan customers asking 'why no crypto?')", () => {

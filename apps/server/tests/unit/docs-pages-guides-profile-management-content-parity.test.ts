@@ -57,7 +57,7 @@ describe('W782 docs /guides/profile-management content parity', () => {
     const p = read(PAGE);
 
     const tierCaps: Array<[string, string]> = [
-      ['Trial pack', '1'],
+      ['Free', '1'],
       ['Solo Manual', '10'],
       ['Team Manual', '50'],
       ['Agency Manual', '200'],

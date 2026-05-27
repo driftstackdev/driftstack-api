@@ -16,7 +16,7 @@
 //   • DELETE 204 + in-flight sessions keep running + idempotent.
 //   • Snapshots V-312: psnap_-prefix + /v1/profile-snapshots/:id/restore
 //     (NOT under /v1/profiles/<parent>/snapshots) + immutable.
-//   • PROFILES_PER_TIER 8-tier table: Trial Pack 1 / Solo Manual 10 /
+//   • PROFILES_PER_TIER 8-tier table: Free 1 / Solo Manual 10 /
 //     Team Manual 50 / Agency Manual 200 / API Starter 25 / API Builder 100 /
 //     API Scale 500 / Enterprise custom.
 //   • Privacy: encrypted-at-rest cookies + storage + deleted on account
@@ -132,8 +132,8 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
     );
   });
 
-  it('PROFILES_PER_TIER 8-tier table pinned: Trial Pack 1 / Solo Manual 10 / Team Manual 50 / Agency Manual 200 / API Starter 25 / API Builder 100 / API Scale 500 / Enterprise custom — pinned so the 8-tier-cap table stays consistent with PROFILES_PER_TIER in common.ts (drift to a different cap on any tier would create marketing↔server divergence)', () => {
-    expect(body).toMatch(/<tr><td>Trial Pack<\/td><td>1<\/td><\/tr>/);
+  it('PROFILES_PER_TIER 8-tier table pinned: Free 1 / Solo Manual 10 / Team Manual 50 / Agency Manual 200 / API Starter 25 / API Builder 100 / API Scale 500 / Enterprise custom — pinned so the 8-tier-cap table stays consistent with PROFILES_PER_TIER in common.ts (drift to a different cap on any tier would create marketing↔server divergence)', () => {
+    expect(body).toMatch(/<tr><td>Free<\/td><td>1<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>Solo Manual<\/td><td>10<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>Team Manual<\/td><td>50<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>Agency Manual<\/td><td>200<\/td><\/tr>/);

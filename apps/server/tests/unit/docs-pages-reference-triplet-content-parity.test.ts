@@ -166,7 +166,7 @@ describe('W786 docs reference/ triplet content parity', () => {
     const p = read(RL);
 
     for (const tier of [
-      'trial_pack',
+      'free',
       'solo_manual',
       'team_manual',
       'agency_manual',
@@ -179,7 +179,7 @@ describe('W786 docs reference/ triplet content parity', () => {
     }
 
     // Key check pairs from the table.
-    expect(p).toMatch(/\| `trial_pack`\s+\| 60\s+\| 1\s+\| 5\s+\| 1\/60/);
+    expect(p).toMatch(/\| `free`\s+\| 60\s+\| 1\s+\| 5\s+\| 1\/60/);
     expect(p).toMatch(/\| `enterprise`\s+\| 60,000\s+\| 1,000\s+\| 600\s+\| 10/);
   });
 
