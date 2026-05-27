@@ -51,7 +51,7 @@ Returns:
     "emailCents": 12,
     "llmCents": 0,
     "totalCents": 4732,
-    "thresholdState": "between"
+    "thresholdState": "between-soft-and-hard"
   }
 }
 ```
@@ -66,11 +66,11 @@ undercount).
 `breakdown.thresholdState` is one of three values relative to
 your tier's per-cycle soft warn / hard cap:
 
-| State        | Meaning                                                               |
-| ------------ | --------------------------------------------------------------------- |
-| `under-soft` | Spend below the soft-warn threshold. Default.                         |
-| `between`    | Spend ≥ soft-warn, < hard cap. We'll email you when this transitions. |
-| `over-hard`  | Spend ≥ hard cap. New sessions may be rate-limited.                   |
+| State                   | Meaning                                                               |
+| ----------------------- | --------------------------------------------------------------------- |
+| `under-soft`            | Spend below the soft-warn threshold. Default.                         |
+| `between-soft-and-hard` | Spend ≥ soft-warn, < hard cap. We'll email you when this transitions. |
+| `over-hard`             | Spend ≥ hard cap. New sessions may be rate-limited.                   |
 
 The actual soft/hard cents values are tier-tuned + operator-
 adjustable. The customer surface intentionally hides the numeric
