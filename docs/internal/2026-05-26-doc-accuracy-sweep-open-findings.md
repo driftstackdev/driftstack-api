@@ -22,6 +22,7 @@ the numbered list below.
   - #14 — BYOK-key rotation email links to a 404 dashboard route; no BYOK management UI exists (management is API-only).
 - **Latent, high-impact on a planned event:**
   - #12 — V-173 forward-path webhook delivery signs bare-hex; breaks ALL SDK verification on the durable-impl cutover. (Fix #12 + #13 together — one webhook-signature pass; both rooted in a missing server-sign→SDK-verify e2e test.)
+  - #15 — LLM cost-to-serve rate card models 4o-mini but the agent runs Opus 4.7 (~100× under-estimate); inert until LLM usage metering lands, then under-reports bundled-LLM margin alerts. (Fix with #6 / V-541.J/K — same deferred metering subsystem.)
 - **Contract / intent decisions (pick a direction, then align sources):**
   - #5 — webhook retry count: code does 4 retries, docs + rationale promise 5; the guard is toothless.
   - #10 — crypto checkout accepts `trial_pack` but crypto quote 400s it.
@@ -350,6 +351,33 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
     `PUT` rotate flow). NOT auto-fixed: whether a dashboard BYOK UI is
     intended-but-unbuilt vs. deliberately API-only is a product call, and the
     email body is parity-pinned.
+
+15. **LLM cost-to-serve rate card models OpenAI 4o-mini but the agent uses
+    Claude Opus 4.7 — ~100× under-estimate (latent, gated with #6).**
+    `cost-defaults.ts` sets `llmCentsPer1kInputTokens: 0.015` /
+    `llmCentsPer1kOutputTokens: 0.06` with comments "OpenAI 4o-mini input/
+    output list price". But `agent-decomposer-claude.ts:37` runs
+    `claude-opus-4-7`, whose list price is **$15 / $75 per Mtok** = `1.5` /
+    `7.5` cents per 1k — ~100× higher than the configured rate (and Opus's
+    5× output/input ratio vs the rate card's 4×). The cost engine math is
+    correct (`(tokens/1000) * ratePer1k`); the inputs are mis-calibrated for
+    the actual model. Prod wires `DEFAULT_COST_RATES` directly
+    (`bootstrap.ts:1011`); `/v1/admin/cost/config` is a **read-only**
+    inspector (no runtime override), so a rate change is a code edit + deploy.
+    **Latent today:** the LLM usage dimension is hard-zero until the
+    `usage_records` writers land (`bootstrap.ts:1020` "llm dimensions zero
+    until V-541.I/J/K") — the SAME deferred metering subsystem as #6 — so
+    `llmCents` computes to 0 regardless of the rate right now. Internal
+    accounting only (the `cost-defaults-v541f` invariant confirms these rates
+    do NOT drive customer billing). **When V-541.J/K wires LLM metering**, the
+    100×-low rate will make bundled-LLM cost-monitoring under-report LLM
+    cost-to-serve ~100×, defeating the soft/hard margin alerts
+    (`deriveThresholdsFromMonthlyPrice` = 60% / 90% of selling price) for
+    bundled-LLM accounts. **Decide + fix with #6/V-541.K:** set the rate to
+    the actual model's cost-to-serve (Opus 4.7 list, a negotiated rate, or
+    whatever the bundled-LLM model ends up being) and correct the 4o-mini
+    comments. NOT auto-fixed: the true cost-to-serve number is a finance/
+    model-choice decision, and it's inert until the deferred metering lands.
 
 ## Minor hardening notes (NOT findings — surfaced by the security audits)
 
