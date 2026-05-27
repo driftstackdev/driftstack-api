@@ -30,7 +30,7 @@ the numbered list below.
   - #3 — TS SDK User-Agent frozen at 0.0.1 vs package.json 0.1.6 (contradictory pin vs W834).
 - **UI / ops / completeness (lower urgency):**
   - #7 — `pointerToViewport` object-contain mis-mapping (multi-archetype blocker, latent).
-  - #2 — runbook references a one-shot sweep script that was never built.
+  - #2 — [RESOLVED 2026-05-27] runbook referenced a one-shot sweep script that was never built (+ stale "not yet wired" section); rewritten to the real wired scheduled-job mechanism.
   - #9 — env-vars doc completeness — RESOLVED (6 vars documented; residual: confirm `NOWPAYMENTS_IPN_CALLBACK_URL` before crypto LIVE).
   - #11 — OpenAPI spec is a curated subset of the documented customer surface (decide complete vs curated).
 
@@ -65,7 +65,21 @@ pruneIdempotency`, `IDEMPOTENCY_TTL_MS = 24h`, entries deleted, no row).
      the "24h TTL / scheduled job" wording for that path)? Then rewrite the
      bullet to the real per-subsystem behaviour.
 
-2. **Runbook references a one-shot script that was never built.**
+2. **[RESOLVED 2026-05-27]** Runbook referenced a one-shot script that was
+   never built, **and** its "Periodic sweep — NOT yet wired (follow-up)"
+   section was stale. **Resolution:** rewrote `docs/runbooks/auth-token-
+   sweeper.md` to reality — documented that `auth_tokens.sweep` IS a wired
+   scheduled job (registered in `bootstrap.ts` via `registerAuthTokensSweep
+   Job` + `enqueueNextAuthTokensSweep`, daily 03:00 UTC, self-re-arming),
+   replaced the dead `scripts/auth-token-sweep-once.mjs` instruction with a
+   `scheduled_jobs`-table inspection query + a safe "force immediate run"
+   path (advance `run_at` to now for the poller), and removed the now-
+   unneeded known-pending exception from `docs-runbooks-file-references-
+   exist.test.ts`. Took the rewrite (not build-the-script) path per the
+   standing guardrail against shipping untested prod-DB DELETE ops code.
+   Original finding below for reference.
+
+   Runbook references a one-shot script that was never built.
    `docs/runbooks/auth-token-sweeper.md` §"Manual one-shot sweep" tells ops
    to run `npx tsx scripts/auth-token-sweep-once.mjs`; that file does not
    exist (the other 11 runbook-referenced scripts do). The sweeper runs
@@ -127,6 +141,25 @@ MAX_ATTEMPTS` with `MAX_ATTEMPTS = 5` (`apps/server/src/services/
      grep the constants. NOT auto-fixed: picking (a) vs (b) is a
      customer-facing behavioural call, and a test currently pins the 5-attempt
      behaviour as if intentional.
+     **RECOMMENDATION (Agent 2, 2026-05-27):** take (a) — make the code do 5
+     retries. Rationale: three independent artifacts (the code's own
+     `MAX_ATTEMPTS` rationale comment "initial + 5 retries → 6 total tries",
+     the `BACKOFF_MS_BY_ATTEMPT[5]=60min` entry that's only meaningful with a
+     5th retry, and the customer doc "retries… 5 times") all describe 5
+     retries; the _only_ artifact saying 4 is the bare `>=` boundary, with no
+     comment or doc anywhere asserting 4-is-intentional. So (a) makes the code
+     match its own stated contract rather than de-promising a documented
+     retry. Cleanest impl: rename the constant to total-tries semantics
+     (`MAX_ATTEMPTS = 6`, keep `>=`), update the in-memory + worker DLQ tests
+     to `totalAttempts === 6` / DLQ-at-attempts-6, rewrite the cross-source
+     invariant to DRIVE a delivery to DLQ and assert the count (kill the
+     toothless string-match), and fix `replay.md:45-46` (the "By 10:15 → DLQ"
+     example is wrong for any schedule; 5 retries = 1+5+15+30+60min → DLQ at
+     ~11:51, so reword to "within ~2 hours"). One blocker to confirm before
+     shipping: this adds a real 5th delivery attempt (the 60min one) to live
+     customer endpoints — a more-generous policy that matches what we already
+     advertise, but still a prod behaviour change. Founder one-line approve of
+     (a) unblocks it.
 
 6. **Trial-pack credit is granted but never consumed — the "~16 hours"
    promise + "decrements at session_end" comments are unenforced (launch

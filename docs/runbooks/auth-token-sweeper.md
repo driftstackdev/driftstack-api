@@ -27,16 +27,16 @@ the policy above.
 
 ## Operations
 
-### Manual one-shot sweep (ops console)
+### Automatic periodic sweep (scheduled job — wired)
 
-```ts
-// Run via `npx tsx scripts/auth-token-sweep-once.mjs` (the script
-// instantiates the sweeper with the prod DATABASE_URL + a real
-// DrizzleAuthFlowsRepo, calls tickOnce(new Date()), and logs the
-// deletion counts per kind).
-```
+The sweep runs automatically. `bootstrap.ts` registers the
+`auth_tokens.sweep` scheduled job (`registerAuthTokensSweepJob` +
+`enqueueNextAuthTokensSweep`) at startup; it fires **daily at 03:00
+UTC** (low-traffic window) and re-arms itself after each successful
+run. No operator action is required for normal retention.
 
-The service's `tickOnce(now)` returns:
+Each run logs (`component: "auth-tokens-sweep"`) the deletion counts —
+the service's `tickOnce(now)` returns:
 
 ```ts
 {
@@ -49,14 +49,31 @@ The service's `tickOnce(now)` returns:
 }
 ```
 
-### Periodic sweep (scheduled-jobs wire — follow-up)
+To confirm the job is scheduled and when it last/next runs, inspect the
+`scheduled_jobs` table:
 
-The sweeper is constructable today but is NOT yet wired into the
-scheduled-jobs poller. Follow-up: add a `job_type` =
-`auth_tokens_sweep` entry to the scheduled-jobs registry alongside
-the existing `webhook-rotation-reminder` job. Cadence: daily at
-03:00 UTC (low traffic window; identical to the audit-archive
-sweep).
+```sh
+ssh root@128.140.37.74 "set -a; source /opt/driftstack/api/.env; set +a; psql \$DATABASE_URL -At -c \"
+SELECT job_type, status, run_at, last_run_at FROM scheduled_jobs WHERE job_type = 'auth_tokens.sweep' ORDER BY run_at DESC LIMIT 5;
+\""
+```
+
+### Forcing an immediate sweep
+
+There is **no one-shot CLI script** for an ad-hoc sweep (a prior
+reference to one was aspirational and was never built — running an
+untested DELETE against prod from a throwaway script is deliberately
+avoided). If an immediate sweep is genuinely
+needed before the next 03:00 UTC run, advance the pending row's
+`run_at` to now so the poller picks it up on its next tick:
+
+```sh
+ssh root@128.140.37.74 "set -a; source /opt/driftstack/api/.env; set +a; psql \$DATABASE_URL -c \"
+UPDATE scheduled_jobs SET run_at = now() WHERE job_type = 'auth_tokens.sweep' AND status = 'pending';
+\""
+```
+
+The job re-arms to the normal 03:00 UTC cadence after it runs.
 
 ## Investigation: how many stale rows are out there right now?
 

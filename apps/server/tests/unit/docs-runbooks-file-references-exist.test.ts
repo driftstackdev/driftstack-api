@@ -5,9 +5,12 @@
 // operator hits "no such file" / "Cannot find module" mid-procedure. Two
 // such bugs were fixed on this surface: the self-hosted runbook referenced
 // `docker-compose.dev.yml` (the real file is `docker-compose.yml`, fixed in
-// 1d9e96ee), and the auth-token-sweeper runbook cites a one-shot script
-// that was never built. The per-runbook content-parity tests pin command
-// TEXT but never check the referenced file is actually on disk — this does.
+// 1d9e96ee), and the auth-token-sweeper runbook cited a one-shot script
+// that was never built (resolved 2026-05-27 — that runbook section was
+// rewritten to the real wired scheduled-job mechanism, so the dead
+// `scripts/` reference is gone and no longer needs a known-pending
+// exception). The per-runbook content-parity tests pin command TEXT but
+// never check the referenced file is actually on disk — this does.
 //
 // Scope: `scripts/<path>` and `docker-compose*.yml` references. Both are
 // concrete repo paths a runbook tells the operator to invoke.
@@ -22,10 +25,10 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const RUNBOOKS_DIR = resolve(REPO_ROOT, 'docs/runbooks');
 
 // Known-pending references the founder/ops still has to resolve (build the
-// file or rewrite the section). Tracked in
-// project_auth_token_sweep_once_script_missing — remove from here once the
-// one-shot sweep script ships or the runbook section is rewritten.
-const KNOWN_PENDING = new Set(['scripts/auth-token-sweep-once.mjs']);
+// file or rewrite the section). Empty as of 2026-05-27 — the only entry
+// (`scripts/auth-token-sweep-once.mjs`) was retired when the auth-token-
+// sweeper runbook was rewritten to the real scheduled-job mechanism.
+const KNOWN_PENDING = new Set<string>([]);
 
 function runbookFiles(): string[] {
   return readdirSync(RUNBOOKS_DIR)
