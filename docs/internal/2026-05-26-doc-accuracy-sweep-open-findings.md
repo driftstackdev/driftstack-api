@@ -14,11 +14,13 @@ intent or touches untestable/external state.
    exist.** `apps/docs/src/pages/reference/idempotency.md` (Edge-cases
    list) claims "The 24-hour TTL is enforced by a scheduled job that nulls
    out expired keys; the row itself remains." No such scheduled job exists
-   (the scheduled-jobs registry has only `subscription.trial_pack_expired`
-   - `cost.threshold_alert`). Actual behaviour differs by subsystem:
-   * crypto-orders: in-memory `Map` lazily pruned (`CryptoOrdersService.
+   — the three registered scheduled jobs are `trial_pack.expired`
+   (bootstrap.ts:458), `auth_tokens.sweep` (auth-flows-sweeper.ts), and
+   `cost.recompute_nightly` (cost-nightly-job.ts), none of which sweeps
+   idempotency keys. Actual behaviour differs by subsystem:
+   - crypto-orders: in-memory `Map` lazily pruned (`CryptoOrdersService.
 pruneIdempotency`, `IDEMPOTENCY_TTL_MS = 24h`, entries deleted, no row).
-   * agent_sessions: partial-unique index on `(account_id, idempotency_key)`
+   - agent_sessions: partial-unique index on `(account_id, idempotency_key)`
      with **no TTL nulling at all** — `findByIdempotencyKey` has no cutoff,
      so the key persists with the row indefinitely.
      **Decide:** should agent_sessions keys have a 24h TTL (then wire a sweep
