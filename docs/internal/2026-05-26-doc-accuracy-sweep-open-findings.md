@@ -170,6 +170,32 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
    would start getting 403) that the scope-enforcement parity tests should
    pin.
 
+## Minor hardening notes (NOT findings — surfaced by the security audits)
+
+These came out of the systematic route-security sweep (scope / ownership /
+rate-limit / input-validation / secret-exposure / CORS / PII-in-logs). They
+are **not bugs** — the default postures are secure and the gaps require a
+deliberate insecure config or a privacy-policy choice — but they're recorded
+here so they aren't lost. No action unless the posture below is wrong.
+
+- **CORS `PERMISSIVE_CORS` has no prod fail-fast.** `bootstrap.ts:1362`
+  reads `PERMISSIVE_CORS` (default false → allowlist mode, secure). When
+  `true` the app uses `origin: true` + `credentials: true` — fine for dev,
+  dangerous in prod. The codebase already fails fast on insecure prod config
+  (`DASHBOARD_ORIGIN` refuses localhost in prod), so a parallel guard
+  refusing `PERMISSIVE_CORS=true` in prod would be consistent. NOT done here
+  because "prod vs staging" detection is non-trivial — **staging may
+  legitimately want permissive CORS with a prod-like `NODE_ENV`**, so the
+  guard needs a prod-only signal the operator confirms.
+- **V-494 log redaction covers secrets, not PII.** `logger.ts` redacts
+  `authorization` / `*password` / `*secret` / `totp_secret` / `client_secret`
+  but not `email`/`to`/`ip`, so operational logs (`email.ts:653` "email sent"
+  with `to`; the IP rate-limiter) carry customer email + IP in plaintext.
+  This is standard legitimate-interest operational logging and V-494's
+  secret-only scope looks deliberate — but if the EU/GDPR posture wants log
+  PII-minimization, add `to`/`email`/`ip` to the redact paths (or hash them).
+  A privacy-policy call, not a bug.
+
 ## Shipped this sweep (all on `main`, gate-green)
 
 ~11 customer-facing doc/code fixes: TS error-handling class name
