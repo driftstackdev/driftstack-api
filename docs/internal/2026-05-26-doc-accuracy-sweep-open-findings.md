@@ -277,6 +277,13 @@ Additional shipped fixes (all on `main`, gate-green):
 - `docs/reference/errors.md` `legal-acceptance-required` row corrected
   `403`→`409` + TS class `ForbiddenError`→`LegalAcceptanceRequiredError`
   (all code surfaces use 409 + LegalAcceptanceRequiredError).
+- OpenAPI spec for `GET /v1/admin/accounts` advertised `limit` max `200`
+  but the route (`ListAdminAccountsQuerySchema`) enforces `100` — spec
+  aligned to the enforced value (an integrator trusting the spec who sent
+  `limit=150` would have hit an unexpected `400`). Same commit corrected
+  `reference/pagination.md` "Limit bounds": no endpoint defaults to `20`
+  (all default `50`), and the `200` max applies only to a few admin
+  endpoints (status-subscribers), not admin endpoints broadly.
 
 Guard-strengthenings shipped:
 
