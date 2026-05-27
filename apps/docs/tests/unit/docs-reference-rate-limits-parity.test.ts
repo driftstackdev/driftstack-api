@@ -77,6 +77,21 @@ describe('W254.A docs/reference/rate-limits ↔ TIER_RATE_LIMIT_DEFAULTS parity'
     }
   });
 
+  it('every agent_sessions:input_event capacity / refill (prose line) matches TIER_RATE_LIMIT_DEFAULTS', () => {
+    // The input_event values live in a prose line ("`tier` cap / refill,
+    // ...") below the table, not a table column. Tier-anchored so duplicate
+    // value pairs (e.g. solo_manual == api_starter == 360/90) don't alias;
+    // `\s*` spans the prose line-wrap.
+    for (const t of tiers) {
+      const cfg = TIER_RATE_LIMIT_DEFAULTS[t as keyof typeof TIER_RATE_LIMIT_DEFAULTS];
+      const ie = cfg['agent_sessions:input_event'];
+      const cap = ie.capacity.toLocaleString('en-US').replace(/,/g, ',?');
+      const refill = ie.refill_per_second.toLocaleString('en-US').replace(/,/g, ',?');
+      const re = new RegExp(`\`${t}\`\\s*${cap}\\s*/\\s*${refill}`);
+      expect(doc, `input_event cap/refill mismatch for ${t}`).toMatch(re);
+    }
+  });
+
   it('cites both bucket keys (global + sessions:create) explicitly', () => {
     expect(doc).toMatch(/`global`/);
     expect(doc).toMatch(/`sessions:create`/);
