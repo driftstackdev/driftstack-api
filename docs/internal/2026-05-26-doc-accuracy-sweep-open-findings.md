@@ -115,6 +115,34 @@ MAX_ATTEMPTS` with `MAX_ATTEMPTS = 5` (`apps/server/src/services/
    bound is the product intent is a founder call, and the email copy is
    parity-pinned.
 
+7. **`pointerToViewport` assumes `object-fill` but the `<video>` is
+   `object-contain` — latent click mis-mapping, a multi-archetype blocker.**
+   `apps/gui-client/src/lib/livekit-input-capture.ts` `pointerToViewport`
+   maps a click via the full element rect:
+   `x = ((clientX - rect.left) / rect.width) * videoWidth`. But the `<video>`
+   renders with `object-contain` (`AgentSessionPanel.tsx:108`,
+   `h-full w-full object-contain`) inside a container whose `aspectRatio` is
+   fixed (default `IPHONE_16_PRO_ASPECT_RATIO`, `AgentSessionPanel.tsx:101`).
+   When the stream aspect == container aspect (iPhone-only v1.0) there is no
+   letterbox and the mapping is exact — so this is **not a current bug**. But
+   `object-contain` letterboxes the moment the stream aspect differs from the
+   container `aspectRatio` (e.g. a non-iPhone archetype), and the mapping does
+   NOT account for the letterbox bars / content-rect offset — so **every
+   click would be mis-mapped (offset + wrong scale) on a mismatched-aspect
+   stream**, making remote control unusable for that archetype. The pure test
+   (`livekit-input-capture-pure.test.tsx`) only covers matched 4:3 cases, so
+   it wouldn't catch this. **Multi-archetype pre-req (queued):** before any
+   non-iPhone archetype ships, make `pointerToViewport` letterbox-aware —
+   compute `scale = min(rect.w/nw, rect.h/nh)`, subtract the centered
+   `offset = (rect.w - nw*scale)/2` (and y), divide by `scale`. This is
+   backward-compatible (algebraically identical when aspects match) so the
+   existing matched-aspect tests stay green. NOT auto-fixed: the fix forces a
+   **UX decision** for clicks that land in the letterbox bar (clamp to the
+   nearest content edge / return `null` to ignore / pass through
+   out-of-bounds) — best made by the multi-archetype implementer with product
+   context; and two content-parity tests pin the current `pointerToViewport`
+   source, so the source + pins must change together.
+
 ## Shipped this sweep (all on `main`, gate-green)
 
 ~11 customer-facing doc/code fixes: TS error-handling class name
