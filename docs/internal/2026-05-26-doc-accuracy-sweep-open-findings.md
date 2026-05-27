@@ -24,7 +24,7 @@ the numbered list below.
   - #12 — V-173 forward-path webhook delivery signs bare-hex; breaks ALL SDK verification on the durable-impl cutover. (Fix #12 + #13 together — one webhook-signature pass; both rooted in a missing server-sign→SDK-verify e2e test.)
   - #15 — LLM cost rate card models 4o-mini but the agent runs Opus 4.7 (~100× under-estimate); inert until LLM usage metering lands, then (a) under-reports bundled-LLM margin alerts AND (b) makes the customer-facing bundled-LLM budget soft-cap deplete ~100× too slowly (customers get ~100× more bundled Opus than the cap intends). Rate must be right in the writer BEFORE bundled-LLM goes LIVE. (Fix with #6 / V-541.J/K — same deferred metering subsystem.)
 - **Contract / intent decisions (pick a direction, then align sources):**
-  - #5 — webhook retry count: code does 4 retries, docs + rationale promise 5; the guard is toothless.
+  - #5 — [RESOLVED 2026-05-27, 0a3e5cca] webhook retry count fixed to the documented 5 retries / 6 attempts (founder approved option a); all 3 impls bumped to MAX=6, customer docs reconciled, the toothless guard now asserts numeric cross-source equality.
   - #10 — crypto checkout accepts `trial_pack` but crypto quote 400s it.
   - #1 — [RESOLVED 2026-05-27] idempotency reference doc described a TTL-sweep job that doesn't exist; rewritten to real per-subsystem behaviour.
   - #3 — TS SDK User-Agent frozen at 0.0.1 vs package.json 0.1.6 (contradictory pin vs W834).
