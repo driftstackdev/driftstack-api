@@ -243,6 +243,22 @@ describe('W966 config lib cross-source invariant', () => {
     expect(p).toMatch(/driver: z\.enum\(\['mock', 'webkit', 'playwright'\]\)\.default\('mock'\),/);
   });
 
+  it('CRITICAL docs/deployment/env-vars.md DRIVER row lists EVERY config.ts driver enum value. Drift (config gains a driver, doc omits it — as happened with `playwright`) leaves operators unaware a substrate is selectable.', () => {
+    const cfg = read(resolve(REPO_ROOT, 'apps/server/src/lib/config.ts'));
+    const enumMatch = cfg.match(/driver: z\.enum\(\[([^\]]+)\]\)/);
+    expect(enumMatch, 'config.ts driver enum not found').not.toBeNull();
+    const enumBody = enumMatch?.[1] ?? '';
+    const values = [...enumBody.matchAll(/'([a-z]+)'/g)]
+      .map((m) => m[1])
+      .filter((v): v is string => v !== undefined);
+    expect(values.length).toBeGreaterThanOrEqual(3);
+    const envVarsDoc = read(resolve(REPO_ROOT, 'docs/deployment/env-vars.md'));
+    const driverRow = envVarsDoc.split('\n').find((l) => /^\|\s*`DRIVER`/.test(l)) ?? '';
+    for (const v of values) {
+      expect(driverRow, `env-vars.md DRIVER row must list driver value '${v}'`).toContain(v);
+    }
+  });
+
   // ─── nodeEnv + logLevel enums ────────────────────────────────
 
   it("CRITICAL nodeEnv 3-value enum — 'development' | 'test' | 'production' (default 'development'). Matches the standard Node.js NODE_ENV vocabulary.", () => {

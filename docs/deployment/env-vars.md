@@ -32,13 +32,13 @@ months in.
 
 ### Process / runtime
 
-| Name        | Required | Per-env? | Example      | Notes                                                                                                                                           |
-| ----------- | -------- | -------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`  | yes      | per-env  | `production` | One of `development \| test \| production`. Production deploys hardcode `production` in the Dockerfile env block; the .env override is unusual. |
-| `PORT`      | optional | shared   | `7780`       | Default 3000 in dev; production compose pins 7780 to match the GUI client's expected default.                                                   |
-| `HOST`      | optional | shared   | `0.0.0.0`    | Default `0.0.0.0`. Inside the container; the host binds `127.0.0.1:7780` so the bind value is irrelevant externally.                            |
-| `LOG_LEVEL` | optional | per-env  | `info`       | `fatal \| error \| warn \| info \| debug \| trace`. Production: `info`. Staging: `debug`. Default `info`.                                       |
-| `DRIVER`    | optional | per-env  | `mock`       | `mock \| webkit`. Pre-V1 staging + production both run `mock` until Agent 1's WebKit fork integrates.                                           |
+| Name        | Required | Per-env? | Example      | Notes                                                                                                                                                                                                                |
+| ----------- | -------- | -------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`  | yes      | per-env  | `production` | One of `development \| test \| production`. Production deploys hardcode `production` in the Dockerfile env block; the .env override is unusual.                                                                      |
+| `PORT`      | optional | shared   | `7780`       | Default 3000 in dev; production compose pins 7780 (nginx proxies the loopback `127.0.0.1:7780`).                                                                                                                     |
+| `HOST`      | optional | shared   | `0.0.0.0`    | Default `0.0.0.0`. Inside the container; the host binds `127.0.0.1:7780` so the bind value is irrelevant externally.                                                                                                 |
+| `LOG_LEVEL` | optional | per-env  | `info`       | `fatal \| error \| warn \| info \| debug \| trace`. Production: `info`. Staging: `debug`. Default `info`.                                                                                                            |
+| `DRIVER`    | optional | per-env  | `mock`       | `mock \| webkit \| playwright` (config.ts enum). Pre-V1 staging + production both run `mock` until Agent 1's WebKit fork integrates; `playwright` is the V-333b local real-browser path (with `PLAYWRIGHT_BROWSER`). |
 
 ### Postgres (Neon, EU Frankfurt)
 
