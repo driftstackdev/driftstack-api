@@ -34,6 +34,16 @@ const MARKETING_DIR = resolve(REPO_ROOT, 'apps/marketing-site/src/pages');
 // those deliberate counter-examples don't read as drift.
 const MARKETING_SCAN_EXCLUDE = new Set(['docs/migration-from-browserless.astro']);
 
+// The SDK README files are the npm / PyPI / pkg.go.dev landing pages —
+// the highest-visibility customer-facing SDK examples. A drifted method
+// call there is a broken first-impression snippet, and (like marketing)
+// nothing else type-checks them, so sweep them for method existence too.
+const SDK_READMES = [
+  'packages/sdk-typescript/README.md',
+  'packages/sdk-python/README.md',
+  'packages/sdk-go/README.md',
+];
+
 function walkDocs(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -200,6 +210,27 @@ describe('docs ↔ SDK method-call cross-source invariant', () => {
     expect(
       missing,
       `Python-example client.<resource>.<method>() calls with no matching SDK method:\n${missing.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('every client.<resource>.<method>() in the SDK READMEs exists on a real SDK', () => {
+    const callRe = /client\.([A-Za-z][A-Za-z0-9_]*)\.([A-Za-z][A-Za-z0-9_]*)\(/g;
+    const missing: string[] = [];
+    let scanned = 0;
+    for (const rel of SDK_READMES) {
+      const body = readFileSync(resolve(REPO_ROOT, rel), 'utf8');
+      let m: RegExpExecArray | null;
+      const re = new RegExp(callRe.source, 'g');
+      while ((m = re.exec(body)) !== null) {
+        scanned += 1;
+        const key = `${m[1]}.${m[2]}`;
+        if (!inventory.has(key)) missing.push(`${key}  (${rel})`);
+      }
+    }
+    expect(scanned, 'expected the SDK READMEs to contain method-call examples').toBeGreaterThan(20);
+    expect(
+      missing,
+      `SDK README client.<resource>.<method>() calls with no matching SDK method:\n${missing.join('\n')}`,
     ).toEqual([]);
   });
 });
