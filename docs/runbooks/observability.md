@@ -41,14 +41,14 @@ Each project has its own DSN. Server-side DSNs are read via
 `SENTRY_DSN` (the server only reports its own errors) at boot;
 browser-bundled DSNs are injected at build time via repo secrets:
 
-| Project                | Env var consumed                                   | GitHub secret                   |
-| ---------------------- | -------------------------------------------------- | ------------------------------- |
-| driftstack-server      | `SENTRY_DSN` (on the api server's /etc env file)   | `SENTRY_DSN_SERVER`             |
-| driftstack-dashboard   | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_DASHBOARD`   |
-| driftstack-marketing   | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_MARKETING`   |
-| driftstack-docs        | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_DOCS`        |
-| driftstack-status-site | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_STATUS_SITE` |
-| driftstack-admin-panel | `NEXT_PUBLIC_SENTRY_DSN` (or framework equivalent) | `PUBLIC_SENTRY_DSN_ADMIN_PANEL` |
+| Project                | Env var consumed                                     | GitHub secret                   |
+| ---------------------- | ---------------------------------------------------- | ------------------------------- |
+| driftstack-server      | `SENTRY_DSN` (on the api server's /etc env file)     | `SENTRY_DSN_SERVER`             |
+| driftstack-dashboard   | `PUBLIC_SENTRY_DSN_<service>` (Astro build-time env) | `PUBLIC_SENTRY_DSN_DASHBOARD`   |
+| driftstack-marketing   | `PUBLIC_SENTRY_DSN_<service>` (Astro build-time env) | `PUBLIC_SENTRY_DSN_MARKETING`   |
+| driftstack-docs        | `PUBLIC_SENTRY_DSN_<service>` (Astro build-time env) | `PUBLIC_SENTRY_DSN_DOCS`        |
+| driftstack-status-site | `PUBLIC_SENTRY_DSN_<service>` (Astro build-time env) | `PUBLIC_SENTRY_DSN_STATUS_SITE` |
+| driftstack-admin-panel | `PUBLIC_SENTRY_DSN_<service>` (Astro build-time env) | `PUBLIC_SENTRY_DSN_ADMIN_PANEL` |
 
 > Naming note: the api server reads `SENTRY_DSN`, but the GitHub
 > secret is `SENTRY_DSN_SERVER` (disambiguated so a future

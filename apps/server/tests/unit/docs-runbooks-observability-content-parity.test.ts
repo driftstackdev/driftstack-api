@@ -88,6 +88,10 @@ describe('W556.C /docs/runbooks/observability.md content parity', () => {
     expect(body).toMatch(/`PUBLIC_SENTRY_DSN_DOCS`/);
     expect(body).toMatch(/`PUBLIC_SENTRY_DSN_STATUS_SITE`/);
     expect(body).toMatch(/`PUBLIC_SENTRY_DSN_ADMIN_PANEL`/);
+    // The client apps are Astro (PUBLIC_ build-time env), never Next.js — a
+    // NEXT_PUBLIC_ var name would send operators to set a var no app reads
+    // (Sentry silently disabled). astro.config.mjs reads PUBLIC_SENTRY_DSN_*.
+    expect(body).not.toMatch(/NEXT_PUBLIC/);
     // EU validator
     expect(body).toMatch(
       /The validator in `apps\/server\/src\/lib\/config\.ts:63` enforces\s*\n?the EU region — DSNs without `\.de\.` or `\.ingest\.de\.sentry\.io`\s*\n?are rejected at boot\./,
