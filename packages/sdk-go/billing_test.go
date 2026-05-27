@@ -23,7 +23,6 @@ func TestBilling_GetState(t *testing.T) {
 				CurrentPeriodEnd:  &periodEnd,
 				CancelAtPeriodEnd: false,
 			},
-			TrialPack: TrialPackState{Active: false, Redeemed: false},
 		})
 	})
 	got, err := client.Billing.GetState(context.Background())
@@ -32,9 +31,6 @@ func TestBilling_GetState(t *testing.T) {
 	}
 	if got.Subscription == nil || got.Subscription.Tier != TierAPIBuilder {
 		t.Errorf("unexpected subscription: %+v", got.Subscription)
-	}
-	if got.TrialPack.Active {
-		t.Errorf("unexpected trial-pack: %+v", got.TrialPack)
 	}
 }
 
@@ -67,27 +63,6 @@ func TestBilling_CreateCheckoutSession(t *testing.T) {
 	}
 	if got.CheckoutURL == "" || got.SessionID == "" {
 		t.Errorf("unexpected response: %+v", got)
-	}
-}
-
-func TestBilling_StartTrialPack_NilBody(t *testing.T) {
-	t.Parallel()
-	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/billing/trial-pack" {
-			t.Errorf("path=%q", r.URL.Path)
-		}
-		w.Header().Set("content-type", "application/json")
-		_ = json.NewEncoder(w).Encode(StartTrialPackResponse{
-			CheckoutURL: "https://checkout.stripe.com/c/cs_trial_123",
-			SessionID:   "cs_trial_123",
-		})
-	})
-	got, err := client.Billing.StartTrialPack(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.CheckoutURL == "" {
-		t.Errorf("missing checkout url")
 	}
 }
 

@@ -47,7 +47,7 @@ describe('CryptoOrdersResource', () => {
     const h = harness();
     h.setResponse({ order_id: 'ord_a' });
     const r = new CryptoOrdersResource(h.http);
-    await r.createCheckout({ product: 'trial_pack', price_cents: 299, price_currency: 'USD' });
+    await r.createCheckout({ product: 'solo_manual', price_cents: 7900, price_currency: 'USD' });
     expect(h.calls[0]?.path).toBe('/v1/billing/crypto-checkout');
     expect(h.calls[0]?.headers).toBeUndefined();
   });
@@ -57,7 +57,7 @@ describe('CryptoOrdersResource', () => {
     h.setResponse({ order_id: 'ord_a' });
     const r = new CryptoOrdersResource(h.http);
     await r.createCheckout(
-      { product: 'trial_pack', price_cents: 299, price_currency: 'USD' },
+      { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' },
       { idempotencyKey: 'k-123' },
     );
     expect(h.calls[0]?.headers).toEqual({ 'idempotency-key': 'k-123' });

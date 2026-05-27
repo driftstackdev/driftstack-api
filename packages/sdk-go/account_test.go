@@ -69,7 +69,7 @@ func TestAccount_Me_NullableFields(t *testing.T) {
 		"id":                        "acc_00000000-0000-4000-8000-000000000001",
 		"email":                     "x@y.z",
 		"name":                      nil,
-		"tier":                      "trial_pack",
+		"tier":                      "free",
 		"status":                    "active",
 		"timezone":                  nil,
 		"slug":                      nil,

@@ -1,19 +1,18 @@
 """BillingResource tests.
 
-BillingResource (4 sync + 4 async methods) had NO direct test
+BillingResource (3 sync + 3 async methods) had NO direct test
 coverage in the Python SDK test suite. The /v1/billing surface
-(V-082) is customer-facing — checkout sessions, trial-pack purchase,
-Stripe customer portal — but the HTTP wrappers around it weren't
-exercised by unit tests.
+(V-082) is customer-facing — checkout sessions + Stripe customer
+portal — but the HTTP wrappers around it weren't exercised by unit
+tests. (The one-time trial-pack purchase flow was retired 2026-05-27;
+the perpetual free tier needs no purchase step.)
 
 Coverage:
   - get_state() → GET /v1/billing
   - create_checkout_session({...}) → POST /v1/billing/checkout-session
-  - start_trial_pack() → POST /v1/billing/trial-pack with {} body
-  - start_trial_pack({...}) → POST /v1/billing/trial-pack with body
   - create_portal_session() → POST /v1/billing/portal-session (no body)
 
-  + 4 mirror async paths.
+  + 3 mirror async paths.
 """
 
 from __future__ import annotations
@@ -34,7 +33,6 @@ BILLING_STATE: dict = {
         "current_period_end": "2026-06-01T00:00:00Z",
         "cancel_at_period_end": False,
     },
-    "trial_pack": None,
 }
 
 
@@ -73,34 +71,6 @@ def test_sync_create_checkout_session_sends_post() -> None:
         assert b'"billing_period":"monthly"' in captured_body[0]
 
 
-def test_sync_start_trial_pack_no_body_sends_empty_object() -> None:
-    captured_body: list[bytes] = []
-    with respx.mock(base_url=BASE) as mock:
-        mock.post("/v1/billing/trial-pack").mock(
-            side_effect=lambda req: (
-                captured_body.append(req.content) or httpx.Response(200, json={"ok": True})
-            ),
-        )
-        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
-            result = client.billing.start_trial_pack()
-        assert result == {"ok": True}
-        # No body argument → empty object {}.
-        assert captured_body[0] == b"{}"
-
-
-def test_sync_start_trial_pack_with_body_forwards_it() -> None:
-    captured_body: list[bytes] = []
-    with respx.mock(base_url=BASE) as mock:
-        mock.post("/v1/billing/trial-pack").mock(
-            side_effect=lambda req: (
-                captured_body.append(req.content) or httpx.Response(200, json={"ok": True})
-            ),
-        )
-        with Driftstack(api_key=API_KEY, base_url=BASE) as client:
-            client.billing.start_trial_pack({"discount_code": "FRIEND10"})
-        assert b'"discount_code":"FRIEND10"' in captured_body[0]
-
-
 def test_sync_create_portal_session_hits_portal_endpoint() -> None:
     response = {"url": "https://billing.stripe.com/p/session/abc"}
     with respx.mock(base_url=BASE) as mock:
@@ -134,20 +104,6 @@ async def test_async_create_checkout_session() -> None:
                 {"tier": "api_scale", "billing_period": "annual"},
             )
         assert result["url"].endswith("/xyz789")
-
-
-@pytest.mark.asyncio
-async def test_async_start_trial_pack_no_body() -> None:
-    captured_body: list[bytes] = []
-    with respx.mock(base_url=BASE) as mock:
-        mock.post("/v1/billing/trial-pack").mock(
-            side_effect=lambda req: (
-                captured_body.append(req.content) or httpx.Response(200, json={"ok": True})
-            ),
-        )
-        async with AsyncDriftstack(api_key=API_KEY, base_url=BASE) as client:
-            await client.billing.start_trial_pack()
-        assert captured_body[0] == b"{}"
 
 
 @pytest.mark.asyncio
