@@ -465,6 +465,38 @@ Guard-strengthenings shipped:
   column against every ApiError subclass status (closes the gap that hid the
   legal-acceptance drift).
 
+### Wave 2 (2026-05-27) — additional shipped fixes + guards
+
+Fixes (all on `main`, gate-green):
+
+- `reference/cost-monitoring.md` `thresholdState` value corrected `between`
+  → `between-soft-and-hard` (example + state table); the cost engine emits
+  `between-soft-and-hard` (`cost-estimator.ts:111`), so a customer branching
+  on `=== 'between'` never matched.
+- Admin UI cost-badge key corrected `between` → `between-soft-and-hard` in
+  `cost.astro` + `accounts/[id].astro` — the soft-warn account state was
+  rendering the gray default badge instead of amber (same drift class as the
+  doc fix; the stale value had propagated to two admin pages).
+- `docs/deployment/env-vars.md` — documented the 6 operator env vars the
+  server reads but the canonical schema omitted (resolves finding #9; see #9
+  for the residual `NOWPAYMENTS_IPN_CALLBACK_URL` operator action).
+
+Guard-strengthenings:
+
+- `openapi-admin-list-limit-bounds-parity` — pins the spec's `limit` max to
+  the route schema's for every admin list endpoint (the class behind the
+  /v1/admin/accounts 200-vs-100 fix).
+- `scope-enforcement-literals-valid` — scans all ~135 `requireScope` /
+  `throwIfMissingScope` call sites; asserts each scope literal ∈
+  ApiKeyScopeSchema + bans the bare legacy `'admin'` (V-174 defense).
+- `rate-limit-bucket-literals-valid` — scans `rateLimit('…')` call-site
+  buckets against the TIER_RATE_LIMIT_DEFAULTS roster.
+- `docs-cost-monitoring-threshold-parity` + `admin-cost-threshold-badge-keys-parity`
+  — pin the thresholdState value across the doc + both admin badge maps
+  (regression protection for the two fixes above).
+- `docs-sdk-install-package-names-parity` — pins sdk/installation.md install
+  commands to the real npm/PyPI/Go package identities (rename → install break).
+
 ### Verification coverage (checked-and-clean, this session)
 
 So findings + fixes above are the _exceptions_; the bulk of the session was
