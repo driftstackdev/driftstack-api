@@ -131,10 +131,11 @@ docker compose exec redis redis-cli FLUSHALL
 
 ## Common pitfalls
 
-- **GUI's First-Run Wizard fails**: usually `PUBLIC_API_BASE_URL`
-  mismatch. The GUI tries `http://localhost:7780` by default per
-  `apps/gui-client/src/lib/settings.ts`; override to
-  `http://localhost:3000` in the wizard's base-URL field.
+- **GUI's First-Run Wizard fails**: usually a base-URL mismatch. The
+  GUI's self-hosted default is `http://localhost:3000` (matches the dev
+  API) per `apps/gui-client/src/lib/settings.ts` — set that in the
+  wizard's base-URL field if it's pointed elsewhere (e.g. left at the
+  cloud default `https://api.driftstack.dev`).
 - **Migrations fail with "extension uuid-ossp not found"**: the dev
   compose enables it via `docker-entrypoint-initdb.d`. If you wiped
   the volume, rebuild via `docker compose down -v && docker compose

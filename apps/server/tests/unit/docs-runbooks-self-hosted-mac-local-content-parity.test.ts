@@ -13,7 +13,7 @@
 //   • DRIVER=webkit returns DriverNotIntegratedError until WebKit
 //     fork (Agent 1 repo) lands production driver.
 //   • PUBLIC_API_BASE_URL defaults http://localhost:3000.
-//   • GUI default base http://localhost:7780 — override to 3000 in
+//   • GUI self-hosted default base http://localhost:3000 (matches dev API;
 //     first-run wizard.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -92,7 +92,7 @@ describe('W557.B /docs/runbooks/self-hosted-mac-local.md content parity', () => 
     expect(body).toMatch(/repo\) lands the production driver separately\./);
   });
 
-  it("Reset-between-runs + common-pitfalls framing pinned: 'TRUNCATE TABLE' + 'sessions, profiles, api_keys, web_sessions, accounts, account_audit_log' + 'admin_audit_log, webhook_endpoints, webhook_deliveries, stripe_events' + 'subscriptions, usage_records, rate_limit_overrides, status_subscribers' + 'incidents, incident_updates, scheduled_jobs, team_members, team_invites' + 'legal_acceptances RESTART IDENTITY CASCADE' + 'docker compose exec redis redis-cli FLUSHALL' + '**GUI's First-Run Wizard fails**: usually `PUBLIC_API_BASE_URL` mismatch. The GUI tries `http://localhost:7780` by default per `apps/gui-client/src/lib/settings.ts`' + '**Migrations fail with \"extension uuid-ossp not found\"**' + 'docker compose down -v && docker compose' + '**Tauri dev hangs at \"Compiling tauri\"**: cold compile is slow on Apple Silicon (~3 min); warm rebuilds are <10s.' — pinned so the TRUNCATE-CASCADE-table-inventory + Redis-FLUSHALL + GUI-default-7780-override-3000 + uuid-ossp-down-v + Tauri-cold-3min-warm-10s commitment survives", () => {
+  it("Reset-between-runs + common-pitfalls framing pinned: 'TRUNCATE TABLE' + 'sessions, profiles, api_keys, web_sessions, accounts, account_audit_log' + 'admin_audit_log, webhook_endpoints, webhook_deliveries, stripe_events' + 'subscriptions, usage_records, rate_limit_overrides, status_subscribers' + 'incidents, incident_updates, scheduled_jobs, team_members, team_invites' + 'legal_acceptances RESTART IDENTITY CASCADE' + 'docker compose exec redis redis-cli FLUSHALL' + '**GUI's First-Run Wizard fails**: usually a base-URL mismatch. The GUI self-hosted default is `http://localhost:3000` (matches the dev API) per `apps/gui-client/src/lib/settings.ts`' + '**Migrations fail with \"extension uuid-ossp not found\"**' + 'docker compose down -v && docker compose' + '**Tauri dev hangs at \"Compiling tauri\"**: cold compile is slow on Apple Silicon (~3 min); warm rebuilds are <10s.' — pinned so the TRUNCATE-CASCADE-table-inventory + Redis-FLUSHALL + GUI-self-hosted-default-3000 + uuid-ossp-down-v + Tauri-cold-3min-warm-10s commitment survives", () => {
     expect(body).toMatch(/TRUNCATE TABLE/);
     expect(body).toMatch(
       /sessions, profiles, api_keys, web_sessions, accounts, account_audit_log,/,
@@ -104,9 +104,13 @@ describe('W557.B /docs/runbooks/self-hosted-mac-local.md content parity', () => 
     );
     expect(body).toMatch(/legal_acceptances RESTART IDENTITY CASCADE;/);
     expect(body).toMatch(/docker compose exec redis redis-cli FLUSHALL/);
-    expect(body).toMatch(/- \*\*GUI's First-Run Wizard fails\*\*: usually `PUBLIC_API_BASE_URL`/);
-    expect(body).toMatch(/mismatch\. The GUI tries `http:\/\/localhost:7780` by default per/);
-    expect(body).toMatch(/`apps\/gui-client\/src\/lib\/settings\.ts`;/);
+    expect(body).toMatch(/- \*\*GUI's First-Run Wizard fails\*\*: usually a base-URL mismatch/);
+    expect(body).toMatch(/self-hosted default is `http:\/\/localhost:3000` \(matches the dev/);
+    // Regression: the GUI default flipped 7780 → 3000 on 2026-05-20
+    // (FirstRunWizard.tsx + settings.ts DEFAULT_SETTINGS) — the runbook
+    // must not resurrect the stale 7780 default.
+    expect(body).not.toMatch(/7780/);
+    expect(body).toMatch(/`apps\/gui-client\/src\/lib\/settings\.ts`/);
     expect(body).toMatch(/- \*\*Migrations fail with "extension uuid-ossp not found"\*\*/);
     expect(body).toMatch(/docker compose down -v && docker compose/);
     expect(body).toMatch(/- \*\*Tauri dev hangs at "Compiling tauri"\*\*: cold compile is slow on/);
