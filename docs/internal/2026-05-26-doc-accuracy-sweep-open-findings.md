@@ -195,6 +195,25 @@ production-env-schema.md` found these read-but-undocumented-in-both:
    (no intent decision); deferred only because the complete-list sweep +
    accurate per-var descriptions are worth doing in one pass.
 
+10. **Crypto quote vs checkout product lists disagree on `trial_pack`
+    (minor).** Crypto **checkout** derives its accepted-product enum from
+    `TIER_PRICE_CENTS` keys (`billing-crypto.ts:96` —
+    `Object.keys(TIER_PRICE_CENTS)`), which includes 7 products **incl.
+    `trial_pack`**. But the crypto **quote** route hardcodes a 6-product list
+    (`billing-crypto-quote.ts:26`) — the recurring tiers only, **omitting
+    `trial_pack`** (and enterprise). So `POST /v1/billing/crypto-checkout`
+    accepts `product: 'trial_pack'`, but `POST
+/v1/billing/crypto-checkout/quote` 400s for it. Both routes price from
+    the same `TIER_PRICE_CENTS` (no price divergence), and the quote 400 is
+    graceful (not a crash), so impact is low — a customer can crypto-checkout
+    the $2.99 trial but can't get a crypto _quote_ for it first. **Decide:**
+    either `trial_pack` should be crypto-quotable (derive the quote list from
+    `TIER_PRICE_CENTS` too, matching checkout), or the $2.99 one-time trial
+    should NOT be crypto-checkout-able (Stripe-only) and should be excluded
+    from `TIER_PRICE_CENTS` / the checkout enum. NOT auto-fixed: which is the
+    product intent (is the trial crypto-purchasable?) is a founder call, and
+    deriving the quote list vs trimming checkout are opposite resolutions.
+
 ## Minor hardening notes (NOT findings — surfaced by the security audits)
 
 These came out of the systematic route-security sweep (scope / ownership /
