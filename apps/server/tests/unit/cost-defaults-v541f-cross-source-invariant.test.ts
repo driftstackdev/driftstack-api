@@ -25,8 +25,8 @@
 //     - storageCentsPerGbMonth: 1.5 (R2 €0.015/GB-month list).
 //     - egressCentsPerGb: 5 (TURN €0.05/GB post-V-531-discount).
 //     - emailCentsPerSend: 0.1 (Postmark transactional bulk).
-//     - llmCentsPer1kInputTokens: 0.015 (OpenAI 4o-mini ~€0.15/1M).
-//     - llmCentsPer1kOutputTokens: 0.06 (OpenAI 4o-mini ~€0.60/1M).
+//     - llmCentsPer1kInputTokens: 1.5 (Anthropic Claude Opus 4.7 $15/1M).
+//     - llmCentsPer1kOutputTokens: 7.5 (Anthropic Claude Opus 4.7 $75/1M).
 //
 //   Source-spreadsheet framing — 'Source spreadsheet: docs/internal/
 //   v541-cost-monitoring-design.md, Default rate card v1 (W44
@@ -134,8 +134,8 @@ describe('W973 V-541.F cost-defaults cross-source invariant', () => {
     expect(DEFAULT_COST_RATES.storageCentsPerGbMonth).toBe(1.5);
     expect(DEFAULT_COST_RATES.egressCentsPerGb).toBe(5);
     expect(DEFAULT_COST_RATES.emailCentsPerSend).toBe(0.1);
-    expect(DEFAULT_COST_RATES.llmCentsPer1kInputTokens).toBe(0.015);
-    expect(DEFAULT_COST_RATES.llmCentsPer1kOutputTokens).toBe(0.06);
+    expect(DEFAULT_COST_RATES.llmCentsPer1kInputTokens).toBe(1.5);
+    expect(DEFAULT_COST_RATES.llmCentsPer1kOutputTokens).toBe(7.5);
   });
 
   it("CRITICAL compute-rate framing — '// Hetzner CCX13 averaged across the fleet, divided by minutes-per-month.' + 0.05 cents/min. The Hetzner-CCX13-fleet-averaged framing is the compute-rate provenance.", () => {
@@ -162,16 +162,17 @@ describe('W973 V-541.F cost-defaults cross-source invariant', () => {
     expect(p).toMatch(/emailCentsPerSend: 0\.1,/);
   });
 
-  it("CRITICAL LLM-input-rate framing — '// OpenAI 4o-mini input list price ~€0.15/1M = 0.015c/1k.' + 0.015 cents/1k tokens. The 4o-mini-€0.15/1M framing is the LLM-input-rate provenance.", () => {
+  it('CRITICAL LLM-input-rate framing — Anthropic Claude Opus 4.7 list price ($15/1M = 1.5c/1k) + 1.5 cents/1k tokens. The Opus-4.7-$15/1M framing is the LLM-input-rate provenance (corrected from the 4o-mini ~100× under-estimate, #15).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/cost-defaults.ts'));
-    expect(p).toMatch(/OpenAI 4o-mini input list price ~€0\.15\/1M = 0\.015c\/1k\./);
-    expect(p).toMatch(/llmCentsPer1kInputTokens: 0\.015,/);
+    expect(p).toMatch(/\/\/ Anthropic Claude Opus 4\.7 list price \(the model the agent actually/);
+    expect(p).toMatch(/\$15\/1M input = 1\.5c\/1k\./);
+    expect(p).toMatch(/llmCentsPer1kInputTokens: 1\.5,/);
   });
 
-  it("CRITICAL LLM-output-rate framing — '// OpenAI 4o-mini output list price ~€0.60/1M = 0.06c/1k.' + 0.06 cents/1k tokens. The 4o-mini-€0.60/1M framing is the LLM-output-rate provenance.", () => {
+  it('CRITICAL LLM-output-rate framing — Anthropic Claude Opus 4.7 list price ($75/1M = 7.5c/1k) + 7.5 cents/1k tokens. The Opus-4.7-$75/1M framing is the LLM-output-rate provenance (corrected from the 4o-mini ~100× under-estimate, #15).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/cost-defaults.ts'));
-    expect(p).toMatch(/OpenAI 4o-mini output list price ~€0\.60\/1M = 0\.06c\/1k\./);
-    expect(p).toMatch(/llmCentsPer1kOutputTokens: 0\.06,/);
+    expect(p).toMatch(/Anthropic Claude Opus 4\.7 list price — \$75\/1M output = 7\.5c\/1k\./);
+    expect(p).toMatch(/llmCentsPer1kOutputTokens: 7\.5,/);
   });
 
   // ─── TIER_MONTHLY_PRICE_CENTS 6-tier inventory ───────────────

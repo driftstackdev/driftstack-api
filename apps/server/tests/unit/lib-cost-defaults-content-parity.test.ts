@@ -50,19 +50,22 @@ describe('W390.C apps/server/src/lib/cost-defaults.ts content parity', () => {
     expect(body).toMatch(/storageCentsPerGbMonth: 1\.5,/);
     expect(body).toMatch(/egressCentsPerGb: 5,/);
     expect(body).toMatch(/emailCentsPerSend: 0\.1,/);
-    expect(body).toMatch(/llmCentsPer1kInputTokens: 0\.015,/);
-    expect(body).toMatch(/llmCentsPer1kOutputTokens: 0\.06,/);
+    expect(body).toMatch(/llmCentsPer1kInputTokens: 1\.5,/);
+    expect(body).toMatch(/llmCentsPer1kOutputTokens: 7\.5,/);
   });
 
-  it('DEFAULT_COST_RATES: provenance comments pinned (Hetzner CCX13 / R2 €0.015 / TURN €0.05 / Postmark €0.001 / OpenAI 4o-mini)', () => {
+  it('DEFAULT_COST_RATES: provenance comments pinned (Hetzner CCX13 / R2 €0.015 / TURN €0.05 / Postmark €0.001 / Anthropic Claude Opus 4.7)', () => {
     expect(body).toMatch(
       /\/\/ Hetzner CCX13 averaged across the fleet, divided by minutes-per-month\./,
     );
     expect(body).toMatch(/\/\/ R2 €0\.015\/GB-month list price\./);
     expect(body).toMatch(/\/\/ TURN egress €0\.05\/GB after V-531 free-tier discount\./);
     expect(body).toMatch(/\/\/ Postmark transactional bulk rate, €0\.001\/send\./);
-    expect(body).toMatch(/\/\/ OpenAI 4o-mini input list price ~€0\.15\/1M = 0\.015c\/1k\./);
-    expect(body).toMatch(/\/\/ OpenAI 4o-mini output list price ~€0\.60\/1M = 0\.06c\/1k\./);
+    expect(body).toMatch(
+      /\/\/ Anthropic Claude Opus 4\.7 list price \(the model the agent actually/,
+    );
+    expect(body).toMatch(/\$15\/1M input = 1\.5c\/1k\./);
+    expect(body).toMatch(/Anthropic Claude Opus 4\.7 list price — \$75\/1M output = 7\.5c\/1k\./);
   });
 
   it('TIER_MONTHLY_PRICE_CENTS: 6 self-serve tiers with cents values (Partial<Record<AccountTier>>)', () => {
