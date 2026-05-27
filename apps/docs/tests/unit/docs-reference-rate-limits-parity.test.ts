@@ -46,6 +46,37 @@ describe('W254.A docs/reference/rate-limits ↔ TIER_RATE_LIMIT_DEFAULTS parity'
     }
   });
 
+  // W254.A follow-up — the original guard pinned only the two capacity
+  // columns (global + sessions:create), leaving global-refill and the
+  // agent_sessions:message capacity unpinned so a future
+  // TIER_RATE_LIMIT_DEFAULTS change to those would silently drift the doc.
+  // These integer columns are pinnable directly (fractional refill columns
+  // render as "1/N (M per minute)" and are left to a separate prose pin).
+  it('every per-tier global-bucket refill (rps) matches TIER_RATE_LIMIT_DEFAULTS', () => {
+    for (const t of tiers) {
+      const cfg = TIER_RATE_LIMIT_DEFAULTS[t as keyof typeof TIER_RATE_LIMIT_DEFAULTS];
+      // Only assert integer refills here; fractional ones (e.g. 1/60) use a
+      // human "1/N" rendering covered separately.
+      if (!Number.isInteger(cfg.global.refill_per_second)) continue;
+      const refill = cfg.global.refill_per_second.toLocaleString('en-US');
+      // Second numeric column (after global capacity).
+      const re = new RegExp(`\`${t}\`\\s*\\|[^|]+\\|\\s*${refill.replace(/,/g, ',?')}\\s*\\|`);
+      expect(doc, `global refill mismatch for ${t} (expect ${refill})`).toMatch(re);
+    }
+  });
+
+  it('every agent_sessions:message capacity matches TIER_RATE_LIMIT_DEFAULTS', () => {
+    for (const t of tiers) {
+      const cfg = TIER_RATE_LIMIT_DEFAULTS[t as keyof typeof TIER_RATE_LIMIT_DEFAULTS];
+      const cap = cfg['agent_sessions:message'].capacity.toLocaleString('en-US');
+      // Fifth numeric column (skip global cap/refill + sessions:create cap/refill).
+      const re = new RegExp(
+        `\`${t}\`\\s*\\|[^|]+\\|[^|]+\\|[^|]+\\|[^|]+\\|\\s*${cap.replace(/,/g, ',?')}\\s*\\|`,
+      );
+      expect(doc, `agent_sessions:message capacity mismatch for ${t} (expect ${cap})`).toMatch(re);
+    }
+  });
+
   it('cites both bucket keys (global + sessions:create) explicitly', () => {
     expect(doc).toMatch(/`global`/);
     expect(doc).toMatch(/`sessions:create`/);
