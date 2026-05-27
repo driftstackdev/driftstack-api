@@ -7,7 +7,7 @@ description: Cursor-based pagination across every list endpoint — request shap
 # Pagination
 
 Every list endpoint that can grow beyond a single page uses
-**cursor-based pagination**. Cursors are opaque opaque strings the
+**cursor-based pagination**. Cursors are opaque strings the
 server mints; clients pass them back to fetch the next page. This
 contract is shared across `/v1/sessions`, `/v1/profiles`,
 `/v1/webhooks/{id}/deliveries`, `/v1/account/audit-log`,
@@ -21,10 +21,10 @@ this page is the canonical reference.
 
 ## Request shape
 
-| Query parameter | Required | Notes                                                              |
-| --------------- | -------- | ------------------------------------------------------------------ |
-| `limit`         | optional | Per-page size. Defaults vary per endpoint (typically 50). Bounded. |
-| `cursor`        | optional | Pagination token from a prior page's `next_cursor`.                |
+| Query parameter | Required | Notes                                                                     |
+| --------------- | -------- | ------------------------------------------------------------------------- |
+| `limit`         | optional | Per-page size. Defaults + max vary per endpoint (see Limit bounds below). |
+| `cursor`        | optional | Pagination token from a prior page's `next_cursor`.                       |
 
 The first request omits `cursor`; subsequent requests pass the
 prior response's `next_cursor` back.
