@@ -26,7 +26,7 @@ the numbered list below.
 - **Contract / intent decisions (pick a direction, then align sources):**
   - #5 — webhook retry count: code does 4 retries, docs + rationale promise 5; the guard is toothless.
   - #10 — crypto checkout accepts `trial_pack` but crypto quote 400s it.
-  - #1 — idempotency reference doc describes a TTL-sweep job that doesn't exist.
+  - #1 — [RESOLVED 2026-05-27] idempotency reference doc described a TTL-sweep job that doesn't exist; rewritten to real per-subsystem behaviour.
   - #3 — TS SDK User-Agent frozen at 0.0.1 vs package.json 0.1.6 (contradictory pin vs W834).
 - **UI / ops / completeness (lower urgency):**
   - #7 — `pointerToViewport` object-contain mis-mapping (multi-archetype blocker, latent).
@@ -36,8 +36,19 @@ the numbered list below.
 
 ## Open — need your call
 
-1. **idempotency reference doc describes a TTL mechanism that doesn't
-   exist.** `apps/docs/src/pages/reference/idempotency.md` (Edge-cases
+1. **[RESOLVED 2026-05-27]** idempotency reference doc described a TTL
+   mechanism that doesn't exist. **Resolution:** rewrote the TTL-enforcement
+   bullet (`apps/docs/src/pages/reference/idempotency.md`) to the real
+   per-subsystem behaviour — crypto-orders = in-memory 24h lazy prune
+   (entries deleted), resource-backed keys (agent_sessions) = persistent
+   partial-unique index with no TTL. The persistent index is intended (it
+   is the direct consequence of the "the resource row IS the cache"
+   storage model documented in the same section), so no sweep job was
+   added. Whether agent_sessions keys should additionally gain a 24h TTL
+   stays an optional future product call — not a doc bug. Original finding
+   below for reference.
+
+   `apps/docs/src/pages/reference/idempotency.md` (Edge-cases
    list) claims "The 24-hour TTL is enforced by a scheduled job that nulls
    out expired keys; the row itself remains." No such scheduled job exists
    — the three registered scheduled jobs are `trial_pack.expired`

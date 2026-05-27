@@ -190,8 +190,14 @@ curl -X POST https://api.driftstack.dev/v1/agent-sessions \
   they protected (e.g. `agent_sessions.idempotency_key` is a
   partial-unique-indexed column on the table itself). There's no
   separate idempotency-key table — the resource row IS the cache.
-- **TTL enforcement.** The 24-hour TTL is enforced by a scheduled
-  job that nulls out expired keys; the row itself remains.
+- **TTL enforcement.** There is no scheduled key-expiry job. Behaviour
+  differs by subsystem: crypto-order keys are held in an in-memory cache
+  with a 24-hour TTL and pruned lazily — an entry is dropped the next
+  time the cache is consulted after its cutoff, so a key stops replaying
+  ~24h after first use. Resource-backed keys (e.g.
+  `agent_sessions.idempotency_key`) have no TTL: the value lives in the
+  partial-unique index for the lifetime of the row, so those keys replay
+  for as long as the resource exists.
 - **Replay observability.** Audit-log entries are written for the
   first request but NOT the replays. This intentionally mirrors
   Stripe — the original is the operationally-significant action; the
