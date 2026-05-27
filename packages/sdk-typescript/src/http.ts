@@ -115,7 +115,14 @@ export class HttpClient {
   }
 
   private buildUrl(path: string, query?: Record<string, string | number | undefined>): string {
-    const url = new URL(path, this.config.baseUrl);
+    // Concatenate rather than `new URL(path, baseUrl)`: an absolute-path
+    // reference (`/v1/...`) passed as the first arg to `new URL` REPLACES
+    // the base's path, silently dropping a path prefix on a self-hosted
+    // base URL (e.g. `https://gw.internal/driftstack`). `baseUrl` already
+    // has trailing slashes stripped (client.ts) and every `path` starts
+    // with `/`, so concatenation mirrors the Python/Go SDKs and preserves
+    // the prefix.
+    const url = new URL(this.config.baseUrl + path);
     if (query) {
       for (const [k, v] of Object.entries(query)) {
         if (v !== undefined) url.searchParams.set(k, String(v));

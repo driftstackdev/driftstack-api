@@ -100,6 +100,39 @@ describe('HttpClient.request', () => {
     expect(capturedUrl).toContain('cursor=abc');
   });
 
+  it('preserves a base-URL path prefix (self-hosted behind a path-prefixing gateway)', async () => {
+    let capturedUrl: string | undefined;
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'https://gw.internal/driftstack',
+      fetch: vi.fn(async (url) => {
+        capturedUrl = String(url);
+        await Promise.resolve();
+        return new Response('{}', { status: 200 });
+      }),
+      retry: NEVER_RETRY,
+    });
+    await http.request<unknown>({ method: 'GET', path: '/v1/x' });
+    // Must keep `/driftstack` — `new URL('/v1/x', base)` would have dropped it.
+    expect(capturedUrl).toBe('https://gw.internal/driftstack/v1/x');
+  });
+
+  it('host-only base URL joins cleanly (no double slash)', async () => {
+    let capturedUrl: string | undefined;
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      fetch: vi.fn(async (url) => {
+        capturedUrl = String(url);
+        await Promise.resolve();
+        return new Response('{}', { status: 200 });
+      }),
+      retry: NEVER_RETRY,
+    });
+    await http.request<unknown>({ method: 'GET', path: '/v1/x' });
+    expect(capturedUrl).toBe('http://api.test/v1/x');
+  });
+
   it('400 validation problem maps to ValidationError', async () => {
     const http = new HttpClient({
       apiKey: 'ds_live_test',

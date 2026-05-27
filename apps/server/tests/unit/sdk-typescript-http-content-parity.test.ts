@@ -164,10 +164,15 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
     expect(body).toMatch(/\}, opts\.retry \?\? this\.config\.retry\);/);
   });
 
-  it('CRITICAL buildUrl helper — `new URL(path, this.config.baseUrl)` + query-iteration with `if (v !== undefined) url.searchParams.set(k, String(v))`. The `!== undefined` filter (not falsy check) ensures `query: { limit: 0 }` is sent (drift to `if (v)` would drop limit:0). String(v) coerces numbers to string for URLSearchParams compatibility.', () => {
+  it('CRITICAL buildUrl helper — `new URL(this.config.baseUrl + path)` (concat, NOT `new URL(path, base)` which would drop a self-hosted base path prefix; mirrors Python/Go) + query-iteration with `if (v !== undefined) url.searchParams.set(k, String(v))`. The `!== undefined` filter (not falsy check) ensures `query: { limit: 0 }` is sent (drift to `if (v)` would drop limit:0). String(v) coerces numbers to string for URLSearchParams compatibility. Discrete pins (not one chained block regex) per the no-long-chain-regex lesson.', () => {
     expect(body).toMatch(
-      /private buildUrl\(path: string, query\?: Record<string, string \| number \| undefined>\): string \{\s*\n?\s*const url = new URL\(path, this\.config\.baseUrl\);\s*\n?\s*if \(query\) \{\s*\n?\s*for \(const \[k, v\] of Object\.entries\(query\)\) \{\s*\n?\s*if \(v !== undefined\) url\.searchParams\.set\(k, String\(v\)\);\s*\n?\s*\}\s*\n?\s*\}\s*\n?\s*return url\.toString\(\);\s*\n?\s*\}/,
+      /private buildUrl\(path: string, query\?: Record<string, string \| number \| undefined>\): string \{/,
     );
+    // Concat — preserves a path-prefixed base URL (the cross-SDK fix).
+    expect(body).toMatch(/const url = new URL\(this\.config\.baseUrl \+ path\);/);
+    // The `!== undefined` filter (not falsy) so `limit: 0` is still sent.
+    expect(body).toMatch(/if \(v !== undefined\) url\.searchParams\.set\(k, String\(v\)\);/);
+    expect(body).toMatch(/return url\.toString\(\);/);
   });
 
   it('CRITICAL isProblem type-guard — `typeof x !== "object" || x === null` early-return + `typeof r.type === "string" && typeof r.title === "string" && typeof r.status === "number"`. Exact 3-field RFC 7807 minimum (type/title/status). Drift to requiring `detail` or `instance` would falsely reject legitimate Problems that omit them.', () => {
