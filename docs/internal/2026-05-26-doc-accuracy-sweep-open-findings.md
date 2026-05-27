@@ -243,3 +243,44 @@ DRIVER doc ↔ config).
 The remaining customer-facing accuracy surfaces verified clean; the complex
 packages (behavioural-simulation gesture math, recapture scheduler,
 cost-monitoring threshold wiring) spot-checked sound.
+
+### Continued (later in the session)
+
+Additional shipped fixes (all on `main`, gate-green):
+
+- `sdk-go` `CryptoOrders.Iterate` now treats an empty-string `next_cursor`
+  as terminal (matched the 3 sibling Go iterators; was a latent
+  loop-on-page-1 risk; parity pin updated same commit).
+- `sdk-typescript` `buildUrl` switched from `new URL(path, baseUrl)` to
+  `new URL(baseUrl + path)` so a self-hosted base-URL path prefix is
+  preserved (the `new URL` form silently dropped it); identical output for
+  every host-only base, fixes path-prefixed bases; +2 regression tests.
+- `docs/reference/errors.md` `legal-acceptance-required` row corrected
+  `403`→`409` + TS class `ForbiddenError`→`LegalAcceptanceRequiredError`
+  (all code surfaces use 409 + LegalAcceptanceRequiredError).
+
+Guard-strengthenings shipped:
+
+- `docs/reference/rate-limits` parity guard extended to pin global-refill,
+  agent_sessions:message capacity, and the input_event capacity/refill prose
+  (was: only the two capacity columns).
+- New `errors-md-status-vs-code-parity` guard pins the errors.md Status
+  column against every ApiError subclass status (closes the gap that hid the
+  legal-acceptance drift).
+
+### Verification coverage (checked-and-clean, this session)
+
+So findings + fixes above are the _exceptions_; the bulk of the session was
+verification that came up sound, recorded here so the assurance scope is
+known: all 3 SDKs (retry/webhook-sig/error-dispatch/headers/baseURL/
+pagination/examples/READMEs); billing/rate-limit/crypto-orders/stripe-webhooks/
+webhook-delivery services; all money paths (cost-estimator, agent-decomposer
+LLM cost, crypto-orders, bundled-LLM budget gating); 7 route-security
+properties (scope/ownership/rate-limit/input-validation/secret-exposure/
+CORS/PII-logs); agent-decomposer (model-id current, cost math, AUP refusal
+layer, prompt↔validator verb parity); the full behavioural-simulation +
+recapture packages; LiveKit token authz; OpenAPI route+auth coverage;
+metrics catalogue; and the Drizzle keyset/cursor/sweep paths
+(crypto-sweep, webhook-durable list+DLQ, timestamp-cursor migration ≡
+profiles-repo) structurally verified equivalent to their proven references
+(residual: still no live-Postgres integration test for those Drizzle paths).
