@@ -173,7 +173,7 @@ func (r *CryptoOrdersResource) Iterate(
 				return nil
 			}
 		}
-		if resp.NextCursor == nil {
+		if resp.NextCursor == nil || *resp.NextCursor == "" {
 			return nil
 		}
 		next := *resp.NextCursor

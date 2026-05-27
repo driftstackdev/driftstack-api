@@ -200,6 +200,37 @@ func TestCryptoOrders_Iterate_WalksCursorPages(t *testing.T) {
 	}
 }
 
+func TestCryptoOrders_Iterate_TreatsEmptyCursorAsTerminal(t *testing.T) {
+	t.Parallel()
+	empty := ""
+	pages := []ListCryptoOrdersResponse{
+		{Orders: []CryptoOrderEnvelope{{"id": "ord_1"}}, NextCursor: &empty},
+	}
+	idx := 0
+	_, client := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_ = json.NewEncoder(w).Encode(pages[idx])
+		idx++
+	})
+	var ids []string
+	err := client.CryptoOrders.Iterate(context.Background(), nil, func(o CryptoOrderEnvelope) bool {
+		ids = append(ids, o["id"].(string))
+		return true
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 1 || ids[0] != "ord_1" {
+		t.Errorf("ids=%v, want [ord_1]", ids)
+	}
+	// An empty-string next_cursor must be treated as terminal (matching the
+	// audit-log / profiles / profile-snapshots iterators). Otherwise the loop
+	// would re-fetch with cursor="" and over-run the single-page slice.
+	if idx != 1 {
+		t.Errorf("fetched %d pages, want 1 (empty cursor should be terminal)", idx)
+	}
+}
+
 func TestCryptoOrders_Iterate_StopsEarlyOnVisitFalse(t *testing.T) {
 	t.Parallel()
 	c1 := "c1"
