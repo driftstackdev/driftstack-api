@@ -303,6 +303,32 @@ production-env-schema.md` found these read-but-undocumented-in-both:
       critical verification logic + a rotation-model decision (multi-`v1` vs
       separate header) that should be settled together with #12.
 
+14. **BYOK-key rotation email links to a dashboard route that doesn't
+    exist; there is no dashboard BYOK-management UI at all (moderate).**
+    The `byok-anthropic-key-rotation-reminder` email (`email.ts:480`) tells
+    customers to "update it on your Driftstack account at
+    `${dashboardUrl}/account/byok-anthropic`". The customer-dashboard has
+    **no `/account/` route** (pages are flat — no `account/` dir, no
+    `_redirects`, no catch-all), so the link 404s. Worse, there is **no BYOK
+    management UI anywhere** in the dashboard or the gui-client — exhaustive
+    grep finds only a status-pill GET on `agent-sessions.astro`
+    (`/v1/account/me/byok-anthropic-key`, read-only) and no set/rotate form.
+    BYOK management is **API-only** (`api/byok-anthropic.md` documents
+    `PUT`/`DELETE`/`POST …/test`). Compounding: the dashboard's own
+    status-pill "manage" link (`agent-sessions.astro:202`) points to
+    `/settings#byok-anthropic`, but `settings.astro` (1945 lines) has **zero**
+    BYOK content — so that target is also broken. So a customer who gets the
+    rotation nag has no working link from either the email or the dashboard to
+    actually rotate the key (they must hit the API directly). **Decide:**
+    either (a) build the BYOK-management section the email + status-pill
+    already reference (then pick ONE canonical path and make email +
+    `agent-sessions.astro:202` agree on it), or (b) keep BYOK API-only and
+    repoint the email + the status-pill link to the docs
+    (`docs.driftstack.dev/api/byok-anthropic`, which documents the
+    `PUT` rotate flow). NOT auto-fixed: whether a dashboard BYOK UI is
+    intended-but-unbuilt vs. deliberately API-only is a product call, and the
+    email body is parity-pinned.
+
 ## Minor hardening notes (NOT findings — surfaced by the security audits)
 
 These came out of the systematic route-security sweep (scope / ownership /
