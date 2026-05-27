@@ -30,7 +30,7 @@ the numbered list below.
 - **UI / ops / completeness (lower urgency):**
   - #7 — `pointerToViewport` object-contain mis-mapping (multi-archetype blocker, latent).
   - #2 — runbook references a one-shot sweep script that was never built.
-  - #9 — env-vars doc completeness.
+  - #9 — env-vars doc completeness — RESOLVED (6 vars documented; residual: confirm `NOWPAYMENTS_IPN_CALLBACK_URL` before crypto LIVE).
   - #11 — OpenAPI spec is a curated subset of the documented customer surface (decide complete vs curated).
 
 ## Open — need your call
@@ -197,28 +197,25 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
    would start getting 403) that the scope-enforcement parity tests should
    pin.
 
-9. **`env-vars.md` omits several operator env vars the server actually
-   reads.** An env-read audit (`process.env.X` dot-access in `apps/server/
-src`) vs `docs/deployment/env-vars.md` + `docs/operations/
-production-env-schema.md` found these read-but-undocumented-in-both:
-   `CORS_ALLOWED_ORIGINS`, `NOWPAYMENTS_IPN_CALLBACK_URL`,
+9. **`env-vars.md` omitted operator env vars — RESOLVED 2026-05-27 (mostly;
+   one operator action remains).** The 6 read-but-undocumented operator vars
+   (`CORS_ALLOWED_ORIGINS`, `NOWPAYMENTS_IPN_CALLBACK_URL`,
    `BROADCAST_SLACK_WEBHOOK_URL`, `BROADCAST_GENERIC_WEBHOOK_URL`,
-   `PUBLIC_STATUS_PAGE_URL`, `DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS`
-   (plus `PERMISSIVE_CORS` + `GIT_SHA`, which are reasonably omitted — dev
-   flag + deploy-injected). Triage: `CORS_ALLOWED_ORIGINS` IS in
-   `infra/env-templates/{staging.env,production.env.template}` so operators
-   deploying from the templates set it (no breakage) — it's just missing
-   from the human-readable doc. `NOWPAYMENTS_IPN_CALLBACK_URL` is in **no**
-   deploy surface at all (template or doc) and gates crypto-billing IPN
-   callbacks — the one worth confirming before crypto-billing goes LIVE. The
-   broadcast webhooks + status URL + rotation-reminder toggle are
-   optional/operational. **Recommended fix:** add the operator-relevant vars
-   to `env-vars.md` with required/optional + default + purpose. CAVEAT: this
-   audit caught only `process.env.X` _dot-access_ reads — a complete pass
-   should also sweep destructured `const { X } = process.env` reads
-   (bootstrap/config) before declaring the doc exhaustive. Low-risk doc fix
-   (no intent decision); deferred only because the complete-list sweep +
-   accurate per-var descriptions are worth doing in one pass.
+   `PUBLIC_STATUS_PAGE_URL`, `DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS`) are
+   now documented in `docs/deployment/env-vars.md` (new "Operational /
+   optional" section, with required/optional + default + purpose; all 5
+   env-vars parity tests stay green). Re-audit corrections: the original
+   draft also listed `DRIFTSTACK_STAFF_EMAILS` + `PUBLIC_API_BASE_URL` as
+   undocumented, but both were ALREADY documented (a broken multi-path grep
+   false-flagged them); `PERMISSIVE_CORS` + `GIT_SHA` remain reasonably
+   omitted (dev flag + deploy-injected). **Residual operator action (NOT a
+   doc gap):** `NOWPAYMENTS_IPN_CALLBACK_URL` is still in no deploy surface
+   (template or `.env`); it defaults to `https://api.driftstack.dev/v1/webhooks/nowpayments`,
+   so confirm that resolves to the live API origin before crypto-billing
+   goes LIVE. CAVEAT: this audit covered `process.env.X` dot/bracket reads +
+   single-line destructuring; vars read only via multi-line destructuring or
+   the central config Zod schema (DATABASE_URL etc., already documented) were
+   not re-swept — the 6 above were the known operator-facing gap.
 
 10. **Crypto quote vs checkout product lists disagree on `trial_pack`
     (minor).** Crypto **checkout** derives its accepted-product enum from
