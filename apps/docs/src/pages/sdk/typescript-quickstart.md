@@ -38,7 +38,7 @@ const client = new Driftstack({
   apiKey: process.env.DRIFTSTACK_API_KEY!,
   // Optional — defaults to https://api.driftstack.dev. Override
   // for staging or self-hosted deployments.
-  // baseUrl: 'https://api-staging.driftstack.dev',
+  // baseUrl: 'https://api.staging.driftstack.dev',
 });
 ```
 
