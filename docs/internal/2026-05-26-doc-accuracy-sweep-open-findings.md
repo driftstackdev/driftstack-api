@@ -89,6 +89,32 @@ MAX_ATTEMPTS` with `MAX_ATTEMPTS = 5` (`apps/server/src/services/
      customer-facing behavioural call, and a test currently pins the 5-attempt
      behaviour as if intentional.
 
+6. **Trial-pack credit is granted but never consumed — the "~16 hours"
+   promise + "decrements at session_end" comments are unenforced (launch
+   gate).** `trial_pack_credit_cents` is granted at purchase
+   (`stripe-webhooks-repo.ts:146` = `DEFAULT_TRIAL_PACK_CREDIT_CENTS`) and
+   read for the `active` check + `creditCentsRemaining` display
+   (`billing.ts:235,241`), but **nothing decrements it** — exhaustive grep
+   finds no decrement in any service/repo/session-end hook. This is a known
+   downstream consequence of the deferred usage-metering subsystem:
+   `usage.ts:216` states "the buckets are all empty because usage_records
+   writers aren't wired in production code", and `cost-aggregator.ts:14,17`
+   mark the writers as **V-541.J/K follow-ups**. So the missing decrement is
+   deferred-by-design, NOT a stray bug. BUT two surfaces overstate
+   enforcement: (a) the trial email (`email.ts:422,424`) tells customers
+   "Credit remaining: N cents (~16 hours of iPhone Safari sessions at
+   $0.18/hr)" — an hours-cap that is not metered; (b) `usage.ts:46` and
+   `migrations/0010_billing.sql:6` say the credit "decrements at session_end"
+   in the **present tense**, which is false today. Trial-pack is pre-LIVE
+   (Stripe test mode until post-BV/KvK), so no paying customer is misled yet.
+   **Launch gate / decide:** before trial-pack goes LIVE, either (a) land the
+   usage_records writers + session-end credit decrement (V-541.J/K) so the
+   16h/$0.18-hr cap is actually enforced, or (b) soften the email copy +
+   make the "decrements at session_end" comments future-tense if the real
+   bound is the 14-day expiry, not the credit cap. NOT auto-fixed: which
+   bound is the product intent is a founder call, and the email copy is
+   parity-pinned.
+
 ## Shipped this sweep (all on `main`, gate-green)
 
 ~11 customer-facing doc/code fixes: TS error-handling class name
