@@ -18,7 +18,7 @@ the numbered list below.
   - #6 — trial-pack credit granted but never decremented; "~16h" email + "decrements at session_end" copy are unenforced (LAUNCH GATE before trial-pack goes LIVE).
   - #8 — profile-snapshot write ops (capture/restore/delete) don't enforce `write:profiles`; a read-scope key can mutate a profile via snapshot restore (security; pre-launch so no break yet).
 - **Live customer-impact (wrong behavior today):**
-  - #13 — webhook rotation-grace dual-`v1=` signing breaks SDK verification for customers who adopt the new secret during grace (LIVE path).
+  - #13 — RESOLVED 2026-05-27: webhook rotation-grace dual-`v1=` verification fixed across all 3 SDKs (collect-all-`v1`, accept any). Was a LIVE-path bug.
   - #14 — BYOK-key rotation email links to a 404 dashboard route; no BYOK management UI exists (management is API-only).
 - **Latent, high-impact on a planned event:**
   - #12 — V-173 forward-path webhook delivery signs bare-hex; breaks ALL SDK verification on the durable-impl cutover. (Fix #12 + #13 together — one webhook-signature pass; both rooted in a missing server-sign→SDK-verify e2e test.)
@@ -295,7 +295,21 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
     call; a partial fix would re-create the same broken-chain footgun.
 
 13. **Rotation-grace dual-`v1=` signing breaks SDK verification for
-    new-secret adopters — LIVE path (moderate).** During a webhook-secret
+    new-secret adopters — RESOLVED 2026-05-27 (8351d21b).** Fixed across all
+    3 SDKs: the verifiers now collect EVERY `v1=` from the header and accept
+    if the computed HMAC matches ANY (constant-time per candidate), so a
+    customer holding either the new or old secret passes the dual-`v1=`
+    single-header form mid-rotation (TS `signatureHexes[]`/`.some()`, Python
+    `signature_hexes`/`any(compare_digest)`, Go `signatureHexes`/loop).
+    Backward-compatible (single-`v1` = one-element; `headerPrev` path
+    unaffected). Added dual-`v1` rotation tests in all 3 SDKs, updated the
+    per-SDK + cross-SDK content-parity pins, and rewrote the
+    `webhook-signing.test.ts` block that had documented the last-wins
+    "limitation" (it now asserts BOTH secrets verify) + corrected its stale
+    "webhook-worker only single-signs" comment. Full gate green. Original
+    finding below for reference:
+
+    During a webhook-secret
     rotation's 24h grace window, the production worker
     (`webhook-worker.ts:163`) dual-signs Stripe-style into ONE header:
     `x-driftstack-signature: t=<ts>,v1=<HMAC-new>,v1=<HMAC-old>` (via
