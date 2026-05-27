@@ -45,7 +45,7 @@ returns true for that class.
 | `errors.driftstack.dev/email-already-registered`     | 409  | `EmailAlreadyRegisteredError`         | `EmailAlreadyRegisteredError`         | `EmailAlreadyRegisteredError`         | no         |
 | `errors.driftstack.dev/invalid-credentials`          | 401  | `InvalidCredentialsError`             | `InvalidCredentialsError`             | `InvalidCredentialsError`             | no         |
 | `errors.driftstack.dev/invalid-auth-token`           | 400  | `InvalidAuthTokenError`               | `InvalidAuthTokenError`               | `InvalidAuthTokenError`               | no         |
-| `errors.driftstack.dev/legal-acceptance-required`    | 403  | `ForbiddenError`                      | `LegalAcceptanceRequiredError`        | `LegalAcceptanceRequiredError`        | no         |
+| `errors.driftstack.dev/legal-acceptance-required`    | 409  | `LegalAcceptanceRequiredError`        | `LegalAcceptanceRequiredError`        | `LegalAcceptanceRequiredError`        | no         |
 | `errors.driftstack.dev/rate-limited`                 | 429  | `RateLimitError`                      | `RateLimitError`                      | `RateLimitError`                      | **yes**    |
 | `errors.driftstack.dev/concurrency-limit`            | 429  | `ConcurrencyLimitError`               | `ConcurrencyLimitError`               | `ConcurrencyLimitError`               | no         |
 | `errors.driftstack.dev/tier-limit`                   | 429  | `TierLimitError`                      | `QuotaExceededError`                  | `QuotaExceededError`                  | no         |
