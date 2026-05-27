@@ -146,18 +146,27 @@ describe('W424.B packages/sdk-typescript/src/webhook-signature.ts content parity
     );
   });
 
-  it('sign + hex + compare — 3-line chain: subtle.sign("HMAC", key, payload) → bytesToHex(new Uint8Array(sigBuffer)) → constantTimeHexEq(expectedHex, parsed.signatureHex). The `new Uint8Array(sigBuffer)` wrap is necessary because subtle.sign returns ArrayBuffer (not Uint8Array). Drift to direct comparison (===) would leak timing.', () => {
+  it('sign + hex + compare — subtle.sign("HMAC", key, payload) → bytesToHex(new Uint8Array(sigBuffer)) → accept if the computed HMAC matches ANY of parsed.signatureHexes (constant-time per candidate). The `new Uint8Array(sigBuffer)` wrap is necessary because subtle.sign returns ArrayBuffer. Drift to direct comparison (===) would leak timing; the multi-`v1` `.some()` is load-bearing for rotation dual-sign (server emits t=,v1=<new>,v1=<old>).', () => {
     expect(body).toMatch(
-      /const sigBuffer = await subtle\.sign\('HMAC', key, toArrayBuffer\(payload\)\);\s*\n?\s*const expectedHex = bytesToHex\(new Uint8Array\(sigBuffer\)\);\s*\n?\s*return constantTimeHexEq\(expectedHex, parsed\.signatureHex\);/,
+      /const sigBuffer = await subtle\.sign\('HMAC', key, toArrayBuffer\(payload\)\);/,
+    );
+    expect(body).toMatch(/const expectedHex = bytesToHex\(new Uint8Array\(sigBuffer\)\);/);
+    expect(body).toMatch(
+      /return parsed\.signatureHexes\.some\(\(sig\) => constantTimeHexEq\(expectedHex, sig\)\);/,
     );
   });
 
-  it('CRITICAL parseSignatureHeader — walks comma-separated parts, splits on FIRST `=` (`indexOf("=")` + `slice`). Unknown keys silently skipped (forward-compat with future v2/v3 signature versions). Number.isFinite guard on `t` value rejects "abc" or "NaN" payloads. Returns null when EITHER timestamp OR signature is missing.', () => {
+  it('CRITICAL parseSignatureHeader — walks comma-separated parts, splits on FIRST `=` (`indexOf("=")` + `slice`). Unknown keys silently skipped (forward-compat with future v2/v3). Number.isFinite guard on `t` rejects "abc"/"NaN". Collects ALL `v1=` (non-empty) into signatureHexes[] for Stripe-style multi-signature / rotation dual-sign. Returns null when timestamp missing OR zero signatures.', () => {
     expect(body).toMatch(
-      /function parseSignatureHeader\(\s*\n?\s*header: string,\s*\n?\s*\): \{ timestamp: number; timestampMs: number; signatureHex: string \} \| null \{/,
+      /\): \{ timestamp: number; timestampMs: number; signatureHexes: string\[\] \} \| null \{/,
     );
+    expect(body).toMatch(/const signatures: string\[\] = \[\];/);
     expect(body).toMatch(
-      /for \(const part of header\.split\(','\)\) \{\s*\n?\s*const eq = part\.indexOf\('='\);\s*\n?\s*if \(eq < 0\) continue;\s*\n?\s*const k = part\.slice\(0, eq\)\.trim\(\);\s*\n?\s*const v = part\.slice\(eq \+ 1\)\.trim\(\);\s*\n?\s*if \(k === 't'\) \{\s*\n?\s*const n = Number\(v\);\s*\n?\s*if \(Number\.isFinite\(n\)\) timestamp = n;\s*\n?\s*\} else if \(k === 'v1'\) \{\s*\n?\s*signature = v;\s*\n?\s*\}\s*\n?\s*\}\s*\n?\s*if \(timestamp === null \|\| signature === null\) return null;\s*\n?\s*return \{ timestamp, timestampMs: timestamp \* 1000, signatureHex: signature \};/,
+      /\} else if \(k === 'v1' && v\.length > 0\) \{\s*\n?\s*signatures\.push\(v\);/,
+    );
+    expect(body).toMatch(/if \(timestamp === null \|\| signatures\.length === 0\) return null;/);
+    expect(body).toMatch(
+      /return \{ timestamp, timestampMs: timestamp \* 1000, signatureHexes: signatures \};/,
     );
   });
 

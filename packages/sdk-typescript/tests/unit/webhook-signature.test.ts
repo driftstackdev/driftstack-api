@@ -103,6 +103,45 @@ describe('verifyWebhookSignature', () => {
     expect(ok).toBe(true);
   });
 
+  // Dual-`v1=` in ONE header (Stripe-style multi-signature). During a
+  // secret-rotation grace window the server dual-signs into a single
+  // `x-driftstack-signature: t=,v1=<new>,v1=<old>` header (no separate
+  // -prev header). The verifier must accept if EITHER signature matches the
+  // configured secret — regardless of order — so a customer on the new OR
+  // the old secret verifies during grace.
+  describe('multi-v1 single header (rotation dual-sign)', () => {
+    const NEW = 'whsec_new_rotated';
+    const OLD = 'whsec_old_pre_rotation';
+    const h = (b: string, t: number, s: string) =>
+      createHmac('sha256', s).update(`${t.toString()}.${b}`).digest('hex');
+
+    it('accepts the new-secret holder when v1=<new> is FIRST (was the discarded position)', async () => {
+      const now = Date.now();
+      const t = Math.floor(now / 1000);
+      const body = '{"event":"x"}';
+      const header = `t=${t.toString()},v1=${h(body, t, NEW)},v1=${h(body, t, OLD)}`;
+      expect(await verifyWebhookSignature({ body, header, secret: NEW, nowMs: now })).toBe(true);
+    });
+
+    it('accepts the old-secret holder when v1=<old> is LAST', async () => {
+      const now = Date.now();
+      const t = Math.floor(now / 1000);
+      const body = '{"event":"x"}';
+      const header = `t=${t.toString()},v1=${h(body, t, NEW)},v1=${h(body, t, OLD)}`;
+      expect(await verifyWebhookSignature({ body, header, secret: OLD, nowMs: now })).toBe(true);
+    });
+
+    it('rejects a secret matching NEITHER signature', async () => {
+      const now = Date.now();
+      const t = Math.floor(now / 1000);
+      const body = '{"event":"x"}';
+      const header = `t=${t.toString()},v1=${h(body, t, NEW)},v1=${h(body, t, OLD)}`;
+      expect(
+        await verifyWebhookSignature({ body, header, secret: 'whsec_unrelated', nowMs: now }),
+      ).toBe(false);
+    });
+  });
+
   // V-359 — rotation grace: when the customer hasn't yet rolled the new
   // secret across their verifier, they pass `headerPrev` (the prev
   // signature header from the inbound request); the verifier accepts

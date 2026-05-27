@@ -97,14 +97,19 @@ async function verifySingleHeader(
   const sigBuffer = await subtle.sign('HMAC', key, toArrayBuffer(payload));
   const expectedHex = bytesToHex(new Uint8Array(sigBuffer));
 
-  return constantTimeHexEq(expectedHex, parsed.signatureHex);
+  // The header may carry MULTIPLE `v1=` signatures (Stripe-style) — e.g.
+  // during a secret-rotation grace window the server dual-signs
+  // `t=,v1=<new>,v1=<old>`. Accept if our computed HMAC matches ANY of them
+  // (constant-time per candidate), so a verifier holding either the new or
+  // the old secret passes. Single-`v1` headers are the one-element case.
+  return parsed.signatureHexes.some((sig) => constantTimeHexEq(expectedHex, sig));
 }
 
 function parseSignatureHeader(
   header: string,
-): { timestamp: number; timestampMs: number; signatureHex: string } | null {
+): { timestamp: number; timestampMs: number; signatureHexes: string[] } | null {
   let timestamp: number | null = null;
-  let signature: string | null = null;
+  const signatures: string[] = [];
   for (const part of header.split(',')) {
     const eq = part.indexOf('=');
     if (eq < 0) continue;
@@ -113,12 +118,12 @@ function parseSignatureHeader(
     if (k === 't') {
       const n = Number(v);
       if (Number.isFinite(n)) timestamp = n;
-    } else if (k === 'v1') {
-      signature = v;
+    } else if (k === 'v1' && v.length > 0) {
+      signatures.push(v);
     }
   }
-  if (timestamp === null || signature === null) return null;
-  return { timestamp, timestampMs: timestamp * 1000, signatureHex: signature };
+  if (timestamp === null || signatures.length === 0) return null;
+  return { timestamp, timestampMs: timestamp * 1000, signatureHexes: signatures };
 }
 
 function toBodyBytes(body: string | Uint8Array | ArrayBuffer): Uint8Array {
