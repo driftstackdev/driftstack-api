@@ -44,7 +44,7 @@ Each tier has a hard cap on simultaneously-active sessions. Exceeding the cap re
 
 | Tier          | Concurrent sessions |
 | ------------- | ------------------- |
-| Trial pack    | 1                   |
+| Free          | 1                   |
 | Solo Manual   | 1                   |
 | Team Manual   | 3                   |
 | Agency Manual | 8                   |

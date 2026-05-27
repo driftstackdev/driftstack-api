@@ -32,7 +32,7 @@ describe('W260.D docs/quickstart (multi-lang) ↔ live surface parity', () => {
   });
 
   it('quoted tier-cap numbers match TIER_CONCURRENT_SESSION_LIMITS', () => {
-    expect(doc).toMatch(new RegExp(`Trial pack: ${TIER_CONCURRENT_SESSION_LIMITS.trial_pack}`));
+    expect(doc).toMatch(new RegExp(`Free: ${TIER_CONCURRENT_SESSION_LIMITS.free}`));
     expect(doc).toMatch(new RegExp(`API Starter: ${TIER_CONCURRENT_SESSION_LIMITS.api_starter}`));
     expect(doc).toMatch(new RegExp(`API Builder: ${TIER_CONCURRENT_SESSION_LIMITS.api_builder}`));
     expect(doc).toMatch(new RegExp(`API Scale: ${TIER_CONCURRENT_SESSION_LIMITS.api_scale}`));

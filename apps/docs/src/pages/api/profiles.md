@@ -27,7 +27,7 @@ mirror `PROFILES_PER_TIER` in `@driftstack/api-types`:
 
 | Tier            | Profiles cap |
 | --------------- | -----------: |
-| `trial_pack`    |            1 |
+| `free`          |            1 |
 | `solo_manual`   |           10 |
 | `team_manual`   |           50 |
 | `agency_manual` |          200 |

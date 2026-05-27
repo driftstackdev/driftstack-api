@@ -51,12 +51,7 @@ describe('W257.C docs/sdk/installation ↔ TS SDK client parity', () => {
 
   it('billing methods cited in the doc exist on the live BillingResource', () => {
     const billing = read(resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/billing.ts'));
-    for (const m of [
-      'getState',
-      'createCheckoutSession',
-      'startTrialPack',
-      'createPortalSession',
-    ]) {
+    for (const m of ['getState', 'createCheckoutSession', 'createPortalSession']) {
       expect(doc).toContain(`client.billing.${m}`);
       expect(billing).toMatch(new RegExp(`\\b${m}\\s*\\(`));
     }

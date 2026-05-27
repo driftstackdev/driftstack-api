@@ -23,7 +23,7 @@ shared `TIER_CONCURRENT_SESSION_LIMITS` constant in
 
 | Tier            | Concurrent sessions |
 | --------------- | ------------------: |
-| `trial_pack`    |                   1 |
+| `free`          |                   1 |
 | `solo_manual`   |                   1 |
 | `team_manual`   |                   3 |
 | `agency_manual` |                   8 |

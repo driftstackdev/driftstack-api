@@ -23,9 +23,9 @@ function read(p: string): string {
 describe('W338.A /quickstart tier-cap parity', () => {
   const body = read(PAGE);
 
-  it('cites Trial pack cap (1) matching TIER_CONCURRENT_SESSION_LIMITS.trial_pack', () => {
-    expect(TIER_CONCURRENT_SESSION_LIMITS.trial_pack).toBe(1);
-    expect(body).toMatch(/Trial pack:\s*1\b/);
+  it('cites Free cap (1) matching TIER_CONCURRENT_SESSION_LIMITS.free', () => {
+    expect(TIER_CONCURRENT_SESSION_LIMITS.free).toBe(1);
+    expect(body).toMatch(/Free:\s*1\b/);
   });
 
   it('cites API Starter cap (2) matching TIER_CONCURRENT_SESSION_LIMITS.api_starter', () => {

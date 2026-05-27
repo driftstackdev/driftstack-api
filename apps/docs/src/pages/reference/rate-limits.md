@@ -38,7 +38,7 @@ returns 429.
 
 | Tier            | global capacity | global refill (rps) | sessions:create capacity | sessions:create refill (rps) | agent_sessions:message capacity | agent_sessions:message refill (rps) |
 | --------------- | --------------- | ------------------- | ------------------------ | ---------------------------- | ------------------------------- | ----------------------------------- |
-| `trial_pack`    | 60              | 1                   | 5                        | 1/60 (1 per minute)          | 20                              | 1/5 (12 per minute)                 |
+| `free`          | 60              | 1                   | 5                        | 1/60 (1 per minute)          | 20                              | 1/5 (12 per minute)                 |
 | `solo_manual`   | 120             | 2                   | 10                       | 1/30 (2 per minute)          | 40                              | 1/3 (20 per minute)                 |
 | `team_manual`   | 360             | 6                   | 20                       | 1/10 (6 per minute)          | 100                             | 1                                   |
 | `agency_manual` | 1,800           | 30                  | 60                       | 1                            | 300                             | 3                                   |
@@ -52,7 +52,7 @@ Refill = sustained rate (tokens per second). Effective sustained
 RPS for a default-cost call is the `refill` column.
 
 `agent_sessions:input_event` scales per tier too (capacity / refill):
-`trial_pack` 240 / 60, `solo_manual` 360 / 90, `team_manual` 480 / 120,
+`free` 240 / 60, `solo_manual` 360 / 90, `team_manual` 480 / 120,
 `agency_manual` 600 / 150, `api_starter` 360 / 90, `api_builder`
 600 / 150, `api_scale` 1,200 / 300, `enterprise` 12,000 / 3,000.
 

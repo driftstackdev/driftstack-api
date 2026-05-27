@@ -16,7 +16,7 @@ Each tier has a profile cap, enforced at `POST /v1/profiles` creation time. Exce
 
 | Tier          | Profile cap |
 | ------------- | ----------- |
-| Trial pack    | 1           |
+| Free          | 1           |
 | Solo Manual   | 10          |
 | Team Manual   | 50          |
 | Agency Manual | 200         |

@@ -262,7 +262,7 @@ The HTTP API and the SDKs version independently. SDKs at any version stay compat
 | Usage             | ✅  | ✅     | ✅  | Current-period read + 30-day daily series                         |
 | Audit log         | ✅  | ✅     | ✅  | Paginated read + GDPR-Article-20 CSV/JSON export                  |
 | MFA               | ✅  | ✅     | ✅  | TOTP enroll/verify/disable + recovery-code regen                  |
-| Billing           | ✅  | ✅     | ✅  | State read + Stripe checkout/portal + $2.99 trial-pack            |
+| Billing           | ✅  | ✅     | ✅  | State read + Stripe checkout/portal                               |
 | Email preferences | ✅  | ✅     | ✅  | List + set + opt-in/out (non-critical templates only)             |
 | Legal             | ✅  | ✅     | ✅  | Catalog + required + accept (content-hash-bound)                  |
 | Account self      | ✅  | ✅     | ✅  | `me` returns tier + concurrent + profile counts + teams[]         |
