@@ -138,7 +138,7 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
 
   it("Self-hosted dev stack runbook cross-reference pinned: 'The self-hosted dev stack (see the self-hosted mac local runbook) runs the same rate-limit code path against a local Redis. Use it to exercise your 429 handling without consuming real production budget.' + GitHub URL to docs/runbooks/self-hosted-mac-local.md — pinned so the local-Redis + same-code-path + self-hosted-mac-local-runbook-anchor survives", () => {
     expect(body).toMatch(
-      /<a href="https:\/\/github\.com\/driftstack\/driftstack-api\/blob\/main\/docs\/runbooks\/self-hosted-mac-local\.md">self-hosted mac local<\/a>/,
+      /<a href="https:\/\/github\.com\/driftstackdev\/driftstack-api\/blob\/main\/docs\/runbooks\/self-hosted-mac-local\.md">self-hosted mac local<\/a>/,
     );
     expect(body).toMatch(
       /runbook\) runs the same rate-limit code path against a local\s*\n?\s*Redis\. Use it to exercise your 429 handling without consuming\s*\n?\s*real production budget\./,

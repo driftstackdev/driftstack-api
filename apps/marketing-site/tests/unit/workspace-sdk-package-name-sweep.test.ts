@@ -63,6 +63,14 @@ const FORBIDDEN_PACKAGES: { pattern: RegExp; canonical: string }[] = [
     pattern: /github\.com\/driftstack\/driftstack-go/g,
     canonical: 'github.com/driftstackdev/driftstack-api/packages/sdk-go',
   },
+  // Repo URL — the GitHub org is `driftstackdev`, not `driftstack`. A
+  // `github.com/driftstack/driftstack-api` link 404s (wrong org). The
+  // `/driftstack/` (vs `/driftstackdev/`) discriminator only matches the
+  // wrong form — `driftstackdev/` has no `/` after `driftstack`.
+  {
+    pattern: /github\.com\/driftstack\/driftstack-api/g,
+    canonical: 'github.com/driftstackdev/driftstack-api',
+  },
 ];
 
 describe('W274.A workspace-wide SDK package-name sweep', () => {

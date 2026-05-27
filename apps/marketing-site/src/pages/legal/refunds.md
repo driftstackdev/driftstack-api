@@ -131,6 +131,6 @@ think we got it wrong, write to support and we'll make it right.
 
 We may update this Refund Policy from time to time. The version
 header above tracks the current version; prior versions are kept
-in the [legal repository](https://github.com/driftstack/driftstack-api/tree/main/docs/legal)
+in the [legal repository](https://github.com/driftstackdev/driftstack-api/tree/main/docs/legal)
 for reference. Material changes are notified by email to active
 Customers at least 30 days before the new version takes effect.

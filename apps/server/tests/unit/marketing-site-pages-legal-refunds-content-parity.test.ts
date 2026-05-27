@@ -116,7 +116,7 @@ describe('W504.C apps/marketing-site/src/pages/legal/refunds.md content parity',
 
   it('30-day material-change notice + GitHub repo archive cross-reference — pinned so the version-tracking + 30-day-notice + public-archive commitments all survive (drift to dropping the 30-day notice would let policy changes land without customer warning; drift to dropping the repo link would orphan the prior-versions archive)', () => {
     expect(body).toMatch(
-      /\[legal repository\]\(https:\/\/github\.com\/driftstack\/driftstack-api\/tree\/main\/docs\/legal\)/,
+      /\[legal repository\]\(https:\/\/github\.com\/driftstackdev\/driftstack-api\/tree\/main\/docs\/legal\)/,
     );
     expect(body).toMatch(
       /Material changes are notified by email to active\s*\n?\s*Customers at least 30 days before the new version takes effect\./,
