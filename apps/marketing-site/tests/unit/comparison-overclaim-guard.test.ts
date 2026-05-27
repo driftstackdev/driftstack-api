@@ -63,7 +63,7 @@ describe('W312.B /comparison overclaim guard', () => {
     expect(body).not.toMatch(/Android\s+(?:Safari|host|runtime|supported)/i);
   });
 
-  it('mentions trial pack price as the verification path', () => {
-    expect(body).toMatch(/trial pack/i);
+  it('mentions the free tier as the verification path', () => {
+    expect(body).toMatch(/free tier/i);
   });
 });

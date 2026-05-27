@@ -8,9 +8,9 @@
 //     out-of-band → IPN settles) not the V-666.D future state.
 //   • W247.C — labels derived from API_TIERS data source (single
 //     source of truth, hard-coded prices would drift).
-//   • 7 CRYPTO_PAYABLE_TIER_IDS in canonical order: trial_pack /
-//     solo_manual / team_manual / agency_manual / api_starter /
-//     api_builder / api_scale.
+//   • 6 CRYPTO_PAYABLE_TIER_IDS in canonical order: solo_manual /
+//     team_manual / agency_manual / api_starter / api_builder /
+//     api_scale. (The free tier is not purchasable.)
 //   • 5 ACCEPTED_CURRENCIES pinned exactly: BTC / ETH / USDC
 //     (ERC-20) / USDT (ERC-20) / USDC (Polygon).
 //   • 4-row confirmation timing table: BTC (2 conf, ~20min) /
@@ -58,12 +58,11 @@ describe('W376.C marketing-site /pricing/crypto page content parity', () => {
     expect(body).toMatch(/import \{ API_TIERS \} from '\.\.\/\.\.\/data\/pricing\.ts';/);
   });
 
-  it('7 CRYPTO_PAYABLE_TIER_IDS pinned in canonical order', () => {
+  it('6 CRYPTO_PAYABLE_TIER_IDS pinned in canonical order (free tier is not purchasable)', () => {
     const block = body.match(/const CRYPTO_PAYABLE_TIER_IDS = \[([\s\S]*?)\];/);
     expect(block).not.toBeNull();
     const ids = Array.from(block![1]!.matchAll(/'([a-z_]+)'/g)).map((m) => m[1] as string);
     expect(ids).toEqual([
-      'trial_pack',
       'solo_manual',
       'team_manual',
       'agency_manual',

@@ -1,6 +1,6 @@
 // W285.B — drift guard for API_TIERS ordering. Marketing pricing
 // page renders tiers in API_TIERS order; that order must follow:
-// trial → manual (asc by capacity) → api (asc by capacity) →
+// free → manual (asc by capacity) → api (asc by capacity) →
 // enterprise. Catches drift where a refactor reshuffles tiers and
 // pricing rows display in the wrong sequence.
 
@@ -10,8 +10,8 @@ import { API_TIERS } from '../../src/data/pricing';
 describe('W285.B API_TIERS sequencing', () => {
   const nonSelfHosted = API_TIERS.filter((t) => t.tierType !== 'self_hosted');
 
-  it('first non-self-hosted tier is the trial pack', () => {
-    expect(nonSelfHosted[0]?.id).toBe('trial_pack');
+  it('first non-self-hosted tier is the free tier', () => {
+    expect(nonSelfHosted[0]?.id).toBe('free');
   });
 
   it('manual tiers precede api tiers', () => {

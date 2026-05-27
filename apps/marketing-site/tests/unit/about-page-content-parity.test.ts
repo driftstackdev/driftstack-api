@@ -14,8 +14,8 @@
 //     /faq#acceptable-use).
 //   • Company facts: Dutch BV + Netherlands HQ + Solo founder
 //     + Bootstrapped no-VC + sub-processors cross-link + hello@.
-//   • Trial-pack CTA cross-link points at /pricing#trial-pack
-//     with $2.99 / 16h / 14-day-window figures pinned.
+//   • Free-tier CTA cross-link points at /pricing#free
+//     with the one-profile / unlimited-manual / no-card framing.
 //   • Source-modified WebKit framing (not JS-runtime-patches)
 //     pinned — load-bearing engineering differentiator.
 
@@ -124,10 +124,10 @@ describe('W367.A marketing-site /about page content parity', () => {
     expect(body).toContain('hello@driftstack.dev');
   });
 
-  it('trial-pack CTA cross-link points at /pricing#trial-pack + figures pinned ($2.99 / 16h / 14-day)', () => {
-    expect(body).toMatch(/href="\/pricing#trial-pack"/);
-    expect(body).toMatch(/\$2\.99 buys 16 hours of iPhone Safari sessions/);
-    expect(body).toMatch(/Used once per account, 14-day window/);
+  it('free-tier CTA cross-link points at /pricing#free + framing pinned (one profile / unlimited manual / no card)', () => {
+    expect(body).toMatch(/href="\/pricing#free"/);
+    expect(body).toMatch(/Start free — one profile, unlimited manual sessions on real/);
+    expect(body).toMatch(/Perpetual, no expiry\./);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro'))).toBe(
       true,
     );

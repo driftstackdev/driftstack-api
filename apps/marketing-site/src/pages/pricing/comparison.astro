@@ -8,8 +8,8 @@ import type { LlmBilling } from '../../data/pricing.ts';
 // deep dive sales evaluations actually need. Pulls every dimension
 // directly from the same data file so the two pages can't drift.
 
-const trialPack = API_TIERS.find((t) => t.id === 'trial_pack');
-const paidTiers = API_TIERS.filter((t) => t.id !== 'trial_pack');
+const freeTier = API_TIERS.find((t) => t.id === 'free');
+const paidTiers = API_TIERS.filter((t) => t.id !== 'free');
 
 function fmtUsd(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
@@ -125,18 +125,18 @@ const DIMENSIONS = [
     </div>
   </section>
 
-  {trialPack && (
+  {freeTier && (
     <section class="border-t border-white/10 bg-surface-raised">
       <div class="mx-auto max-w-6xl px-6 py-12">
-        <h2 class="text-xl font-semibold tracking-tight text-ink-primary">Trial pack ({fmtUsd(trialPack.monthlyUsd)}, one-time)</h2>
+        <h2 class="text-xl font-semibold tracking-tight text-ink-primary">Free ({fmtUsd(freeTier.monthlyUsd)}, forever)</h2>
         <p class="mt-2 max-w-prose text-sm text-ink-secondary">
-          {trialPack.hoursLabel} of metered usage; ideal for a real-API
-          evaluation before committing to a tier. {trialPack.archetypeAccess}.
+          {freeTier.hoursLabel} — manual-only evaluation, no card required,
+          before committing to a paid tier. {freeTier.archetypeAccess}.
         </p>
         <p class="mt-2 text-sm">
           <a
-            href={trialPack.cta.href}
-            class="font-medium text-oxblood-700 underline">{trialPack.cta.label} →</a>
+            href={freeTier.cta.href}
+            class="font-medium text-oxblood-700 underline">{freeTier.cta.label} →</a>
         </p>
       </div>
     </section>

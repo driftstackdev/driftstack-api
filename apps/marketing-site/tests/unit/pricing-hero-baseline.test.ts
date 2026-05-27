@@ -1,9 +1,9 @@
-// W330.B — drift guard for /pricing page hero + trial-pack card.
+// W330.B — drift guard for /pricing page hero + free-tier card.
 // Pins the headline + framing:
-//   • "Two ladders. One trial pack to start." headline
+//   • "Two ladders. One free tier to start." headline
 //   • Manual = humans clicking GUI; API = code calling SDK
-//   • Trial pack section anchored at id="trial-pack"
-//   • Card uses fmtUsd(trialPack.monthlyUsd) — no inline $-literal
+//   • Free-tier section anchored at id="free"
+//   • Card uses fmtUsd(freeTier.monthlyUsd) — no inline $-literal
 //     for the price (data-bound)
 //   • Paid tiers are concurrent-only (no hour metering)
 
@@ -23,25 +23,26 @@ function read(p: string): string {
 describe('W330.B /pricing hero baseline', () => {
   const body = read(PAGE);
 
-  it('headline reads "Two ladders. One trial pack to start." 2026-05-22 — split into two spans (gradient-text accent + block reflow) by the hero-glow visual treatment; check each phrase independently.', () => {
+  it('headline reads "Two ladders. One free tier to start." — split into two spans by the hero-glow visual treatment; check each phrase independently.', () => {
     expect(body).toMatch(/Two ladders\./);
-    expect(body).toMatch(/One trial pack to start\./);
+    expect(body).toMatch(/One free tier to start\./);
   });
 
   it('subhead frames Manual vs API audience split', () => {
     expect(body).toMatch(/Manual for humans clicking the GUI/);
-    expect(body).toMatch(/API for code\s+calling the SDK/);
+    expect(body).toMatch(/API for code calling the SDK/);
   });
 
-  it('trial-pack section is anchored at id="trial-pack"', () => {
-    expect(body).toMatch(/id="trial-pack"/);
+  it('free-tier section is anchored at id="free"', () => {
+    expect(body).toMatch(/id="free"/);
   });
 
-  it('trial-pack price is data-bound via fmtUsd(trialPack.monthlyUsd)', () => {
-    expect(body).toMatch(/fmtUsd\(trialPack\.monthlyUsd\)/);
+  it('free-tier price is data-bound via fmtUsd(freeTier.monthlyUsd)', () => {
+    expect(body).toMatch(/fmtUsd\(freeTier\.monthlyUsd\)/);
   });
 
-  it('positions paid tiers as concurrent-only (no hour metering on paid)', () => {
-    expect(body).toMatch(/paid tiers don't meter usage at all/i);
+  it('positions usage as concurrent-only (no hour metering)', () => {
+    expect(body).toMatch(/Pay per concurrent session/);
+    expect(body).toMatch(/is unmetered/);
   });
 });

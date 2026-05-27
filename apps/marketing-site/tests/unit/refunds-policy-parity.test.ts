@@ -1,9 +1,8 @@
 // W339.B — drift guard for the marketing /legal/refunds page.
 // Several claims on this page are tied to source-of-truth values:
 //
-//   • "14-day window" trial-pack expiry tracks TRIAL_PACK.windowDays
-//     (the billing schema's trial_pack_expires_at column also
-//     uses 14 days)
+//   • the discretionary "14 days of first paid charge, no usage"
+//     card-refund window (a goodwill policy, not statutory)
 //   • cross-links to /pricing/crypto + /docs/cost-monitoring must
 //     resolve to real pages
 //   • the canonical support / legal / privacy / dispute contact
@@ -17,7 +16,6 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TRIAL_PACK } from '../../src/data/pricing';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -32,11 +30,6 @@ function read(p: string): string {
 
 describe('W339.B /legal/refunds policy parity', () => {
   const body = read(PAGE);
-
-  it('cites the 14-day trial-pack window matching TRIAL_PACK.windowDays', () => {
-    expect(TRIAL_PACK.windowDays).toBe(14);
-    expect(body).toMatch(/14[-\s]day window/);
-  });
 
   it('declares crypto payments non-refundable (matches ADR posture)', () => {
     expect(body).toMatch(/Crypto payments at Driftstack are non-refundable/);

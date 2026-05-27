@@ -11,7 +11,9 @@
 //     category strings).
 //   • Two-ladder pricing entry pinned with verbatim prices
 //     (Manual $79 / $249 / $699; API $149 / $499 / $1,499 +
-//     Enterprise + $2.99 / 16h trial pack).
+//     Enterprise + free entry tier below both ladders).
+//   • Free-tier launch entry pinned (perpetual free tier
+//     replaces the one-time trial pack).
 //   • Crypto-deferred entry pinned (Coinbase Commerce closed
 //     2026-03-31 + Stripe sole launch rail) — load-bearing
 //     scope decision that defines the launch payment surface.
@@ -59,10 +61,16 @@ describe('W370.A marketing-site /changelog page content parity', () => {
     }
   });
 
-  it('two-ladder pricing entry pinned exactly (Manual $79/$249/$699 + API $149/$499/$1,499 + Enterprise + trial $2.99/16h)', () => {
+  it('two-ladder pricing entry pinned exactly (Manual $79/$249/$699 + API $149/$499/$1,499 + Enterprise + free entry tier)', () => {
     expect(body).toMatch(
-      /Manual \(\$79\/mo Solo \/ \$249\/mo Team \/ \$699\/mo Agency\) and API \(\$149\/mo Starter \/ \$499\/mo Builder \/ \$1,499\/mo Scale \+ custom Enterprise\)\. Trial pack stays \$2\.99 \/ 16 hours\./,
+      /Manual \(\$79\/mo Solo \/ \$249\/mo Team \/ \$699\/mo Agency\) and API \(\$149\/mo Starter \/ \$499\/mo Builder \/ \$1,499\/mo Scale \+ custom Enterprise\)\. A free entry tier sits below both ladders\./,
     );
+  });
+
+  it('free-tier launch entry pinned (perpetual free tier replaces the one-time trial pack)', () => {
+    expect(body).toMatch(/Perpetual free tier replaces the one-time trial pack/);
+    expect(body).toMatch(/The entry tier is now a perpetual free tier: \$0 forever/);
+    expect(body).toMatch(/This replaces the previous one-time \$2\.99 trial pack entirely\./);
   });
 
   it('crypto-deferred entry pinned: Coinbase Commerce 2026-03-31 closure + Stripe sole launch rail (fiat-only)', () => {

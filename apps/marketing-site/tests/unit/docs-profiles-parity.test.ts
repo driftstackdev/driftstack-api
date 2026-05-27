@@ -30,7 +30,7 @@ describe('W347.A /docs/profiles parity', () => {
 
   it('cap table cites every tier in PROFILES_PER_TIER with the correct number', () => {
     const expected: Record<string, string> = {
-      'Trial Pack': '1',
+      Free: '1',
       'Solo Manual': '10',
       'Team Manual': '50',
       'Agency Manual': '200',
@@ -45,7 +45,7 @@ describe('W347.A /docs/profiles parity', () => {
   });
 
   it('PROFILES_PER_TIER values align with what the page advertises', () => {
-    expect(PROFILES_PER_TIER.trial_pack).toBe(1);
+    expect(PROFILES_PER_TIER.free).toBe(1);
     expect(PROFILES_PER_TIER.solo_manual).toBe(10);
     expect(PROFILES_PER_TIER.team_manual).toBe(50);
     expect(PROFILES_PER_TIER.agency_manual).toBe(200);

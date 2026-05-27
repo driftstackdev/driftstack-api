@@ -20,8 +20,8 @@
 //   • SELF_HOSTED_SOFTWARE_UPDATES + SELF_HOSTED_ARCHETYPE_UPDATES +
 //     SELF_HOSTED_SOURCE_ACCESS 3-tier records pinned.
 //   • ANNUAL_DISCOUNT_LABEL = "20% off annual".
-//   • TRIAL_PACK 7-field as-const surface.
-//   • TierType union: 'trial' | 'manual' | 'api'.
+//   • TRIAL_PACK const fully retired (free tier replaced it).
+//   • TierType union: 'free' | 'manual' | 'api'.
 //   • LlmBilling union: byok_only / byok_or_bundled /
 //     byok_or_bundled_custom / null.
 
@@ -41,11 +41,11 @@ function read(p: string): string {
 describe('W386.A marketing-site src/data/pricing.ts self-hosted data-source content parity', () => {
   const body = read(DATA);
 
-  it('ADR-004 + ADR-003 framing pinned in module comment', () => {
+  it('ADR-004 + free-tier framing pinned in module comment', () => {
     expect(body).toMatch(
       /Locked pricing values — single source of truth for the marketing\s*\n?\s*\/\/\s*site\. Per ADR-004/,
     );
-    expect(body).toMatch(/Trial pack mechanics survive intact per ADR-003/);
+    expect(body).toMatch(/The perpetual free tier replaced the one-time trial pack 2026-05-27/);
   });
 
   it('V-073 backend-equivalence framing pinned (TIER_CONCURRENT_SESSION_LIMITS, PROFILES_PER_TIER)', () => {
@@ -57,8 +57,8 @@ describe('W386.A marketing-site src/data/pricing.ts self-hosted data-source cont
     );
   });
 
-  it('TierType union: trial / manual / api', () => {
-    expect(body).toMatch(/export type TierType = 'trial' \| 'manual' \| 'api';/);
+  it('TierType union: free / manual / api', () => {
+    expect(body).toMatch(/export type TierType = 'free' \| 'manual' \| 'api';/);
   });
 
   it('LlmBilling union: 4 literals (byok_only / byok_or_bundled / byok_or_bundled_custom / null)', () => {
@@ -132,18 +132,10 @@ describe('W386.A marketing-site src/data/pricing.ts self-hosted data-source cont
     expect(body).toMatch(/export const ANNUAL_DISCOUNT_LABEL = '20% off annual';/);
   });
 
-  it('TRIAL_PACK as-const: 7 fields (price=2.99 / credit=299 / meterRate / 16h / 14d / concurrent=1 / oncePerAccount=true)', () => {
-    expect(body).toMatch(/export const TRIAL_PACK = \{/);
-    expect(body).toMatch(/priceUsd: 2\.99,/);
-    expect(body).toMatch(/creditCents: 299,/);
-    expect(body).toMatch(
-      /meterRate: '\$0\.18 per concurrent-hour \(per ADR-003 trial-pack mechanic\)',/,
-    );
-    expect(body).toMatch(/hoursApprox: 16,/);
-    expect(body).toMatch(/windowDays: 14,/);
-    expect(body).toMatch(/concurrent: 1,/);
-    expect(body).toMatch(/oncePerAccount: true,/);
-    expect(body).toMatch(/\} as const;/);
+  it('TRIAL_PACK const fully retired (no $2.99 / credit / meter surface in the data module)', () => {
+    expect(body).not.toMatch(/TRIAL_PACK/);
+    expect(body).not.toMatch(/priceUsd: 2\.99/);
+    expect(body).not.toMatch(/creditCents/);
   });
 
   it('SelfHostedSku interface: 10 fields incl. customArchetypeDevelopment 3-literal union + supportTier 3-literal union', () => {

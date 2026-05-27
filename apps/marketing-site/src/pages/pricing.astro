@@ -6,11 +6,10 @@ import {
   SELF_HOSTED_SKUS,
   SELF_HOSTED_SOFTWARE_UPDATES,
   SELF_HOSTED_SOURCE_ACCESS,
-  TRIAL_PACK,
 } from '../data/pricing.ts';
 import type { LlmBilling } from '../data/pricing.ts';
 
-const trialPack = API_TIERS.find((t) => t.id === 'trial_pack')!;
+const freeTier = API_TIERS.find((t) => t.id === 'free')!;
 const manualTiers = API_TIERS.filter((t) => t.tierType === 'manual');
 const apiTiers = API_TIERS.filter((t) => t.tierType === 'api');
 
@@ -64,7 +63,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
 
 <BaseLayout
   title="Pricing"
-  description="Driftstack pricing: $2.99 trial pack, then per-concurrent-session subscription across two ladders — Manual for humans clicking the GUI, API for code calling the SDK. Self-hosted for sovereignty."
+  description="Driftstack pricing: a perpetual free tier, then per-concurrent-session subscription across two ladders — Manual for humans clicking the GUI, API for code calling the SDK. Self-hosted for sovereignty."
 >
   <!-- Header -->
   <section class="relative overflow-hidden">
@@ -81,26 +80,26 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         
           Two ladders.
         
-        <span class="block text-ink-primary">One trial pack to start.</span>
+        <span class="block text-ink-primary">One free tier to start.</span>
       </h1>
       <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
         <strong class="text-ink-primary">Manual</strong> if a person is driving
         sessions in our desktop app.
         <strong class="text-ink-primary">API</strong> if your code is calling
         the SDK. Same engine underneath; pick the workflow that matches yours.
-        Try the $2.99 trial pack first to see which feels right.
+        Start on the free tier first to see which feels right.
       </p>
     </div>
   </section>
 
-  <!-- Trial pack hero card -->
-  <section id="trial-pack" class="border-t border-white/10 bg-surface-base">
+  <!-- Free tier hero card -->
+  <section id="free" class="border-t border-white/10 bg-surface-base">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div
         class="grid gap-8 rounded-lg border border-glow-red/30 bg-surface-raised p-8 md:grid-cols-3 md:items-center"
       >
         <div class="md:col-span-2">
-          {/* 2026-05-23 — icon + gradient text on trial-pack hero h2. */}
+          {/* 2026-05-23 — icon + h2 on free-tier hero. */}
           <div class="flex items-start gap-3">
             <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -110,21 +109,20 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
             <div>
               <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Start here</p>
               <h2 class="mt-3 text-2xl font-semibold text-ink-primary">
-                  Trial pack — {fmtUsd(trialPack.monthlyUsd)}, one-time
+                  Free — {fmtUsd(freeTier.monthlyUsd)}, forever
                 </h2>
             </div>
           </div>
           <p class="mt-3 max-w-prose text-ink-secondary">
-            $2.99 buys ~{TRIAL_PACK.hoursApprox} hours of iPhone Safari
-            sessions to evaluate the platform. {TRIAL_PACK.concurrent}
-            concurrent session, {TRIAL_PACK.windowDays}-day window from
-            purchase, used once per account.
+            A perpetual free tier to evaluate the platform — no card
+            required. {freeTier.profiles} profile, {freeTier.concurrent}
+            concurrent session, manual control only (no API access), and
+            it never expires.
           </p>
           <p class="mt-2 max-w-prose text-sm text-ink-muted">
-            How the meter works: $2.99 of pre-paid credit, billed at
-            {TRIAL_PACK.meterRate}. The trial is our only product that
-            charges by the hour — paid tiers don't meter usage at all,
-            just the number of sessions you run in parallel.
+            No usage metering at all — run as many manual iPhone Safari
+            sessions as you like. Upgrade to a paid tier when you need the
+            API, more profiles, more concurrency, or the AI agent.
           </p>
           <ul class="mt-4 space-y-1 text-sm text-ink-secondary">
             <li class="flex gap-2">
@@ -136,14 +134,13 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
               code changes.
             </li>
             <li class="flex gap-2">
-              <span class="text-glow-red">•</span> Unused credit expires after {TRIAL_PACK.windowDays}
-              days; subscribe to a tier to continue.
+              <span class="text-glow-red">•</span> Perpetual — no expiry, no credit to run down.
             </li>
           </ul>
         </div>
         <div class="flex flex-col gap-3 md:items-end">
           <a href="https://app.driftstack.dev/signup" class="btn-primary w-full md:w-auto"
-            >Start for {fmtUsd(trialPack.monthlyUsd)}</a
+            >Get started free</a
           >
           <a href="https://docs.driftstack.dev" class="btn-secondary w-full md:w-auto"
             >Read the docs</a
@@ -173,7 +170,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
   </section>
 
   <!-- Monthly/annual toggle (controls both Manual + API tables) -->
-  <!-- V-502 — decision-tree section between trial-pack hero and the
+  <!-- V-502 — decision-tree section between the free-tier hero and the
        monthly/annual toggle. Static prose ladder; intentionally
        no JS interaction (Tier-1 placeholder bound). -->
   <section
@@ -206,12 +203,13 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
             Just looking
           </p>
           <h3 class="mt-2 font-medium text-ink-primary">
-            Trial pack — $2.99
+            Free — $0, forever
           </h3>
           <p class="mt-2 text-sm text-ink-secondary">
-            16 hours of session time, no auto-renewal. The right entry if
-            you want to run your existing test suite or scraping job
-            against Driftstack and compare outputs before committing.
+            One profile, one concurrent session, manual control only — no
+            card required. The right entry if you want to click through
+            iPhone Safari sessions and see the fingerprint surface before
+            committing to a paid tier.
           </p>
         </li>
         <li class="rounded-lg border border-white/10 bg-surface-raised p-5">
@@ -419,7 +417,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
                   <dd class="text-right text-ink-secondary">{tier.support}</dd>
                 </div>
               </dl>
-              <a href="https://app.driftstack.dev/signup" class="btn-primary mt-6 w-full">Start with $2.99</a>
+              <a href="https://app.driftstack.dev/signup" class="btn-primary mt-6 w-full">Get started free</a>
               <a
                 href={`https://app.driftstack.dev/signup?tier=${tier.id}`}
                 class="mt-2 block w-full text-center text-sm font-medium text-glow-red underline-offset-4 hover:underline"
@@ -545,7 +543,7 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
                 ) : (
                   <>
                     <a href="https://app.driftstack.dev/signup" class="btn-primary mt-6 w-full">
-                      Start with $2.99
+                      Get started free
                     </a>
                     <a
                       href={`https://app.driftstack.dev/signup?tier=${tier.id}`}
@@ -728,11 +726,12 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
           </p>
         </div>
         <div>
-          <h3 class="font-medium text-ink-primary">What happens when the trial pack runs out?</h3>
+          <h3 class="font-medium text-ink-primary">Does the free tier expire?</h3>
           <p class="mt-2 text-sm text-ink-secondary">
-            Either the credit hits zero or 14 days pass. New session attempts
-            return 402 Payment Required pointing at Stripe Checkout for a paid
-            tier. Trial pack is once per account; to come back, subscribe.
+            No. The free tier is perpetual — one profile, one concurrent
+            session, manual control only, no card. When you need the API,
+            more profiles, more concurrency, or the AI agent, subscribe to
+            a paid tier from your dashboard.
           </p>
         </div>
       </div>

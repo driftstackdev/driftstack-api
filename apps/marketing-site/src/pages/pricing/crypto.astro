@@ -26,8 +26,9 @@ function fmtPriceLabel(monthlyUsd: number | null, oneTime?: boolean): string {
   return oneTime ? `${price}, one-time` : `${price}/mo`;
 }
 
+// The perpetual free tier is not purchasable (no crypto checkout); the
+// one-time trial_pack was retired 2026-05-27. Only the 6 paid tiers.
 const CRYPTO_PAYABLE_TIER_IDS = [
-  'trial_pack',
   'solo_manual',
   'team_manual',
   'agency_manual',

@@ -11,7 +11,7 @@
 //     (M.3 simplify; "Customer data stays in the EU." was the prior
 //     framing — replaced for inviting / scan-friendly tone)
 //   • "Drive it by hand, or drive it from code." audience split
-//   • Two ladders + trial pack
+//   • Two ladders + free tier
 //   • Self-hosted as a parallel offering
 
 import { readFileSync } from 'node:fs';

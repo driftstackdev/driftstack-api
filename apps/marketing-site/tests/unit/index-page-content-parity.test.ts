@@ -3,7 +3,7 @@
 //
 //   • Hero positioning: stealth-browsers-modify-JS-at-runtime
 //     framing + WebKit-source differentiator.
-//   • $2.99 trial-pack CTA + 16h / 14-day / once-per-account
+//   • Free-tier CTA + one-profile / unlimited-manual / no-card subline
 //     figures (consistent with /comparison, /about, /faq).
 //   • "Bit-identical" framing + iPhone 16 Pro / iOS 18.7 /
 //     Safari 26.4 reference.
@@ -47,10 +47,10 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).not.toMatch(/Other API browsers patch JavaScript at runtime/);
   });
 
-  it('trial-pack CTA + figures pinned: $2.99 / 16h / 14-day / once-per-account', () => {
-    expect(body).toMatch(/href="\/pricing#trial-pack"/);
-    expect(body).toMatch(/Start for \$2\.99/);
-    expect(body).toMatch(/16 hours of session time · 14-day window · one trial per account\./);
+  it('free-tier CTA + figures pinned: Start free / #free anchor / one-profile subline', () => {
+    expect(body).toMatch(/href="\/pricing#free"/);
+    expect(body).toMatch(/Start free/);
+    expect(body).toMatch(/One profile · unlimited manual sessions · no card required\./);
   });
 
   it('Comparison CTA pinned (M.3 Plan Item 2 — "Compare the alternatives" generic framing replaced "Why not Browserless?" which read too defensive and gave free SEO to a specific competitor)', () => {
@@ -158,12 +158,12 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     );
   });
 
-  it('R12 polish: 3-card use-case section "Anywhere mobile Safari fidelity decides the outcome." headline + Mobile-Safari coverage / Mobile-first scraping / Multi-account operations cards + Final-CTA "See it for yourself. $2.99." headline + "Read the docs" secondary CTA', () => {
+  it('R12 polish: 3-card use-case section "Anywhere mobile Safari fidelity decides the outcome." headline + Mobile-Safari coverage / Mobile-first scraping / Multi-account operations cards + Final-CTA "See it for yourself. Free." headline + "Read the docs" secondary CTA', () => {
     expect(body).toMatch(/Anywhere mobile Safari fidelity decides the outcome\./);
     expect(body).toMatch(/Mobile-Safari coverage/);
     expect(body).toMatch(/Mobile-first scraping/);
     expect(body).toMatch(/Multi-account operations/);
-    expect(body).toMatch(/See it for yourself\. \$2\.99\./);
+    expect(body).toMatch(/See it for yourself\. Free\./);
     expect(body).toMatch(/Read the docs/);
   });
 });

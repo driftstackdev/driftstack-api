@@ -51,8 +51,9 @@ describe('W340.A /pricing/crypto parity', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('Trial pack is included in crypto-payable tiers (one-time $2.99 path)', () => {
-    expect(page).toMatch(/'trial_pack'/);
+  it('free tier is excluded from crypto-payable tiers (not purchasable; trial pack retired)', () => {
+    expect(page).not.toMatch(/'trial_pack'/);
+    expect(page).not.toMatch(/'free'/);
   });
 
   it('lists at least the canonical 5 currencies (BTC / ETH / USDC ERC-20 / USDT ERC-20 / USDC Polygon)', () => {

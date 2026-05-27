@@ -9,7 +9,7 @@ description: Refund eligibility, timing, card refund mechanics, the non-refundab
 **Version:** 1.0 · **Effective:** 2026-05-11
 
 This Refund Policy explains how Driftstack issues refunds for paid
-Subscriptions, Trial Pack purchases, and one-off charges. It is
+Subscriptions and one-off charges. It is
 incorporated into the [Terms of Service](terms.md) by reference;
 section 8.7 of the Terms is the binding contractual statement and
 this policy expands on the operational mechanics.
@@ -19,8 +19,8 @@ this policy expands on the operational mechanics.
 Refunds are issued in four scenarios:
 
 1. **Failed delivery.** A charge succeeded but the corresponding
-   feature was not made available to your account (e.g. Trial Pack
-   credit didn't unlock; subscription tier didn't flip). Driftstack
+   feature was not made available to your account (e.g. the
+   subscription tier didn't flip). Driftstack
    refunds the full amount automatically once detected; you do not
    need to request it.
 2. **Service failure attributable to Driftstack.** Where Driftstack
@@ -47,8 +47,6 @@ We do **not** issue refunds in these scenarios:
 - Usage that exceeded customer expectations (e.g. LLM-bundled
   spend). We surface estimated cost in the [billing dashboard](/docs/cost-monitoring)
   so you can shape usage before the next cycle.
-- Trial Pack credit not consumed within its 14-day window. The
-  credit forfeits at expiry; the Trial Pack itself is non-refundable.
 
 ## How refunds work — card payments (Stripe)
 

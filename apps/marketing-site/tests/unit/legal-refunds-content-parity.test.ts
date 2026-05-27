@@ -58,15 +58,14 @@ describe('W378.B marketing-site /legal/refunds.md content parity', () => {
     );
   });
 
-  it('4 no-refund scenarios pinned (Mid-cycle cancel / Downgrade / Overage / Trial Pack non-consumed)', () => {
+  it('3 no-refund scenarios pinned (Mid-cycle cancel / Downgrade / Overage)', () => {
     expect(body).toMatch(/Mid-cycle cancellation of a monthly Subscription/);
     expect(body).toMatch(/Tier downgrade\. The downgrade takes effect at the next renewal/);
     expect(body).toMatch(
       /Usage that exceeded customer expectations \(e\.g\. LLM-bundled\s+spend\)/,
     );
-    expect(body).toMatch(
-      /Trial Pack credit not consumed within its 14-day window\. The\s+credit forfeits at expiry; the Trial Pack itself is non-refundable/,
-    );
+    // The retired trial-pack non-consumed denial scenario must NOT return.
+    expect(body).not.toMatch(/Trial Pack/);
   });
 
   it('cost-monitoring cross-link in the LLM-overage no-refund line', () => {

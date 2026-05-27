@@ -15,7 +15,7 @@ const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/faq.astro');
 
 const REQUIRED_SECTIONS = [
   'Pricing model',
-  'Trial pack',
+  'Free tier',
   'Tiers + upgrades',
   'Billing + payments',
   'Bundled LLM + BYOK',
@@ -44,9 +44,9 @@ describe('W308.B /faq section + question coverage', () => {
     expect(totalQuestions).toBeGreaterThanOrEqual(30);
   });
 
-  it('mentions €2.55 / $2.99 trial-pack price somewhere', () => {
-    // Trial pack section must include the canonical pricing.
-    expect(body).toMatch(/\$2\.99|€2\.\d{2}/);
+  it('mentions the free-tier $0-forever framing somewhere', () => {
+    // Free-tier section must include the canonical $0 framing.
+    expect(body).toMatch(/\$0 forever/);
   });
 
   it('mentions EU stack / GDPR posture', () => {

@@ -21,7 +21,7 @@
 //   • mobileExtraItems is now an empty array (F-3).
 //   • V-219* D-badge + lowercase font-mono "driftstack".
 //   • "Sign in" link to https://app.driftstack.dev/login.
-//   • "Get started" btn-primary to /pricing#trial-pack.
+//   • "Get started" btn-primary to /pricing#free.
 //   • Mobile hamburger uses CSS-only <details>/<summary> (no JS).
 //   • aria-label="Open navigation menu" on summary.
 //
@@ -90,11 +90,11 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(body).toMatch(/<span class="tracking-tight">driftstack<\/span>/);
   });
 
-  it('Sign in CTA → app.driftstack.dev/login + Get started CTA → /pricing#trial-pack', () => {
+  it('Sign in CTA → app.driftstack.dev/login + Get started CTA → /pricing#free', () => {
     expect(body).toMatch(
       /<a href="https:\/\/app\.driftstack\.dev\/login" class="nav-link">Sign in<\/a>/,
     );
-    expect(body).toMatch(/<a href="\/pricing#trial-pack" class="btn-primary">Get started<\/a>/);
+    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Get started<\/a>/);
   });
 
   it('mobile hamburger: CSS-only <details>/<summary> (no client-side JS)', () => {
@@ -103,8 +103,8 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(body).toMatch(/\[&::-webkit-details-marker\]:hidden/);
   });
 
-  it('mobile CTA: "Start" (shorter mobile label, same /pricing#trial-pack target)', () => {
-    expect(body).toMatch(/<a href="\/pricing#trial-pack" class="btn-primary text-sm">Start<\/a>/);
+  it('mobile CTA: "Start" (shorter mobile label, same /pricing#free target)', () => {
+    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary text-sm">Start<\/a>/);
   });
 
   it('external nav-items render target="_blank" + rel="noopener noreferrer"', () => {

@@ -3,7 +3,7 @@
 //   • iPhone Safari fingerprints (the product claim)
 //   • WebKit C++ source-level fork (not stealth-plugin patching)
 //   • Validated against iPhone 16 Pro / iOS 18.7 / Safari 26.4
-//   • Trial pack: $2.99 / 16 hours / once per account
+//   • Free tier: one profile / unlimited manual sessions / no card
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,10 +35,10 @@ describe('W318.B / hero claims baseline', () => {
     expect(body).toMatch(/Safari 26\.4|26\.4/);
   });
 
-  it('trial-pack hero claim: $2.99 / 16 hours / once per account', () => {
-    expect(body).toMatch(/\$2\.99/);
-    expect(body).toMatch(/16\s*hours/);
-    expect(body).toMatch(/one trial per account/i);
+  it('free-tier hero claim: one profile / unlimited manual sessions / no card', () => {
+    expect(body).toMatch(/Start free/);
+    expect(body).toMatch(/unlimited manual sessions/i);
+    expect(body).toMatch(/no card required/i);
   });
 
   it('does NOT position as a Chromium fork (overclaim guard)', () => {

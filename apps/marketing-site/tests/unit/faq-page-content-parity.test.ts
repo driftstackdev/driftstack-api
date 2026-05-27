@@ -1,5 +1,5 @@
 // W368.A — drift guard for marketing-site /faq page content.
-// V-500. Existing tests cover tier-cap + trial-pack subset
+// V-500. Existing tests cover tier-cap + free-tier subset
 // parity + coverage baseline; this guard pins the structural
 // shape and the load-bearing answers a buyer reads before
 // signing:
@@ -7,9 +7,9 @@
 //   • 9 FAQ groups present, in canonical order. A future "drop
 //     a group" change should require a deliberate decision, not
 //     a drive-by.
-//   • Trial-pack mechanics: $2.99 / 16h / $0.18/hr / 299¢
-//     credit / 14-day expiry / once-per-account / 402 on
-//     exhaustion.
+//   • Free-tier mechanics: $0 forever / one profile / one
+//     concurrent / manual-only (no API) / perpetual / no
+//     metering.
 //   • Concurrent-cap ladder (Solo Manual = 1 / Team Manual = 3
 //     / Agency Manual = 8 / API Starter = 2 / Builder = 8 /
 //     Scale = 24 / Enterprise = custom).
@@ -41,7 +41,7 @@ describe('W368.A marketing-site /faq page content parity', () => {
   it('9 FAQ groups present in canonical order', () => {
     const expected = [
       "title: 'Pricing model'",
-      "title: 'Trial pack'",
+      "title: 'Free tier'",
       "title: 'Tiers + upgrades'",
       "title: 'Billing + payments'",
       "title: 'Bundled LLM + BYOK'",
@@ -60,14 +60,14 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toContain("title: 'Support + reliability'");
   });
 
-  it('trial-pack mechanics pinned: $2.99 / 16h / $0.18/hr / 299¢ / 14-day', () => {
-    expect(body).toMatch(/About 16 hours of session time/);
-    expect(body).toMatch(/credits 299¢ to your account/);
-    expect(body).toMatch(/sessions decrement at \$0\.18 per concurrent-hour/);
-    expect(body).toMatch(/Unused credit expires 14 days after purchase/);
-    expect(body).toMatch(/once per account, no reset on downgrade or churn/);
-    // 402 on exhaustion.
-    expect(body).toMatch(/return 402 Payment Required/);
+  it('free-tier mechanics pinned: $0-forever / one profile / one concurrent / manual-only / perpetual / no metering', () => {
+    expect(body).toMatch(
+      /One persistent profile, one concurrent session, and unlimited manual sessions/,
+    );
+    expect(body).toMatch(/\$0 forever, no card required/);
+    expect(body).toMatch(/The free tier is perpetual/);
+    expect(body).toMatch(/The free tier is manual-only/);
+    expect(body).toMatch(/No per-hour metering, no credit decrement, no overage/);
   });
 
   it('concurrent-cap ladder pinned exactly (Solo=1 / Team=3 / Agency=8 / Starter=2 / Builder=8 / Scale=24)', () => {

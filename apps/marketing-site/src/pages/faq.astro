@@ -29,7 +29,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'How does concurrent metering work?',
-        a: '<strong>Concurrent</strong> = the number of sessions you can run at the same time, like browser tabs you\'d have open at once. That\'s the only thing we meter on paid tiers. Per-tier caps: Solo Manual = 1 concurrent / Team Manual = 3 / Agency Manual = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom. Within your cap, run as many session-hours as you want — same cap covers a 5-minute session and a 6-hour session. The cap controls peak parallelism; monthly throughput is whatever your concurrent fleet runs continuously. No monthly meter, no per-hour metering, no overage line items. The trial pack ($2.99) is the one exception — it uses time-based decrement at $0.18/hr against the prepaid 299¢ credit.',
+        a: '<strong>Concurrent</strong> = the number of sessions you can run at the same time, like browser tabs you\'d have open at once. That\'s the only thing we meter on paid tiers. Per-tier caps: Solo Manual = 1 concurrent / Team Manual = 3 / Agency Manual = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom. Within your cap, run as many session-hours as you want — same cap covers a 5-minute session and a 6-hour session. The cap controls peak parallelism; monthly throughput is whatever your concurrent fleet runs continuously. No monthly meter, no per-hour metering, no overage line items. The free tier has no metering at all — one concurrent session, manual-only, no usage charges.',
       },
       {
         q: 'What happens when I hit my concurrent cap?',
@@ -37,7 +37,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'Are there setup fees on any tier?',
-        a: 'No. No setup fees, no implementation fees, no minimum-monthly-volume commitments on any subscription tier. The trial pack is one-time $2.99; subscriptions bill monthly or annually with the listed price + applicable BTW.',
+        a: 'No. No setup fees, no implementation fees, no minimum-monthly-volume commitments on any subscription tier. The free tier is $0 forever; subscriptions bill monthly or annually with the listed price + applicable BTW.',
       },
       {
         q: 'How does annual billing work?',
@@ -46,27 +46,27 @@ const groups: FaqGroup[] = [
     ],
   },
   {
-    title: 'Trial pack',
+    title: 'Free tier',
     entries: [
       {
-        q: 'Why $2.99 and not free?',
-        a: 'Two reasons. First, the $2.99 charge funds the fleet time the trial consumes — each session decrements pre-paid credit at the Starter overage rate. Second, the price is itself the anti-abuse mechanism: low-friction for technical buyers, effective filter against sock-puppet signups. A zero-cost entry would need signup-fingerprinting, IP rate limits, OAuth-quality gates, and CAPTCHA layers; the $2.99 price tag does the same job in one line.',
+        q: 'What do I get on the free tier?',
+        a: 'One persistent profile, one concurrent session, and unlimited manual sessions driven from the desktop GUI client — $0 forever, no card required. It is meant for evaluation: run real iPhone Safari sessions on real WebKit and see the fingerprint match in your own flows before paying for anything.',
       },
       {
-        q: 'How many hours do I actually get from the trial pack?',
-        a: 'About 16 hours of session time. The trial pack credits 299¢ to your account; sessions decrement at $0.18 per concurrent-hour (per ADR-003 trial-pack mechanic). 299 ÷ 18 ≈ 16.6 hours of usage. Unused credit expires 14 days after purchase. The trial pack is the only Driftstack product with hour-based metering — paid tiers are concurrent-only.',
+        q: 'Does the free tier expire?',
+        a: 'No. The free tier is perpetual — there is no time window, no credit that runs out, and no auto-charge. Stay on it as long as you like.',
       },
       {
-        q: 'Can I extend the trial pack?',
-        a: 'No. The trial pack is once per account, no reset on downgrade or churn. To continue beyond it, subscribe to a paid tier. Stripe Checkout handles the conversion — your existing Stripe customer record carries over.',
+        q: 'Can I use the API or SDK on the free tier?',
+        a: 'No. The free tier is manual-only — sessions are driven by hand from the desktop GUI client. Programmatic API/SDK access starts on the API ladder (API Starter from $149/mo). Upgrade to a paid tier when you need to automate.',
       },
       {
-        q: 'What happens when the trial pack runs out?',
-        a: 'Either the credit hits zero or 14 days pass. New session attempts return 402 Payment Required pointing at Stripe Checkout for a paid tier. You can subscribe at any tier; existing API keys keep working once the subscription activates.',
+        q: 'Is there any usage metering on the free tier?',
+        a: 'None. No per-hour metering, no credit decrement, no overage. One concurrent session is the only limit, and within it you can run as many manual session-hours as you want.',
       },
       {
-        q: 'Can I get a refund on the trial pack?',
-        a: 'Yes — within the 14-day window if no sessions have been started. Once a session runs and decrements credit, the trial pack is consumed. Email <a href="mailto:support@driftstack.dev" class="text-glow-red underline">support@driftstack.dev</a> for refund requests.',
+        q: 'How do I move from the free tier to a paid tier?',
+        a: 'Subscribe to any Manual or API tier through Stripe Checkout from your dashboard. Your existing profile and account carry over; the higher concurrent + profile limits and (on the API ladder) programmatic access apply immediately on activation.',
       },
     ],
   },
@@ -202,7 +202,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'Can I run a side-by-side comparison before committing?',
-        a: 'Yes — that\'s exactly what the $2.99 trial pack is for. 16 hours of session time gives most teams enough fleet capacity to run their existing test suite or scraping job through Driftstack in parallel with their current vendor and compare outputs. Many customers convert to a paid tier after seeing real fingerprint match rates in their actual flows; some discover their detection-evasion problem isn\'t worth solving and stay on a Chromium service. Either outcome is fine — we\'d rather you make the right call than the upsell.',
+        a: 'Yes — that\'s exactly what the free tier is for. Run manual sessions through Driftstack in parallel with your current vendor and compare outputs at no cost. Many customers convert to a paid tier after seeing real fingerprint match rates in their actual flows; some discover their detection-evasion problem isn\'t worth solving and stay on a Chromium service. Either outcome is fine — we\'d rather you make the right call than the upsell.',
       },
     ],
   },
@@ -232,7 +232,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'What if a session fails?',
-        a: 'Session lifecycle is observable end-to-end via the SDK and the dashboard. Failed sessions return structured error responses (RFC 7807 problem-types); recordings + state captures up to the failure point stay available. Sessions that fail in the orchestration layer (driver crashes, fleet unavailability, etc.) do not consume your concurrent slot — the slot frees immediately on failure detection. Trial-pack credit is also unaffected by orchestration-layer failures.',
+        a: 'Session lifecycle is observable end-to-end via the SDK and the dashboard. Failed sessions return structured error responses (RFC 7807 problem-types); recordings + state captures up to the failure point stay available. Sessions that fail in the orchestration layer (driver crashes, fleet unavailability, etc.) do not consume your concurrent slot — the slot frees immediately on failure detection.',
       },
       {
         q: 'What\'s the uptime target?',
@@ -245,7 +245,7 @@ const groups: FaqGroup[] = [
 
 <BaseLayout
   title="FAQ"
-  description="Common questions about Driftstack pricing, the $2.99 trial pack, tier upgrades, the bundled LLM, EU data residency, and support."
+  description="Common questions about Driftstack pricing, the free tier, tier upgrades, the bundled LLM, EU data residency, and support."
 >
   <section class="relative overflow-hidden bg-gradient-to-b from-surface-base to-surface-raised">
     {/* 2026-05-22 — hero-glow atmosphere matches the rest of the site. */}

@@ -1,6 +1,6 @@
 // W327.B — drift guard for marketing /index CTAs. Pins the
 // canonical CTA labels + hrefs:
-//   • Primary above-the-fold: "Get started — $2.99" → /pricing#trial-pack
+//   • Primary above-the-fold: "Start free" → /pricing#free
 //   • Manual ladder: "See Manual pricing →" → /pricing#manual
 //   • API ladder: "See API pricing →" → /pricing#api
 //   • Final "See pricing" → /pricing
@@ -21,10 +21,8 @@ function read(p: string): string {
 describe('W327.B / index CTA baseline', () => {
   const body = read(PAGE);
 
-  it('primary CTA above the fold points at /pricing#trial-pack', () => {
-    expect(body).toMatch(
-      /<a\s+href="\/pricing#trial-pack"\s+class="btn-primary">[\s\S]{0,40}Start for \$2\.99/,
-    );
+  it('primary CTA above the fold points at /pricing#free', () => {
+    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
   });
 
   it('Manual ladder CTA links to /pricing#manual', () => {

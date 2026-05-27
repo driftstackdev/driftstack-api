@@ -1,7 +1,7 @@
 // Locked pricing values — single source of truth for the marketing
 // site. Per ADR-004 (two-ladder concurrent-only restructure,
 // supersedes file-127 single-ladder hours-with-overage design).
-// Trial pack mechanics survive intact per ADR-003.
+// The perpetual free tier replaced the one-time trial pack 2026-05-27.
 //
 // Backend equivalent at apps/server/src/services/sessions.ts
 // (TIER_CONCURRENT_SESSION_LIMITS, PROFILES_PER_TIER) per V-073.
@@ -90,7 +90,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Solo power users, individual operators',
     aiAgent: false,
     llmBilling: null,
-    cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
+    cta: { label: 'Get started', href: '/signup' },
   },
   {
     id: 'team_manual',
@@ -108,7 +108,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Teams of account managers',
     aiAgent: true,
     llmBilling: 'byok_only',
-    cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
+    cta: { label: 'Get started', href: '/signup' },
     highlight: true,
   },
   {
@@ -127,7 +127,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Agencies juggling many client profiles',
     aiAgent: true,
     llmBilling: 'byok_only',
-    cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
+    cta: { label: 'Get started', href: '/signup' },
   },
 
   // API ladder — programmatic SDK access.
@@ -147,7 +147,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Solo developers, evaluation-stage automation',
     aiAgent: true,
     llmBilling: 'byok_only',
-    cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
+    cta: { label: 'Get started', href: '/signup' },
   },
   {
     id: 'api_builder',
@@ -165,7 +165,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Production automation at scale',
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
-    cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
+    cta: { label: 'Get started', href: '/signup' },
     highlight: true,
   },
   {
@@ -184,7 +184,7 @@ export const API_TIERS: ApiTier[] = [
     audience: 'High-throughput automation fleets',
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
-    cta: { label: 'Start with $2.99', href: '/pricing#trial-pack' },
+    cta: { label: 'Get started', href: '/signup' },
   },
   {
     id: 'enterprise',
@@ -307,13 +307,3 @@ export const SELF_HOSTED_SKUS: SelfHostedSku[] = [
 ];
 
 export const ANNUAL_DISCOUNT_LABEL = '20% off annual';
-
-export const TRIAL_PACK = {
-  priceUsd: 2.99,
-  creditCents: 299,
-  meterRate: '$0.18 per concurrent-hour (per ADR-003 trial-pack mechanic)',
-  hoursApprox: 16,
-  windowDays: 14,
-  concurrent: 1,
-  oncePerAccount: true,
-} as const;

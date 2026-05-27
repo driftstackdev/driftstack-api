@@ -2,25 +2,23 @@
 // V-502. Existing pricing-* tests (concurrency-profile-cap-parity,
 // pricing-data-binding-parity, pricing-section-anchors-baseline,
 // pricing-hero-baseline, pricing-tier-ordering-parity, pricing-
-// tier-id-schema-parity, trial-pack-binding, ladder-coverage,
+// tier-id-schema-parity, ladder-coverage,
 // crypto-parity, manual-tier-figures, api-tier-figures) cover the
 // data-driven sections. This guard pins the load-bearing UX +
 // content claims:
 //
-//   • TRIAL_PACK + SELF_HOSTED_SKUS + API_TIERS sourced from
-//     ../data/pricing.ts (data-driven, not inline-hardcoded).
-//   • 4 canonical section anchors: #trial-pack / #which-tier
+//   • SELF_HOSTED_SKUS + API_TIERS sourced from
+//     ../data/pricing.ts (data-driven, not inline-hardcoded; TRIAL_PACK retired).
+//   • 5 canonical section anchors: #free / #which-tier
 //     (V-502 decision tree) / #manual / #api / #self-hosted.
-//   • V-502 decision-tree 7-tier teaser ladder pinned with
-//     verbatim title strings (Solo Manual $79 → Enterprise from
-//     $4,000).
+//   • V-502 decision-tree teaser ladder pinned with
+//     verbatim title strings (Free $0 → Enterprise from $4,000).
 //   • Monthly/annual toggle wired (id=billing-toggle + data-
 //     period-target=monthly/annual).
 //   • "Pay per concurrent session" landing-band copy pinned.
 //   • BYOK-or-bundled LLM explainer: Anthropic console link +
 //     Self-hosted SKUs are BYOK-only.
-//   • 402 Payment Required on trial-pack exhaustion (matches
-//     /faq's claim).
+//   • Free tier is perpetual (never expires; matches /faq's claim).
 //   • Stripe-proration mid-month claim pinned.
 //   • Mini-FAQ teaser with 4 questions + /faq cross-link.
 
@@ -41,15 +39,17 @@ function read(p: string): string {
 describe('W372.A marketing-site /pricing page content parity', () => {
   const body = read(PAGE);
 
-  it('TRIAL_PACK + SELF_HOSTED_SKUS + API_TIERS sourced from ../data/pricing.ts (data-driven)', () => {
+  it('SELF_HOSTED_SKUS + API_TIERS sourced from ../data/pricing.ts (data-driven; TRIAL_PACK retired)', () => {
     expect(existsSync(PRICING_DATA)).toBe(true);
-    expect(body).toMatch(
-      /import \{[\s\S]*?API_TIERS,[\s\S]*?SELF_HOSTED_SKUS,[\s\S]*?TRIAL_PACK,\s*\n?\s*\} from '\.\.\/data\/pricing\.ts'/,
-    );
+    const imp = body.match(/import \{([\s\S]*?)\} from '\.\.\/data\/pricing\.ts'/);
+    expect(imp).not.toBeNull();
+    expect(imp![1]!).toContain('API_TIERS');
+    expect(imp![1]!).toContain('SELF_HOSTED_SKUS');
+    expect(imp![1]!).not.toContain('TRIAL_PACK');
   });
 
-  it('canonical section anchors pinned: #trial-pack / #which-tier / #manual / #api / #self-hosted', () => {
-    expect(body).toMatch(/<section id="trial-pack"/);
+  it('canonical section anchors pinned: #free / #which-tier / #manual / #api / #self-hosted', () => {
+    expect(body).toMatch(/<section id="free"/);
     expect(body).toMatch(/<section\s*\n?[^>]*id="which-tier"/);
     expect(body).toMatch(/<section id="manual"/);
     expect(body).toMatch(/<section id="api"/);
@@ -57,11 +57,11 @@ describe('W372.A marketing-site /pricing page content parity', () => {
   });
 
   it('V-502 decision-tree 7-tier teaser ladder pinned verbatim', () => {
-    // Order matches the buyer's mental ladder (Trial → Manual ladder
+    // Order matches the buyer's mental ladder (Free → Manual ladder
     // → API ladder → Enterprise). Pin so a future reorder requires
     // an explicit decision.
     for (const t of [
-      'Trial pack — $2.99',
+      'Free — $0, forever',
       'Solo Manual — $79/mo',
       'Team Manual — $249/mo',
       'Agency Manual — $699/mo',
@@ -99,11 +99,9 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     expect(body).toMatch(/Bundled per-token rate announced at launch/);
   });
 
-  it('trial-pack exhaustion claim pinned: 402 Payment Required → Stripe Checkout (matches /faq)', () => {
-    expect(body).toMatch(
-      /New session attempts\s+return 402 Payment Required pointing at Stripe Checkout/,
-    );
-    expect(body).toMatch(/Trial pack is once per account; to come back, subscribe/);
+  it('free-tier perpetual claim pinned: never expires + upgrade to a paid tier (matches /faq)', () => {
+    expect(body).toMatch(/The free tier is perpetual/);
+    expect(body).toMatch(/subscribe to\s+a paid tier from your dashboard/);
   });
 
   it('Stripe-proration mid-month claim pinned ("Yes. Stripe prorates the change automatically")', () => {
@@ -122,21 +120,19 @@ describe('W372.A marketing-site /pricing page content parity', () => {
       /<h3 class="font-medium text-ink-primary">Can I switch tiers mid-month\?<\/h3>/,
     );
     expect(body).toMatch(
-      /<h3 class="font-medium text-ink-primary">What happens when the trial pack runs out\?<\/h3>/,
+      /<h3 class="font-medium text-ink-primary">Does the free tier expire\?<\/h3>/,
     );
     expect(body).toMatch(/<a href="\/faq" class="btn-secondary">See full FAQ<\/a>/);
   });
 
-  it('trial-pack header card cross-links: signup + docs', () => {
+  it('free-tier header card cross-links: signup + docs + data-bound price', () => {
     expect(body).toMatch(/href="https:\/\/app\.driftstack\.dev\/signup"/);
     expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev"/);
-    expect(body).toMatch(/Start for \{fmtUsd\(trialPack\.monthlyUsd\)\}/);
+    expect(body).toMatch(/Free — \{fmtUsd\(freeTier\.monthlyUsd\)\}, forever/);
   });
 
-  it('trial-pack hour-based metering exception pinned (R6 plain-English rewrite)', () => {
-    expect(body).toMatch(
-      /The trial is our only product that\s+charges by the hour — paid tiers don't meter usage at all/,
-    );
+  it('free-tier no-metering framing pinned', () => {
+    expect(body).toMatch(/No usage metering at all/);
   });
 
   it('"720 browser-hours/month" surprise-overage example pinned (concurrent-caps rationale)', () => {

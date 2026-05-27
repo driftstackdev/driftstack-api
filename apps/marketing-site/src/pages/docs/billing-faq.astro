@@ -15,16 +15,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       about how Driftstack billing works.
     </p>
 
-    <h2>How does the trial work?</h2>
+    <h2>How does the free tier work?</h2>
     <p>
-      Every new account starts on the <strong>Trial Pack</strong>:
-      a metered evaluation tier capped at <strong>1 concurrent
-      session</strong> and <strong>1 profile</strong>. No card is
-      required to start. All API keys — trial or paid — use the
-      <code>ds_live_…</code> prefix; there is no separate
-      <code>ds_test_</code> namespace today. Trial keys continue to
-      authenticate after the trial expires but the account is
-      downgraded to a read-only state until you pick a paid tier.
+      Every new account starts on the <strong>Free</strong> tier:
+      a perpetual evaluation tier capped at <strong>1 concurrent
+      session</strong> and <strong>1 profile</strong>, manual-only
+      (no API/SDK access). No card is required, and it never expires.
+      Sessions are driven by hand from the desktop GUI client; there
+      is no usage metering, no credit, and no auto-charge. All API keys
+      use the <code>ds_live_…</code> prefix; there is no separate
+      <code>ds_test_</code> namespace today. Subscribe to a paid tier
+      when you need higher limits or programmatic access.
     </p>
 
     <h2>How does upgrading to a paid tier work?</h2>
@@ -56,7 +57,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>Can I get a refund?</h2>
     <p>
       Card payments: full refund within <strong>14 days of payment</strong>
-      if you haven't used more than the trial pack's session minutes.
+      if you haven't run sessions beyond a brief evaluation.
       Past the 14-day window we do not refund unless the issue is on
       our side (extended outage, billing error).
     </p>
@@ -128,7 +129,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       a renewal reminder 7 days before the cycle ends with a link
       to the next checkout. If a crypto renewal is not paid within
       48 hours of cycle end, the account drops to a read-only
-      grace state for 7 days, then is downgraded to the Trial Pack
+      grace state for 7 days, then is downgraded to the Free
       tier until renewal.
     </p>
 

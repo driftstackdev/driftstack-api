@@ -15,8 +15,8 @@
 //   • "Where Driftstack isn't the fit" honesty section pinned
 //     with 3 explicit non-fit categories (desktop-only,
 //     pure-HTML-scraping, IP-pool-as-product).
-//   • Trial-pack CTA cross-link to /pricing#trial-pack.
-//   • $2.99 / 16-hour / once trial-pack figures pinned.
+//   • Free-tier CTA cross-link to /pricing#free.
+//   • Free-tier framing (one profile / manual / perpetual) pinned.
 //   • "Last reviewed YYYY-MM-DD" review date pinned (stops
 //     freshness drifting silently).
 //   • No performance-benchmark claims today — V-345 routes
@@ -96,9 +96,9 @@ describe('W366.A marketing-site /comparison page content parity', () => {
     );
   });
 
-  it('trial-pack CTA cross-link points at /pricing#trial-pack + figures pinned ($2.99 / 16h / once)', () => {
-    expect(body).toMatch(/href="\/pricing#trial-pack"/);
-    expect(body).toMatch(/\$2\.99 trial pack — 16 hours, used once/);
+  it('free-tier CTA cross-link points at /pricing#free + framing pinned (one profile / manual / perpetual)', () => {
+    expect(body).toMatch(/href="\/pricing#free"/);
+    expect(body).toMatch(/Free tier — one profile, manual, perpetual\./);
     // The cross-linked anchor must exist on /pricing.
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro'))).toBe(
       true,

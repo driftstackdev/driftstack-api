@@ -1,7 +1,7 @@
 // W319.B — drift guard for /pricing tier ladder coverage. Each
 // of the eight canonical AccountTier slugs must appear in API_TIERS
 // (the marketing source of truth), and tier grouping must be:
-//   • 'trial'  → trial_pack
+//   • 'free'   → free
 //   • 'manual' → solo_manual / team_manual / agency_manual
 //   • 'api'    → api_starter / api_builder / api_scale / enterprise
 
@@ -10,7 +10,7 @@ import { API_TIERS } from '../../src/data/pricing';
 import { AccountTierSchema } from '@driftstack/api-types';
 
 const EXPECTED_GROUPS: Record<string, string[]> = {
-  trial: ['trial_pack'],
+  free: ['free'],
   manual: ['solo_manual', 'team_manual', 'agency_manual'],
   api: ['api_starter', 'api_builder', 'api_scale', 'enterprise'],
 };
@@ -27,9 +27,9 @@ describe('W319.B /pricing ladder coverage', () => {
     expect(API_TIERS.length).toBe(8);
   });
 
-  it('trial group: only trial_pack', () => {
-    const ids = API_TIERS.filter((p) => p.tierType === 'trial').map((p) => p.id);
-    expect(ids).toEqual(EXPECTED_GROUPS.trial);
+  it('free group: only free', () => {
+    const ids = API_TIERS.filter((p) => p.tierType === 'free').map((p) => p.id);
+    expect(ids).toEqual(EXPECTED_GROUPS.free);
   });
 
   it('manual ladder ordered solo → team → agency', () => {

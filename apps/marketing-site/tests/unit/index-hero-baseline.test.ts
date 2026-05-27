@@ -1,14 +1,12 @@
 // W304.B — drift guard for marketing /index hero copy. The hero
 // section must lead with the WebKit-source-fork differentiator and
-// cite the trial pack price + duration that match TRIAL_PACK
-// constants. Catches drift where the hero is re-written away from
-// the locked positioning.
+// cite the free-tier entry framing. Catches drift where the hero is
+// re-written away from the locked positioning.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TRIAL_PACK } from '../../src/data/pricing';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -30,11 +28,11 @@ describe('W304.B /index hero baseline', () => {
     expect(body).toMatch(/C\+\+|source-level|source code/i);
   });
 
-  it('hero cites the canonical trial-pack price', () => {
-    expect(body).toMatch(new RegExp(`\\$${TRIAL_PACK.priceUsd.toFixed(2).replace('.', '\\.')}`));
+  it('hero leads with the free-tier entry CTA', () => {
+    expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
   });
 
-  it('hero cites the canonical trial-pack hour budget', () => {
-    expect(body).toMatch(new RegExp(`${TRIAL_PACK.hoursApprox}\\s+hours`));
+  it('hero subline cites the free-tier framing', () => {
+    expect(body).toMatch(/One profile · unlimited manual sessions · no card required\./);
   });
 });

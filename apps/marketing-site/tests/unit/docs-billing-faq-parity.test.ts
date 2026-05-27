@@ -1,5 +1,5 @@
 // W264.B — drift-guard for /docs/billing-faq. Pins:
-// 1. Trial Pack concurrent/profile caps + non-refundability of crypto match data.
+// 1. Free-tier concurrent/profile caps + non-refundability of crypto match data.
 // 2. ds_live_ prefix and no separate ds_test_ namespace.
 // 3. 14-day refund window for card payments.
 // 4. NowPayments + Stripe pathways are named (no fictional providers).
@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TRIAL_PACK } from '../../src/data/pricing';
+import { TIER_CONCURRENT_SESSION_LIMITS, PROFILES_PER_TIER } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -21,8 +21,9 @@ function read(p: string): string {
 describe('W264.B /docs/billing-faq ↔ live billing parity', () => {
   const page = read(PAGE);
 
-  it('Trial Pack concurrent + profile caps match data layer', () => {
-    expect(TRIAL_PACK.concurrent).toBe(1);
+  it('Free-tier concurrent + profile caps match data layer', () => {
+    expect(TIER_CONCURRENT_SESSION_LIMITS.free).toBe(1);
+    expect(PROFILES_PER_TIER.free).toBe(1);
     expect(page).toMatch(/1\s+concurrent\s+session/);
     expect(page).toMatch(/1\s+profile/);
   });

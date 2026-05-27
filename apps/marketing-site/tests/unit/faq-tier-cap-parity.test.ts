@@ -44,10 +44,10 @@ describe('W261.C /faq ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
     expect(page).toMatch(/RFC 7807 problem-detail/i);
   });
 
-  it('trial pack credit + meter rate match TRIAL_PACK data', () => {
-    expect(page).toMatch(/\$2\.99/);
-    expect(page).toMatch(/\$0\.18 per concurrent-hour/);
-    expect(page).toMatch(/14 days/);
+  it('free-tier framing pinned: $0-forever / one concurrent / manual-only / no metering', () => {
+    expect(page).toMatch(/The free tier is \$0 forever/);
+    expect(page).toMatch(/The free tier has no metering at all/);
+    expect(page).toMatch(/The free tier is manual-only/);
   });
 
   it('annual discount label matches the live ANNUAL_DISCOUNT_LABEL', () => {
@@ -62,7 +62,7 @@ describe('W261.C /faq ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
   });
 
   it('PROFILES_PER_TIER values referenced in the FAQ match the schema', () => {
-    // Trial pack profile cap is 1. (Sanity bound only; FAQ may not show all numbers.)
-    expect(PROFILES_PER_TIER.trial_pack).toBe(1);
+    // Free tier profile cap is 1. (Sanity bound only; FAQ may not show all numbers.)
+    expect(PROFILES_PER_TIER.free).toBe(1);
   });
 });

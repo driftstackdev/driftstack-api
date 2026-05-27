@@ -1,5 +1,5 @@
 // W335.B — drift guard for /pricing page section anchors. The
-// homepage CTAs deep-link to /pricing#trial-pack / /pricing#manual
+// homepage CTAs deep-link to /pricing#free / /pricing#manual
 // / /pricing#api / /pricing#self-hosted. Each anchor must exist
 // on the pricing page or the deep links 404.
 
@@ -12,7 +12,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro');
 
-const REQUIRED_ANCHORS = ['trial-pack', 'manual', 'api', 'self-hosted'];
+const REQUIRED_ANCHORS = ['free', 'manual', 'api', 'self-hosted'];
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
