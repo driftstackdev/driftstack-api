@@ -22,7 +22,7 @@ the numbered list below.
   - #14 — BYOK-key rotation email links to a 404 dashboard route; no BYOK management UI exists (management is API-only).
 - **Latent, high-impact on a planned event:**
   - #12 — V-173 forward-path webhook delivery signs bare-hex; breaks ALL SDK verification on the durable-impl cutover. (Fix #12 + #13 together — one webhook-signature pass; both rooted in a missing server-sign→SDK-verify e2e test.)
-  - #15 — LLM cost-to-serve rate card models 4o-mini but the agent runs Opus 4.7 (~100× under-estimate); inert until LLM usage metering lands, then under-reports bundled-LLM margin alerts. (Fix with #6 / V-541.J/K — same deferred metering subsystem.)
+  - #15 — LLM cost rate card models 4o-mini but the agent runs Opus 4.7 (~100× under-estimate); inert until LLM usage metering lands, then (a) under-reports bundled-LLM margin alerts AND (b) makes the customer-facing bundled-LLM budget soft-cap deplete ~100× too slowly (customers get ~100× more bundled Opus than the cap intends). Rate must be right in the writer BEFORE bundled-LLM goes LIVE. (Fix with #6 / V-541.J/K — same deferred metering subsystem.)
 - **Contract / intent decisions (pick a direction, then align sources):**
   - #5 — webhook retry count: code does 4 retries, docs + rationale promise 5; the guard is toothless.
   - #10 — crypto checkout accepts `trial_pack` but crypto quote 400s it.
@@ -367,13 +367,19 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
     **Latent today:** the LLM usage dimension is hard-zero until the
     `usage_records` writers land (`bootstrap.ts:1020` "llm dimensions zero
     until V-541.I/J/K") — the SAME deferred metering subsystem as #6 — so
-    `llmCents` computes to 0 regardless of the rate right now. Internal
-    accounting only (the `cost-defaults-v541f` invariant confirms these rates
-    do NOT drive customer billing). **When V-541.J/K wires LLM metering**, the
-    100×-low rate will make bundled-LLM cost-monitoring under-report LLM
+    `llmCents` computes to 0 regardless of the rate right now. It does not
+    drive fiat customer billing (the `cost-defaults-v541f` invariant confirms
+    that). **When V-541.J/K wires LLM metering**, the 100×-low rate has TWO
+    downstream effects: (a) bundled-LLM cost-MONITORING under-reports LLM
     cost-to-serve ~100×, defeating the soft/hard margin alerts
-    (`deriveThresholdsFromMonthlyPrice` = 60% / 90% of selling price) for
-    bundled-LLM accounts. **Decide + fix with #6/V-541.K:** set the rate to
+    (`deriveThresholdsFromMonthlyPrice` = 60% / 90% of selling price); AND
+    (b) — newly traced — the **customer-facing bundled-LLM budget soft-cap**
+    sums `usage_records.cost_usd_cents` (`bundled-llm.ts:30`), so if the
+    deferred writer prices Opus tokens at the 4o-mini rate, each bundled-LLM
+    customer's monthly cap depletes ~100× too slowly → they get ~100× more
+    bundled Opus usage than the cap intends before the soft-cap fires. So the
+    rate must be correct in the writer BEFORE bundled-LLM goes LIVE, not just
+    for internal alerting. **Decide + fix with #6/V-541.K:** set the rate to
     the actual model's cost-to-serve (Opus 4.7 list, a negotiated rate, or
     whatever the bundled-LLM model ends up being) and correct the 4o-mini
     comments. NOT auto-fixed: the true cost-to-serve number is a finance/
