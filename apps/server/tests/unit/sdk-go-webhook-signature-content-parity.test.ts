@@ -136,13 +136,13 @@ describe('W594.B packages/sdk-go/webhook_signature.go content parity', () => {
 
   it('Constant-time signature compare via hmac.Equal. hex.DecodeString on the parsed signature hex; if decode fails (malformed hex) returns false WITHOUT invoking hmac.Equal. Drift to bytes.Equal or == comparison would reveal where the mismatch is via timing, defeating the constant-time HMAC guarantee.', () => {
     expect(body).toMatch(
-      /gotSum, err := hex\.DecodeString\(parsed\.signatureHex\)\s*\n\s*if err != nil \{\s*\n\s*return false\s*\n\s*\}\s*\n\s*return hmac\.Equal\(expectedSum, gotSum\)/,
+      /for _, sigHex := range parsed\.signatureHexes \{\s*\n\s*gotSum, err := hex\.DecodeString\(sigHex\)\s*\n\s*if err != nil \{\s*\n\s*continue\s*\n\s*\}\s*\n\s*if hmac\.Equal\(expectedSum, gotSum\) \{\s*\n\s*return true\s*\n\s*\}\s*\n\s*\}\s*\n\s*return false/,
     );
   });
 
   it('parseSignatureHeader robustness: parsedSignature 2-field private struct (timestampSeconds + signatureHex); comma-split + per-part IndexByte(\'=\') with bad-eq-skip; TrimSpace on both key + val; switch on key with ONLY "t" and "v1" cases (no default — UNKNOWN KEYS SILENTLY SKIPPED so server can add future fields without breaking old verifiers); malformed "t" int silently dropped via err==nil guard; tsSet bool flag separates "0 set" from "never set" since 0 is a valid Unix timestamp; accept only when tsSet AND sig != "".', () => {
     expect(body).toMatch(
-      /^type parsedSignature struct \{\s*\n\s*timestampSeconds int64\s*\n\s*signatureHex\s+string\s*\n\}/m,
+      /^type parsedSignature struct \{\s*\n\s*timestampSeconds int64\s*\n\s*signatureHexes\s+\[\]string\s*\n\}/m,
     );
     expect(body).toMatch(/^func parseSignatureHeader\(header string\) \(parsedSignature, bool\)/m);
     expect(body).toMatch(/for _, part := range strings\.Split\(header, ","\) \{/);
@@ -153,11 +153,13 @@ describe('W594.B packages/sdk-go/webhook_signature.go content parity', () => {
     expect(body).toMatch(/val := strings\.TrimSpace\(part\[eq\+1:\]\)/);
     // Switch with only "t" and "v1" — unknown keys SILENTLY SKIPPED (no default).
     expect(body).toMatch(
-      /switch key \{\s*\n\s*case "t":\s*\n\s*n, err := strconv\.ParseInt\(val, 10, 64\)\s*\n\s*if err == nil \{\s*\n\s*ts = n\s*\n\s*tsSet = true\s*\n\s*\}\s*\n\s*case "v1":\s*\n\s*sig = val\s*\n\s*\}/,
+      /switch key \{\s*\n\s*case "t":\s*\n\s*n, err := strconv\.ParseInt\(val, 10, 64\)\s*\n\s*if err == nil \{\s*\n\s*ts = n\s*\n\s*tsSet = true\s*\n\s*\}\s*\n\s*case "v1":\s*\n\s*if val != "" \{\s*\n\s*sigs = append\(sigs, val\)\s*\n\s*\}\s*\n\s*\}/,
     );
     expect(body).toMatch(
-      /if !tsSet \|\| sig == "" \{\s*\n\s*return parsedSignature\{\}, false\s*\n\s*\}/,
+      /if !tsSet \|\| len\(sigs\) == 0 \{\s*\n\s*return parsedSignature\{\}, false\s*\n\s*\}/,
     );
-    expect(body).toMatch(/return parsedSignature\{timestampSeconds: ts, signatureHex: sig\}, true/);
+    expect(body).toMatch(
+      /return parsedSignature\{timestampSeconds: ts, signatureHexes: sigs\}, true/,
+    );
   });
 });

@@ -36,13 +36,19 @@ DEFAULT_TOLERANCE_SEC = 300
 @dataclass
 class _ParsedSignature:
     timestamp_seconds: int
-    signature_hex: str
+    signature_hexes: list[str]
 
 
 def _parse_signature_header(header: str) -> _ParsedSignature | None:
-    """Parse ``t=...,v1=...`` (order-independent). Return None on shape failure."""
+    """Parse ``t=...,v1=...`` (order-independent).
+
+    Collects EVERY ``v1=`` (Stripe-style multi-signature) — during a
+    secret-rotation grace window the server dual-signs into one header
+    (``t=,v1=<new>,v1=<old>``). Return None on shape failure (no timestamp
+    or zero signatures).
+    """
     timestamp: int | None = None
-    signature: str | None = None
+    signatures: list[str] = []
     for part in header.split(","):
         eq_idx = part.find("=")
         if eq_idx < 0:
@@ -54,11 +60,11 @@ def _parse_signature_header(header: str) -> _ParsedSignature | None:
                 timestamp = int(value)
             except ValueError:
                 continue
-        elif key == "v1":
-            signature = value
-    if timestamp is None or signature is None:
+        elif key == "v1" and value:
+            signatures.append(value)
+    if timestamp is None or not signatures:
         return None
-    return _ParsedSignature(timestamp_seconds=timestamp, signature_hex=signature)
+    return _ParsedSignature(timestamp_seconds=timestamp, signature_hexes=signatures)
 
 
 def _verify_single_header(
@@ -84,7 +90,10 @@ def _verify_single_header(
         payload,
         hashlib.sha256,
     ).hexdigest()
-    return hmac.compare_digest(expected, parsed.signature_hex)
+    # Accept if our computed HMAC matches ANY of the header's v1= signatures
+    # (constant-time per candidate), so a verifier holding either the new or
+    # old secret passes during a rotation dual-sign grace window.
+    return any(hmac.compare_digest(expected, sig) for sig in parsed.signature_hexes)
 
 
 def verify_webhook_signature(

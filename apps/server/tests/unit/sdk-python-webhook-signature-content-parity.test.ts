@@ -46,25 +46,25 @@ describe('W586.C packages/sdk-python/src/driftstack/webhook_signature.py content
     expect(body).toMatch(/^from dataclasses import dataclass$/m);
     expect(body).toMatch(/^DEFAULT_TOLERANCE_SEC = 300$/m);
     expect(body).toMatch(
-      /^@dataclass\nclass _ParsedSignature:\s*\n\s*timestamp_seconds: int\s*\n\s*signature_hex: str$/m,
+      /^@dataclass\nclass _ParsedSignature:\s*\n\s*timestamp_seconds: int\s*\n\s*signature_hexes: list\[str\]$/m,
     );
   });
 
   it('_parse_signature_header: split on , + split on = + accept t (int) + v1 (hex) + order-independent + None if either missing or unparseable', () => {
     expect(body).toMatch(
-      /^def _parse_signature_header\(header: str\) -> _ParsedSignature \| None:\s*\n\s*"""Parse ``t=\.\.\.,v1=\.\.\.`` \(order-independent\)\. Return None on shape failure\."""/m,
+      /^def _parse_signature_header\(header: str\) -> _ParsedSignature \| None:/m,
     );
-    expect(body).toMatch(/timestamp: int \| None = None\s*\n\s*signature: str \| None = None/);
+    expect(body).toMatch(/timestamp: int \| None = None\s*\n\s*signatures: list\[str\] = \[\]/);
     expect(body).toMatch(/for part in header\.split\(","\):/);
     expect(body).toMatch(/eq_idx = part\.find\("="\)\s*\n\s*if eq_idx < 0:\s*\n\s*continue/);
     expect(body).toMatch(
       /key = part\[:eq_idx\]\.strip\(\)\s*\n\s*value = part\[eq_idx \+ 1 :\]\.strip\(\)/,
     );
     expect(body).toMatch(
-      /if key == "t":\s*\n\s*try:\s*\n\s*timestamp = int\(value\)\s*\n\s*except ValueError:\s*\n\s*continue\s*\n\s*elif key == "v1":\s*\n\s*signature = value/,
+      /if key == "t":\s*\n\s*try:\s*\n\s*timestamp = int\(value\)\s*\n\s*except ValueError:\s*\n\s*continue\s*\n\s*elif key == "v1" and value:\s*\n\s*signatures\.append\(value\)/,
     );
     expect(body).toMatch(
-      /if timestamp is None or signature is None:\s*\n\s*return None\s*\n\s*return _ParsedSignature\(timestamp_seconds=timestamp, signature_hex=signature\)/,
+      /if timestamp is None or not signatures:\s*\n\s*return None\s*\n\s*return _ParsedSignature\(timestamp_seconds=timestamp, signature_hexes=signatures\)/,
     );
   });
 
@@ -80,7 +80,12 @@ describe('W586.C packages/sdk-python/src/driftstack/webhook_signature.py content
       /if abs\(now - parsed\.timestamp_seconds\) > tolerance_sec:\s*\n\s*return False/,
     );
     expect(body).toMatch(
-      /payload = f"\{parsed\.timestamp_seconds\}\."\.encode\(\) \+ body_bytes\s*\n\s*expected = hmac\.new\(\s*\n\s*secret\.encode\("utf-8"\),\s*\n\s*payload,\s*\n\s*hashlib\.sha256,\s*\n\s*\)\.hexdigest\(\)\s*\n\s*return hmac\.compare_digest\(expected, parsed\.signature_hex\)/,
+      /payload = f"\{parsed\.timestamp_seconds\}\."\.encode\(\) \+ body_bytes\s*\n\s*expected = hmac\.new\(\s*\n\s*secret\.encode\("utf-8"\),\s*\n\s*payload,\s*\n\s*hashlib\.sha256,\s*\n\s*\)\.hexdigest\(\)/,
+    );
+    // Accept if computed HMAC matches ANY of the parsed v1= signatures
+    // (Stripe-style multi-signature for rotation dual-sign).
+    expect(body).toMatch(
+      /return any\(hmac\.compare_digest\(expected, sig\) for sig in parsed\.signature_hexes\)/,
     );
   });
 

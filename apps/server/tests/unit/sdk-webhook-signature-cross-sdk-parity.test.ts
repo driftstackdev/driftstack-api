@@ -140,10 +140,10 @@ describe('W816 cross-SDK webhook-signature parity', () => {
 
   // ─── Python _ParsedSignature internal dataclass ───────────────
 
-  it("CRITICAL Python _ParsedSignature internal dataclass pinned — timestamp_seconds: int + signature_hex: str. The leading-underscore + dataclass pattern is the canonical 'this is parser-internal, not public API' convention.", () => {
+  it("CRITICAL Python _ParsedSignature internal dataclass pinned — timestamp_seconds: int + signature_hexes: list[str] (Stripe-style multi-signature; collects every v1= for rotation dual-sign). The leading-underscore + dataclass pattern is the canonical 'this is parser-internal, not public API' convention.", () => {
     const p = read(PY);
     expect(p).toMatch(
-      /@dataclass\s*\nclass _ParsedSignature:\s*\n\s+timestamp_seconds: int\s*\n\s+signature_hex: str/,
+      /@dataclass\s*\nclass _ParsedSignature:\s*\n\s+timestamp_seconds: int\s*\n\s+signature_hexes: list\[str\]/,
     );
   });
 

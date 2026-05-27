@@ -17,6 +17,34 @@ func sign(body []byte, secret string, ts int64) string {
 	return "t=" + strconv.FormatInt(ts, 10) + ",v1=" + hex.EncodeToString(mac.Sum(nil))
 }
 
+func sigHex(body []byte, secret string, ts int64) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(strconv.FormatInt(ts, 10)))
+	mac.Write([]byte("."))
+	mac.Write(body)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// During a secret-rotation grace window the server dual-signs into ONE
+// header (t=,v1=<new>,v1=<old>); a verifier holding EITHER secret must pass.
+func TestVerifyWebhookSignature_DualV1Rotation(t *testing.T) {
+	body := []byte(`{"event":"x"}`)
+	now := time.Now()
+	ts := now.Unix()
+	const newSecret = "whsec_new_rotated"
+	const oldSecret = "whsec_old_pre_rotation"
+	header := "t=" + strconv.FormatInt(ts, 10) + ",v1=" + sigHex(body, newSecret, ts) + ",v1=" + sigHex(body, oldSecret, ts)
+	if !VerifyWebhookSignature(body, header, newSecret, VerifyWebhookOptions{Now: now}) {
+		t.Error("new-secret holder should verify (first v1=, previously discarded)")
+	}
+	if !VerifyWebhookSignature(body, header, oldSecret, VerifyWebhookOptions{Now: now}) {
+		t.Error("old-secret holder should verify (last v1=)")
+	}
+	if VerifyWebhookSignature(body, header, "whsec_unrelated", VerifyWebhookOptions{Now: now}) {
+		t.Error("unrelated secret must not verify against any v1=")
+	}
+}
+
 func TestVerifyWebhookSignature_RoundTrip(t *testing.T) {
 	t.Parallel()
 	body := []byte(`{"id":"evt-1","type":"session.completed","data":{}}`)

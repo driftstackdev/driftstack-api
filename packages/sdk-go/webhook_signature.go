@@ -90,21 +90,30 @@ func verifySingleHeader(body []byte, header string, secret string, tolerance tim
 	mac.Write([]byte("."))
 	mac.Write(body)
 	expectedSum := mac.Sum(nil)
-	gotSum, err := hex.DecodeString(parsed.signatureHex)
-	if err != nil {
-		return false
+	// Accept if our computed HMAC matches ANY of the header's v1= signatures
+	// (constant-time per candidate). During a secret-rotation grace window the
+	// server dual-signs into one header (t=,v1=<new>,v1=<old>), so a verifier
+	// holding either the new or the old secret passes.
+	for _, sigHex := range parsed.signatureHexes {
+		gotSum, err := hex.DecodeString(sigHex)
+		if err != nil {
+			continue
+		}
+		if hmac.Equal(expectedSum, gotSum) {
+			return true
+		}
 	}
-	return hmac.Equal(expectedSum, gotSum)
+	return false
 }
 
 type parsedSignature struct {
 	timestampSeconds int64
-	signatureHex     string
+	signatureHexes   []string
 }
 
 func parseSignatureHeader(header string) (parsedSignature, bool) {
 	var ts int64
-	var sig string
+	var sigs []string
 	tsSet := false
 	for _, part := range strings.Split(header, ",") {
 		eq := strings.IndexByte(part, '=')
@@ -121,11 +130,13 @@ func parseSignatureHeader(header string) (parsedSignature, bool) {
 				tsSet = true
 			}
 		case "v1":
-			sig = val
+			if val != "" {
+				sigs = append(sigs, val)
+			}
 		}
 	}
-	if !tsSet || sig == "" {
+	if !tsSet || len(sigs) == 0 {
 		return parsedSignature{}, false
 	}
-	return parsedSignature{timestampSeconds: ts, signatureHex: sig}, true
+	return parsedSignature{timestampSeconds: ts, signatureHexes: sigs}, true
 }

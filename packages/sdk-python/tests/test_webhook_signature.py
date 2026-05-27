@@ -17,6 +17,39 @@ def _sign(body: bytes, secret: str, timestamp_seconds: int) -> str:
     return f"t={timestamp_seconds},v1={sig}"
 
 
+def _sig_hex(body: bytes, secret: str, timestamp_seconds: int) -> str:
+    payload = f"{timestamp_seconds}.".encode() + body
+    return _hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+
+
+def test_dual_v1_single_header_rotation() -> None:
+    """During a secret-rotation grace window the server dual-signs into one
+    header (t=,v1=<new>,v1=<old>); a verifier holding EITHER secret must pass."""
+    body = b'{"event":"x"}'
+    now = int(time.time())
+    new_secret = "whsec_new_rotated"
+    old_secret = "whsec_old_pre_rotation"
+    header = f"t={now},v1={_sig_hex(body, new_secret, now)},v1={_sig_hex(body, old_secret, now)}"
+
+    # new-secret holder verifies against the FIRST v1= (previously discarded)
+    assert (
+        verify_webhook_signature(body=body, header=header, secret=new_secret, now_seconds=now)
+        is True
+    )
+    # old-secret holder verifies against the LAST v1=
+    assert (
+        verify_webhook_signature(body=body, header=header, secret=old_secret, now_seconds=now)
+        is True
+    )
+    # unrelated secret matches neither
+    assert (
+        verify_webhook_signature(
+            body=body, header=header, secret="whsec_unrelated", now_seconds=now
+        )
+        is False
+    )
+
+
 def test_round_trip_accepts_valid_signature() -> None:
     body = b'{"id":"evt-1","type":"session.completed","data":{}}'
     secret = "whsec_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

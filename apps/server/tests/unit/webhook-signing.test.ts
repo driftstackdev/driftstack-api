@@ -90,22 +90,19 @@ describe('round-trip with SDK verifier', () => {
 // V-397 — V-359 dual-signing during rotation grace at the
 // signWebhookPayload primitive level.
 //
-// Production note: there are TWO webhook delivery paths in the
-// codebase. webhook-worker.ts uses signWebhookPayload (Stripe-
-// style `t=…,v1=…` header) but does NOT thread secretPrev through
-// — it only single-signs. durable-webhook-delivery.ts emits two
-// SEPARATE headers (`x-driftstack-signature` +
-// `x-driftstack-signature-prev`), each a raw hex digest, and that
-// path IS what runs grace-period dual-signing in production. The
-// SDK verifier accepts the two-header form via the `headerPrev`
-// input.
+// Production note: webhook-worker.ts (the live delivery path) calls
+// signWebhookPayload WITH `secretPrev` during a rotation grace
+// window, emitting the Stripe-style dual-`v1=` single header
+// `x-driftstack-signature: t=…,v1=<new>,v1=<old>`. (The forward-path
+// durable-webhook-delivery.ts instead emits two SEPARATE headers
+// `x-driftstack-signature` + `x-driftstack-signature-prev`; the SDK
+// verifier accepts that form via the `headerPrev` input.)
 //
-// The dual-`v1=` form below is therefore an internal-use code
-// path of signWebhookPayload — it CAN be emitted, but production
-// dispatchers don't reach for it. These tests pin the primitive
-// behavior so a future consolidation onto the Stripe-style format
-// has a known reference point. Format-consolidation queued as a
-// separate slice (TD-snap).
+// Finding #13 fix: the SDK verifier now collects EVERY `v1=` and
+// accepts if our HMAC matches ANY (constant-time per candidate), so
+// a verifier holding either the new OR the old secret passes the
+// dual-`v1=` single-header form — no longer last-wins. These tests
+// pin that primitive + verifier behavior.
 describe('V-359 dual-signing — signWebhookPayload primitive', () => {
   it('emits two v1=… entries when secretPrev is set', () => {
     const header = signWebhookPayload({
@@ -129,7 +126,7 @@ describe('V-359 dual-signing — signWebhookPayload primitive', () => {
     expect(a).toBe(b);
   });
 
-  it('SDK verifier currently keeps only the LAST v1= entry — an inherent limitation of dual-`v1=` consumed via the single-header path. Production avoids this by emitting separate headers (header + headerPrev) instead.', async () => {
+  it('SDK verifier accepts EITHER secret from the dual-`v1=` single-header form (finding #13 — collects all v1=, no longer last-wins)', async () => {
     const oldSecret = generateWebhookSecret();
     const newSecret = generateWebhookSecret();
     const body = '{"x":1}';
@@ -140,15 +137,16 @@ describe('V-359 dual-signing — signWebhookPayload primitive', () => {
       secretPrev: oldSecret,
       timestampSec: t,
     });
-    // OLD secret holders pass — parser keeps the LAST v1= which
-    // is the prev-secret HMAC.
-    const okOld = await verifyWebhookSignature({ body, header, secret: oldSecret });
-    expect(okOld).toBe(true);
-    // NEW secret holders FAIL when consuming the dual-`v1=` form
-    // through a single header; this is the limitation the prod
-    // dispatcher avoids by sending two separate headers.
-    const okNew = await verifyWebhookSignature({ body, header, secret: newSecret });
-    expect(okNew).toBe(false);
+    // OLD-secret holders pass (their HMAC is the LAST v1=).
+    expect(await verifyWebhookSignature({ body, header, secret: oldSecret })).toBe(true);
+    // NEW-secret holders ALSO pass now — their HMAC is the FIRST v1=,
+    // which the pre-fix last-wins parser discarded. This is the live
+    // rotation bug (#13) the verifier fix resolves.
+    expect(await verifyWebhookSignature({ body, header, secret: newSecret })).toBe(true);
+    // An unrelated secret matches neither v1=.
+    expect(await verifyWebhookSignature({ body, header, secret: generateWebhookSecret() })).toBe(
+      false,
+    );
   });
 });
 
