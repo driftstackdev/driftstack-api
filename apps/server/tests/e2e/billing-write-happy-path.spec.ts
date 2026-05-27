@@ -66,19 +66,9 @@ test('checkout-session 200 with annual price for api_scale tier', async ({ reque
   expect(server.billingProvider.state.checkoutSessions[0]?.priceId).toBe('price_api_scale_annual');
 });
 
-test('trial-pack 200 routes to the free one-time price', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'free' });
-  const res = await request.post(`${server.baseUrl}/v1/billing/trial-pack`, {
-    headers: authHeader(seed.plaintext),
-    data: {
-      success_url: 'http://localhost:5173/billing/success',
-      cancel_url: 'http://localhost:5173/billing/cancel',
-    },
-  });
-  expect(res.status()).toBe(200);
-  expect(server.billingProvider.state.checkoutSessions[0]?.kind).toBe('free');
-  expect(server.billingProvider.state.checkoutSessions[0]?.priceId).toBe('price_free_one_time');
-});
+// The one-time trial-pack purchase flow was retired 2026-05-27: the
+// perpetual free tier is the default for every new account and needs no
+// purchase step, so there is no POST /v1/billing/* route to "start free."
 
 test('two checkouts on the same account reuse the same Stripe customer', async ({ request }) => {
   const seed = await seedAccount(server.client);
@@ -128,7 +118,7 @@ test('portal-session 200 after a customer has been provisioned via checkout', as
   expect(server.billingProvider.state.portalSessions).toHaveLength(1);
 });
 
-test('GET /v1/billing reports null subscription + inactive trial-pack for a fresh account', async ({
+test('GET /v1/billing reports null subscription for a fresh free-tier account', async ({
   request,
 }) => {
   const seed = await seedAccount(server.client);
@@ -136,10 +126,8 @@ test('GET /v1/billing reports null subscription + inactive trial-pack for a fres
     headers: authHeader(seed.plaintext),
   });
   expect(res.status()).toBe(200);
-  const body = (await res.json()) as {
-    subscription: unknown;
-    free: { active: boolean; redeemed: boolean };
-  };
+  // GetBillingStateResponse is { subscription } only since the trial-pack
+  // retirement — the free tier carries no billing-state envelope.
+  const body = (await res.json()) as { subscription: unknown };
   expect(body.subscription).toBeNull();
-  expect(body.free.active).toBe(false);
 });

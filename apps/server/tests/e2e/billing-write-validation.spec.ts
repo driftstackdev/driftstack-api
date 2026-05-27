@@ -108,34 +108,9 @@ test('checkout-session 401 without auth', async ({ request }) => {
   expect(res.status()).toBe(401);
 });
 
-// ────────────────────────────────────────────────────────────────────────
-// POST /v1/billing/trial-pack — validation
-// ────────────────────────────────────────────────────────────────────────
-
-test('trial-pack 400 on malformed cancel_url', async ({ request }) => {
-  const seed = await seedAccount(server.client);
-  const res = await request.post(`${server.baseUrl}/v1/billing/trial-pack`, {
-    headers: authHeader(seed.plaintext),
-    data: { cancel_url: 'not a url' },
-  });
-  expect(res.status()).toBe(400);
-});
-
-test('trial-pack 400 on off-allowlist success_url', async ({ request }) => {
-  const seed = await seedAccount(server.client);
-  const res = await request.post(`${server.baseUrl}/v1/billing/trial-pack`, {
-    headers: authHeader(seed.plaintext),
-    data: { success_url: 'https://phish.example.com/yes' },
-  });
-  expect(res.status()).toBe(400);
-});
-
-test('trial-pack 401 without auth', async ({ request }) => {
-  const res = await request.post(`${server.baseUrl}/v1/billing/trial-pack`, {
-    data: {},
-  });
-  expect(res.status()).toBe(401);
-});
+// The POST /v1/billing/trial-pack route was retired 2026-05-27 with the
+// one-time trial pack; the perpetual free tier needs no purchase step, so
+// there is nothing to validate here anymore.
 
 // ────────────────────────────────────────────────────────────────────────
 // POST /v1/billing/portal-session — auth only (no body validation)
