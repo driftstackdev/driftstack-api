@@ -41,10 +41,11 @@ const apiBaseUrl = resolveApiBaseUrl();
     </p>
 
     <!-- Wave 1086+ — post-checkout confirmation banner. Stripe-success
-         redirects (trial-pack + subscribe) land here with ?trial=ok
-         or ?subscribed=<tier>. Without an explicit confirmation the
-         customer sees the generic "create your first session" form
-         and wonders if their payment went through. -->
+         redirects (subscribe) land here with ?subscribed=<tier>.
+         Without an explicit confirmation the customer sees the generic
+         "create your first session" form and wonders if their payment
+         went through. (The one-time trial pack was retired 2026-05-27;
+         free accounts reach this page directly with no checkout.) -->
     <div
       data-post-checkout
       class="mt-6 hidden rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200"
@@ -109,24 +110,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       // Wave 1086+ — Stripe-success-redirect confirmation banner.
-      // /select-tier sets success_url to /first-session?trial=ok for
-      // the trial pack and /first-session?subscribed=<tier> for paid
-      // tiers; without this handler the customer arrives with no
+      // /select-tier sets success_url to /first-session?subscribed=<tier>
+      // for paid tiers; without this handler the customer arrives with no
       // confirmation their payment landed.
       (function showPostCheckoutBanner() {
         const params = new URLSearchParams(window.location.search);
-        const trialOk = params.get('trial') === 'ok';
         const subscribed = params.get('subscribed');
-        if (!trialOk && !subscribed) return;
+        if (!subscribed) return;
         const postCheckout = root.querySelector('[data-post-checkout]');
         if (!postCheckout) return;
-        if (trialOk) {
-          postCheckout.textContent =
-            'Trial pack purchased. You have 16 hours of session time over the next 14 days. Create your first session below to get started.';
-        } else if (subscribed) {
-          postCheckout.textContent =
-            'Subscription active — welcome. Create your first session below; your concurrent cap is set by your tier.';
-        }
+        postCheckout.textContent =
+          'Subscription active — welcome. Create your first session below; your concurrent cap is set by your tier.';
         postCheckout.classList.remove('hidden');
       })();
 

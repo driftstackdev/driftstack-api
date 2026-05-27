@@ -31,16 +31,17 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
     <ul class="mt-8 space-y-4">
       <li class="auth-card">
         <div class="flex items-baseline justify-between gap-3">
-          <h2 class="text-lg font-semibold text-ink-primary">Trial pack</h2>
-          <span class="font-mono text-sm text-glow-red-soft">$2.99 · one-time</span>
+          <h2 class="text-lg font-semibold text-ink-primary">Start free</h2>
+          <span class="font-mono text-sm text-glow-red-soft">$0 · no card</span>
         </div>
         <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
-          16 hours of session time. No subscription, no auto-renewal.
-          14-day window. The best way to try Driftstack before committing —
-          most first-time customers start here.
+          Your account is already on the free plan: 1 profile, 1 concurrent
+          session, manual-only. No subscription, no expiry — the best way to
+          try Driftstack before committing. Create your first session whenever
+          you're ready.
         </p>
-        <a href="/select-tier?focus=trial" class="btn-primary mt-4 inline-flex">
-          Start trial pack
+        <a href="/first-session" class="btn-primary mt-4 inline-flex">
+          Create your first session
         </a>
       </li>
       <li class="card p-6">
@@ -49,7 +50,8 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
           <span class="font-mono text-sm text-ink-muted">$79–$1,499 / mo</span>
         </div>
         <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
-          Skip the trial and subscribe right away — Solo Manual for hand-
+          Upgrade to a paid plan for more concurrency, more profiles, and API
+          access — Solo Manual for hand-
           driven sessions, all the way up to API Scale for high-volume
           automation. Cancel anytime.
         </p>
@@ -69,8 +71,9 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
             >1</span
           >
           <span class="leading-relaxed">
-            We'll send you to Stripe to confirm payment. Your card details
-            stay between you and Stripe — we never see them.
+            Start free with no card — or pick a paid tier and we'll send you
+            to Stripe to confirm payment. Your card details stay between you
+            and Stripe — we never see them.
           </span>
         </li>
         <li class="flex gap-4">

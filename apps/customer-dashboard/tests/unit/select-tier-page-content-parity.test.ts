@@ -12,10 +12,11 @@
 //     Manual + API Starter / Builder / Scale) with exact prices.
 //   • Enterprise mailto:sales@driftstack.dev fallback ("~$4,000/
 //     mo, custom" floor matches /faq + /pricing).
-//   • Trial-pack hero card pinned ($2.99 / 16h / 1 concurrent /
-//     14-day window / once-per-account).
-//   • POST /v1/billing/trial-pack + /v1/billing/checkout-session
-//     wired with success_url + cancel_url shapes.
+//   • Free-tier note pinned ("You're on the free plan" / $0 / no
+//     card / never expires) — the one-time trial pack was retired
+//     2026-05-27, so the page has no trial purchase card.
+//   • POST /v1/billing/checkout-session wired with success_url +
+//     cancel_url shapes.
 //   • V-501 withBusy disabled-while-pending double-checkout
 //     guard (no double-Stripe-session).
 //   • "All tiers run the same engine — only caps change" framing.
@@ -78,20 +79,15 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
     );
   });
 
-  it('trial-pack hero card: $2.99 / 16h / 1 concurrent / 14-day / once-per-account', () => {
-    expect(body).toMatch(/Trial pack — \$2\.99/);
+  it('free-tier note pinned (no trial-pack purchase card)', () => {
+    expect(body).toMatch(/You're on the free plan/);
     expect(body).toMatch(
-      /16 hours of iPhone Safari sessions\. 1 concurrent\. 14-day window\.\s+Once per account\./,
+      /Free includes 1 profile, 1 concurrent session, and manual-only\s+sessions/,
     );
-    expect(body).toMatch(
-      /<button[^>]*data-action="buy-trial-pack"[^>]*>\s*Start trial pack\s*<\/button>/,
-    );
-  });
-
-  it('POST /v1/billing/trial-pack wired with success/cancel URLs', () => {
-    expect(body).toMatch(/authedFetch\('\/v1\/billing\/trial-pack'/);
-    expect(body).toMatch(/success_url: window\.location\.origin \+ '\/first-session\?trial=ok'/);
-    expect(body).toMatch(/cancel_url: window\.location\.origin \+ '\/select-tier'/);
+    // The retired trial-pack purchase surface must be gone.
+    expect(body).not.toMatch(/data-action="buy-trial-pack"/);
+    expect(body).not.toMatch(/\$2\.99/);
+    expect(body).not.toContain('/v1/billing/trial-pack');
   });
 
   it('POST /v1/billing/checkout-session wired with tier + billing_period + success/cancel URLs', () => {
@@ -125,6 +121,7 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
     expect(body).toMatch(
       /"Change plan" reuse: this same page is reachable from \/billing\s*\n?\s*\/\/\s*"Change plan" link \(post-onboarding\)/,
     );
+    expect(body).toMatch(/Every account starts on the/);
   });
 
   it('withSidebar={false} pre-subscribed layout', () => {

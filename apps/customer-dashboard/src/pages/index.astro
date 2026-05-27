@@ -212,10 +212,6 @@ const apiBaseUrl = resolveApiBaseUrl();
         <p data-subscription-period class="mt-3 text-sm text-ink-secondary"></p>
         <a href="/billing" class="btn-secondary mt-4 inline-flex">Manage billing</a>
       </div>
-      <div data-trial-pack class="dashboard-card mt-4 hidden border-emerald-400/30 bg-emerald-400/10">
-        <p class="font-mono text-xs uppercase tracking-widest text-emerald-300">Trial pack</p>
-        <p data-trial-pack-line class="mt-3 text-sm text-emerald-200"></p>
-      </div>
     </section>
   </div>
 
@@ -389,17 +385,6 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (period) period.textContent = 'Period ends ' + fmtIsoDay(sub.current_period_end) + '.';
           } else if (empty) {
             empty.classList.remove('hidden');
-          }
-
-          const trial = b.trial_pack;
-          if (trial && trial.active) {
-            const tEl = root.querySelector('[data-trial-pack]');
-            const tLine = root.querySelector('[data-trial-pack-line]');
-            if (tEl) tEl.classList.remove('hidden');
-            const cents = Number(trial.credit_cents_remaining || 0);
-            const dollars = (cents / 100).toFixed(2);
-            const exp = trial.expires_at ? ' Expires ' + fmtIsoDay(trial.expires_at) + '.' : '';
-            if (tLine) tLine.textContent = '$' + dollars + ' credit remaining.' + exp;
           }
         })
         .catch(function () {

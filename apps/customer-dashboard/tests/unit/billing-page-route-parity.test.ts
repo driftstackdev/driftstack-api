@@ -1,6 +1,8 @@
 // W316.C — drift guard for /billing page route citations. The
-// page hits four /v1/billing/* endpoints. All must be registered
-// on the server.
+// page hits /v1/billing (state) + /v1/billing/portal-session. Both
+// must be registered on the server. (The one-time trial-pack
+// endpoint was deleted 2026-05-27 alongside the move to a
+// perpetual free entry tier.)
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -41,8 +43,8 @@ describe('W316.C /billing page ↔ billing route parity', () => {
     expect(page).toContain('/v1/billing/portal-session');
   });
 
-  it('page calls POST /v1/billing/trial-pack', () => {
-    expect(page).toContain('/v1/billing/trial-pack');
+  it('page does not call the removed POST /v1/billing/trial-pack', () => {
+    expect(page).not.toContain('/v1/billing/trial-pack');
   });
 
   it('server registers GET /v1/billing', () => {
@@ -53,7 +55,8 @@ describe('W316.C /billing page ↔ billing route parity', () => {
     expect(allRouteBodies).toContain("'/v1/billing/portal-session'");
   });
 
-  it('server registers POST /v1/billing/trial-pack', () => {
-    expect(allRouteBodies).toContain("'/v1/billing/trial-pack'");
+  it('server registers GET /v1/billing and POST /v1/billing/portal-session', () => {
+    expect(allRouteBodies).toMatch(/'\/v1\/billing'/);
+    expect(allRouteBodies).toContain("'/v1/billing/portal-session'");
   });
 });

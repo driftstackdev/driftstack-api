@@ -1,6 +1,6 @@
 // W332.C — drift guard for /welcome onboarding page. Pins the
 // post-signup framing:
-//   • Trial pack CTA → /select-tier?focus=trial
+//   • Start-free CTA → /first-session (no purchase; perpetual free)
 //   • Pick-a-tier CTA → /select-tier
 //   • What-happens-next sequence (Stripe → first session → API key mint)
 //   • Defensive redirect to /signup when no ds_web_session_token
@@ -21,18 +21,18 @@ function read(p: string): string {
 describe('W332.C /welcome onboarding baseline', () => {
   const body = read(PAGE);
 
-  it('trial-pack CTA links to /select-tier?focus=trial', () => {
-    expect(body).toContain('href="/select-tier?focus=trial"');
+  it('start-free CTA links to /first-session', () => {
+    expect(body).toContain('href="/first-session"');
   });
 
   it('pick-a-tier CTA links to /select-tier', () => {
     expect(body).toContain('href="/select-tier"');
   });
 
-  it('positions trial pack at $2.99 / 16 hours / 14-day window', () => {
-    expect(body).toMatch(/\$2\.99/);
-    expect(body).toMatch(/16 hours/);
-    expect(body).toMatch(/14-day window/);
+  it('positions the free plan at $0 / no card / no expiry (trial pack removed)', () => {
+    expect(body).toMatch(/\$0 · no card/);
+    expect(body).toMatch(/Start free/);
+    expect(body).not.toMatch(/\$2\.99/);
   });
 
   it('what-happens-next sequence covers Stripe → first session → API key mint', () => {

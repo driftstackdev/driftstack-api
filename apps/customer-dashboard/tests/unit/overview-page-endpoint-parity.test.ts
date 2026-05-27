@@ -79,11 +79,12 @@ describe('W337.C dashboard /index overview endpoint parity', () => {
       'data-subscription-card',
       'data-subscription-line',
       'data-subscription-period',
-      'data-trial-pack',
-      'data-trial-pack-line',
     ]) {
       expect(body).toContain(hook);
     }
+    // The trial-pack credit card was removed 2026-05-27 (GetBillingState
+    // no longer returns trial_pack; entry tier is the perpetual free tier).
+    expect(body).not.toContain('data-trial-pack');
   });
 
   it('links downstream surfaces (Sessions, Billing, Select tier) the page CTAs target', () => {
@@ -92,10 +93,10 @@ describe('W337.C dashboard /index overview endpoint parity', () => {
     expect(body).toContain('href="/select-tier"');
   });
 
-  it('formats trial-pack credit in dollars (cents / 100), matching billing API shape', () => {
-    // The /v1/billing payload returns credit_cents_remaining; the
-    // page must display it as a $-prefixed two-decimal string.
-    expect(body).toContain('credit_cents_remaining');
-    expect(body).toMatch(/\(cents \/ 100\)\.toFixed\(2\)/);
+  it('no residual trial-pack credit formatting (trial pack removed 2026-05-27)', () => {
+    // GetBillingState no longer returns credit_cents_remaining; the
+    // overview page must not read or format it.
+    expect(body).not.toContain('credit_cents_remaining');
+    expect(body).not.toContain('b.trial_pack');
   });
 });

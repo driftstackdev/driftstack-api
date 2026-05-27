@@ -201,11 +201,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (portalBtn) portalBtn.addEventListener('click', handlePortal);
       if (cancelBtn) cancelBtn.addEventListener('click', handlePortal); // cancellation goes through Stripe portal
 
-      // 2026-05-22 — crypto modal + handlers removed alongside the
-      // trial-pack crypto button (81a15517). NowPayments' $19.16 USD
-      // floor exceeds the $2.99 trial price; the crypto flow now
-      // lives exclusively on /select-tier where every tier clears
-      // the floor (a4460e2a).
+      // 2026-05-22 — crypto modal + handlers removed from /billing.
+      // The crypto checkout flow lives exclusively on /select-tier,
+      // where every tier clears NowPayments' $19.16 USD floor
+      // (a4460e2a).
 
       if (!token) {
         showBanner('Sign in to see live billing state. Showing preview data below.');

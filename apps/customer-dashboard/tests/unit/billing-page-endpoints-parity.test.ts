@@ -39,13 +39,17 @@ describe('W268.D /billing page ↔ /v1/billing/* route parity', () => {
     expect(route).toContain(`'/v1/billing/portal-session'`);
   });
 
-  it('buy-trial-pack action targets /v1/billing/trial-pack', () => {
-    expect(page).toMatch(/\/v1\/billing\/trial-pack/);
-    expect(route).toContain(`'/v1/billing/trial-pack'`);
+  it('trial-pack purchase flow removed from the /billing page (2026-05-27)', () => {
+    // The entry tier is now the perpetual free tier (no purchase), so
+    // the /billing page no longer cites the trial-pack checkout. Guard
+    // against drift back on the dashboard side. (The server keeps a
+    // disabled-route stub for it under registerBillingDisabledRoutes —
+    // that's apps/server's concern, not this page's.)
+    expect(page).not.toContain('/v1/billing/trial-pack');
   });
 
   it('checkout-session route exists on the live server (used by /select-tier, not /billing)', () => {
-    // /billing page itself only wires portal + trial-pack; the tier
+    // /billing page itself only wires the portal session; the tier
     // checkout flow lives on /select-tier. Verify the route still exists
     // so other pages can rely on it.
     expect(route).toContain(`'/v1/billing/checkout-session'`);

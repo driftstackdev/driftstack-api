@@ -8,11 +8,13 @@
 //     /v1/profiles / /v1/api-keys / /v1/sessions / /v1/usage on
 //     scaffolding exit).
 //   • Imports from @driftstack/api-types: AccountTier + Profile +
-//     Subscription + TrialPackState + TIER_CONCURRENT_SESSION_LIMITS.
+//     Subscription + TIER_CONCURRENT_SESSION_LIMITS. (TrialPackState
+//     was dropped 2026-05-27 — the type no longer exists in
+//     @driftstack/api-types after the one-time trial pack was
+//     replaced by the perpetual free tier.)
 //   • MockAccount (id, email, name, tier, emailVerifiedAt, createdAt).
 //   • MOCK_ACCOUNT fixture: api_builder tier, email-verified.
 //   • MOCK_SUBSCRIPTION fixture: api_builder/active/no-cancel.
-//   • MOCK_TRIAL_PACK_STATE: redeemed=true / active=false.
 //   • MOCK_PROFILES: 2 profiles, archetype iphone16pro_ios18_7_safari26_4.
 //   • MockApiKey: 4 scope literals (read/write/admin/gui_control).
 //   • MOCK_USAGE_SUMMARY: 5 usage totals (session_minute / navigate
@@ -51,10 +53,12 @@ describe('W383.B customer-dashboard src/data/mocks.ts content parity', () => {
     );
   });
 
-  it('imports 5 symbols from @driftstack/api-types (TIER_CONCURRENT_SESSION_LIMITS + 4 types)', () => {
+  it('imports 4 symbols from @driftstack/api-types (TIER_CONCURRENT_SESSION_LIMITS + 3 types)', () => {
     expect(body).toMatch(
-      /import \{[\s\S]+?TIER_CONCURRENT_SESSION_LIMITS,[\s\S]+?type AccountTier,[\s\S]+?type Profile,[\s\S]+?type Subscription,[\s\S]+?type TrialPackState,[\s\S]+?\} from '@driftstack\/api-types';/,
+      /import \{[\s\S]+?TIER_CONCURRENT_SESSION_LIMITS,[\s\S]+?type AccountTier,[\s\S]+?type Profile,[\s\S]+?type Subscription,[\s\S]+?\} from '@driftstack\/api-types';/,
     );
+    // TrialPackState was removed from @driftstack/api-types.
+    expect(body).not.toContain('TrialPackState');
   });
 
   it('MockAccount interface: 6 fields (id, email, name, tier, emailVerifiedAt, createdAt)', () => {
@@ -83,10 +87,8 @@ describe('W383.B customer-dashboard src/data/mocks.ts content parity', () => {
     expect(body).toMatch(/canceled_at: null,/);
   });
 
-  it('MOCK_TRIAL_PACK_STATE: redeemed=true + active=false (post-redemption state)', () => {
-    expect(body).toMatch(
-      /export const MOCK_TRIAL_PACK_STATE: TrialPackState = \{\s*\n?\s*active: false,\s*\n?\s*credit_cents_remaining: null,\s*\n?\s*expires_at: null,\s*\n?\s*redeemed: true,\s*\n?\s*\};/,
-    );
+  it('no MOCK_TRIAL_PACK_STATE fixture (trial pack removed 2026-05-27)', () => {
+    expect(body).not.toContain('MOCK_TRIAL_PACK_STATE');
   });
 
   it('MOCK_PROFILES: 2 profiles with iphone16pro_ios18_7_safari26_4 archetype', () => {

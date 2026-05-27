@@ -1,6 +1,7 @@
-// W285.A — drift guard for welcome.astro CTA targets. The Trial
-// pack CTA must include `?focus=trial` so the select-tier page
-// scrolls to the Trial Pack card on landing.
+// W285.A — drift guard for welcome.astro CTA targets. The free-tier
+// "Start free" CTA goes to /first-session (no purchase); the upgrade
+// CTA goes to /select-tier. (The one-time trial pack + its
+// ?focus=trial deep-link were retired 2026-05-27.)
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -18,11 +19,11 @@ function read(p: string): string {
 describe('W285.A welcome page CTA consistency', () => {
   const body = read(PAGE);
 
-  it('Trial Pack primary CTA links to /select-tier?focus=trial', () => {
-    expect(body).toMatch(/href=["']\/select-tier\?focus=trial["']/);
+  it('free-tier primary CTA links to /first-session (no purchase step)', () => {
+    expect(body).toMatch(/href=["']\/first-session["']/);
   });
 
-  it('Secondary CTA links to /select-tier without focus', () => {
+  it('upgrade CTA links to /select-tier', () => {
     expect(body).toMatch(/href=["']\/select-tier["']/);
   });
 

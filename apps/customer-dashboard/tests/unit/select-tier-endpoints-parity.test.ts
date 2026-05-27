@@ -1,6 +1,8 @@
 // W272.D — drift-guard for customer-dashboard /select-tier page.
-// Pins the /v1/billing/trial-pack + /v1/billing/checkout-session
-// actions to their live registrations in billing.ts.
+// Pins the /v1/billing/checkout-session action to its live
+// registration in billing.ts. (The one-time /v1/billing/trial-pack
+// purchase was retired from the page 2026-05-27 — entry tier is now
+// the perpetual free tier with no purchase step.)
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -20,9 +22,8 @@ describe('W272.D /select-tier page ↔ /v1/billing/* route parity', () => {
   const page = read(PAGE);
   const billing = read(BILLING);
 
-  it('POST /v1/billing/trial-pack is registered and used by the page', () => {
-    expect(page).toMatch(/\/v1\/billing\/trial-pack/);
-    expect(billing).toContain(`'/v1/billing/trial-pack'`);
+  it('the retired /v1/billing/trial-pack purchase is no longer cited by the page', () => {
+    expect(page).not.toMatch(/\/v1\/billing\/trial-pack/);
   });
 
   it('POST /v1/billing/checkout-session is registered and used by the page', () => {

@@ -11,8 +11,8 @@ import {
 // highlights, AI-agent gating row, etc.) lands in V-184b draft.
 //
 // "Change plan" reuse: this same page is reachable from /billing
-// "Change plan" link (post-onboarding) — the trial-pack CTA is
-// hidden when the account already has an active subscription.
+// "Change plan" link (post-onboarding). Every account starts on the
+// perpetual free tier; the cards below upgrade to a paid tier.
 //
 // V-501 — disabled-while-pending guards on checkout buttons; copy
 // micro-polish (cancel-anytime line, clearer "what changes" framing).
@@ -66,27 +66,26 @@ const TIERS: {
     >
     </div>
 
-    {/* 2026-05-23 — icon header on Trial pack hero card. */}
-    <!-- Trial pack hero card -->
-    <div
-      data-trial-card
-      class="mt-8 rounded-lg border border-glow-red/30 bg-surface-raised p-6"
-    >
+    {/* 2026-05-27 — current-plan note. Every account starts on the
+        perpetual free tier (1 profile, manual-only, no API). Picking a
+        card below upgrades to a paid tier; there is no purchase step to
+        stay free. (The one-time entry pack was retired alongside the
+        free tier — its checkout endpoint no longer exists.) */}
+    <!-- Free-tier note -->
+    <div class="mt-8 rounded-lg border border-white/10 bg-surface-raised p-6">
       <h2 class="flex items-center gap-2 text-xl font-semibold text-ink-primary">
         <span class="flex h-8 w-8 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            <path d="M20 6 9 17l-5-5" />
           </svg>
         </span>
-        Trial pack — $2.99
+        You're on the free plan
       </h2>
       <p class="mt-2 text-sm text-ink-secondary">
-        16 hours of iPhone Safari sessions. 1 concurrent. 14-day window.
-        Once per account.
+        Free includes 1 profile, 1 concurrent session, and manual-only
+        sessions — no card required, and it never expires. Upgrade below
+        for more concurrency, more profiles, and API access.
       </p>
-      <button type="button" class="btn-primary mt-4" data-action="buy-trial-pack">
-        Start trial pack
-      </button>
     </div>
 
     {/* 2026-05-22 — paid tier grid: each card opens with a ladder
@@ -152,9 +151,8 @@ const TIERS: {
     {/* 2026-05-21 — V-666.D shared crypto checkout modal. Single modal
         for all 4 tier cards; the click handler reads data-tier +
         data-tier-label + data-tier-price-cents off the source button
-        + POSTs /v1/billing/crypto-checkout. Same shape as the
-        billing-page modal (81a15517) but indexed by tier rather than
-        hard-coded to trial pack. */}
+        + POSTs /v1/billing/crypto-checkout. The modal is indexed by
+        tier — each card supplies its own price_cents. */}
     <div
       data-crypto-modal
       class="fixed inset-0 z-50 hidden items-center justify-center bg-surface-base/80 backdrop-blur-md p-6"
@@ -257,52 +255,6 @@ const TIERS: {
           });
       }
 
-      const trialBtn = root.querySelector('[data-action="buy-trial-pack"]');
-      if (trialBtn) {
-        trialBtn.addEventListener('click', () => {
-          if (!token) {
-            showBanner('Sign up first.');
-            return;
-          }
-          withBusy(trialBtn, () =>
-          authedFetch('/v1/billing/trial-pack', {
-            method: 'POST',
-            body: JSON.stringify({
-              success_url: window.location.origin + '/first-session?trial=ok',
-              cancel_url: window.location.origin + '/select-tier',
-            }),
-          })
-            .then((r) => {
-              // Wave 1086+ B1 client-side leg: 404/503 on /v1/billing/*
-              // means billing isn't wired (STRIPE_TRIAL_PACK_PRICE_ID +
-              // DRIFTSTACK_TIER_PRICE_IDS env vars missing — see
-              // docs/internal/2026-05-16-wave-1085-diagnostics.md).
-              // Surface a customer-friendly message instead of
-              // "HTTP 404", which reads as a broken site.
-              if (r.status === 404 || r.status === 503) {
-                return Promise.reject(
-                  new Error(
-                    'Billing setup is still in progress on this server. Check back shortly — you can keep exploring the dashboard in the meantime.',
-                  ),
-                );
-              }
-              return r.ok
-                ? r.json()
-                : r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
-            })
-            .then((body) => {
-              if (body.checkout_url) window.location.href = body.checkout_url;
-            })
-          ).catch((err) => {
-            showBanner(
-              err && err.message
-                ? err.message
-                : "Couldn't start trial-pack checkout (network error).",
-            );
-          });
-        });
-      }
-
       const tierButtons = root.querySelectorAll('[data-action="buy-tier"]');
       tierButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -322,7 +274,10 @@ const TIERS: {
               }),
             })
               .then((r) => {
-                // Same B1 client-side leg as the trial-pack handler.
+                // Wave 1086+ B1 client-side leg: 404/503 on /v1/billing/*
+                // means billing isn't wired (DRIFTSTACK_TIER_PRICE_IDS
+                // env var missing). Surface a customer-friendly message
+                // instead of "HTTP 404", which reads as a broken site.
                 if (r.status === 404 || r.status === 503) {
                   return Promise.reject(
                     new Error(

@@ -1,21 +1,26 @@
 // W360.B — drift guard for customer-dashboard /billing page
 // content. V-183 progressive-enhancement against /v1/billing +
-// /v1/billing/portal-session + /v1/billing/trial-pack. The
-// existing endpoint + route parity tests cover where the page
-// calls the server; this guard pins the page's STATUS_BADGE map,
-// trial-pack copy, and Stripe-portal posture against the source-
-// of-truth schemas + route registrations.
+// /v1/billing/portal-session. The existing endpoint + route
+// parity tests cover where the page calls the server; this guard
+// pins the page's STATUS_BADGE map, current-plan display, and
+// Stripe-portal posture against the source-of-truth schemas +
+// route registrations.
+//
+// 2026-05-27 — the one-time trial-pack purchase flow was removed
+// (POST /v1/billing/trial-pack deleted; entry tier is now the
+// perpetual free tier, no purchase). The page no longer renders
+// any trial-pack card, copy, or checkout wiring — those pins were
+// dropped here in lockstep with the source.
 //
 // Pinned:
 //   • STATUS_BADGE_CLASS keys cover SubscriptionStatusSchema's 8
 //     real values + the page's 'no_subscription' synthetic state.
-//   • Trial-pack copy: $2.99 / once-per-account / 16 hours of
-//     iPhone Safari sessions / 14-day expiry framing stays
-//     pinned.
+//   • Current-plan display: subscribed tier vs the free-tier
+//     upgrade CTA framing stays pinned.
 //   • Stripe-portal-only payment posture pinned ("all payment
 //     changes redirect to Stripe's secure portal").
-//   • Action buttons wired to POST /v1/billing/portal-session,
-//     POST /v1/billing/trial-pack — both registered server-side.
+//   • Action button wired to POST /v1/billing/portal-session —
+//     registered server-side.
 //   • localStorage key ds_web_session_token.
 //   • Cancel-subscription button only renders when
 //     !cancel_at_period_end (otherwise hidden — avoid double-
@@ -52,12 +57,15 @@ describe('W360.B customer-dashboard /billing page content parity', () => {
     expect(body).toMatch(/no_subscription:\s*'bg-/);
   });
 
-  it('trial-pack copy stays pinned ($2.99 / once-per-account / 16 hours iPhone Safari)', () => {
-    expect(body).toMatch(/Buy 16 hours of iPhone Safari sessions for \$2\.99 — once per account/);
-    expect(body).toMatch(
-      /\$2\.99 trial pack already used on this account\. Once-per-account; the trial does not refresh/,
-    );
-    expect(body).toMatch(/Buy trial pack — \$2\.99/);
+  it('current-plan display pinned (free-tier upgrade CTA + subscribed tier)', () => {
+    // Free accounts (the default, no subscription) see an upgrade CTA;
+    // subscribed accounts see their tier. No trial-pack purchase UI.
+    expect(body).toMatch(/Upgrade to a paid tier to unlock concurrent caps/);
+    expect(body).toMatch(/No active subscription/);
+    expect(body).toMatch(/href="\/select-tier"/);
+    // The deleted endpoint must not reappear in any form.
+    expect(body).not.toContain('/v1/billing/trial-pack');
+    expect(body).not.toMatch(/trial pack/i);
   });
 
   it('Stripe-portal-only payment posture pinned', () => {
@@ -65,12 +73,12 @@ describe('W360.B customer-dashboard /billing page content parity', () => {
     expect(body).toMatch(/Manage in Stripe portal/);
   });
 
-  it('action buttons wired to POST /v1/billing/portal-session + /v1/billing/trial-pack (both registered)', () => {
+  it('action button wired to POST /v1/billing/portal-session (registered)', () => {
     expect(body).toContain("authedFetch('/v1/billing/portal-session'");
-    expect(body).toContain("authedFetch('/v1/billing/trial-pack'");
     expect(route).toContain("'/v1/billing/portal-session'");
-    expect(route).toContain("'/v1/billing/trial-pack'");
     expect(route).toContain("'/v1/billing'");
+    // The /billing page no longer cites the retired trial-pack endpoint.
+    expect(body).not.toContain('/v1/billing/trial-pack');
   });
 
   it('GET /v1/billing state-fetch wiring pinned (the canonical /v1/billing endpoint)', () => {
@@ -89,19 +97,13 @@ describe('W360.B customer-dashboard /billing page content parity', () => {
     );
   });
 
-  it('trial-pack 3-state ternary (Active / Redeemed / Available) pinned', () => {
-    // The trial-pack card has three load-bearing display states —
-    // a refactor that drops the Redeemed branch would suggest the
-    // customer can re-buy, which they can't (once-per-account).
-    expect(body).toMatch(/MOCK_TRIAL_PACK_STATE\.active\s*\?\s*'Active'/);
-    expect(body).toMatch(/MOCK_TRIAL_PACK_STATE\.redeemed\s*\?\s*'Redeemed'\s*:\s*'Available'/);
-  });
-
-  it('success/cancel URLs for trial-pack checkout build off window.location.origin (V-183)', () => {
-    // The checkout success-URL pattern is /billing?trial=success;
-    // cancel is /billing?trial=cancel. These query-string sentinels
-    // are how the post-checkout return picks up state, so they're
-    // load-bearing for the end-to-end UX.
-    expect(body).toMatch(/window\.location\.origin \+ '\/billing\?trial=cancel'/);
+  it('no residual trial-pack purchase UI (flow removed 2026-05-27)', () => {
+    // The trial-pack 3-state card + checkout success/cancel URLs were
+    // removed alongside the deleted endpoint. Guard against any
+    // reintroduction of the purchase surface.
+    expect(body).not.toContain('MOCK_TRIAL_PACK_STATE');
+    expect(body).not.toMatch(/\$2\.99/);
+    expect(body).not.toMatch(/16 hours/);
+    expect(body).not.toMatch(/trial=cancel/);
   });
 });

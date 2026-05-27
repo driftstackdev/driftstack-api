@@ -4,10 +4,9 @@
 // consistency tests pin structural shape; this guard pins the
 // load-bearing onboarding claims:
 //
-//   • Trial-pack $2.99 / one-time / 16 hours / 14-day window
-//     figures pinned exactly (the customer's expectation set
-//     here must match the /pricing#trial-pack page and the
-//     /select-tier?focus=trial flow).
+//   • Free-tier "Start free" $0 / no-card framing pinned (the
+//     perpetual free tier replaced the one-time trial pack
+//     2026-05-27; primary CTA goes to /first-session, no purchase).
 //   • Tier range "$79–$1,499 / mo" pinned to match pricing
 //     ladder bounds (Solo Manual → API Scale).
 //   • "What happens next" 3-step pinned (Stripe / first session
@@ -17,8 +16,8 @@
 //     claim pinned — load-bearing trust claim.
 //   • Defensive redirect: no ds_web_session_token → /signup
 //     (catches direct-nav to /welcome without auth).
-//   • CTAs go to /select-tier?focus=trial + /select-tier; both
-//     cross-link to the same destination page that must exist.
+//   • CTAs go to /first-session (free start) + /select-tier
+//     (upgrade); the select-tier destination page must exist.
 //   • localStorage key ds_web_session_token.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -38,11 +37,13 @@ function read(p: string): string {
 describe('W367.B customer-dashboard /welcome page content parity', () => {
   const body = read(PAGE);
 
-  it('trial-pack figures pinned exactly: $2.99 · one-time / 16 hours / 14-day window', () => {
-    expect(body).toMatch(/\$2\.99 · one-time/);
-    expect(body).toMatch(/16 hours of session time/);
-    expect(body).toMatch(/No subscription, no auto-renewal/);
-    expect(body).toMatch(/14-day window/);
+  it('free-tier figures pinned: Start free / $0 · no card / 1 profile / manual-only / no expiry', () => {
+    expect(body).toMatch(/Start free/);
+    expect(body).toMatch(/\$0 · no card/);
+    expect(body).toMatch(/1 profile, 1 concurrent/);
+    expect(body).toMatch(/No subscription, no expiry/);
+    // No residual trial-pack purchase figures.
+    expect(body).not.toMatch(/\$2\.99/);
   });
 
   it('tier-range hint "$79–$1,499 / mo" pinned (matches pricing ladder bounds)', () => {
@@ -57,9 +58,10 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
 
   it('"What happens next" 3-step contract pinned (Stripe / session / API key)', () => {
     expect(body).toContain('What happens next');
-    // Step 1 — Stripe redirect + card-detail reassurance.
+    // Step 1 — free-start (no card) OR paid Stripe redirect + card-
+    // detail reassurance.
     expect(body).toMatch(
-      /We'll send you to Stripe to confirm payment\. Your card details\s+stay between you and Stripe — we never see them/,
+      /Start free with no card — or pick a paid tier and we'll send you\s+to Stripe to confirm payment\. Your card details stay between you\s+and Stripe — we never see them/,
     );
     // Step 2 — first session = iPhone Safari instance with optional
     // proxy/VPN egress. 2026-05-16 honesty pass dropped "real"; 2026-
@@ -81,8 +83,8 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     );
   });
 
-  it('CTAs go to /select-tier (+ ?focus=trial variant) — destination page exists', () => {
-    expect(body).toMatch(/href="\/select-tier\?focus=trial"/);
+  it('CTAs go to /first-session (free start) + /select-tier (upgrade) — destinations exist', () => {
+    expect(body).toMatch(/href="\/first-session"/);
     expect(body).toMatch(/href="\/select-tier"/);
     expect(existsSync(SELECT_TIER)).toBe(true);
   });

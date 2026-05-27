@@ -1,8 +1,10 @@
 // W292.A — drift guard for select-tier page tier-card coverage.
-// Every AccountTier (except trial_pack, which has its own focus
-// section) must appear as a card on /select-tier so customers can
-// pick any subscription tier. Catches drift where a tier ships in
-// the schema but the dashboard doesn't expose it for selection.
+// Every paid, self-serve AccountTier must appear as a card on
+// /select-tier so customers can pick any subscription tier.
+// Excluded: 'free' (the perpetual default entry tier — no purchase,
+// so no card) and 'enterprise' (contact-sales, not self-serve).
+// Catches drift where a tier ships in the schema but the dashboard
+// doesn't expose it for selection.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -22,13 +24,25 @@ describe('W292.A /select-tier ↔ AccountTierSchema coverage', () => {
   const body = read(PAGE);
 
   it('every paid AccountTier appears as a card on /select-tier', () => {
-    const tiers = AccountTierSchema.options.filter((t) => t !== 'trial_pack' && t !== 'enterprise');
+    const tiers = AccountTierSchema.options.filter((t) => t !== 'free' && t !== 'enterprise');
     const missing: string[] = [];
     for (const tier of tiers) {
       const re = new RegExp(`\\bid:\\s*['"]${tier}['"]`);
       if (!re.test(body)) missing.push(tier);
     }
     expect(missing).toEqual([]);
+    // Exactly the 6 self-serve paid tiers render as cards. The 7th paid
+    // tier (enterprise) is contact-sales — a mailto link, not a card.
+    expect(tiers).toEqual([
+      'solo_manual',
+      'team_manual',
+      'agency_manual',
+      'api_starter',
+      'api_builder',
+      'api_scale',
+    ]);
+    // 'free' is the default entry tier and must NOT render as a card.
+    expect(body).not.toMatch(/\bid:\s*['"]free['"]/);
   });
 
   it('cards declare a label that matches the live tier id (capitalised words)', () => {
