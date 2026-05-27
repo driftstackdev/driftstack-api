@@ -19,7 +19,7 @@ the numbered list below.
   - #8 — profile-snapshot write ops (capture/restore/delete) don't enforce `write:profiles`; a read-scope key can mutate a profile via snapshot restore (security; pre-launch so no break yet).
 - **Live customer-impact (wrong behavior today):**
   - #13 — RESOLVED 2026-05-27: webhook rotation-grace dual-`v1=` verification fixed across all 3 SDKs (collect-all-`v1`, accept any). Was a LIVE-path bug.
-  - #14 — BYOK-key rotation email links to a 404 dashboard route; no BYOK management UI exists (management is API-only).
+  - #14 — [RESOLVED 2026-05-27] BYOK rotation email + status-pill linked to 404 dashboard routes; repointed both to the API docs (BYOK stays API-only).
 - **Latent, high-impact on a planned event:**
   - #12 — V-173 forward-path webhook delivery signs bare-hex; breaks ALL SDK verification on the durable-impl cutover. (Fix #12 + #13 together — one webhook-signature pass; both rooted in a missing server-sign→SDK-verify e2e test.)
   - #15 — LLM cost rate card models 4o-mini but the agent runs Opus 4.7 (~100× under-estimate); inert until LLM usage metering lands, then (a) under-reports bundled-LLM margin alerts AND (b) makes the customer-facing bundled-LLM budget soft-cap deplete ~100× too slowly (customers get ~100× more bundled Opus than the cap intends). Rate must be right in the writer BEFORE bundled-LLM goes LIVE. (Fix with #6 / V-541.J/K — same deferred metering subsystem.)
@@ -351,8 +351,20 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
       critical verification logic + a rotation-model decision (multi-`v1` vs
       separate header) that should be settled together with #12.
 
-14. **BYOK-key rotation email links to a dashboard route that doesn't
-    exist; there is no dashboard BYOK-management UI at all (moderate).**
+14. **[RESOLVED 2026-05-27]** BYOK-key rotation email + status-pill linked
+    to dashboard routes that don't exist. **Resolution:** took option (b) —
+    BYOK management stays API-only (no dashboard UI built). Repointed the
+    `byok-anthropic-key-rotation-reminder` email's rotation instructions to
+    the working API docs (`https://docs.driftstack.dev/api/byok-anthropic`,
+    HEAD 200) and kept its `dashboardUrl` meaningful by pointing the status
+    link at the real `/agent-sessions` page (which carries the BYOK status
+    pill). Repointed the `agent-sessions.astro` status-pill "Manage key"
+    link from the BYOK-less `/settings#byok-anthropic` to the same API docs
+    URL. Building a dashboard BYOK UI (option a) stays a future product
+    option — not foreclosed. Original finding below for reference.
+
+    BYOK-key rotation email links to a dashboard route that doesn't
+    exist; there is no dashboard BYOK-management UI at all (moderate).
     The `byok-anthropic-key-rotation-reminder` email (`email.ts:480`) tells
     customers to "update it on your Driftstack account at
     `${dashboardUrl}/account/byok-anthropic`". The customer-dashboard has
