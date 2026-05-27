@@ -11,6 +11,12 @@
 // profile's metadata (per founder Tier-2 verdict 2026-05-09); the
 // parent keeps evolving independently. Restore creates a NEW profile
 // row carrying the snapshot's archetype + a customer-supplied name.
+//
+// Scope model: the 3 read routes need only requireAuth; the 3 WRITE
+// routes (capture / restore / delete) additionally require the
+// `write:profiles` scope, matching the sibling /v1/profiles write
+// routes. Snapshots are profile mutations — restore in particular
+// creates a profile — so a read-scope key must not reach them.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
@@ -96,7 +102,7 @@ export function registerProfileSnapshotsRoutes(
   // ── POST /v1/profiles/:id/snapshots — capture ──────────────────────────
   app.post<{ Params: { id: string } }>(
     '/v1/profiles/:id/snapshots',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const profileId = uuidFromPrefixedId(req.params.id, 'prof');
@@ -179,7 +185,7 @@ export function registerProfileSnapshotsRoutes(
   // ── POST /v1/profile-snapshots/:id/restore ─────────────────────────────
   app.post<{ Params: { id: string } }>(
     '/v1/profile-snapshots/:id/restore',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
       const id = uuidFromPrefixedId(req.params.id, 'psnap');
@@ -209,7 +215,7 @@ export function registerProfileSnapshotsRoutes(
   // ── DELETE /v1/profile-snapshots/:id ───────────────────────────────────
   app.delete<{ Params: { id: string } }>(
     '/v1/profile-snapshots/:id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    { preHandler: [app.requireAuth, app.requireScope('write:profiles'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
       const id = uuidFromPrefixedId(req.params.id, 'psnap');

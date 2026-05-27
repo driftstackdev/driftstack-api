@@ -16,7 +16,7 @@ the numbered list below.
 - **Do before launch / now (security + go-live gates):**
   - #4 — rotate the exposed staging Neon password + fix malformed staging `.env` (security).
   - #6 — trial-pack credit granted but never decremented; "~16h" email + "decrements at session_end" copy are unenforced (LAUNCH GATE before trial-pack goes LIVE).
-  - #8 — profile-snapshot write ops (capture/restore/delete) don't enforce `write:profiles`; a read-scope key can mutate a profile via snapshot restore (security; pre-launch so no break yet).
+  - #8 — [RESOLVED 2026-05-27] profile-snapshot write ops now enforce `write:profiles` (route-level requireScope on capture/restore/delete) + proof tests; closed the read-scope→profile-mutation gap.
 - **Live customer-impact (wrong behavior today):**
   - #13 — RESOLVED 2026-05-27: webhook rotation-grace dual-`v1=` verification fixed across all 3 SDKs (collect-all-`v1`, accept any). Was a LIVE-path bug.
   - #14 — [RESOLVED 2026-05-27] BYOK rotation email + status-pill linked to 404 dashboard routes; repointed both to the API docs (BYOK stays API-only).
@@ -215,8 +215,26 @@ MAX_ATTEMPTS` with `MAX_ATTEMPTS = 5` (`apps/server/src/services/
    context; and two content-parity tests pin the current `pointerToViewport`
    source, so the source + pins must change together.
 
-8. **Profile-snapshot write ops don't enforce `write:profiles` — a
-   read-scope key can mutate a profile via snapshot restore.** The
+8. **[RESOLVED 2026-05-27]** Profile-snapshot write ops didn't enforce
+   `write:profiles` — a read-scope key could mutate a profile via snapshot
+   restore. **Resolution:** added route-level `app.requireScope('write:
+   profiles')` to the 3 write routes (capture / restore / delete) in
+   `apps/server/src/routes/profile-snapshots.ts`, matching the sibling
+   `/v1/profiles` write routes (enforcement is route-level `app.requireScope`
+   in the profiles domain, not service-layer — the original finding's
+   service-layer recommendation was superseded by the existing route-level
+   pattern). The 3 read routes correctly keep `requireAuth`-only.
+   Security-model call: snapshots share the parent `write:profiles` scope (no
+   new scope) — restore creates a profile, capture/delete mutate snapshot
+   state, all profile-domain mutations. Proof tests added (read-scope key →
+   403 on all 3 writes; read-scope still LISTs; write-scope happy path
+   intact) + the cross-source invariant updated to pin the 3 write-route
+   chains + write:profiles count. No docs/OpenAPI contradicted (neither
+   documented a snapshot-specific scope). Pre-launch so no customer break.
+   Original finding below for reference.
+
+   Profile-snapshot write ops don't enforce `write:profiles` — a
+   read-scope key can mutate a profile via snapshot restore. The
    `/v1/profiles/.../snapshots` routes (`apps/server/src/routes/
 profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
    team-targeting role check (line 38), and `ProfileSnapshotsService`

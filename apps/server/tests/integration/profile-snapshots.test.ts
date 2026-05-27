@@ -452,3 +452,68 @@ describe('V-312 edge cases (V-394)', () => {
     expect(snap2.parent_archetype).toBe(gen2.archetype);
   });
 });
+
+describe('profile-snapshot write ops require write:profiles scope', () => {
+  // A read-scope key must not capture, restore, or delete snapshots —
+  // those are profile mutations (restore creates a new profile). The
+  // requireScope preHandler runs before the route body, so the 403
+  // lands regardless of whether the referenced profile/snapshot exists.
+  const READ_ONLY = { scopes: ['read'] as const };
+  const SOME_PROF = 'prof_00000000-0000-4000-8000-00000000c001';
+  const SOME_SNAP = 'psnap_00000000-0000-4000-8000-00000000c002';
+
+  it('403 capture (POST /v1/profiles/:id/snapshots) with a read-only key', async () => {
+    fx = await buildTestApp({ scopes: [...READ_ONLY.scopes] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${SOME_PROF}/snapshots`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'x' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('403 restore (POST /v1/profile-snapshots/:id/restore) with a read-only key', async () => {
+    fx = await buildTestApp({ scopes: [...READ_ONLY.scopes] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profile-snapshots/${SOME_SNAP}/restore`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { name: 'escalated' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('403 delete (DELETE /v1/profile-snapshots/:id) with a read-only key', async () => {
+    fx = await buildTestApp({ scopes: [...READ_ONLY.scopes] });
+    const res = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profile-snapshots/${SOME_SNAP}`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('read-only key can still LIST snapshots (reads are not over-restricted)', async () => {
+    fx = await buildTestApp({ scopes: [...READ_ONLY.scopes] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/profile-snapshots',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ data: unknown[] }>().data).toEqual([]);
+  });
+
+  it('a write-scoped key still captures a snapshot (no regression for the happy path)', async () => {
+    fx = await buildTestApp();
+    const profile = await mintProfile(fx, 'scope-happy');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${profile.id}/snapshots`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { label: 'ok' },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+});

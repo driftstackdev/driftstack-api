@@ -152,8 +152,26 @@ describe('W1048 routes/profile-snapshots V-312 + V-326e cross-source invariant',
 
   it('CRITICAL requireAuth + global rate-limit on every snapshot route. Drift to dropping either would expose the surface to anonymous or unrate-limited callers.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profile-snapshots.ts'));
-    const refs = p.match(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\]/g) ?? [];
-    expect(refs.length, 'requireAuth + global rate-limit chain count').toBeGreaterThanOrEqual(6);
+    // All 6 routes carry requireAuth + a global rate-limit. The 3 write
+    // routes (capture / restore / delete) additionally carry
+    // requireScope('write:profiles') — counted separately below — so we
+    // match the auth + rate-limit anchors individually rather than the
+    // whole preHandler array.
+    const authRefs = p.match(/app\.requireAuth/g) ?? [];
+    expect(authRefs.length, 'requireAuth count (one per route)').toBeGreaterThanOrEqual(6);
+    const rlRefs = p.match(/app\.rateLimit\('global'\)/g) ?? [];
+    expect(rlRefs.length, 'global rate-limit count (one per route)').toBeGreaterThanOrEqual(6);
+  });
+
+  it('CRITICAL write:profiles scope on the 3 snapshot WRITE routes (capture / restore / delete). Snapshots are profile mutations — capture and delete change snapshot state and restore creates a new profile — so a read-scope key must NOT reach them. Dropping requireScope here reopens the privilege-escalation gap where a read-only key mutates profiles via snapshot restore.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/profile-snapshots.ts'));
+    const scopeRefs = p.match(/app\.requireScope\('write:profiles'\)/g) ?? [];
+    expect(scopeRefs.length, "requireScope('write:profiles') count = 3 write routes").toBe(3);
+    // Mechanically pin the chain on each write route: requireAuth THEN
+    // requireScope THEN rate-limit (scope check runs before the handler).
+    const writeChain =
+      /preHandler: \[app\.requireAuth, app\.requireScope\('write:profiles'\), app\.rateLimit\('global'\)\]/g;
+    expect((p.match(writeChain) ?? []).length, 'full write-route preHandler chain count').toBe(3);
   });
 
   // ─── Capture payload shape ───────────────────────────────────
