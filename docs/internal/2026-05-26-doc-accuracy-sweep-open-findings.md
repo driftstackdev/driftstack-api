@@ -271,6 +271,38 @@ production-env-schema.md` found these read-but-undocumented-in-both:
     tied to an in-flight migration whose cutover sequencing is a coordination
     call; a partial fix would re-create the same broken-chain footgun.
 
+13. **Rotation-grace dual-`v1=` signing breaks SDK verification for
+    new-secret adopters — LIVE path (moderate).** During a webhook-secret
+    rotation's 24h grace window, the production worker
+    (`webhook-worker.ts:163`) dual-signs Stripe-style into ONE header:
+    `x-driftstack-signature: t=<ts>,v1=<HMAC-new>,v1=<HMAC-old>` (via
+    `signWebhookPayload` with `secretPrev`), and emits NO separate
+    `x-driftstack-signature-prev` header. But every SDK verifier parses
+    `v1=` **last-wins** — TS `parseSignatureHeader` (`signature = v`,
+    webhook-signature.ts) and Python `_parse_signature_header`
+    (`signature = value`, line 58); Go by cross-SDK parity — so it keeps
+    only the LAST `v1=` (`HMAC-old`) and its rotation model expects the old
+    sig in a SEPARATE `headerPrev` (`x-driftstack-signature-prev`) the prod
+    worker never sends. Net effect during grace:
+    - customer still on the OLD secret → matches `HMAC-old` (last v1) → OK;
+    - customer who already rolled their verifier to the NEW secret →
+      computes `HMAC-new` = the FIRST v1, which the SDK discarded → silent
+      verification **failure** until grace expires.
+      So the diligent customer who updates promptly (exactly what rotation
+      grace is for) gets failures. Uncaught: the SDK rotation test only
+      exercises the separate-`headerPrev` model (webhook-signature.test.ts
+      "rotation grace (headerPrev)"), never the worker's actual dual-`v1`
+      single-header output; `cross-sdk-webhook-signature-parity` pins the
+      single-`v1` format string but not multi-`v1` verification. **Fix
+      (one coherent webhook-signature pass with #12):** make the SDK parsers
+      collect ALL `v1=` entries and accept if ANY matches (the real Stripe
+      model) across TS/Python/Go, OR have the worker emit the old signature
+      in a separate `x-driftstack-signature-prev` header (matching the SDK's
+      existing `headerPrev` path + the durable impl). Add a worker-output →
+      SDK-verify rotation e2e test. NOT auto-fixed: 3-SDK change to security-
+      critical verification logic + a rotation-model decision (multi-`v1` vs
+      separate header) that should be settled together with #12.
+
 ## Minor hardening notes (NOT findings — surfaced by the security audits)
 
 These came out of the systematic route-security sweep (scope / ownership /
