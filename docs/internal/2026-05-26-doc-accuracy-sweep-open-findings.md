@@ -214,6 +214,31 @@ production-env-schema.md` found these read-but-undocumented-in-both:
     product intent (is the trial crypto-purchasable?) is a founder call, and
     deriving the quote list vs trimming checkout are opposite resolutions.
 
+11. **OpenAPI spec is a subset of the documented customer surface (low).**
+    Several customer endpoints that have a Markdown doc page on
+    docs.driftstack.dev are absent from the hand-written OpenAPI spec
+    (`apps/server/src/lib/openapi.ts`), so they don't appear in the
+    Scalar reference UI at api.driftstack.dev/docs. Confirmed concrete
+    cases (route registered + Markdown-documented + NOT in spec):
+    `/v1/account/cost` (api/cost-monitoring.md), `/v1/account/me/notifications`
+    (api/account-notifications.md), `/v1/agent-sessions/:id/transcript`
+    (api/agent-sessions.md), `/v1/profiles/:id/launch` (api/profiles.md).
+    Of 21 registered customer routes absent from the spec, ~8 are
+    _correctly_ excluded — `/v1/internal/atlas-priority/*` (internal),
+    `/v1/webhooks/{nowpayments,stripe}` (inbound provider webhooks),
+    `/v1/proxies/:id/test` (503 stub, egress unwired), `/v1/status/stream`
+    (SSE, doesn't fit OpenAPI). Impact is low: the SDKs are hand-written
+    (no codegen miss), the Markdown docs are the primary reference, and
+    every spec path IS backed by a real route (no phantom endpoints —
+    `openapi-route-coverage` pins that direction). **Decide:** is the
+    OpenAPI spec meant to be the _complete_ customer surface (then add the
+    ~4 confirmed-missing endpoints' request/response schemas) or a curated
+    core subset (then it's fine as-is)? NOT auto-fixed: which endpoints
+    belong in the public spec is a product/surface decision, and writing
+    full OpenAPI schemas per endpoint is substantial. `openapi-route-coverage`
+    only pins a hardcoded CORE allowlist into the spec + the no-phantom
+    direction; it does not assert spec-completeness, so this is uncaught.
+
 ## Minor hardening notes (NOT findings — surfaced by the security audits)
 
 These came out of the systematic route-security sweep (scope / ownership /
