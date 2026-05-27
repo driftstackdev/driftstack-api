@@ -143,6 +143,33 @@ MAX_ATTEMPTS` with `MAX_ATTEMPTS = 5` (`apps/server/src/services/
    context; and two content-parity tests pin the current `pointerToViewport`
    source, so the source + pins must change together.
 
+8. **Profile-snapshot write ops don't enforce `write:profiles` — a
+   read-scope key can mutate a profile via snapshot restore.** The
+   `/v1/profiles/.../snapshots` routes (`apps/server/src/routes/
+profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
+   team-targeting role check (line 38), and `ProfileSnapshotsService`
+   (`capture` / `restore` / delete) has **zero** scope checks — the injected
+   `profilesService` is `void`-ed (line 223-225, only to silence an
+   unused-var warn), so there's no delegation to the scope-enforcing profiles
+   service either. But `scopes.md` (line 44) defines `write:profiles` as
+   gating profile create/delete, and **`restore` mutates the profile's state
+   (applies the snapshot's cookies/storage)** — so a key with `read:profiles`
+   (or bare `read`) can capture/restore/delete snapshots, mutating a profile
+   without the write scope. This is the same gap class as the resolved
+   read-write-scope finding, on a resource (profile-snapshots) that the
+   `requireScope` rollout apparently missed (the enforced list named
+   "profiles" but not its snapshots sub-resource). Pre-launch, so no real
+   integration breaks. **Recommended fix:** add `throwIfMissingScope(ctx,
+'write:profiles')` to `restore` + delete in `ProfileSnapshotsService`
+   (service-layer, matching the webhooks/email-preferences pattern); decide
+   whether `capture` is a write (creates a snapshot record) or read (doesn't
+   mutate the live profile) and gate accordingly. NOT auto-fixed: it's a
+   security-model decision (which snapshot ops are reads vs writes; whether
+   snapshots share the parent `write:profiles` scope or get their own), and
+   adding enforcement is a behavior change (a read key that can restore today
+   would start getting 403) that the scope-enforcement parity tests should
+   pin.
+
 ## Shipped this sweep (all on `main`, gate-green)
 
 ~11 customer-facing doc/code fixes: TS error-handling class name
