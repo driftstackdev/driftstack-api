@@ -132,10 +132,11 @@ func ListAllAuditEntries(ctx context.Context, c *driftstack.Client) ([]any, erro
 
 Per-endpoint `limit` ranges:
 
-- Default: typically `50` (audit log, webhooks deliveries) or
-  `20` (some admin endpoints).
-- Maximum: typically `100` for customer-facing endpoints, `200`
-  for admin endpoints (where ops tooling reasonably batches).
+- Default: `50` on every list endpoint (audit log, webhooks
+  deliveries, admin accounts/sessions/api-keys).
+- Maximum: `100` on most endpoints; a few admin list endpoints
+  (e.g. status subscribers) allow `200` where ops tooling
+  reasonably batches.
 - Out-of-range values surface as `400 ValidationFailed` problem+json
   with the per-endpoint bound in the `detail` field.
 

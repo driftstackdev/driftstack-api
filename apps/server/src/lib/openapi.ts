@@ -1813,7 +1813,7 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       query: z.object({
-        limit: z.number().int().min(1).max(200).optional(),
+        limit: z.number().int().min(1).max(100).optional(),
         cursor: z.string().optional(),
         status: z.enum(['active', 'suspended', 'deleted']).optional(),
         tier: z.string().optional(),
