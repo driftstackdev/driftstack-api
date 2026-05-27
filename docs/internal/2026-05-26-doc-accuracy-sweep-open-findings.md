@@ -239,6 +239,38 @@ production-env-schema.md` found these read-but-undocumented-in-both:
     only pins a hardcoded CORE allowlist into the spec + the no-phantom
     direction; it does not assert spec-completeness, so this is uncaught.
 
+12. **Forward-path webhook delivery signs with an incompatible header
+    scheme — breaks SDK verification on cutover (latent, high-impact).**
+    The published contract is a Stripe-style compound header:
+    `X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>`, HMAC-SHA256 over
+    `<t>.<body>` — documented in `webhooks/events.md:64`, verified by all
+    three SDK helpers (`verifyWebhookSignature` parses `t=`/`v1=` from the
+    single header), and emitted by the **production-today** path
+    (`webhook-worker.ts` → `signWebhookPayload` in `lib/webhook-signing.ts`,
+    which formats `t=…,v1=…`). BUT the **V-173 FORWARD path** —
+    `DurableWebhookDeliveryService` (`durable-webhook-delivery.ts:558`
+    `signPayload`) and the `@driftstack/webhook-delivery` package's
+    `InMemoryWebhookDelivery` (`packages/webhook-delivery/src/in-memory.ts:515`)
+    — emit a **bare hex** digest in `x-driftstack-signature` and put the
+    timestamp in a SEPARATE `x-driftstack-emitted-at` header. Feeding that
+    bare-hex header to the SDK verifier fails `parseSignatureHeader` (no
+    `t=`/`v1=`) → returns `false` for every delivery. So when the planned
+    migration ("replace webhooks.ts is a separate future V-NNN", per the
+    durable service's coexistence note) cuts deliveries over to the durable
+    / package implementation, **every SDK customer's webhook verification
+    silently breaks.** Latent today (durable path is not wired in bootstrap;
+    `webhook-worker.ts` owns production). Root cause: there is **no
+    end-to-end test** bridging an emitted signature header to the SDK
+    verifier — each side is unit-tested against its OWN format, so the
+    divergence is invisible (the classic cross-layer-plumbing gap). **Fix
+    (with the cutover, not piecemeal):** route the durable + package signing
+    through the canonical `signWebhookPayload` (`t=,v1=` formatter), drop the
+    separate `x-driftstack-emitted-at` reliance, update the bare-hex tests in
+    `packages/webhook-delivery`, and add a server-sign → SDK-verify e2e test
+    FIRST so the contract is locked. NOT auto-fixed: cross-package change
+    tied to an in-flight migration whose cutover sequencing is a coordination
+    call; a partial fix would re-create the same broken-chain footgun.
+
 ## Minor hardening notes (NOT findings — surfaced by the security audits)
 
 These came out of the systematic route-security sweep (scope / ownership /
