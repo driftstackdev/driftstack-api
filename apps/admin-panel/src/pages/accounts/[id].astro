@@ -583,7 +583,7 @@ const accountId = account.id;
 
       function changeTier() {
         const tier = window.prompt(
-          'New tier (one of trial_pack / solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale / enterprise):',
+          'New tier (one of free / solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale / enterprise):',
         );
         if (!tier) return;
         const reason = window.prompt('Reason for tier change (optional, max 500 chars):') || '';

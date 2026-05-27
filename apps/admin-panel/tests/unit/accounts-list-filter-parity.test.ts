@@ -67,7 +67,7 @@ describe('W346.C admin /accounts list filter parity', () => {
     const block = page.match(/<select\s+data-field="tier"[\s\S]*?<\/select>/);
     expect(block).not.toBeNull();
     for (const label of [
-      'Trial pack',
+      'Free',
       'Solo Manual',
       'Team Manual',
       'Agency Manual',
