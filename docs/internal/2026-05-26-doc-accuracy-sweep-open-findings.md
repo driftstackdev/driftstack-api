@@ -170,6 +170,29 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
    would start getting 403) that the scope-enforcement parity tests should
    pin.
 
+9. **`env-vars.md` omits several operator env vars the server actually
+   reads.** An env-read audit (`process.env.X` dot-access in `apps/server/
+src`) vs `docs/deployment/env-vars.md` + `docs/operations/
+production-env-schema.md` found these read-but-undocumented-in-both:
+   `CORS_ALLOWED_ORIGINS`, `NOWPAYMENTS_IPN_CALLBACK_URL`,
+   `BROADCAST_SLACK_WEBHOOK_URL`, `BROADCAST_GENERIC_WEBHOOK_URL`,
+   `PUBLIC_STATUS_PAGE_URL`, `DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS`
+   (plus `PERMISSIVE_CORS` + `GIT_SHA`, which are reasonably omitted — dev
+   flag + deploy-injected). Triage: `CORS_ALLOWED_ORIGINS` IS in
+   `infra/env-templates/{staging.env,production.env.template}` so operators
+   deploying from the templates set it (no breakage) — it's just missing
+   from the human-readable doc. `NOWPAYMENTS_IPN_CALLBACK_URL` is in **no**
+   deploy surface at all (template or doc) and gates crypto-billing IPN
+   callbacks — the one worth confirming before crypto-billing goes LIVE. The
+   broadcast webhooks + status URL + rotation-reminder toggle are
+   optional/operational. **Recommended fix:** add the operator-relevant vars
+   to `env-vars.md` with required/optional + default + purpose. CAVEAT: this
+   audit caught only `process.env.X` _dot-access_ reads — a complete pass
+   should also sweep destructured `const { X } = process.env` reads
+   (bootstrap/config) before declaring the doc exhaustive. Low-risk doc fix
+   (no intent decision); deferred only because the complete-list sweep +
+   accurate per-var descriptions are worth doing in one pass.
+
 ## Minor hardening notes (NOT findings — surfaced by the security audits)
 
 These came out of the systematic route-security sweep (scope / ownership /
