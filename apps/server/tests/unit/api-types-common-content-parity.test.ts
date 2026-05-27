@@ -99,9 +99,12 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     );
   });
 
-  it('Trial-pack rationale pinned: $2.99 one-time / 14-day / 1 concurrent / 299¢ at $0.18/hr ≈ 16 hrs (ADR-003)', () => {
+  it('Free-tier rationale pinned: perpetual default, $0, 1 profile, manual-only (no API), 1 concurrent, no AI, no expiry', () => {
     expect(body).toMatch(
-      /\/\/ Trial \(one-time\):\s*\n?\s*\/\/\s*- trial_pack\s+\$2\.99\s+— 14-day window, 1 concurrent, 299¢ at \$0\.18\/hr ≈ 16 hrs \(ADR-003\)/,
+      /\/\/ Free \(perpetual default — no billing, resolves findings #6\/#10 by/,
+    );
+    expect(body).toMatch(
+      /\/\/\s*- free\s+\$0\s+— 1 profile, manual-only \(no API\), 1 concurrent, no AI agent, no expiry/,
     );
   });
 
@@ -117,15 +120,16 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     );
   });
 
-  it('Annual 20% off + concurrent caps the ONLY metering primitive on paid tiers + hours metering ONLY for trial_pack (ADR-003 trial_pack_credit_cents decrement) + profile-count enforced at /v1/profiles creation gate (V-073)', () => {
+  it('Annual 20% off + concurrent caps the ONLY metering primitive on paid tiers + free tier has no usage metering + profile-count enforced at /v1/profiles creation gate', () => {
     expect(body).toMatch(
-      /\/\/ Annual is 20% off across all tiers\. Concurrent caps are the\s*\n?\s*\/\/ only metering primitive on paid tiers; hours metering exists\s*\n?\s*\/\/ ONLY for the trial pack \(per ADR-003 trial_pack_credit_cents\s*\n?\s*\/\/ decrement\)\. Profile count is enforced at the \/v1\/profiles\s*\n?\s*\/\/ creation gate \(V-073 lands the constant \+ scaffolding\)\./,
+      /\/\/ Annual is 20% off across all tiers\. Concurrent caps are the\s*\n?\s*\/\/ only metering primitive on paid tiers; the free tier has no\s*\n?\s*\/\/ usage metering at all \(no credit, no hours cap, no expiry\)\./,
     );
+    expect(body).toMatch(/\/\/ Profile count is enforced at the \/v1\/profiles creation gate\./);
   });
 
-  it('AccountTier enum: 8 values pinned (trial_pack/solo_manual/team_manual/agency_manual/api_starter/api_builder/api_scale/enterprise)', () => {
+  it('AccountTier enum: 8 values pinned (free/solo_manual/team_manual/agency_manual/api_starter/api_builder/api_scale/enterprise)', () => {
     expect(body).toMatch(
-      /export const AccountTierSchema = z\.enum\(\[\s*\n?\s*'trial_pack',\s*\n?\s*'solo_manual',\s*\n?\s*'team_manual',\s*\n?\s*'agency_manual',\s*\n?\s*'api_starter',\s*\n?\s*'api_builder',\s*\n?\s*'api_scale',\s*\n?\s*'enterprise',\s*\n?\s*\]\);/,
+      /export const AccountTierSchema = z\.enum\(\[\s*\n?\s*'free',\s*\n?\s*'solo_manual',\s*\n?\s*'team_manual',\s*\n?\s*'agency_manual',\s*\n?\s*'api_starter',\s*\n?\s*'api_builder',\s*\n?\s*'api_scale',\s*\n?\s*'enterprise',\s*\n?\s*\]\);/,
     );
   });
 
@@ -134,7 +138,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /\*\s*Profile-count limits per tier — single source of truth for\s*\n?\s*\*\s*marketing-site, customer-dashboard, and server-side enforcement\./,
     );
     expect(body).toMatch(
-      /export const PROFILES_PER_TIER: Record<AccountTier, number \| 'custom'> = \{\s*\n?\s*trial_pack: 1,\s*\n?\s*solo_manual: 10,\s*\n?\s*team_manual: 50,\s*\n?\s*agency_manual: 200,\s*\n?\s*api_starter: 25,\s*\n?\s*api_builder: 100,\s*\n?\s*api_scale: 500,\s*\n?\s*enterprise: 'custom',\s*\n?\s*\};/,
+      /export const PROFILES_PER_TIER: Record<AccountTier, number \| 'custom'> = \{\s*\n?\s*free: 1,\s*\n?\s*solo_manual: 10,\s*\n?\s*team_manual: 50,\s*\n?\s*agency_manual: 200,\s*\n?\s*api_starter: 25,\s*\n?\s*api_builder: 100,\s*\n?\s*api_scale: 500,\s*\n?\s*enterprise: 'custom',\s*\n?\s*\};/,
     );
   });
 
@@ -146,7 +150,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /\*\s*Locked per ADR-004\. Values mirrored in\s*\n?\s*\*\s*`apps\/marketing-site\/src\/data\/pricing\.ts:API_TIERS` field\s*\n?\s*\*\s*`concurrent`\. `enterprise: 32` is a sentinel floor for the smallest\s*\n?\s*\*\s*custom contract; per-account overrides via the rate-limit-overrides\s*\n?\s*\*\s*path bump real Enterprise customers higher\./,
     );
     expect(body).toMatch(
-      /export const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = \{\s*\n?\s*trial_pack: 1,\s*\n?\s*solo_manual: 1,\s*\n?\s*team_manual: 3,\s*\n?\s*agency_manual: 8,\s*\n?\s*api_starter: 2,\s*\n?\s*api_builder: 8,\s*\n?\s*api_scale: 24,\s*\n?\s*enterprise: 32,\s*\n?\s*\};/,
+      /export const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = \{\s*\n?\s*free: 1,\s*\n?\s*solo_manual: 1,\s*\n?\s*team_manual: 3,\s*\n?\s*agency_manual: 8,\s*\n?\s*api_starter: 2,\s*\n?\s*api_builder: 8,\s*\n?\s*api_scale: 24,\s*\n?\s*enterprise: 32,\s*\n?\s*\};/,
     );
   });
 
@@ -173,7 +177,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /export const TIER_RATE_LIMIT_DEFAULTS: Record<\s*\n?\s*AccountTier,\s*\n?\s*Record<\s*\n?\s*'global' \| 'sessions:create' \| 'agent_sessions:message' \| 'agent_sessions:input_event',\s*\n?\s*BucketLimitConfig\s*\n?\s*>\s*\n?\s*> = \{/,
     );
     expect(body).toMatch(
-      /trial_pack: \{\s*\n?\s*global: \{ capacity: 60, refill_per_second: 1 \},\s*\n?\s*'sessions:create': \{ capacity: 5, refill_per_second: 1 \/ 60 \},[\s\S]*?'agent_sessions:message': \{ capacity: 20, refill_per_second: 1 \/ 5 \},[\s\S]*?'agent_sessions:input_event': \{ capacity: 240, refill_per_second: 60 \},\s*\n?\s*\},/,
+      /free: \{\s*\n?\s*global: \{ capacity: 60, refill_per_second: 1 \},\s*\n?\s*'sessions:create': \{ capacity: 5, refill_per_second: 1 \/ 60 \},[\s\S]*?'agent_sessions:message': \{ capacity: 20, refill_per_second: 1 \/ 5 \},[\s\S]*?'agent_sessions:input_event': \{ capacity: 240, refill_per_second: 60 \},\s*\n?\s*\},/,
     );
     expect(body).toMatch(
       /api_scale: \{\s*\n?\s*global: \{ capacity: 6_000, refill_per_second: 100 \},\s*\n?\s*'sessions:create': \{ capacity: 120, refill_per_second: 2 \},\s*\n?\s*'agent_sessions:message': \{ capacity: 1_000, refill_per_second: 10 \},\s*\n?\s*'agent_sessions:input_event': \{ capacity: 1_200, refill_per_second: 300 \},\s*\n?\s*\},/,
@@ -186,7 +190,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
   it('V-485 TierFeatures framing pinned: single source of truth for tier-gated capabilities; mirrors marketing-site pricing.ts; consumers (requireTierFeature 403 feature_not_available + customer dashboard conditional UI); add-new-feature instructions', () => {
     expect(body).toMatch(/\*\s*V-485 — per-tier feature gating registry\./);
     expect(body).toMatch(
-      /\*\s*Single source of truth for "which capabilities does this tier\s*\n?\s*\*\s*unlock\?" Today the server checks `tier === 'trial_pack'` \/\s*\n?\s*\*\s*`PROFILES_PER_TIER\[tier\]` \/ `TIER_CONCURRENT_SESSION_LIMITS\[tier\]`\s*\n?\s*\*\s*in scattered call sites; this registry is the central place for\s*\n?\s*\*\s*those plus the AI-agent \+ LLM-billing gates that ship with V-487\+\./,
+      /\*\s*Single source of truth for "which capabilities does this tier\s*\n?\s*\*\s*unlock\?" Today the server checks `tier === 'free'` \/\s*\n?\s*\*\s*`PROFILES_PER_TIER\[tier\]` \/ `TIER_CONCURRENT_SESSION_LIMITS\[tier\]`\s*\n?\s*\*\s*in scattered call sites; this registry is the central place for\s*\n?\s*\*\s*those plus the AI-agent \+ LLM-billing gates that ship with V-487\+\./,
     );
     expect(body).toMatch(
       /\*\s*Consumers:\s*\n?\s*\*\s*- Server: `requireTierFeature\(tier, key\)` in\s*\n?\s*\*\s*`apps\/server\/src\/lib\/errors-helpers\.ts` throws 403 with\s*\n?\s*\*\s*`feature_not_available` problem-type when the gate fails\.\s*\n?\s*\*\s*- Customer dashboard: read TIER_FEATURES directly to drive\s*\n?\s*\*\s*conditional UI \(e\.g\. hide AI-agent CTA on Solo Manual\)\./,
@@ -194,23 +198,31 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     expect(body).toMatch(
       /export type LlmBilling = 'byok_only' \| 'byok_or_bundled' \| 'byok_or_bundled_custom' \| null;/,
     );
+    expect(body).toMatch(/export interface TierFeatures \{/);
+    expect(body).toMatch(/concurrentSessions: number;/);
+    expect(body).toMatch(/profiles: number \| 'custom';/);
     expect(body).toMatch(
-      /export interface TierFeatures \{\s*\n?\s*\/\*\* Concurrent session cap\. Mirrors TIER_CONCURRENT_SESSION_LIMITS\. \*\/\s*\n?\s*concurrentSessions: number;\s*\n?\s*\/\*\* Profile-count cap\. `'custom'` for Enterprise \(negotiated\)\. \*\/\s*\n?\s*profiles: number \| 'custom';\s*\n?\s*\/\*\* Stripe environment for API-key minting \(test on trial_pack, live elsewhere\)\. \*\/\s*\n?\s*apiKeyEnvironment: 'test' \| 'live';\s*\n?\s*\/\*\* AI-agent \(LLM-driven sessions\) feature available on this tier\. \*\/\s*\n?\s*aiAgent: boolean;\s*\n?\s*\/\*\* LLM billing model when aiAgent is true; `null` when off\. \*\/\s*\n?\s*llmBilling: LlmBilling;\s*\n?\s*\/\*\* True for the trial_pack tier — distinguishes one-time from subscription\. \*\/\s*\n?\s*trialPack: boolean;\s*\n?\s*\}/,
+      /\/\*\* Stripe environment for API-key minting \(test on free, live elsewhere\)\. \*\//,
     );
+    expect(body).toMatch(/apiKeyEnvironment: 'test' \| 'live';/);
+    expect(body).toMatch(/apiAccess: boolean;/);
+    expect(body).toMatch(/aiAgent: boolean;/);
+    expect(body).toMatch(/llmBilling: LlmBilling;/);
+    expect(body).toMatch(/trialPack: boolean;/);
   });
 
-  it('TIER_FEATURES Record: trial_pack (test env + aiAgent false + trialPack true) + team_manual (aiAgent true + byok_only) + api_builder (byok_or_bundled) + enterprise (custom profiles + byok_or_bundled_custom)', () => {
+  it('TIER_FEATURES Record: free (test env + apiAccess false + aiAgent false) + team_manual (apiAccess true + aiAgent true + byok_only) + api_builder (byok_or_bundled) + enterprise (custom profiles + byok_or_bundled_custom)', () => {
     expect(body).toMatch(
-      /trial_pack: \{\s*\n?\s*concurrentSessions: 1,\s*\n?\s*profiles: 1,\s*\n?\s*apiKeyEnvironment: 'test',\s*\n?\s*aiAgent: false,\s*\n?\s*llmBilling: null,\s*\n?\s*trialPack: true,\s*\n?\s*\},/,
+      /free: \{\s*\n?\s*concurrentSessions: 1,\s*\n?\s*profiles: 1,\s*\n?\s*apiKeyEnvironment: 'test',\s*\n?\s*apiAccess: false,\s*\n?\s*aiAgent: false,\s*\n?\s*llmBilling: null,\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /team_manual: \{\s*\n?\s*concurrentSessions: 3,\s*\n?\s*profiles: 50,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_only',\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
+      /team_manual: \{\s*\n?\s*concurrentSessions: 3,\s*\n?\s*profiles: 50,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_only',\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /api_builder: \{\s*\n?\s*concurrentSessions: 8,\s*\n?\s*profiles: 100,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled',\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
+      /api_builder: \{\s*\n?\s*concurrentSessions: 8,\s*\n?\s*profiles: 100,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled',\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /enterprise: \{\s*\n?\s*concurrentSessions: 32,\s*\n?\s*profiles: 'custom',\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled_custom',\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
+      /enterprise: \{\s*\n?\s*concurrentSessions: 32,\s*\n?\s*profiles: 'custom',\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled_custom',\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
     );
   });
 

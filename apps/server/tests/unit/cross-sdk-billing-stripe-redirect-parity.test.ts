@@ -59,7 +59,7 @@ describe('W695 cross-SDK V-082 billing Stripe-redirect parity', () => {
     expect(py).toMatch(/V-082/);
   });
 
-  it('CRITICAL 4-verb surface pinned across all 3 SDKs — getState + createCheckoutSession + startTrialPack + createPortalSession (language-canonical naming). The 4 verbs cover the entire customer billing flow; drift to dropping any would break the dashboard or signup flow.', () => {
+  it('CRITICAL 3-verb surface pinned across all 3 SDKs — getState + createCheckoutSession + createPortalSession (language-canonical naming; startTrialPack retired 2026-05-27). The 3 verbs cover the customer billing flow; drift to dropping any would break the dashboard or signup flow.', () => {
     const ts = read(TS_BILLING);
     const go = read(GO_BILLING);
     const py = read(PY_BILLING);
@@ -67,23 +67,20 @@ describe('W695 cross-SDK V-082 billing Stripe-redirect parity', () => {
     // sdk-typescript: camelCase methods.
     expect(ts).toMatch(/getState\(\)/);
     expect(ts).toMatch(/createCheckoutSession\(/);
-    expect(ts).toMatch(/startTrialPack\(/);
     expect(ts).toMatch(/createPortalSession\(\)/);
 
     // sdk-go: PascalCase methods.
     expect(go).toMatch(/func \(r \*BillingResource\) GetState\(/);
     expect(go).toMatch(/func \(r \*BillingResource\) CreateCheckoutSession\(/);
-    expect(go).toMatch(/func \(r \*BillingResource\) StartTrialPack\(/);
     expect(go).toMatch(/func \(r \*BillingResource\) CreatePortalSession\(/);
 
     // sdk-python: snake_case methods.
     expect(py).toMatch(/def get_state\(self/);
     expect(py).toMatch(/def create_checkout_session\(self/);
-    expect(py).toMatch(/def start_trial_pack\(self/);
     expect(py).toMatch(/def create_portal_session\(self/);
   });
 
-  it('CRITICAL 4 wire-paths pinned per-SDK: /v1/billing + /v1/billing/checkout-session + /v1/billing/trial-pack + /v1/billing/portal-session. Drift to renaming any path would break server-side routing.', () => {
+  it('CRITICAL 3 wire-paths pinned per-SDK: /v1/billing + /v1/billing/checkout-session + /v1/billing/portal-session (trial-pack retired 2026-05-27). Drift to renaming any path would break server-side routing.', () => {
     const ts = read(TS_BILLING);
     const go = read(GO_BILLING);
     const py = read(PY_BILLING);
@@ -91,7 +88,6 @@ describe('W695 cross-SDK V-082 billing Stripe-redirect parity', () => {
     for (const sdk of [ts, go, py]) {
       expect(sdk).toMatch(/\/v1\/billing/);
       expect(sdk).toMatch(/\/v1\/billing\/checkout-session/);
-      expect(sdk).toMatch(/\/v1\/billing\/trial-pack/);
       expect(sdk).toMatch(/\/v1\/billing\/portal-session/);
     }
   });
@@ -122,45 +118,33 @@ describe('W695 cross-SDK V-082 billing Stripe-redirect parity', () => {
     expect(go).toMatch(/redirected to|customer redirects/);
   });
 
-  it('CRITICAL trial-pack one-time framing — "$2.99 trial pack" + "once-per-account" pinned in sdk-go. The trial-pack is a one-time $2.99 SKU that bypasses recurring-subscription onboarding; drift to recurring would silently re-bill customers.', () => {
-    const go = read(GO_BILLING);
-
-    expect(go).toMatch(/\$2\.99 trial/);
-    expect(go).toMatch(/Once-per-account|once-per-account/);
-  });
-
-  it('CRITICAL ADR-003 reference on trial-pack in sdk-python. The ADR-003 anchor pins the architectural decision behind trial-pack-as-Stripe-checkout (vs. internal credit ledger). Drift to dropping the ADR reference would lose the design-decision provenance.', () => {
-    const py = read(PY_BILLING);
-    expect(py).toMatch(/ADR-003/);
-  });
-
-  it("CRITICAL method-verb invariant — GET on getState; POST on the 3 redirect-producing verbs (createCheckoutSession + startTrialPack + createPortalSession). Drift to GET on POST would let accidental browser-prefetch fire real Stripe sessions and silently churn through the customer's payment surface.", () => {
+  it("CRITICAL method-verb invariant — GET on getState; POST on the 2 redirect-producing verbs (createCheckoutSession + createPortalSession). Drift to GET on POST would let accidental browser-prefetch fire real Stripe sessions and silently churn through the customer's payment surface.", () => {
     const ts = read(TS_BILLING);
     const go = read(GO_BILLING);
 
-    // sdk-typescript: getState uses GET, 3 redirect-producers use POST.
+    // sdk-typescript: getState uses GET, 2 redirect-producers use POST.
     // Count GET vs POST mentions in method blocks.
     const tsGetCount = (ts.match(/method: 'GET'/g) ?? []).length;
     const tsPostCount = (ts.match(/method: 'POST'/g) ?? []).length;
     expect(tsGetCount, 'sdk-typescript GET method count').toBe(1);
-    expect(tsPostCount, 'sdk-typescript POST method count').toBe(3);
+    expect(tsPostCount, 'sdk-typescript POST method count').toBe(2);
 
     // sdk-go: same shape, lowercase quoted strings.
     const goGetCount = (go.match(/method: "GET"/g) ?? []).length;
     const goPostCount = (go.match(/method: "POST"/g) ?? []).length;
     expect(goGetCount, 'sdk-go GET method count').toBe(1);
-    expect(goPostCount, 'sdk-go POST method count').toBe(3);
+    expect(goPostCount, 'sdk-go POST method count').toBe(2);
   });
 
-  it('CRITICAL "subscription mirror + trial-pack state" framing on getState in sdk-typescript + sdk-go. The "mirror" wording tells customers driftstack does NOT own the source-of-truth for subscription state (Stripe does); driftstack mirrors. Drift to "subscription source" would mislead callers about source-of-truth.', () => {
+  it('CRITICAL "subscription mirror" framing on getState in sdk-typescript + sdk-go (trial-pack state removed 2026-05-27). The "mirror" wording tells customers driftstack does NOT own the source-of-truth for subscription state (Stripe does); driftstack mirrors. Drift to "subscription source" would mislead callers about source-of-truth.', () => {
     const ts = read(TS_BILLING);
     const go = read(GO_BILLING);
 
-    expect(ts).toMatch(/subscription mirror \+ trial-pack\s*\n?\s*(?:\/\/\s*)?state/);
-    expect(go).toMatch(/subscription mirror \+ trial-pack\s*\n?\s*(?:\/\/\s*)?state/);
+    expect(ts).toMatch(/subscription mirror/);
+    expect(go).toMatch(/subscription mirror/);
   });
 
-  it('Cross-SDK V-082 5-invariant cluster — V-082 anchor + 4-verb surface (getState/createCheckoutSession/startTrialPack/createPortalSession) + 4 wire-paths (/v1/billing × 4) + Stripe-redirect framing + subscription-mirror framing. Drift on any would fragment the cross-language billing contract.', () => {
+  it('Cross-SDK V-082 invariant cluster — V-082 anchor + 3-verb surface (getState/createCheckoutSession/createPortalSession) + 3 wire-paths (/v1/billing + checkout-session + portal-session) + Stripe-redirect framing + subscription-mirror framing. Drift on any would fragment the cross-language billing contract.', () => {
     const sdks = {
       'sdk-typescript': read(TS_BILLING),
       'sdk-go': read(GO_BILLING),
@@ -171,7 +155,6 @@ describe('W695 cross-SDK V-082 billing Stripe-redirect parity', () => {
       expect(body, `${name} V-082`).toMatch(/V-082/);
       expect(body, `${name} /v1/billing path`).toMatch(/\/v1\/billing/);
       expect(body, `${name} checkout-session`).toMatch(/checkout-session/);
-      expect(body, `${name} trial-pack`).toMatch(/trial-pack/);
       expect(body, `${name} portal-session`).toMatch(/portal-session/);
     }
   });

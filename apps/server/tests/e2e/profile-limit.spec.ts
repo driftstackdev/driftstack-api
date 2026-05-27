@@ -6,7 +6,7 @@
 // (create N profiles → N+1 fails with 402 + profile-cap-reached body).
 //
 // Per ADR-004 + V-073:
-//   trial_pack:    1
+//   free:    1
 //   solo_manual:   10
 //   team_manual:   50
 //   agency_manual: 200
@@ -25,7 +25,7 @@ interface TierProfileCap {
 }
 
 const PROFILE_CAPS: TierProfileCap[] = [
-  { tier: 'trial_pack', expected: 1 },
+  { tier: 'free', expected: 1 },
   { tier: 'solo_manual', expected: 10 },
   { tier: 'team_manual', expected: 50 },
   { tier: 'agency_manual', expected: 200 },

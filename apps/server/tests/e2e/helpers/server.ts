@@ -378,7 +378,6 @@ export async function startTestServer(): Promise<TestServer> {
       api_builder: { monthly: 'price_api_builder_monthly', annual: 'price_api_builder_annual' },
       api_scale: { monthly: 'price_api_scale_monthly', annual: 'price_api_scale_annual' },
     },
-    trialPackPriceId: 'price_trial_pack_one_time',
     defaultSuccessUrl: 'http://localhost:5173/billing/success',
     defaultCancelUrl: 'http://localhost:5173/billing/cancel',
     portalReturnUrl: 'http://localhost:5173/billing',

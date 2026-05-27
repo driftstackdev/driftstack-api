@@ -39,11 +39,12 @@ function read(p: string): string {
 describe('W433.C packages/api-types/src/billing.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-082 framing pinned + 4 endpoints listed (POST checkout-session/trial-pack/portal-session + GET subscription)', () => {
+  it('V-082 framing pinned + 3 endpoints listed (POST checkout-session/portal-session + GET subscription) + trial_pack retirement note', () => {
     expect(body).toMatch(/\/\/ Billing flow schemas \(V-082\)\./);
     expect(body).toMatch(
-      /\/\/ Endpoints exposed under \/v1\/billing\/\*:\s*\n?\s*\/\/\s*- POST \/v1\/billing\/checkout-session\s+\(start a paid-tier subscription\)\s*\n?\s*\/\/\s*- POST \/v1\/billing\/trial-pack\s+\(start the \$2\.99 trial pack\)\s*\n?\s*\/\/\s*- POST \/v1\/billing\/portal-session\s+\(open Stripe Customer Portal\)\s*\n?\s*\/\/\s*- GET\s+\/v1\/billing\/subscription\s+\(current subscription state\)/,
+      /\/\/ Endpoints exposed under \/v1\/billing\/\*:\s*\n?\s*\/\/\s*- POST \/v1\/billing\/checkout-session\s+\(start a paid-tier subscription\)\s*\n?\s*\/\/\s*- POST \/v1\/billing\/portal-session\s+\(open Stripe Customer Portal\)\s*\n?\s*\/\/\s*- GET\s+\/v1\/billing\/subscription\s+\(current subscription state\)/,
     );
+    expect(body).toMatch(/The one-time \$2\.99 trial_pack was retired 2026-05-27 in favour of a/);
   });
 
   it('BillingProvider seam rationale pinned: scaffolding-time Stripe calls gated behind interface; in-memory deterministic test provider returns checkout URLs / customer IDs', () => {
@@ -62,12 +63,12 @@ describe('W433.C packages/api-types/src/billing.ts content parity', () => {
     expect(body).toMatch(/export type BillingPeriod = z\.infer<typeof BillingPeriodSchema>;/);
   });
 
-  it('CreateCheckoutSessionRequest: tier refine REJECTS trial_pack + enterprise (self-serve paid tier only); billing_period + optional success/cancel URLs with {CHECKOUT_SESSION_ID} server-side substitution comment', () => {
+  it('CreateCheckoutSessionRequest: tier refine REJECTS free + enterprise (self-serve paid tier only); billing_period + optional success/cancel URLs with {CHECKOUT_SESSION_ID} server-side substitution comment', () => {
     expect(body).toMatch(
-      /\/\*\* Target tier\. Must be a paid tier \(not 'trial_pack' or 'enterprise'\)\. \*\//,
+      /\/\*\* Target tier\. Must be a self-serve paid tier \(not 'free' or 'enterprise'\)\. \*\//,
     );
     expect(body).toMatch(
-      /tier: AccountTierSchema\.refine\(\s*\n?\s*\(t\) => t !== 'trial_pack' && t !== 'enterprise',\s*\n?\s*'tier must be a self-serve paid tier \(trial_pack and enterprise excluded\)',\s*\n?\s*\),/,
+      /tier: AccountTierSchema\.refine\(\s*\n?\s*\(t\) => t !== 'free' && t !== 'enterprise',\s*\n?\s*'tier must be a self-serve paid tier \(free and enterprise excluded\)',\s*\n?\s*\),/,
     );
     expect(body).toMatch(/billing_period: BillingPeriodSchema,/);
     expect(body).toMatch(
@@ -80,18 +81,6 @@ describe('W433.C packages/api-types/src/billing.ts content parity', () => {
   it('CreateCheckoutSessionResponse: checkout_url + checkout_session_id (echoed for client-side correlation)', () => {
     expect(body).toMatch(
       /export const CreateCheckoutSessionResponseSchema = z\.object\(\{\s*\n?\s*checkout_url: z\.string\(\)\.url\(\),\s*\n?\s*\/\*\* Stripe checkout session id\. Echoed for client-side correlation\. \*\/\s*\n?\s*checkout_session_id: z\.string\(\),\s*\n?\s*\}\);/,
-    );
-  });
-
-  it('Trial-pack rationale pinned: ADR-003 one-time $2.99 pre-paid credit; same Stripe Checkout flow with different price_id (one-time, not subscription); webhook provisions credit 299c + 14d expiry', () => {
-    expect(body).toMatch(
-      /\/\/ The trial-pack is a one-time \$2\.99 pre-paid credit per ADR-003\. Same\s*\n?\s*\/\/ Stripe Checkout flow, different price id \(a one-time payment, not a\s*\n?\s*\/\/ subscription\)\. On success the webhook router records the purchase\s*\n?\s*\/\/ and provisions trial_pack_credit_cents = 299, expires_at = \+14 days\./,
-    );
-    expect(body).toMatch(
-      /export const StartTrialPackRequestSchema = z\.object\(\{\s*\n?\s*success_url: z\.string\(\)\.url\(\)\.optional\(\),\s*\n?\s*cancel_url: z\.string\(\)\.url\(\)\.optional\(\),\s*\n?\s*\}\);/,
-    );
-    expect(body).toMatch(
-      /export const StartTrialPackResponseSchema = z\.object\(\{\s*\n?\s*checkout_url: z\.string\(\)\.url\(\),\s*\n?\s*checkout_session_id: z\.string\(\),\s*\n?\s*\}\);/,
     );
   });
 
@@ -113,15 +102,9 @@ describe('W433.C packages/api-types/src/billing.ts content parity', () => {
     );
   });
 
-  it('TrialPackState: active + credit_cents_remaining nullable int + expires_at nullable + redeemed; "True when the account holds an unredeemed trial-pack credit" comment', () => {
+  it('GetBillingStateResponse: subscription nullable only (trial_pack state removed)', () => {
     expect(body).toMatch(
-      /export const TrialPackStateSchema = z\.object\(\{\s*\n?\s*\/\*\* True when the account holds an unredeemed trial-pack credit\. \*\/\s*\n?\s*active: z\.boolean\(\),\s*\n?\s*credit_cents_remaining: z\.number\(\)\.int\(\)\.nullable\(\),\s*\n?\s*expires_at: Iso8601Schema\.nullable\(\),\s*\n?\s*redeemed: z\.boolean\(\),\s*\n?\s*\}\);/,
-    );
-  });
-
-  it('GetBillingStateResponse: subscription nullable (no paid sub yet) + trial_pack (always present)', () => {
-    expect(body).toMatch(
-      /export const GetBillingStateResponseSchema = z\.object\(\{\s*\n?\s*subscription: SubscriptionSchema\.nullable\(\),\s*\n?\s*trial_pack: TrialPackStateSchema,\s*\n?\s*\}\);/,
+      /export const GetBillingStateResponseSchema = z\.object\(\{\s*\n?\s*subscription: SubscriptionSchema\.nullable\(\),\s*\n?\s*\}\);/,
     );
   });
 

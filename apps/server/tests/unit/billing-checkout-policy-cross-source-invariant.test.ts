@@ -38,7 +38,7 @@ function read(p: string): string {
 }
 
 const BILLING_PERIODS = ['monthly', 'annual'] as const;
-const EXCLUDED_TIERS = ['trial_pack', 'enterprise'] as const;
+const EXCLUDED_TIERS = ['free', 'enterprise'] as const;
 
 describe('W877 Billing checkout policy cross-source invariant', () => {
   // ─── BillingPeriodSchema 2-value enum ────────────────────────
@@ -51,13 +51,11 @@ describe('W877 Billing checkout policy cross-source invariant', () => {
 
   // ─── CreateCheckoutSessionRequest tier refine ─────────────────
 
-  it("CRITICAL CreateCheckoutSessionRequest tier field uses AccountTierSchema.refine((t) => t !== 'trial_pack' && t !== 'enterprise', ...) with 'tier must be a self-serve paid tier (trial_pack and enterprise excluded)' message. The 2-tier exclusion is the gate for the self-serve checkout endpoint.", () => {
+  it("CRITICAL CreateCheckoutSessionRequest tier field uses AccountTierSchema.refine((t) => t !== 'free' && t !== 'enterprise', ...) with 'tier must be a self-serve paid tier (free and enterprise excluded)' message. The 2-tier exclusion is the gate for the self-serve checkout endpoint.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/billing.ts'));
     expect(p).toMatch(/tier: AccountTierSchema\.refine\(/);
-    expect(p).toMatch(/\(t\) => t !== 'trial_pack' && t !== 'enterprise',/);
-    expect(p).toMatch(
-      /'tier must be a self-serve paid tier \(trial_pack and enterprise excluded\)',/,
-    );
+    expect(p).toMatch(/\(t\) => t !== 'free' && t !== 'enterprise',/);
+    expect(p).toMatch(/'tier must be a self-serve paid tier \(free and enterprise excluded\)',/);
   });
 
   it('CRITICAL CreateCheckoutSessionRequest billing_period field uses BillingPeriodSchema (typed enum, not loose string). Drift to z.string() would let the server hit Stripe with an invalid billing_period.', () => {
@@ -74,10 +72,9 @@ describe('W877 Billing checkout policy cross-source invariant', () => {
 
   // ─── 4-endpoint inventory ────────────────────────────────────
 
-  it('CRITICAL packages/api-types/src/billing.ts header pins the 4-endpoint /v1/billing/* inventory — checkout-session + trial-pack + portal-session + subscription. The 4-endpoint roster is what V-082 locks in.', () => {
+  it('CRITICAL packages/api-types/src/billing.ts header pins the 3-endpoint /v1/billing/* inventory — checkout-session + portal-session + subscription (trial-pack retired 2026-05-27). The roster is what V-082 locks in.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/billing.ts'));
     expect(p).toMatch(/POST \/v1\/billing\/checkout-session/);
-    expect(p).toMatch(/POST \/v1\/billing\/trial-pack/);
     expect(p).toMatch(/POST \/v1\/billing\/portal-session/);
     expect(p).toMatch(/GET\s+\/v1\/billing\/subscription/);
   });
@@ -123,9 +120,9 @@ describe('W877 Billing checkout policy cross-source invariant', () => {
     expect(BILLING_PERIODS).toEqual(['monthly', 'annual']);
   });
 
-  it('CRITICAL CreateCheckoutSession excludes EXACTLY 2 tiers from self-serve (trial_pack + enterprise). The 2-tier exclusion encodes ADR-003 (trial_pack uses dedicated endpoint) + ADR-004 (enterprise is sales-negotiated).', () => {
+  it('CRITICAL CreateCheckoutSession excludes EXACTLY 2 tiers from self-serve (free + enterprise). The 2-tier exclusion encodes the perpetual free tier (not purchasable) + ADR-004 (enterprise is sales-negotiated).', () => {
     expect(EXCLUDED_TIERS.length).toBe(2);
-    expect(EXCLUDED_TIERS).toEqual(['trial_pack', 'enterprise']);
+    expect(EXCLUDED_TIERS).toEqual(['free', 'enterprise']);
   });
 
   it('test file metadata — file exists at canonical path', () => {

@@ -35,7 +35,7 @@
 //
 //   AuthFlowsServiceConfig (5 fields): verifyEmailUrl + magicLinkUrl
 //     + passwordResetUrl + exposeDebugToken (dev/test seam) +
-//     initialTier? (default 'trial_pack').
+//     initialTier? (default 'free').
 //
 //   exposeDebugToken framing — 'wired in dev / test builds where
 //     there is no real Postmark deliverability path, so tests can
@@ -165,7 +165,7 @@ describe('W941 V-079 auth-flows cross-source invariant', () => {
 
   // ─── AuthFlowsServiceConfig 5-field shape ────────────────────
 
-  it("CRITICAL AuthFlowsServiceConfig has 5 fields — verifyEmailUrl + magicLinkUrl + passwordResetUrl + exposeDebugToken + initialTier? (default 'trial_pack'). The 3 URL fields + dev-test exposeDebugToken seam + initialTier default is the boot-time wiring.", () => {
+  it("CRITICAL AuthFlowsServiceConfig has 5 fields — verifyEmailUrl + magicLinkUrl + passwordResetUrl + exposeDebugToken + initialTier? (default 'free'). The 3 URL fields + dev-test exposeDebugToken seam + initialTier default is the boot-time wiring.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-flows.ts'));
     expect(p).toMatch(/export interface AuthFlowsServiceConfig \{/);
     expect(p).toMatch(/Base URL the verify-email link points at \(no trailing slash\)/);
@@ -175,7 +175,7 @@ describe('W941 V-079 auth-flows cross-source invariant', () => {
     expect(p).toMatch(/Base URL the password-reset link points at/);
     expect(p).toMatch(/passwordResetUrl: string;/);
     expect(p).toMatch(/exposeDebugToken: boolean;/);
-    expect(p).toMatch(/Tier assigned to newly-created accounts\. Default 'trial_pack'/);
+    expect(p).toMatch(/Tier assigned to newly-created accounts\. Default 'free'/);
     expect(p).toMatch(/initialTier\?: AccountTier;/);
   });
 

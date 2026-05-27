@@ -29,8 +29,8 @@ describe('marketing-site data/pricing content parity', () => {
     expect(body).toMatch(/Both layers must agree on tier ids \+ concurrent caps \+ profile/);
   });
 
-  it("TierType discriminator pinned: 'trial' | 'manual' | 'api'. Drift to dropping any would break the two-ladder pricing-page section grouping", () => {
-    expect(body).toMatch(/export type TierType = 'trial' \| 'manual' \| 'api';/);
+  it("TierType discriminator pinned: 'free' | 'manual' | 'api' (trial→free 2026-05-27). Drift to dropping any would break the two-ladder pricing-page section grouping", () => {
+    expect(body).toMatch(/export type TierType = 'free' \| 'manual' \| 'api';/);
   });
 
   it('LlmBilling discriminator pinned: byok_only | byok_or_bundled | byok_or_bundled_custom | null. Drift to dropping a variant would break the agent-LLM tier-gating UI on /pricing', () => {
@@ -39,12 +39,12 @@ describe('marketing-site data/pricing content parity', () => {
     );
   });
 
-  it('trial_pack pricing pinned: $2.99 one-time + 1 profile + 1 concurrent + community-support + Evaluation audience. Drift to a different trial price would break the /pricing#trial-pack CTA referenced from EVERY ladder tier', () => {
-    expect(body).toMatch(/id: 'trial_pack',/);
-    expect(body).toMatch(/monthlyUsd: 2\.99,/);
-    expect(body).toMatch(/oneTime: true,/);
+  it('free-tier pricing pinned: $0 + perpetual + 1 profile + 1 concurrent + community-support + Evaluation audience (trial_pack retired 2026-05-27)', () => {
+    expect(body).toMatch(/id: 'free',/);
+    expect(body).toMatch(/monthlyUsd: 0,/);
+    expect(body).toMatch(/oneTime: false,/);
     expect(body).toMatch(/profiles: 1,/);
-    expect(body).toMatch(/hoursLabel: '~16 hrs at \$0\.18\/hr',/);
+    expect(body).toMatch(/hoursLabel: 'Unlimited manual sessions',/);
   });
 
   it('Manual-ladder 3-tier price points pinned: $79 / $249 / $699 (Solo / Team / Agency). Drift would break ALL three pricing-page rows AND the changelog 2026-05-03 two-ladder-pricing entry', () => {

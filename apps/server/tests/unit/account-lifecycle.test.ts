@@ -190,7 +190,7 @@ describe('AccountLifecycleService — subscription.tier_changed (V-202b)', () =>
     const { service, audit, email } = build();
     await service.emit('acc_test', {
       kind: 'subscription.tier_changed',
-      fromTier: 'trial_pack',
+      fromTier: 'free',
       toTier: 'api_builder',
       effectiveAt: new Date('2026-05-05T12:00:00Z'),
       stripeEventType: 'customer.subscription.created',
@@ -203,7 +203,7 @@ describe('AccountLifecycleService — subscription.tier_changed (V-202b)', () =>
         actorType: 'system',
         action: 'subscription.tier_changed',
         payload: {
-          from: 'trial_pack',
+          from: 'free',
           to: 'api_builder',
           stripe_event_type: 'customer.subscription.created',
           stripe_event_id: 'evt_xyz',
@@ -213,7 +213,7 @@ describe('AccountLifecycleService — subscription.tier_changed (V-202b)', () =>
     expect(email.sendTierChanged).toHaveBeenCalledTimes(1);
     expect(email.sendTierChanged).toHaveBeenCalledWith({
       to: 'first-failure@driftstack.local',
-      fromTier: 'trial_pack',
+      fromTier: 'free',
       toTier: 'api_builder',
       effectiveAt: new Date('2026-05-05T12:00:00Z'),
       portalUrl: 'https://example.test/billing',
@@ -238,7 +238,7 @@ describe('AccountLifecycleService — subscription.tier_changed (V-202b)', () =>
     const { service, audit, email } = build({ shouldSend: false });
     await service.emit('acc_test', {
       kind: 'subscription.tier_changed',
-      fromTier: 'trial_pack',
+      fromTier: 'free',
       toTier: 'api_starter',
       effectiveAt: new Date(),
       stripeEventType: 'customer.subscription.updated',
@@ -253,7 +253,7 @@ describe('AccountLifecycleService — subscription.tier_changed (V-202b)', () =>
     audit.record.mockRejectedValueOnce(new Error('db down'));
     await service.emit('acc_test', {
       kind: 'subscription.tier_changed',
-      fromTier: 'trial_pack',
+      fromTier: 'free',
       toTier: 'api_builder',
       effectiveAt: new Date(),
       stripeEventType: 'customer.subscription.created',

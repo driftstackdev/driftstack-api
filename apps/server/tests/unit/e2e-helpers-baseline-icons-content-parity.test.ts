@@ -62,7 +62,7 @@ describe('W625 e2e helpers + baseline.ci + icons README content parity', () => {
     expect(body).toMatch(
       /email: input\.email \?\? `seed-\$\{Math\.random\(\)\.toString\(36\)\.slice\(2, 10\)\}@driftstack\.test`,/,
     );
-    expect(body).toMatch(/const env = tier === 'trial_pack' \? 'test' : 'live';/);
+    expect(body).toMatch(/const env = tier === 'free' \? 'test' : 'live';/);
     expect(body).toMatch(/const plaintext = generateApiKey\(env\);/);
     expect(body).toMatch(/scopes: input\.scopes \?\? \['read', 'write', 'admin'\],/);
     expect(body).toMatch(/\/\/ V-049 gate — pre-accept all legal docs unless the test opts out\./);
@@ -167,7 +167,6 @@ describe('W625 e2e helpers + baseline.ci + icons README content parity', () => {
     expect(body).toMatch(
       /api_scale: \{ monthly: 'price_api_scale_monthly', annual: 'price_api_scale_annual' \},/,
     );
-    expect(body).toMatch(/trialPackPriceId: 'price_trial_pack_one_time',/);
     expect(body).toMatch(/permissiveCors: true,/);
     expect(body).toMatch(/await app\.listen\(\{ host: '127\.0\.0\.1', port: 0 \}\);/);
     expect(body).toMatch(/throw new Error\('listening on a unix socket\?'\);/);

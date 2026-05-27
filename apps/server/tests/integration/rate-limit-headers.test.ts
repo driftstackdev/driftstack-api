@@ -88,12 +88,12 @@ describe('W199/W200 rate-limit response headers', () => {
   // v2-#23 — pin the 429 path. SDKs (TS / Python / Go) consume
   // `Retry-After` to schedule the next attempt; without the header, the
   // SDK's RateLimitError back-off falls back to a body-side hint or a
-  // hard-coded 1s default. We drain the trial_pack `sessions:create`
+  // hard-coded 1s default. We drain the free `sessions:create`
   // bucket (capacity 5; cost 1 per call) by firing 6 POST /v1/sessions
   // calls and assert the 6th returns 429 with the full header set.
   it('v2-#23 429 path: retry-after + x-ratelimit-* headers MUST be present so SDK backoff has a stable contract', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
-    const expectedCapacity = TIER_RATE_LIMIT_DEFAULTS.trial_pack['sessions:create'].capacity;
+    fx = await buildTestApp({ tier: 'free' });
+    const expectedCapacity = TIER_RATE_LIMIT_DEFAULTS.free['sessions:create'].capacity;
 
     // Burn capacity. Bucket fires from the FIRST request, so capacity
     // successful POSTs leaves the bucket empty; the next is 429.

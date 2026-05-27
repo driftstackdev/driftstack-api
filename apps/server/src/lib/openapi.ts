@@ -73,8 +73,6 @@ import {
   RefreshSessionResponseSchema,
   SignupRequestSchema,
   SignupResponseSchema,
-  StartTrialPackRequestSchema,
-  StartTrialPackResponseSchema,
   UpdateAccountMeRequestSchema,
   UploadAvatarRequestSchema,
   VerifyEmailRequestSchema,
@@ -2326,23 +2324,6 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Checkout URL + session id; redirect the customer to checkout_url.',
         content: { 'application/json': { schema: CreateCheckoutSessionResponseSchema } },
-      },
-      ...errors4xx,
-    },
-  });
-  registerRoute(r, {
-    method: 'post',
-    path: '/v1/billing/trial-pack',
-    summary: 'Start a Stripe Checkout session for the one-time $2.99 trial pack',
-    tags: ['billing'],
-    security: auth,
-    request: {
-      body: { content: { 'application/json': { schema: StartTrialPackRequestSchema } } },
-    },
-    responses: {
-      200: {
-        description: 'Checkout URL + session id.',
-        content: { 'application/json': { schema: StartTrialPackResponseSchema } },
       },
       ...errors4xx,
     },

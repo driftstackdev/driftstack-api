@@ -9,7 +9,6 @@ import {
   type AccountTier,
   type Profile,
   type Subscription,
-  type TrialPackState,
 } from '@driftstack/api-types';
 
 export interface MockAccount {
@@ -39,13 +38,6 @@ export const MOCK_SUBSCRIPTION: Subscription | null = {
   canceled_at: null,
   created_at: '2026-04-15T09:00:00Z',
   updated_at: '2026-04-15T09:00:00Z',
-};
-
-export const MOCK_TRIAL_PACK_STATE: TrialPackState = {
-  active: false,
-  credit_cents_remaining: null,
-  expires_at: null,
-  redeemed: true,
 };
 
 export const MOCK_PROFILES: Profile[] = [

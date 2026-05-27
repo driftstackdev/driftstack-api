@@ -20,7 +20,7 @@ import {
 // ───────────────────────────────────────────────────────────────────────────
 
 export const accountTier = pgEnum('account_tier', [
-  'trial_pack',
+  'free',
   'solo_manual',
   'team_manual',
   'agency_manual',
@@ -209,22 +209,12 @@ export const accounts = pgTable(
     // consuming a single-use email_verify_token. Auth gates that require
     // a verified email check `email_verified_at IS NOT NULL`.
     emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
-    tier: accountTier('tier').notNull().default('trial_pack'),
+    tier: accountTier('tier').notNull().default('free'),
     status: accountStatus('status').notNull().default('active'),
     // V-082 / Workstream D — Stripe customer link. Set at first
     // checkout-session create; remains pinned across tier changes
     // (Stripe customer ID is stable for the lifetime of the account).
     stripeCustomerId: text('stripe_customer_id'),
-    // V-082 / ADR-003 — trial-pack mechanics. Set at trial-pack
-    // purchase (Checkout success). $0.18/hr decrement debits this
-    // counter; 14-day window from `trial_pack_purchased_at`.
-    // `trial_pack_redeemed` flips true when this account exits
-    // trial state via either subscription start OR credit
-    // exhaustion OR window expiry.
-    trialPackPurchasedAt: timestamp('trial_pack_purchased_at', { withTimezone: true }),
-    trialPackCreditCents: integer('trial_pack_credit_cents'),
-    trialPackExpiresAt: timestamp('trial_pack_expires_at', { withTimezone: true }),
-    trialPackRedeemed: boolean('trial_pack_redeemed').notNull().default(false),
     // V-202c — set to the wall clock when we send `session-failed-first`
     // to this account. Null until the first session.failed ever; one-shot
     // by design (subsequent failures don't email).

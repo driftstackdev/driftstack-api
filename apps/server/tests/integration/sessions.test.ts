@@ -66,7 +66,7 @@ describe('POST /v1/sessions', () => {
   });
 
   it('429 ConcurrencyLimit when free-tier already at limit', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
+    fx = await buildTestApp({ tier: 'free' });
     await createSession(fx); // free tier limit = 1
 
     const res = await fx.app.inject({

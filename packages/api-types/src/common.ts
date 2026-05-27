@@ -71,8 +71,9 @@ export type SessionId = z.infer<typeof SessionIdSchema>;
 // recreates the Postgres enum and re-maps any existing test data
 // from old tier names to new equivalents).
 //
-// Trial (one-time):
-//   - trial_pack    $2.99  — 14-day window, 1 concurrent, 299¢ at $0.18/hr ≈ 16 hrs (ADR-003)
+// Free (perpetual default — no billing, resolves findings #6/#10 by
+// removing the one-time trial_pack entirely per founder verdict 2026-05-27):
+//   - free          $0  — 1 profile, manual-only (no API), 1 concurrent, no AI agent, no expiry
 //
 // Manual ladder (humans clicking GUI client; profile count tier-defining):
 //   - solo_manual    $79/mo   ($758/yr = $63/mo)    — 10 profiles  / 1 concurrent / unlimited hours
@@ -86,12 +87,11 @@ export type SessionId = z.infer<typeof SessionIdSchema>;
 //   - enterprise     from $4,000/mo annual only — custom profiles + concurrent, negotiated
 //
 // Annual is 20% off across all tiers. Concurrent caps are the
-// only metering primitive on paid tiers; hours metering exists
-// ONLY for the trial pack (per ADR-003 trial_pack_credit_cents
-// decrement). Profile count is enforced at the /v1/profiles
-// creation gate (V-073 lands the constant + scaffolding).
+// only metering primitive on paid tiers; the free tier has no
+// usage metering at all (no credit, no hours cap, no expiry).
+// Profile count is enforced at the /v1/profiles creation gate.
 export const AccountTierSchema = z.enum([
-  'trial_pack',
+  'free',
   'solo_manual',
   'team_manual',
   'agency_manual',
@@ -115,7 +115,7 @@ export type AccountTier = z.infer<typeof AccountTierSchema>;
  * `/v1/profiles` creation gate reads from this constant.
  */
 export const PROFILES_PER_TIER: Record<AccountTier, number | 'custom'> = {
-  trial_pack: 1,
+  free: 1,
   solo_manual: 10,
   team_manual: 50,
   agency_manual: 200,
@@ -143,7 +143,7 @@ export const PROFILES_PER_TIER: Record<AccountTier, number | 'custom'> = {
  * can import directly.
  */
 export const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = {
-  trial_pack: 1,
+  free: 1,
   solo_manual: 1,
   team_manual: 3,
   agency_manual: 8,
@@ -190,7 +190,7 @@ export const TIER_RATE_LIMIT_DEFAULTS: Record<
     BucketLimitConfig
   >
 > = {
-  trial_pack: {
+  free: {
     global: { capacity: 60, refill_per_second: 1 },
     'sessions:create': { capacity: 5, refill_per_second: 1 / 60 },
     // v2-#13 — per-turn AI chat throttle. Chat is naturally bursty
@@ -201,8 +201,8 @@ export const TIER_RATE_LIMIT_DEFAULTS: Record<
     // Slice 4 (Wave 29-NNN ARC 3) — ManualControlOverlay raw screen-
     // coord stream from the customer dashboard. Client-side 120Hz
     // cap; server-side burst of ~2 seconds of un-throttled mousemove
-    // + sustained 60Hz refill. Trial tier gets a deliberately tight
-    // budget — trial customers shouldn't be running pair-mode
+    // + sustained 60Hz refill. Free tier gets a deliberately tight
+    // budget — free accounts shouldn't be running pair-mode
     // sessions at scale.
     'agent_sessions:input_event': { capacity: 240, refill_per_second: 60 },
   },
@@ -254,7 +254,7 @@ export const TIER_RATE_LIMIT_DEFAULTS: Record<
  * V-485 — per-tier feature gating registry.
  *
  * Single source of truth for "which capabilities does this tier
- * unlock?" Today the server checks `tier === 'trial_pack'` /
+ * unlock?" Today the server checks `tier === 'free'` /
  * `PROFILES_PER_TIER[tier]` / `TIER_CONCURRENT_SESSION_LIMITS[tier]`
  * in scattered call sites; this registry is the central place for
  * those plus the AI-agent + LLM-billing gates that ship with V-487+.
@@ -282,29 +282,37 @@ export interface TierFeatures {
   concurrentSessions: number;
   /** Profile-count cap. `'custom'` for Enterprise (negotiated). */
   profiles: number | 'custom';
-  /** Stripe environment for API-key minting (test on trial_pack, live elsewhere). */
+  /** Stripe environment for API-key minting (test on free, live elsewhere). */
   apiKeyEnvironment: 'test' | 'live';
+  /**
+   * Programmatic API / SDK access. `false` on the free tier — it is
+   * manual-only (GUI client): cannot mint usable API keys or call the
+   * REST API. All paid tiers are `true`.
+   */
+  apiAccess: boolean;
   /** AI-agent (LLM-driven sessions) feature available on this tier. */
   aiAgent: boolean;
   /** LLM billing model when aiAgent is true; `null` when off. */
   llmBilling: LlmBilling;
-  /** True for the trial_pack tier — distinguishes one-time from subscription. */
+  /** Vestigial; always false (the perpetual free tier replaced the one-time trial_pack). TODO(6.b): remove with the trial billing logic. */
   trialPack: boolean;
 }
 
 export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
-  trial_pack: {
+  free: {
     concurrentSessions: 1,
     profiles: 1,
     apiKeyEnvironment: 'test',
+    apiAccess: false,
     aiAgent: false,
     llmBilling: null,
-    trialPack: true,
+    trialPack: false,
   },
   solo_manual: {
     concurrentSessions: 1,
     profiles: 10,
     apiKeyEnvironment: 'live',
+    apiAccess: true,
     aiAgent: false,
     llmBilling: null,
     trialPack: false,
@@ -313,6 +321,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     concurrentSessions: 3,
     profiles: 50,
     apiKeyEnvironment: 'live',
+    apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_only',
     trialPack: false,
@@ -321,6 +330,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     concurrentSessions: 8,
     profiles: 200,
     apiKeyEnvironment: 'live',
+    apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_only',
     trialPack: false,
@@ -329,6 +339,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     concurrentSessions: 2,
     profiles: 25,
     apiKeyEnvironment: 'live',
+    apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_only',
     trialPack: false,
@@ -337,6 +348,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     concurrentSessions: 8,
     profiles: 100,
     apiKeyEnvironment: 'live',
+    apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
     trialPack: false,
@@ -345,6 +357,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     concurrentSessions: 24,
     profiles: 500,
     apiKeyEnvironment: 'live',
+    apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
     trialPack: false,
@@ -353,6 +366,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     concurrentSessions: 32,
     profiles: 'custom',
     apiKeyEnvironment: 'live',
+    apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_or_bundled_custom',
     trialPack: false,

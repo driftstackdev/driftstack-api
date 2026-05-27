@@ -444,22 +444,16 @@ export async function createProductionDeps(
     accountAuditService, // V-202b — required for tier_changed audit emit
   );
 
-  // V-202d — generic scheduled-jobs dispatcher. Currently registers
-  // one handler (`trial_pack.expired`) that delegates to the lifecycle
-  // service. Future cron-shaped jobs reuse this service with new
-  // `register(jobType, handler)` calls.
+  // V-202d — generic scheduled-jobs dispatcher. The trial_pack.expired
+  // handler was removed 2026-05-27 with the trial_pack retirement; the
+  // dispatcher remains for the other registered cron-shaped jobs
+  // (auth_tokens.sweep, cost.recompute_nightly) via `register(...)`.
   // workerId composition: `<process-pid>@<host>` is sufficient here —
   // production runs single-replica today; multi-replica safety still
   // works because the SELECT FOR UPDATE SKIP LOCKED query in the repo
   // is what guarantees mutual exclusion, not the workerId.
   const scheduledJobsService = new ScheduledJobsService(scheduledJobsRepo, logger, {
     workerId: `pid-${process.pid.toString()}`,
-  });
-  scheduledJobsService.register('trial_pack.expired', async (job) => {
-    if (job.accountId === null) return; // mis-enqueued; skip
-    await accountLifecycleService.emit(job.accountId, {
-      kind: 'subscription.trial_pack_expired',
-    });
   });
 
   // Webhooks first so sessions + api-keys can wire it.
@@ -863,7 +857,6 @@ export async function createProductionDeps(
       priceToTier,
     },
     accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
-    scheduledJobsService, // V-202d — enqueues trial_pack.expired job at trial-pack purchase
   );
 
   // V-081: Profiles service.
@@ -892,15 +885,11 @@ export async function createProductionDeps(
   // V-082 + V-088: Billing service. Activates only when all three of
   // STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS + STRIPE_TRIAL_PACK_PRICE_ID
   // are configured (the StripeBillingProvider needs the secret key
-  // for API calls; tier + trial-pack price ids are needed to map
-  // tier → Stripe Checkout price). When any is missing, billingService
-  // is undefined and routes simply don't register.
+  // for API calls; tier price ids are needed to map tier → Stripe
+  // Checkout price). When any is missing, billingService is undefined
+  // and routes simply don't register.
   let billingService: BillingService | undefined;
-  if (
-    config.stripe?.secretKey !== undefined &&
-    config.stripe.tierPrices !== undefined &&
-    config.stripe.trialPackPriceId !== undefined
-  ) {
+  if (config.stripe?.secretKey !== undefined && config.stripe.tierPrices !== undefined) {
     const stripeApi = new StripeApiClient({
       secretKey: config.stripe.secretKey,
       ...(config.stripe.apiVersion !== undefined ? { apiVersion: config.stripe.apiVersion } : {}),
@@ -910,7 +899,6 @@ export async function createProductionDeps(
     const billingRepo = new DrizzleBillingRepo(dbHandle);
     billingService = new BillingService(billingRepo, billingProvider, {
       tierPrices: config.stripe.tierPrices,
-      trialPackPriceId: config.stripe.trialPackPriceId,
       // V-057.E — derived from DASHBOARD_ORIGIN-driven config
       // instead of a per-env literal, same pattern as the email
       // URLs above. Explicit STRIPE_*_URL env vars still win.
@@ -922,7 +910,7 @@ export async function createProductionDeps(
   } else {
     logger.warn(
       { component: 'billing' },
-      'BillingService NOT wired (STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS + STRIPE_TRIAL_PACK_PRICE_ID required); /v1/billing/* routes will not register',
+      'BillingService NOT wired (STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS required); /v1/billing/* routes will not register',
     );
   }
 
@@ -1317,7 +1305,7 @@ export async function createProductionDeps(
                     passwordHash: '', // sentinel — column is nullable,
                     // route layer treats empty hash as "no password set";
                     // user adds a password via /account/security later.
-                    initialTier: 'trial_pack',
+                    initialTier: 'free',
                   });
                   await authFlowsRepo.markEmailVerified(row.id, new Date());
                   return row.id;

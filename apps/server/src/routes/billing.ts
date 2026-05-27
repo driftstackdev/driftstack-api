@@ -1,19 +1,15 @@
 // Billing routes (V-082).
 //
 //   POST /v1/billing/checkout-session   — start a paid-tier subscription
-//   POST /v1/billing/trial-pack         — start the $2.99 trial pack
 //   POST /v1/billing/portal-session     — open Stripe Customer Portal (JSON {portal_url})
-//   GET  /v1/billing                    — current subscription + trial state
+//   GET  /v1/billing                    — current subscription state
 //   GET  /v1/account/me/billing-portal  — v2-#26 dashboard-friendly 302 redirect
 //
-// All auth-gated. Trial-pack endpoint is also self-serve from the
-// onboarding flow (Workstream F) before tier selection.
+// All auth-gated. The one-time trial_pack checkout was retired 2026-05-27
+// in favour of the perpetual free tier (new accounts default to 'free').
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import {
-  CreateCheckoutSessionRequestSchema,
-  StartTrialPackRequestSchema,
-} from '@driftstack/api-types';
+import { CreateCheckoutSessionRequestSchema } from '@driftstack/api-types';
 import type { BillingService, SubscriptionMirror } from '../services/billing.js';
 import { BadRequestError, FeatureUnavailableError, ValidationError } from '../lib/errors.js';
 
@@ -115,35 +111,6 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
   );
 
   app.post(
-    '/v1/billing/trial-pack',
-    { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
-    async (req) => {
-      const ctx = requireCtx(req);
-      const parsed = StartTrialPackRequestSchema.safeParse(req.body ?? {});
-      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
-
-      // V-248 — same allowlist gate as checkout-session.
-      const successUrl =
-        parsed.data.success_url !== undefined
-          ? validateReturnUrl(parsed.data.success_url, 'success_url')
-          : undefined;
-      const cancelUrl =
-        parsed.data.cancel_url !== undefined
-          ? validateReturnUrl(parsed.data.cancel_url, 'cancel_url')
-          : undefined;
-      const result = await service.startTrialPack({
-        accountId: ctx.account.id,
-        ...(successUrl !== undefined ? { successUrl } : {}),
-        ...(cancelUrl !== undefined ? { cancelUrl } : {}),
-      });
-      return {
-        checkout_url: result.url,
-        checkout_session_id: result.sessionId,
-      };
-    },
-  );
-
-  app.post(
     '/v1/billing/portal-session',
     { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req) => {
@@ -178,12 +145,6 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
       const state = await service.getBillingState(ctx.account.id);
       return {
         subscription: state.subscription !== null ? publicSubscription(state.subscription) : null,
-        trial_pack: {
-          active: state.trialPack.active,
-          credit_cents_remaining: state.trialPack.creditCentsRemaining,
-          expires_at: state.trialPack.expiresAt ? state.trialPack.expiresAt.toISOString() : null,
-          redeemed: state.trialPack.redeemed,
-        },
       };
     },
   );

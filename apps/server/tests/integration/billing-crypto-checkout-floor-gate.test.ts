@@ -39,22 +39,12 @@ describe('crypto checkout NowPayments floor gate (V-666.SEC)', () => {
     if (fx) await fx.cleanup();
   });
 
-  it('below-floor product (trial_pack, $2.99) → stays stub, NowPayments NOT called even when wired', async () => {
-    const { client, createPayment } = mockNowpayments();
-    fx = await buildTestApp({ nowpaymentsClient: client });
-    const res = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/billing/crypto-checkout',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { product: 'trial_pack', price_cents: 299, price_currency: 'USD' },
-    });
-    expect(res.statusCode).toBe(201);
-    const body = res.json<{ provider: string; payment_address: string | null }>();
-    expect(body.provider).toBe('stub');
-    expect(body.payment_address).toBeNull();
-    expect(createPayment).not.toHaveBeenCalled();
-  });
-
+  // 2026-05-27 — the below-floor branch is no longer reachable via the
+  // product catalog: trial_pack ($2.99, the only sub-$19.16 product) was
+  // retired and every remaining paid tier is ≥ $79 (above the floor). The
+  // defensive `amount < NOWPAYMENTS_MIN_USD_CENTS` short-circuit stays in
+  // the route but has no product that triggers it, so its dedicated test
+  // was removed. The above-floor path below remains the live behaviour.
   it('above-floor product (solo_manual) → provider nowpayments, createPayment called once', async () => {
     const { client, createPayment } = mockNowpayments();
     fx = await buildTestApp({ nowpaymentsClient: client });

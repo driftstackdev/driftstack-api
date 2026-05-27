@@ -456,6 +456,13 @@
       "when": 1779572400000,
       "tag": "0064_crypto_order_webhook_events",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1779576000000,
+      "tag": "0065_retire_trial_pack_free_tier",
+      "breakpoints": true
     }
   ]
 }

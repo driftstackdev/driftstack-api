@@ -56,30 +56,6 @@ function buildSubscriptionEvent(args: {
   });
 }
 
-function buildCheckoutEvent(args: {
-  eventId: string;
-  mode: 'subscription' | 'payment';
-  stripeCustomerId: string;
-  clientReferenceId?: string | null;
-}): string {
-  return JSON.stringify({
-    id: args.eventId,
-    object: 'event',
-    type: 'checkout.session.completed',
-    api_version: '2024-12-18.acacia',
-    created: nowSec(),
-    livemode: false,
-    data: {
-      object: {
-        id: 'cs_test_xxxxx',
-        mode: args.mode,
-        customer: args.stripeCustomerId,
-        client_reference_id: args.clientReferenceId ?? null,
-      },
-    },
-  });
-}
-
 async function postEvent(fx: TestAppFixture, raw: string): Promise<unknown> {
   const sig = signStripePayload({ rawBody: raw, secret: fx.stripeWebhookSigningSecret });
   const res = await fx.app.inject({
@@ -99,7 +75,7 @@ describe('customer.subscription.created — mirror INSERT + tier upgrade', () =>
   });
 
   it('inserts a subscription mirror row and upgrades account tier on active status', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
+    fx = await buildTestApp({ tier: 'free' });
 
     const raw = buildSubscriptionEvent({
       eventId: 'evt_sub_created_001',
@@ -124,7 +100,7 @@ describe('customer.subscription.created — mirror INSERT + tier upgrade', () =>
   });
 
   it('does not change account tier when status is incomplete (payment hasnt cleared)', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
+    fx = await buildTestApp({ tier: 'free' });
 
     const raw = buildSubscriptionEvent({
       eventId: 'evt_sub_incomplete_001',
@@ -137,7 +113,7 @@ describe('customer.subscription.created — mirror INSERT + tier upgrade', () =>
     await postEvent(fx, raw);
 
     const acct = fx.stripeWebhooksRepo.readAccount(fx.accountId);
-    expect(acct?.tier).toBe('trial_pack'); // unchanged
+    expect(acct?.tier).toBe('free'); // unchanged
     const subs = fx.stripeWebhooksRepo.listSubscriptions();
     expect(subs[0]?.status).toBe('incomplete'); // mirror written
   });
@@ -166,7 +142,7 @@ describe('customer.subscription.updated — UPDATE existing mirror', () => {
   });
 
   it('upserts a row into the same stripe_subscription_id slot', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
+    fx = await buildTestApp({ tier: 'free' });
     const subId = 'sub_upsert_001';
 
     // Create
@@ -214,7 +190,7 @@ describe('customer.subscription.deleted — cancel + downgrade', () => {
     if (fx) await fx.cleanup();
   });
 
-  it('marks the mirror canceled and downgrades account tier to trial_pack', async () => {
+  it('marks the mirror canceled and downgrades account tier to free', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
 
     // Create the subscription first so the mirror exists
@@ -251,81 +227,7 @@ describe('customer.subscription.deleted — cancel + downgrade', () => {
     expect(subs[0]?.canceledAt).toBeInstanceOf(Date);
 
     const acct = fx.stripeWebhooksRepo.readAccount(fx.accountId);
-    expect(acct?.tier).toBe('trial_pack');
-  });
-});
-
-describe('checkout.session.completed — trial-pack provisioning', () => {
-  let fx: TestAppFixture;
-
-  afterEach(async () => {
-    if (fx) await fx.cleanup();
-  });
-
-  it('payment-mode session provisions trial-pack credit + sets expires_at +14 days', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
-
-    const before = Date.now();
-    const raw = buildCheckoutEvent({
-      eventId: 'evt_checkout_payment_001',
-      mode: 'payment',
-      stripeCustomerId: 'cus_test_default',
-      clientReferenceId: fx.accountId,
-    });
-    const result = (await postEvent(fx, raw)) as { statusCode: number; body: { outcome: string } };
-    expect(result.body.outcome).toBe('handled');
-
-    const acct = fx.stripeWebhooksRepo.readAccount(fx.accountId);
-    expect(acct?.trialPackPurchasedAt).toBeInstanceOf(Date);
-    expect(acct?.trialPackCreditCents).toBe(299);
-    expect(acct?.trialPackExpiresAt).toBeInstanceOf(Date);
-    expect(acct?.trialPackRedeemed).toBe(false);
-    const expiresMs = acct!.trialPackExpiresAt!.getTime();
-    const fourteenDays = 14 * 24 * 60 * 60 * 1000;
-    expect(expiresMs).toBeGreaterThanOrEqual(before + fourteenDays - 5_000);
-    expect(expiresMs).toBeLessThanOrEqual(Date.now() + fourteenDays + 5_000);
-  });
-
-  it('subscription-mode session is informational only; no trial-pack mutation', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
-    const raw = buildCheckoutEvent({
-      eventId: 'evt_checkout_subscription_001',
-      mode: 'subscription',
-      stripeCustomerId: 'cus_test_default',
-      clientReferenceId: fx.accountId,
-    });
-    const result = (await postEvent(fx, raw)) as { statusCode: number; body: { outcome: string } };
-    expect(result.body.outcome).toBe('handled');
-
-    const acct = fx.stripeWebhooksRepo.readAccount(fx.accountId);
-    expect(acct?.trialPackPurchasedAt).toBeNull();
-  });
-
-  it('second trial-pack checkout for the same account is a no-op (already provisioned)', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
-    const raw1 = buildCheckoutEvent({
-      eventId: 'evt_first',
-      mode: 'payment',
-      stripeCustomerId: 'cus_test_default',
-      clientReferenceId: fx.accountId,
-    });
-    await postEvent(fx, raw1);
-    const acctAfterFirst = fx.stripeWebhooksRepo.readAccount(fx.accountId);
-    const firstPurchasedAt = acctAfterFirst!.trialPackPurchasedAt;
-    expect(firstPurchasedAt).toBeInstanceOf(Date);
-
-    const raw2 = buildCheckoutEvent({
-      eventId: 'evt_second',
-      mode: 'payment',
-      stripeCustomerId: 'cus_test_default',
-      clientReferenceId: fx.accountId,
-    });
-    const result = (await postEvent(fx, raw2)) as { statusCode: number; body: { outcome: string } };
-    expect(result.body.outcome).toBe('handled');
-
-    // The trial-pack timestamp should NOT have been overwritten.
-    const acctAfterSecond = fx.stripeWebhooksRepo.readAccount(fx.accountId);
-    expect(acctAfterSecond?.trialPackPurchasedAt?.getTime()).toBe(firstPurchasedAt!.getTime());
+    expect(acct?.tier).toBe('free');
   });
 });
 
@@ -357,7 +259,7 @@ describe('V-226 — subscription tier changes emit account audit entries', () =>
   }
 
   it('emits subscription.tier_changed when subscription.created upgrades the tier', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
+    fx = await buildTestApp({ tier: 'free' });
     const raw = buildSubscriptionEvent({
       eventId: 'evt_v226_upgrade',
       type: 'customer.subscription.created',
@@ -373,12 +275,12 @@ describe('V-226 — subscription tier changes emit account audit entries', () =>
     const entry = log.data[0]!;
     expect(entry.actor_type).toBe('system');
     const payload = entry.payload as { from?: string; to?: string; stripe_event_type?: string };
-    expect(payload.from).toBe('trial_pack');
+    expect(payload.from).toBe('free');
     expect(payload.to).toBe('api_builder');
     expect(payload.stripe_event_type).toBe('customer.subscription.created');
   });
 
-  it('emits subscription.tier_changed when subscription.deleted downgrades to trial_pack', async () => {
+  it('emits subscription.tier_changed when subscription.deleted downgrades to free', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const raw = buildSubscriptionEvent({
       eventId: 'evt_v226_downgrade',
@@ -395,7 +297,7 @@ describe('V-226 — subscription tier changes emit account audit entries', () =>
     expect(log.data.length).toBe(1);
     const payload = log.data[0]!.payload as { from?: string; to?: string };
     expect(payload.from).toBe('api_builder');
-    expect(payload.to).toBe('trial_pack');
+    expect(payload.to).toBe('free');
   });
 
   it('does NOT emit when subscription.updated keeps the same tier', async () => {
@@ -413,40 +315,5 @@ describe('V-226 — subscription tier changes emit account audit entries', () =>
 
     const log = await listTierChanges(fx);
     expect(log.data.length).toBe(0);
-  });
-});
-
-// V-202b — checkout.session.completed (mode=payment) → trial-pack
-// purchase. Asserts the lifecycle dispatcher fires (the trial_pack_credit
-// state mutation is covered by the V-089 tests above; this slice
-// validates the AccountLifecycleService.emit wire-in fired without
-// breaking the handler).
-describe('V-202b — trial-pack purchase routes through lifecycle dispatcher', () => {
-  let fx: TestAppFixture;
-
-  afterEach(async () => {
-    if (fx) await fx.cleanup();
-  });
-
-  it('first checkout.session.completed (payment) does NOT add a tier_changed audit row', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
-    const raw = buildCheckoutEvent({
-      eventId: 'evt_v202b_trial_first',
-      mode: 'payment',
-      stripeCustomerId: 'cus_test_default',
-      clientReferenceId: fx.accountId,
-    });
-    const result = (await postEvent(fx, raw)) as { statusCode: number; body: { outcome: string } };
-    expect(result.body.outcome).toBe('handled');
-    // Trial-pack purchase doesn't flip the tier (the customer stays on
-    // trial_pack and just gains credit). So no subscription.tier_changed
-    // audit row should appear.
-    const auditRes = await fx.app.inject({
-      method: 'GET',
-      url: '/v1/account/audit-log?action=subscription.tier_changed',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-    });
-    expect(auditRes.statusCode).toBe(200);
-    expect(auditRes.json<{ data: unknown[] }>().data.length).toBe(0);
   });
 });

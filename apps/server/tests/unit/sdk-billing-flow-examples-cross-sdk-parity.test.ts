@@ -127,20 +127,6 @@ describe('W800 cross-SDK billing-flow examples parity', () => {
     expect(read(GO)).toMatch(/portal\.PortalURL/);
   });
 
-  // ─── trial_pack credit-cents-remaining ────────────────────────
-
-  it("CRITICAL trial_pack 2-field accessor pinned cross-SDK — active + credit_cents_remaining (with null/None/nil guard). TS: state.trial_pack.active && state.trial_pack.credit_cents_remaining !== null + Python: tp.get('active') and tp.get('credit_cents_remaining') is not None + Go: state.TrialPack.Active && state.TrialPack.CreditCentsRemaining != nil. Drift would lose the canonical 'show trial credit only when active' guard.", () => {
-    expect(read(TS)).toMatch(
-      /state\.trial_pack\.active && state\.trial_pack\.credit_cents_remaining !== null/,
-    );
-    expect(read(PY)).toMatch(
-      /tp\.get\("active"\) and tp\.get\("credit_cents_remaining"\) is not None/,
-    );
-    expect(read(GO)).toMatch(
-      /state\.TrialPack\.Active && state\.TrialPack\.CreditCentsRemaining != nil/,
-    );
-  });
-
   // ─── 4-call flow ordering: getState → createCheckout → createPortal
 
   it('CRITICAL all 3 examples demonstrate the same call ordering — getState first, then EITHER createCheckoutSession OR createPortalSession (branched by subscription === null). Drift to changing the gate would let a subscribed customer get pushed back through Checkout (creating a duplicate sub).', () => {

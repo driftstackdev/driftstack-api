@@ -1,17 +1,15 @@
 // BillingResource — typed methods for /v1/billing (V-082).
 //
-// `getState` returns the current subscription mirror + trial-pack
-// state. `createCheckoutSession` and `startTrialPack` return Stripe
-// Checkout URLs the customer redirects to. `createPortalSession`
-// returns a Stripe Customer Portal URL.
+// `getState` returns the current subscription mirror.
+// `createCheckoutSession` returns a Stripe Checkout URL the customer
+// redirects to. `createPortalSession` returns a Stripe Customer Portal
+// URL. (The one-time trial_pack flow was retired 2026-05-27.)
 
 import type {
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
   CreatePortalSessionResponse,
   GetBillingStateResponse,
-  StartTrialPackRequest,
-  StartTrialPackResponse,
 } from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';
 
@@ -31,14 +29,6 @@ export class BillingResource {
     return this.http.request<CreateCheckoutSessionResponse>({
       method: 'POST',
       path: '/v1/billing/checkout-session',
-      body,
-    });
-  }
-
-  startTrialPack(body: StartTrialPackRequest = {}): Promise<StartTrialPackResponse> {
-    return this.http.request<StartTrialPackResponse>({
-      method: 'POST',
-      path: '/v1/billing/trial-pack',
       body,
     });
   }

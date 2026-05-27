@@ -18,7 +18,7 @@
 // they still apply so the Tier 3 draft-surface review can focus on
 // new fields + render structure.
 
-export type TierType = 'trial' | 'manual' | 'api';
+export type TierType = 'free' | 'manual' | 'api';
 
 /**
  * AI agent feature gating per ADR-004 + founder Tier 3 spec
@@ -52,25 +52,25 @@ export interface ApiTier {
 }
 
 export const API_TIERS: ApiTier[] = [
-  // Trial pack — unchanged from ADR-003.
+  // Free — perpetual entry tier (replaced the one-time trial_pack 2026-05-27).
   {
-    id: 'trial_pack',
-    tierType: 'trial',
-    name: 'Trial pack',
-    monthlyUsd: 2.99,
+    id: 'free',
+    tierType: 'free',
+    name: 'Free',
+    monthlyUsd: 0,
     annualMonthlyEquivalentUsd: null,
     annualUsd: null,
     profiles: 1,
-    hoursLabel: '~16 hrs at $0.18/hr',
+    hoursLabel: 'Unlimited manual sessions',
     overagePerHourUsd: null,
     concurrent: 1,
     archetypeAccess: 'All currently-available archetypes',
     support: 'Community',
-    audience: 'Evaluation',
+    audience: 'Evaluation (manual-only — no API)',
     aiAgent: false,
     llmBilling: null,
-    cta: { label: 'Get started — $2.99', href: '/pricing#trial-pack' },
-    oneTime: true,
+    cta: { label: 'Get started — free', href: '/signup' },
+    oneTime: false,
   },
 
   // Manual ladder — humans clicking GUI client, persistent profiles.

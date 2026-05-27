@@ -60,7 +60,7 @@ describe('POST /v1/api-keys', () => {
   });
 
   it('returns ds_test_ prefix for free tier', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
+    fx = await buildTestApp({ tier: 'free' });
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/api-keys',

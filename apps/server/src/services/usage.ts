@@ -58,7 +58,7 @@ const ALL_TYPES: UsageRecordType[] = [
 // change. The customer-visible signal is "no per-meter caps at this
 // tier" rather than the absence of the field.
 const TIER_QUOTAS: Record<AccountTier, Record<UsageRecordType, number | null>> = {
-  trial_pack: {
+  free: {
     session_minute: null,
     navigate: null,
     interact: null,

@@ -70,7 +70,7 @@ test('POST /v1/sessions: records "created" event in DB', async ({ request }) => 
 });
 
 test('POST /v1/sessions: 429 ConcurrencyLimit when free-tier already at 1', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'trial_pack' });
+  const seed = await seedAccount(server.client, { tier: 'free' });
   await createSession(request, server.baseUrl, seed.plaintext);
 
   const res = await request.post(`${server.baseUrl}/v1/sessions`, {

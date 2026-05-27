@@ -180,7 +180,7 @@ export class ApiKeysService {
       }
     }
 
-    const env = tier === 'trial_pack' ? 'test' : 'live';
+    const env = tier === 'free' ? 'test' : 'live';
     const plaintext = generateApiKey(env);
     const keyHash = await hashApiKey(plaintext);
     const keyPrefix = keyPrefixFromPlaintext(plaintext);
@@ -285,7 +285,7 @@ export class ApiKeysService {
     }
 
     // Mint the new key.
-    const env = tier === 'trial_pack' ? 'test' : 'live';
+    const env = tier === 'free' ? 'test' : 'live';
     const plaintext = generateApiKey(env);
     const keyHash = await hashApiKey(plaintext);
     const keyPrefix = keyPrefixFromPlaintext(plaintext);

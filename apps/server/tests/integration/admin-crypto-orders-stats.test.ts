@@ -213,7 +213,7 @@ describe('V-666.AP GET /v1/admin/crypto-orders/idempotency-metrics', () => {
       authorization: `Bearer ${fx.plaintext}`,
       'idempotency-key': 'metrics-key',
     };
-    const payload = { product: 'trial_pack', price_cents: 299, price_currency: 'USD' };
+    const payload = { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' };
     // First call: first_writes += 1.
     await fx.app.inject({
       method: 'POST',

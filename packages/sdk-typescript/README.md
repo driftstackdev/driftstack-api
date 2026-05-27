@@ -96,7 +96,6 @@ client.account.me()                     // calling account's full state
 
 client.billing.getState()
 client.billing.createCheckoutSession(body)
-client.billing.startTrialPack(body)
 client.billing.createPortalSession()
 
 client.auth.signup(body)

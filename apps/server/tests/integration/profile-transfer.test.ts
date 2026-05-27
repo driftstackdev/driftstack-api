@@ -18,7 +18,7 @@ const RECIPIENT_ID = '00000000-0000-4000-8000-0000000000b2';
  *  auth repo so the transfer route's getAccount lookup resolves it. */
 function seedRecipient(
   fx: TestAppFixture,
-  opts: { id?: string; tier?: 'api_builder' | 'trial_pack' } = {},
+  opts: { id?: string; tier?: 'api_builder' | 'free' } = {},
 ): void {
   fx.authRepo.upsertAccount({
     id: opts.id ?? RECIPIENT_ID,
@@ -116,8 +116,8 @@ describe('POST /v1/profiles/:id/transfer', () => {
 
   it('429 TierLimit when the recipient is already at their profile cap', async () => {
     fx = await buildTestApp();
-    // Recipient on trial_pack (profile cap 1) already holding 1 profile.
-    seedRecipient(fx, { tier: 'trial_pack' });
+    // Recipient on free (profile cap 1) already holding 1 profile.
+    seedRecipient(fx, { tier: 'free' });
     await fx.profilesRepo.insert({
       accountId: RECIPIENT_ID,
       name: 'recipient-existing',
@@ -147,11 +147,11 @@ describe('POST /v1/profiles/:id/transfer', () => {
 
   it('429 TierLimit when the recipient is under their profile cap but over the per-cycle import cap', async () => {
     fx = await buildTestApp();
-    // trial_pack recipient: profile cap 1, import cap 2/cycle. Hold 0
+    // free recipient: profile cap 1, import cap 2/cycle. Hold 0
     // profiles (profile cap clear) but seed 2 prior profile.imported
     // rows this cycle so the transfer (which counts as an import for
     // the recipient) trips the cycle cap, not the profile cap.
-    seedRecipient(fx, { tier: 'trial_pack' });
+    seedRecipient(fx, { tier: 'free' });
     for (let i = 0; i < 2; i += 1) {
       await fx.accountAuditRepo.insert({
         accountId: RECIPIENT_ID,

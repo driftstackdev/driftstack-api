@@ -60,7 +60,7 @@ Every public API endpoint is a typed method on a resource accessor. All take `co
 | `client.Usage`            | `CurrentPeriod`                                                                                                                               |
 | `client.Webhooks`         | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`, `ReplayDelivery` (V-307)                                                                 |
 | `client.Team`             | `Invite`, `ListMembers`, `ListInvites`, `AcceptInvite`, `RemoveMember` (V-298)                                                                |
-| `client.Billing`          | `GetState`, `CreateCheckoutSession`, `StartTrialPack`, `CreatePortalSession`                                                                  |
+| `client.Billing`          | `GetState`, `CreateCheckoutSession`, `CreatePortalSession`                                                                                    |
 | `client.Auth`             | `Signup`, `VerifyEmail`, `Login`, `Refresh`, `Logout`, `RequestMagicLink`, `ConsumeMagicLink`, `RequestPasswordReset`, `ConfirmPasswordReset` |
 | `client.Account`          | `Me` (V-385 — full /v1/account/me with slug / region / avatar / mfa / teams)                                                                  |
 

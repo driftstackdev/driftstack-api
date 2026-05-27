@@ -40,9 +40,9 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/Both layers must agree on tier ids \+ concurrent caps \+ profile/);
   });
 
-  it("CRITICAL TierType 3-value union pinned — 'trial' | 'manual' | 'api'. Drift to a 4th value would silently widen the V-075+ section-grouping discriminator.", () => {
+  it("CRITICAL TierType 3-value union pinned — 'free' | 'manual' | 'api' (trial→free 2026-05-27). Drift to a 4th value would silently widen the V-075+ section-grouping discriminator.", () => {
     const p = read(PRICING);
-    expect(p).toMatch(/export type TierType = 'trial' \| 'manual' \| 'api'/);
+    expect(p).toMatch(/export type TierType = 'free' \| 'manual' \| 'api'/);
   });
 
   it("CRITICAL LlmBilling 4-value union pinned — 'byok_only' | 'byok_or_bundled' | 'byok_or_bundled_custom' | null. The 4-value set is the per-tier AI-agent billing gate.", () => {
@@ -56,7 +56,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     const p = read(PRICING);
 
     const tierIds = [
-      'trial_pack',
+      'free',
       'solo_manual',
       'team_manual',
       'agency_manual',
@@ -71,12 +71,12 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     }
   });
 
-  it('CRITICAL trial_pack pricing pinned — $2.99 monthly + 1 profile + 1 concurrent + oneTime: true + ~16 hrs at $0.18/hr. Matches ADR-003.', () => {
+  it('CRITICAL free-tier pricing pinned — $0 monthly + 1 profile + 1 concurrent + oneTime: false + unlimited manual sessions (perpetual free tier; trial_pack retired 2026-05-27).', () => {
     const p = read(PRICING);
 
-    expect(p).toMatch(/id: 'trial_pack',[\s\S]{0,400}monthlyUsd: 2\.99,/);
-    expect(p).toMatch(/profiles: 1,[\s\S]{0,200}hoursLabel: '~16 hrs at \$0\.18\/hr',/);
-    expect(p).toMatch(/concurrent: 1,[\s\S]{0,400}oneTime: true,/);
+    expect(p).toMatch(/id: 'free',[\s\S]{0,400}monthlyUsd: 0,/);
+    expect(p).toMatch(/profiles: 1,[\s\S]{0,200}hoursLabel: 'Unlimited manual sessions',/);
+    expect(p).toMatch(/concurrent: 1,[\s\S]{0,400}oneTime: false,/);
   });
 
   it('CRITICAL Solo Manual pricing pinned — $79/mo + $63 annual-equiv + 10 profiles + 1 concurrent.', () => {
@@ -160,11 +160,11 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/id: 'enterprise',[\s\S]{0,1000}llmBilling: 'byok_or_bundled_custom',/);
   });
 
-  it('CRITICAL aiAgent boolean gates pinned correctly — false on trial_pack + solo_manual; true on team_manual + agency_manual + all api_* + enterprise. The trial/solo lock-out is per founder Tier 3 spec post-V-072.', () => {
+  it('CRITICAL aiAgent boolean gates pinned correctly — false on free + solo_manual; true on team_manual + agency_manual + all api_* + enterprise. The free/solo lock-out is per founder Tier 3 spec post-V-072.', () => {
     const p = read(PRICING);
 
     // aiAgent: false tiers.
-    expect(p).toMatch(/id: 'trial_pack',[\s\S]{0,800}aiAgent: false,/);
+    expect(p).toMatch(/id: 'free',[\s\S]{0,800}aiAgent: false,/);
     expect(p).toMatch(/id: 'solo_manual',[\s\S]{0,800}aiAgent: false,/);
 
     // aiAgent: true tiers.
@@ -302,7 +302,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
 
     // 8 tiers + 3 self-hosted.
     const allTiers = [
-      'trial_pack',
+      'free',
       'solo_manual',
       'team_manual',
       'agency_manual',

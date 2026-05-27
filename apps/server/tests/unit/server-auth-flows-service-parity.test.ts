@@ -32,7 +32,7 @@ describe('W745 server AuthFlowsService canonical surface parity', () => {
     );
   });
 
-  it('CRITICAL AuthFlowsServiceConfig 5-field shape pinned. verifyEmailUrl + magicLinkUrl + passwordResetUrl drive the V-079.C URL construction; exposeDebugToken gates dev surface; initialTier defaults to trial_pack.', () => {
+  it('CRITICAL AuthFlowsServiceConfig 5-field shape pinned. verifyEmailUrl + magicLinkUrl + passwordResetUrl drive the V-079.C URL construction; exposeDebugToken gates dev surface; initialTier defaults to free.', () => {
     const f = read(FLOWS);
 
     expect(f).toMatch(/export interface AuthFlowsServiceConfig \{/);
@@ -64,9 +64,9 @@ describe('W745 server AuthFlowsService canonical surface parity', () => {
     );
   });
 
-  it("CRITICAL signup() default initialTier = 'trial_pack'. Drift to a paid tier would skip the trial-pack onboarding funnel. Matches W729 ADR-003.", () => {
+  it("CRITICAL signup() default initialTier = 'free'. Drift to a paid tier would skip the trial-pack onboarding funnel. Matches W729 ADR-003.", () => {
     const f = read(FLOWS);
-    expect(f).toMatch(/initialTier: this\.config\.initialTier \?\? 'trial_pack'/);
+    expect(f).toMatch(/initialTier: this\.config\.initialTier \?\? 'free'/);
   });
 
   it("CRITICAL signup() plaintext token + tokenHash + insertAuthToken contract pinned. Token kind = 'email_verify'; expiresAt = AUTH_TOKEN_TTL_MS.signupVerification. Drift to storing plaintext in DB would invalidate the security model (server only stores hashes).", () => {

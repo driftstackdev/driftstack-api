@@ -135,10 +135,10 @@ describe('V-518 — TIER_FEATURES internal consistency', () => {
     }
   });
 
-  it('apiKeyEnvironment is "test" iff trialPack is true', () => {
+  it('apiKeyEnvironment is "test" iff the tier is free', () => {
     for (const tier of ALL_TIERS) {
       const f = TIER_FEATURES[tier];
-      if (f.trialPack) {
+      if (tier === 'free') {
         expect(f.apiKeyEnvironment).toBe('test');
       } else {
         expect(f.apiKeyEnvironment).toBe('live');
@@ -146,8 +146,8 @@ describe('V-518 — TIER_FEATURES internal consistency', () => {
     }
   });
 
-  it('exactly one tier has trialPack=true', () => {
-    const trialTiers = ALL_TIERS.filter((t) => TIER_FEATURES[t].trialPack);
-    expect(trialTiers).toEqual(['trial_pack']);
+  it('exactly one tier denies API access (the free tier)', () => {
+    const noApi = ALL_TIERS.filter((t) => !TIER_FEATURES[t].apiAccess);
+    expect(noApi).toEqual(['free']);
   });
 });

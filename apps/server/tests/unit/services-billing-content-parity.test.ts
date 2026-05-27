@@ -60,7 +60,7 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     );
   });
 
-  it('BillingProvider: 4-method boundary (ensureCustomer + createSubscriptionCheckout + createTrialPackCheckout + createPortalSession)', () => {
+  it('BillingProvider: 3-method boundary (ensureCustomer + createSubscriptionCheckout + createPortalSession)', () => {
     expect(body).toMatch(/export interface BillingProvider \{/);
     expect(body).toMatch(
       /ensureCustomer\(args: \{ accountId: string; email: string; name: string \| null \}\): Promise<string>;/,
@@ -69,20 +69,14 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
       /createSubscriptionCheckout\(args: \{\s*\n?\s*customerId: string;\s*\n?\s*priceId: string;\s*\n?\s*successUrl: string;\s*\n?\s*cancelUrl: string;\s*\n?\s*accountId: string;\s*\n?\s*\}\): Promise<\{ url: string; sessionId: string \}>;/,
     );
     expect(body).toMatch(
-      /createTrialPackCheckout\(args: \{[\s\S]+?\}\): Promise<\{ url: string; sessionId: string \}>;/,
-    );
-    expect(body).toMatch(
       /createPortalSession\(args: \{ customerId: string; returnUrl: string \}\): Promise<\{ url: string \}>;/,
     );
   });
 
-  it('BillingAccountSnapshot: 9 fields — trial pack quartet (purchasedAt + creditCents + expiresAt + redeemed) all nullable except redeemed:boolean', () => {
+  it('BillingAccountSnapshot: 5 fields (id + email + name + tier + stripeCustomerId) — trial-pack quartet removed 2026-05-27', () => {
     expect(body).toMatch(/export interface BillingAccountSnapshot \{/);
     expect(body).toMatch(/stripeCustomerId: string \| null;/);
-    expect(body).toMatch(/trialPackPurchasedAt: Date \| null;/);
-    expect(body).toMatch(/trialPackCreditCents: number \| null;/);
-    expect(body).toMatch(/trialPackExpiresAt: Date \| null;/);
-    expect(body).toMatch(/trialPackRedeemed: boolean;/);
+    expect(body).not.toMatch(/trialPackPurchasedAt/);
   });
 
   it('SubscriptionMirror.status: 8-literal Stripe enum (incomplete|incomplete_expired|trialing|active|past_due|canceled|unpaid|paused)', () => {
@@ -103,13 +97,6 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     );
   });
 
-  it("startTrialPack: ConflictError when trialPackPurchasedAt already set (ADR-003 one-trial-per-account); resource:'trial_pack' metadata", () => {
-    expect(body).toMatch(
-      /if \(account\.trialPackPurchasedAt !== null\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*'Trial pack already purchased on this account; one trial pack per account\.',\s*\n?\s*\{ resource: 'trial_pack' \},/,
-    );
-    expect(body).toMatch(/priceId: this\.config\.trialPackPriceId,/);
-  });
-
   it("createPortalSession: ConflictError when stripeCustomerId null (must complete checkout first); resource:'stripe_customer' metadata", () => {
     expect(body).toMatch(
       /if \(account\.stripeCustomerId === null\) \{\s*\n?\s*throw new ConflictError\(\s*\n?\s*'Account has no Stripe customer record yet\. Complete a checkout flow first\.',\s*\n?\s*\{ resource: 'stripe_customer' \},/,
@@ -119,13 +106,11 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     );
   });
 
-  it('getBillingState.trialPack.active: 4-condition AND (purchasedAt!=null AND !redeemed AND expiresAt > now AND creditCents > 0)', () => {
+  it('getBillingState returns subscription only (trial-pack state removed 2026-05-27)', () => {
     expect(body).toMatch(
-      /const active =\s*\n?\s*account\.trialPackPurchasedAt !== null &&\s*\n?\s*!account\.trialPackRedeemed &&\s*\n?\s*account\.trialPackExpiresAt !== null &&\s*\n?\s*account\.trialPackExpiresAt\.getTime\(\) > now\.getTime\(\) &&\s*\n?\s*\(account\.trialPackCreditCents \?\? 0\) > 0;/,
+      /async getBillingState\(accountId: string\): Promise<\{\s*\n?\s*subscription: SubscriptionMirror \| null;\s*\n?\s*\}> \{/,
     );
-    expect(body).toMatch(
-      /trialPack: \{\s*\n?\s*active,\s*\n?\s*creditCentsRemaining: account\.trialPackCreditCents,\s*\n?\s*expiresAt: account\.trialPackExpiresAt,\s*\n?\s*redeemed: account\.trialPackRedeemed,/,
-    );
+    expect(body).not.toMatch(/trialPack/);
   });
 
   it('ensureCustomerId helper: lazy provisions via provider.ensureCustomer + repo.setStripeCustomerId (no-op if already set)', () => {
@@ -150,7 +135,7 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     );
   });
 
-  it('TierPriceMap + TierPrices: monthly + annual partial-record per tier; BillingServiceConfig 4-URL shape', () => {
+  it('TierPriceMap + TierPrices: monthly + annual partial-record per tier; BillingServiceConfig URL shape (trialPackPriceId removed 2026-05-27)', () => {
     expect(body).toMatch(
       /export interface TierPrices \{\s*\n?\s*monthly: string;\s*\n?\s*annual: string;\s*\n?\s*\}/,
     );
@@ -159,9 +144,7 @@ describe('W407.C apps/server/src/services/billing.ts content parity', () => {
     expect(body).toMatch(
       /\/\*\* Map of self-serve paid tier to monthly \+ annual Stripe price ids\. \*\/\s*\n?\s*tierPrices: TierPriceMap;/,
     );
-    expect(body).toMatch(
-      /\/\*\* One-time price id for the trial-pack purchase\. \*\/\s*\n?\s*trialPackPriceId: string;/,
-    );
+    expect(body).not.toMatch(/trialPackPriceId/);
     expect(body).toMatch(/defaultSuccessUrl: string;/);
     expect(body).toMatch(/defaultCancelUrl: string;/);
     expect(body).toMatch(/portalReturnUrl: string;/);

@@ -22,19 +22,6 @@ export class InMemoryBillingRepo implements BillingRepo {
     this.subscriptions.set(s.id, s);
   }
 
-  /** Test seam: simulate a successful trial-pack purchase. */
-  applyTrialPackPurchase(accountId: string, args: { creditCents: number; expiresAt: Date }): void {
-    const a = this.accounts.get(accountId);
-    if (!a) throw new Error('applyTrialPackPurchase: account not found');
-    this.accounts.set(accountId, {
-      ...a,
-      trialPackPurchasedAt: new Date(),
-      trialPackCreditCents: args.creditCents,
-      trialPackExpiresAt: args.expiresAt,
-      trialPackRedeemed: false,
-    });
-  }
-
   getAccount(accountId: string): Promise<BillingAccountSnapshot | null> {
     return Promise.resolve(this.accounts.get(accountId) ?? null);
   }
@@ -62,7 +49,7 @@ export interface InMemoryProviderState {
     customerId: string;
     accountId: string;
     priceId: string;
-    kind: 'subscription' | 'trial_pack';
+    kind: 'subscription';
   }>;
   portalSessions: Array<{ id: string; customerId: string }>;
 }
@@ -103,29 +90,6 @@ export class InMemoryBillingProvider implements BillingProvider {
       accountId: args.accountId,
       priceId: args.priceId,
       kind: 'subscription',
-    });
-    void args.successUrl;
-    void args.cancelUrl;
-    return Promise.resolve({
-      url: `https://checkout.stripe.example/${sessionId}`,
-      sessionId,
-    });
-  }
-
-  createTrialPackCheckout(args: {
-    customerId: string;
-    priceId: string;
-    successUrl: string;
-    cancelUrl: string;
-    accountId: string;
-  }): Promise<{ url: string; sessionId: string }> {
-    const sessionId = `cs_test_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
-    this.state.checkoutSessions.push({
-      id: sessionId,
-      customerId: args.customerId,
-      accountId: args.accountId,
-      priceId: args.priceId,
-      kind: 'trial_pack',
     });
     void args.successUrl;
     void args.cancelUrl;

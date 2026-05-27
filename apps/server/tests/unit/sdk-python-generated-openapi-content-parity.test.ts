@@ -93,7 +93,7 @@ describe('W622 sdk-python generated + openapi content parity', () => {
     );
     expect(body).toMatch(/email: EmailStr/);
     expect(body).toMatch(/tier: Literal\[/);
-    expect(body).toMatch(/^\s+"trial_pack",$/m);
+    expect(body).toMatch(/^\s+"free",$/m);
     expect(body).toMatch(/^\s+"solo_manual",$/m);
     expect(body).toMatch(/^\s+"team_manual",$/m);
     expect(body).toMatch(/^\s+"agency_manual",$/m);

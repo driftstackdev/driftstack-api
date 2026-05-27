@@ -2,7 +2,7 @@
 // caps (ADR-004 two-ladder concurrent-only) hold when measured against
 // real DB row counts. Concurrent caps are the primary metering primitive
 // on paid tiers; trial pack inherits the same enforcement path with
-// limit=1 plus the trial_pack_credit_cents decrement (per ADR-003).
+// limit=1 plus the free_credit_cents decrement (per ADR-003).
 
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import { PROBLEM_TYPES, type AccountTier } from '@driftstack/api-types';
@@ -29,7 +29,7 @@ interface TierExpectation {
 }
 
 const TIER_LIMITS: TierExpectation[] = [
-  { tier: 'trial_pack', limit: 1 },
+  { tier: 'free', limit: 1 },
   { tier: 'solo_manual', limit: 1 },
   { tier: 'team_manual', limit: 3 },
   { tier: 'api_starter', limit: 2 },
@@ -120,7 +120,7 @@ test('tier=api_scale: 25th concurrent session denied (spot-check)', async ({ req
 });
 
 test('destroying a session frees a slot', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'trial_pack' });
+  const seed = await seedAccount(server.client, { tier: 'free' });
   await clearRateLimits(server.redis);
 
   // Free tier allows 1 concurrent.

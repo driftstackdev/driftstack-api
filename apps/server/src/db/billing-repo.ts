@@ -16,10 +16,6 @@ function toAccount(r: typeof accounts.$inferSelect): BillingAccountSnapshot {
     name: r.name,
     tier: r.tier,
     stripeCustomerId: r.stripeCustomerId,
-    trialPackPurchasedAt: r.trialPackPurchasedAt,
-    trialPackCreditCents: r.trialPackCreditCents,
-    trialPackExpiresAt: r.trialPackExpiresAt,
-    trialPackRedeemed: r.trialPackRedeemed,
   };
 }
 

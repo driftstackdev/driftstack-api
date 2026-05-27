@@ -67,15 +67,6 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     );
   });
 
-  it('DEFAULT_TRIAL_PACK_CREDIT_CENTS = 299 (ADR-003); DEFAULT_TRIAL_PACK_WINDOW_MS = 14 days', () => {
-    expect(body).toMatch(/const DEFAULT_TRIAL_PACK_CREDIT_CENTS = 299;/);
-    expect(body).toMatch(/const DEFAULT_TRIAL_PACK_WINDOW_MS = 14 \* 24 \* 60 \* 60 \* 1000;/);
-    expect(body).toMatch(/Trial-pack credit cents \(default 299 = \$2\.99 per ADR-003\)\./);
-    expect(body).toMatch(
-      /Trial-pack window length in milliseconds \(default 14 days per ADR-003\)\./,
-    );
-  });
-
   it('STATUS_VALUES: 8-literal Stripe subscription status enum (incomplete|incomplete_expired|trialing|active|past_due|canceled|unpaid|paused)', () => {
     expect(body).toMatch(
       /const STATUS_VALUES = \[\s*\n?\s*'incomplete',\s*\n?\s*'incomplete_expired',\s*\n?\s*'trialing',\s*\n?\s*'active',\s*\n?\s*'past_due',\s*\n?\s*'canceled',\s*\n?\s*'unpaid',\s*\n?\s*'paused',\s*\n?\s*\] as const;/,
@@ -122,10 +113,8 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     );
   });
 
-  it("handleSubscriptionDeleted: downgrade default 'trial_pack'; cancel-handler dispatches tier_changed lifecycle", () => {
-    expect(body).toMatch(
-      /const downgradeTier = this\.config\.cancelDowngradeTier \?\? 'trial_pack';/,
-    );
+  it("handleSubscriptionDeleted: downgrade default 'free'; cancel-handler dispatches tier_changed lifecycle", () => {
+    expect(body).toMatch(/const downgradeTier = this\.config\.cancelDowngradeTier \?\? 'free';/);
     expect(body).toMatch(
       /kind: 'subscription\.tier_changed',\s*\n?\s*fromTier: previousTier,\s*\n?\s*toTier: downgradeTier,/,
     );
@@ -141,28 +130,11 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     );
   });
 
-  it('V-082 handleCheckoutCompleted: subscription mode informational (V-089 subscription.created does mirror write); payment mode → trial-pack via client_reference_id or customer fallback', () => {
+  it('V-082 handleCheckoutCompleted: subscription mode informational; non-subscription modes no-op (trial_pack payment-mode retired 2026-05-27)', () => {
     expect(body).toMatch(
-      /\/\/ Subscription path: customer\.subscription\.created arrives separately\s*\n?\s*\/\/ and does the actual mirror write\. checkout\.session\.completed for\s*\n?\s*\/\/ subscription mode is informational here\./,
+      /\/\/ The one-time trial_pack \(payment-mode checkout\) was retired\s*\n?\s*\/\/ 2026-05-27 in favour of the perpetual free tier; all checkouts are\s*\n?\s*\/\/ now subscriptions\./,
     );
-    expect(body).toMatch(
-      /\/\/ payment-mode → trial pack purchase per V-082 metadata convention\.\s*\n?\s*\/\/ We use client_reference_id as the source of truth; fall back to\s*\n?\s*\/\/ customer lookup if absent\./,
-    );
-  });
-
-  it('V-202b trial-pack-purchased + V-202d trial_pack.expired enqueue: only when applied=true (first-apply idempotency); dedupOnAccountAndType', () => {
-    expect(body).toMatch(
-      /\/\/ V-202b — fire trial-pack-purchased email only on first apply\s*\n?\s*\/\/ \(the repo's idempotency gate ensures `applied=false` on a\s*\n?\s*\/\/ duplicate Stripe event re-delivery, so this skips correctly\)\./,
-    );
-    expect(body).toMatch(
-      /if \(applied && this\.accountLifecycle !== null\) \{\s*\n?\s*await this\.accountLifecycle\.emit\(accountId, \{\s*\n?\s*kind: 'subscription\.trial_pack_purchased',/,
-    );
-    expect(body).toMatch(
-      /\/\/ V-202d — schedule the expiry email at expiresAt\. dedupOnAccountAndType\s*\n?\s*\/\/ ensures one pending trial_pack\.expired job per account regardless\s*\n?\s*\/\/ of how many times the purchase webhook re-fires/,
-    );
-    expect(body).toMatch(
-      /jobType: 'trial_pack\.expired',\s*\n?\s*accountId,\s*\n?\s*payload: \{ trial_pack_expires_at: expiresAt\.toISOString\(\) \},\s*\n?\s*runAt: expiresAt,\s*\n?\s*dedupOnAccountAndType: true,/,
-    );
+    expect(body).toMatch(/checkout subscription completed \(informational\)/);
   });
 
   it('Invoice events V-202b decision: receipt emails fire from Stripe (Driftstack-branded receipts deferred — TD-001)', () => {
@@ -171,15 +143,6 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     );
     expect(body).toMatch(
       /case 'invoice\.payment_succeeded':\s*\n?\s*case 'invoice\.payment_failed':\s*\n?\s*case 'invoice\.finalized':/,
-    );
-  });
-
-  it('ApplyTrialPackPurchase: idempotent — no-op when trial_pack_purchased_at already set; ADR-003 299¢/14d window framing', () => {
-    expect(body).toMatch(
-      /Provision a trial-pack purchase per ADR-003: 299¢ credit, 14-day\s*\n?\s*\*\s*window, redeemed=false\. Idempotent: if `trial_pack_purchased_at`\s*\n?\s*\*\s*is already set, no-op\./,
-    );
-    expect(body).toMatch(
-      /applyTrialPackPurchase\(args: \{\s*\n?\s*accountId: string;\s*\n?\s*creditCents: number;\s*\n?\s*expiresAt: Date;\s*\n?\s*at: Date;\s*\n?\s*\}\): Promise<\{ applied: boolean \}>;/,
     );
   });
 
@@ -207,14 +170,14 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     );
   });
 
-  it('imports: createHash + AccountTier + Logger + AccountLifecycleService + ScheduledJobsService types', () => {
+  it('imports: createHash + AccountTier + Logger + AccountLifecycleService types (ScheduledJobsService removed 2026-05-27 with trial_pack.expired)', () => {
     expect(body).toMatch(/import \{ createHash \} from 'node:crypto';/);
     expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
     expect(body).toMatch(/import type \{ Logger \} from '\.\.\/lib\/logger\.js';/);
     expect(body).toMatch(
       /import type \{ AccountLifecycleService \} from '\.\/account-lifecycle\.js';/,
     );
-    expect(body).toMatch(/import type \{ ScheduledJobsService \} from '\.\/scheduled-jobs\.js';/);
+    expect(body).not.toMatch(/import type \{ ScheduledJobsService \}/);
   });
 
   it('file exists at canonical path', () => {

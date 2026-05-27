@@ -36,7 +36,7 @@ describe('W619 sdk-typescript/examples content parity', () => {
     expect(existsSync(E('quickstart.ts'))).toBe(true);
   });
 
-  it('billing-flow.ts: customer self-serve mirror of /billing page + getState branching (no-sub → createCheckoutSession api_builder monthly with success/cancel urls / has-sub → createPortalSession) + trial_pack credit_cents_remaining surfaced pinned', () => {
+  it('billing-flow.ts: customer self-serve mirror of /billing page + getState branching (no-sub → createCheckoutSession api_builder monthly with success/cancel urls / has-sub → createPortalSession) pinned (trial_pack block removed 2026-05-27)', () => {
     const body = read(E('billing-flow.ts'));
     expect(body).toMatch(
       /^\/\/ Customer billing self-serve flow — mirror the customer-dashboard$/m,
@@ -52,9 +52,6 @@ describe('W619 sdk-typescript/examples content parity', () => {
     expect(body).toMatch(/success_url: 'https:\/\/app\.driftstack\.dev\/billing\?ok=1',/);
     expect(body).toMatch(/cancel_url: 'https:\/\/app\.driftstack\.dev\/billing\?cancelled=1',/);
     expect(body).toMatch(/const portal = await client\.billing\.createPortalSession\(\);/);
-    expect(body).toMatch(
-      /state\.trial_pack\.active && state\.trial_pack\.credit_cents_remaining !== null/,
-    );
     expect(existsSync(E('billing-flow.ts'))).toBe(true);
   });
 

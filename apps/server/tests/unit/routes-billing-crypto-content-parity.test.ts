@@ -79,8 +79,8 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     expect(body).toMatch(/'idempotency-key replayed with a different request body',/);
   });
 
-  it('SUPPORTED_PRODUCTS derives from TIER_PRICE_CENTS map keys — server-side authoritative price for trial_pack + 6 paid tiers. 2026-05-21 — V-666.SEC: the prior 7-tuple included stale scaffold tier names (solo_automated/team_growth/team_scale/api_pro) AND trusted customer-supplied price_cents (price-tampering vulnerability). The map is now the single source of truth; SUPPORTED_PRODUCTS is `Object.keys(TIER_PRICE_CENTS)` cast. trial_pack stays in the map for SDK + integration-test compatibility; the route short-circuits to stub posture when amount < NOWPAYMENTS_MIN_USD_CENTS.', () => {
-    expect(body).toMatch(/trial_pack: 299,/);
+  it('SUPPORTED_PRODUCTS derives from TIER_PRICE_CENTS map keys — server-side authoritative price for the 6 self-serve paid tiers. 2026-05-21 — V-666.SEC: the prior 7-tuple included stale scaffold tier names (solo_automated/team_growth/team_scale/api_pro) AND trusted customer-supplied price_cents (price-tampering vulnerability). The map is now the single source of truth; SUPPORTED_PRODUCTS is `Object.keys(TIER_PRICE_CENTS)` cast. trial_pack was removed 2026-05-27 (free tier is not purchasable).', () => {
+    expect(body).not.toMatch(/trial_pack: 299/);
     expect(body).toMatch(/solo_manual: 7900,/);
     expect(body).toMatch(/team_manual: 24900,/);
     expect(body).toMatch(/agency_manual: 69900,/);

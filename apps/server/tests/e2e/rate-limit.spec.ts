@@ -25,7 +25,7 @@ test.beforeEach(async () => {
 test('429 RateLimited via real Redis Lua when bucket drained', async ({ request }) => {
   // Use free tier (global capacity = 60). Drain via direct Redis state
   // manipulation — the Lua script reads (tokens, last_ms) from the same hash.
-  const seed = await seedAccount(server.client, { tier: 'trial_pack' });
+  const seed = await seedAccount(server.client, { tier: 'free' });
   const key = `rl:${seed.accountId}:global`;
   await server.redis.hmset(key, 'tokens', '0', 'last_ms', Date.now().toString());
   await server.redis.expire(key, 120);
@@ -51,7 +51,7 @@ test('Lua atomicity: 100 concurrent calls with capacity=60 yield exactly 60 succ
   // a 61st call succeed despite the bucket only having 60 tokens. Allow a
   // small refill window: assert successes ≤ 65.
 
-  const seed = await seedAccount(server.client, { tier: 'trial_pack' });
+  const seed = await seedAccount(server.client, { tier: 'free' });
 
   const start = Date.now();
   const results = await Promise.all(
@@ -84,8 +84,8 @@ test('Lua atomicity: 100 concurrent calls with capacity=60 yield exactly 60 succ
 });
 
 test('different accounts have independent buckets', async ({ request }) => {
-  const a = await seedAccount(server.client, { tier: 'trial_pack', email: 'a@bucket.test' });
-  const b = await seedAccount(server.client, { tier: 'trial_pack', email: 'b@bucket.test' });
+  const a = await seedAccount(server.client, { tier: 'free', email: 'a@bucket.test' });
+  const b = await seedAccount(server.client, { tier: 'free', email: 'b@bucket.test' });
 
   // Drain account A's bucket via direct Redis.
   await server.redis.hmset(

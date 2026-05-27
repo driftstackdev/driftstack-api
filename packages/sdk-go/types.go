@@ -20,11 +20,11 @@ import (
 // ──────────────────────────────────────────────────────────────────
 
 // AccountTier is the closed enum of pricing tiers (V-148 two-ladder
-// restructure; locked per ADR-003 / ADR-004).
+// restructure; locked per ADR-004; trial_pack retired 2026-05-27 → free).
 type AccountTier string
 
 const (
-	TierTrialPack    AccountTier = "trial_pack"
+	TierFree         AccountTier = "free"
 	TierSoloManual   AccountTier = "solo_manual"
 	TierTeamManual   AccountTier = "team_manual"
 	TierAgencyManual AccountTier = "agency_manual"
@@ -637,19 +637,11 @@ type Subscription struct {
 	UpdatedAt            time.Time          `json:"updated_at"`
 }
 
-type TrialPackState struct {
-	Active               bool       `json:"active"`
-	CreditCentsRemaining *int       `json:"credit_cents_remaining"`
-	ExpiresAt            *time.Time `json:"expires_at"`
-	Redeemed             bool       `json:"redeemed"`
-}
-
 // GetBillingStateResponse — V-429. `Subscription` is nullable
-// (account never subscribed). `TrialPack` is always present (server's
-// schema has it non-nullable).
+// (account never subscribed). The trial_pack envelope was removed
+// 2026-05-27 with the trial_pack retirement.
 type GetBillingStateResponse struct {
-	Subscription *Subscription  `json:"subscription"`
-	TrialPack    TrialPackState `json:"trial_pack"`
+	Subscription *Subscription `json:"subscription"`
 }
 
 type CreateCheckoutSessionRequest struct {
@@ -659,16 +651,6 @@ type CreateCheckoutSessionRequest struct {
 }
 
 type CreateCheckoutSessionResponse struct {
-	CheckoutURL string `json:"checkout_url"`
-	SessionID   string `json:"session_id"`
-}
-
-type StartTrialPackRequest struct {
-	SuccessURL string `json:"success_url,omitempty"`
-	CancelURL  string `json:"cancel_url,omitempty"`
-}
-
-type StartTrialPackResponse struct {
 	CheckoutURL string `json:"checkout_url"`
 	SessionID   string `json:"session_id"`
 }

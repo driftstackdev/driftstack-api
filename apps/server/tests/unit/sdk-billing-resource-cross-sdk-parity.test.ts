@@ -20,11 +20,11 @@ const TS = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/billing.ts'
 const PY = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/billing.py');
 const GO = resolve(REPO_ROOT, 'packages/sdk-go/billing.go');
 
-// 4 required method names. Each language uses idiomatic naming.
+// 3 required method names (startTrialPack retired 2026-05-27). Each
+// language uses idiomatic naming.
 const REQUIRED_METHODS: Array<[string, string, string]> = [
   ['getState', 'get_state', 'GetState'],
   ['createCheckoutSession', 'create_checkout_session', 'CreateCheckoutSession'],
-  ['startTrialPack', 'start_trial_pack', 'StartTrialPack'],
   ['createPortalSession', 'create_portal_session', 'CreatePortalSession'],
 ];
 
@@ -37,7 +37,7 @@ describe('W825 cross-SDK BillingResource methods parity', () => {
 
   // ─── 4-required-method set ────────────────────────────────────
 
-  it('CRITICAL all 4 BillingResource methods exist in all 3 SDKs — getState + createCheckoutSession + startTrialPack + createPortalSession. Drift would break W800 cross-SDK billing-flow example + customer self-serve subscribe + portal flow.', () => {
+  it('CRITICAL all 3 BillingResource methods exist in all 3 SDKs — getState + createCheckoutSession + createPortalSession. Drift would break W800 cross-SDK billing-flow example + customer self-serve subscribe + portal flow.', () => {
     const ts = read(TS);
     const py = read(PY);
     const go = read(GO);
@@ -53,26 +53,20 @@ describe('W825 cross-SDK BillingResource methods parity', () => {
 
   // ─── TS strongly-typed responses ──────────────────────────────
 
-  it('CRITICAL TS BillingResource methods return typed responses — GetBillingStateResponse + CreateCheckoutSessionResponse + StartTrialPackResponse + CreatePortalSessionResponse. Drift to dropping types would lose customer typeahead for billing surfaces.', () => {
+  it('CRITICAL TS BillingResource methods return typed responses — GetBillingStateResponse + CreateCheckoutSessionResponse + CreatePortalSessionResponse. Drift to dropping types would lose customer typeahead for billing surfaces.', () => {
     const p = read(TS);
     expect(p).toMatch(/getState\(\): Promise<GetBillingStateResponse>/);
     expect(p).toMatch(/createCheckoutSession\(/);
-    expect(p).toMatch(
-      /startTrialPack\(body: StartTrialPackRequest = \{\}\): Promise<StartTrialPackResponse>/,
-    );
     expect(p).toMatch(/createPortalSession\(\): Promise<CreatePortalSessionResponse>/);
   });
 
   // ─── Go strongly-typed responses ──────────────────────────────
 
-  it('CRITICAL Go BillingResource methods return typed pointer-+-error pairs. GetState → *GetBillingStateResponse + error; CreateCheckoutSession → *CreateCheckoutSessionResponse + error; StartTrialPack → *StartTrialPackResponse + error; CreatePortalSession → *CreatePortalSessionResponse + error.', () => {
+  it('CRITICAL Go BillingResource methods return typed pointer-+-error pairs. GetState → *GetBillingStateResponse + error; CreateCheckoutSession → *CreateCheckoutSessionResponse + error; CreatePortalSession → *CreatePortalSessionResponse + error.', () => {
     const p = read(GO);
     expect(p).toMatch(/GetState\(ctx context\.Context\) \(\*GetBillingStateResponse, error\)/);
     expect(p).toMatch(
       /CreateCheckoutSession\(ctx context\.Context, body \*CreateCheckoutSessionRequest\) \(\*CreateCheckoutSessionResponse, error\)/,
-    );
-    expect(p).toMatch(
-      /StartTrialPack\(ctx context\.Context, body \*StartTrialPackRequest\) \(\*StartTrialPackResponse, error\)/,
     );
     expect(p).toMatch(
       /CreatePortalSession\(ctx context\.Context\) \(\*CreatePortalSessionResponse, error\)/,
@@ -81,14 +75,11 @@ describe('W825 cross-SDK BillingResource methods parity', () => {
 
   // ─── Python untyped-dict return (pending codegen) ─────────────
 
-  it('CRITICAL Python BillingResource returns raw dict (untyped pending codegen pass — matches W824 profiles + W798 pagination duck-typing). All 4 methods return dict[str, Any].', () => {
+  it('CRITICAL Python BillingResource returns raw dict (untyped pending codegen pass — matches W824 profiles + W798 pagination duck-typing). All 3 methods return dict[str, Any].', () => {
     const p = read(PY);
     expect(p).toMatch(/def get_state\(self\) -> dict\[str, Any\]:/);
     expect(p).toMatch(
       /def create_checkout_session\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/,
-    );
-    expect(p).toMatch(
-      /def start_trial_pack\(self, body: dict\[str, Any\] \| None = None\) -> dict\[str, Any\]:/,
     );
     expect(p).toMatch(/def create_portal_session\(self\) -> dict\[str, Any\]:/);
   });
@@ -102,16 +93,6 @@ describe('W825 cross-SDK BillingResource methods parity', () => {
         new RegExp(`async def ${pyName}\\(`),
       );
     }
-  });
-
-  // ─── startTrialPack optional body cross-SDK ───────────────────
-
-  it('CRITICAL startTrialPack accepts optional body cross-SDK. TS: StartTrialPackRequest = {} default; Python: dict | None = None; Go: *StartTrialPackRequest (nil OK). Drift to required body would break customers who want trial-pack defaults.', () => {
-    expect(read(TS)).toMatch(/startTrialPack\(body: StartTrialPackRequest = \{\}\)/);
-    expect(read(PY)).toMatch(/def start_trial_pack\(self, body: dict\[str, Any\] \| None = None\)/);
-    expect(read(GO)).toMatch(
-      /StartTrialPack\(ctx context\.Context, body \*StartTrialPackRequest\)/,
-    );
   });
 
   // ─── Go ctx-first convention ──────────────────────────────────

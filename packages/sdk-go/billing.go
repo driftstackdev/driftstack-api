@@ -4,15 +4,15 @@ import "context"
 
 // BillingResource handles /v1/billing endpoints (V-082).
 //
-// GetState returns the current subscription mirror + trial-pack state.
-// CreateCheckoutSession and StartTrialPack return Stripe Checkout
-// URLs the customer redirects to. CreatePortalSession returns a
-// Stripe Customer Portal URL.
+// GetState returns the current subscription mirror state.
+// CreateCheckoutSession returns a Stripe Checkout URL the customer
+// redirects to. CreatePortalSession returns a Stripe Customer Portal
+// URL. (The one-time trial_pack flow was retired 2026-05-27.)
 type BillingResource struct {
 	client *Client
 }
 
-// GetState returns the current subscription + trial-pack state.
+// GetState returns the current subscription state.
 func (r *BillingResource) GetState(ctx context.Context) (*GetBillingStateResponse, error) {
 	var out GetBillingStateResponse
 	if err := r.client.do(ctx, requestOptions{
@@ -33,25 +33,6 @@ func (r *BillingResource) CreateCheckoutSession(ctx context.Context, body *Creat
 	if err := r.client.do(ctx, requestOptions{
 		method: "POST",
 		path:   "/v1/billing/checkout-session",
-		body:   body,
-		out:    &out,
-	}); err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
-// StartTrialPack returns a Stripe Checkout URL for the $2.99 trial
-// pack purchase. Once-per-account; calling on an account that has
-// already redeemed returns an error.
-func (r *BillingResource) StartTrialPack(ctx context.Context, body *StartTrialPackRequest) (*StartTrialPackResponse, error) {
-	var out StartTrialPackResponse
-	if body == nil {
-		body = &StartTrialPackRequest{}
-	}
-	if err := r.client.do(ctx, requestOptions{
-		method: "POST",
-		path:   "/v1/billing/trial-pack",
 		body:   body,
 		out:    &out,
 	}); err != nil {

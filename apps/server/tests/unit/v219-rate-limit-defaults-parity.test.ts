@@ -68,10 +68,10 @@ describe('W731 V-219 TIER_RATE_LIMIT_DEFAULTS parity', () => {
     );
   });
 
-  it('CRITICAL trial_pack rate limits — global 60/1 + sessions:create 5/(1/60). The 1-token-per-minute session-create cap matches the 16h trial budget.', () => {
+  it('CRITICAL free rate limits — global 60/1 + sessions:create 5/(1/60). The 1-token-per-minute session-create cap matches the 16h trial budget.', () => {
     const c = read(COMMON);
     expect(c).toMatch(
-      /trial_pack: \{\s*\n\s*global: \{ capacity: 60, refill_per_second: 1 \},\s*\n\s*'sessions:create': \{ capacity: 5, refill_per_second: 1 \/ 60 \},/,
+      /free: \{\s*\n\s*global: \{ capacity: 60, refill_per_second: 1 \},\s*\n\s*'sessions:create': \{ capacity: 5, refill_per_second: 1 \/ 60 \},/,
     );
   });
 
@@ -161,7 +161,7 @@ describe('W731 V-219 TIER_RATE_LIMIT_DEFAULTS parity', () => {
     expect(block).toBeDefined();
 
     for (const tier of [
-      'trial_pack',
+      'free',
       'solo_manual',
       'team_manual',
       'agency_manual',

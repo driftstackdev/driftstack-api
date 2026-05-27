@@ -58,22 +58,21 @@ describe('W1044 routes/billing V-082 + V-248 cross-source invariant', () => {
     expect(p).toMatch(/Billing routes \(V-082\)\./);
   });
 
-  it('CRITICAL endpoint roster — 4 routes (checkout-session / trial-pack / portal-session / billing-state). The exhaustive header comment is the canonical contract.', () => {
+  it('CRITICAL endpoint roster — 3 routes (checkout-session / portal-session / billing-state); trial-pack retired 2026-05-27. The exhaustive header comment is the canonical contract.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts'));
     expect(p).toMatch(/POST \/v1\/billing\/checkout-session\s+— start a paid-tier subscription/);
-    expect(p).toMatch(/POST \/v1\/billing\/trial-pack\s+— start the \$2\.99 trial pack/);
     expect(p).toMatch(/POST \/v1\/billing\/portal-session\s+— open Stripe Customer Portal/);
-    expect(p).toMatch(/GET\s+\/v1\/billing\s+— current subscription \+ trial state/);
+    expect(p).toMatch(/GET\s+\/v1\/billing\s+— current subscription state/);
   });
 
-  it('CRITICAL every billing route is requireAuth + global rate-limit; the 4 mutations also require admin:billing (V-481).', () => {
+  it('CRITICAL every billing route is requireAuth + global rate-limit; the 3 mutations also require admin:billing (V-481).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts'));
-    // The 4 billing mutations carry app.requireScope('admin:billing')
+    // The 3 billing mutations carry app.requireScope('admin:billing')
     // between requireAuth and rateLimit, so count each guard
     // independently rather than as an adjacent pair.
     expect((p.match(/app\.requireAuth/g) ?? []).length).toBeGreaterThanOrEqual(4);
     expect((p.match(/app\.rateLimit\('global'\)/g) ?? []).length).toBeGreaterThanOrEqual(4);
-    expect((p.match(/app\.requireScope\('admin:billing'\)/g) ?? []).length).toBe(4);
+    expect((p.match(/app\.requireScope\('admin:billing'\)/g) ?? []).length).toBe(3);
   });
 
   // ─── V-248 open-redirect gate ────────────────────────────────
@@ -130,22 +129,17 @@ describe('W1044 routes/billing V-082 + V-248 cross-source invariant', () => {
 
   // ─── /v1/billing response envelope ───────────────────────────
 
-  it('CRITICAL /v1/billing response shape — { subscription, trial_pack: { active, credit_cents_remaining, expires_at, redeemed } }. The nested trial_pack object lets the dashboard render trial state independent of subscription state.', () => {
+  it('CRITICAL /v1/billing response shape — { subscription } only (trial_pack envelope removed 2026-05-27).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts'));
     expect(p).toMatch(
       /subscription: state\.subscription !== null \? publicSubscription\(state\.subscription\) : null,/,
     );
-    expect(p).toMatch(/active: state\.trialPack\.active,/);
-    expect(p).toMatch(/credit_cents_remaining: state\.trialPack\.creditCentsRemaining,/);
-    expect(p).toMatch(
-      /expires_at: state\.trialPack\.expiresAt \? state\.trialPack\.expiresAt\.toISOString\(\) : null,/,
-    );
-    expect(p).toMatch(/redeemed: state\.trialPack\.redeemed,/);
+    expect(p).not.toMatch(/state\.trialPack/);
   });
 
   // ─── checkout-session / trial-pack response ──────────────────
 
-  it('CRITICAL checkout response shape — { checkout_url, checkout_session_id }. Both checkout-session + trial-pack share this 2-field shape so the dashboard can route either through the same redirect helper.', () => {
+  it('CRITICAL checkout response shape — { checkout_url, checkout_session_id }. The checkout-session 2-field shape drives the dashboard redirect helper.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts'));
     expect(p).toMatch(/checkout_url: result\.url,/);
     expect(p).toMatch(/checkout_session_id: result\.sessionId,/);
@@ -154,10 +148,5 @@ describe('W1044 routes/billing V-082 + V-248 cross-source invariant', () => {
   it("CRITICAL portal-session response — { portal_url }. The single-field response matches the dashboard's redirect-to-Stripe-portal flow.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts'));
     expect(p).toMatch(/return \{ portal_url: result\.url \};/);
-  });
-
-  it('CRITICAL trial-pack body defaults to {} — parsed against StartTrialPackRequestSchema with `req.body ?? {}` fallback. Lets the dashboard call POST with empty body when no override URLs are needed.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts'));
-    expect(p).toMatch(/StartTrialPackRequestSchema\.safeParse\(req\.body \?\? \{\}\)/);
   });
 });

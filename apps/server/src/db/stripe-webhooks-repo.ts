@@ -2,7 +2,7 @@
 // ledger + subscription mirror writes + account tier / trial-pack
 // mutations triggered by inbound Stripe events.
 
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { AccountTier } from '@driftstack/api-types';
 import type { StripeWebhooksRepo } from '../services/stripe-webhooks.js';
 import type { Database } from './client.js';
@@ -128,29 +128,6 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       .set({ tier: args.tier, updatedAt: args.at })
       .where(eq(accounts.id, args.accountId));
     return { previousTier };
-  }
-
-  async applyTrialPackPurchase(args: {
-    accountId: string;
-    creditCents: number;
-    expiresAt: Date;
-    at: Date;
-  }): Promise<{ applied: boolean }> {
-    // Conditional update: only set trial-pack fields if not already
-    // set (`trial_pack_purchased_at IS NULL`). Returning + length tells
-    // us whether the row was actually mutated.
-    const result = await this.database.db
-      .update(accounts)
-      .set({
-        trialPackPurchasedAt: args.at,
-        trialPackCreditCents: args.creditCents,
-        trialPackExpiresAt: args.expiresAt,
-        trialPackRedeemed: false,
-        updatedAt: args.at,
-      })
-      .where(and(eq(accounts.id, args.accountId), isNull(accounts.trialPackPurchasedAt)))
-      .returning({ id: accounts.id });
-    return { applied: result.length > 0 };
   }
 }
 

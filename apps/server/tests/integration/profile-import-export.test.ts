@@ -246,7 +246,7 @@ describe('Profile export → import round-trip', () => {
 // more than `limit` profiles at once; this cap (2× limit imports per
 // billing cycle) is the second wall that stops the import → delete →
 // re-import churn pattern from effectively bypassing the tier. On
-// trial_pack (profile cap 1) the import cap is 2 imports/cycle, so a
+// free (profile cap 1) the import cap is 2 imports/cycle, so a
 // third import — even after deleting the prior two — must 429.
 describe('POST /v1/profiles/import — per-cycle import cap', () => {
   let fx: TestAppFixture;
@@ -275,7 +275,7 @@ describe('POST /v1/profiles/import — per-cycle import cap', () => {
   }
 
   it('429 TierLimit on the (2×cap+1)th import even after deleting prior imports', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' }); // profile cap 1 → import cap 2/cycle
+    fx = await buildTestApp({ tier: 'free' }); // profile cap 1 → import cap 2/cycle
 
     // Import #1, then delete to free the profile-cap slot.
     const first = await importOne('churn-1');

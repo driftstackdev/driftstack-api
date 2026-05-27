@@ -28,7 +28,7 @@ test.beforeEach(async () => {
 test('admin tier-change: full stack — auth, cache, rate-limit, audit', async ({ request }) => {
   // Two distinct accounts: A (admin) and B (target).
   const admin = await seedAccount(server.client, { tier: 'api_builder' });
-  const target = await seedAccount(server.client, { tier: 'trial_pack' });
+  const target = await seedAccount(server.client, { tier: 'free' });
 
   // 1. Sanity: B is on free tier (whoami reflects tier from cached ctx).
   const beforeWhoami = await request.get(`${server.baseUrl}/v1/whoami`, {
@@ -36,7 +36,7 @@ test('admin tier-change: full stack — auth, cache, rate-limit, audit', async (
   });
   expect(beforeWhoami.status()).toBe(200);
   const beforeBody = (await beforeWhoami.json()) as { tier: string };
-  expect(beforeBody.tier).toBe('trial_pack');
+  expect(beforeBody.tier).toBe('free');
 
   // 2. Admin A changes B's tier to scale.
   const tierChange = await request.post(

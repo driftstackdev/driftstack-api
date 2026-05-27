@@ -290,7 +290,6 @@ describe('@driftstack/sdk against real server', () => {
 
     const state = await sdk.billing.getState();
     expect(state.subscription).toBeNull();
-    expect(state.trial_pack.active).toBe(false);
   });
 
   it('billing.createCheckoutSession returns a Stripe URL', async () => {

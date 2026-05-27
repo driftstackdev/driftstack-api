@@ -44,7 +44,7 @@ export type CryptoOrderEvent = z.infer<typeof CryptoOrderEventSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 export const CreateCryptoCheckoutRequestSchema = z.object({
-  product: z.string().describe('SKU; one of the tier ids or trial_pack.'),
+  product: z.string().describe('SKU; one of the paid tier ids (the free tier is not purchasable).'),
   price_cents: z.number().int().positive().max(1_000_000),
   price_currency: z
     .string()

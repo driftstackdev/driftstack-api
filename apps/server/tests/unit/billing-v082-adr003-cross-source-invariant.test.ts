@@ -111,14 +111,14 @@ describe('W939 V-082 + ADR-003 billing cross-source invariant', () => {
     expect(p).toMatch(/against an in-memory provider without touching real Stripe/);
   });
 
-  it('CRITICAL BillingProvider has 4 methods — ensureCustomer + createSubscriptionCheckout + createTrialPackCheckout + createPortalSession. The 4-method surface covers all Stripe API calls the service needs.', () => {
+  it('CRITICAL BillingProvider has 3 methods — ensureCustomer + createSubscriptionCheckout + createPortalSession (createTrialPackCheckout removed 2026-05-27).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/billing.ts'));
     expect(p).toMatch(/export interface BillingProvider \{/);
     expect(p).toMatch(
       /ensureCustomer\(args: \{ accountId: string; email: string; name: string \| null \}\): Promise<string>;/,
     );
     expect(p).toMatch(/createSubscriptionCheckout\(args: \{/);
-    expect(p).toMatch(/createTrialPackCheckout\(args: \{/);
+    expect(p).not.toMatch(/createTrialPackCheckout/);
     expect(p).toMatch(
       /createPortalSession\(args: \{ customerId: string; returnUrl: string \}\): Promise<\{ url: string \}>;/,
     );
@@ -133,7 +133,7 @@ describe('W939 V-082 + ADR-003 billing cross-source invariant', () => {
 
   // ─── BillingAccountSnapshot 9-field shape ────────────────────
 
-  it('CRITICAL BillingAccountSnapshot has 9 fields — id + email + name (nullable) + tier + stripeCustomerId (nullable) + trialPackPurchasedAt (nullable) + trialPackCreditCents (nullable) + trialPackExpiresAt (nullable) + trialPackRedeemed. The 9-field snapshot has 5 nullables to handle no-customer / no-trial-pack states.', () => {
+  it('CRITICAL BillingAccountSnapshot has 5 fields — id + email + name (nullable) + tier + stripeCustomerId (nullable); trial-pack quartet removed 2026-05-27.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/billing.ts'));
     expect(p).toMatch(/export interface BillingAccountSnapshot \{/);
     expect(p).toMatch(/id: string;/);
@@ -141,10 +141,7 @@ describe('W939 V-082 + ADR-003 billing cross-source invariant', () => {
     expect(p).toMatch(/name: string \| null;/);
     expect(p).toMatch(/tier: AccountTier;/);
     expect(p).toMatch(/stripeCustomerId: string \| null;/);
-    expect(p).toMatch(/trialPackPurchasedAt: Date \| null;/);
-    expect(p).toMatch(/trialPackCreditCents: number \| null;/);
-    expect(p).toMatch(/trialPackExpiresAt: Date \| null;/);
-    expect(p).toMatch(/trialPackRedeemed: boolean;/);
+    expect(p).not.toMatch(/trialPackPurchasedAt/);
   });
 
   // ─── SubscriptionMirror 8-status enum ────────────────────────
@@ -211,13 +208,12 @@ describe('W939 V-082 + ADR-003 billing cross-source invariant', () => {
 
   // ─── BillingServiceConfig 5-field shape ──────────────────────
 
-  it("CRITICAL BillingServiceConfig has 5 fields — tierPrices (TierPriceMap) + trialPackPriceId ('One-time price id for the trial-pack purchase') + defaultSuccessUrl + defaultCancelUrl + portalReturnUrl. The 5-field config is the boot-time billing-wiring surface.", () => {
+  it('CRITICAL BillingServiceConfig has 4 fields — tierPrices (TierPriceMap) + defaultSuccessUrl + defaultCancelUrl + portalReturnUrl; trialPackPriceId removed 2026-05-27. The config is the boot-time billing-wiring surface.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/billing.ts'));
     expect(p).toMatch(/export interface BillingServiceConfig \{/);
     expect(p).toMatch(/Map of self-serve paid tier to monthly \+ annual Stripe price ids/);
     expect(p).toMatch(/tierPrices: TierPriceMap;/);
-    expect(p).toMatch(/One-time price id for the trial-pack purchase/);
-    expect(p).toMatch(/trialPackPriceId: string;/);
+    expect(p).not.toMatch(/trialPackPriceId/);
     expect(p).toMatch(/Default success \/ cancel URLs \(customer dashboard\)/);
     expect(p).toMatch(/defaultSuccessUrl: string;/);
     expect(p).toMatch(/defaultCancelUrl: string;/);

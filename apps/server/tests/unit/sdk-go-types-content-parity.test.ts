@@ -55,7 +55,7 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
 
   it('Closed enums pinned: AccountTier (8) + AccountStatus (3) + APIKeyScope (6 with V-174 split) + SessionStatus (5) + SessionPurpose (3 V-433 server-aligned + DefaultSessionPurpose) + WebhookEventType (6) + WebhookDeliveryStatus (5) + UsageRecordType (6) + CaptureKind (3) + SubscriptionStatus (8) + TeamRole (2)', () => {
     expect(body).toMatch(/^type AccountTier string$/m);
-    expect(body).toMatch(/TierTrialPack\s+AccountTier = "trial_pack"/);
+    expect(body).toMatch(/TierFree\s+AccountTier = "free"/);
     expect(body).toMatch(/TierSoloManual\s+AccountTier = "solo_manual"/);
     expect(body).toMatch(/TierAPIBuilder\s+AccountTier = "api_builder"/);
     expect(body).toMatch(/TierEnterprise\s+AccountTier = "enterprise"/);

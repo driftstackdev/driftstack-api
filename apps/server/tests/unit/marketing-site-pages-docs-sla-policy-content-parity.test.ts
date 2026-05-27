@@ -42,7 +42,7 @@ describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content par
 
   it("5-tier availability table: trial_pack/api_starter (no SLA) + solo_manual 99.5% / ~3h 40m + team_manual/api_builder 99.9% / ~43m + agency_manual/api_scale 99.95% / ~21m + enterprise 99.99% (per addendum) / ~4m — pinned so the 5-tier availability ladder + max-downtime/month commitments survive (drift to a different uptime target would put Driftstack on the hook for credits beyond contract; drift to dropping the 'per addendum' caveat on enterprise would lock in 99.99% as default)", () => {
     expect(body).toMatch(
-      /<tr><td><code>trial_pack<\/code> \/ <code>api_starter<\/code><\/td><td>—<\/td><td>\(no SLA — best effort\)<\/td><\/tr>/,
+      /<tr><td><code>free<\/code> \/ <code>api_starter<\/code><\/td><td>—<\/td><td>\(no SLA — best effort\)<\/td><\/tr>/,
     );
     expect(body).toMatch(
       /<tr><td><code>solo_manual<\/code><\/td><td>99\.5%<\/td><td>~3h 40m<\/td><\/tr>/,

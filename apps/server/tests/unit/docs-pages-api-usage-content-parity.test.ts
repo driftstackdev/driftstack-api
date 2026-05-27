@@ -127,7 +127,7 @@ describe('W769 docs /api/usage content parity', () => {
     const p = read(PAGE);
 
     const tierData: Array<[string, string, string, string]> = [
-      ['trial_pack', '1', '1', '30'],
+      ['free', '1', '1', '—'],
       ['solo_manual', '1', '10', '600'],
       ['team_manual', '3', '50', '6,000'],
       ['agency_manual', '8', '200', '24,000'],

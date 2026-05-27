@@ -117,11 +117,10 @@ describe('W649 cross-SDK verb parity', () => {
     expect(tsPaths).toEqual(new Set(['/v1/usage', '/v1/usage/series']));
   });
 
-  it('billing — V-082 4-verb wire paths match: /v1/billing + /v1/billing/checkout-session + /v1/billing/trial-pack + /v1/billing/portal-session', () => {
+  it('billing — V-082 3-verb wire paths match: /v1/billing + /v1/billing/checkout-session + /v1/billing/portal-session (trial-pack retired 2026-05-27)', () => {
     const expected = new Set([
       '/v1/billing',
       '/v1/billing/checkout-session',
-      '/v1/billing/trial-pack',
       '/v1/billing/portal-session',
     ]);
     expect(extractV1Paths(read(goPath('billing')))).toEqual(expected);

@@ -14,7 +14,6 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
-import { PROBLEM_TYPES } from '@driftstack/api-types';
 
 interface CheckoutResponse {
   checkout_url: string;
@@ -64,32 +63,6 @@ describe('V-540.B-14 multi-step checkout flows', () => {
     expect(fx.billingProvider.state.checkoutSessions[0]?.priceId).toBe('price_api_scale_annual');
   });
 
-  it('trial-pack then subscription checkout — both succeed; same customer', async () => {
-    fx = await buildTestApp();
-    const t = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/billing/trial-pack',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: {},
-    });
-    expect(t.statusCode).toBe(200);
-
-    const s = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/billing/checkout-session',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { tier: 'api_starter', billing_period: 'monthly' },
-    });
-    expect(s.statusCode).toBe(200);
-
-    const customers = [...fx.billingProvider.state.customers.values()];
-    expect(customers).toHaveLength(1);
-    const sessions = fx.billingProvider.state.checkoutSessions;
-    expect(sessions).toHaveLength(2);
-    expect(sessions[0]?.kind).toBe('trial_pack');
-    expect(sessions[1]?.kind).toBe('subscription');
-  });
-
   it('portal-session reuses the customer from prior checkout (idempotent)', async () => {
     fx = await buildTestApp();
     await fx.app.inject({
@@ -127,32 +100,6 @@ describe('V-540.B-14 multi-step checkout flows', () => {
     expect(res.statusCode).toBe(400);
     expect(fx.billingProvider.state.checkoutSessions).toHaveLength(0);
     expect(fx.billingProvider.state.customers.size).toBe(0);
-  });
-
-  it('trial-pack 409 after purchase — second call leaves state unchanged', async () => {
-    fx = await buildTestApp();
-    const first = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/billing/trial-pack',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: {},
-    });
-    expect(first.statusCode).toBe(200);
-    // Apply the purchase server-side (simulates webhook landing).
-    fx.billingRepo.applyTrialPackPurchase(fx.accountId, {
-      creditCents: 299,
-      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-    });
-    const second = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/billing/trial-pack',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: {},
-    });
-    expect(second.statusCode).toBe(409);
-    expect(second.json<{ type: string }>().type).toBe(PROBLEM_TYPES.Conflict);
-    // The 409 path must NOT create another Stripe checkout session.
-    expect(fx.billingProvider.state.checkoutSessions).toHaveLength(1);
   });
 });
 

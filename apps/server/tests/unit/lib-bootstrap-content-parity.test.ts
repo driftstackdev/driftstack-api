@@ -125,15 +125,12 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/accountAuditService, \/\/ V-202b — required for tier_changed audit emit/);
   });
 
-  it('V-202d scheduled-jobs framing pinned: generic dispatcher; "trial_pack.expired" handler delegates to lifecycle; workerId `pid-${pid}@<host>` sufficient — single-replica today; multi-replica safety via SELECT FOR UPDATE SKIP LOCKED in repo (not workerId)', () => {
+  it('V-202d scheduled-jobs framing pinned: generic dispatcher; trial_pack.expired handler removed 2026-05-27; dispatcher remains for auth_tokens.sweep + cost.recompute_nightly; workerId `pid-${pid}@<host>` sufficient — single-replica today; multi-replica safety via SELECT FOR UPDATE SKIP LOCKED in repo (not workerId)', () => {
     expect(body).toMatch(
-      /\/\/ V-202d — generic scheduled-jobs dispatcher\. Currently registers\s*\n?\s*\/\/ one handler \(`trial_pack\.expired`\) that delegates to the lifecycle\s*\n?\s*\/\/ service\. Future cron-shaped jobs reuse this service with new\s*\n?\s*\/\/ `register\(jobType, handler\)` calls\./,
+      /\/\/ V-202d — generic scheduled-jobs dispatcher\. The trial_pack\.expired\s*\n?\s*\/\/ handler was removed 2026-05-27 with the trial_pack retirement; the\s*\n?\s*\/\/ dispatcher remains for the other registered cron-shaped jobs\s*\n?\s*\/\/ \(auth_tokens\.sweep, cost\.recompute_nightly\) via `register\(\.\.\.\)`\./,
     );
     expect(body).toMatch(
       /\/\/ workerId composition: `<process-pid>@<host>` is sufficient here —\s*\n?\s*\/\/ production runs single-replica today; multi-replica safety still\s*\n?\s*\/\/ works because the SELECT FOR UPDATE SKIP LOCKED query in the repo\s*\n?\s*\/\/ is what guarantees mutual exclusion, not the workerId\./,
-    );
-    expect(body).toMatch(
-      /scheduledJobsService\.register\('trial_pack\.expired', async \(job\) => \{\s*\n?\s*if \(job\.accountId === null\) return; \/\/ mis-enqueued; skip\s*\n?\s*await accountLifecycleService\.emit\(job\.accountId, \{\s*\n?\s*kind: 'subscription\.trial_pack_expired',\s*\n?\s*\}\);\s*\n?\s*\}\);/,
     );
   });
 

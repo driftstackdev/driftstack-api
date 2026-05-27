@@ -75,11 +75,11 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
     expect(c).toMatch(/trialPack: boolean;/);
   });
 
-  it('CRITICAL apiKeyEnvironment is "test" on trial_pack + "live" elsewhere. The test/live split is what determines whether the minted Stripe key is sandboxed or real. Drift to "live" on trial_pack would let trial keys charge real money.', () => {
+  it('CRITICAL apiKeyEnvironment is "test" on free + "live" elsewhere. The test/live split is what determines whether the minted Stripe key is sandboxed or real. Drift to "live" on free would let free keys charge real money.', () => {
     const c = read(COMMON);
-    expect(c).toMatch(/trial_pack: \{[\s\S]+?apiKeyEnvironment: 'test',/);
+    expect(c).toMatch(/free: \{[\s\S]+?apiKeyEnvironment: 'test',/);
 
-    // Every non-trial tier uses 'live'.
+    // Every non-free tier uses 'live'.
     for (const tier of [
       'solo_manual',
       'team_manual',
@@ -95,9 +95,9 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
     }
   });
 
-  it('CRITICAL trialPack: true ONLY on trial_pack; false everywhere else. The boolean discriminator threads through subscription-vs-one-time accounting; drift would let multiple tiers claim to be trial.', () => {
+  it('CRITICAL apiAccess: false ONLY on free; true everywhere else. The boolean discriminator gates manual-only (no API) vs API-capable tiers.', () => {
     const c = read(COMMON);
-    expect(c).toMatch(/trial_pack: \{[\s\S]+?trialPack: true,/);
+    expect(c).toMatch(/free: \{[\s\S]+?apiAccess: false,/);
 
     for (const tier of [
       'solo_manual',
@@ -108,15 +108,15 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
       'api_scale',
       'enterprise',
     ]) {
-      expect(c, `${tier} trialPack: false`).toMatch(
-        new RegExp(`${tier}: \\{[\\s\\S]+?trialPack: false,`),
+      expect(c, `${tier} apiAccess: true`).toMatch(
+        new RegExp(`${tier}: \\{[\\s\\S]+?apiAccess: true,`),
       );
     }
   });
 
-  it('CRITICAL aiAgent gate matrix pinned — false on trial_pack + solo_manual; true on every other paid tier. Matches W729 marketing.aiAgent (founder Tier 3 spec post-V-072).', () => {
+  it('CRITICAL aiAgent gate matrix pinned — false on free + solo_manual; true on every other paid tier. Matches W729 marketing.aiAgent (founder Tier 3 spec post-V-072).', () => {
     const c = read(COMMON);
-    expect(c).toMatch(/trial_pack: \{[\s\S]+?aiAgent: false,/);
+    expect(c).toMatch(/free: \{[\s\S]+?aiAgent: false,/);
     expect(c).toMatch(/solo_manual: \{[\s\S]+?aiAgent: false,/);
 
     for (const tier of [
@@ -133,9 +133,9 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
     }
   });
 
-  it('CRITICAL llmBilling gate matrix pinned — null on trial+solo; byok_only on team/agency/starter; byok_or_bundled on builder/scale; byok_or_bundled_custom on enterprise. Matches W729 marketing.llmBilling.', () => {
+  it('CRITICAL llmBilling gate matrix pinned — null on free+solo; byok_only on team/agency/starter; byok_or_bundled on builder/scale; byok_or_bundled_custom on enterprise. Matches W729 marketing.llmBilling.', () => {
     const c = read(COMMON);
-    expect(c).toMatch(/trial_pack: \{[\s\S]+?llmBilling: null,/);
+    expect(c).toMatch(/free: \{[\s\S]+?llmBilling: null,/);
     expect(c).toMatch(/solo_manual: \{[\s\S]+?llmBilling: null,/);
 
     for (const tier of ['team_manual', 'agency_manual', 'api_starter']) {
@@ -161,7 +161,7 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
     expect(c).toMatch(/Concurrent session cap\. Mirrors TIER_CONCURRENT_SESSION_LIMITS/);
 
     const expected: Array<[string, number]> = [
-      ['trial_pack', 1],
+      ['free', 1],
       ['solo_manual', 1],
       ['team_manual', 3],
       ['agency_manual', 8],
@@ -180,7 +180,7 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
     const c = read(COMMON);
 
     const expected: Array<[string, string]> = [
-      ['trial_pack', '1'],
+      ['free', '1'],
       ['solo_manual', '10'],
       ['team_manual', '50'],
       ['agency_manual', '200'],

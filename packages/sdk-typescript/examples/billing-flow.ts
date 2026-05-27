@@ -41,12 +41,6 @@ async function main(): Promise<void> {
   console.log(
     `Subscribed to ${state.subscription.tier} (status=${state.subscription.status})\nPortal: ${portal.portal_url}`,
   );
-
-  if (state.trial_pack.active && state.trial_pack.credit_cents_remaining !== null) {
-    console.log(
-      `Trial-pack credit remaining: ${state.trial_pack.credit_cents_remaining.toString()} cents`,
-    );
-  }
 }
 
 main().catch((err: unknown) => {

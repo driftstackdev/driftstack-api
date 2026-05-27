@@ -38,10 +38,6 @@ interface AccountFacet {
   id: string;
   stripeCustomerId: string | null;
   tier: AccountTier;
-  trialPackPurchasedAt: Date | null;
-  trialPackCreditCents: number | null;
-  trialPackExpiresAt: Date | null;
-  trialPackRedeemed: boolean;
 }
 
 export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
@@ -58,11 +54,7 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     this.accounts.set(args.accountId, {
       id: args.accountId,
       stripeCustomerId: args.stripeCustomerId,
-      tier: args.tier ?? 'trial_pack',
-      trialPackPurchasedAt: null,
-      trialPackCreditCents: null,
-      trialPackExpiresAt: null,
-      trialPackRedeemed: false,
+      tier: args.tier ?? 'free',
     });
   }
 
@@ -163,24 +155,5 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     const previousTier = a.tier;
     this.accounts.set(args.accountId, { ...a, tier: args.tier });
     return Promise.resolve({ previousTier });
-  }
-
-  applyTrialPackPurchase(args: {
-    accountId: string;
-    creditCents: number;
-    expiresAt: Date;
-    at: Date;
-  }): Promise<{ applied: boolean }> {
-    const a = this.accounts.get(args.accountId);
-    if (!a) return Promise.resolve({ applied: false });
-    if (a.trialPackPurchasedAt !== null) return Promise.resolve({ applied: false });
-    this.accounts.set(args.accountId, {
-      ...a,
-      trialPackPurchasedAt: args.at,
-      trialPackCreditCents: args.creditCents,
-      trialPackExpiresAt: args.expiresAt,
-      trialPackRedeemed: false,
-    });
-    return Promise.resolve({ applied: true });
   }
 }

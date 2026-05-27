@@ -44,7 +44,7 @@ describe('W621 sdk-go/examples content parity', () => {
     expect(existsSync(E('quickstart/main.go'))).toBe(true);
   });
 
-  it('billing_flow/main.go: /billing-page mirror + account_owner scope + Billing.GetState branching (no-sub → CreateCheckoutSession TierAPIBuilder + success/cancel urls / has-sub → CreatePortalSession) + TrialPack.Active + CreditCentsRemaining pinned', () => {
+  it('billing_flow/main.go: /billing-page mirror + account_owner scope + Billing.GetState branching (no-sub → CreateCheckoutSession TierAPIBuilder + success/cancel urls / has-sub → CreatePortalSession) pinned (trial-pack block removed 2026-05-27)', () => {
     const body = read(E('billing_flow/main.go'));
     expect(body).toMatch(/^\/\/ Example: customer billing self-serve flow\.$/m);
     expect(body).toMatch(/customer-dashboard \/billing page in code form/);
@@ -58,9 +58,6 @@ describe('W621 sdk-go/examples content parity', () => {
     expect(body).toMatch(/SuccessURL: "https:\/\/app\.driftstack\.dev\/billing\?ok=1",/);
     expect(body).toMatch(/CancelURL:\s+"https:\/\/app\.driftstack\.dev\/billing\?cancelled=1",/);
     expect(body).toMatch(/portal, err := client\.Billing\.CreatePortalSession\(ctx\)/);
-    expect(body).toMatch(
-      /if state\.TrialPack\.Active && state\.TrialPack\.CreditCentsRemaining != nil \{/,
-    );
     expect(existsSync(E('billing_flow/main.go'))).toBe(true);
   });
 

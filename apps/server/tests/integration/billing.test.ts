@@ -16,12 +16,6 @@ interface BillingState {
     status: string;
     stripe_subscription_id: string;
   } | null;
-  trial_pack: {
-    active: boolean;
-    credit_cents_remaining: number | null;
-    expires_at: string | null;
-    redeemed: boolean;
-  };
 }
 
 describe('POST /v1/billing/checkout-session', () => {
@@ -63,13 +57,13 @@ describe('POST /v1/billing/checkout-session', () => {
     expect(body.detail).toContain('admin:billing');
   });
 
-  it('400 ValidationFailed for tier=trial_pack', async () => {
+  it('400 ValidationFailed for tier=free', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/billing/checkout-session',
       headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { tier: 'trial_pack', billing_period: 'monthly' },
+      payload: { tier: 'free', billing_period: 'monthly' },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.ValidationFailed);
@@ -152,43 +146,6 @@ describe('POST /v1/billing/checkout-session', () => {
       },
     });
     expect(res.statusCode).toBe(400);
-  });
-});
-
-describe('POST /v1/billing/trial-pack', () => {
-  let fx: TestAppFixture;
-
-  afterEach(async () => {
-    if (fx) await fx.cleanup();
-  });
-
-  it('200 returns a Checkout URL for the one-time trial pack', async () => {
-    fx = await buildTestApp();
-    const res = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/billing/trial-pack',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: {},
-    });
-    expect(res.statusCode).toBe(200);
-    expect(fx.billingProvider.state.checkoutSessions[0]?.kind).toBe('trial_pack');
-    expect(fx.billingProvider.state.checkoutSessions[0]?.priceId).toBe('price_trial_pack_one_time');
-  });
-
-  it('409 Conflict when trial pack already purchased', async () => {
-    fx = await buildTestApp();
-    fx.billingRepo.applyTrialPackPurchase(fx.accountId, {
-      creditCents: 299,
-      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-    });
-    const res = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/billing/trial-pack',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: {},
-    });
-    expect(res.statusCode).toBe(409);
-    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.Conflict);
   });
 });
 
@@ -279,7 +236,7 @@ describe('GET /v1/billing', () => {
     if (fx) await fx.cleanup();
   });
 
-  it('200 returns null subscription + inactive trial-pack on a fresh account', async () => {
+  it('200 returns null subscription on a fresh account', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'GET',
@@ -289,8 +246,6 @@ describe('GET /v1/billing', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<BillingState>();
     expect(body.subscription).toBeNull();
-    expect(body.trial_pack.active).toBe(false);
-    expect(body.trial_pack.redeemed).toBe(false);
   });
 
   it('V-666.BW sets Cache-Control: no-store, private', async () => {
@@ -302,24 +257,6 @@ describe('GET /v1/billing', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store, private');
-  });
-
-  it('reflects an active trial-pack purchase', async () => {
-    fx = await buildTestApp();
-    fx.billingRepo.applyTrialPackPurchase(fx.accountId, {
-      creditCents: 299,
-      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-    });
-
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: '/v1/billing',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-    });
-    const body = res.json<BillingState>();
-    expect(body.trial_pack.active).toBe(true);
-    expect(body.trial_pack.credit_cents_remaining).toBe(299);
-    expect(body.trial_pack.expires_at).toBeTruthy();
   });
 
   it('reflects a subscription mirror row', async () => {

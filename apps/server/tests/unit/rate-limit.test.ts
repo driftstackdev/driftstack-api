@@ -151,7 +151,7 @@ describe('bucketConfigFor', () => {
     // Two-ladder per ADR-004 — verify each ladder + trial pack scales
     // monotonically up. Bonus: enterprise is the strict upper bound.
     const orderedAlongLadders = [
-      'trial_pack',
+      'free',
       'solo_manual',
       'team_manual',
       'agency_manual',
@@ -178,7 +178,7 @@ describe('rateLimitConsume (service)', () => {
     const store = new MemoryRateLimitStore();
     const r = await rateLimitConsume(store, {
       accountId: 'acc-1',
-      tier: 'trial_pack',
+      tier: 'free',
       bucketKey: 'global',
       now: 1000,
     });

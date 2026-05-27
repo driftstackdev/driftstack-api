@@ -36,7 +36,7 @@ describe('POST /v1/admin/accounts/:id/tier', () => {
   });
 
   it('writes an audit row capturing input + admin identity', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
+    fx = await buildTestApp({ tier: 'free' });
     await fx.app.inject({
       method: 'POST',
       url: `/v1/admin/accounts/${accId(fx)}/tier`,

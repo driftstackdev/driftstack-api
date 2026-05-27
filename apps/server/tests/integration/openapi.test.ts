@@ -101,7 +101,6 @@ describe('OpenAPI spec generation', () => {
         '/v1/billing',
         '/v1/billing/checkout-session',
         '/v1/billing/portal-session',
-        '/v1/billing/trial-pack',
         // V-666 — crypto-orders surface (V-666.AX)
         '/v1/billing/crypto-checkout',
         '/v1/billing/crypto-checkout/quote',

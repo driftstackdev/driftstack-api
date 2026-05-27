@@ -224,11 +224,8 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
       'CreateCheckoutSessionResponse',
       'CreatePortalSessionResponse',
       'GetBillingStateResponse',
-      'StartTrialPackRequest',
-      'StartTrialPackResponse',
       'Subscription',
       'SubscriptionStatus',
-      'TrialPackState',
     ] as const) {
       expect(body).toMatch(new RegExp(`\\b${t}\\b,`));
     }

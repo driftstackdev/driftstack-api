@@ -64,7 +64,7 @@ export async function seedAccount(
     .returning({ id: accounts.id });
   if (!account) throw new Error('failed to seed account');
 
-  const env = tier === 'trial_pack' ? 'test' : 'live';
+  const env = tier === 'free' ? 'test' : 'live';
   const plaintext = generateApiKey(env);
   const keyHash = await hashApiKey(plaintext);
   const keyPrefix = keyPrefixFromPlaintext(plaintext);

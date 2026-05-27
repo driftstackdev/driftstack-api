@@ -19,7 +19,6 @@ import { createHash } from 'node:crypto';
 import type { AccountTier } from '@driftstack/api-types';
 import type { Logger } from '../lib/logger.js';
 import type { AccountLifecycleService } from './account-lifecycle.js';
-import type { ScheduledJobsService } from './scheduled-jobs.js';
 
 /**
  * Minimal parsed-Stripe-event shape. We don't depend on the `stripe`
@@ -103,18 +102,6 @@ export interface StripeWebhooksRepo {
     tier: AccountTier;
     at: Date;
   }): Promise<{ previousTier: AccountTier | null }>;
-
-  /**
-   * Provision a trial-pack purchase per ADR-003: 299¢ credit, 14-day
-   * window, redeemed=false. Idempotent: if `trial_pack_purchased_at`
-   * is already set, no-op.
-   */
-  applyTrialPackPurchase(args: {
-    accountId: string;
-    creditCents: number;
-    expiresAt: Date;
-    at: Date;
-  }): Promise<{ applied: boolean }>;
 }
 
 export type DispatchOutcome = 'handled' | 'ignored' | `error:${string}`;
@@ -131,26 +118,13 @@ export interface StripeWebhooksServiceConfig {
    */
   priceToTier: Record<string, AccountTier>;
   /**
-   * Trial-pack credit cents (default 299 = $2.99 per ADR-003).
-   * Override for tests.
-   */
-  trialPackCreditCents?: number;
-  /**
-   * Trial-pack window length in milliseconds (default 14 days per ADR-003).
-   * Override for tests.
-   */
-  trialPackWindowMs?: number;
-  /**
    * What tier the account drops to when a subscription is canceled
    * (status='canceled' / event 'customer.subscription.deleted').
-   * Default 'trial_pack' (loses paid tier privileges; trial-pack
-   * credit may still be active independently).
+   * Default 'free' (loses paid-tier privileges, lands on the perpetual
+   * free tier).
    */
   cancelDowngradeTier?: AccountTier;
 }
-
-const DEFAULT_TRIAL_PACK_CREDIT_CENTS = 299;
-const DEFAULT_TRIAL_PACK_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 
 export class StripeWebhooksService {
   constructor(
@@ -167,14 +141,6 @@ export class StripeWebhooksService {
      * outputs). Best-effort; failures never block the Stripe handler.
      */
     private readonly accountLifecycle: AccountLifecycleService | null = null,
-    /**
-     * V-202d — optional. When wired, trial-pack purchases enqueue a
-     * `trial_pack.expired` scheduled job that fires the expiry email
-     * at `expiresAt`. Tests that don't exercise the expiry path pass
-     * null; the trial-pack provisioning still happens, just without
-     * the future-dated email.
-     */
-    private readonly scheduledJobs: ScheduledJobsService | null = null,
   ) {}
 
   /**
@@ -395,7 +361,7 @@ export class StripeWebhooksService {
       canceledAt: at,
       at,
     });
-    const downgradeTier = this.config.cancelDowngradeTier ?? 'trial_pack';
+    const downgradeTier = this.config.cancelDowngradeTier ?? 'free';
     const { previousTier } = await this.repo.setAccountTier({
       accountId,
       tier: downgradeTier,
@@ -473,96 +439,22 @@ export class StripeWebhooksService {
     this.logEvent(event, 'invoice.upcoming → renewal_reminder dispatched');
   }
 
-  private async handleCheckoutCompleted(event: StripeEvent): Promise<DispatchOutcome> {
+  private handleCheckoutCompleted(event: StripeEvent): Promise<DispatchOutcome> {
     const session = event.data.object;
     const mode = readString(session, 'mode');
-    const clientReferenceId = readString(session, 'client_reference_id');
-    const stripeCustomerId = readString(session, 'customer');
 
+    // The one-time trial_pack (payment-mode checkout) was retired
+    // 2026-05-27 in favour of the perpetual free tier; all checkouts are
+    // now subscriptions. Subscription mode is informational here —
+    // customer.subscription.created does the actual mirror write — and
+    // any other mode is a no-op ack. No await needed; kept Promise-typed
+    // so the per-type dispatch switch can uniformly `await` every handler.
     if (mode === 'subscription') {
-      // Subscription path: customer.subscription.created arrives separately
-      // and does the actual mirror write. checkout.session.completed for
-      // subscription mode is informational here.
       this.logEvent(event, 'checkout subscription completed (informational)');
-      return 'handled';
+    } else {
+      this.logEvent(event, `checkout completed (mode=${mode ?? 'unknown'}, no-op)`);
     }
-
-    if (mode !== 'payment') {
-      this.logEvent(event, `checkout completed (mode=${mode ?? 'unknown'})`);
-      return 'handled';
-    }
-
-    // payment-mode → trial pack purchase per V-082 metadata convention.
-    // We use client_reference_id as the source of truth; fall back to
-    // customer lookup if absent.
-    const accountId = await this.repo.findAccountIdFromCustomerOrRef({
-      stripeCustomerId,
-      clientReferenceId,
-    });
-    if (accountId === null) {
-      this.config.logger.warn(
-        { component: 'stripe-webhooks', eventId: event.id, stripeCustomerId, clientReferenceId },
-        'checkout.session.completed (payment) for unknown account; ignoring',
-      );
-      return 'ignored';
-    }
-
-    const at = new Date();
-    const expiresAt = new Date(
-      at.getTime() + (this.config.trialPackWindowMs ?? DEFAULT_TRIAL_PACK_WINDOW_MS),
-    );
-    const creditCents = this.config.trialPackCreditCents ?? DEFAULT_TRIAL_PACK_CREDIT_CENTS;
-    const { applied } = await this.repo.applyTrialPackPurchase({
-      accountId,
-      creditCents,
-      expiresAt,
-      at,
-    });
-
-    // V-202b — fire trial-pack-purchased email only on first apply
-    // (the repo's idempotency gate ensures `applied=false` on a
-    // duplicate Stripe event re-delivery, so this skips correctly).
-    if (applied && this.accountLifecycle !== null) {
-      await this.accountLifecycle.emit(accountId, {
-        kind: 'subscription.trial_pack_purchased',
-        creditCents,
-        expiresAt,
-      });
-    }
-
-    // V-202d — schedule the expiry email at expiresAt. dedupOnAccountAndType
-    // ensures one pending trial_pack.expired job per account regardless
-    // of how many times the purchase webhook re-fires (Stripe re-deliveries
-    // beyond the V-089 idempotency-gate's window would otherwise enqueue
-    // duplicates here).
-    if (applied && this.scheduledJobs !== null) {
-      try {
-        await this.scheduledJobs.enqueue({
-          jobType: 'trial_pack.expired',
-          accountId,
-          payload: { trial_pack_expires_at: expiresAt.toISOString() },
-          runAt: expiresAt,
-          dedupOnAccountAndType: true,
-        });
-      } catch (err) {
-        // Best-effort. A scheduled-jobs enqueue failure shouldn't fail
-        // the Stripe webhook (re-delivery would re-enqueue anyway).
-        this.config.logger.warn(
-          {
-            component: 'stripe-webhooks',
-            eventId: event.id,
-            err:
-              err instanceof Error
-                ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
-                : { value: err },
-          },
-          'trial_pack.expired enqueue failed (best-effort, swallowed)',
-        );
-      }
-    }
-
-    this.logEvent(event, applied ? 'trial-pack provisioned' : 'trial-pack already provisioned');
-    return 'handled';
+    return Promise.resolve<DispatchOutcome>('handled');
   }
 
   private logEvent(event: StripeEvent, kind: string): void {

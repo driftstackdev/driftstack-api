@@ -45,15 +45,15 @@ describe('V-485 — TIER_FEATURES registry shape', () => {
     }
   });
 
-  it('only the trial_pack tier has trialPack=true', () => {
+  it('only the free tier denies API access (manual-only)', () => {
     for (const tier of ALL_TIERS) {
-      expect(TIER_FEATURES[tier].trialPack).toBe(tier === 'trial_pack');
+      expect(TIER_FEATURES[tier].apiAccess).toBe(tier !== 'free');
     }
   });
 
-  it('only the trial_pack tier mints test-environment API keys', () => {
+  it('only the free tier mints test-environment API keys', () => {
     for (const tier of ALL_TIERS) {
-      const expected = tier === 'trial_pack' ? 'test' : 'live';
+      const expected = tier === 'free' ? 'test' : 'live';
       expect(TIER_FEATURES[tier].apiKeyEnvironment).toBe(expected);
     }
   });
@@ -70,8 +70,8 @@ describe('V-485 — TIER_FEATURES registry shape', () => {
   });
 
   it('locks the AI-agent matrix per ADR-004 + founder Tier 3 spec', () => {
-    // trial_pack / solo_manual: AI agent OFF.
-    expect(TIER_FEATURES.trial_pack.aiAgent).toBe(false);
+    // free / solo_manual: AI agent OFF.
+    expect(TIER_FEATURES.free.aiAgent).toBe(false);
     expect(TIER_FEATURES.solo_manual.aiAgent).toBe(false);
     // Manual mid + Manual top + API ladder: AI agent ON.
     expect(TIER_FEATURES.team_manual.aiAgent).toBe(true);
@@ -94,32 +94,32 @@ describe('V-485 — tierFeatures() lookup', () => {
     expect(tierFeatures('api_builder')).toBe(TIER_FEATURES.api_builder);
   });
 
-  it('returns the trial_pack row with apiKeyEnvironment=test', () => {
-    expect(tierFeatures('trial_pack').apiKeyEnvironment).toBe('test');
+  it('returns the free row with apiKeyEnvironment=test', () => {
+    expect(tierFeatures('free').apiKeyEnvironment).toBe('test');
   });
 });
 
 describe('V-485 — tierHasFeature() boolean predicate', () => {
   it('returns true when the boolean feature is enabled', () => {
     expect(tierHasFeature('api_builder', 'aiAgent')).toBe(true);
-    expect(tierHasFeature('trial_pack', 'trialPack')).toBe(true);
+    expect(tierHasFeature('api_builder', 'apiAccess')).toBe(true);
   });
 
   it('returns false when the boolean feature is disabled', () => {
     expect(tierHasFeature('solo_manual', 'aiAgent')).toBe(false);
-    expect(tierHasFeature('api_scale', 'trialPack')).toBe(false);
+    expect(tierHasFeature('free', 'apiAccess')).toBe(false);
   });
 });
 
 describe('V-485 — requireTierFeature() guard', () => {
   it('does not throw when the feature is enabled', () => {
     expect(() => requireTierFeature('api_builder', 'aiAgent')).not.toThrow();
-    expect(() => requireTierFeature('trial_pack', 'trialPack')).not.toThrow();
+    expect(() => requireTierFeature('api_builder', 'apiAccess')).not.toThrow();
   });
 
   it('throws ForbiddenError when the feature is disabled', () => {
     expect(() => requireTierFeature('solo_manual', 'aiAgent')).toThrow(ForbiddenError);
-    expect(() => requireTierFeature('trial_pack', 'aiAgent')).toThrow(ForbiddenError);
+    expect(() => requireTierFeature('free', 'aiAgent')).toThrow(ForbiddenError);
   });
 
   it('error message names the feature and tier so the customer can read it', () => {
@@ -135,9 +135,9 @@ describe('V-485 — requireTierFeature() guard', () => {
     expect(detail).toContain('solo_manual');
   });
 
-  it('exhaustively gates aiAgent: only OFF on trial_pack + solo_manual', () => {
+  it('exhaustively gates aiAgent: only OFF on free + solo_manual', () => {
     for (const tier of ALL_TIERS) {
-      if (tier === 'trial_pack' || tier === 'solo_manual') {
+      if (tier === 'free' || tier === 'solo_manual') {
         expect(() => requireTierFeature(tier, 'aiAgent')).toThrow(ForbiddenError);
       } else {
         expect(() => requireTierFeature(tier, 'aiAgent')).not.toThrow();

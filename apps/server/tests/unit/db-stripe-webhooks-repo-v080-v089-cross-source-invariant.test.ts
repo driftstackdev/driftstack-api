@@ -79,14 +79,14 @@ describe('W1003 db/stripe-webhooks-repo V-080 + V-089 cross-source invariant', (
 
   // ─── 6-method surface ────────────────────────────────────────
 
-  it('CRITICAL 6-method surface — hasEvent + recordEvent + findAccountIdFromCustomerOrRef + upsertSubscription + setAccountTier + applyTrialPackPurchase. The 6-method shape covers the full Stripe-webhook side-effect set.', () => {
+  it('CRITICAL 5-method surface — hasEvent + recordEvent + findAccountIdFromCustomerOrRef + upsertSubscription + setAccountTier (applyTrialPackPurchase removed 2026-05-27). The 5-method shape covers the full Stripe-webhook side-effect set.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/stripe-webhooks-repo.ts'));
     expect(p).toMatch(/async hasEvent\(eventId: string\): Promise<boolean> \{/);
     expect(p).toMatch(/async recordEvent\(args: \{/);
     expect(p).toMatch(/async findAccountIdFromCustomerOrRef\(args: \{/);
     expect(p).toMatch(/async upsertSubscription\(args: \{/);
     expect(p).toMatch(/async setAccountTier\(args: \{/);
-    expect(p).toMatch(/async applyTrialPackPurchase\(args: \{/);
+    expect(p).not.toMatch(/applyTrialPackPurchase/);
   });
 
   // ─── hasEvent narrow projection ──────────────────────────────
@@ -179,27 +179,6 @@ describe('W1003 db/stripe-webhooks-repo V-080 + V-089 cross-source invariant', (
   });
 
   // ─── applyTrialPackPurchase ADR-003 once-per-account ─────────
-
-  it("CRITICAL applyTrialPackPurchase framing — 'Conditional update: only set trial-pack fields if not already set (trial_pack_purchased_at IS NULL). Returning + length tells us whether the row was actually mutated'. The IS-NULL guard + returning-length signal is the ADR-003 once-per-account idempotency contract.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/stripe-webhooks-repo.ts'));
-    expect(p).toMatch(/\/\/ Conditional update: only set trial-pack fields if not already/);
-    expect(p).toMatch(/\/\/ set \(`trial_pack_purchased_at IS NULL`\)\. Returning \+ length tells/);
-    expect(p).toMatch(/\/\/ us whether the row was actually mutated\./);
-    expect(p).toMatch(
-      /\.where\(and\(eq\(accounts\.id, args\.accountId\), isNull\(accounts\.trialPackPurchasedAt\)\)\)/,
-    );
-    expect(p).toMatch(/\.returning\(\{ id: accounts\.id \}\);/);
-    expect(p).toMatch(/return \{ applied: result\.length > 0 \};/);
-  });
-
-  it('CRITICAL applyTrialPackPurchase 5-field SET — trialPackPurchasedAt + trialPackCreditCents + trialPackExpiresAt + trialPackRedeemed:false + updatedAt. The 5-field set initializes the ADR-003 trial-pack ledger atomically.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/stripe-webhooks-repo.ts'));
-    expect(p).toMatch(/trialPackPurchasedAt: args\.at,/);
-    expect(p).toMatch(/trialPackCreditCents: args\.creditCents,/);
-    expect(p).toMatch(/trialPackExpiresAt: args\.expiresAt,/);
-    expect(p).toMatch(/trialPackRedeemed: false,/);
-    expect(p).toMatch(/updatedAt: args\.at,/);
-  });
 
   // ─── void sql keepalive ──────────────────────────────────────
 

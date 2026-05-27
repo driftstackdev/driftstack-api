@@ -61,11 +61,11 @@ describe('docs/api/usage content parity', () => {
     );
   });
 
-  it("8-tier quota table snapshot pinned: trial_pack (1/1/30) + solo_manual (1/10/600) + team_manual (3/50/6,000) + agency_manual (8/200/24,000) + api_starter (2/25/6,000) + api_builder (8/100/50,000) + api_scale (24/500/250,000) + enterprise (32/custom/custom). + 'driven by TIER_CONCURRENT_SESSION_LIMITS and PROFILES_PER_TIER in @driftstack/api-types' source-of-truth pointer — pinned so the 8-tier×3-cap snapshot + canonical constant names contract all stay documented (drift on numbers would mismatch the tier-cap source-of-truth + likely under/over-charge customers)", () => {
+  it("8-tier quota table snapshot pinned: free (1/1/—) + solo_manual (1/10/600) + team_manual (3/50/6,000) + agency_manual (8/200/24,000) + api_starter (2/25/6,000) + api_builder (8/100/50,000) + api_scale (24/500/250,000) + enterprise (32/custom/custom). + 'driven by TIER_CONCURRENT_SESSION_LIMITS and PROFILES_PER_TIER in @driftstack/api-types' source-of-truth pointer — pinned so the 8-tier×3-cap snapshot + canonical constant names contract all stay documented (drift on numbers would mismatch the tier-cap source-of-truth + likely under/over-charge customers)", () => {
     expect(body).toMatch(
       /`TIER_CONCURRENT_SESSION_LIMITS`\s*\n?\s*and `PROFILES_PER_TIER` in `@driftstack\/api-types`/,
     );
-    expect(body).toMatch(/\|\s*`trial_pack`\s*\|\s+1 \|\s+1 \|\s+30 \|/);
+    expect(body).toMatch(/\|\s*`free`\s*\|\s+1 \|\s+1 \|\s+— \|/);
     expect(body).toMatch(/\|\s*`solo_manual`\s*\|\s+1 \|\s+10 \|\s+600 \|/);
     expect(body).toMatch(/\|\s*`api_starter`\s*\|\s+2 \|\s+25 \|\s+6,000 \|/);
     expect(body).toMatch(/\|\s*`api_builder`\s*\|\s+8 \|\s+100 \|\s+50,000 \|/);

@@ -67,15 +67,11 @@ export interface CryptoCheckoutRoutesDeps {
 // price_cents is now IGNORED — server uses this table verbatim.
 //
 // Tier IDs match the canonical AccountTier enum at
-// packages/api-types/src/common.ts. trial_pack is included for
-// backwards-compat (SDK + integration tests POST it); the handler
-// detects amounts below NOWPAYMENTS_MIN_USD_CENTS and returns the
-// stub posture WITHOUT calling NowPayments — avoids the
-// amount_too_low error customers would otherwise see. The
-// customer-dashboard hides the crypto button on trial-pack copy as
-// a UX guard.
+// packages/api-types/src/common.ts. Only the 6 self-serve paid tiers
+// are crypto-purchasable; the perpetual free tier is not purchasable
+// (trial_pack was retired 2026-05-27 — its removal resolves the #10
+// checkout-vs-quote product-list mismatch by deletion).
 export const TIER_PRICE_CENTS: Record<string, number> = {
-  trial_pack: 299,
   solo_manual: 7900,
   team_manual: 24900,
   agency_manual: 69900,
@@ -251,9 +247,7 @@ export function registerCryptoCheckoutRoutes(
       let payAmount: number | null = null;
       // V-666.SEC: skip the NowPayments call when the amount is below
       // their USD-equivalent floor. Avoids surfacing amount_too_low
-      // errors to customers + keeps the trial-pack flow on Stripe
-      // even if a future regression re-enables a trial-pack crypto
-      // button without UI gating.
+      // errors to customers for any sub-floor product.
       if (
         deps.nowpayments !== undefined &&
         deps.nowpaymentsIpnCallbackUrl !== undefined &&

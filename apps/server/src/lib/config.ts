@@ -75,8 +75,8 @@ const ConfigSchema = z.object({
   // the in-memory stub. Sub-fields are individually optional so dev
   // can run without any Stripe config (routes simply don't register).
   // `tierPrices` maps each self-serve paid tier to its monthly +
-  // annual Stripe price ids (price_...). `trialPackPriceId` is the
-  // one-time price for ADR-003 trial-pack purchases.
+  // annual Stripe price ids (price_...). The one-time trial_pack was
+  // retired 2026-05-27 (perpetual free tier replaced it).
   stripe: z
     .object({
       webhookSecret: z.string().min(1).optional(),
@@ -86,7 +86,6 @@ const ConfigSchema = z.object({
       tierPrices: z
         .record(z.string(), z.object({ monthly: z.string(), annual: z.string() }))
         .optional(),
-      trialPackPriceId: z.string().min(1).optional(),
       successUrl: z.string().url().optional(),
       cancelUrl: z.string().url().optional(),
       portalReturnUrl: z.string().url().optional(),
@@ -480,9 +479,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
             ...(env.STRIPE_API_VERSION ? { apiVersion: env.STRIPE_API_VERSION } : {}),
             ...(env.DRIFTSTACK_TIER_PRICE_IDS
               ? { tierPrices: parseTierPrices(env.DRIFTSTACK_TIER_PRICE_IDS) }
-              : {}),
-            ...(env.STRIPE_TRIAL_PACK_PRICE_ID
-              ? { trialPackPriceId: env.STRIPE_TRIAL_PACK_PRICE_ID }
               : {}),
             ...(env.STRIPE_SUCCESS_URL ? { successUrl: env.STRIPE_SUCCESS_URL } : {}),
             ...(env.STRIPE_CANCEL_URL ? { cancelUrl: env.STRIPE_CANCEL_URL } : {}),

@@ -1,21 +1,16 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import { MOCK_ACCOUNT, MOCK_SUBSCRIPTION, MOCK_TRIAL_PACK_STATE } from '../data/mocks.ts';
+import { MOCK_ACCOUNT, MOCK_SUBSCRIPTION } from '../data/mocks.ts';
 
 // V-183 — progressive-enhancement wiring against /v1/billing.
 // SSG renders mock for instant paint; inline <script> fetches live
-// state + replaces card values. Action buttons (portal / trial pack)
-// POST to the corresponding billing endpoint + redirect to the
-// returned Stripe URL. Mirrors V-180/V-181/V-182.
+// state + replaces card values. The portal action button POSTs to the
+// billing endpoint + redirects to the returned Stripe URL. Mirrors
+// V-180/V-181/V-182. (Trial-pack flow retired 2026-05-27.)
 
 function fmtIso(iso: string | null): string {
   if (iso === null) return '—';
   return new Date(iso).toISOString().slice(0, 10);
-}
-
-function fmtCents(cents: number | null): string {
-  if (cents === null) return '—';
-  return `$${(cents / 100).toFixed(2)}`;
 }
 
 const status = MOCK_SUBSCRIPTION?.status ?? 'no_subscription';
@@ -48,7 +43,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       <p class="text-sm text-ink-muted" data-field="account-email">Account · {MOCK_ACCOUNT.email}</p>
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Billing</h1>
       <p class="mt-2 max-w-prose text-sm text-ink-muted">
-        Manage subscription, payment method, invoices, and trial-pack credit.
+        Manage subscription, payment method, and invoices.
         All payment changes redirect to Stripe's secure portal.
       </p>
     </header>
@@ -105,69 +100,6 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </section>
 
-    {/* 2026-05-23 — icon header on the trial-pack card. */}
-    <!-- Trial pack card -->
-    <section class="dashboard-card mt-6">
-      <div class="flex items-start justify-between gap-6">
-        <div class="flex items-start gap-4">
-          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M20 12V8H6a2 2 0 0 1 0-4h12v4" />
-              <path d="M4 6v12a2 2 0 0 0 2 2h14v-4" />
-              <path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
-            </svg>
-          </div>
-          <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Trial pack</p>
-          <h2 class="mt-2 text-xl font-semibold text-ink-primary" data-field="trial-state">
-            {
-              MOCK_TRIAL_PACK_STATE.active
-                ? 'Active'
-                : MOCK_TRIAL_PACK_STATE.redeemed
-                  ? 'Redeemed'
-                  : 'Available'
-            }
-          </h2>
-          <p class="mt-2 text-sm text-ink-secondary" data-field="trial-summary">
-            {
-              MOCK_TRIAL_PACK_STATE.active
-                ? `${fmtCents(MOCK_TRIAL_PACK_STATE.credit_cents_remaining)} of credit remaining · expires ${fmtIso(MOCK_TRIAL_PACK_STATE.expires_at)}`
-                : MOCK_TRIAL_PACK_STATE.redeemed
-                  ? '$2.99 trial pack already used on this account. Once-per-account; the trial does not refresh.'
-                  : 'Buy 16 hours of iPhone Safari sessions for $2.99 — once per account.'
-            }
-          </p>
-          </div>
-        </div>
-      </div>
-      <div
-        data-field="trial-buy-wrap"
-        class:list={[
-          'mt-6 flex flex-wrap items-center gap-3',
-          !MOCK_TRIAL_PACK_STATE.active && !MOCK_TRIAL_PACK_STATE.redeemed ? '' : 'hidden',
-        ]}
-      >
-        <button type="button" class="btn-primary" data-action="buy-trial-pack">
-          Buy trial pack — $2.99
-        </button>
-        {/* 2026-05-21 — crypto disabled on trial pack: NowPayments has
-            a $19.16 USD-equivalent floor across all currencies, so
-            the $2.99 trial would always fail amount_too_low at their
-            API. Crypto checkout is offered on /subscription tier
-            upgrades instead (Solo Manual $79+ comfortably clears
-            the floor). Customer-facing copy makes this explicit. */}
-        <p class="text-xs text-ink-muted">
-          Card only — crypto checkout requires a $20+ purchase. Available on{' '}
-          <a href="/subscription" class="text-glow-red hover:underline">subscription tiers</a>.
-        </p>
-      </div>
-      {/* 2026-05-22 — crypto modal removed alongside the "or pay with
-          crypto →" button (81a15517 dropped the button because
-          NowPayments' $19.16 USD floor exceeds the $2.99 trial-pack
-          price). Crypto checkout lives on /select-tier for $20+ tiers
-          per a4460e2a; this billing page is card-only. */}
-    </section>
-
     {/* 2026-05-23 — icon header on the invoices card. */}
     <!-- Invoices placeholder -->
     <section class="dashboard-card mt-6">
@@ -183,8 +115,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Invoices</p>
           <h2 class="mt-2 text-xl font-semibold tracking-tight text-ink-primary">Recent invoices</h2>
           <p class="mt-3 text-sm text-ink-muted">
-            No invoices yet. Once your subscription renews or the trial pack is
-            purchased, invoices appear here. Each invoice carries a permanent
+            No invoices yet. Once your subscription renews, invoices appear
+            here. Each invoice carries a permanent
             URL — bookmark for accounting. The full invoice history is also
             accessible via the Stripe Customer Portal link above.
           </p>
@@ -202,8 +134,7 @@ const apiBaseUrl = resolveApiBaseUrl();
   <!--
  — progressive-enhancement script. Reads ds_web_session_token
     from localStorage, fetches /v1/billing for state, wires action
-    buttons (portal / trial-pack purchase) to corresponding POST
-    endpoints with redirect on response.
+    the portal button to its POST endpoint with redirect on response.
   -->
   <script is:inline define:vars={{ apiBaseUrl }}>
     (function () {
@@ -227,11 +158,6 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!iso) return '—';
         return new Date(iso).toISOString().slice(0, 10);
       }
-      function fmtCents(cents) {
-        if (cents === null || cents === undefined) return '—';
-        return '$' + (cents / 100).toFixed(2);
-      }
-
       function authedFetch(path, init = {}) {
         return fetch(apiBaseUrl + path, {
           ...init,
@@ -252,7 +178,6 @@ const apiBaseUrl = resolveApiBaseUrl();
       // banner if no token rather than silently no-oping.
       const portalBtn = root.querySelector('[data-action="portal"]');
       const cancelBtn = root.querySelector('[data-action="cancel"]');
-      const buyBtn = root.querySelector('[data-action="buy-trial-pack"]');
 
       function handlePortal() {
         if (!token) {
@@ -273,33 +198,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      function handleBuyTrialPack() {
-        if (!token) {
-          showBanner('Sign in to purchase the trial pack.');
-          return;
-        }
-        const successUrl = window.location.origin + '/billing?trial=ok';
-        const cancelUrl = window.location.origin + '/billing?trial=cancel';
-        authedFetch('/v1/billing/trial-pack', {
-          method: 'POST',
-          body: JSON.stringify({ success_url: successUrl, cancel_url: cancelUrl }),
-        })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
-          .then((body) => {
-            if (body.checkout_url) window.location.href = body.checkout_url;
-          })
-          .catch((err) => {
-            showBanner(
-              "Couldn't start trial-pack checkout (" +
-                (err && err.message ? err.message : 'network error') +
-                ').',
-            );
-          });
-      }
-
       if (portalBtn) portalBtn.addEventListener('click', handlePortal);
       if (cancelBtn) cancelBtn.addEventListener('click', handlePortal); // cancellation goes through Stripe portal
-      if (buyBtn) buyBtn.addEventListener('click', handleBuyTrialPack);
 
       // 2026-05-22 — crypto modal + handlers removed alongside the
       // trial-pack crypto button (81a15517). NowPayments' $19.16 USD
@@ -356,34 +256,6 @@ const apiBaseUrl = resolveApiBaseUrl();
             );
             setText('sub-status-badge', 'no subscription');
             if (cancelBtn) cancelBtn.classList.add('hidden');
-          }
-
-          // Trial pack card.
-          const tp = body.trial_pack || {};
-          let trialState;
-          let trialSummary;
-          let showBuy = false;
-          if (tp.active) {
-            trialState = 'Active';
-            trialSummary =
-              fmtCents(tp.credit_cents_remaining) +
-              ' of credit remaining · expires ' +
-              fmtIso(tp.expires_at);
-          } else if (tp.redeemed) {
-            trialState = 'Redeemed';
-            trialSummary =
-              '$2.99 trial pack already used on this account. Once-per-account; the trial does not refresh.';
-          } else {
-            trialState = 'Available';
-            trialSummary = 'Buy 16 hours of iPhone Safari sessions for $2.99 — once per account.';
-            showBuy = true;
-          }
-          setText('trial-state', trialState);
-          setText('trial-summary', trialSummary);
-          const buyWrap = root.querySelector('[data-field="trial-buy-wrap"]');
-          if (buyWrap) {
-            if (showBuy) buyWrap.classList.remove('hidden');
-            else buyWrap.classList.add('hidden');
           }
         })
         .catch((err) => {

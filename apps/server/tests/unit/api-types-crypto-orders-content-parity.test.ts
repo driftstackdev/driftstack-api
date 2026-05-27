@@ -79,9 +79,9 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
     );
   });
 
-  it('CreateCryptoCheckoutRequest: product (SKU: tier ids or trial_pack) + price_cents int positive max 1M + price_currency 3-letter uppercase ISO regex /^[A-Z]{3}$/', () => {
+  it('CreateCryptoCheckoutRequest: product (SKU: paid tier ids; free not purchasable) + price_cents int positive max 1M + price_currency 3-letter uppercase ISO regex /^[A-Z]{3}$/', () => {
     expect(body).toMatch(
-      /export const CreateCryptoCheckoutRequestSchema = z\.object\(\{\s*\n?\s*product: z\.string\(\)\.describe\('SKU; one of the tier ids or trial_pack\.'\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\)\.positive\(\)\.max\(1_000_000\),\s*\n?\s*price_currency: z\s*\n?\s*\.string\(\)\s*\n?\s*\.length\(3\)\s*\n?\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/, 'price_currency must be a 3-letter uppercase ISO code'\),\s*\n?\s*\}\);/,
+      /export const CreateCryptoCheckoutRequestSchema = z\.object\(\{\s*\n?\s*product: z\.string\(\)\.describe\('SKU; one of the paid tier ids \(the free tier is not purchasable\)\.'\),\s*\n?\s*price_cents: z\.number\(\)\.int\(\)\.positive\(\)\.max\(1_000_000\),\s*\n?\s*price_currency: z\s*\n?\s*\.string\(\)\s*\n?\s*\.length\(3\)\s*\n?\s*\.regex\(\/\^\[A-Z\]\{3\}\$\/, 'price_currency must be a 3-letter uppercase ISO code'\),\s*\n?\s*\}\);/,
     );
   });
 

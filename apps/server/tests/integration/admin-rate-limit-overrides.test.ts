@@ -316,7 +316,7 @@ describe('R2 consume-path integration', () => {
     for (let i = 0; i < 60; i++) {
       const r = await rateLimitConsume(store, {
         accountId: 'acc-1',
-        tier: 'trial_pack',
+        tier: 'free',
         bucketKey: 'global',
         overrides,
       });
@@ -366,7 +366,7 @@ describe('R2 consume-path integration', () => {
   });
 
   it('end-to-end via HTTP: setting an override is visible to the next request', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
+    fx = await buildTestApp({ tier: 'free' });
 
     // Warm the cache (loads AccountContext with no overrides).
     const before = await fx.app.inject({

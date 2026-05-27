@@ -43,7 +43,7 @@ interface AuditLogEntry {
 
 test('admin support-note: dual-write reaches customer audit slice', async ({ request }) => {
   const admin = await seedAccount(server.client, { tier: 'api_builder' });
-  const target = await seedAccount(server.client, { tier: 'trial_pack' });
+  const target = await seedAccount(server.client, { tier: 'free' });
 
   // 1. Admin records a support note.
   const noteRes = await request.post(
@@ -75,7 +75,7 @@ test('admin refund-record: dual-write + Stripe ref preserved on target_resource_
   request,
 }) => {
   const admin = await seedAccount(server.client, { tier: 'api_builder' });
-  const target = await seedAccount(server.client, { tier: 'trial_pack' });
+  const target = await seedAccount(server.client, { tier: 'free' });
 
   // 1. Admin records a refund (audit-only — no Stripe call).
   const refundRes = await request.post(
@@ -119,7 +119,7 @@ test('admin support-note: 403 when caller lacks driftstack_internal_admin scope'
     tier: 'api_builder',
     scopes: ['read', 'write'],
   });
-  const target = await seedAccount(server.client, { tier: 'trial_pack' });
+  const target = await seedAccount(server.client, { tier: 'free' });
 
   const res = await request.post(
     `${server.baseUrl}/v1/admin/accounts/acc_${target.accountId}/audit-note`,

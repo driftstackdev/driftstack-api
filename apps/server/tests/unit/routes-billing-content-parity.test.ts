@@ -42,14 +42,13 @@ function read(p: string): string {
 describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-082 framing pinned: 4 routes (checkout-session + trial-pack + portal-session + state); trial-pack also self-serve from onboarding Workstream F', () => {
+  it('V-082 framing pinned: 3 routes (checkout-session + portal-session + state); trial_pack checkout retired 2026-05-27', () => {
     expect(body).toMatch(/Billing routes \(V-082\)\./);
     expect(body).toMatch(/POST \/v1\/billing\/checkout-session\s+— start a paid-tier subscription/);
-    expect(body).toMatch(/POST \/v1\/billing\/trial-pack\s+— start the \$2\.99 trial pack/);
     expect(body).toMatch(/POST \/v1\/billing\/portal-session\s+— open Stripe Customer Portal/);
-    expect(body).toMatch(/GET\s+\/v1\/billing\s+— current subscription \+ trial state/);
+    expect(body).toMatch(/GET\s+\/v1\/billing\s+— current subscription state/);
     expect(body).toMatch(
-      /All auth-gated\. Trial-pack endpoint is also self-serve from the\s*\n?\s*\/\/\s*onboarding flow \(Workstream F\) before tier selection\./,
+      /All auth-gated\. The one-time trial_pack checkout was retired 2026-05-27\s*\n?\s*\/\/\s*in favour of the perpetual free tier/,
     );
   });
 
@@ -97,21 +96,22 @@ describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
     expect(body).toMatch(/updated_at: s\.updatedAt\.toISOString\(\),/);
   });
 
-  it('Schemas: CreateCheckoutSessionRequestSchema + StartTrialPackRequestSchema from @driftstack/api-types (SDK mirror)', () => {
+  it('Schemas: CreateCheckoutSessionRequestSchema from @driftstack/api-types (SDK mirror; StartTrialPack removed 2026-05-27)', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*CreateCheckoutSessionRequestSchema,\s*\n?\s*StartTrialPackRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{ CreateCheckoutSessionRequestSchema \} from '@driftstack\/api-types';/,
     );
   });
 
-  it("Auth posture: requireAuth + rateLimit('global') on all billing routes; admin:billing on the 4 mutations", () => {
-    // requireAuth + rateLimit('global') on every route (5). The 4
-    // mutations (checkout-session / trial-pack / portal-session /
-    // billing-portal) now carry app.requireScope('admin:billing')
-    // between them (V-481 scope enforcement), so count each guard
-    // independently rather than as an adjacent pair.
-    expect((body.match(/app\.requireAuth/g) ?? []).length).toBeGreaterThanOrEqual(5);
-    expect((body.match(/app\.rateLimit\('global'\)/g) ?? []).length).toBeGreaterThanOrEqual(5);
-    expect((body.match(/app\.requireScope\('admin:billing'\)/g) ?? []).length).toBe(4);
+  it("Auth posture: requireAuth + rateLimit('global') on all billing routes; admin:billing on the 3 mutations", () => {
+    // requireAuth + rateLimit('global') on every route (4 after the
+    // trial_pack route was retired 2026-05-27). The 3 mutations
+    // (checkout-session / portal-session / billing-portal) now carry
+    // app.requireScope('admin:billing') between them (V-481 scope
+    // enforcement), so count each guard independently rather than as
+    // an adjacent pair.
+    expect((body.match(/app\.requireAuth/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    expect((body.match(/app\.rateLimit\('global'\)/g) ?? []).length).toBeGreaterThanOrEqual(4);
+    expect((body.match(/app\.requireScope\('admin:billing'\)/g) ?? []).length).toBe(3);
   });
 
   it('Checkout-session: V-248 allowlist gate on customer-supplied success/cancel URLs; service.createCheckoutSession with snake→camel; reply checkout_url + checkout_session_id', () => {
@@ -127,22 +127,15 @@ describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
     );
   });
 
-  it('Trial-pack: same V-248 allowlist gate ("same allowlist gate as checkout-session"); service.startTrialPack dispatch; same reply shape', () => {
-    expect(body).toMatch(/\/\/ V-248 — same allowlist gate as checkout-session\./);
-    expect(body).toMatch(
-      /const result = await service\.startTrialPack\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*\.\.\.\(successUrl !== undefined \? \{ successUrl \} : \{\}\),\s*\n?\s*\.\.\.\(cancelUrl !== undefined \? \{ cancelUrl \} : \{\}\),\s*\n?\s*\}\);/,
-    );
-  });
-
   it('Portal session: service.createPortalSession(accountId); reply { portal_url }', () => {
     expect(body).toMatch(
       /const result = await service\.createPortalSession\(ctx\.account\.id\);\s*\n?\s*return \{ portal_url: result\.url \};/,
     );
   });
 
-  it('GET billing state: subscription null-handled via publicSubscription; trial_pack envelope (active/credit_cents_remaining/expires_at nullable ISO/redeemed)', () => {
+  it('GET billing state: subscription null-handled via publicSubscription (trial_pack envelope removed 2026-05-27)', () => {
     expect(body).toMatch(
-      /const state = await service\.getBillingState\(ctx\.account\.id\);\s*\n?\s*return \{\s*\n?\s*subscription: state\.subscription !== null \? publicSubscription\(state\.subscription\) : null,\s*\n?\s*trial_pack: \{\s*\n?\s*active: state\.trialPack\.active,\s*\n?\s*credit_cents_remaining: state\.trialPack\.creditCentsRemaining,\s*\n?\s*expires_at: state\.trialPack\.expiresAt \? state\.trialPack\.expiresAt\.toISOString\(\) : null,\s*\n?\s*redeemed: state\.trialPack\.redeemed,\s*\n?\s*\},\s*\n?\s*\};/,
+      /const state = await service\.getBillingState\(ctx\.account\.id\);\s*\n?\s*return \{\s*\n?\s*subscription: state\.subscription !== null \? publicSubscription\(state\.subscription\) : null,\s*\n?\s*\};/,
     );
   });
 

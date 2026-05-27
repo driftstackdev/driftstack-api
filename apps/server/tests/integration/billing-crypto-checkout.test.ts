@@ -35,7 +35,7 @@ describe('V-666.C POST /v1/billing/crypto-checkout', () => {
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/billing/crypto-checkout',
-      payload: { product: 'trial_pack', price_cents: 299, price_currency: 'USD' },
+      payload: { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -46,13 +46,13 @@ describe('V-666.C POST /v1/billing/crypto-checkout', () => {
       method: 'POST',
       url: '/v1/billing/crypto-checkout',
       headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { product: 'trial_pack', price_cents: 299, price_currency: 'USD' },
+      payload: { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json<CryptoCheckoutResponse>();
     expect(body.order_id).toMatch(/^ord_[0-9a-f]{12}$/);
-    expect(body.product).toBe('trial_pack');
-    expect(body.price_cents).toBe(299);
+    expect(body.product).toBe('solo_manual');
+    expect(body.price_cents).toBe(7900);
     expect(body.price_currency).toBe('USD');
     expect(body.status).toBe('pending');
     // V-666.D follow-up will populate these via the NowPayments client.
@@ -105,7 +105,7 @@ describe('V-666.C POST /v1/billing/crypto-checkout', () => {
       authorization: `Bearer ${fx.plaintext}`,
       'idempotency-key': 'client-retry-abc',
     };
-    const payload = { product: 'trial_pack', price_cents: 299, price_currency: 'USD' };
+    const payload = { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' };
     const first = await fx.app.inject({
       method: 'POST',
       url: '/v1/billing/crypto-checkout',
@@ -132,7 +132,7 @@ describe('V-666.C POST /v1/billing/crypto-checkout', () => {
   it('V-666.AO different Idempotency-Keys mint different orders', async () => {
     fx = await buildTestApp();
     const auth = { authorization: `Bearer ${fx.plaintext}` };
-    const payload = { product: 'trial_pack', price_cents: 299, price_currency: 'USD' };
+    const payload = { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' };
     const a = await fx.app.inject({
       method: 'POST',
       url: '/v1/billing/crypto-checkout',
@@ -160,7 +160,7 @@ describe('V-666.C POST /v1/billing/crypto-checkout', () => {
         authorization: `Bearer ${fx.plaintext}`,
         'idempotency-key': oversize,
       },
-      payload: { product: 'trial_pack', price_cents: 299, price_currency: 'USD' },
+      payload: { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' },
     });
     expect(res.statusCode).toBe(400);
   });
@@ -169,7 +169,7 @@ describe('V-666.C POST /v1/billing/crypto-checkout', () => {
     fx = await buildTestApp();
     // Second account, fresh API key — but the same Idempotency-Key.
     const second = await seedAdditionalAccount(fx);
-    const payload = { product: 'trial_pack', price_cents: 299, price_currency: 'USD' };
+    const payload = { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' };
     const sharedKey = 'colliding-customer-retry';
     const a = await fx.app.inject({
       method: 'POST',
@@ -208,7 +208,7 @@ describe('V-666.C POST /v1/billing/crypto-checkout', () => {
   it('V-666.AO missing header still mints fresh on every call', async () => {
     fx = await buildTestApp();
     const auth = { authorization: `Bearer ${fx.plaintext}` };
-    const payload = { product: 'trial_pack', price_cents: 299, price_currency: 'USD' };
+    const payload = { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' };
     const a = await fx.app.inject({
       method: 'POST',
       url: '/v1/billing/crypto-checkout',
@@ -232,7 +232,7 @@ describe('V-666.C POST /v1/billing/crypto-checkout', () => {
       method: 'POST',
       url: '/v1/billing/crypto-checkout',
       headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { product: 'trial_pack', price_cents: 299, price_currency: 'USD' },
+      payload: { product: 'solo_manual', price_cents: 7900, price_currency: 'USD' },
     });
     const body = checkout.json<CryptoCheckoutResponse>();
 

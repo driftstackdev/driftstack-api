@@ -726,19 +726,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountAuditService, // V-202b — tier_changed audit emit
   );
 
-  // V-202d — scheduled-jobs service with the trial_pack.expired handler
-  // pre-registered. Tests that exercise the trial-pack expiry flow can
-  // call `scheduledJobsService.processTick()` directly to fire any due
-  // jobs without waiting on a setInterval poller.
+  // Scheduled-jobs service. Tests can call
+  // `scheduledJobsService.processTick()` directly to fire any due jobs
+  // without waiting on a setInterval poller.
   const scheduledJobsRepo = new InMemoryScheduledJobsRepo();
   const scheduledJobsService = new ScheduledJobsService(scheduledJobsRepo, testLogger, {
     workerId: 'test-worker',
-  });
-  scheduledJobsService.register('trial_pack.expired', async (job) => {
-    if (job.accountId === null) return;
-    await accountLifecycleService.emit(job.accountId, {
-      kind: 'subscription.trial_pack_expired',
-    });
   });
 
   const webhooksRepo = new InMemoryWebhooksRepo();
@@ -1100,7 +1093,6 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       },
     },
     accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
-    scheduledJobsService, // V-202d — enqueues trial_pack.expired job at trial-pack purchase
   );
   const stripeWebhookSigningSecret = 'whsec_test_fixture_secret';
 
@@ -1126,10 +1118,6 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     name: 'Tester',
     tier: opts.tier ?? 'api_builder',
     stripeCustomerId: null,
-    trialPackPurchasedAt: null,
-    trialPackCreditCents: null,
-    trialPackExpiresAt: null,
-    trialPackRedeemed: false,
   });
   const billingProvider = new InMemoryBillingProvider();
   const billingService = new BillingService(billingRepo, billingProvider, {
@@ -1141,7 +1129,6 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       api_builder: { monthly: 'price_api_builder_monthly', annual: 'price_api_builder_annual' },
       api_scale: { monthly: 'price_api_scale_monthly', annual: 'price_api_scale_annual' },
     },
-    trialPackPriceId: 'price_trial_pack_one_time',
     defaultSuccessUrl: 'http://localhost:5173/billing/success',
     defaultCancelUrl: 'http://localhost:5173/billing/cancel',
     portalReturnUrl: 'http://localhost:5173/billing',
@@ -1197,7 +1184,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
                 email: args.email,
                 name: args.name,
                 passwordHash: '',
-                initialTier: 'trial_pack',
+                initialTier: 'free',
               });
               await authFlowsRepo.markEmailVerified(created.id, new Date());
               return created.id;

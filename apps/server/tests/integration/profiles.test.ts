@@ -70,8 +70,8 @@ describe('POST /v1/profiles', () => {
   });
 
   it('429 TierLimit when profile count exceeds tier limit', async () => {
-    // trial_pack permits 1 profile; create one then expect the second to fail.
-    fx = await buildTestApp({ tier: 'trial_pack' });
+    // free permits 1 profile; create one then expect the second to fail.
+    fx = await buildTestApp({ tier: 'free' });
     const first = await fx.app.inject({
       method: 'POST',
       url: '/v1/profiles',

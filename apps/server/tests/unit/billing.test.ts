@@ -27,7 +27,6 @@ function makeService(
 
 function makeServiceConfig(args: {
   includeApiStarter?: boolean;
-  trialPackPriceId?: string;
 }): Parameters<typeof BillingService.prototype.createCheckoutSession>[0] extends never
   ? never
   : ConstructorParameters<typeof BillingService>[2] {
@@ -40,7 +39,6 @@ function makeServiceConfig(args: {
   }
   return {
     tierPrices,
-    trialPackPriceId: args.trialPackPriceId ?? 'price_trial_pack',
     defaultSuccessUrl: 'http://localhost/success',
     defaultCancelUrl: 'http://localhost/cancel',
     portalReturnUrl: 'http://localhost/billing',
@@ -54,10 +52,6 @@ function seedAccount(repo: InMemoryBillingRepo, accountId: string): void {
     name: null,
     tier: 'api_builder',
     stripeCustomerId: null,
-    trialPackPurchasedAt: null,
-    trialPackCreditCents: null,
-    trialPackExpiresAt: null,
-    trialPackRedeemed: false,
   });
 }
 
@@ -106,18 +100,6 @@ describe('BillingService.createPortalSession', () => {
     const service = makeService(repo, provider);
 
     await expect(service.createPortalSession('no-such-account')).rejects.toMatchObject({
-      status: 404,
-    });
-  });
-});
-
-describe('BillingService.startTrialPack', () => {
-  it('throws NotFound when account does not exist', async () => {
-    const repo = new InMemoryBillingRepo();
-    const provider = new InMemoryBillingProvider();
-    const service = makeService(repo, provider);
-
-    await expect(service.startTrialPack({ accountId: 'no-such-account' })).rejects.toMatchObject({
       status: 404,
     });
   });

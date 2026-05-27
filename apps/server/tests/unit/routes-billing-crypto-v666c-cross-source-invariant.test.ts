@@ -98,9 +98,9 @@ describe('W1040 routes/billing-crypto V-666.C + V-666.AO/AQ/AR cross-source inva
 
   // ─── Supported-product enum ──────────────────────────────────
 
-  it('CRITICAL supported-product enum — 7 entries (trial_pack + 6 canonical AccountTier paid tiers). 2026-05-21 — V-666.SEC: enum + price table merged into TIER_PRICE_CENTS so price is server-side authoritative. Trial pack stays in the map for SDK + integration-test backwards-compat; route short-circuits to stub posture when amount < NOWPAYMENTS_MIN_USD_CENTS so the customer never sees amount_too_low.', () => {
+  it('CRITICAL supported-product enum — 6 entries (the canonical AccountTier paid tiers). 2026-05-21 — V-666.SEC: enum + price table merged into TIER_PRICE_CENTS so price is server-side authoritative. trial_pack was removed 2026-05-27 (free tier is not purchasable; #10 checkout-vs-quote mismatch resolved by deletion).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts'));
-    expect(p).toMatch(/trial_pack: 299,/);
+    expect(p).not.toMatch(/trial_pack: 299/);
     expect(p).toMatch(/solo_manual: 7900,/);
     expect(p).toMatch(/team_manual: 24900,/);
     expect(p).toMatch(/agency_manual: 69900,/);

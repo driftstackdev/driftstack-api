@@ -41,17 +41,17 @@ describe('GET /v1/admin/accounts/:id/usage', () => {
 
   it('uses the TARGET account tier (not the caller tier) for quotas', async () => {
     // Caller tier doesn't matter — admin endpoint reflects target.
-    fx = await buildTestApp({ tier: 'trial_pack' });
+    fx = await buildTestApp({ tier: 'free' });
     const res = await fx.app.inject({
       method: 'GET',
       url: `/v1/admin/accounts/acc_${fx.accountId}/usage`,
       headers: auth(fx),
     });
     const body = res.json<{ tier: string; quotas: Record<string, number | null> }>();
-    expect(body.tier).toBe('trial_pack');
-    // Per ADR-004 all paid tiers + trial_pack are unmetered for the
+    expect(body.tier).toBe('free');
+    // Per ADR-004 all paid tiers + free are unmetered for the
     // operation-count meters; quota values are `null` (no per-meter
-    // cap). Trial-pack hours metering is via accounts.trial_pack_credit_cents,
+    // cap). Trial-pack hours metering is via accounts.free_credit_cents,
     // independent of TIER_QUOTAS.
     expect(body.quotas.navigate).toBeNull();
   });

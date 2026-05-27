@@ -18,7 +18,7 @@ class BillingResource:
         self._http = http
 
     def get_state(self) -> dict[str, Any]:
-        """Current subscription mirror + trial-pack state."""
+        """Current subscription mirror state."""
         return self._http.request("GET", "/v1/billing")
 
     def create_checkout_session(self, body: dict[str, Any]) -> dict[str, Any]:
@@ -29,12 +29,6 @@ class BillingResource:
         """
         return self._http.request(
             "POST", "/v1/billing/checkout-session", json_body=coerce_body(body)
-        )
-
-    def start_trial_pack(self, body: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Start the $2.99 trial-pack one-time purchase (per ADR-003)."""
-        return self._http.request(
-            "POST", "/v1/billing/trial-pack", json_body=coerce_body(body or {})
         )
 
     def create_portal_session(self) -> dict[str, Any]:
@@ -54,11 +48,6 @@ class AsyncBillingResource:
     async def create_checkout_session(self, body: dict[str, Any]) -> dict[str, Any]:
         return await self._http.request(
             "POST", "/v1/billing/checkout-session", json_body=coerce_body(body)
-        )
-
-    async def start_trial_pack(self, body: dict[str, Any] | None = None) -> dict[str, Any]:
-        return await self._http.request(
-            "POST", "/v1/billing/trial-pack", json_body=coerce_body(body or {})
         )
 
     async def create_portal_session(self) -> dict[str, Any]:

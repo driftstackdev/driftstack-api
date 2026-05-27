@@ -110,8 +110,8 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     );
   });
 
-  it("create: tier 'trial_pack' → 'test' env else 'live'; generateApiKey + hashApiKey + keyPrefixFromPlaintext; emits api_key.minted audit", () => {
-    expect(body).toMatch(/const env = tier === 'trial_pack' \? 'test' : 'live';/);
+  it("create: tier 'free' → 'test' env else 'live'; generateApiKey + hashApiKey + keyPrefixFromPlaintext; emits api_key.minted audit", () => {
+    expect(body).toMatch(/const env = tier === 'free' \? 'test' : 'live';/);
     expect(body).toMatch(/const plaintext = generateApiKey\(env\);/);
     expect(body).toMatch(/const keyHash = await hashApiKey\(plaintext\);/);
     expect(body).toMatch(/const keyPrefix = keyPrefixFromPlaintext\(plaintext\);/);

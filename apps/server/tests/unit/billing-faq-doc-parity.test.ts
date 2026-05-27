@@ -1,7 +1,7 @@
 // W231.A — drift-guard for /docs/billing-faq.
 //
 // Pins:
-//   - the trial-pack concurrent-session cap (1, not 2)
+//   - the free-tier concurrent-session cap (1, not 2)
 //   - the API key prefix (`ds_live_`, no `ds_test_` namespace)
 //   - the non-refundable crypto claim
 
@@ -20,16 +20,16 @@ function read(path: string): string {
 describe('W231.A billing-faq doc parity', () => {
   const doc = read(DOC_PATH);
 
-  it('trial-pack concurrent-session cap claim matches TIER_CONCURRENT_SESSION_LIMITS', () => {
-    const trialConcurrent = TIER_CONCURRENT_SESSION_LIMITS.trial_pack;
-    expect(trialConcurrent).toBe(1);
-    expect(doc).toMatch(new RegExp(`<strong>${trialConcurrent} concurrent\\s+session`));
+  it('free-tier concurrent-session cap claim matches TIER_CONCURRENT_SESSION_LIMITS', () => {
+    const freeConcurrent = TIER_CONCURRENT_SESSION_LIMITS.free;
+    expect(freeConcurrent).toBe(1);
+    expect(doc).toMatch(new RegExp(`<strong>${freeConcurrent} concurrent\\s+session`));
     // Rule out the stale "2 concurrent sessions" claim:
     expect(doc).not.toMatch(/2\s+concurrent sessions/);
   });
 
-  it('trial-pack profile cap matches PROFILES_PER_TIER', () => {
-    expect(PROFILES_PER_TIER.trial_pack).toBe(1);
+  it('free-tier profile cap matches PROFILES_PER_TIER', () => {
+    expect(PROFILES_PER_TIER.free).toBe(1);
     expect(doc).toMatch(/<strong>1 profile<\/strong>/);
   });
 

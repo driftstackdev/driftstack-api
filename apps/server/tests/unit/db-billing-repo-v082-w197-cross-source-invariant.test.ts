@@ -105,7 +105,7 @@ describe('W992 db/billing-repo V-082 + W197 cross-source invariant', () => {
 
   // ─── toAccount 9-field mapper ────────────────────────────────
 
-  it('CRITICAL toAccount 9-field mapper — id + email + name + tier + stripeCustomerId + trialPackPurchasedAt + trialPackCreditCents + trialPackExpiresAt + trialPackRedeemed. The 9-field BillingAccountSnapshot covers identity + tier + ADR-003 trial-pack ledger.', () => {
+  it('CRITICAL toAccount 5-field mapper — id + email + name + tier + stripeCustomerId. The 5-field BillingAccountSnapshot covers identity + tier (trial-pack ledger quartet removed 2026-05-27).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/billing-repo.ts'));
     expect(p).toMatch(
       /function toAccount\(r: typeof accounts\.\$inferSelect\): BillingAccountSnapshot \{/,
@@ -115,10 +115,7 @@ describe('W992 db/billing-repo V-082 + W197 cross-source invariant', () => {
     expect(p).toMatch(/name: r\.name,/);
     expect(p).toMatch(/tier: r\.tier,/);
     expect(p).toMatch(/stripeCustomerId: r\.stripeCustomerId,/);
-    expect(p).toMatch(/trialPackPurchasedAt: r\.trialPackPurchasedAt,/);
-    expect(p).toMatch(/trialPackCreditCents: r\.trialPackCreditCents,/);
-    expect(p).toMatch(/trialPackExpiresAt: r\.trialPackExpiresAt,/);
-    expect(p).toMatch(/trialPackRedeemed: r\.trialPackRedeemed,/);
+    expect(p).not.toMatch(/trialPackPurchasedAt/);
   });
 
   // ─── toSubscription 11-field mapper ──────────────────────────

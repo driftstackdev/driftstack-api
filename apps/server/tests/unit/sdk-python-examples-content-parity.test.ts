@@ -36,7 +36,7 @@ describe('W620 sdk-python/examples content parity', () => {
     expect(existsSync(E('quickstart.py'))).toBe(true);
   });
 
-  it('billing_flow.py: /billing-page mirror + get_state branching (no-sub → create_checkout_session api_builder monthly with success/cancel urls / has-sub → create_portal_session) + trial_pack credit_cents_remaining surfaced pinned', () => {
+  it('billing_flow.py: /billing-page mirror + get_state branching (no-sub → create_checkout_session api_builder monthly with success/cancel urls / has-sub → create_portal_session) pinned (trial_pack block removed 2026-05-27)', () => {
     const body = read(E('billing_flow.py'));
     expect(body).toMatch(/^"""Customer billing self-serve flow — mirror the customer-dashboard$/m);
     expect(body).toMatch(/\/billing page in code form/);
@@ -48,9 +48,6 @@ describe('W620 sdk-python/examples content parity', () => {
     expect(body).toMatch(/"success_url": "https:\/\/app\.driftstack\.dev\/billing\?ok=1",/);
     expect(body).toMatch(/"cancel_url": "https:\/\/app\.driftstack\.dev\/billing\?cancelled=1",/);
     expect(body).toMatch(/portal = client\.billing\.create_portal_session\(\)/);
-    expect(body).toMatch(
-      /if tp\.get\("active"\) and tp\.get\("credit_cents_remaining"\) is not None:/,
-    );
     expect(existsSync(E('billing_flow.py'))).toBe(true);
   });
 

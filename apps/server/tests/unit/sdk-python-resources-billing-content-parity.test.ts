@@ -53,9 +53,9 @@ describe('W583.C packages/sdk-python/src/driftstack/resources/billing.py content
     );
   });
 
-  it('get_state (sync) — GET /v1/billing returns the current subscription mirror + trial-pack state. Docstring framing pinned because "subscription mirror" is what tells dashboards this is a Stripe-of-record snapshot, not a live Stripe API passthrough.', () => {
+  it('get_state (sync) — GET /v1/billing returns the current subscription mirror state. Docstring framing pinned because "subscription mirror" is what tells dashboards this is a Stripe-of-record snapshot, not a live Stripe API passthrough.', () => {
     expect(body).toMatch(
-      /def get_state\(self\) -> dict\[str, Any\]:\s*\n\s*"""Current subscription mirror \+ trial-pack state\."""\s*\n\s*return self\._http\.request\("GET", "\/v1\/billing"\)/,
+      /def get_state\(self\) -> dict\[str, Any\]:\s*\n\s*"""Current subscription mirror state\."""\s*\n\s*return self\._http\.request\("GET", "\/v1\/billing"\)/,
     );
   });
 
@@ -70,16 +70,6 @@ describe('W583.C packages/sdk-python/src/driftstack/resources/billing.py content
     expect(body).toMatch(/"success_url"\?: \.\.\., "cancel_url"\?: \.\.\.\}``\./);
     expect(body).toMatch(
       /"POST", "\/v1\/billing\/checkout-session", json_body=coerce_body\(body\)/,
-    );
-  });
-
-  it('start_trial_pack (sync) — POST /v1/billing/trial-pack with ADR-003 $2.99 one-time purchase. Nil-body-default substitution (`body or {}`) — callers can pass None and the SDK plugs an empty dict so the wire body is "{}", not Python\'s null. Mirrors the sdk-go &StartTrialPackRequest{} pattern.', () => {
-    expect(body).toMatch(
-      /def start_trial_pack\(self, body: dict\[str, Any\] \| None = None\) -> dict\[str, Any\]:/,
-    );
-    expect(body).toMatch(/"""Start the \$2\.99 trial-pack one-time purchase \(per ADR-003\)\."""/);
-    expect(body).toMatch(
-      /"POST", "\/v1\/billing\/trial-pack", json_body=coerce_body\(body or \{\}\)/,
     );
   });
 
@@ -103,12 +93,9 @@ describe('W583.C packages/sdk-python/src/driftstack/resources/billing.py content
     );
   });
 
-  it('Async create_checkout_session + start_trial_pack — awaited POST twins with same coerce_body wrapping + same paths. Drift here would diverge sync/async customers off the same wire contract.', () => {
+  it('Async create_checkout_session — awaited POST twin with same coerce_body wrapping + same path. Drift here would diverge sync/async customers off the same wire contract.', () => {
     expect(body).toMatch(
       /async def create_checkout_session\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\(\s*\n\s*"POST", "\/v1\/billing\/checkout-session", json_body=coerce_body\(body\)\s*\n\s*\)/,
-    );
-    expect(body).toMatch(
-      /async def start_trial_pack\(self, body: dict\[str, Any\] \| None = None\) -> dict\[str, Any\]:\s*\n\s*return await self\._http\.request\(\s*\n\s*"POST", "\/v1\/billing\/trial-pack", json_body=coerce_body\(body or \{\}\)\s*\n\s*\)/,
     );
   });
 

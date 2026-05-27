@@ -57,7 +57,7 @@ test('POST /v1/api-keys: 400 with empty scopes', async ({ request }) => {
 });
 
 test('POST /v1/api-keys: free tier returns ds_test_ prefix', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'trial_pack' });
+  const seed = await seedAccount(server.client, { tier: 'free' });
   const res = await request.post(`${server.baseUrl}/v1/api-keys`, {
     headers: authHeader(seed.plaintext),
     data: { name: 'free-key', scopes: ['read'] },

@@ -46,11 +46,11 @@ describe('W728 api-types core-enum source-of-truth parity', () => {
 
   // --- AccountTier ------------------------------------------------
 
-  it('CRITICAL AccountTier 8-value closed roster pinned (ADR-004 lock). The 8 tiers: trial_pack + 3 manual (solo/team/agency) + 3 API (starter/builder/scale) + enterprise. Drift to renaming would break the AccountTierSchema enum used by every billing call.', () => {
+  it('CRITICAL AccountTier 8-value closed roster pinned (ADR-004 lock). The 8 tiers: free + 3 manual (solo/team/agency) + 3 API (starter/builder/scale) + enterprise. Drift to renaming would break the AccountTierSchema enum used by every billing call.', () => {
     const c = read(COMMON);
 
     const tiers = [
-      'trial_pack',
+      'free',
       'solo_manual',
       'team_manual',
       'agency_manual',
@@ -67,9 +67,8 @@ describe('W728 api-types core-enum source-of-truth parity', () => {
     expect(c).toMatch(/export type AccountTier = z\.infer<typeof AccountTierSchema>/);
   });
 
-  it('CRITICAL AccountTier ADR-003 + ADR-004 anchors pinned in common.ts framing. Drift to dropping would lose the per-tier-locking provenance (ADR-004 = pricing lock; ADR-003 = trial_pack metering).', () => {
+  it('CRITICAL AccountTier ADR-004 pricing-lock anchor pinned in common.ts framing. Drift to dropping would lose the per-tier-locking provenance (ADR-004 = pricing lock; ADR-003 trial metering removed 2026-05-27 with trial_pack).', () => {
     const c = read(COMMON);
-    expect(c).toMatch(/ADR-003/);
     expect(c).toMatch(/Locked per ADR-004/);
   });
 

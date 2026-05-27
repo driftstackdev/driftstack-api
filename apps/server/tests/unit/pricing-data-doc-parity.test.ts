@@ -59,10 +59,10 @@ describe('W246.B pricing data ↔ tier-constants parity', () => {
     }
   });
 
-  it('trial_pack stays single-concurrent / single-profile', () => {
-    const trial = API_TIERS.find((t) => t.id === 'trial_pack');
-    expect(trial).toBeDefined();
-    expect(trial!.concurrent).toBe(1);
-    expect(trial!.profiles).toBe(1);
+  it('free tier stays single-concurrent / single-profile', () => {
+    const free = API_TIERS.find((t) => t.id === 'free');
+    expect(free).toBeDefined();
+    expect(free!.concurrent).toBe(1);
+    expect(free!.profiles).toBe(1);
   });
 });

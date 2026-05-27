@@ -51,7 +51,7 @@ export interface CryptoOrder {
   order_id: string;
   /** Account this order is attributable to. Null for pre-signup checkouts. */
   account_id: string | null;
-  /** Tier being purchased (or 'trial_pack'). */
+  /** Paid tier being purchased (the free tier is not purchasable). */
   product: string;
   /** Expected payment in fiat-cents. */
   price_cents: number;

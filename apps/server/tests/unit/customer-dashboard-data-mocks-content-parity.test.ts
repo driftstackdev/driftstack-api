@@ -53,9 +53,9 @@ describe('W463.B apps/customer-dashboard/src/data/mocks.ts content parity', () =
     );
   });
 
-  it('5 api-types imports: TIER_CONCURRENT_SESSION_LIMITS value + AccountTier + Profile + Subscription + TrialPackState types via single combined import block', () => {
+  it('4 api-types imports: TIER_CONCURRENT_SESSION_LIMITS value + AccountTier + Profile + Subscription types via single combined import block (TrialPackState removed 2026-05-27)', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*TIER_CONCURRENT_SESSION_LIMITS,\s*\n?\s*type AccountTier,\s*\n?\s*type Profile,\s*\n?\s*type Subscription,\s*\n?\s*type TrialPackState,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*\n?\s*TIER_CONCURRENT_SESSION_LIMITS,\s*\n?\s*type AccountTier,\s*\n?\s*type Profile,\s*\n?\s*type Subscription,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
   });
 
@@ -71,12 +71,6 @@ describe('W463.B apps/customer-dashboard/src/data/mocks.ts content parity', () =
   it("MOCK_SUBSCRIPTION Subscription | null typed as non-null mock: tier='api_builder' + status='active' + cancel_at_period_end=false + canceled_at=null", () => {
     expect(body).toMatch(
       /export const MOCK_SUBSCRIPTION: Subscription \| null = \{\s*\n?\s*tier: 'api_builder',\s*\n?\s*status: 'active',\s*\n?\s*stripe_subscription_id: 'sub_test_dashboard_mock',\s*\n?\s*current_period_end: '2026-06-15T08:55:00Z',\s*\n?\s*cancel_at_period_end: false,\s*\n?\s*canceled_at: null,/,
-    );
-  });
-
-  it('MOCK_TRIAL_PACK_STATE: post-trial state with active=false + credit_cents_remaining=null + expires_at=null + redeemed=true', () => {
-    expect(body).toMatch(
-      /export const MOCK_TRIAL_PACK_STATE: TrialPackState = \{\s*\n?\s*active: false,\s*\n?\s*credit_cents_remaining: null,\s*\n?\s*expires_at: null,\s*\n?\s*redeemed: true,\s*\n?\s*\};/,
     );
   });
 

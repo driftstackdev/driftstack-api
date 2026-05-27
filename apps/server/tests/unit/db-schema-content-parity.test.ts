@@ -32,9 +32,9 @@ describe('W616 apps/server/src/db/schema.ts content parity', () => {
     expect(body).toMatch(/^\} from 'drizzle-orm\/pg-core';$/m);
   });
 
-  it('8 account/auth/usage/admin pgEnums (account_tier 8-value with trial_pack + 3 manual + 3 api + enterprise / account_status 3 / account_region 3 / api_key_scope V-174+V-481 / session_status 5 / session_purpose V-169 3 / session_event_type 9 / usage_record_type 6) pinned', () => {
+  it('8 account/auth/usage/admin pgEnums (account_tier 8-value with free + 3 manual + 3 api + enterprise / account_status 3 / account_region 3 / api_key_scope V-174+V-481 / session_status 5 / session_purpose V-169 3 / session_event_type 9 / usage_record_type 6) pinned', () => {
     expect(body).toMatch(/export const accountTier = pgEnum\('account_tier', \[/);
-    expect(body).toMatch(/'trial_pack',/);
+    expect(body).toMatch(/'free',/);
     expect(body).toMatch(/'solo_manual',/);
     expect(body).toMatch(/'team_manual',/);
     expect(body).toMatch(/'agency_manual',/);
@@ -134,26 +134,16 @@ describe('W616 apps/server/src/db/schema.ts content parity', () => {
     expect(body).toMatch(/export const teamRole = pgEnum\('team_role', \['member', 'admin'\]\);/);
   });
 
-  it('account-lifecycle tables (accounts + email_verify_tokens + magic_link_tokens + password_reset_tokens) + ADR-003 trial_pack columns + V-352 timezone + V-082 stripe_customer_id + V-298b accountRegion default us + V-202c first_failure_email_sent_at + V-304a first_success_email_sent_at pinned', () => {
+  it('account-lifecycle tables (accounts + email_verify_tokens + magic_link_tokens + password_reset_tokens) + free-tier default + V-352 timezone + V-082 stripe_customer_id + V-298b accountRegion default us + V-202c first_failure_email_sent_at + V-304a first_success_email_sent_at pinned', () => {
     expect(body).toMatch(/export const accounts = pgTable\(\s*\n\s*'accounts',/);
     expect(body).toMatch(/email: text\('email'\)\.notNull\(\),/);
     expect(body).toMatch(/passwordHash: text\('password_hash'\),/);
     expect(body).toMatch(
       /emailVerifiedAt: timestamp\('email_verified_at', \{ withTimezone: true \}\),/,
     );
-    expect(body).toMatch(/tier: accountTier\('tier'\)\.notNull\(\)\.default\('trial_pack'\),/);
+    expect(body).toMatch(/tier: accountTier\('tier'\)\.notNull\(\)\.default\('free'\),/);
     expect(body).toMatch(/status: accountStatus\('status'\)\.notNull\(\)\.default\('active'\),/);
     expect(body).toMatch(/stripeCustomerId: text\('stripe_customer_id'\),/);
-    expect(body).toMatch(
-      /trialPackPurchasedAt: timestamp\('trial_pack_purchased_at', \{ withTimezone: true \}\),/,
-    );
-    expect(body).toMatch(/trialPackCreditCents: integer\('trial_pack_credit_cents'\),/);
-    expect(body).toMatch(
-      /trialPackExpiresAt: timestamp\('trial_pack_expires_at', \{ withTimezone: true \}\),/,
-    );
-    expect(body).toMatch(
-      /trialPackRedeemed: boolean\('trial_pack_redeemed'\)\.notNull\(\)\.default\(false\),/,
-    );
     expect(body).toMatch(
       /firstFailureEmailSentAt: timestamp\('first_failure_email_sent_at', \{ withTimezone: true \}\),/,
     );

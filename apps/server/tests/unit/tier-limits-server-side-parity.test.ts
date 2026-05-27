@@ -39,7 +39,7 @@ describe('W730 tier-limit server-side records parity', () => {
     );
 
     const expected: Array<[string, string]> = [
-      ['trial_pack', '1'],
+      ['free', '1'],
       ['solo_manual', '10'],
       ['team_manual', '50'],
       ['agency_manual', '200'],
@@ -63,7 +63,7 @@ describe('W730 tier-limit server-side records parity', () => {
     );
 
     const expected: Array<[string, number]> = [
-      ['trial_pack', 1],
+      ['free', 1],
       ['solo_manual', 1],
       ['team_manual', 3],
       ['agency_manual', 8],
@@ -144,7 +144,7 @@ describe('W730 tier-limit server-side records parity', () => {
     const pricing = read(resolve(REPO_ROOT, 'apps/marketing-site/src/data/pricing.ts'));
 
     const expected: Array<[string, number | string]> = [
-      ['trial_pack', 1],
+      ['free', 1],
       ['solo_manual', 1],
       ['team_manual', 3],
       ['agency_manual', 8],
@@ -172,7 +172,7 @@ describe('W730 tier-limit server-side records parity', () => {
     const pricing = read(resolve(REPO_ROOT, 'apps/marketing-site/src/data/pricing.ts'));
 
     const expected: Array<[string, number | string]> = [
-      ['trial_pack', 1],
+      ['free', 1],
       ['solo_manual', 10],
       ['team_manual', 50],
       ['agency_manual', 200],

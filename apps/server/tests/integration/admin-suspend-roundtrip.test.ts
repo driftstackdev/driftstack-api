@@ -137,8 +137,8 @@ describe('admin: suspend → blocked → unsuspend → restored', () => {
   });
 
   it('cross-account: tier change on B doesn’t affect A’s tier', async () => {
-    fx = await buildTestApp({ tier: 'trial_pack' });
-    const target = await seedAdditionalAccount(fx, { tier: 'trial_pack' });
+    fx = await buildTestApp({ tier: 'free' });
+    const target = await seedAdditionalAccount(fx, { tier: 'free' });
     const adminAuth = { authorization: `Bearer ${fx.plaintext}` };
 
     // Admin changes B's tier to scale.
@@ -156,7 +156,7 @@ describe('admin: suspend → blocked → unsuspend → restored', () => {
       headers: adminAuth,
     });
     expect(aWhoami.statusCode).toBe(200);
-    expect(aWhoami.json<{ tier: string }>().tier).toBe('trial_pack');
+    expect(aWhoami.json<{ tier: string }>().tier).toBe('free');
 
     // B sees the new tier on the next request (cache invalidation
     // forces a re-load).

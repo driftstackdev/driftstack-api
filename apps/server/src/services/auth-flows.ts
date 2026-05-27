@@ -207,7 +207,7 @@ export interface AuthFlowsServiceConfig {
    * can exercise the consume endpoints without scraping email.
    */
   exposeDebugToken: boolean;
-  /** Tier assigned to newly-created accounts. Default 'trial_pack'. */
+  /** Tier assigned to newly-created accounts. Default 'free'. */
   initialTier?: AccountTier;
 }
 
@@ -432,7 +432,7 @@ export class AuthFlowsService {
       email,
       name: args.name ?? null,
       passwordHash,
-      initialTier: this.config.initialTier ?? 'trial_pack',
+      initialTier: this.config.initialTier ?? 'free',
       ...(args.bundledLlmConsent !== undefined
         ? { bundledLlmConsent: args.bundledLlmConsent }
         : {}),

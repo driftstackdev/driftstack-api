@@ -43,8 +43,8 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
     );
   });
 
-  it('imports: and/eq/isNull/sql from drizzle-orm; AccountTier; StripeWebhooksRepo from services; Database; accounts + processedStripeEvents + subscriptions schemas', () => {
-    expect(body).toMatch(/import \{ and, eq, isNull, sql \} from 'drizzle-orm';/);
+  it('imports: eq/sql from drizzle-orm; AccountTier; StripeWebhooksRepo from services; Database; accounts + processedStripeEvents + subscriptions schemas', () => {
+    expect(body).toMatch(/import \{ eq, sql \} from 'drizzle-orm';/);
     expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
     expect(body).toMatch(
       /import type \{ StripeWebhooksRepo \} from '\.\.\/services\/stripe-webhooks\.js';/,
@@ -84,15 +84,6 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
   it('setAccountTier: read previousTier BEFORE update (select tier + limit 1); update accounts set tier + updatedAt; returns {previousTier: before[0]?.tier ?? null} — enables V-202b audit before/after recording', () => {
     expect(body).toMatch(
       /const before = await this\.database\.db\s*\n?\s*\.select\(\{ tier: accounts\.tier \}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.id, args\.accountId\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*const previousTier = before\[0\]\?\.tier \?\? null;\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(accounts\)\s*\n?\s*\.set\(\{ tier: args\.tier, updatedAt: args\.at \}\)\s*\n?\s*\.where\(eq\(accounts\.id, args\.accountId\)\);\s*\n?\s*return \{ previousTier \};/,
-    );
-  });
-
-  it("applyTrialPackPurchase framing pinned: 'Conditional update: only set trial-pack fields if not already set (`trial_pack_purchased_at IS NULL`). Returning + length tells us whether the row was actually mutated.'", () => {
-    expect(body).toMatch(
-      /\/\/ Conditional update: only set trial-pack fields if not already\s*\n?\s*\/\/ set \(`trial_pack_purchased_at IS NULL`\)\. Returning \+ length tells\s*\n?\s*\/\/ us whether the row was actually mutated\./,
-    );
-    expect(body).toMatch(
-      /\.set\(\{\s*\n?\s*trialPackPurchasedAt: args\.at,\s*\n?\s*trialPackCreditCents: args\.creditCents,\s*\n?\s*trialPackExpiresAt: args\.expiresAt,\s*\n?\s*trialPackRedeemed: false,\s*\n?\s*updatedAt: args\.at,\s*\n?\s*\}\)\s*\n?\s*\.where\(and\(eq\(accounts\.id, args\.accountId\), isNull\(accounts\.trialPackPurchasedAt\)\)\)\s*\n?\s*\.returning\(\{ id: accounts\.id \}\);\s*\n?\s*return \{ applied: result\.length > 0 \};/,
     );
   });
 

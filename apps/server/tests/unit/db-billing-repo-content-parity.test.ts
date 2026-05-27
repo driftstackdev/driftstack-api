@@ -46,9 +46,9 @@ describe('W442.A apps/server/src/db/billing-repo.ts content parity', () => {
     expect(body).toMatch(/import \{ accounts, subscriptions \} from '\.\/schema\.js';/);
   });
 
-  it('toAccount mapper: 9-field BillingAccountSnapshot (id, email, name, tier, stripeCustomerId, trialPack {Purchased, Credit, Expires, Redeemed} pack)', () => {
+  it('toAccount mapper: 5-field BillingAccountSnapshot (id, email, name, tier, stripeCustomerId)', () => {
     expect(body).toMatch(
-      /function toAccount\(r: typeof accounts\.\$inferSelect\): BillingAccountSnapshot \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*email: r\.email,\s*\n?\s*name: r\.name,\s*\n?\s*tier: r\.tier,\s*\n?\s*stripeCustomerId: r\.stripeCustomerId,\s*\n?\s*trialPackPurchasedAt: r\.trialPackPurchasedAt,\s*\n?\s*trialPackCreditCents: r\.trialPackCreditCents,\s*\n?\s*trialPackExpiresAt: r\.trialPackExpiresAt,\s*\n?\s*trialPackRedeemed: r\.trialPackRedeemed,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toAccount\(r: typeof accounts\.\$inferSelect\): BillingAccountSnapshot \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*email: r\.email,\s*\n?\s*name: r\.name,\s*\n?\s*tier: r\.tier,\s*\n?\s*stripeCustomerId: r\.stripeCustomerId,\s*\n?\s*\};\s*\n?\s*\}/,
     );
   });
 

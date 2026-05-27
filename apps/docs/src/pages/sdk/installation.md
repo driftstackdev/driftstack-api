@@ -126,7 +126,6 @@ client.emailPreferences.optOut(category);
 
 client.billing.getState();
 client.billing.createCheckoutSession(body);
-client.billing.startTrialPack(body?);
 client.billing.createPortalSession();
 
 client.cryptoOrders.quote(body);

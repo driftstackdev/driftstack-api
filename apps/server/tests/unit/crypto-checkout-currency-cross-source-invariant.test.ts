@@ -32,7 +32,7 @@ describe('W902 CryptoCheckout currency + price-cents cross-source invariant', ()
   it('CRITICAL packages/api-types/src/crypto-orders.ts CreateCryptoCheckoutRequestSchema has 3 fields — product (string with SKU describe) + price_cents (positive int max 1M) + price_currency (3-letter ISO regex).', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
     expect(p).toMatch(
-      /CreateCryptoCheckoutRequestSchema = z\.object\(\{\s*\n\s*product: z\.string\(\)\.describe\('SKU; one of the tier ids or trial_pack\.'\),\s*\n\s*price_cents: z\.number\(\)\.int\(\)\.positive\(\)\.max\(1_000_000\),/,
+      /CreateCryptoCheckoutRequestSchema = z\.object\(\{\s*\n\s*product: z\.string\(\)\.describe\('SKU; one of the paid tier ids \(the free tier is not purchasable\)\.'\),\s*\n\s*price_cents: z\.number\(\)\.int\(\)\.positive\(\)\.max\(1_000_000\),/,
     );
   });
 
@@ -71,10 +71,10 @@ describe('W902 CryptoCheckout currency + price-cents cross-source invariant', ()
 
   // ─── product SKU describe ────────────────────────────────────
 
-  it("CRITICAL product field describe pins 'SKU; one of the tier ids or trial_pack.' The describe documents what valid product strings look like — drift to a different describe would leave SDK consumers without guidance.", () => {
+  it("CRITICAL product field describe pins 'SKU; one of the paid tier ids (the free tier is not purchasable).' The describe documents what valid product strings look like — drift to a different describe would leave SDK consumers without guidance.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
     expect(p).toMatch(
-      /product: z\.string\(\)\.describe\('SKU; one of the tier ids or trial_pack\.'\)/,
+      /product: z\.string\(\)\.describe\('SKU; one of the paid tier ids \(the free tier is not purchasable\)\.'\)/,
     );
   });
 

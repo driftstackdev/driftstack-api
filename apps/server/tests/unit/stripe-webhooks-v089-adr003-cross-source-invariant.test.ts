@@ -163,33 +163,14 @@ describe('W955 V-089 + ADR-003 stripe-webhooks cross-source invariant', () => {
 
   // ─── ADR-003 trial-pack defaults ─────────────────────────────
 
-  it('CRITICAL ADR-003 trial-pack defaults — DEFAULT_TRIAL_PACK_CREDIT_CENTS = 299 ($2.99) + DEFAULT_TRIAL_PACK_WINDOW_MS = 14 * 24 * 60 * 60 * 1000 (14 days). The 299¢ + 14d defaults are the ADR-003 trial-pack policy (matches W939 billing).', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-webhooks.ts'));
-    expect(p).toMatch(/const DEFAULT_TRIAL_PACK_CREDIT_CENTS = 299;/);
-    expect(p).toMatch(/const DEFAULT_TRIAL_PACK_WINDOW_MS = 14 \* 24 \* 60 \* 60 \* 1000;/);
-  });
-
-  it("CRITICAL trialPackCreditCents config JSDoc — 'Trial-pack credit cents (default 299 = $2.99 per ADR-003). Override for tests'. The 299/default + test-override design is the customer-facing trial-pack contract.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-webhooks.ts'));
-    expect(p).toMatch(/Trial-pack credit cents \(default 299 = \$2\.99 per ADR-003\)\./);
-    expect(p).toMatch(/Override for tests\./);
-    expect(p).toMatch(/trialPackCreditCents\?: number;/);
-  });
-
-  it("CRITICAL trialPackWindowMs config JSDoc — 'Trial-pack window length in milliseconds (default 14 days per ADR-003). Override for tests'. The 14d window matches ADR-003.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-webhooks.ts'));
-    expect(p).toMatch(/Trial-pack window length in milliseconds \(default 14 days per ADR-003\)\./);
-    expect(p).toMatch(/trialPackWindowMs\?: number;/);
-  });
-
   // ─── cancelDowngradeTier framing ─────────────────────────────
 
-  it("CRITICAL cancelDowngradeTier JSDoc — 'What tier the account drops to when a subscription is canceled (status=canceled / event customer.subscription.deleted). Default trial_pack (loses paid tier privileges; trial-pack credit may still be active independently)'. The default-trial_pack-on-cancel keeps customer alive at the floor tier.", () => {
+  it("CRITICAL cancelDowngradeTier JSDoc — 'What tier the account drops to when a subscription is canceled (status=canceled / event customer.subscription.deleted). Default free (loses paid-tier privileges, lands on the perpetual free tier)'. The default-free-on-cancel keeps the customer alive at the floor tier.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-webhooks.ts'));
     expect(p).toMatch(/What tier the account drops to when a subscription is canceled/);
     expect(p).toMatch(/\(status='canceled' \/ event 'customer\.subscription\.deleted'\)\./);
-    expect(p).toMatch(/Default 'trial_pack' \(loses paid tier privileges; trial-pack/);
-    expect(p).toMatch(/credit may still be active independently\)\./);
+    expect(p).toMatch(/Default 'free' \(loses paid-tier privileges, lands on the/);
+    expect(p).toMatch(/free tier\)\./);
     expect(p).toMatch(/cancelDowngradeTier\?: AccountTier;/);
   });
 

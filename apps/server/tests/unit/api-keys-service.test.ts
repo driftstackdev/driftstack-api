@@ -249,10 +249,10 @@ describe('V-553.B-20 ApiKeysService.create', () => {
     expect(calls[0]?.accountId).toBe('acc_1');
   });
 
-  it('mints a test key for trial_pack tier', async () => {
+  it('mints a test key for free tier', async () => {
     const { repo } = makeRepo();
     const svc = new ApiKeysService(repo);
-    const result = await svc.create(ctxWith(['account_owner'], { tier: 'trial_pack' }), {
+    const result = await svc.create(ctxWith(['account_owner'], { tier: 'free' }), {
       name: 'mine',
       scopes: ['read'],
       expiresAt: null,
@@ -264,7 +264,7 @@ describe('V-553.B-20 ApiKeysService.create', () => {
     const { repo, state } = makeRepo();
     const svc = new ApiKeysService(repo);
     const result = await svc.create(
-      ctxWith(['account_owner'], { id: 'acc_member', tier: 'trial_pack' }),
+      ctxWith(['account_owner'], { id: 'acc_member', tier: 'free' }),
       { name: 'team-key', scopes: ['read'], expiresAt: null },
       { effectiveAccountId: 'acc_owner', effectiveTier: 'api_starter' as AccountTier },
     );

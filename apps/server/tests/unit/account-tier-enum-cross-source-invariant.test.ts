@@ -28,7 +28,7 @@ function read(p: string): string {
 
 // The canonical 8-value AccountTier set.
 const ACCOUNT_TIERS = [
-  'trial_pack',
+  'free',
   'solo_manual',
   'team_manual',
   'agency_manual',
@@ -41,7 +41,7 @@ const ACCOUNT_TIERS = [
 describe('W850 AccountTier 8-value cross-source invariant', () => {
   // ─── api-types canonical source ──────────────────────────────
 
-  it('CRITICAL packages/api-types/src/common.ts declares AccountTierSchema = z.enum([...]) with the EXACT 8-value set (trial_pack + solo_manual + team_manual + agency_manual + api_starter + api_builder + api_scale + enterprise). Drift would cascade through every tier-check.', () => {
+  it('CRITICAL packages/api-types/src/common.ts declares AccountTierSchema = z.enum([...]) with the EXACT 8-value set (free + solo_manual + team_manual + agency_manual + api_starter + api_builder + api_scale + enterprise). Drift would cascade through every tier-check.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
     expect(p).toMatch(/export const AccountTierSchema = z\.enum\(\[/);
     for (const tier of ACCOUNT_TIERS) {
@@ -56,10 +56,10 @@ describe('W850 AccountTier 8-value cross-source invariant', () => {
 
   // ─── Go SDK 8-const declarations ─────────────────────────────
 
-  it('CRITICAL Go SDK packages/sdk-go/types.go declares 8 AccountTier consts — TierTrialPack + TierSoloManual + TierTeamManual + TierAgencyManual + TierAPIStarter + TierAPIBuilder + TierAPIScale + TierEnterprise. Each maps to one canonical tier string.', () => {
+  it('CRITICAL Go SDK packages/sdk-go/types.go declares 8 AccountTier consts — TierFree + TierSoloManual + TierTeamManual + TierAgencyManual + TierAPIStarter + TierAPIBuilder + TierAPIScale + TierEnterprise. Each maps to one canonical tier string.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/sdk-go/types.go'));
     expect(p).toMatch(/type AccountTier string/);
-    expect(p).toMatch(/TierTrialPack +AccountTier = "trial_pack"/);
+    expect(p).toMatch(/TierFree +AccountTier = "free"/);
     expect(p).toMatch(/TierSoloManual +AccountTier = "solo_manual"/);
     expect(p).toMatch(/TierTeamManual +AccountTier = "team_manual"/);
     expect(p).toMatch(/TierAgencyManual AccountTier = "agency_manual"/);
@@ -76,7 +76,7 @@ describe('W850 AccountTier 8-value cross-source invariant', () => {
 
   // ─── 3-ladder + 2-special framing ────────────────────────────
 
-  it('CRITICAL the 8-tier set decomposes as 3 Manual + 3 API + 2 Special (trial_pack + enterprise). The 3+3+2 shape matches the V-148 two-ladder + special-cases model. Drift to a different decomposition (e.g. 4 Manual tiers) would break the pricing-page UI.', () => {
+  it('CRITICAL the 8-tier set decomposes as 3 Manual + 3 API + 2 Special (free + enterprise). The 3+3+2 shape matches the V-148 two-ladder + special-cases model. Drift to a different decomposition (e.g. 4 Manual tiers) would break the pricing-page UI.', () => {
     // Manual ladder: 3 tiers.
     const manual = ACCOUNT_TIERS.filter((t) => t.endsWith('_manual'));
     expect(manual.length, '3 Manual-ladder tiers').toBe(3);
@@ -90,7 +90,7 @@ describe('W850 AccountTier 8-value cross-source invariant', () => {
     // Special: 2 tiers.
     const special = ACCOUNT_TIERS.filter((t) => !t.endsWith('_manual') && !t.startsWith('api_'));
     expect(special.length, '2 special tiers').toBe(2);
-    expect(special).toEqual(['trial_pack', 'enterprise']);
+    expect(special).toEqual(['free', 'enterprise']);
 
     // Total: 8.
     expect(ACCOUNT_TIERS.length).toBe(8);
@@ -105,16 +105,9 @@ describe('W850 AccountTier 8-value cross-source invariant', () => {
 
   // ─── No forbidden tier names ─────────────────────────────────
 
-  it('CRITICAL no source declares forbidden tier names (free / pro / basic / premium / pro_plus / startup). These are common SaaS-tier names that AccountTier intentionally avoids — drift to adding them would break the two-ladder positioning.', () => {
+  it('CRITICAL no source declares forbidden tier names (pro / basic / premium / pro_plus / startup). These are common SaaS-tier names that AccountTier intentionally avoids — drift to adding them would break the two-ladder positioning. (NOTE: free is now the canonical entry tier as of 2026-05-27, replacing trial_pack.)', () => {
     const apiTypes = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
-    for (const forbidden of [
-      "'free'",
-      "'pro'",
-      "'basic'",
-      "'premium'",
-      "'pro_plus'",
-      "'startup'",
-    ]) {
+    for (const forbidden of ["'pro'", "'basic'", "'premium'", "'pro_plus'", "'startup'"]) {
       expect(apiTypes, `AccountTier must NOT include forbidden tier ${forbidden}`).not.toMatch(
         new RegExp(`AccountTierSchema[\\s\\S]+?${forbidden}[\\s\\S]+?\\]\\)`),
       );

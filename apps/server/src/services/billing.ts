@@ -44,15 +44,6 @@ export interface BillingProvider {
     accountId: string;
   }): Promise<{ url: string; sessionId: string }>;
 
-  /** Start a Checkout Session for a one-time trial-pack purchase. */
-  createTrialPackCheckout(args: {
-    customerId: string;
-    priceId: string;
-    successUrl: string;
-    cancelUrl: string;
-    accountId: string;
-  }): Promise<{ url: string; sessionId: string }>;
-
   /** Open a Stripe Customer Portal session for the given customer. */
   createPortalSession(args: { customerId: string; returnUrl: string }): Promise<{ url: string }>;
 }
@@ -67,10 +58,6 @@ export interface BillingAccountSnapshot {
   name: string | null;
   tier: AccountTier;
   stripeCustomerId: string | null;
-  trialPackPurchasedAt: Date | null;
-  trialPackCreditCents: number | null;
-  trialPackExpiresAt: Date | null;
-  trialPackRedeemed: boolean;
 }
 
 export interface SubscriptionMirror {
@@ -120,8 +107,6 @@ export type TierPriceMap = Partial<Record<AccountTier, TierPrices>>;
 export interface BillingServiceConfig {
   /** Map of self-serve paid tier to monthly + annual Stripe price ids. */
   tierPrices: TierPriceMap;
-  /** One-time price id for the trial-pack purchase. */
-  trialPackPriceId: string;
   /** Default success / cancel URLs (customer dashboard). */
   defaultSuccessUrl: string;
   defaultCancelUrl: string;
@@ -169,32 +154,6 @@ export class BillingService {
     });
   }
 
-  async startTrialPack(args: {
-    accountId: string;
-    successUrl?: string;
-    cancelUrl?: string;
-  }): Promise<{ url: string; sessionId: string }> {
-    const account = await this.repo.getAccount(args.accountId);
-    if (account === null) throw new NotFoundError('Account not found.');
-
-    if (account.trialPackPurchasedAt !== null) {
-      throw new ConflictError(
-        'Trial pack already purchased on this account; one trial pack per account.',
-        { resource: 'trial_pack' },
-      );
-    }
-
-    const customerId = await this.ensureCustomerId(account);
-
-    return this.provider.createTrialPackCheckout({
-      accountId: account.id,
-      customerId,
-      priceId: this.config.trialPackPriceId,
-      successUrl: args.successUrl ?? this.config.defaultSuccessUrl,
-      cancelUrl: args.cancelUrl ?? this.config.defaultCancelUrl,
-    });
-  }
-
   async createPortalSession(accountId: string): Promise<{ url: string }> {
     const account = await this.repo.getAccount(accountId);
     if (account === null) throw new NotFoundError('Account not found.');
@@ -214,35 +173,12 @@ export class BillingService {
 
   async getBillingState(accountId: string): Promise<{
     subscription: SubscriptionMirror | null;
-    trialPack: {
-      active: boolean;
-      creditCentsRemaining: number | null;
-      expiresAt: Date | null;
-      redeemed: boolean;
-    };
   }> {
     const account = await this.repo.getAccount(accountId);
     if (account === null) throw new NotFoundError('Account not found.');
 
     const subscription = await this.repo.findCurrentSubscription(accountId);
-    const now = new Date();
-
-    const active =
-      account.trialPackPurchasedAt !== null &&
-      !account.trialPackRedeemed &&
-      account.trialPackExpiresAt !== null &&
-      account.trialPackExpiresAt.getTime() > now.getTime() &&
-      (account.trialPackCreditCents ?? 0) > 0;
-
-    return {
-      subscription,
-      trialPack: {
-        active,
-        creditCentsRemaining: account.trialPackCreditCents,
-        expiresAt: account.trialPackExpiresAt,
-        redeemed: account.trialPackRedeemed,
-      },
-    };
+    return { subscription };
   }
 
   // ──────────────── helpers ────────────────

@@ -17,7 +17,7 @@ class Account(BaseModel):
     email: EmailStr
     name: str | None
     tier: Literal[
-        "trial_pack",
+        "free",
         "solo_manual",
         "team_manual",
         "agency_manual",
@@ -48,7 +48,7 @@ class AccountMeResponse(BaseModel):
     email: EmailStr
     name: str | None
     tier: Literal[
-        "trial_pack",
+        "free",
         "solo_manual",
         "team_manual",
         "agency_manual",
@@ -232,7 +232,7 @@ class UsagePeriodSummary(BaseModel):
     ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z
     """
     tier: Literal[
-        "trial_pack",
+        "free",
         "solo_manual",
         "team_manual",
         "agency_manual",
@@ -633,7 +633,7 @@ class AdminAccount(BaseModel):
     email: EmailStr
     name: str | None
     tier: Literal[
-        "trial_pack",
+        "free",
         "solo_manual",
         "team_manual",
         "agency_manual",

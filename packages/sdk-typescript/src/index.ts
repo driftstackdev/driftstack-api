@@ -222,11 +222,8 @@ export type {
   CreateCheckoutSessionResponse,
   CreatePortalSessionResponse,
   GetBillingStateResponse,
-  StartTrialPackRequest,
-  StartTrialPackResponse,
   Subscription,
   SubscriptionStatus,
-  TrialPackState,
   // EG-API-1.1 — customer-configurable egress (planning 133)
   EgressSafeguard,
   OpenVpnProxyConfig,

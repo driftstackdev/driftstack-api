@@ -31,15 +31,15 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
 
     expect(p).toMatch(/V-183 — progressive-enhancement wiring against \/v1\/billing\./);
     expect(p).toMatch(/SSG renders mock for instant paint; inline <script> fetches live/);
-    expect(p).toMatch(/state \+ replaces card values\. Action buttons \(portal \/ trial pack\)/);
-    expect(p).toMatch(/Mirrors V-180\/V-181\/V-182/);
+    expect(p).toMatch(/state \+ replaces card values\. The portal action button POSTs to the/);
+    expect(p).toMatch(/Mirrors\s*\n?\s*\/\/ V-180\/V-181\/V-182/);
   });
 
   it('CRITICAL Stripe-redirect-for-all-payment-changes framing pinned. The wording — "All payment changes redirect to Stripe\'s secure portal" — is the load-bearing PCI/compliance framing (dashboard never handles card data).', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Manage subscription, payment method, invoices, and trial-pack credit\.\s*\n\s+All payment changes redirect to Stripe's secure portal\./,
+      /Manage subscription, payment method, and invoices\.\s*\n\s+All payment changes redirect to Stripe's secure portal\./,
     );
   });
 
@@ -88,45 +88,11 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     expect(p).toMatch(/if \(body\.portal_url\) window\.location\.href = body\.portal_url;/);
   });
 
-  it('CRITICAL POST /v1/billing/trial-pack with success_url + cancel_url body shape. Drift to a different param name would break the V-273 trial-pack checkout redirect (Stripe returns checkout_url).', () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(/const successUrl = window\.location\.origin \+ '\/billing\?trial=ok';/);
-    expect(p).toMatch(/const cancelUrl = window\.location\.origin \+ '\/billing\?trial=cancel';/);
-    expect(p).toMatch(
-      /authedFetch\('\/v1\/billing\/trial-pack', \{\s*\n\s+method: 'POST',\s*\n\s+body: JSON\.stringify\(\{ success_url: successUrl, cancel_url: cancelUrl \}\),\s*\n\s+\}\)/,
-    );
-    expect(p).toMatch(/if \(body\.checkout_url\) window\.location\.href = body\.checkout_url;/);
-  });
-
   it('CRITICAL Cancel button → handlePortal pinned. The "cancellation goes through Stripe portal" inline comment is the load-bearing PCI framing: we never cancel directly.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
       /if \(cancelBtn\) cancelBtn\.addEventListener\('click', handlePortal\); \/\/ cancellation goes through Stripe portal/,
-    );
-  });
-
-  it("CRITICAL trial-pack 3-state copy — Active/Redeemed/Available — with $2.99 once-per-account framing. Drift to a different price would diverge from server config; drift to dropping the 'does not refresh' wording would let customers expect a refreshable trial.", () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(
-      /\$2\.99 trial pack already used on this account\. Once-per-account; the trial does not refresh\./,
-    );
-    expect(p).toMatch(/Buy 16 hours of iPhone Safari sessions for \$2\.99 — once per account\./);
-  });
-
-  it('CRITICAL fmtCents() helper pinned in BOTH frontmatter + inline script — `$${(cents / 100).toFixed(2)}` with em-dash fallback. Drift would change the customer-visible price display.', () => {
-    const p = read(PAGE);
-
-    // Frontmatter (TS).
-    expect(p).toMatch(
-      /function fmtCents\(cents: number \| null\): string \{\s*\n\s+if \(cents === null\) return '—';\s*\n\s+return `\$\$\{\(cents \/ 100\)\.toFixed\(2\)\}`;\s*\n\}/,
-    );
-
-    // Inline-script (JS).
-    expect(p).toMatch(
-      /function fmtCents\(cents\) \{\s*\n\s+if \(cents === null \|\| cents === undefined\) return '—';\s*\n\s+return '\$' \+ \(cents \/ 100\)\.toFixed\(2\);\s*\n\s+\}/,
     );
   });
 
@@ -156,11 +122,6 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     expect(p).toMatch(
       /"Couldn't open Stripe portal \(" \+\s*\n\s+\(err && err\.message \? err\.message : 'network error'\) \+\s*\n\s+'\)\.'/,
     );
-  });
-
-  it("CRITICAL trial-pack-error banner framing pinned — `Couldn't start trial-pack checkout (<error>)`. Drift to silent error would let customers double-click + buy 2x trial packs.", () => {
-    const p = read(PAGE);
-    expect(p).toMatch(/"Couldn't start trial-pack checkout \(" \+/);
   });
 
   it("CRITICAL action-buttons wired regardless of token framing pinned. The 'Wire action buttons regardless of token state — they show a banner if no token rather than silently no-oping' inline comment is the load-bearing zero-confusion-state framing.", () => {
@@ -218,10 +179,11 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
   it('F-7 invoices-section placeholder framing — the prior "(Live invoice list endpoint TODO — accessible via Stripe Customer Portal in the meantime)" wording was a developer-comment leaking into customer copy. Reframed to describe the Stripe Customer Portal path as a feature rather than a workaround for a missing endpoint.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /No invoices yet\. Once your subscription renews or the trial pack is\s*\n\s+purchased, invoices appear here\. Each invoice carries a permanent\s*\n\s+URL — bookmark for accounting\. The full invoice history is also\s*\n\s+accessible via the Stripe Customer Portal link above\./,
-    );
+    expect(p).toMatch(/No invoices yet\. Once your subscription renews, invoices appear/);
+    expect(p).toMatch(/here\. Each invoice carries a permanent/);
+    expect(p).toMatch(/accessible via the Stripe Customer Portal link above\./);
     expect(p).not.toMatch(/Live invoice list endpoint TODO/);
+    expect(p).not.toMatch(/the trial pack is/);
   });
 
   it('CRITICAL resolveApiBaseUrl + DashboardLayout used (no withSidebar={false}). Billing IS sidebar-enabled.', () => {

@@ -92,11 +92,11 @@ describe('W408.B apps/server/src/services/usage.ts content parity', () => {
     );
   });
 
-  it('TIER_QUOTAS: 8 tiers covered (trial_pack / solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale / enterprise)', () => {
+  it('TIER_QUOTAS: 8 tiers covered (free / solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale / enterprise)', () => {
     expect(body).toMatch(
       /const TIER_QUOTAS: Record<AccountTier, Record<UsageRecordType, number \| null>> = \{/,
     );
-    expect(body).toMatch(/trial_pack: \{/);
+    expect(body).toMatch(/free: \{/);
     expect(body).toMatch(/solo_manual: \{/);
     expect(body).toMatch(/team_manual: \{/);
     expect(body).toMatch(/agency_manual: \{/);

@@ -151,7 +151,7 @@ and `PROFILES_PER_TIER` in `@driftstack/api-types`. Snapshot:
 
 | Tier            | Concurrent sessions | Profiles | Session minutes / month |
 | --------------- | ------------------: | -------: | ----------------------: |
-| `trial_pack`    |                   1 |        1 |                      30 |
+| `free`          |                   1 |        1 |                       — |
 | `solo_manual`   |                   1 |       10 |                     600 |
 | `team_manual`   |                   3 |       50 |                   6,000 |
 | `agency_manual` |                   8 |      200 |                  24,000 |

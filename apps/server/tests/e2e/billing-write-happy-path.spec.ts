@@ -66,8 +66,8 @@ test('checkout-session 200 with annual price for api_scale tier', async ({ reque
   expect(server.billingProvider.state.checkoutSessions[0]?.priceId).toBe('price_api_scale_annual');
 });
 
-test('trial-pack 200 routes to the trial_pack one-time price', async ({ request }) => {
-  const seed = await seedAccount(server.client, { tier: 'trial_pack' });
+test('trial-pack 200 routes to the free one-time price', async ({ request }) => {
+  const seed = await seedAccount(server.client, { tier: 'free' });
   const res = await request.post(`${server.baseUrl}/v1/billing/trial-pack`, {
     headers: authHeader(seed.plaintext),
     data: {
@@ -76,10 +76,8 @@ test('trial-pack 200 routes to the trial_pack one-time price', async ({ request 
     },
   });
   expect(res.status()).toBe(200);
-  expect(server.billingProvider.state.checkoutSessions[0]?.kind).toBe('trial_pack');
-  expect(server.billingProvider.state.checkoutSessions[0]?.priceId).toBe(
-    'price_trial_pack_one_time',
-  );
+  expect(server.billingProvider.state.checkoutSessions[0]?.kind).toBe('free');
+  expect(server.billingProvider.state.checkoutSessions[0]?.priceId).toBe('price_free_one_time');
 });
 
 test('two checkouts on the same account reuse the same Stripe customer', async ({ request }) => {
@@ -140,8 +138,8 @@ test('GET /v1/billing reports null subscription + inactive trial-pack for a fres
   expect(res.status()).toBe(200);
   const body = (await res.json()) as {
     subscription: unknown;
-    trial_pack: { active: boolean; redeemed: boolean };
+    free: { active: boolean; redeemed: boolean };
   };
   expect(body.subscription).toBeNull();
-  expect(body.trial_pack.active).toBe(false);
+  expect(body.free.active).toBe(false);
 });

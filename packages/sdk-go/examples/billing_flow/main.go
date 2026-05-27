@@ -55,8 +55,4 @@ func main() {
 	}
 	fmt.Printf("Subscribed to %s (status=%s) — portal:\n  %s\n",
 		state.Subscription.Tier, state.Subscription.Status, portal.PortalURL)
-
-	if state.TrialPack.Active && state.TrialPack.CreditCentsRemaining != nil {
-		fmt.Printf("Trial-pack credit remaining: %d cents\n", *state.TrialPack.CreditCentsRemaining)
-	}
 }
