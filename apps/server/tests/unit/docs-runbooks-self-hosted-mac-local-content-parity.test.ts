@@ -46,15 +46,15 @@ describe('W557.B /docs/runbooks/self-hosted-mac-local.md content parity', () => 
     expect(body).toMatch(/PlaywrightDriver lands \(V-333b\)/);
   });
 
-  it("Prerequisites + one-time setup framing pinned: 'macOS 12+ (Monterey or newer).' + 'Node.js 22+' + 'Docker Desktop (for Postgres 17 + Redis 7).' + 'Tauri prerequisites for the GUI client: Rust' + 'docker compose -f docker-compose.dev.yml up -d' + 'postgres on 127.0.0.1:5432 (db driftstack_dev / user driftstack_dev)' + 'redis on 127.0.0.1:6379' + 'npm run db:migrate --workspace @driftstack/server' — pinned so the macOS-12+ + Node-22+ + Docker-Postgres-17-Redis-7 + Tauri-Rust + 5432-driftstack_dev-DB + 6379-Redis + db:migrate-@driftstack/server commitment survives", () => {
+  it("Prerequisites + one-time setup framing pinned: 'macOS 12+ (Monterey or newer).' + 'Node.js 22+' + 'Docker Desktop (for Postgres 17 + Redis 7).' + 'Tauri prerequisites for the GUI client: Rust' + 'docker compose up -d' (default docker-compose.yml) + 'postgres on 127.0.0.1:5432 (db driftstack / user driftstack)' + 'redis on 127.0.0.1:6379' + 'npm run db:migrate --workspace @driftstack/server' — pinned so the macOS-12+ + Node-22+ + Docker-Postgres-17-Redis-7 + Tauri-Rust + 5432-driftstack-DB + 6379-Redis + db:migrate-@driftstack/server commitment survives. The compose file is docker-compose.yml (db/user/password all `driftstack` per .env.example + docker-compose.yml) — NOT a docker-compose.dev.yml (no such file) nor a driftstack_dev DB.", () => {
     expect(body).toMatch(/- macOS 12\+ \(Monterey or newer\)\./);
     expect(body).toMatch(/- Node\.js 22\+/);
     expect(body).toMatch(/- Docker Desktop \(for Postgres 17 \+ Redis 7\)\./);
     expect(body).toMatch(/- Tauri prerequisites for the GUI client: Rust/);
-    expect(body).toMatch(/docker compose -f docker-compose\.dev\.yml up -d/);
-    expect(body).toMatch(
-      /# {3}postgres on 127\.0\.0\.1:5432 \(db driftstack_dev \/ user driftstack_dev\)/,
-    );
+    expect(body).toMatch(/docker compose up -d/);
+    expect(body).toMatch(/# {3}postgres on 127\.0\.0\.1:5432 \(db driftstack \/ user driftstack\)/);
+    // The referenced compose file must actually exist (self-hoster runs it).
+    expect(body).not.toMatch(/docker-compose\.dev\.yml/);
     expect(body).toMatch(/# {3}redis on 127\.0\.0\.1:6379/);
     expect(body).toMatch(/npm run db:migrate --workspace @driftstack\/server/);
   });
@@ -92,7 +92,7 @@ describe('W557.B /docs/runbooks/self-hosted-mac-local.md content parity', () => 
     expect(body).toMatch(/repo\) lands the production driver separately\./);
   });
 
-  it("Reset-between-runs + common-pitfalls framing pinned: 'TRUNCATE TABLE' + 'sessions, profiles, api_keys, web_sessions, accounts, account_audit_log' + 'admin_audit_log, webhook_endpoints, webhook_deliveries, stripe_events' + 'subscriptions, usage_records, rate_limit_overrides, status_subscribers' + 'incidents, incident_updates, scheduled_jobs, team_members, team_invites' + 'legal_acceptances RESTART IDENTITY CASCADE' + 'docker compose -f docker-compose.dev.yml exec redis redis-cli FLUSHALL' + '**GUI's First-Run Wizard fails**: usually `PUBLIC_API_BASE_URL` mismatch. The GUI tries `http://localhost:7780` by default per `apps/gui-client/src/lib/settings.ts`' + '**Migrations fail with \"extension uuid-ossp not found\"**' + 'docker compose down -v && docker compose' + '**Tauri dev hangs at \"Compiling tauri\"**: cold compile is slow on Apple Silicon (~3 min); warm rebuilds are <10s.' — pinned so the TRUNCATE-CASCADE-table-inventory + Redis-FLUSHALL + GUI-default-7780-override-3000 + uuid-ossp-down-v + Tauri-cold-3min-warm-10s commitment survives", () => {
+  it("Reset-between-runs + common-pitfalls framing pinned: 'TRUNCATE TABLE' + 'sessions, profiles, api_keys, web_sessions, accounts, account_audit_log' + 'admin_audit_log, webhook_endpoints, webhook_deliveries, stripe_events' + 'subscriptions, usage_records, rate_limit_overrides, status_subscribers' + 'incidents, incident_updates, scheduled_jobs, team_members, team_invites' + 'legal_acceptances RESTART IDENTITY CASCADE' + 'docker compose exec redis redis-cli FLUSHALL' + '**GUI's First-Run Wizard fails**: usually `PUBLIC_API_BASE_URL` mismatch. The GUI tries `http://localhost:7780` by default per `apps/gui-client/src/lib/settings.ts`' + '**Migrations fail with \"extension uuid-ossp not found\"**' + 'docker compose down -v && docker compose' + '**Tauri dev hangs at \"Compiling tauri\"**: cold compile is slow on Apple Silicon (~3 min); warm rebuilds are <10s.' — pinned so the TRUNCATE-CASCADE-table-inventory + Redis-FLUSHALL + GUI-default-7780-override-3000 + uuid-ossp-down-v + Tauri-cold-3min-warm-10s commitment survives", () => {
     expect(body).toMatch(/TRUNCATE TABLE/);
     expect(body).toMatch(
       /sessions, profiles, api_keys, web_sessions, accounts, account_audit_log,/,
@@ -103,9 +103,7 @@ describe('W557.B /docs/runbooks/self-hosted-mac-local.md content parity', () => 
       /incidents, incident_updates, scheduled_jobs, team_members, team_invites,/,
     );
     expect(body).toMatch(/legal_acceptances RESTART IDENTITY CASCADE;/);
-    expect(body).toMatch(
-      /docker compose -f docker-compose\.dev\.yml exec redis redis-cli FLUSHALL/,
-    );
+    expect(body).toMatch(/docker compose exec redis redis-cli FLUSHALL/);
     expect(body).toMatch(/- \*\*GUI's First-Run Wizard fails\*\*: usually `PUBLIC_API_BASE_URL`/);
     expect(body).toMatch(/mismatch\. The GUI tries `http:\/\/localhost:7780` by default per/);
     expect(body).toMatch(/`apps\/gui-client\/src\/lib\/settings\.ts`;/);

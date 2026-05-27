@@ -30,9 +30,9 @@ cd driftstack-api
 npm install
 
 # Spin up Postgres + Redis via the dev compose file.
-docker compose -f docker-compose.dev.yml up -d
-# Compose file lives in the repo root and exposes:
-#   postgres on 127.0.0.1:5432 (db driftstack_dev / user driftstack_dev)
+docker compose up -d
+# Compose file (docker-compose.yml) lives in the repo root and exposes:
+#   postgres on 127.0.0.1:5432 (db driftstack / user driftstack)
 #   redis on 127.0.0.1:6379
 
 # Apply migrations (Drizzle generates + applies all V-NNN migrations).
@@ -115,8 +115,8 @@ repo) lands the production driver separately.
 
 ```sh
 # Wipe the dev database (loses all signups + sessions; keeps schema).
-docker compose -f docker-compose.dev.yml exec postgres psql \
-  -U driftstack_dev -d driftstack_dev -c '
+docker compose exec postgres psql \
+  -U driftstack -d driftstack -c '
     TRUNCATE TABLE
       sessions, profiles, api_keys, web_sessions, accounts, account_audit_log,
       admin_audit_log, webhook_endpoints, webhook_deliveries, stripe_events,
@@ -126,7 +126,7 @@ docker compose -f docker-compose.dev.yml exec postgres psql \
   '
 
 # Wipe Redis (auth-cache, rate-limit buckets, web-session locks).
-docker compose -f docker-compose.dev.yml exec redis redis-cli FLUSHALL
+docker compose exec redis redis-cli FLUSHALL
 ```
 
 ## Common pitfalls
