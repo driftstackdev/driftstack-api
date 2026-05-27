@@ -75,23 +75,25 @@ describe('W213.B webhooks doc parity', () => {
     expect(BACKOFF_MS_BY_ATTEMPT[2]).toBe(5 * 60_000);
     expect(BACKOFF_MS_BY_ATTEMPT[3]).toBe(15 * 60_000);
     expect(BACKOFF_MS_BY_ATTEMPT[4]).toBe(30 * 60_000);
-    // The doc lists attempts 1→5 with backoff applied between them
-    // (so attempt 5's delay = entry 4 = 30 min). Entry 5 = 60 min is
-    // unused for delivery (DEFAULT_MAX_ATTEMPTS = 5 dlqs after the
-    // 5th attempt) but kept for symmetry.
+    expect(BACKOFF_MS_BY_ATTEMPT[5]).toBe(60 * 60_000);
+    // The doc lists attempts 1→6: the initial try plus 5 retries with
+    // backoff applied between them (1/5/15/30/60 min). All five backoff
+    // entries are used; the 5th (60 min) schedules the final retry
+    // before DLQ.
     expect(doc).toMatch(/1 minute/);
     expect(doc).toMatch(/5 minutes/);
     expect(doc).toMatch(/15 minutes/);
     expect(doc).toMatch(/30 minutes/);
+    expect(doc).toMatch(/60 minutes/);
     // Rule out the stale schedule:
     expect(doc).not.toMatch(/30s, 2m, 10m, 1h, 6h, 24h/);
   });
 
   it('max-attempts claim matches DEFAULT_MAX_ATTEMPTS', () => {
-    expect(DEFAULT_MAX_ATTEMPTS).toBe(5);
-    expect(doc).toMatch(/After <strong>5 attempts<\/strong>/);
-    // Rule out the stale claim:
-    expect(doc).not.toMatch(/6 failed attempts/);
+    expect(DEFAULT_MAX_ATTEMPTS).toBe(6);
+    expect(doc).toMatch(/After <strong>6 attempts<\/strong>/);
+    // Rule out the stale 5-attempt (4-retry) claim:
+    expect(doc).not.toMatch(/After <strong>5 attempts<\/strong>/);
   });
 
   it('timeout claim matches DEFAULT_TIMEOUT_MS', () => {

@@ -73,8 +73,8 @@ Headers:
   type (e.g. `session.completed`), so handlers can route without
   parsing the body.
 
-Retry policy: 5 attempts with exponential backoff at 1m, 5m, 15m,
-30m, 60m. Final failures land in DLQ
+Retry policy: 6 attempts (the initial delivery plus 5 retries) with
+exponential backoff at 1m, 5m, 15m, 30m, 60m. Final failures land in DLQ
 (see `docs/api/webhooks.md` and the admin /webhook-dlq page).
 
 Idempotency: every delivery includes the same `evt_<uuid>`. Customers
@@ -388,7 +388,8 @@ HTTP 2xx within the 10s timeout. Any other outcome (5xx, timeout,
 connection refused, DNS failure) marks the attempt failed; the
 delivery scheduler picks it up at the next retry slot.
 
-After 5 failed attempts the delivery lands in DLQ. DLQ deliveries
+After 6 failed attempts (the initial delivery plus 5 retries) the
+delivery lands in DLQ. DLQ deliveries
 are visible in the admin panel
 (`admin.driftstack.dev/webhook-dlq`) — staff can manually requeue
 them after investigating the failure.

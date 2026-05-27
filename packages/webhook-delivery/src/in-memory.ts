@@ -47,7 +47,7 @@ export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = {
 /** Default per-attempt delivery timeout (10s). */
 export const DEFAULT_TIMEOUT_MS = 10_000;
 /** Default max attempts before DLQ. */
-export const DEFAULT_MAX_ATTEMPTS = 5;
+export const DEFAULT_MAX_ATTEMPTS = 6; // initial + 5 retries (backoff[5] = 60 min); DLQ on the 6th
 
 export interface InMemoryWebhookDeliveryDeps {
   /** Test seam — defaults to global fetch. */

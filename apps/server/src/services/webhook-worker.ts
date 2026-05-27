@@ -34,11 +34,13 @@ export interface WebhookWorkerConfig {
   batchSize?: number;
 }
 
-const MAX_ATTEMPTS = 5; // 0..5 inclusive (initial + 5 retries) → 6 total tries
+const MAX_ATTEMPTS = 6; // attempt indices 0..5 (initial + 5 retries); DLQ when the next index would be 6
 
 /**
  * Backoff schedule per attempt-index AFTER a failure. Index = the next
- * attempt number (1 = first retry, 5 = sixth attempt = DLQ boundary).
+ * attempt number (1 = first retry … 5 = fifth/last retry, scheduled
+ * 60 min out). The next index after 5 is 6, which trips the DLQ boundary
+ * instead of scheduling a 7th try.
  *   1: 1 min
  *   2: 5 min
  *   3: 15 min

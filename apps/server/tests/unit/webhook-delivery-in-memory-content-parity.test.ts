@@ -14,7 +14,7 @@
 //   • Out-of-scope framing pinned: persistence, FOR UPDATE SKIP
 //     LOCKED, cross-region replication.
 //   • BACKOFF_MS_BY_ATTEMPT: 5-entry curve 1min/5min/15min/30min/60min.
-//   • DEFAULT_TIMEOUT_MS=10_000; DEFAULT_MAX_ATTEMPTS=5.
+//   • DEFAULT_TIMEOUT_MS=10_000; DEFAULT_MAX_ATTEMPTS=6.
 //   • InMemoryWebhookDeliveryDeps: 3-field (fetch test seam + now
 //     test seam + getEndpoint required).
 //   • SharedDeliveryStore: 3-field (queue + dlq + idCounter); 'The
@@ -90,7 +90,7 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
       /export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = \{\s*\n?\s*1: 60_000,\s*\n?\s*2: 5 \* 60_000,\s*\n?\s*3: 15 \* 60_000,\s*\n?\s*4: 30 \* 60_000,\s*\n?\s*5: 60 \* 60_000,\s*\n?\s*\};/,
     );
     expect(body).toMatch(/export const DEFAULT_TIMEOUT_MS = 10_000;/);
-    expect(body).toMatch(/export const DEFAULT_MAX_ATTEMPTS = 5;/);
+    expect(body).toMatch(/export const DEFAULT_MAX_ATTEMPTS = 6;/);
   });
 
   it("InMemoryWebhookDeliveryDeps: 3-field (fetch test seam 'defaults to global fetch' + now test seam 'defaults to () => Date.now()' + getEndpoint required); 'The delivery service does not own endpoint storage' framing pinned", () => {

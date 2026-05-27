@@ -42,9 +42,11 @@ Response (200):
 
 ## Typical flow
 
-1. Your endpoint goes down at 10:00 — Driftstack starts retrying with
-   backoff. By 10:15 the deliveries land in DLQ (`status: "dlq"`).
-2. You fix your endpoint at 11:00.
+1. Your endpoint goes down at 10:00 — Driftstack retries each delivery
+   on the backoff schedule (1m, 5m, 15m, 30m, 60m). It stays down past
+   the last retry, so ~2 hours later the deliveries land in DLQ
+   (`status: "dlq"`).
+2. You fix your endpoint at 13:00.
 3. List the DLQ deliveries:
    `GET /v1/webhooks/:webhookId/deliveries?status=dlq`
 4. Replay each one: `POST /v1/webhook-deliveries/:deliveryId/replay`.

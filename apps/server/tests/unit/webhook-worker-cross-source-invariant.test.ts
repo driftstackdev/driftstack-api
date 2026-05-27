@@ -22,8 +22,8 @@
 //   rely on SELECT...FOR UPDATE SKIP LOCKED to coordinate (already
 //   in DrizzleWebhooksRepo.claim)'.
 //
-//   MAX_ATTEMPTS = 5 ('0..5 inclusive (initial + 5 retries) → 6
-//   total tries').
+//   MAX_ATTEMPTS = 6 ('attempt indices 0..5 (initial + 5 retries);
+//   DLQ when the next index would be 6').
 //
 //   BACKOFF_MS_BY_ATTEMPT 5-step schedule (mirrors V-173 durable-
 //   webhook-delivery W918 schedule):
@@ -91,12 +91,12 @@ describe('W956 webhook-worker delivery-loop cross-source invariant', () => {
     expect(p).toMatch(/\(already in DrizzleWebhooksRepo\.claim\)\./);
   });
 
-  // ─── MAX_ATTEMPTS = 5 + framing ──────────────────────────────
+  // ─── MAX_ATTEMPTS = 6 + framing ──────────────────────────────
 
-  it("CRITICAL MAX_ATTEMPTS = 5 — '0..5 inclusive (initial + 5 retries) → 6 total tries'. The 0..5 + 6-total-tries framing distinguishes attempt count from total tries; drift would change customer-facing retry behavior.", () => {
+  it("CRITICAL MAX_ATTEMPTS = 6 — 'attempt indices 0..5 (initial + 5 retries); DLQ when the next index would be 6'. The 6-total-tries framing distinguishes attempt count from total tries; drift would change customer-facing retry behavior.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/webhook-worker.ts'));
     expect(p).toMatch(
-      /const MAX_ATTEMPTS = 5;\s*\/\/ 0\.\.5 inclusive \(initial \+ 5 retries\) → 6 total tries/,
+      /const MAX_ATTEMPTS = 6;\s*\/\/ attempt indices 0\.\.5 \(initial \+ 5 retries\); DLQ when the next index would be 6/,
     );
   });
 
@@ -105,7 +105,7 @@ describe('W956 webhook-worker delivery-loop cross-source invariant', () => {
   it('CRITICAL BACKOFF_MS_BY_ATTEMPT 5-step schedule — 1: 1 min + 2: 5 min + 3: 15 min + 4: 30 min + 5: 60 min. Mirrors W918 durable-webhook-delivery V-173 BACKOFF_MS_BY_ATTEMPT — cross-source contract that lets InMemory + Durable behave identically under retry.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/webhook-worker.ts'));
     expect(p).toMatch(/Backoff schedule per attempt-index AFTER a failure\. Index = the next/);
-    expect(p).toMatch(/attempt number \(1 = first retry, 5 = sixth attempt = DLQ boundary\)\./);
+    expect(p).toMatch(/attempt number \(1 = first retry … 5 = fifth\/last retry, scheduled/);
     expect(p).toMatch(/1: 1 min/);
     expect(p).toMatch(/2: 5 min/);
     expect(p).toMatch(/3: 15 min/);

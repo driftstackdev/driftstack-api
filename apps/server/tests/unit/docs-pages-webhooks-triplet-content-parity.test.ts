@@ -183,11 +183,11 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).toMatch(/`X-Driftstack-Event-Type: <event-type>` — the delivered event/);
   });
 
-  it('CRITICAL retry-policy 5-attempt exponential backoff pinned — 1m + 5m + 15m + 30m + 60m (matches webhook-worker BACKOFF_MS_BY_ATTEMPT). The 5-step backoff schedule is the canonical retry contract; drift would mismatch V-273 + V-475 server-side.', () => {
+  it('CRITICAL retry-policy 6-attempt (initial + 5 retries) exponential backoff pinned — 1m + 5m + 15m + 30m + 60m (matches webhook-worker BACKOFF_MS_BY_ATTEMPT). The 5-step backoff schedule is the canonical retry contract; drift would mismatch V-273 + V-475 server-side.', () => {
     const p = read(EV);
 
     expect(p).toMatch(
-      /Retry policy: 5 attempts with exponential backoff at 1m, 5m, 15m,\s*\n?30m, 60m\./,
+      /Retry policy: 6 attempts \(the initial delivery plus 5 retries\) with\s*\n?exponential backoff at 1m, 5m, 15m, 30m, 60m\./,
     );
     expect(p).toMatch(/Final failures land in DLQ/);
   });
@@ -253,12 +253,12 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).toMatch(/"attempts": 0/);
   });
 
-  it('CRITICAL 4-step typical-flow pinned — endpoint down at 10:00 + DLQ by 10:15 + fix at 11:00 + replay-each-DLQ. The numbered sequence matches the V-475 dashboard /webhooks delivery-log filter+replay UX.', () => {
+  it('CRITICAL 4-step typical-flow pinned — endpoint down at 10:00 + retries on backoff + ~2h-to-DLQ + fix at 13:00 + replay-each-DLQ. The numbered sequence matches the V-475 dashboard /webhooks delivery-log filter+replay UX.', () => {
     const p = read(RPL);
 
-    expect(p).toMatch(/1\. Your endpoint goes down at 10:00 — Driftstack starts retrying with/);
-    expect(p).toMatch(/By 10:15 the deliveries land in DLQ \(`status: "dlq"`\)\./);
-    expect(p).toMatch(/2\. You fix your endpoint at 11:00\./);
+    expect(p).toMatch(/1\. Your endpoint goes down at 10:00 — Driftstack retries each delivery/);
+    expect(p).toMatch(/~2 hours later the deliveries land in DLQ\s*\n?\s*\(`status: "dlq"`\)\./);
+    expect(p).toMatch(/2\. You fix your endpoint at 13:00\./);
     expect(p).toMatch(
       /3\. List the DLQ deliveries:\s*\n?\s+`GET \/v1\/webhooks\/:webhookId\/deliveries\?status=dlq`/,
     );

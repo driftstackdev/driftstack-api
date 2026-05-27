@@ -54,7 +54,7 @@ export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = {
 };
 
 export const DEFAULT_TIMEOUT_MS = 10_000;
-export const DEFAULT_MAX_ATTEMPTS = 5;
+export const DEFAULT_MAX_ATTEMPTS = 6; // initial + 5 retries (backoff[5] = 60 min); DLQ on the 6th
 
 export interface DurableWebhookDeliveryDeps {
   database: Database;

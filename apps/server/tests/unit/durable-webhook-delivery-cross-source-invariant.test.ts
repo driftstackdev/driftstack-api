@@ -28,7 +28,7 @@
 //   Mirrors V-164 InMemoryWebhookDelivery; total ≈ 1h51m before DLQ.
 //
 //   DEFAULT_TIMEOUT_MS = 10_000  (10s per attempt).
-//   DEFAULT_MAX_ATTEMPTS = 5.
+//   DEFAULT_MAX_ATTEMPTS = 6  (initial + 5 retries).
 //
 //   ProcessTickResult: { pulled + delivered + retried + dlqed }
 //   (4-counter ops-metric shape).
@@ -131,7 +131,7 @@ describe('W918 V-173 durable-webhook-delivery cross-source invariant', () => {
     expect(total).toBe(6_660_000);
   });
 
-  // ─── DEFAULT_TIMEOUT_MS = 10s + DEFAULT_MAX_ATTEMPTS = 5 ─────
+  // ─── DEFAULT_TIMEOUT_MS = 10s + DEFAULT_MAX_ATTEMPTS = 6 ─────
 
   it('CRITICAL DEFAULT_TIMEOUT_MS = 10_000 (10s per attempt). The 10s cap bounds per-attempt latency before AbortController fires.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/durable-webhook-delivery.ts'));
@@ -139,11 +139,11 @@ describe('W918 V-173 durable-webhook-delivery cross-source invariant', () => {
     expect(DEFAULT_TIMEOUT_MS).toBe(10_000);
   });
 
-  it('CRITICAL DEFAULT_MAX_ATTEMPTS = 5 (matches BACKOFF_MS_BY_ATTEMPT length). The 5-attempt cap is what bounds total retry runtime + matches the 5-step backoff table.', () => {
+  it('CRITICAL DEFAULT_MAX_ATTEMPTS = 6 (initial + 5 retries; one backoff entry per retry). The 6-attempt cap bounds total retry runtime; the 5-entry backoff table is one slot per retry, so length = cap - 1.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/durable-webhook-delivery.ts'));
-    expect(p).toMatch(/export const DEFAULT_MAX_ATTEMPTS = 5;/);
-    expect(DEFAULT_MAX_ATTEMPTS).toBe(5);
-    expect(Object.keys(BACKOFF_MS_BY_ATTEMPT)).toHaveLength(DEFAULT_MAX_ATTEMPTS);
+    expect(p).toMatch(/export const DEFAULT_MAX_ATTEMPTS = 6;/);
+    expect(DEFAULT_MAX_ATTEMPTS).toBe(6);
+    expect(Object.keys(BACKOFF_MS_BY_ATTEMPT)).toHaveLength(DEFAULT_MAX_ATTEMPTS - 1);
   });
 
   // ─── ProcessTickResult 4-counter shape ───────────────────────

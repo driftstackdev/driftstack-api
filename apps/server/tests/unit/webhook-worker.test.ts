@@ -118,7 +118,7 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
 
   it('after MAX attempts, transitions to DLQ', async () => {
     const { repo, endpoint } = await setupRepoWithEndpoint();
-    // Fast-forward attempts to 4 (next failure → 5, which is >= MAX_ATTEMPTS = 5).
+    // Fast-forward attempts to 5 (next failure → 6, which is >= MAX_ATTEMPTS = 6).
     const dlist = repo.getAllDeliveries();
     expect(dlist[0]).toBeDefined();
     const id = dlist[0]?.id ?? '';
@@ -126,7 +126,7 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
       responseStatus: 500,
       responseExcerpt: null,
       lastError: null,
-      attempts: 4,
+      attempts: 5,
       nextAttemptAt: new Date(NOW.getTime() - 1000), // claim-eligible
     });
 
@@ -141,6 +141,38 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(repo.getAllDeliveries()[0]?.status).toBe('dlq');
     // Endpoint not auto-disabled yet (consecutive_failures = 1, < 50).
     expect(endpoint.disabledAt).toBeNull();
+  });
+
+  it('the 5th retry (attempts=4 → 5) is scheduled, not DLQd, with the 60-min backoff', async () => {
+    // Regression guard for the off-by-one that capped delivery at 4
+    // retries: with attempts=4 the next index is 5 (< MAX_ATTEMPTS=6),
+    // so the worker must RETRY using BACKOFF_MS_BY_ATTEMPT[5] = 60 min,
+    // not promote to DLQ. This is the previously-unreachable 5th retry.
+    const { repo } = await setupRepoWithEndpoint();
+    const id = repo.getAllDeliveries()[0]?.id ?? '';
+    await repo.recordRetry(id, {
+      responseStatus: 500,
+      responseExcerpt: null,
+      lastError: null,
+      attempts: 4,
+      nextAttemptAt: new Date(NOW.getTime() - 1000),
+    });
+
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fakeFetch({ status: 500 }),
+      now: constNow,
+    });
+    const { outcomes } = await worker.tickOnce();
+    expect(outcomes[0]?.kind).toBe('retry');
+    const d = repo.getAllDeliveries()[0];
+    expect(d?.status).toBe('pending');
+    expect(d?.attempts).toBe(5);
+    // Next attempt ~60 min out (backoff[5]), plus up to 15% jitter.
+    const delayMs = (d?.nextAttemptAt.getTime() ?? 0) - NOW.getTime();
+    expect(delayMs).toBeGreaterThanOrEqual(60 * 60_000);
+    expect(delayMs).toBeLessThanOrEqual(60 * 60_000 * 1.15 + 1);
   });
 
   it('endpoint missing/disabled → DLQ', async () => {

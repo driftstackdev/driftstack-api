@@ -1,15 +1,15 @@
 // W408.C — drift guard for apps/server/src/services/webhook-worker.ts.
 // V-164 inline webhook delivery worker. Long-running claim → POST →
-// observe → record loop. Drift here either breaks the 5-attempt
+// observe → record loop. Drift here either breaks the 6-attempt
 // exponential backoff schedule (DLQ boundary regression) or
-// scrambles MAX_ATTEMPTS=5 / AUTO_DISABLE=50 thresholds.
+// scrambles MAX_ATTEMPTS=6 / AUTO_DISABLE=50 thresholds.
 //
 //   • V-164 framing pinned: 5-step loop (claim → sign+POST →
 //     observe → recordDelivered|recordRetry|recordDlq → maybe
 //     auto-disable on consecutiveFailures cross).
 //   • Process-local loop framing: SELECT FOR UPDATE SKIP LOCKED
 //     coordinates across instances (in DrizzleWebhooksRepo.claim).
-//   • MAX_ATTEMPTS = 5 (0..5 inclusive = 6 total tries including
+//   • MAX_ATTEMPTS = 6 (0..5 inclusive = 6 total tries including
 //     initial); AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES = 50.
 //   • BACKOFF_MS_BY_ATTEMPT 5-entry ladder (1min / 5min / 15min /
 //     30min / 60min).
@@ -54,16 +54,16 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     );
   });
 
-  it('MAX_ATTEMPTS = 5 (0..5 inclusive = 6 total tries); AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES = 50', () => {
+  it('MAX_ATTEMPTS = 6 (0..5 inclusive = 6 total tries); AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES = 50', () => {
     expect(body).toMatch(
-      /const MAX_ATTEMPTS = 5; \/\/ 0\.\.5 inclusive \(initial \+ 5 retries\) → 6 total tries/,
+      /const MAX_ATTEMPTS = 6; \/\/ attempt indices 0\.\.5 \(initial \+ 5 retries\); DLQ when the next index would be 6/,
     );
     expect(body).toMatch(/const AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES = 50;/);
   });
 
   it('BACKOFF_MS_BY_ATTEMPT: 5-entry exponential ladder (1min / 5min / 15min / 30min / 60min)', () => {
     expect(body).toMatch(
-      /Backoff schedule per attempt-index AFTER a failure\. Index = the next\s*\n?\s*\*\s*attempt number \(1 = first retry, 5 = sixth attempt = DLQ boundary\)\.\s*\n?\s*\*\s*1: 1 min\s*\n?\s*\*\s*2: 5 min\s*\n?\s*\*\s*3: 15 min\s*\n?\s*\*\s*4: 30 min\s*\n?\s*\*\s*5: 60 min/,
+      /Backoff schedule per attempt-index AFTER a failure\. Index = the next\s*\n?\s*\*\s*attempt number \(1 = first retry … 5 = fifth\/last retry, scheduled\s*\n?\s*\*\s*60 min out\)\.[\s\S]*?\*\s*1: 1 min\s*\n?\s*\*\s*2: 5 min\s*\n?\s*\*\s*3: 15 min\s*\n?\s*\*\s*4: 30 min\s*\n?\s*\*\s*5: 60 min/,
     );
     expect(body).toMatch(
       /const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = \{\s*\n?\s*1: 60_000,\s*\n?\s*2: 5 \* 60_000,\s*\n?\s*3: 15 \* 60_000,\s*\n?\s*4: 30 \* 60_000,\s*\n?\s*5: 60 \* 60_000,\s*\n?\s*\};/,

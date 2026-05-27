@@ -120,14 +120,15 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     expect(body).toMatch(/<code>driftstack\.VerifyWebhookSignature\(\.\.\.\)<\/code>/);
   });
 
-  it('5-attempt retry schedule pinned: 1 (initial, —) + 2 (1 min) + 3 (5 min) + 4 (15 min) + 5 (30 min) + DLQ-after-5 + 50-consecutive-failures auto-disable + 10s timeout — pinned so the 5-attempt schedule + DLQ-trigger + 50-consec auto-disable + 10s-timeout commitment all survive (drift to a different schedule would create marketing↔durable-webhook-delivery.ts divergence)', () => {
+  it('6-attempt retry schedule pinned: 1 (initial, —) + 2 (1 min) + 3 (5 min) + 4 (15 min) + 5 (30 min) + 6 (60 min, final) + DLQ-after-6 + 50-consecutive-failures auto-disable + 10s timeout — pinned so the 6-attempt schedule + DLQ-trigger + 50-consec auto-disable + 10s-timeout commitment all survive (drift to a different schedule would create marketing↔durable-webhook-delivery.ts divergence)', () => {
     expect(body).toMatch(/<tr><td>1 \(initial\)<\/td><td>—<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>2<\/td><td>1 minute after attempt 1<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>3<\/td><td>5 minutes after attempt 2<\/td><\/tr>/);
     expect(body).toMatch(/<tr><td>4<\/td><td>15 minutes after attempt 3<\/td><\/tr>/);
-    expect(body).toMatch(/<tr><td>5 \(final\)<\/td><td>30 minutes after attempt 4<\/td><\/tr>/);
+    expect(body).toMatch(/<tr><td>5<\/td><td>30 minutes after attempt 4<\/td><\/tr>/);
+    expect(body).toMatch(/<tr><td>6 \(final\)<\/td><td>60 minutes after attempt 5<\/td><\/tr>/);
     expect(body).toMatch(
-      /After <strong>5 attempts<\/strong>, the delivery moves to a\s*\n?\s*dead-letter queue \(DLQ\)/,
+      /After <strong>6 attempts<\/strong> \(the initial delivery plus\s*\n?\s*5 retries\), the delivery moves to a dead-letter queue \(DLQ\)/,
     );
     expect(body).toMatch(
       /After <strong>50 consecutive failures across all deliveries<\/strong>\s*\n?\s*for one endpoint, the endpoint is auto-disabled\./,

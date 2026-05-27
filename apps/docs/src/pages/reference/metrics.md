@@ -85,7 +85,7 @@ The current counter catalogue (all `driftstack_*` namespaced):
 | Metric                                       | Labels           | What it tracks                                                                                                    |
 | -------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `driftstack_webhook_delivery_attempt_total`  | `outcome`        | Every dispatcher attempt to a customer's endpoint (success / http_error / timeout / transport_error)              |
-| `driftstack_webhook_delivery_terminal_total` | `terminal_state` | Terminal-state transitions only — `delivered` on first 2xx, `dlq` when retries exhaust (DEFAULT_MAX_ATTEMPTS = 5) |
+| `driftstack_webhook_delivery_terminal_total` | `terminal_state` | Terminal-state transitions only — `delivered` on first 2xx, `dlq` when retries exhaust (DEFAULT_MAX_ATTEMPTS = 6) |
 
 ### Audit log
 

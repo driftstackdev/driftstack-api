@@ -10,7 +10,7 @@
 //   • 11 [PLANNED]: session.created/destroyed + profile.created/deleted
 //     + api_key.minted + subscription.changed/cancelled +
 //     trial_pack.purchased/expired + webhook_endpoint.created/deleted.
-//   • Retry: 5 attempts, 1m/5m/15m/30m/60m backoff → DLQ.
+//   • Retry: 6 attempts (initial + 5 retries), 1m/5m/15m/30m/60m backoff → DLQ.
 //   • 10s timeout, plaintext secret returned ONCE on create.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -113,8 +113,10 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
     expect(body).toMatch(/- `X-Driftstack-Event-Id: evt_<uuid>` — duplicate of `data\.id`,/);
     expect(body).toMatch(/surfaces in HTTP logs without parsing the body\./);
     expect(body).toMatch(/- `X-Driftstack-Event-Type: <event-type>` — the delivered event/);
-    expect(body).toMatch(/Retry policy: 5 attempts with exponential backoff at 1m, 5m, 15m,/);
-    expect(body).toMatch(/30m, 60m\. Final failures land in DLQ/);
+    expect(body).toMatch(/Retry policy: 6 attempts \(the initial delivery plus 5 retries\) with/);
+    expect(body).toMatch(
+      /exponential backoff at 1m, 5m, 15m, 30m, 60m\. Final failures land in DLQ/,
+    );
     expect(body).toMatch(/\(see `docs\/api\/webhooks\.md` and the admin \/webhook-dlq page\)\./);
     expect(body).toMatch(/Idempotency: every delivery includes the same `evt_<uuid>`\./);
     expect(body).toMatch(/Customers/);
@@ -200,7 +202,9 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
     expect(body).toMatch(/## Failure modes/);
     expect(body).toMatch(/A delivery is considered "successful" only if your endpoint returns/);
     expect(body).toMatch(/HTTP 2xx within the 10s timeout\./);
-    expect(body).toMatch(/After 5 failed attempts the delivery lands in DLQ\./);
+    expect(body).toMatch(
+      /After 6 failed attempts \(the initial delivery plus 5 retries\) the\s*\n?\s*delivery lands in DLQ\./,
+    );
     expect(body).toMatch(/DLQ deliveries/);
     expect(body).toMatch(/are visible in the admin panel/);
     expect(body).toMatch(/\(`admin\.driftstack\.dev\/webhook-dlq`\) — staff can manually requeue/);

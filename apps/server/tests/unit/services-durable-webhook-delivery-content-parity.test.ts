@@ -13,7 +13,7 @@
 //     (mirrors existing webhook-worker.ts WebhooksRepo.claim).
 //   • BACKOFF_MS_BY_ATTEMPT 5-entry exponential ladder (60s / 5m /
 //     15m / 30m / 60m).
-//   • DEFAULT_TIMEOUT_MS = 10_000; DEFAULT_MAX_ATTEMPTS = 5.
+//   • DEFAULT_TIMEOUT_MS = 10_000; DEFAULT_MAX_ATTEMPTS = 6.
 //   • WebhookEventType 5-literal union (session.completed /
 //     session.failed / quota.warning_80pct / quota.exceeded /
 //     api_key.revoked).
@@ -72,12 +72,12 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     );
   });
 
-  it('BACKOFF_MS_BY_ATTEMPT 5-entry ladder (60s / 5m / 15m / 30m / 60m); DEFAULT_TIMEOUT_MS=10_000; DEFAULT_MAX_ATTEMPTS=5', () => {
+  it('BACKOFF_MS_BY_ATTEMPT 5-entry ladder (60s / 5m / 15m / 30m / 60m); DEFAULT_TIMEOUT_MS=10_000; DEFAULT_MAX_ATTEMPTS=6', () => {
     expect(body).toMatch(
       /export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = \{\s*\n?\s*1: 60_000,\s*\n?\s*2: 5 \* 60_000,\s*\n?\s*3: 15 \* 60_000,\s*\n?\s*4: 30 \* 60_000,\s*\n?\s*5: 60 \* 60_000,\s*\n?\s*\};/,
     );
     expect(body).toMatch(/export const DEFAULT_TIMEOUT_MS = 10_000;/);
-    expect(body).toMatch(/export const DEFAULT_MAX_ATTEMPTS = 5;/);
+    expect(body).toMatch(/export const DEFAULT_MAX_ATTEMPTS = 6;/);
   });
 
   it('WebhookEventType: 5-literal union (session.completed/session.failed/quota.warning_80pct/quota.exceeded/api_key.revoked)', () => {

@@ -150,7 +150,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(/Request body: `\{\}` \(empty\)\./);
     expect(body).toMatch(/"status": "pending",/);
     expect(body).toMatch(/"attempts": 0,/);
-    expect(body).toMatch(/By 10:15 the deliveries land in DLQ \(`status: "dlq"`\)\./);
+    expect(body).toMatch(/~2 hours later the deliveries land in DLQ\s*\n?\s*\(`status: "dlq"`\)\./);
     expect(body).toMatch(/`GET \/v1\/webhooks\/:webhookId\/deliveries\?status=dlq`/);
     expect(existsSync(RP)).toBe(true);
   });

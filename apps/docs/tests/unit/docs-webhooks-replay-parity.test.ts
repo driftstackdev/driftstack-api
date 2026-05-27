@@ -31,9 +31,9 @@ describe('W258.A docs/webhooks/replay ↔ live replay surface parity', () => {
     expect(route).toContain(`'/v1/webhook-deliveries/:deliveryId/replay'`);
   });
 
-  it('retry-count claim matches DEFAULT_MAX_ATTEMPTS = 5', () => {
+  it('retry-count claim (5 retries) matches DEFAULT_MAX_ATTEMPTS = 6 (initial + 5 retries)', () => {
     expect(doc).toMatch(/retries failed webhook deliveries 5 times/);
-    expect(dispatcher).toContain('DEFAULT_MAX_ATTEMPTS = 5');
+    expect(dispatcher).toContain('DEFAULT_MAX_ATTEMPTS = 6');
   });
 
   it('TypeScript SDK methods cited exist on WebhooksResource', () => {

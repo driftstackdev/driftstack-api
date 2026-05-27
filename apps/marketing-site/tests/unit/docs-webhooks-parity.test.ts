@@ -4,8 +4,8 @@
 //
 //   • 5 subscribable event types ↔ SubscribableWebhookEventTypeSchema
 //     (test.ping is documented as a 6th non-subscribable type)
-//   • Retry schedule (1m / 5m / 15m / 30m) ↔ BACKOFF_MS_BY_ATTEMPT
-//   • DEFAULT_MAX_ATTEMPTS=5 ↔ "After 5 attempts → DLQ" claim
+//   • Retry schedule (1m / 5m / 15m / 30m / 60m) ↔ BACKOFF_MS_BY_ATTEMPT
+//   • DEFAULT_MAX_ATTEMPTS=6 ↔ "After 6 attempts → DLQ" claim
 //   • DEFAULT_TIMEOUT_MS=10_000 ↔ "10 seconds" timeout claim
 //   • AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES=50 ↔ "50 consecutive
 //     failures → auto-disable" claim
@@ -53,23 +53,25 @@ describe('W346.A /docs/webhooks parity', () => {
     expect(schemaEvents.has('test.ping')).toBe(false);
   });
 
-  it('DEFAULT_MAX_ATTEMPTS=5 matches the "5 attempts → DLQ" claim', () => {
-    expect(worker).toContain('export const DEFAULT_MAX_ATTEMPTS = 5;');
-    expect(body).toMatch(/After <strong>5 attempts<\/strong>/);
+  it('DEFAULT_MAX_ATTEMPTS=6 matches the "6 attempts → DLQ" claim', () => {
+    expect(worker).toContain('export const DEFAULT_MAX_ATTEMPTS = 6;');
+    expect(body).toMatch(/After <strong>6 attempts<\/strong>/);
   });
 
-  it('BACKOFF_MS_BY_ATTEMPT[1..4] matches the 1m/5m/15m/30m page table', () => {
-    // Pin both sides. Attempt 5 in the table uses BACKOFF[4]
-    // (i.e. the wait before the 5th and final attempt).
+  it('BACKOFF_MS_BY_ATTEMPT[1..5] matches the 1m/5m/15m/30m/60m page table', () => {
+    // Pin both sides. The table runs attempts 1→6 (initial + 5 retries);
+    // attempt 6 uses BACKOFF[5] (the 60-min wait before the final retry).
     expect(worker).toMatch(/1:\s*60_000,/);
     expect(worker).toMatch(/2:\s*5\s*\*\s*60_000,/);
     expect(worker).toMatch(/3:\s*15\s*\*\s*60_000,/);
     expect(worker).toMatch(/4:\s*30\s*\*\s*60_000,/);
+    expect(worker).toMatch(/5:\s*60\s*\*\s*60_000,/);
 
     expect(body).toMatch(/<td>2<\/td><td>1 minute after attempt 1<\/td>/);
     expect(body).toMatch(/<td>3<\/td><td>5 minutes after attempt 2<\/td>/);
     expect(body).toMatch(/<td>4<\/td><td>15 minutes after attempt 3<\/td>/);
-    expect(body).toMatch(/<td>5 \(final\)<\/td><td>30 minutes after attempt 4<\/td>/);
+    expect(body).toMatch(/<td>5<\/td><td>30 minutes after attempt 4<\/td>/);
+    expect(body).toMatch(/<td>6 \(final\)<\/td><td>60 minutes after attempt 5<\/td>/);
   });
 
   it('DEFAULT_TIMEOUT_MS=10_000 matches the 10-second timeout claim', () => {
