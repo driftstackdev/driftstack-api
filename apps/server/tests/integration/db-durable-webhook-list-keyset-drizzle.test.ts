@@ -1,0 +1,126 @@
+// Drizzle-backed integration test for DurableWebhookDeliveryService.list
+// keyset pagination — same-created_at completeness against a REAL Postgres.
+//
+// Sibling of db-sessions-repo-keyset-drizzle.test.ts. The V-173 durable
+// delivery service pages a webhook endpoint's history on a compound
+// (createdAt desc, id desc) keyset (fix e2d8f5f5). Deliveries fanned out
+// from one event batch share an identical created_at; the previous
+// timestamp-only cursor silently dropped rows sharing the cursor's
+// created_at when a page boundary landed inside such a batch. This
+// validates the shipped keyset SQL on real PG — the residual flagged when
+// the fix landed (the build-test app uses the in-memory impl, so the
+// Drizzle path had only typecheck + in-memory-twin coverage).
+//
+// Run scope:
+//   - CI: build-test job has postgres:17-alpine at localhost:5432 with the
+//     `driftstack` schema migrated; this test always runs there.
+//   - Local dev: skips if DATABASE_URL postgres is unreachable.
+
+import { randomUUID } from 'node:crypto';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DurableWebhookDeliveryService } from '../../src/services/durable-webhook-delivery.js';
+import type * as schema from '../../src/db/schema.js';
+
+const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
+const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+
+let dbReachable = false;
+let client: ReturnType<typeof postgres> | null = null;
+// (accountId, webhookId) pairs seeded — cleaned in FK order:
+// webhook_deliveries → webhook_endpoints → accounts.
+const seeded: Array<{ accountId: string; webhookId: string }> = [];
+
+beforeAll(async () => {
+  const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+  try {
+    await probe`SELECT 1`;
+    dbReachable = true;
+    await probe.end({ timeout: 1 });
+  } catch {
+    await probe.end({ timeout: 1 }).catch(() => {});
+    return;
+  }
+  client = postgres(DB_URL, { max: 1 });
+  try {
+    await client`SELECT 1 FROM webhook_deliveries LIMIT 0`;
+  } catch {
+    dbReachable = false;
+    await client.end({ timeout: 1 }).catch(() => {});
+    client = null;
+  }
+});
+
+afterAll(async () => {
+  if (client) {
+    for (const { accountId, webhookId } of seeded) {
+      await client`DELETE FROM webhook_deliveries WHERE webhook_id = ${webhookId}`.catch(() => {});
+      await client`DELETE FROM webhook_endpoints WHERE id = ${webhookId}`.catch(() => {});
+      await client`DELETE FROM accounts WHERE id = ${accountId}`.catch(() => {});
+    }
+    await client.end({ timeout: 5 });
+  }
+});
+
+describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
+  'DurableWebhookDeliveryService.list keyset (Drizzle path against real Postgres)',
+  () => {
+    it('pages a same-created_at tie group larger than the page size WITHOUT dropping rows', async () => {
+      if (!dbReachable || !client) {
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const svc = new DurableWebhookDeliveryService({ client, db, close: async () => {} }, () =>
+        Date.now(),
+      );
+
+      const accountId = randomUUID();
+      const webhookId = randomUUID();
+      seeded.push({ accountId, webhookId });
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`durable-wh-${accountId}@test.local`})`;
+      await client`INSERT INTO webhook_endpoints (id, account_id, url, secret, secret_prefix, events)
+        VALUES (${webhookId}, ${accountId}, 'https://example.test/hook', 'whsec_test_secret', 'whsec_test',
+                ARRAY['session.completed']::webhook_event_type[])`;
+
+      // 2 newest, 5 in a tie group (> page size 2), 2 oldest — all on the
+      // same endpoint, so the tie group spans page boundaries.
+      const base = Date.UTC(2026, 0, 1, 0, 0, 0);
+      const groups: Array<{ ts: Date; n: number }> = [
+        { ts: new Date(base + 2000), n: 2 },
+        { ts: new Date(base + 1000), n: 5 },
+        { ts: new Date(base), n: 2 },
+      ];
+      const inserted: string[] = [];
+      for (const g of groups) {
+        for (let i = 0; i < g.n; i++) {
+          const [row] = await client`
+            INSERT INTO webhook_deliveries (webhook_id, event_id, event_type, payload, created_at)
+            VALUES (${webhookId}, ${randomUUID()}, 'session.completed',
+                    ${JSON.stringify({ body: '{}', emittedAtSec: 1 })}::jsonb, ${g.ts})
+            RETURNING id`;
+          inserted.push(row?.id as string);
+        }
+      }
+      expect(inserted).toHaveLength(9);
+
+      const collected: string[] = [];
+      let cursor: string | undefined;
+      for (let guard = 0; guard < 50; guard++) {
+        const page = await svc.list(
+          cursor === undefined
+            ? { endpointId: webhookId, limit: 2 }
+            : { endpointId: webhookId, limit: 2, cursor },
+        );
+        collected.push(...page.data.map((d) => d.id));
+        if (page.nextCursor === null) break;
+        cursor = page.nextCursor;
+      }
+
+      // Completeness: every seeded delivery returned exactly once.
+      expect(collected).toHaveLength(9);
+      expect(new Set(collected).size).toBe(9);
+      expect([...collected].sort()).toEqual([...inserted].sort());
+    });
+  },
+);
