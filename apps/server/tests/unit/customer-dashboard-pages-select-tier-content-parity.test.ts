@@ -72,10 +72,10 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     );
   });
 
-  it("Free-plan note pinned: 'You're on the free plan' + '1 profile, 1 concurrent session, and manual-only sessions — no card required, and it never expires' — pinned so the perpetual free-tier framing (1 profile / 1 concurrent / manual-only / no card / no expiry) survives on the tier picker.", () => {
+  it("Free-plan note pinned: 'You're on the free plan' + '1 profile, 1 concurrent session, and manual-only sessions up to 20 minutes each — no card required, and it never expires' — pinned so the perpetual free-tier framing (1 profile / 1 concurrent / manual-only / 20-min sessions / no card / no expiry) survives on the tier picker. The 20-min cap (6.g) is the enforced free-tier session-duration limit.", () => {
     expect(body).toMatch(/You're on the free plan/);
     expect(body).toMatch(
-      /Free includes 1 profile, 1 concurrent session, and manual-only\s*\n?\s*sessions — no card required, and it never expires\./,
+      /Free includes 1 profile, 1 concurrent session, and manual-only\s+sessions up to 20 minutes each — no card required, and it never\s+expires\./,
     );
   });
 
