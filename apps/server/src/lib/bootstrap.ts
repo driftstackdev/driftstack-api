@@ -108,6 +108,11 @@ import {
   enqueueNextAuthTokensSweep,
   registerAuthTokensSweepJob,
 } from '../services/auth-flows-sweeper.js';
+import {
+  SessionDurationSweeperService,
+  enqueueNextSessionDurationSweep,
+  registerSessionDurationSweepJob,
+} from '../services/session-duration-sweeper.js';
 import { CliAuthorizeService } from '../services/cli-authorize.js';
 import { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import { ProfilesService } from '../services/profiles.js';
@@ -821,6 +826,26 @@ export async function createProductionDeps(
     logger,
   });
   await enqueueNextAuthTokensSweep({ scheduledJobs: scheduledJobsService });
+
+  // 6.g — free-tier session-duration auto-destroy sweep. The free tier caps
+  // a single session at MAX_SESSION_MINUTES_PER_TIER.free (20 min); a free
+  // session pins an expensive fleet slot, so the cap is enforced by an
+  // ACTIVE background sweep (not lazy-on-access). Every 2 min the sweeper
+  // finds active sessions past their tier's cutoff (paid = null = never)
+  // and auto-destroys them via sessionsService.autoDestroyExpired. Re-arms
+  // itself; idempotent via the V-202d dedup-on-account-and-type flag
+  // (job_type 'sessions.duration_sweep', account_id NULL).
+  const sessionDurationSweeper = new SessionDurationSweeperService({
+    repo: sessionsRepo,
+    sessions: sessionsService,
+    logger,
+  });
+  registerSessionDurationSweepJob({
+    scheduledJobs: scheduledJobsService,
+    sweeper: sessionDurationSweeper,
+    logger,
+  });
+  await enqueueNextSessionDurationSweep({ scheduledJobs: scheduledJobsService });
 
   // V-266: browser-OAuth-style CLI / GUI activation flow. Pure
   // Redis state — no schema migration needed. Always wired (no

@@ -97,7 +97,7 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
   });
 
-  it('SessionRepo: 7 methods (insert/findSession/findSessionUnscoped/updateSessionStatus/countActiveSessions/listSessions/listAllSessions + recordEvent)', () => {
+  it('SessionRepo methods (insert/findSession/findSessionUnscoped/updateSessionStatus/countActiveSessions/listSessions/listAllSessions/listExpiredForAutoDestroy + recordEvent + setEgressCapabilityReport)', () => {
     expect(body).toMatch(/export interface SessionRepo \{/);
     expect(body).toMatch(/insertSession\(input: NewSessionInput\): Promise<SessionRecord>;/);
     expect(body).toMatch(
@@ -112,6 +112,11 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
     expect(body).toMatch(/listAllSessions\(opts: \{/);
     expect(body).toMatch(/recordEvent\(input: SessionEventInput\): Promise<void>;/);
+    // 6.g — duration auto-destroy sweep query.
+    expect(body).toMatch(/listExpiredForAutoDestroy\(opts: \{/);
+    expect(body).toMatch(
+      /tierCutoffs: ReadonlyArray<\{ tier: AccountTier; expiredBefore: Date \}>;/,
+    );
   });
 
   it('SessionsServiceDeps: 4 fields — repo + driver + V-216 accountAudit (session.created/destroyed only) + V-202c/V-304a accountLifecycle', () => {

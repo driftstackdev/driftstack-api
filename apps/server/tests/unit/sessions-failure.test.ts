@@ -117,6 +117,11 @@ class StubRepo implements SessionRepo {
   listAllSessions(): Promise<{ items: SessionRecord[]; nextCursor: string | null }> {
     return Promise.resolve({ items: [], nextCursor: null });
   }
+  // 6.g — duration auto-destroy sweep query. Not exercised by the V-090
+  // driver-failure suite; provided to satisfy the SessionRepo interface.
+  listExpiredForAutoDestroy(): Promise<SessionRecord[]> {
+    return Promise.resolve([]);
+  }
   recordEvent(input: SessionEventInput): Promise<void> {
     this.events.push(input);
     return Promise.resolve();

@@ -45,14 +45,17 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
-  it('imports: and/desc/eq/isNull/lt/sql from drizzle-orm; 5 service types; Database; sessionEvents + sessions schemas', () => {
+  it('imports: asc/and/desc/eq/inArray/isNull/lt/or/sql from drizzle-orm; AccountTier; 5 service types; Database; accounts + sessionEvents + sessions schemas', () => {
     expect(body).toMatch(
-      /import \{ type SQL, and, desc, eq, isNull, lt, or, sql \} from 'drizzle-orm';/,
+      /import \{ type SQL, and, asc, desc, eq, inArray, isNull, lt, or, sql \} from 'drizzle-orm';/,
     );
+    // 6.g — AccountTier for the listExpiredForAutoDestroy tierCutoffs.
+    expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*NewSessionInput,\s*\n?\s*SessionEventInput,\s*\n?\s*SessionListPage,\s*\n?\s*SessionRecord,\s*\n?\s*SessionRepo,\s*\n?\s*\} from '\.\.\/services\/sessions\.js';/,
     );
-    expect(body).toMatch(/import \{ sessionEvents, sessions \} from '\.\/schema\.js';/);
+    // 6.g — accounts joined in for the duration-sweep tier resolution.
+    expect(body).toMatch(/import \{ accounts, sessionEvents, sessions \} from '\.\/schema\.js';/);
   });
 
   it("insertSession: 7-field values (accountId + apiKeyId + driverSessionId + archetype + purpose + label + metadata); returning(); throws 'insertSession returned no row'", () => {

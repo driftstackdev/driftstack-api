@@ -160,6 +160,24 @@ export interface SessionRepo {
     status?: SessionRecord['status'];
     accountId?: string;
   }): Promise<SessionListPage>;
+  /**
+   * 6.g — find active sessions that have exceeded their tier's wall-clock
+   * duration cap and are eligible for auto-destroy.
+   *
+   * The cap source-of-truth is `maxSessionMinutesFor(tier)` (see the
+   * SessionDurationSweeperService) — the SERVICE computes a per-capped-tier
+   * cutoff and passes the `(tier, expiredBefore)` pairs here so the repo
+   * never re-derives cap values. The repo's only job is "return ACTIVE
+   * sessions whose account is on one of these tiers and whose createdAt is
+   * strictly before that tier's cutoff". `status` is restricted to the
+   * non-terminal set (`creating` / `ready` / `busy`) — destroyed/errored
+   * rows are never returned. Returns at most `limit` rows (oldest first)
+   * so a tick is bounded; the sweep re-runs each cadence to drain a backlog.
+   */
+  listExpiredForAutoDestroy(opts: {
+    tierCutoffs: ReadonlyArray<{ tier: AccountTier; expiredBefore: Date }>;
+    limit: number;
+  }): Promise<SessionRecord[]>;
   recordEvent(input: SessionEventInput): Promise<void>;
   /**
    * Arc 5 EGRESS eg.1/eg.2 — persist the harness-emitted
@@ -555,6 +573,68 @@ export class SessionsService {
         /* swallow */
       }
     }
+  }
+
+  /**
+   * 6.g — system-actor auto-destroy for the free-tier session-duration
+   * sweep. Mirrors `destroy()`'s mechanics (driver.destroy → mark
+   * destroyed → record event → best-effort webhook/audit) but takes a
+   * pre-resolved SessionRecord instead of an AccountContext: the sweep is
+   * a background job with no caller scope, so the customer-facing scope
+   * checks + member/owner indirection in `destroy()` don't apply.
+   *
+   * Idempotent on terminal status (a row that raced to destroyed/errored
+   * between the sweep query and this call is a no-op). The `destroyed`
+   * event payload carries `reason: 'auto-destroyed: free-tier session
+   * duration cap'` + the cap so the audit trail explains the closure.
+   * Webhook + audit are best-effort — a failure there never blocks the
+   * slot-freeing destroy.
+   */
+  async autoDestroyExpired(
+    session: SessionRecord,
+    opts: { maxMinutes: number },
+  ): Promise<{ destroyed: boolean }> {
+    if (session.status === 'destroyed' || session.status === 'errored') {
+      return { destroyed: false };
+    }
+    const reason = 'auto-destroyed: free-tier session duration cap';
+    const destroyedAt = new Date();
+    await this.deps.driver.destroy(session.driverSessionId);
+    await this.deps.repo.updateSessionStatus(session.id, 'destroyed', { destroyedAt });
+    await this.deps.repo.recordEvent({
+      sessionId: session.id,
+      type: 'destroyed',
+      payload: { auto_destroyed: true, reason, max_session_minutes: opts.maxMinutes },
+      durationMs: null,
+    });
+
+    const durationMs = destroyedAt.getTime() - session.createdAt.getTime();
+    if (this.deps.webhooks) {
+      try {
+        await this.deps.webhooks.enqueueEvent(session.accountId, 'session.completed', {
+          session_id: `ses_${session.id}`,
+          duration_ms: durationMs,
+          auto_destroyed: true,
+          reason,
+        });
+      } catch {
+        /* webhook enqueue is best-effort */
+      }
+    }
+    if (this.deps.accountAudit) {
+      try {
+        await this.deps.accountAudit.record({
+          accountId: session.accountId,
+          actorType: 'system',
+          action: 'session.destroyed',
+          targetResourceId: `ses_${session.id}`,
+          payload: { duration_ms: durationMs, auto_destroyed: true, reason },
+        });
+      } catch {
+        /* swallow */
+      }
+    }
+    return { destroyed: true };
   }
 
   async list(

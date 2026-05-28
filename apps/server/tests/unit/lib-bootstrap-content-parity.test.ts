@@ -285,6 +285,19 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/notifications: notificationEventBus,/);
   });
 
+  it("6.g session-duration auto-destroy sweep wired in bootstrap: SessionDurationSweeperService(repo+sessions) + registerSessionDurationSweepJob + enqueueNextSessionDurationSweep on app start. Pinned so a refactor can't silently drop the wire-up and let free-tier sessions pin fleet slots forever.", () => {
+    expect(body).toMatch(
+      /import \{\s*\n?\s*SessionDurationSweeperService,\s*\n?\s*enqueueNextSessionDurationSweep,\s*\n?\s*registerSessionDurationSweepJob,\s*\n?\s*\} from '\.\.\/services\/session-duration-sweeper\.js';/,
+    );
+    expect(body).toMatch(/const sessionDurationSweeper = new SessionDurationSweeperService\(\{/);
+    expect(body).toMatch(/repo: sessionsRepo,/);
+    expect(body).toMatch(/sessions: sessionsService,/);
+    expect(body).toMatch(/registerSessionDurationSweepJob\(\{/);
+    expect(body).toMatch(
+      /await enqueueNextSessionDurationSweep\(\{ scheduledJobs: scheduledJobsService \}\);/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

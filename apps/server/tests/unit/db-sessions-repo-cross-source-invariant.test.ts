@@ -7,11 +7,12 @@
 //   use an in-memory impl from tests/integration/_helpers/in-memory-
 //   sessions-repo.ts'.
 //
-//   DrizzleSessionRepo 8-method surface — insertSession + findSession
+//   DrizzleSessionRepo 9-method surface — insertSession + findSession
 //     (account-scoped) + findSessionUnscoped (admin) +
 //     updateSessionStatus + countActiveSessions + listSessions
 //     (account-scoped paged) + recordEvent + listAllSessions (admin
-//     paged).
+//     paged) + listExpiredForAutoDestroy (6.g free-tier duration sweep;
+//     accounts-join, oldest-first, bounded).
 //
 //   insertSession 7-field values — accountId + apiKeyId +
 //     driverSessionId + archetype + purpose + label + metadata.
@@ -61,9 +62,9 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
     expect(p).toMatch(/`tests\/integration\/_helpers\/in-memory-sessions-repo\.ts`\./);
   });
 
-  // ─── 8-method surface ────────────────────────────────────────
+  // ─── 9-method surface ────────────────────────────────────────
 
-  it('CRITICAL 8-method surface — insertSession + findSession + findSessionUnscoped + updateSessionStatus + countActiveSessions + listSessions + recordEvent + listAllSessions. The 8-method SessionRepo covers CRUD + event-recording + admin lookup.', () => {
+  it('CRITICAL 9-method surface — insertSession + findSession + findSessionUnscoped + updateSessionStatus + countActiveSessions + listSessions + recordEvent + listAllSessions + listExpiredForAutoDestroy. The SessionRepo covers CRUD + event-recording + admin lookup + 6.g duration sweep.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
     expect(p).toMatch(/async insertSession\(input: NewSessionInput\): Promise<SessionRecord> \{/);
     expect(p).toMatch(
@@ -75,6 +76,23 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
     expect(p).toMatch(/async listSessions\(/);
     expect(p).toMatch(/async recordEvent\(input: SessionEventInput\): Promise<void> \{/);
     expect(p).toMatch(/async listAllSessions\(opts: \{/);
+    expect(p).toMatch(/async listExpiredForAutoDestroy\(opts: \{/);
+  });
+
+  // ─── listExpiredForAutoDestroy (6.g duration sweep) ──────────
+
+  it('CRITICAL listExpiredForAutoDestroy — accounts innerJoin to resolve tier; status restricted to ACTIVE_SESSION_STATUSES; per-tier (tier eq + createdAt lt cutoff) clauses OR-ed; oldest-first; bounded by limit. The accounts-join is what makes paid (null-cap) sessions impossible to return — they never match a cutoff.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
+    expect(p).toMatch(
+      /const ACTIVE_SESSION_STATUSES: SessionRecord\['status'\]\[\] = \['creating', 'ready', 'busy'\];/,
+    );
+    expect(p).toMatch(/\.innerJoin\(accounts, eq\(sessions\.accountId, accounts\.id\)\)/);
+    expect(p).toMatch(
+      /and\(eq\(accounts\.tier, c\.tier\), lt\(sessions\.createdAt, c\.expiredBefore\)\)/,
+    );
+    expect(p).toMatch(/inArray\(sessions\.status, ACTIVE_SESSION_STATUSES\)/);
+    expect(p).toMatch(/\.orderBy\(asc\(sessions\.createdAt\)\)/);
+    expect(p).toMatch(/\.limit\(opts\.limit\)/);
   });
 
   // ─── insertSession 7-field values ────────────────────────────

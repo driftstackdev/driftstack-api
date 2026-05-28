@@ -2,7 +2,8 @@
 // SessionsService expectations exactly; tests use an in-memory impl from
 // `tests/integration/_helpers/in-memory-sessions-repo.ts`.
 
-import { type SQL, and, desc, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import { type SQL, and, asc, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import type { AccountTier } from '@driftstack/api-types';
 import type {
   NewSessionInput,
   SessionEventInput,
@@ -11,7 +12,10 @@ import type {
   SessionRepo,
 } from '../services/sessions.js';
 import type { Database } from './client.js';
-import { sessionEvents, sessions } from './schema.js';
+import { accounts, sessionEvents, sessions } from './schema.js';
+
+// 6.g — non-terminal statuses eligible for the duration auto-destroy sweep.
+const ACTIVE_SESSION_STATUSES: SessionRecord['status'][] = ['creating', 'ready', 'busy'];
 
 export class DrizzleSessionRepo implements SessionRepo {
   constructor(private readonly database: Database) {}
@@ -113,6 +117,30 @@ export class DrizzleSessionRepo implements SessionRepo {
       items: items.map(toSessionRecord),
       nextCursor: hasMore && last ? last.id : null,
     };
+  }
+
+  async listExpiredForAutoDestroy(opts: {
+    tierCutoffs: ReadonlyArray<{ tier: AccountTier; expiredBefore: Date }>;
+    limit: number;
+  }): Promise<SessionRecord[]> {
+    // JOIN sessions → accounts to resolve tier (the cap source-of-truth
+    // lives in the SERVICE, which passes per-tier cutoffs here). For each
+    // capped tier: (accounts.tier = T AND sessions.created_at < cutoff_T).
+    // OR the per-tier clauses; AND restrict to non-terminal statuses.
+    // Oldest-first, capped at `limit` so a tick is bounded.
+    if (opts.tierCutoffs.length === 0) return [];
+    const perTier = opts.tierCutoffs.map((c) =>
+      and(eq(accounts.tier, c.tier), lt(sessions.createdAt, c.expiredBefore)),
+    );
+    const tierClause = or(...perTier);
+    const rows = await this.database.db
+      .select({ session: sessions })
+      .from(sessions)
+      .innerJoin(accounts, eq(sessions.accountId, accounts.id))
+      .where(and(inArray(sessions.status, ACTIVE_SESSION_STATUSES), tierClause))
+      .orderBy(asc(sessions.createdAt))
+      .limit(opts.limit);
+    return rows.map((r) => toSessionRecord(r.session));
   }
 
   async recordEvent(input: SessionEventInput): Promise<void> {
