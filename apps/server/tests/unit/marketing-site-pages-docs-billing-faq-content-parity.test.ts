@@ -5,7 +5,7 @@
 // the two paths).
 //
 //   • V-694 doc-comment framing.
-//   • Free tier: 1 concurrent / 1 profile + manual-only + no card +
+//   • Free tier: 1 concurrent / 1 profile + 20-min cap + no card +
 //     perpetual + no metering + single ds_live_… prefix (no ds_test_).
 //   • Crypto vs Stripe: prorate on upgrade (Stripe) vs full + cycle
 //     reset (NowPayments) + downgrade at cycle end (both, no refund).
@@ -39,19 +39,15 @@ describe('W511.B apps/marketing-site/src/pages/docs/billing-faq.astro content pa
     );
   });
 
-  it("Free-tier framing pinned: '1 concurrent session and 1 profile, manual-only (no API/SDK access). No card is required, and it never expires. Subscribe to a paid tier when you need higher limits or programmatic access.' — pinned so the 1-concurrent/1-profile + manual-only + no-card + perpetual + no-metering free-tier framing survives (drift would re-introduce the retired metered trial-pack framing)", () => {
+  it("Free-tier framing pinned: '1 concurrent session and 1 profile, with sessions up to 20 minutes each — drive them from the API/SDK or the desktop GUI client. No card is required, and it never expires.' — pinned so the 1-concurrent/1-profile + 20-min-cap + no-card + perpetual + no-metering free-tier framing survives. (2026-05-28: API/SDK works within the free limits per the accept-+-reconcile-copy decision; the old 'manual-only / no API/SDK access' framing was dropped.)", () => {
     expect(body).toMatch(
-      /<strong>1 concurrent\s*\n?\s*session<\/strong> and <strong>1 profile<\/strong>, manual-only\s*\n?\s*\(no API\/SDK access\)\. No card is required, and it never expires\./,
+      /<strong>1 concurrent\s*\n?\s*session<\/strong> and <strong>1 profile<\/strong>, with sessions\s*\n?\s*up to 20 minutes each/,
     );
-    expect(body).toMatch(
-      /Sessions are driven by hand from the desktop GUI client; there\s*\n?\s*is no usage metering, no credit, and no auto-charge\./,
-    );
+    expect(body).toMatch(/no usage metering, no credit, and no auto-charge\./);
     expect(body).toMatch(
       /All API keys\s*\n?\s*use the <code>ds_live_…<\/code> prefix; there is no separate\s*\n?\s*<code>ds_test_<\/code> namespace today\./,
     );
-    expect(body).toMatch(
-      /Subscribe to a paid tier\s*\n?\s*when you need higher limits or programmatic access\./,
-    );
+    expect(body).toMatch(/when you need higher limits — more concurrency, more profiles/);
   });
 
   it("Stripe vs NowPayments proration framing pinned: 'Upgrades are prorated by Stripe' + 'Crypto upgrades (NowPayments) charge the full new tier price and reset the billing cycle to the upgrade date — crypto is pay-as-you-go-style because we cannot guarantee in-cycle reconciliation against an on-chain payment.' — pinned so the asymmetric Stripe-prorates / NowPayments-full-price-cycle-reset commitment + the 'cannot guarantee in-cycle reconciliation' rationale all survive (drift to claiming crypto upgrades also prorate would create marketing↔NowPayments-flow divergence)", () => {

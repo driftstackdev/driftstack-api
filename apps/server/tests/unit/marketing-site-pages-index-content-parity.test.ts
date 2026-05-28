@@ -69,7 +69,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(
       /<a href="\/comparison" class="btn-secondary">Compare the alternatives<\/a>/,
     );
-    expect(body).toMatch(/One profile · 20-minute manual sessions · no card required\./);
+    expect(body).toMatch(/One profile · 20-minute sessions · no card required\./);
     // The defensive "Why not Browserless?" CTA must NOT return.
     expect(body).not.toMatch(/Why not Browserless\?/);
   });

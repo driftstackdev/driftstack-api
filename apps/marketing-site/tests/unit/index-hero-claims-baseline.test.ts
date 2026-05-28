@@ -3,7 +3,7 @@
 //   • iPhone Safari fingerprints (the product claim)
 //   • WebKit C++ source-level fork (not stealth-plugin patching)
 //   • Validated against iPhone 16 Pro / iOS 18.7 / Safari 26.4
-//   • Free tier: one profile / 20-minute manual sessions / no card
+//   • Free tier: one profile / 20-minute sessions / no card
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,9 +35,9 @@ describe('W318.B / hero claims baseline', () => {
     expect(body).toMatch(/Safari 26\.4|26\.4/);
   });
 
-  it('free-tier hero claim: one profile / 20-minute manual sessions / no card', () => {
+  it('free-tier hero claim: one profile / 20-minute sessions / no card', () => {
     expect(body).toMatch(/Start free/);
-    expect(body).toMatch(/20-minute manual sessions/i);
+    expect(body).toMatch(/20-minute sessions/i);
     expect(body).toMatch(/no card required/i);
   });
 

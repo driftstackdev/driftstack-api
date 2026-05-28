@@ -43,7 +43,7 @@ describe('W517.B apps/marketing-site/src/pages/docs/concurrency.astro content pa
       /Caps below match <code>TIER_CONCURRENT_SESSION_LIMITS<\/code> in\s*\n?\s*<code>@driftstack\/api-types<\/code>; the server reads from the\s*\n?\s*same constant\./,
     );
     expect(body).toMatch(
-      /<tr><td><code>free<\/code><\/td><td>1<\/td><td>Perpetual free evaluation tier \(manual-only\)\.<\/td><\/tr>/,
+      /<tr><td><code>free<\/code><\/td><td>1<\/td><td>Perpetual free evaluation tier \(1 session, 20-min cap\)\.<\/td><\/tr>/,
     );
     expect(body).toMatch(
       /<tr><td><code>solo_manual<\/code><\/td><td>1<\/td><td>Manual operator workflow\.<\/td><\/tr>/,

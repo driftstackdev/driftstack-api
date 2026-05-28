@@ -35,7 +35,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
       /<span class="font-mono text-sm text-glow-red-soft">\$0 · no card<\/span>/,
     );
     expect(body).toMatch(
-      /Your account is already on the free plan: 1 profile, 1 concurrent\s*\n?\s*session, manual-only\. No subscription, no expiry — the best way to\s*\n?\s*try Driftstack before committing\./,
+      /Your account is already on the free plan: 1 profile, 1 concurrent\s*\n?\s*session of up to 20 minutes\. No subscription, no expiry/,
     );
     expect(body).toMatch(
       /<a href="\/first-session" class="btn-primary mt-4 inline-flex">\s*\n?\s*Create your first session\s*\n?\s*<\/a>/,

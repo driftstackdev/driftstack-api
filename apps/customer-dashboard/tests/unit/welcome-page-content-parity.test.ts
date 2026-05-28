@@ -37,7 +37,7 @@ function read(p: string): string {
 describe('W367.B customer-dashboard /welcome page content parity', () => {
   const body = read(PAGE);
 
-  it('free-tier figures pinned: Start free / $0 · no card / 1 profile / manual-only / no expiry', () => {
+  it('free-tier figures pinned: Start free / $0 · no card / 1 profile / 1 concurrent / no expiry', () => {
     expect(body).toMatch(/Start free/);
     expect(body).toMatch(/\$0 · no card/);
     expect(body).toMatch(/1 profile, 1 concurrent/);

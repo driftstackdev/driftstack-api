@@ -15,7 +15,7 @@
 //   • Company facts 6-entry dl: Entity Dutch BV / HQ Netherlands /
 //     Team solo founder + contractors / Funding bootstrapped no VC /
 //     Sub-processors link / Contact hello@driftstack.dev.
-//   • Free-tier bottom CTA: one profile / 20-minute manual sessions /
+//   • Free-tier bottom CTA: one profile / 20-minute sessions /
 //     no card / perpetual.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -142,10 +142,10 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     expect(body).toMatch(/<dd class="text-sm text-ink-primary">hello@driftstack\.dev<\/dd>/);
   });
 
-  it("Free-tier bottom CTA: 'Want to try it?' + 'Start free — one profile, 20-minute manual sessions on real iPhone Safari, no card required. Perpetual, no expiry.' + 'Start free' button → /pricing#free — pinned so the free-tier value-prop (one profile / 20-minute manual / no card / perpetual) + the CTA destination all survive (drift would re-introduce the retired trial-pack framing)", () => {
+  it("Free-tier bottom CTA: 'Want to try it?' + 'Start free — one profile, 20-minute sessions on real iPhone Safari, no card required. Perpetual, no expiry.' + 'Start free' button → /pricing#free — pinned so the free-tier value-prop (one profile / 20-minute / no card / perpetual) + the CTA destination all survive (drift would re-introduce the retired trial-pack framing)", () => {
     expect(body).toMatch(/Want to try it\?/);
     expect(body).toMatch(
-      /Start free — one profile, 20-minute manual sessions on real\s*\n?\s*iPhone Safari, no card required\. Perpetual, no expiry\./,
+      /Start free — one profile, 20-minute sessions on real\s*\n?\s*iPhone Safari, no card required\. Perpetual, no expiry\./,
     );
     expect(body).toMatch(/<a href="\/pricing#free" class="btn-primary">Start free<\/a>/);
   });

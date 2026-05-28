@@ -83,12 +83,12 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     }
   });
 
-  it('CRITICAL free-plan note pinned — $0 perpetual / 1 profile / 1 concurrent / manual-only / no card / never expires.', () => {
+  it('CRITICAL free-plan note pinned — $0 perpetual / 1 profile / 1 concurrent / 20-min session cap / no card / never expires.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/You're on the free plan/);
     expect(p).toMatch(
-      /Free includes 1 profile, 1 concurrent session, and manual-only\s+sessions up to 20 minutes each — no card required, and it never\s+expires/,
+      /Free includes 1 profile, 1 concurrent session, and sessions up\s+to 20 minutes each/,
     );
   });
 

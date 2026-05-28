@@ -9,7 +9,7 @@
 //   • fmtUsd helper (whole vs decimal formatting branch).
 //   • fmtAiAgent 3-state: byok_only / byok_or_bundled / byok_or_bundled_custom.
 //   • Free-tier hero card: $0 perpetual, data-bound profiles/concurrent,
-//     manual-only (no API), never expires.
+//     20-min session cap, never expires.
 //   • Positioning band: 'Pay per concurrent session.' + 'No surprise
 //     overage bills.' framing.
 //   • V-502 'Which tier is right for me?' decision-tree section: Free
@@ -61,11 +61,11 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     );
   });
 
-  it("Free-tier hero card pinned: 'A perpetual free tier to evaluate the platform' + data-bound profiles/concurrent + 'manual control only (no API access)' + 'never expires' — pinned so the perpetual / 1-profile / 1-concurrent / manual-only / no-API / no-expiry framing survives (drift to dropping 'no API access' would over-promise programmatic access on the free tier)", () => {
+  it("Free-tier hero card pinned: 'A perpetual free tier to evaluate the platform' + data-bound profiles/concurrent + '20-minute' session cap + 'never expires' — pinned so the perpetual / 1-profile / 1-concurrent / 20-min-cap / no-expiry framing survives. (2026-05-28: free has API access within the 1-session/20-min limits; the old 'no API access' claim was dropped per the accept-+-reconcile-copy decision — paid API tiers remain the path to production-scale concurrency.)", () => {
     expect(body).toMatch(/A perpetual free tier to evaluate the platform/);
     expect(body).toMatch(/\{freeTier\.profiles\} profile/);
     expect(body).toMatch(/\{freeTier\.concurrent\}/);
-    expect(body).toMatch(/manual control only \(no API access\)/);
+    expect(body).toMatch(/concurrent session of up to 20 minutes/);
     expect(body).toMatch(/it never expires/);
   });
 

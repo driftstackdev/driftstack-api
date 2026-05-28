@@ -33,6 +33,6 @@ describe('W304.B /index hero baseline', () => {
   });
 
   it('hero subline cites the free-tier framing', () => {
-    expect(body).toMatch(/One profile · 20-minute manual sessions · no card required\./);
+    expect(body).toMatch(/One profile · 20-minute sessions · no card required\./);
   });
 });

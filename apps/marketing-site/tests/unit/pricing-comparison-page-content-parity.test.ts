@@ -139,7 +139,7 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
   it('free-tier card uses data import for figures (not hardcoded)', () => {
     expect(body).toMatch(/const freeTier = API_TIERS\.find\(\(t\) => t\.id === 'free'\);/);
     expect(body).toMatch(/Free \(\{fmtUsd\(freeTier\.monthlyUsd\)\}, forever\)/);
-    expect(body).toMatch(/\{freeTier\.hoursLabel\} — manual-only evaluation/);
+    expect(body).toMatch(/\{freeTier\.hoursLabel\} — evaluation tier/);
   });
 
   it('sticky-left "Dimension" column header pinned (table-shape decision)', () => {

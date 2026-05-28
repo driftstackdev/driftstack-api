@@ -8,7 +8,7 @@
 //     a group" change should require a deliberate decision, not
 //     a drive-by.
 //   • Free-tier mechanics: $0 forever / one profile / one
-//     concurrent / manual-only (no API) / perpetual / no
+//     concurrent / API-within-free-limits / perpetual / no
 //     metering.
 //   • Concurrent-cap ladder (Solo Manual = 1 / Team Manual = 3
 //     / Agency Manual = 8 / API Starter = 2 / Builder = 8 /
@@ -60,13 +60,13 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toContain("title: 'Support + reliability'");
   });
 
-  it('free-tier mechanics pinned: $0-forever / one profile / one concurrent / manual-only / perpetual / no metering', () => {
+  it('free-tier mechanics pinned: $0-forever / one profile / one concurrent / API-within-free-limits / perpetual / no metering', () => {
     expect(body).toMatch(
-      /One persistent profile, one concurrent session, and manual sessions up to 20 minutes each/,
+      /One persistent profile, one concurrent session, and sessions up to 20 minutes each/,
     );
     expect(body).toMatch(/\$0 forever, no card required/);
     expect(body).toMatch(/The free tier is perpetual/);
-    expect(body).toMatch(/The free tier is manual-only/);
+    expect(body).toMatch(/within the free limits/);
     expect(body).toMatch(/No per-hour metering, no credit decrement, no overage/);
   });
 

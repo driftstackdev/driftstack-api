@@ -44,10 +44,10 @@ describe('W261.C /faq ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
     expect(page).toMatch(/RFC 7807 problem-detail/i);
   });
 
-  it('free-tier framing pinned: $0-forever / one concurrent / manual-only / no metering', () => {
+  it('free-tier framing pinned: $0-forever / one concurrent / API-within-free-limits / no metering', () => {
     expect(page).toMatch(/The free tier is \$0 forever/);
     expect(page).toMatch(/The free tier has no metering at all/);
-    expect(page).toMatch(/The free tier is manual-only/);
+    expect(page).toMatch(/within the free limits/);
   });
 
   it('annual discount label matches the live ANNUAL_DISCOUNT_LABEL', () => {

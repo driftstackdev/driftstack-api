@@ -29,7 +29,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'How does concurrent metering work?',
-        a: '<strong>Concurrent</strong> = the number of sessions you can run at the same time, like browser tabs you\'d have open at once. That\'s the only thing we meter on paid tiers. Per-tier caps: Solo Manual = 1 concurrent / Team Manual = 3 / Agency Manual = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom. Within your cap, run as many session-hours as you want — same cap covers a 5-minute session and a 6-hour session. The cap controls peak parallelism; monthly throughput is whatever your concurrent fleet runs continuously. No monthly meter, no per-hour metering, no overage line items. The free tier has no metering at all — one concurrent session, manual-only, no usage charges.',
+        a: '<strong>Concurrent</strong> = the number of sessions you can run at the same time, like browser tabs you\'d have open at once. That\'s the only thing we meter on paid tiers. Per-tier caps: Solo Manual = 1 concurrent / Team Manual = 3 / Agency Manual = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom. Within your cap, run as many session-hours as you want — same cap covers a 5-minute session and a 6-hour session. The cap controls peak parallelism; monthly throughput is whatever your concurrent fleet runs continuously. No monthly meter, no per-hour metering, no overage line items. The free tier has no metering at all — one concurrent session, no usage charges.',
       },
       {
         q: 'What happens when I hit my concurrent cap?',
@@ -50,7 +50,7 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'What do I get on the free tier?',
-        a: 'One persistent profile, one concurrent session, and manual sessions up to 20 minutes each, driven from the desktop GUI client — $0 forever, no card required. It is meant for evaluation: run real iPhone Safari sessions on real WebKit and see the fingerprint match in your own flows before paying for anything.',
+        a: 'One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the API or the desktop GUI client — $0 forever, no card required. It is meant for evaluation: run real iPhone Safari sessions on real WebKit and see the fingerprint match in your own flows before paying for anything.',
       },
       {
         q: 'Does the free tier expire?',
@@ -58,7 +58,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'Can I use the API or SDK on the free tier?',
-        a: 'No. The free tier is manual-only — sessions are driven by hand from the desktop GUI client. Programmatic API/SDK access starts on the API ladder (API Starter from $149/mo). Upgrade to a paid tier when you need to automate.',
+        a: 'Yes, within the free limits — one concurrent session of up to 20 minutes, which you can drive from the API/SDK or the desktop GUI client. That is enough to evaluate the full API surface end to end. Production automation — multiple concurrent sessions and no per-session time cap — starts on the API ladder (API Starter from $149/mo).',
       },
       {
         q: 'Is there any usage metering on the free tier?',

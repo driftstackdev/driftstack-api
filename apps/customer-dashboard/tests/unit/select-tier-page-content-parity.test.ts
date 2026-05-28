@@ -82,7 +82,7 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
   it('free-tier note pinned (no trial-pack purchase card)', () => {
     expect(body).toMatch(/You're on the free plan/);
     expect(body).toMatch(
-      /Free includes 1 profile, 1 concurrent session, and manual-only\s+sessions/,
+      /Free includes 1 profile, 1 concurrent session, and sessions up\s+to 20 minutes each/,
     );
     // The retired trial-pack purchase surface must be gone.
     expect(body).not.toMatch(/data-action="buy-trial-pack"/);

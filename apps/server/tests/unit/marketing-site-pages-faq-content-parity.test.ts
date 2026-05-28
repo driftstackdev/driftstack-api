@@ -61,12 +61,12 @@ describe('W500.A apps/marketing-site/src/pages/faq.astro content parity', () => 
     );
   });
 
-  it("Free-tier mechanic pinned: 'One persistent profile, one concurrent session, and manual sessions up to 20 minutes each, driven from the desktop GUI client — $0 forever, no card required.' + perpetual (no expiry) + manual-only (no API) + no metering — pinned so the founder-locked free-tier shape survives (drift would re-introduce the retired trial-pack mechanics)", () => {
+  it("Free-tier mechanic pinned: 'One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the API or the desktop GUI client — $0 forever, no card required.' + perpetual (no expiry) + API-within-free-limits + no metering — pinned so the founder-locked free-tier shape survives. (2026-05-28: free has API access within the 1-session/20-min limits per the accept-+-reconcile-copy decision; the old 'manual-only / no API' framing was dropped.)", () => {
     expect(body).toMatch(
-      /One persistent profile, one concurrent session, and manual sessions up to 20 minutes each, driven from the desktop GUI client — \$0 forever, no card required\./,
+      /One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from the API or the desktop GUI client — \$0 forever, no card required\./,
     );
     expect(body).toMatch(/The free tier is perpetual/);
-    expect(body).toMatch(/The free tier is manual-only/);
+    expect(body).toMatch(/within the free limits/);
     expect(body).toMatch(/No per-hour metering, no credit decrement, no overage/);
   });
 

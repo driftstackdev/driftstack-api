@@ -84,9 +84,9 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
     expect(body).toMatch(/label: 'Support',/);
   });
 
-  it("Free-tier standalone card pinned: 'Free ({fmtUsd(freeTier.monthlyUsd)}, forever)' + 'manual-only evaluation, no card required, before committing to a paid tier' — pinned so the free-tier-as-separate-evaluation-tier framing survives (drift to merging it into the paid-tier table would lose the 'evaluate before committing' positioning)", () => {
+  it("Free-tier standalone card pinned: 'Free ({fmtUsd(freeTier.monthlyUsd)}, forever)' + 'evaluation tier, no card required, before committing to a paid tier' — pinned so the free-tier-as-separate-evaluation-tier framing survives (drift to merging it into the paid-tier table would lose the 'evaluate before committing' positioning)", () => {
     expect(body).toMatch(/Free \(\{fmtUsd\(freeTier\.monthlyUsd\)\}, forever\)/);
-    expect(body).toMatch(/manual-only evaluation, no card required/);
+    expect(body).toMatch(/evaluation tier, no card required/);
   });
 
   it("★ popular-tier framing pinned: '★ = team's most popular tier in active evaluations. Not a sales push — just the current cohort signal.' — pinned so the honest 'cohort signal, not sales pressure' framing survives (drift to dropping 'Not a sales push' would let the highlight read as upsell rather than data signal)", () => {
