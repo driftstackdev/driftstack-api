@@ -9,6 +9,7 @@
 import {
   DEFAULT_SESSION_PURPOSE,
   LOCKED_ARCHETYPE_ID,
+  MAX_SESSION_MINUTES_PER_TIER,
   PROFILES_PER_TIER,
   TIER_CONCURRENT_SESSION_LIMITS,
   type AccountTier,
@@ -46,6 +47,15 @@ export function concurrentSessionLimitFor(tier: AccountTier): number {
 export function profileLimitFor(tier: AccountTier): number | null {
   const limit = PROFILES_PER_TIER[tier];
   return limit === 'custom' ? null : limit;
+}
+
+// 6.g — max wall-clock minutes for a single session before auto-destroy.
+// Single source of truth in api-types (MAX_SESSION_MINUTES_PER_TIER). `null`
+// = unlimited (paid tiers); free is capped (20) so it reads as an evaluation
+// tier without needing a daily-usage meter. The create gate + the duration
+// sweep read this; `null` means no cap applies.
+export function maxSessionMinutesFor(tier: AccountTier): number | null {
+  return MAX_SESSION_MINUTES_PER_TIER[tier];
 }
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -66,6 +66,18 @@ describe('W910 tier-cap helpers cross-source invariant', () => {
     );
   });
 
+  // ─── maxSessionMinutesFor — 6.g ─────────────────────────────
+
+  it('CRITICAL apps/server/src/services/sessions.ts maxSessionMinutesFor(tier) returns MAX_SESSION_MINUTES_PER_TIER[tier] (number | null). 6.g free-tier session-duration cap; single source of truth in api-types. `null` = unlimited (paid).', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/sessions.ts'));
+    expect(p).toMatch(
+      /export function maxSessionMinutesFor\(tier: AccountTier\): number \| null \{\s*\n\s*return MAX_SESSION_MINUTES_PER_TIER\[tier\];\s*\n\s*\}/,
+    );
+    expect(p).toMatch(
+      /Single source of truth in api-types \(MAX_SESSION_MINUTES_PER_TIER\)\. `null`\s*\n\/\/ = unlimited \(paid tiers\); free is capped/,
+    );
+  });
+
   // ─── profileCapFor in account-me route (mirrors profileLimitFor) ─
 
   it("CRITICAL apps/server/src/routes/account-me.ts profileCapFor(tier) mirrors profileLimitFor — reads PROFILES_PER_TIER; returns null for 'custom'. The dashboard /v1/account/me response uses this helper directly.", () => {
@@ -92,10 +104,11 @@ describe('W910 tier-cap helpers cross-source invariant', () => {
 
   // ─── 2-helper cardinality ────────────────────────────────────
 
-  it('CRITICAL EXACTLY 2 tier-cap helpers in sessions.ts — concurrentSessionLimitFor (always int; V-156) + profileLimitFor (int | null; V-136 with custom→null). The 2-helper pair maps to the 2 V-148 ladder dimensions (Manual=profiles; API=concurrent).', () => {
+  it('CRITICAL 3 tier-cap helpers in sessions.ts — concurrentSessionLimitFor (always int; V-156) + profileLimitFor (int | null; V-136 with custom→null) + maxSessionMinutesFor (int | null; 6.g free session-duration cap). concurrent + profiles map to the V-148 ladder dimensions; maxSessionMinutes is the 6.g free-tier evaluation bound.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/sessions.ts'));
     expect(p).toMatch(/export function concurrentSessionLimitFor\(tier: AccountTier\): number/);
     expect(p).toMatch(/export function profileLimitFor\(tier: AccountTier\): number \| null/);
+    expect(p).toMatch(/export function maxSessionMinutesFor\(tier: AccountTier\): number \| null/);
   });
 
   // ─── 'Concurrent session limits + profile count limits per tier' header ──

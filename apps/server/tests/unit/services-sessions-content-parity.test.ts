@@ -247,9 +247,9 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
   });
 
-  it('imports: api-types defaults (DEFAULT_SESSION_PURPOSE + LOCKED_ARCHETYPE_ID + PROFILES_PER_TIER + TIER_CONCURRENT_SESSION_LIMITS) + AccountContext + Driver + errors + GUIInputRequest', () => {
+  it('imports: api-types defaults (DEFAULT_SESSION_PURPOSE + LOCKED_ARCHETYPE_ID + MAX_SESSION_MINUTES_PER_TIER + PROFILES_PER_TIER + TIER_CONCURRENT_SESSION_LIMITS) + AccountContext + Driver + errors + GUIInputRequest', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*DEFAULT_SESSION_PURPOSE,\s*\n?\s*LOCKED_ARCHETYPE_ID,\s*\n?\s*PROFILES_PER_TIER,\s*\n?\s*TIER_CONCURRENT_SESSION_LIMITS,/,
+      /import \{\s*\n?\s*DEFAULT_SESSION_PURPOSE,\s*\n?\s*LOCKED_ARCHETYPE_ID,\s*\n?\s*MAX_SESSION_MINUTES_PER_TIER,\s*\n?\s*PROFILES_PER_TIER,\s*\n?\s*TIER_CONCURRENT_SESSION_LIMITS,/,
     );
     expect(body).toMatch(/import type \{ AccountContext \} from '\.\/auth\.js';/);
     expect(body).toMatch(/import type \{ Driver \} from '\.\.\/drivers\/types\.js';/);
