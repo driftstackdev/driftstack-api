@@ -14,7 +14,7 @@ Fast index over the 14 open findings, grouped by urgency. Full detail in
 the numbered list below.
 
 - **Do before launch / now (security + go-live gates):**
-  - #4 — rotate the exposed staging Neon password + fix malformed staging `.env` (security).
+  - #4 — [malformation RESOLVED 2026-05-28; rotation dropped per founder] the malformed staging `.env` had **prod's** endpoint (`ep-aged-pond`) concatenated onto staging's isolated endpoint (`ep-lingering`) via a lost newline + missing `&` — a real cross-contamination risk. Cleaned to `ep-lingering`-only (postgres connected, `/health` 200, prod URL removed), redacted the backup. Password rotation dropped per founder ("not needed" — it's the empty isolated staging DB). NOTE: the finding's "→ driver:mock" was wrong (driver:mock = session driver, independent of the DB). [NEW, related] `TierFeatures.apiAccess:false` (free = "manual-only") is a DEAD field — unenforced in apps/server/src; free can hit the API via a test key (concurrent cap 1). Can't be cleanly enforced (the manual GUI client itself auths with an API key) — design decision; low practical impact (1-concurrent / 20-min / 1-profile / aiAgent gated). See memory.
   - #6 — [RESOLVED 2026-05-27, e6cb9b99] resolved by deletion: trial_pack replaced entirely by a perpetual FREE tier (no credit/expiry/metering); credit columns + applyTrialPackPurchase dropped, so "granted but never decremented" is moot and the "~16h" copy is gone. Launch gate satisfied (purchase path retired).
   - #8 — [RESOLVED 2026-05-27] profile-snapshot write ops now enforce `write:profiles` (route-level requireScope on capture/restore/delete) + proof tests; closed the read-scope→profile-mutation gap.
 - **Live customer-impact (wrong behavior today):**
@@ -100,7 +100,22 @@ http.ts` sends `driftstack-sdk-typescript/0.0.1` while `package.json` is
    the other SDKs; updates ~5 pins) or keep `0.0.1` frozen and make W834's
    prose stop claiming they must match.
 
-4. **Rotate the staging Neon DB password.** It was printed to a prior
+4. **Rotate the staging Neon DB password.**
+   **[malformation RESOLVED 2026-05-28; rotation dropped per founder]** The
+   malformed `.env` was NOT a simple double — it had **prod's** endpoint
+   (`ep-aged-pond-al77cutb`, verified against prod's own `.env`) concatenated
+   onto staging's ISOLATED endpoint (`ep-lingering-math-alnalhby-pooler`) via
+   a lost newline + stray `DATABASE_URL=` + missing `&`. Naively de-duping
+   could have pointed staging at PROD. Disambiguated empirically (both
+   connect; ep-lingering=0 accounts/correct, ep-aged-pond=10=prod), set
+   staging to `ep-lingering`-only (`postgres connected`, `/health` 200, prod
+   URL removed → cross-contamination averted), redacted all creds from the
+   `.env.bak-20260528-neonfix` backup. Password rotation **dropped per
+   founder** ("if it's not needed, fk it" — it's the empty isolated staging
+   DB; no Neon API token on the box to automate rotation anyway). The
+   "→ `driver:mock`" causal claim below was WRONG: `driver:mock` is the
+   session/WebKit driver (expected on a control-plane node), independent of
+   the DB. It was printed to a prior
    session's terminal output (2026-05-26). Treat as exposed and rotate via
    the Neon console; also repair the malformed staging `.env` `DATABASE_URL`
    (doubled / missing `&` separators → it currently falls back to
