@@ -21,6 +21,7 @@
 //   - DrizzleAgentSessionsRepo backed by Postgres (AI-A.c).
 //   - Cross-account ACL on shared-team agent-sessions (V-326e* style).
 
+import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import type { TranscriptEntry } from './agent-decomposer.js';
 
 export type AgentSessionStatus = 'active' | 'paused' | 'closed';
@@ -88,6 +89,13 @@ export interface AgentSessionRecord {
    */
   mode: AgentSessionMode;
   /**
+   * 6.c / #15 — the Claude 4.x model the AI agent runs for this session.
+   * Set at create-time (defaults to DEFAULT_AGENT_MODEL); the runtime
+   * threads it into each decompose() call so the per-model cost-to-serve
+   * rate (CLAUDE_MODELS) applies. agent_sessions.model column (0066).
+   */
+  model: AgentModel;
+  /**
    * Arc 2 sub-slice 8.2 (v2-#8) — pair-mode state machine discriminator
    * payload (sub-slice 8.7 will define the exact shape). NULL when
    * the session is not in pair mode, OR is in pair mode but no
@@ -134,6 +142,12 @@ export interface CreateAgentSessionArgs {
    * 'manual' or 'pair' to opt into the alternate flows.
    */
   mode?: AgentSessionMode;
+  /**
+   * 6.c / #15 — Claude 4.x model the AI agent runs for this session.
+   * Defaults to DEFAULT_AGENT_MODEL (Opus 4.7) when omitted. SDK +
+   * dashboard surface the picker at create-time.
+   */
+  model?: AgentModel;
 }
 
 export interface AgentSessionsRepo {
@@ -222,6 +236,8 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       closedAt: null,
       // Arc 2 sub-slice 8.2 — default 'ai' mirrors migration 0052 default.
       mode: args.mode ?? 'ai',
+      // 6.c / #15 — default model mirrors migration 0066's column default.
+      model: args.model ?? DEFAULT_AGENT_MODEL,
       pairModeState: null,
       guiControlKeyExpiresAt: null,
       guiControlKeyCiphertext: null,

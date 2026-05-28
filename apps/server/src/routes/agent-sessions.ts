@@ -19,7 +19,11 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { SendInputEventRequestSchema } from '@driftstack/api-types';
+import {
+  AgentModelSchema,
+  SendInputEventRequestSchema,
+  type AgentModel,
+} from '@driftstack/api-types';
 import type { AgentRuntime } from '../services/agent-runtime.js';
 import type { DecomposeUsage } from '../services/agent-decomposer.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
@@ -75,6 +79,9 @@ const CreateAgentSessionRequestSchema = z.object({
   token_budget: z.number().int().positive().max(10_000_000).optional(),
   // Arc 2 sub-slice 8.5 (v2-#8) — operational mode at create-time.
   mode: z.enum(['manual', 'ai', 'pair']).optional(),
+  // 6.c / #15 — Claude 4.x model the AI agent runs (defaults to
+  // DEFAULT_AGENT_MODEL server-side when omitted).
+  model: AgentModelSchema.optional(),
 });
 
 const RunTurnRequestSchema = z.object({
@@ -112,6 +119,8 @@ interface PublicAgentSession {
   created_by_user_id: string | null;
   // Arc 2 sub-slice 8.5 (v2-#8) — operational mode.
   mode: 'manual' | 'ai' | 'pair';
+  // 6.c / #15 — the Claude 4.x model the AI agent runs for this session.
+  model: AgentModel;
   // Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
   // discriminator. NULL when mode != 'pair'; populated with the
   // initialPairModeState() shape on transition INTO pair mode; the
@@ -153,6 +162,7 @@ function publicAgentSession(
     closed_at: rec.closedAt !== null ? rec.closedAt.toISOString() : null,
     created_by_user_id: rec.createdByUserId,
     mode: rec.mode,
+    model: rec.model,
     pair_mode_state:
       rec.pairModeState !== null &&
       typeof rec.pairModeState === 'object' &&
@@ -409,6 +419,9 @@ export function registerAgentSessionsRoutes(
         // Arc 2 sub-slice 8.5 (v2-#8) — forward mode when supplied;
         // otherwise repo applies the default ('ai').
         ...(parsed.data.mode !== undefined ? { mode: parsed.data.mode } : {}),
+        // 6.c / #15 — forward the picked model when supplied; otherwise
+        // repo applies the default ('claude-opus-4-7').
+        ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
       });
       // Q.1.c — decrypt the customer's stored BYOK key ONCE at
       // session-create and stash plaintext in the per-session cache.

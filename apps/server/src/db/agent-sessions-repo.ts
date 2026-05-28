@@ -22,6 +22,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
+import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { agentSessions } from './schema.js';
 import type { TranscriptEntry } from '../services/agent-decomposer.js';
@@ -51,6 +52,9 @@ function rowToRecord(row: typeof agentSessions.$inferSelect): AgentSessionRecord
     // migration 0052. Existing rows pick up mode='ai' from the CHECK
     // default; null for pair_mode_state + gui_control_key_expires_at.
     mode: (row.mode as 'manual' | 'ai' | 'pair') ?? 'ai',
+    // 6.c / #15 — picked Claude 4.x model (migration 0066 column;
+    // existing rows pick up 'claude-opus-4-7' from the CHECK default).
+    model: (row.model as AgentModel) ?? DEFAULT_AGENT_MODEL,
     pairModeState: row.pairModeState,
     guiControlKeyExpiresAt: row.guiControlKeyExpiresAt,
     guiControlKeyCiphertext: row.guiControlKeyCiphertext,
@@ -88,6 +92,9 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         // Arc 2 sub-slice 8.2 — mode forwarded from caller (or default
         // via DB CHECK constraint when args.mode is omitted).
         ...(args.mode !== undefined ? { mode: args.mode } : {}),
+        // 6.c / #15 — model forwarded from caller (or default via DB
+        // CHECK constraint when args.model is omitted).
+        ...(args.model !== undefined ? { model: args.model } : {}),
         createdAt: now,
         updatedAt: now,
       })

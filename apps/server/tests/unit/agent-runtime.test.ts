@@ -203,6 +203,45 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(seenCalls[0]?.byok).toBeUndefined();
   });
 
+  it('6.c model threading: the session-picked model reaches DecomposeArgs.model (cross-layer: create-time model → loaded session → decompose call), and defaults to claude-opus-4-7 when unset', async () => {
+    const seenModels: Array<DecomposeArgs['model']> = [];
+    const recordingDecomposer = {
+      decompose: (args: DecomposeArgs) => {
+        seenModels.push(args.model);
+        return Promise.resolve({
+          kind: 'clarify' as const,
+          clarifyingQuestion: '?',
+          tokensConsumed: 1,
+        });
+      },
+    };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const runtime = new AgentRuntime({
+      decomposer: recordingDecomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    // Picked model threads through.
+    const picked = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+      model: 'claude-haiku-4-5',
+    });
+    await runtime.runTurn({
+      agentSessionId: picked.id,
+      userMessage: 'a sufficiently long task description for clarity',
+    });
+    expect(seenModels[0]).toBe('claude-haiku-4-5');
+    // Default (no model picked) → Opus 4.7.
+    const def = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    await runtime.runTurn({
+      agentSessionId: def.id,
+      userMessage: 'a sufficiently long task description for clarity',
+    });
+    expect(seenModels[1]).toBe('claude-opus-4-7');
+  });
+
   it('Q.3 token budget exhausted before turn: returns refuse + ATOMICALLY CLOSES the session with closedReason=budget-exhausted (so the next turn short-circuits on session-closed instead of letting the customer retry into another budget refusal)', async () => {
     const sessions = new InMemoryAgentSessionsRepo();
     const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });

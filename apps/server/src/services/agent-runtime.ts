@@ -215,6 +215,9 @@ export class AgentRuntime {
         archetype: this.deps.archetype,
         history: sessionWithUser.transcript,
         budgetTokensRemaining: sessionWithUser.tokenBudgetRemaining,
+        // 6.c / #15 — the session's picked Claude 4.x model drives the
+        // Anthropic call + the per-model cost-to-serve rate.
+        model: sessionWithUser.model,
         ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
       });
     } catch (err) {
