@@ -65,10 +65,14 @@ describe('W432.A packages/api-types/src/index.ts content parity', () => {
     }
   });
 
-  it('Barrel is re-exports only (no inline declarations); 17 export-star lines (one per module — one added 2026-05-XX with the api-types growth)', () => {
+  it('Barrel is re-exports only (no inline declarations); 18 export-star lines (one per module — agent-input-event + agent-models added with the api-types growth)', () => {
     const exportStarMatches = body.match(/^export \* from '\.\/[a-z-]+\.js';$/gm);
     expect(exportStarMatches).not.toBeNull();
-    expect((exportStarMatches ?? []).length).toBe(17);
+    expect((exportStarMatches ?? []).length).toBe(18);
+  });
+
+  it('agent-models barrel export pinned (per-session model picker registry — #15 / 6.c)', () => {
+    expect(body).toMatch(/export \* from '\.\/agent-models\.js';/);
   });
 
   it('file exists at canonical path', () => {
