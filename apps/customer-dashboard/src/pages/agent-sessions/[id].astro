@@ -866,7 +866,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
           {
             method: 'POST',
             headers: { 'content-type': 'application/json', ...authHeaders() },
-            body: JSON.stringify({ content: text }),
+            body: JSON.stringify({ user_message: text }),
           },
         );
         const body = await res.json().catch(() => ({}));
