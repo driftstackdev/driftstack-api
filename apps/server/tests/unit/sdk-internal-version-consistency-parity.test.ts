@@ -8,9 +8,12 @@
 //   version. Drift would make `pip install driftstack-sdk==X` install
 //   a package whose `driftstack.__version__` reports a different X.
 //
-// TS: package.json version MUST match the SDK user-agent string in
-//   http.ts. Drift would let server-side telemetry get confused
-//   about which SDK version is hitting it.
+// TS: the SDK user-agent in http.ts is INTENTIONALLY frozen at the
+//   pre-release marker '0.0.1' (founder decision — the stable metric-
+//   bucketing marker that ~5 other SDK tests pin) and is NOT required
+//   to track package.json. This test pins the UA is a valid SemVer
+//   string + tolerates the deliberate lag, rather than enforcing
+//   equality with package.json.
 //
 // Go: version.go const Version MUST match the SDK user-agent string
 //   in any wire-emission code path.
@@ -54,7 +57,7 @@ describe('W834 per-SDK internal version consistency parity', () => {
 
   // ─── TS: package.json vs user-agent in http.ts ────────────────
 
-  it("CRITICAL TS http.ts user-agent string MUST match the package.json version. Drift would let server-side telemetry mis-attribute requests to the wrong SDK version. The user-agent format is 'driftstack-sdk-typescript/<version>'.", () => {
+  it("CRITICAL TS http.ts user-agent is a valid SemVer in the format 'driftstack-sdk-typescript/<version>', INTENTIONALLY frozen at the pre-release marker '0.0.1' (founder decision — the stable metric-bucketing marker) and NOT required to equal the package.json version. The test pins the UA shape + tolerates the deliberate divergence rather than enforcing equality.", () => {
     const pkg = read(resolve(REPO_ROOT, 'packages/sdk-typescript/package.json'));
     const http = read(resolve(REPO_ROOT, 'packages/sdk-typescript/src/http.ts'));
 
@@ -71,9 +74,11 @@ describe('W834 per-SDK internal version consistency parity', () => {
       'TS http.ts must declare user-agent driftstack-sdk-typescript/X.Y.Z',
     ).not.toBeNull();
 
-    // Note: TS user-agent is currently hardcoded to '0.0.1' (legacy
-    // pre-release marker). The package.json version has moved past
-    // this. Pin BOTH but flag the divergence as known.
+    // The TS user-agent is INTENTIONALLY frozen at '0.0.1' (founder
+    // decision — the stable metric-bucketing marker) while package.json
+    // has moved past it. This divergence is DELIBERATE, not drift: pin
+    // BOTH are valid SemVer + tolerate the lag rather than enforcing
+    // equality.
     if (uaMatch![1] !== pkgVersion) {
       // Documented divergence: TS user-agent lags pkg version.
       expect(uaMatch![1]).toMatch(/^[0-9]+\.[0-9]+\.[0-9]+$/);

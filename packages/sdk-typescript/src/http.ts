@@ -61,6 +61,10 @@ export class HttpClient {
         const isBrowserContext = typeof globalThis !== 'undefined' && 'window' in globalThis;
         const init: RequestInit = {
           method: opts.method,
+          // The non-browser `user-agent` set below is INTENTIONALLY frozen
+          // at 0.0.1 — the stable metric-bucketing marker, deliberately NOT
+          // tracking package.json (see W834). Don't "sync" it to the package
+          // version; ~5 SDK tests pin the 0.0.1 freeze on purpose.
           headers: {
             authorization: `Bearer ${this.config.apiKey}`,
             ...(isBrowserContext ? {} : { 'user-agent': 'driftstack-sdk-typescript/0.0.1' }),

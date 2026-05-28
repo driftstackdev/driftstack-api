@@ -27,7 +27,7 @@ the numbered list below.
   - #5 — [RESOLVED 2026-05-27, 0a3e5cca] webhook retry count fixed to the documented 5 retries / 6 attempts (founder approved option a); all 3 impls bumped to MAX=6, customer docs reconciled, the toothless guard now asserts numeric cross-source equality.
   - #10 — [RESOLVED 2026-05-27, e6cb9b99] resolved by deletion: `trial_pack` removed from `TIER_PRICE_CENTS`, so crypto checkout no longer accepts it — matching the quote route. Both agree now; the free tier is $0/not purchasable.
   - #1 — [RESOLVED 2026-05-27] idempotency reference doc described a TTL-sweep job that doesn't exist; rewritten to real per-subsystem behaviour.
-  - #3 — TS SDK User-Agent frozen at 0.0.1 vs package.json 0.1.6 (contradictory pin vs W834).
+  - #3 — [RESOLVED 2026-05-28] founder chose to keep the UA frozen at 0.0.1 (intentional metric-bucketing marker); fixed W834's contradictory "MUST match" prose + added a clarifying comment at the http.ts UA source. No UA value change.
 - **UI / ops / completeness (lower urgency):**
   - #7 — `pointerToViewport` object-contain mis-mapping (multi-archetype blocker, latent).
   - #2 — [RESOLVED 2026-05-27] runbook referenced a one-shot sweep script that was never built (+ stale "not yet wired" section); rewritten to the real wired scheduled-job mechanism.
@@ -89,7 +89,7 @@ pruneIdempotency`, `IDEMPOTENCY_TTL_MS = 24h`, entries deleted, no row).
 Date())`, log `deletedByKind` — mirror `scripts/smoke-livekit.mjs`,
    needs staging-PG testing) or rewrite the section to the real mechanism.
 
-3. **TS SDK User-Agent version is frozen.** `packages/sdk-typescript/src/
+3. **TS SDK User-Agent version is frozen.** **[RESOLVED 2026-05-28]** Founder chose to KEEP `0.0.1` frozen (the stable metric-bucketing marker) + make W834's prose consistent: updated the `sdk-internal-version-consistency` (W834) header + it-title + inline comment to frame the freeze as INTENTIONAL — the test pins the UA shape + tolerates the divergence rather than enforcing equality — and added a clarifying comment at the http.ts UA source so a future dev doesn't "sync" it. No UA value change. `packages/sdk-typescript/src/
 http.ts` sends `driftstack-sdk-typescript/0.0.1` while `package.json` is
    `0.1.6`, so non-browser TS requests report `0.0.1` in server-side
    telemetry. ~5 tests pin `0.0.1` and describe it as the intentional
