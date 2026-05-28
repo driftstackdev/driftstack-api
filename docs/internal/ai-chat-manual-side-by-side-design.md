@@ -1,7 +1,32 @@
 # AI chat + manual side-by-side live feature (v2-#8)
 
-**Status:** IMPLEMENTATION — Slice 2 scaffold landed. Slices 3-6
-sequential.
+**Status:** IMPLEMENTATION — control-plane substantially landed (Arc 2
+
+- Arc 4): pair-mode state machine (`agent-pair-mode-state.ts`),
+  takeover/handback/mode routes, SSE transcript + account-notifications
+  streams, Redis input-conflict lock, `gui_control` key auto-mint,
+  heartbeat sweep, audit/metrics/Sentry breadcrumbs. Dashboard workbench
+  (`agent-sessions/[id].astro`) + list-page composer wired.
+
+**2026-05-28 launch-blocking fixes:** the dashboard composer now POSTs
+`{ user_message }` (was `{ content }` → `RunTurnRequestSchema` 400'd
+every chat turn); the SSE transcript + notifications streams now
+authenticate via the documented `?ds_token=` query fallback
+(`requireAuthEventSource`) — the routes were header-only, so browser
+`EventSource` connections always 401'd and no live stream ever
+delivered.
+
+**OPEN GAPS (not yet wired — design/harness decisions, NOT plain bugs):**
+
+- `takeover-pending` → `human-driving` never fires: nothing in the
+  codebase emits `takeover-grant` (symmetrically, `handback-pending`
+  has no `handback-complete` emitter). The grant is expected from the
+  Mac harness acknowledging the control hand-off — this is cross-agent
+  (planning 133) + a product decision (auto-grant vs harness-ack).
+  Until wired, a session that POSTs `/takeover` sticks at
+  `takeover-pending` indefinitely.
+- `POST /v1/agent-sessions/:id/abort` (Mode C below) is spec'd but
+  unimplemented — `AgentRuntime` has no per-session abort signal yet.
 
 **Trigger:** Strategic directive 2026-05-17T19:15Z (3) — APPROVED
 for v1.0 as the primary differentiator. "Highest moat per engineering
