@@ -5,8 +5,11 @@
 //
 //   pointerToViewport
 //     - null when the <video> has zero width/height (race on mount)
-//     - converts client coords into the video's intrinsic px space
-//       (naturalWidth / rect.width ratio)
+//     - converts client coords into the video's intrinsic px space,
+//       object-contain-aware: maps against the contained sub-rect
+//       (naturalWidth / displayedWidth ratio), so aspect-mismatched
+//       (letterboxed / pillarboxed) streams map correctly
+//     - null for clicks in the letterbox / pillarbox bars (off-surface)
 //     - falls back to rect dimensions when videoWidth/Height are 0
 //       (pre-track-subscribed state)
 //     - rounds to nearest integer (Mac-side decoder expects ints)
@@ -153,6 +156,72 @@ describe('LK.6.d pure-function tests', () => {
       expect(Number.isInteger(result?.y ?? 0.5)).toBe(true);
       // Math: (123/360)*640 = 218.666… → 219; (87/270)*480 = 154.666… → 155.
       expect(result).toEqual({ x: 219, y: 155 });
+    });
+
+    // #7 — object-contain letterbox/pillarbox awareness. The <video> fills
+    // its container (w-full h-full); when the stream aspect differs from the
+    // element aspect the stream is bar-boxed, so the element rect is NOT the
+    // displayed video. Map against the contained sub-rect + ignore clicks in
+    // the bars (return null). All the matched-aspect cases above are
+    // unaffected (offsets are zero when the aspects are equal).
+
+    it('letterbox (stream wider than element → top/bottom bars): maps an on-video click against the contained sub-rect, not the full rect', () => {
+      // 640x480 (4:3) stream in a 600x600 (square) element → fills width
+      // 600, displayed height 600/(640/480)=450, 75px bars top+bottom.
+      const video = fakeVideo({
+        rect: { left: 0, top: 0, width: 600, height: 600 },
+        videoWidth: 640,
+        videoHeight: 480,
+      });
+      const event = fakeMouseEvent(300, 150);
+      // x=(300/600)*640=320; y=((150-75)/450)*480=80. (Naive full-rect math
+      // would give y=(150/600)*480=120 — the latent bug this fixes.)
+      expect(pointerToViewport(event, video)).toEqual({ x: 320, y: 80 });
+    });
+
+    it('letterbox: returns null for a click in the top bar (off-surface)', () => {
+      const video = fakeVideo({
+        rect: { left: 0, top: 0, width: 600, height: 600 },
+        videoWidth: 640,
+        videoHeight: 480,
+      });
+      // clientY=30 is within the 75px top bar → no video there.
+      expect(pointerToViewport(fakeMouseEvent(300, 30), video)).toBeNull();
+    });
+
+    it('letterbox: returns null for a click in the bottom bar (off-surface)', () => {
+      const video = fakeVideo({
+        rect: { left: 0, top: 0, width: 600, height: 600 },
+        videoWidth: 640,
+        videoHeight: 480,
+      });
+      // Video ends at 75+450=525; clientY=570 is in the bottom bar.
+      expect(pointerToViewport(fakeMouseEvent(300, 570), video)).toBeNull();
+    });
+
+    it('pillarbox (stream taller than element → left/right bars): maps an on-video click against the contained sub-rect', () => {
+      // 480x640 (portrait) stream in an 800x600 element → fills height 600,
+      // displayed width 600*(480/640)=450, 175px bars left+right.
+      const video = fakeVideo({
+        rect: { left: 0, top: 0, width: 800, height: 600 },
+        videoWidth: 480,
+        videoHeight: 640,
+      });
+      const event = fakeMouseEvent(300, 300);
+      // x=((300-175)/450)*480=133.33→133; y=(300/600)*640=320.
+      expect(pointerToViewport(event, video)).toEqual({ x: 133, y: 320 });
+    });
+
+    it('pillarbox: returns null for clicks in the left and right bars (off-surface)', () => {
+      const video = fakeVideo({
+        rect: { left: 0, top: 0, width: 800, height: 600 },
+        videoWidth: 480,
+        videoHeight: 640,
+      });
+      // 175px bars: clientX=50 is in the left bar; 750 is in the right bar
+      // (video spans 175..625).
+      expect(pointerToViewport(fakeMouseEvent(50, 300), video)).toBeNull();
+      expect(pointerToViewport(fakeMouseEvent(750, 300), video)).toBeNull();
     });
   });
 

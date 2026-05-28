@@ -4,13 +4,15 @@
 // 9170da82) accepts, and ships them via the LiveKit DataChannel.
 //
 // Coordinate translation:
-//   - <video> renders the remote stream with object-contain. The
-//     video element's bounding rect IS the visible video region;
-//     pointer coords are within that rect.
+//   - <video> renders the remote stream with object-contain and fills
+//     its container (w-full h-full), so when the stream aspect differs
+//     from the element aspect the video is bar-boxed — the element's
+//     bounding rect is NOT the visible video region. Map against the
+//     contained sub-rect (centering offset + scaled size); clicks in
+//     the bars are off-surface and return null.
 //   - The Mac side expects viewport-space coordinates (the
-//     fork's logical px). Convert via
-//     `naturalWidth / rect.width` ratio, matching the existing
-//     LiveSessionView pattern.
+//     fork's logical px). Convert the in-region pointer via the
+//     `naturalWidth / displayedWidth` ratio.
 //
 // Reliability:
 //   - Mouse down/up, key down/up, wheel: reliable=true (must
@@ -65,8 +67,27 @@ export function pointerToViewport(
   if (rect.width === 0 || rect.height === 0) return null;
   const nw = video.videoWidth || rect.width;
   const nh = video.videoHeight || rect.height;
-  const x = ((event.clientX - rect.left) / rect.width) * nw;
-  const y = ((event.clientY - rect.top) / rect.height) * nh;
+  // object-contain: the stream is scaled to fit the element while
+  // preserving aspect ratio, so when the stream aspect differs from the
+  // element aspect it is bar-boxed within the rect. Compute the displayed
+  // sub-rect (centering offset + scaled size); a pointer outside it is in
+  // a bar — off-surface — so return null (callers skip null). When the
+  // aspects match (the common case) the offsets are zero and this reduces
+  // to the plain rect ratio.
+  const elementAspect = rect.width / rect.height;
+  const videoAspect = nw / nh;
+  let dispW = rect.width;
+  let dispH = rect.height;
+  if (videoAspect > elementAspect) {
+    dispH = rect.width / videoAspect; // wider stream → top/bottom bars
+  } else if (videoAspect < elementAspect) {
+    dispW = rect.height * videoAspect; // taller stream → left/right bars
+  }
+  const px = event.clientX - rect.left - (rect.width - dispW) / 2;
+  const py = event.clientY - rect.top - (rect.height - dispH) / 2;
+  if (px < 0 || px > dispW || py < 0 || py > dispH) return null;
+  const x = (px / dispW) * nw;
+  const y = (py / dispH) * nh;
   return { x: Math.round(x), y: Math.round(y) };
 }
 

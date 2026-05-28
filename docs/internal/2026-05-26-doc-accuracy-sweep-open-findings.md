@@ -29,7 +29,7 @@ the numbered list below.
   - #1 — [RESOLVED 2026-05-27] idempotency reference doc described a TTL-sweep job that doesn't exist; rewritten to real per-subsystem behaviour.
   - #3 — [RESOLVED 2026-05-28] founder chose to keep the UA frozen at 0.0.1 (intentional metric-bucketing marker); fixed W834's contradictory "MUST match" prose + added a clarifying comment at the http.ts UA source. No UA value change.
 - **UI / ops / completeness (lower urgency):**
-  - #7 — `pointerToViewport` object-contain mis-mapping (multi-archetype blocker, latent).
+  - #7 — [RESOLVED 2026-05-28] `pointerToViewport` made object-contain-aware (maps against the contained sub-rect + returns null for bar clicks, per founder "ignore the bars"); 5 letterbox/pillarbox pure-test cases + 2 source pins updated. Backward-compatible (matched-aspect mapping unchanged).
   - #2 — [RESOLVED 2026-05-27] runbook referenced a one-shot sweep script that was never built (+ stale "not yet wired" section); rewritten to the real wired scheduled-job mechanism.
   - #9 — env-vars doc completeness — RESOLVED (6 vars documented; residual: confirm `NOWPAYMENTS_IPN_CALLBACK_URL` before crypto LIVE).
   - #11 — [RESOLVED 2026-05-28] founder chose "complete surface"; added the 4 missing customer endpoints (`/v1/account/cost`, `/v1/account/me/notifications`, `/v1/agent-sessions/:id/transcript`, `/v1/profiles/:id/launch`) to the spec + CORE coverage allowlist + regenerated the (stale-since-2026-05-18) sdk-python openapi.json snapshot.
@@ -181,6 +181,15 @@ MAX_ATTEMPTS` with `MAX_ATTEMPTS = 5` (`apps/server/src/services/
 
 7. **`pointerToViewport` assumes `object-fill` but the `<video>` is
    `object-contain` — latent click mis-mapping, a multi-archetype blocker.**
+   **[RESOLVED 2026-05-28]** Founder chose "ignore clicks in the bars".
+   `pointerToViewport` is now object-contain-aware: it computes the
+   contained sub-rect (centering offset + scaled size) and returns `null`
+   for clicks in the letterbox/pillarbox bars (callers already skip
+   `null`). Algebraically identical when aspects match, so the existing
+   matched-aspect tests stay green; added 5 letterbox/pillarbox pure-test
+   cases + updated the 2 content-parity source pins. LiveSessionView's img
+   path is unaffected (it uses `max-w/max-h`, auto-sizing the element to
+   its content so the rect IS the displayed image).
    `apps/gui-client/src/lib/livekit-input-capture.ts` `pointerToViewport`
    maps a click via the full element rect:
    `x = ((clientX - rect.left) / rect.width) * videoWidth`. But the `<video>`

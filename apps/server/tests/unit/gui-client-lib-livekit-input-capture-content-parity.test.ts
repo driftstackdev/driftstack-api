@@ -31,13 +31,12 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
     );
   });
 
-  it("Coordinate-translation viewport-space framing pinned: '<video> renders the remote stream with object-contain. The video element's bounding rect IS the visible video region; pointer coords are within that rect.' + 'The Mac side expects viewport-space coordinates (the fork's logical px). Convert via naturalWidth / rect.width ratio, matching the existing LiveSessionView pattern.' — pinned so the object-contain + naturalWidth-ratio + cross-component LiveSessionView-symmetry contract all stay documented (drift would mis-translate cursor position by the SFU-vs-DOM size ratio)", () => {
+  it("Coordinate-translation framing pinned (#7 letterbox-aware): the <video> uses object-contain + FILLS its container, so the bounding rect is NOT the visible video region — map against the contained sub-rect + return null for clicks in the bars; convert the in-region pointer via the naturalWidth / displayedWidth ratio. Pinned so the letterbox-aware contract stays documented (the prior 'rect IS the visible region' assumption mis-mapped clicks on aspect-mismatched streams).", () => {
     expect(body).toMatch(
-      /\/\/\s+- <video> renders the remote stream with object-contain\. The\s*\n?\s*\/\/\s+video element's bounding rect IS the visible video region;\s*\n?\s*\/\/\s+pointer coords are within that rect\./,
+      /the element's\s*\n?\s*\/\/\s+bounding rect is NOT the visible video region\./,
     );
-    expect(body).toMatch(
-      /\/\/\s+- The Mac side expects viewport-space coordinates \(the\s*\n?\s*\/\/\s+fork's logical px\)\. Convert via\s*\n?\s*\/\/\s+`naturalWidth \/ rect\.width` ratio, matching the existing\s*\n?\s*\/\/\s+LiveSessionView pattern\./,
-    );
+    expect(body).toMatch(/clicks in\s*\n?\s*\/\/\s+the bars are off-surface and return null\./);
+    expect(body).toMatch(/`naturalWidth \/ displayedWidth` ratio\./);
   });
 
   it("Reliability framing pinned: 'Mouse down/up, key down/up, wheel: reliable=true (must arrive in order; missed events break click logic).' + 'mouseMove: reliable=false (lossy ok — cursor jitter at the remote side is preferable to congesting the data channel when the user moves quickly).' — pinned so the reliability-split contract stays documented (drift to reliable=true on mouseMove would congest the DataChannel on fast cursor motion; drift to reliable=false on click would lose click events on transient congestion)", () => {
@@ -58,9 +57,12 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
     );
   });
 
-  it('pointerToViewport coord math pinned: ((event.clientX - rect.left) / rect.width) * nw + ((event.clientY - rect.top) / rect.height) * nh + Math.round — pinned so the ratio-then-round coordinate math stays documented (drift to a different formula would mis-place cursor at the Mac side; drift to dropping Math.round would let fractional CGEvent coords slip through)', () => {
+  it('pointerToViewport letterbox-aware coord math pinned (#7): elementAspect/videoAspect object-contain fit → displayed sub-rect, pointer offset by the centering bars, null when outside the contained region (a bar click), then (px/dispW)*nw + (py/dispH)*nh + Math.round — pinned so the object-contain mapping + bar-rejection stays documented (drift back to the full-rect ratio mis-places every click on an aspect-mismatched stream; dropping Math.round lets fractional CGEvent coords slip through)', () => {
+    expect(body).toMatch(/const elementAspect = rect\.width \/ rect\.height;/);
+    expect(body).toMatch(/const videoAspect = nw \/ nh;/);
+    expect(body).toMatch(/if \(px < 0 \|\| px > dispW \|\| py < 0 \|\| py > dispH\) return null;/);
     expect(body).toMatch(
-      /const x = \(\(event\.clientX - rect\.left\) \/ rect\.width\) \* nw;\s*\n?\s*const y = \(\(event\.clientY - rect\.top\) \/ rect\.height\) \* nh;\s*\n?\s*return \{ x: Math\.round\(x\), y: Math\.round\(y\) \};/,
+      /const x = \(px \/ dispW\) \* nw;\s*\n?\s*const y = \(py \/ dispH\) \* nh;\s*\n?\s*return \{ x: Math\.round\(x\), y: Math\.round\(y\) \};/,
     );
   });
 
