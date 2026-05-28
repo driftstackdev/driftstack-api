@@ -62,7 +62,7 @@ describe('W368.A marketing-site /faq page content parity', () => {
 
   it('free-tier mechanics pinned: $0-forever / one profile / one concurrent / manual-only / perpetual / no metering', () => {
     expect(body).toMatch(
-      /One persistent profile, one concurrent session, and unlimited manual sessions/,
+      /One persistent profile, one concurrent session, and manual sessions up to 20 minutes each/,
     );
     expect(body).toMatch(/\$0 forever, no card required/);
     expect(body).toMatch(/The free tier is perpetual/);

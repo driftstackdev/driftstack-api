@@ -15,7 +15,7 @@
 //   • Company facts: Dutch BV + Netherlands HQ + Solo founder
 //     + Bootstrapped no-VC + sub-processors cross-link + hello@.
 //   • Free-tier CTA cross-link points at /pricing#free
-//     with the one-profile / unlimited-manual / no-card framing.
+//     with the one-profile / 20-minute-manual / no-card framing.
 //   • Source-modified WebKit framing (not JS-runtime-patches)
 //     pinned — load-bearing engineering differentiator.
 
@@ -124,9 +124,9 @@ describe('W367.A marketing-site /about page content parity', () => {
     expect(body).toContain('hello@driftstack.dev');
   });
 
-  it('free-tier CTA cross-link points at /pricing#free + framing pinned (one profile / unlimited manual / no card)', () => {
+  it('free-tier CTA cross-link points at /pricing#free + framing pinned (one profile / 20-minute manual / no card)', () => {
     expect(body).toMatch(/href="\/pricing#free"/);
-    expect(body).toMatch(/Start free — one profile, unlimited manual sessions on real/);
+    expect(body).toMatch(/Start free — one profile, 20-minute manual sessions on real/);
     expect(body).toMatch(/Perpetual, no expiry\./);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro'))).toBe(
       true,

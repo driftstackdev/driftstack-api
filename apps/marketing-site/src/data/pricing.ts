@@ -61,7 +61,7 @@ export const API_TIERS: ApiTier[] = [
     annualMonthlyEquivalentUsd: null,
     annualUsd: null,
     profiles: 1,
-    hoursLabel: 'Unlimited manual sessions',
+    hoursLabel: '20-minute manual sessions',
     overagePerHourUsd: null,
     concurrent: 1,
     archetypeAccess: 'All currently-available archetypes',

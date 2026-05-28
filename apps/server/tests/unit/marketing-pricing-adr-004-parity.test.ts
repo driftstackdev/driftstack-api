@@ -71,11 +71,11 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     }
   });
 
-  it('CRITICAL free-tier pricing pinned — $0 monthly + 1 profile + 1 concurrent + oneTime: false + unlimited manual sessions (perpetual free tier; trial_pack retired 2026-05-27).', () => {
+  it('CRITICAL free-tier pricing pinned — $0 monthly + 1 profile + 1 concurrent + oneTime: false + 20-minute manual sessions (perpetual free tier; trial_pack retired 2026-05-27).', () => {
     const p = read(PRICING);
 
     expect(p).toMatch(/id: 'free',[\s\S]{0,400}monthlyUsd: 0,/);
-    expect(p).toMatch(/profiles: 1,[\s\S]{0,200}hoursLabel: 'Unlimited manual sessions',/);
+    expect(p).toMatch(/profiles: 1,[\s\S]{0,200}hoursLabel: '20-minute manual sessions',/);
     expect(p).toMatch(/concurrent: 1,[\s\S]{0,400}oneTime: false,/);
   });
 

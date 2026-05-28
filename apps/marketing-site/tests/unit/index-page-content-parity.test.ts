@@ -3,7 +3,7 @@
 //
 //   • Hero positioning: stealth-browsers-modify-JS-at-runtime
 //     framing + WebKit-source differentiator.
-//   • Free-tier CTA + one-profile / unlimited-manual / no-card subline
+//   • Free-tier CTA + one-profile / 20-minute-manual / no-card subline
 //     figures (consistent with /comparison, /about, /faq).
 //   • "Bit-identical" framing + iPhone 16 Pro / iOS 18.7 /
 //     Safari 26.4 reference.
@@ -50,7 +50,7 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
   it('free-tier CTA + figures pinned: Start free / #free anchor / one-profile subline', () => {
     expect(body).toMatch(/href="\/pricing#free"/);
     expect(body).toMatch(/Start free/);
-    expect(body).toMatch(/One profile · unlimited manual sessions · no card required\./);
+    expect(body).toMatch(/One profile · 20-minute manual sessions · no card required\./);
   });
 
   it('Comparison CTA pinned (M.3 Plan Item 2 — "Compare the alternatives" generic framing replaced "Why not Browserless?" which read too defensive and gave free SEO to a specific competitor)', () => {
