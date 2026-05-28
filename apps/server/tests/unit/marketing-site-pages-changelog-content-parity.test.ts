@@ -75,10 +75,10 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
     expect(body).toMatch(/docs\.driftstack\.dev\/api\/mfa/);
   });
 
-  it("2026-05-09 'Webhook signing-secret rotation with 24-hour grace' security entry: dual-signing during grace + x-driftstack-signature + x-driftstack-signature-prev + TypeScript/Python/Go SDK verifiers — pinned so the 24h grace + dual-header rotation contract + the 3-language SDK verifier-supports-both reference all survive (drift to dropping any would let customers wonder which signature header to verify against during rotation)", () => {
+  it("2026-05-09 'Webhook signing-secret rotation with 24-hour grace' security entry: dual-signing during grace folded into the single x-driftstack-signature header as two v1= entries + TypeScript/Python/Go SDK verifiers check every v1= — pinned so the 24h grace + compound-single-header rotation contract + the 3-language SDK verifier reference all survive (drift to claiming a separate prev header would let customers read a never-sent header during rotation)", () => {
     expect(body).toMatch(/Webhook signing-secret rotation with 24-hour grace/);
-    expect(body).toMatch(/x-driftstack-signature \+ x-driftstack-signature-prev/);
-    expect(body).toMatch(/SDK verifiers in TypeScript, Python, and Go accept either header/);
+    expect(body).toMatch(/single x-driftstack-signature header \(t=…,v1=<new>,v1=<old>\)/);
+    expect(body).toMatch(/SDK verifiers in TypeScript, Python, and Go check every v1= entry/);
   });
 
   it("2026-05-08 'Team RBAC end-to-end' security entry: X-Driftstack-Account header + member-vs-admin role asymmetry + 'Acting as' picker — pinned so the team-RBAC launch announcement covers the canonical mechanic (act-as header) AND the role-gating (member reads / admin writes) which customers reading the changelog will compare against the dashboard's Acting-as sidebar widget", () => {

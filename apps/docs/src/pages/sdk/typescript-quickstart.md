@@ -122,17 +122,18 @@ import { verifyWebhookSignature } from '@driftstack/sdk';
 const ok = await verifyWebhookSignature({
   body: rawRequestBody,
   header: req.headers['x-driftstack-signature'] as string,
-  headerPrev: req.headers['x-driftstack-signature-prev'] as string | undefined,
   secret: process.env.DRIFTSTACK_WEBHOOK_SECRET!,
 });
 if (!ok) return res.status(401).send('invalid signature');
 ```
 
-`headerPrev` is set by the API during the 24h signing-secret
-rotation grace window — see
+During the 24h signing-secret rotation grace window the single
+`x-driftstack-signature` header carries both the new and old HMACs
+as two `v1=` entries (`t=…,v1=<new>,v1=<old>`) — see
 [`/webhooks/endpoints`](/webhooks/endpoints/) for the rotate-secret
-endpoint. Accept either header during the overlap and your verifier
-won't drop deliveries.
+endpoint. `verifyWebhookSignature` already checks every `v1=` entry
+in that header, so the call above keeps verifying through a rotation
+with no extra arguments and your verifier won't drop deliveries.
 
 ## Pair-mode takeover (interactive AI sessions)
 

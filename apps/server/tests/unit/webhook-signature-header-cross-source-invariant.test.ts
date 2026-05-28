@@ -1,10 +1,13 @@
-// Cross-source invariant: webhook signature headers MUST use the
-// canonical names `x-driftstack-signature` (current secret) and
-// `x-driftstack-signature-prev` (previous secret during rotation
-// grace). The names appear in the delivery dispatcher, the docs
-// SDK examples, and the customer-facing webhooks/endpoints.md.
-// Drift on either header name would silently break customer
-// signature verification across every SDK + every doc example.
+// Cross-source invariant: webhook signatures are carried in the
+// SINGLE canonical header `x-driftstack-signature`. During the
+// rotation grace window the previous-secret HMAC is folded into a
+// SECOND `v1=` entry inside that one header (`t=…,v1=<new>,v1=<old>`),
+// NOT a separate `x-driftstack-signature-prev` header — no wired
+// server path emits such a header. The single-header form appears in
+// the delivery dispatcher, the worker, the customer-facing
+// webhooks/endpoints.md, and the SDK quickstart examples. Drift to
+// claiming a separate prev header would tell customers to read a
+// request header that is never sent.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -40,21 +43,19 @@ describe('webhook signature-header name cross-source invariant', () => {
     expect(worker).toMatch(/'x-driftstack-signature': sigHeader,/);
   });
 
-  it('docs/webhooks/endpoints.md customer-facing copy references both headers (current + prev) for the rotation grace period', () => {
-    expect(docsEndpoints).toMatch(
-      /delivery \(`x-driftstack-signature` \+ `x-driftstack-signature-prev`\)/,
-    );
-    expect(docsEndpoints).toMatch(/`x-driftstack-signature` \(new HMAC\) and/);
-    expect(docsEndpoints).toMatch(/`x-driftstack-signature-prev` \(old HMAC\) are emitted\./);
+  it('docs/webhooks/endpoints.md customer-facing copy describes the compound dual-v1= single header (NOT a separate prev header)', () => {
+    expect(docsEndpoints).toMatch(/`t=<sec>,v1=<new>,v1=<old>`/);
+    expect(docsEndpoints).toMatch(/There is no separate/);
+    expect(docsEndpoints).not.toMatch(/`x-driftstack-signature-prev` \(old HMAC\) are emitted/);
   });
 
-  it('docs/sdk/typescript-quickstart.md SDK example reads both signature headers (lowercase, matching the actual emit)', () => {
+  it('docs/sdk/typescript-quickstart.md SDK example reads only the single signature header (no never-sent prev header)', () => {
     expect(sdkTs).toMatch(/req\.headers\['x-driftstack-signature'\] as string,/);
-    expect(sdkTs).toMatch(/req\.headers\['x-driftstack-signature-prev'\] as string \| undefined,/);
+    expect(sdkTs).not.toMatch(/x-driftstack-signature-prev/);
   });
 
-  it('docs/sdk/python-quickstart.md SDK example reads both signature headers (lowercase, matching the actual emit)', () => {
+  it('docs/sdk/python-quickstart.md SDK example reads only the single signature header (no never-sent prev header)', () => {
     expect(sdkPy).toMatch(/header=request\.headers\["x-driftstack-signature"\],/);
-    expect(sdkPy).toMatch(/header_prev=request\.headers\.get\("x-driftstack-signature-prev"\),/);
+    expect(sdkPy).not.toMatch(/x-driftstack-signature-prev/);
   });
 });

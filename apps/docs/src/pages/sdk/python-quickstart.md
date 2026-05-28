@@ -134,18 +134,20 @@ from driftstack import verify_webhook_signature
 ok = verify_webhook_signature(
     body=raw_body,
     header=request.headers["x-driftstack-signature"],
-    header_prev=request.headers.get("x-driftstack-signature-prev"),
     secret=os.environ["DRIFTSTACK_WEBHOOK_SECRET"],
 )
 if not ok:
     return Response("invalid signature", status_code=401)
 ```
 
-`header_prev` is set by the API during the 24h signing-secret
-rotation grace window — see
+During the 24h signing-secret rotation grace window the single
+`x-driftstack-signature` header carries both the new and old HMACs
+as two `v1=` entries (`t=…,v1=<new>,v1=<old>`) — see
 [`/webhooks/endpoints`](/webhooks/endpoints/) for the rotate-secret
-endpoint. Verify accepting either keeps deliveries flowing while
-you roll the new secret across your verifier infra.
+endpoint. `verify_webhook_signature` already checks every `v1=`
+entry in that header, so the call above keeps verifying through a
+rotation with no extra arguments while you roll the new secret
+across your verifier infra.
 
 ## Pair-mode takeover (interactive AI sessions)
 

@@ -48,11 +48,10 @@ describe('docs webhooks/endpoints content parity', () => {
     expect(body).toMatch(/Safe to log \+ display; the full secret is shown ONCE/);
   });
 
-  it("24h grace dual-signing contract pinned: x-driftstack-signature + x-driftstack-signature-prev during grace. Drift to dropping the dual-signing framing would let customers think rotation is zero-downtime-impossible (it isn't — dual-sig makes it zero-downtime)", () => {
+  it("24h grace dual-signing contract pinned: single x-driftstack-signature header carries both HMACs as two v1= entries during grace (NOT a separate prev header). Drift to dropping the dual-signing framing would let customers think rotation is zero-downtime-impossible (it isn't — dual-sig makes it zero-downtime)", () => {
     expect(body).toMatch(/null\s+except during the 24-hour grace period after a secret rotation/);
-    expect(body).toMatch(
-      /Driftstack is dual-signing every outbound\s+delivery \(`x-driftstack-signature` \+ `x-driftstack-signature-prev`\)/,
-    );
+    expect(body).toMatch(/the single `x-driftstack-signature` header carries/);
+    expect(body).toMatch(/`t=<sec>,v1=<new>,v1=<old>`/);
   });
 
   it('auto-disable framing pinned: consecutive_failures zeros on success + auto-disable after enough failures + re-create-to-re-enable. Drift would orphan customers from understanding why their endpoint stopped firing — a real support-ticket source', () => {

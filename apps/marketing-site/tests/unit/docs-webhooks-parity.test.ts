@@ -99,9 +99,10 @@ describe('W346.A /docs/webhooks parity', () => {
     expect(body).toMatch(/older than 5 minutes/);
   });
 
-  it('secret rotation: 24-hour grace window + dual signature headers', () => {
+  it('secret rotation: 24-hour grace window + compound dual-v1= single header (no separate prev header)', () => {
     expect(body).toMatch(/24-hour grace window/);
-    expect(body).toContain('X-Driftstack-Signature-Prev');
+    expect(body).toContain('t=…,v1=<new>,v1=<old>');
+    expect(body).not.toContain('X-Driftstack-Signature-Prev');
     expect(body).toContain('grace_expires_at');
   });
 

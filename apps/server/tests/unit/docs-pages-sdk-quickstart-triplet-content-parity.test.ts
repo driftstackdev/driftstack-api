@@ -218,15 +218,18 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
     expect(read(GO_PAGE)).toMatch(/driftstack\.VerifyWebhookSignature\(/);
   });
 
-  it("CRITICAL headerPrev / header_prev / HeaderPrev 24h-rotation-grace dual-signature pinned in all 3. The 'Accept either header during the overlap and your verifier won\\'t drop deliveries' wording is the load-bearing dual-sign contract matching V-475 + W753.", () => {
-    expect(read(TS_PAGE)).toMatch(/headerPrev: req\.headers\['x-driftstack-signature-prev'\]/);
-    expect(read(PY_PAGE)).toMatch(
-      /header_prev=request\.headers\.get\("x-driftstack-signature-prev"\)/,
-    );
-    expect(read(GO_PAGE)).toMatch(/HeaderPrev: r\.Header\.Get\("X-Driftstack-Signature-Prev"\)/);
+  it('CRITICAL 24h-rotation-grace prose pinned in all 3 + NO never-sent prev header read. The server folds both HMACs into the single x-driftstack-signature header as two v1= entries; the examples call the verifier with that one header only, and the grace prose describes the compound dual-v1= form (no separate prev header to read).', () => {
+    // The examples must NOT instruct customers to read the never-sent
+    // separate prev header from the request.
+    expect(read(TS_PAGE)).not.toMatch(/x-driftstack-signature-prev/);
+    expect(read(PY_PAGE)).not.toMatch(/x-driftstack-signature-prev/);
+    expect(read(GO_PAGE)).not.toMatch(/X-Driftstack-Signature-Prev/);
 
     for (const PAGE of [TS_PAGE, PY_PAGE, GO_PAGE]) {
-      expect(read(PAGE)).toMatch(/24h signing-secret/);
+      const p = read(PAGE);
+      expect(p).toMatch(/24h signing-secret/);
+      // The compound dual-v1= single-header form is the accurate contract.
+      expect(p).toMatch(/v1=<new>,v1=<old>/);
     }
   });
 

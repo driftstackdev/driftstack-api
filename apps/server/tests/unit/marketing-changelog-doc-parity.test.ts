@@ -28,8 +28,8 @@ describe('W248.C /changelog doc parity', () => {
 
   it('references webhook rotation with the 24-hour grace window', () => {
     expect(doc).toMatch(/24-hour grace/);
-    // And the dual-signing header pair.
-    expect(doc).toMatch(/x-driftstack-signature.*x-driftstack-signature-prev/);
+    // And the compound dual-v1= single header (no separate prev header).
+    expect(doc).toMatch(/single x-driftstack-signature header \(t=…,v1=<new>,v1=<old>\)/);
   });
 
   it('does not promise customer-controlled egress as a shipped changelog entry', () => {

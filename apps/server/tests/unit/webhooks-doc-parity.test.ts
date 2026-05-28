@@ -112,11 +112,11 @@ describe('W213.B webhooks doc parity', () => {
     expect(doc).not.toMatch(/10 consecutive failures/);
   });
 
-  it('rotation pattern: separate -Prev header, not comma-separated v1= in one header', () => {
-    expect(doc).toMatch(/X-Driftstack-Signature-Prev/);
-    // The previous doc claimed dual-sign was comma-separated in the
-    // primary header — rule that wording out.
-    expect(doc).not.toMatch(/dual-signs.*comma-separated/i);
+  it('rotation pattern: both HMACs in ONE comma-separated v1= header, not a separate -Prev header', () => {
+    // The server emits t=…,v1=<new>,v1=<old> in the single
+    // x-driftstack-signature header; no separate prev header exists.
+    expect(doc).toContain('t=…,v1=<new>,v1=<old>');
+    expect(doc).not.toMatch(/X-Driftstack-Signature-Prev/);
   });
 
   it('endpoint id prefix in examples is whk_, not wh_', () => {

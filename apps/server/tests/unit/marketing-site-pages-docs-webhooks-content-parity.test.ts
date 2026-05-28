@@ -91,14 +91,15 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     );
   });
 
-  it('4-delivery-header surface pinned: X-Driftstack-Event-Id + X-Driftstack-Event-Type + X-Driftstack-Emitted-At + X-Driftstack-Signature (t=…,v1=…) + secret-rotation X-Driftstack-Signature-Prev — pinned so the 4-header standard surface + signature-prev-grace header survives (drift to renaming any header would create marketing↔delivery divergence)', () => {
+  it('4-delivery-header surface pinned: X-Driftstack-Event-Id + X-Driftstack-Event-Type + X-Driftstack-Emitted-At + X-Driftstack-Signature (t=…,v1=…) + secret-rotation folds the prev HMAC into a second v1= inside the SAME single header — pinned so the 4-header standard surface + compound dual-v1= grace form survives (drift to renaming any header or claiming a separate prev header would create marketing↔delivery divergence)', () => {
     expect(body).toMatch(/X-Driftstack-Event-Id: evt_…/);
     expect(body).toMatch(/X-Driftstack-Event-Type: session\.completed/);
     expect(body).toMatch(/X-Driftstack-Emitted-At: 1747051200/);
     expect(body).toMatch(/X-Driftstack-Signature: t=1747051200,v1=<hex hmac>/);
     expect(body).toMatch(
-      /During a secret-rotation grace window the request also carries\s*\n?\s*<code>X-Driftstack-Signature-Prev<\/code> in the same\s*\n?\s*<code>t=…,v1=…<\/code> shape/,
+      /the single\s*\n?\s*<code>X-Driftstack-Signature<\/code> header carries both the new/,
     );
+    expect(body).not.toMatch(/X-Driftstack-Signature-Prev/);
   });
 
   it("HMAC framing pinned: 'HMAC-SHA256(secret, <unix-seconds> + \".\" + <raw request body>)' + 'The timestamp lives inside the header (the t= component), not in a separate header. The X-Driftstack-Emitted-At header is informational and must NOT be used as the signed-payload timestamp.' — pinned so the HMAC-SHA256 algorithm + ts-inside-header + Emitted-At-NOT-signed commitments survive (drift to using -Emitted-At for the signed timestamp would create marketing↔webhook-signing.ts divergence)", () => {
@@ -148,18 +149,16 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     );
   });
 
-  it("24h secret-rotation grace + grace_expires_at + dual-header framing pinned: POST /v1/webhooks/<id>/rotate-secret 200 OK + secret_prefix new + prev_secret_prefix + grace_expires_at + 'During the 24-hour grace window, Driftstack sends every outbound delivery with two signature headers: X-Driftstack-Signature signed with the new secret; X-Driftstack-Signature-Prev signed with the old secret.' — pinned so the 24h-grace + dual-header + prev-secret-prefix-on-response survives", () => {
+  it("24h secret-rotation grace + grace_expires_at + compound dual-v1= framing pinned: POST /v1/webhooks/<id>/rotate-secret 200 OK + secret_prefix new + prev_secret_prefix + grace_expires_at + 'During the 24-hour grace window, Driftstack signs every outbound delivery with both secrets inside the single X-Driftstack-Signature header, as two v1= entries' — pinned so the 24h-grace + single-header-dual-v1= + prev-secret-prefix-on-response survives (no separate prev header)", () => {
     expect(body).toMatch(/POST \/v1\/webhooks\/<id>\/rotate-secret/);
     expect(body).toMatch(/"secret": "whsec_NEW…"/);
     expect(body).toMatch(/"prev_secret_prefix": "whsec_xxxx"/);
     expect(body).toMatch(/"grace_expires_at":/);
     expect(body).toMatch(
-      /During the 24-hour grace window, Driftstack sends every\s*\n?\s*outbound delivery with <strong>two signature headers<\/strong>:/,
+      /Driftstack signs every\s*\n?\s*outbound delivery with <strong>both secrets inside the single/,
     );
-    expect(body).toMatch(/<code>X-Driftstack-Signature<\/code> — signed with the new secret\./);
-    expect(body).toMatch(
-      /<code>X-Driftstack-Signature-Prev<\/code> — signed with the old secret\./,
-    );
+    expect(body).toMatch(/<code>v1=&lt;new&gt;<\/code> — signed with the new secret\./);
+    expect(body).toMatch(/<code>v1=&lt;old&gt;<\/code> — signed with the old secret\./);
   });
 
   it("test.ping POST /v1/webhooks/<id>/test 202 framing pinned: 202 Accepted + delivery_id (wdl_…) + event_id (evt_…) + event_type 'test.ping' + 'The test event arrives at your endpoint with the same headers + signature as a real event.' — pinned so the 202 + 3-field test-response shape + same-headers+signature survives", () => {

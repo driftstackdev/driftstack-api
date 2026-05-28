@@ -86,7 +86,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-09',
     category: 'security',
     title: 'Webhook signing-secret rotation with 24-hour grace',
-    body: 'Rotate any webhook endpoint\'s signing secret from /webhooks → Rotate secret. The new plaintext is shown once; the old secret stays valid for 24 hours so you can roll the new value across your verifier infrastructure without dropped deliveries. Driftstack dual-signs every outbound delivery during the grace (x-driftstack-signature + x-driftstack-signature-prev); SDK verifiers in TypeScript, Python, and Go accept either header.',
+    body: 'Rotate any webhook endpoint\'s signing secret from /webhooks → Rotate secret. The new plaintext is shown once; the old secret stays valid for 24 hours so you can roll the new value across your verifier infrastructure without dropped deliveries. Driftstack dual-signs every outbound delivery during the grace inside the single x-driftstack-signature header (t=…,v1=<new>,v1=<old>); SDK verifiers in TypeScript, Python, and Go check every v1= entry and accept the delivery if either matches.',
   },
   {
     date: '2026-05-09',

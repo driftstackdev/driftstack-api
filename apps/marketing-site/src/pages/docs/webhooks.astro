@@ -117,9 +117,10 @@ X-Driftstack-Signature: t=1747051200,v1=<hex hmac>
   "data": { /* event-specific payload */ }
 }`}</code></pre>
     <p class="text-sm text-ink-muted">
-      During a secret-rotation grace window the request also carries
-      <code>X-Driftstack-Signature-Prev</code> in the same
-      <code>t=…,v1=…</code> shape — see
+      During a secret-rotation grace window the single
+      <code>X-Driftstack-Signature</code> header carries both the new
+      and old HMACs as two comma-separated <code>v1=</code> entries
+      (<code>t=…,v1=&lt;new&gt;,v1=&lt;old&gt;</code>) — see
       <a href="#secret-rotation">Secret rotation</a> below.
     </p>
 
@@ -243,19 +244,24 @@ Authorization: Bearer ds_live_…
   "grace_expires_at": "2026-05-13T12:00:00.000Z"
 }`}</code></pre>
     <p>
-      During the 24-hour grace window, Driftstack sends every
-      outbound delivery with <strong>two signature headers</strong>:
+      During the 24-hour grace window, Driftstack signs every
+      outbound delivery with <strong>both secrets inside the single
+      <code>X-Driftstack-Signature</code> header</strong>, as two
+      comma-separated <code>v1=</code> entries:
     </p>
     <ul>
-      <li><code>X-Driftstack-Signature</code> — signed with the new secret.</li>
-      <li><code>X-Driftstack-Signature-Prev</code> — signed with the old secret.</li>
+      <li><code>v1=&lt;new&gt;</code> — signed with the new secret.</li>
+      <li><code>v1=&lt;old&gt;</code> — signed with the old secret.</li>
     </ul>
+    <pre><code>{`X-Driftstack-Signature: t=…,v1=<new>,v1=<old>`}</code></pre>
     <p>
-      Your verifier should accept either. The SDK helpers do this
-      automatically when you pass <code>header_prev</code> (or
-      equivalent). Roll the new secret across your infra at your own
-      pace during the grace window — when it expires, the
-      <code>-Prev</code> header drops and only the new secret is sent.
+      Your verifier should accept the delivery if either HMAC
+      matches. The SDK helpers do this automatically — they iterate
+      every <code>v1=</code> entry in the one header, so no extra
+      argument is needed. Roll the new secret across your infra at
+      your own pace during the grace window — when it expires, the
+      old <code>v1=</code> entry drops and only the new-secret
+      signature is sent.
     </p>
 
     <h2>Testing</h2>

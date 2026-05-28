@@ -88,7 +88,7 @@ describe('W370.A marketing-site /changelog page content parity', () => {
   it('webhook signing-secret 24h-grace rotation entry pinned (matches V-359 contract)', () => {
     expect(body).toMatch(/old secret stays valid for 24 hours/);
     expect(body).toMatch(
-      /Driftstack dual-signs every outbound delivery during the grace \(x-driftstack-signature \+ x-driftstack-signature-prev\)/,
+      /Driftstack dual-signs every outbound delivery during the grace inside the single x-driftstack-signature header \(t=…,v1=<new>,v1=<old>\)/,
     );
   });
 

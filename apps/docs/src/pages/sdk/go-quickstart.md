@@ -156,9 +156,7 @@ ok := driftstack.VerifyWebhookSignature(
     rawBody,
     r.Header.Get("X-Driftstack-Signature"),
     os.Getenv("DRIFTSTACK_WEBHOOK_SECRET"),
-    driftstack.VerifyWebhookOptions{
-        HeaderPrev: r.Header.Get("X-Driftstack-Signature-Prev"),
-    },
+    driftstack.VerifyWebhookOptions{},
 )
 if !ok {
     http.Error(w, "invalid signature", http.StatusUnauthorized)
@@ -166,11 +164,14 @@ if !ok {
 }
 ```
 
-`HeaderPrev` is set by the API during the 24h signing-secret
-rotation grace window — see
+During the 24h signing-secret rotation grace window the single
+`X-Driftstack-Signature` header carries both the new and old HMACs
+as two `v1=` entries (`t=…,v1=<new>,v1=<old>`) — see
 [`/webhooks/endpoints`](/webhooks/endpoints/) for the rotate-secret
-endpoint. Verifier accepts either header so deliveries don't drop
-while you roll the new secret across your verifier infra.
+endpoint. `VerifyWebhookSignature` already checks every `v1=` entry
+in that header, so the call above keeps verifying through a rotation
+without setting any option while you roll the new secret across your
+verifier infra.
 
 ## Pair-mode takeover (interactive AI sessions)
 

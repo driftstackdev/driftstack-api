@@ -33,9 +33,8 @@ describe('webhook 24h-rotation-grace cross-source invariant', () => {
     expect(docs).toMatch(/except during the 24-hour grace period after a secret rotation/);
   });
 
-  it("docs/webhooks/endpoints.md customer copy explains dual-signing during grace: 'When non-null, Driftstack is dual-signing every outbound delivery (x-driftstack-signature + x-driftstack-signature-prev)' — pinned so the customer understands the rotation-grace mechanism", () => {
-    expect(docs).toMatch(
-      /When non-null, Driftstack is dual-signing every outbound\s*\n?\s*delivery \(`x-driftstack-signature` \+ `x-driftstack-signature-prev`\)/,
-    );
+  it('docs/webhooks/endpoints.md customer copy explains dual-signing during grace folds both HMACs into the single x-driftstack-signature header as two v1= entries — pinned so the customer understands the rotation-grace mechanism', () => {
+    expect(docs).toMatch(/When non-null, Driftstack is dual-signing every outbound/);
+    expect(docs).toMatch(/the single `x-driftstack-signature` header carries/);
   });
 });

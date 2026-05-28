@@ -87,7 +87,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(existsSync(SC)).toBe(true);
   });
 
-  it('webhooks/endpoints.md: customer-controlled HTTPS URL + signing-secret-shown-ONCE + 24h rotation grace + dual-sign x-driftstack-signature + x-driftstack-signature-prev + consecutive-failures auto-disable + test.ping rejected from subscribe list pinned. Re-enabled by slice 322 post the R4 V-NNN scrub — the (V-359) anchor between "after a secret rotation" and "When non-null, Driftstack is dual-signing" was removed', () => {
+  it('webhooks/endpoints.md: customer-controlled HTTPS URL + signing-secret-shown-ONCE + 24h rotation grace + single-header compound dual-v1= sign + consecutive-failures auto-disable + test.ping rejected from subscribe list pinned. Re-enabled by slice 322 post the R4 V-NNN scrub — the (V-359) anchor between "after a secret rotation" and "When non-null, Driftstack is dual-signing" was removed', () => {
     const body = read(WE);
     expect(body).toMatch(/^title: Webhook endpoints$/m);
     expect(body).toMatch(/customer-controlled HTTPS URL that/);
@@ -96,7 +96,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(/`prev_secret_prefix` \+ `rotation_grace_expires_at` are null/);
     expect(body).toMatch(/except during the 24-hour grace period after a secret rotation/);
     expect(body).toMatch(/When non-null, Driftstack is dual-signing every outbound/);
-    expect(body).toMatch(/delivery \(`x-driftstack-signature` \+ `x-driftstack-signature-prev`\)/);
+    expect(body).toMatch(/the single `x-driftstack-signature` header carries/);
     expect(body).toMatch(/`consecutive_failures` increments on each failed delivery \+ zeros/);
     expect(body).toMatch(/endpoint auto-disables \(`disabled_at` set\)/);
     expect(body).toMatch(/Only subscribable event types/);

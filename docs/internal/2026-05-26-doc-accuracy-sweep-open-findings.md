@@ -332,9 +332,13 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
     real SDK `verifyWebhookSignature`; package `signPayload` → verifier),
     written first + confirmed failing against the old bare-hex. HMAC input
     unchanged; full suite green. The forward path now verifies identically
-    to production. (Residual: customer-facing SDK/webhook docs that still
-    describe a separate `x-driftstack-signature-prev` header for reading —
-    a doc-accuracy follow-up; no server path emits it now.)
+    to production. (Follow-on DONE: customer docs + all 3 SDK quickstarts +
+    marketing webhook docs corrected — they had told customers to read a
+    separate `x-driftstack-signature-prev` header that no server path emits;
+    rotation verifies from the compound dual-`v1=` single header. RESIDUAL:
+    the SDK _source_ doc-comments (webhook_signature.{ts,py,go}) still claim
+    Driftstack "emits" the separate header — a 3-SDK lockstep doc-comment
+    follow-up; the `headerPrev` API itself stays as backward-compat.)
     The published contract is a Stripe-style compound header:
     `X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>`, HMAC-SHA256 over
     `<t>.<body>` — documented in `webhooks/events.md:64`, verified by all
