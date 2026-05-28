@@ -15,6 +15,7 @@ import {
 import { CostMonitoringService, type UsageAggregator } from '../../src/services/cost-monitoring.js';
 import {
   ScheduledJobsService,
+  type ScheduledJobHandler,
   type ScheduledJobRow,
   type ScheduledJobsRepo,
   type EnqueueScheduledJobInput,
@@ -248,3 +249,122 @@ async function invokeHandler(
   if (!handler) throw new Error('no handler registered');
   await handler(job);
 }
+
+// Minimal fake that models the REAL repo dedup semantics so the re-arm
+// chain can be exercised without a database. `enqueue` no-ops when
+// `dedupOnAccountAndType` is true AND a non-completed job with the same
+// (jobType, accountId) already exists — exactly the predicate
+// (`completed_at IS NULL AND failed_at IS NULL`) the poller leaves the
+// in-flight, still-locked current job in while it runs the handler.
+class FakeScheduledJobs {
+  /** Enqueued jobs; `completed` flips when a job is marked complete. */
+  readonly jobs: Array<{ jobType: string; accountId: string | null; completed: boolean }> = [];
+  private readonly handlers = new Map<string, ScheduledJobHandler>();
+
+  register(jobType: string, handler: ScheduledJobHandler): void {
+    this.handlers.set(jobType, handler);
+  }
+
+  enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }> {
+    if (input.dedupOnAccountAndType) {
+      const dup = this.jobs.some(
+        (j) => !j.completed && j.jobType === input.jobType && j.accountId === input.accountId,
+      );
+      if (dup) return Promise.resolve({ enqueued: false });
+    }
+    this.jobs.push({ jobType: input.jobType, accountId: input.accountId, completed: false });
+    return Promise.resolve({ enqueued: true });
+  }
+
+  getHandler(jobType: string): ScheduledJobHandler {
+    const h = this.handlers.get(jobType);
+    if (!h) throw new Error(`no handler registered for ${jobType}`);
+    return h;
+  }
+
+  pendingOfType(jobType: string): number {
+    return this.jobs.filter((j) => !j.completed && j.jobType === jobType).length;
+  }
+}
+
+describe('V-541.E registerCostNightlyJob — re-arm survives an in-flight job', () => {
+  // PINS THE RE-ARM-SURVIVES-IN-FLIGHT-JOB CONTRACT (same bug class fixed
+  // for sessions.duration_sweep in abcf76e7). The real poller runs
+  // `await handler(job)` BEFORE `await markComplete(job)`, so when the
+  // handler re-arms, the current job is still present + non-completed. A
+  // dedup:true re-arm would see it as a pending duplicate and no-op — the
+  // nightly chain dies after one run (only the bootstrap-on-restart
+  // enqueue would ever fire). The re-arm MUST use dedup:false so the next
+  // run is always enqueued. FAILS pre-fix (re-arm with dedup:true → no
+  // second job); PASSES post-fix. Covers BOTH the populated-accounts
+  // re-arm and the zero-accounts re-arm branch.
+  function makeFakeStack(accountIds: readonly string[]): {
+    fake: FakeScheduledJobs;
+    scheduledJobs: ScheduledJobsService;
+    dispatcher: CostAlertDispatcher;
+    service: CostMonitoringService;
+    accounts: { listAllAccountIds: () => Promise<readonly string[]> };
+    logger: Logger;
+  } {
+    const aggregator: UsageAggregator = {
+      aggregateForAccount: () => Promise.resolve(EMPTY_USAGE),
+    };
+    const service = new CostMonitoringService({
+      aggregator,
+      rates: RATES,
+      tierThresholds: { solo_manual: { softCents: 100, hardCents: 200 } },
+      resolveTier: () => Promise.resolve('solo_manual'),
+    });
+    const dispatcher = new CostAlertDispatcher({ service, sendAlert: () => Promise.resolve() });
+    const fake = new FakeScheduledJobs();
+    return {
+      fake,
+      scheduledJobs: fake as unknown as ScheduledJobsService,
+      dispatcher,
+      service,
+      accounts: { listAllAccountIds: () => Promise.resolve(accountIds) },
+      logger: makeLogger(),
+    };
+  }
+
+  async function runReArmScenario(accountIds: readonly string[]): Promise<FakeScheduledJobs> {
+    const stack = makeFakeStack(accountIds);
+    registerCostNightlyJob({
+      scheduledJobs: stack.scheduledJobs,
+      service: stack.service,
+      dispatcher: stack.dispatcher,
+      accounts: stack.accounts,
+      logger: stack.logger,
+      nowFn: () => new Date('2026-05-11T23:30:00Z').getTime(),
+    });
+
+    // (a) bootstrap-enqueue one nightly job (default dedup:true) → 1 pending.
+    await enqueueNextNightlyRun({ scheduledJobs: stack.scheduledJobs });
+    expect(stack.fake.pendingOfType(COST_NIGHTLY_JOB_TYPE)).toBe(1);
+
+    // (b) run the handler WHILE that bootstrap job is still present +
+    //     non-completed (the poller has not called markComplete yet),
+    //     mimicking runOne's handler-before-markComplete ordering.
+    const handler = stack.fake.getHandler(COST_NIGHTLY_JOB_TYPE);
+    await handler({
+      id: 'job-1',
+      jobType: COST_NIGHTLY_JOB_TYPE,
+      accountId: null,
+      payload: {},
+      runAt: new Date('2026-05-12T00:00:00Z'),
+      attempts: 1,
+      maxAttempts: 3,
+    });
+    return stack.fake;
+  }
+
+  it('re-arms a SECOND nightly job even while the current job is in-flight (populated accounts)', async () => {
+    const fake = await runReArmScenario(['a', 'b']);
+    expect(fake.pendingOfType(COST_NIGHTLY_JOB_TYPE)).toBe(2);
+  });
+
+  it('re-arms a SECOND nightly job even while the current job is in-flight (zero-accounts branch)', async () => {
+    const fake = await runReArmScenario([]);
+    expect(fake.pendingOfType(COST_NIGHTLY_JOB_TYPE)).toBe(2);
+  });
+});

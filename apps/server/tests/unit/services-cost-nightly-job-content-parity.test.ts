@@ -94,27 +94,36 @@ describe('W397.A apps/server/src/services/cost-nightly-job.ts content parity', (
     expect(body).toMatch(
       /opts\.logger\.info\?\.\(\s*\n?\s*\{\s*\n?\s*component: 'cost-nightly',\s*\n?\s*accounts: ids\.length,\s*\n?\s*alerts_fired: result\.alertsFired,\s*\n?\s*alerts_skipped: result\.alertsSkipped,\s*\n?\s*\},\s*\n?\s*'cost nightly recompute complete',\s*\n?\s*\);/,
     );
+    // Re-arm path enqueues with dedup OFF — the in-flight, still-locked
+    // current job would otherwise trip the dedup check and kill the chain.
+    expect(body).toMatch(/\/\/ Re-arm the next run\./);
     expect(body).toMatch(
-      /\/\/ Re-arm the next run\.\s*\n?\s*await enqueueNextNightlyRun\(\{ scheduledJobs: opts\.scheduledJobs, nowFn: now \}\);/,
+      /await enqueueNextNightlyRun\(\{ scheduledJobs: opts\.scheduledJobs, nowFn: now, dedup: false \}\);/,
     );
   });
 
-  it('Zero-accounts branch: debug log + still re-enqueue tomorrow', () => {
+  it('Zero-accounts branch: debug log + still re-enqueue tomorrow (dedup OFF)', () => {
     expect(body).toMatch(/if \(ids\.length === 0\) \{/);
     expect(body).toMatch(
       /opts\.logger\.debug\?\.\(\{ component: 'cost-nightly' \}, 'no accounts to evaluate'\);/,
     );
+    // Zero-accounts is also a re-arm path → dedup:false (chain must survive
+    // the in-flight job even when there's nothing to evaluate).
+    expect(body).toMatch(/\/\/ Even with zero accounts, re-enqueue tomorrow\./);
     expect(body).toMatch(
-      /\/\/ Even with zero accounts, re-enqueue tomorrow\.\s*\n?\s*await enqueueNextNightlyRun\(\{ scheduledJobs: opts\.scheduledJobs, nowFn: now \}\);\s*\n?\s*return;/,
+      /await enqueueNextNightlyRun\(\{ scheduledJobs: opts\.scheduledJobs, nowFn: now, dedup: false \}\);\s*\n?\s*return;/,
     );
   });
 
-  it('enqueueNextNightlyRun: dedupOnAccountAndType=true, accountId=null, runAt=nextMidnightUtc(now), payload={}', () => {
+  it('enqueueNextNightlyRun: dedupOnAccountAndType=opts.dedup ?? true (parameterized), accountId=null, runAt=nextMidnightUtc(now), payload={}', () => {
     expect(body).toMatch(
       /Enqueue the next nightly run\. Idempotent via the scheduled_jobs\s*\n?\s*\*\s*dedup flag: if there's already a pending row for this job_type\s*\n?\s*\*\s*with account_id IS NULL, the enqueue is a no-op\./,
     );
+    // dedup is now parameterized: true (default) for bootstrap, false for the
+    // in-handler re-arm so the still-locked current job can't block re-enqueue.
+    expect(body).toMatch(/dedup\?: boolean;/);
     expect(body).toMatch(
-      /return opts\.scheduledJobs\.enqueue\(\{\s*\n?\s*jobType: COST_NIGHTLY_JOB_TYPE,\s*\n?\s*accountId: null,\s*\n?\s*payload: \{\},\s*\n?\s*runAt: nextMidnightUtc\(new Date\(now\)\),\s*\n?\s*dedupOnAccountAndType: true,\s*\n?\s*\}\);/,
+      /return opts\.scheduledJobs\.enqueue\(\{\s*\n?\s*jobType: COST_NIGHTLY_JOB_TYPE,\s*\n?\s*accountId: null,\s*\n?\s*payload: \{\},\s*\n?\s*runAt: nextMidnightUtc\(new Date\(now\)\),\s*\n?\s*dedupOnAccountAndType: opts\.dedup \?\? true,\s*\n?\s*\}\);/,
     );
   });
 

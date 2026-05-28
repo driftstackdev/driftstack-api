@@ -7,9 +7,24 @@ import { describe, expect, it } from 'vitest';
 import {
   AUTH_TOKENS_SWEEP_JOB_TYPE,
   AuthTokensSweeperService,
+  enqueueNextAuthTokensSweep,
   nextSweepRunAt,
+  registerAuthTokensSweepJob,
 } from '../../src/services/auth-flows-sweeper.js';
 import type { AuthFlowKind, AuthFlowsRepo } from '../../src/services/auth-flows.js';
+import type { Logger } from '../../src/lib/logger.js';
+import type {
+  EnqueueScheduledJobInput,
+  ScheduledJobHandler,
+  ScheduledJobsService,
+} from '../../src/services/scheduled-jobs.js';
+
+const silentLogger = {
+  info() {},
+  warn() {},
+  error() {},
+  debug() {},
+} as unknown as Logger;
 
 function mockRepo(): {
   repo: Pick<AuthFlowsRepo, 'deleteStaleAuthTokens'>;
@@ -105,5 +120,92 @@ describe('AuthTokensSweeperService', () => {
     expect(nextSweepRunAt(new Date('2026-05-20T23:59:00Z')).toISOString()).toBe(
       '2026-05-21T03:00:00.000Z',
     );
+  });
+});
+
+// Minimal fake that models the REAL repo dedup semantics so the re-arm
+// chain can be exercised without a database. `enqueue` no-ops when
+// `dedupOnAccountAndType` is true AND a non-completed job with the same
+// (jobType, accountId) already exists — exactly the predicate
+// (`completed_at IS NULL AND failed_at IS NULL`) the poller leaves the
+// in-flight, still-locked current job in while it runs the handler.
+class FakeScheduledJobs {
+  /** Enqueued jobs; `completed` flips when a job is marked complete. */
+  readonly jobs: Array<{ jobType: string; accountId: string | null; completed: boolean }> = [];
+  private readonly handlers = new Map<string, ScheduledJobHandler>();
+
+  register(jobType: string, handler: ScheduledJobHandler): void {
+    this.handlers.set(jobType, handler);
+  }
+
+  enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }> {
+    if (input.dedupOnAccountAndType) {
+      const dup = this.jobs.some(
+        (j) => !j.completed && j.jobType === input.jobType && j.accountId === input.accountId,
+      );
+      if (dup) return Promise.resolve({ enqueued: false });
+    }
+    this.jobs.push({ jobType: input.jobType, accountId: input.accountId, completed: false });
+    return Promise.resolve({ enqueued: true });
+  }
+
+  getHandler(jobType: string): ScheduledJobHandler {
+    const h = this.handlers.get(jobType);
+    if (!h) throw new Error(`no handler registered for ${jobType}`);
+    return h;
+  }
+
+  pendingOfType(jobType: string): number {
+    return this.jobs.filter((j) => !j.completed && j.jobType === jobType).length;
+  }
+}
+
+describe('AuthTokensSweeperService — re-arm survives an in-flight job', () => {
+  // PINS THE RE-ARM-SURVIVES-IN-FLIGHT-JOB CONTRACT (same bug class fixed
+  // for sessions.duration_sweep in abcf76e7). The real poller runs
+  // `await handler(job)` BEFORE `await markComplete(job)`, so when the
+  // handler re-arms, the current job is still present + non-completed. A
+  // dedup:true re-arm would see it as a pending duplicate and no-op — the
+  // daily sweep chain dies after one run (only the bootstrap-on-restart
+  // enqueue would ever fire). The re-arm MUST use dedup:false so the next
+  // run is always enqueued. FAILS pre-fix (re-arm with dedup:true → no
+  // second job); PASSES post-fix.
+  it('re-arms a SECOND sweep job even while the current job is still in-flight', async () => {
+    const scheduledJobs = new FakeScheduledJobs() as unknown as ScheduledJobsService;
+    const fake = scheduledJobs as unknown as FakeScheduledJobs;
+
+    // tickOnce is a no-op stub — this test only exercises the scheduling
+    // chain, not the per-kind delete logic (covered by the cases above).
+    const sweeper = {
+      tickOnce: () =>
+        Promise.resolve({
+          deletedByKind: { email_verify: 0, magic_link: 0, password_reset: 0 },
+          totalDeleted: 0,
+        }),
+    } as unknown as AuthTokensSweeperService;
+
+    registerAuthTokensSweepJob({ scheduledJobs, sweeper, logger: silentLogger });
+
+    // (a) bootstrap-enqueue one sweep job (default dedup:true) → 1 pending.
+    await enqueueNextAuthTokensSweep({ scheduledJobs });
+    expect(fake.pendingOfType(AUTH_TOKENS_SWEEP_JOB_TYPE)).toBe(1);
+
+    // (b) run the handler WHILE that bootstrap job is still present +
+    //     non-completed (the poller has not called markComplete yet),
+    //     mimicking runOne's handler-before-markComplete ordering.
+    const handler = fake.getHandler(AUTH_TOKENS_SWEEP_JOB_TYPE);
+    await handler({
+      id: 'job-1',
+      jobType: AUTH_TOKENS_SWEEP_JOB_TYPE,
+      accountId: null,
+      payload: {},
+      runAt: new Date('2026-05-20T03:00:00Z'),
+      attempts: 1,
+      maxAttempts: 5,
+    });
+
+    // (c) the chain re-armed: a SECOND sweep job exists despite the first
+    //     still being in-flight.
+    expect(fake.pendingOfType(AUTH_TOKENS_SWEEP_JOB_TYPE)).toBe(2);
   });
 });

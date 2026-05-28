@@ -18,7 +18,11 @@
 //     back later via the same email link).
 //
 // Scheduling: exposes `tickOnce(now)` for a future scheduled-jobs
-// entry. Same pattern as agent-pair-mode-heartbeat-sweep.ts.
+// entry. Same pattern as agent-pair-mode-heartbeat-sweep.ts. The
+// re-arm enqueues with dedup OFF (the still-locked current job would
+// otherwise be mistaken for a pending duplicate); only the bootstrap
+// enqueue dedups, to keep one chain across restarts. See
+// `enqueueNextAuthTokensSweep` JSDoc for the full reasoning.
 
 import type { AuthFlowsRepo, AuthFlowKind } from './auth-flows.js';
 import type { ScheduledJobsService, ScheduledJobRow } from './scheduled-jobs.js';
@@ -81,8 +85,20 @@ export class AuthTokensSweeperService {
  * Wire the sweeper onto the ScheduledJobsService. Cadence: daily at
  * 03:00 UTC (low-traffic window; matches the audit-archive sweep
  * pattern). Re-arms itself after each successful run via
- * `enqueueNextAuthTokensSweep` — idempotent via the dedup-on-account-
- * and-type flag.
+ * `enqueueNextAuthTokensSweep`.
+ *
+ * The re-arm MUST enqueue with `dedup: false`. The poller
+ * (scheduled-jobs.ts `runOne`) runs `await handler(job)` THEN
+ * `await markComplete(job)`, so when this handler fires the
+ * CURRENTLY-EXECUTING job is still locked and has `completed_at IS
+ * NULL`. The repo's `dedupOnAccountAndType` treats any row with
+ * `completed_at IS NULL AND failed_at IS NULL` as a pending duplicate —
+ * it does NOT exclude the in-flight job — so a dedup:true re-arm would
+ * see the running job, no-op, and the sweep chain would DIE after one
+ * run (only the bootstrap-on-restart enqueue would ever fire). Because a
+ * single locked executor processes this job, one handler run produces
+ * exactly one next enqueue, so skipping dedup here can't fan out into
+ * duplicate chains. See `enqueueNextAuthTokensSweep` JSDoc.
  */
 export interface RegisterAuthTokensSweepJobOpts {
   scheduledJobs: ScheduledJobsService;
@@ -107,18 +123,38 @@ export function registerAuthTokensSweepJob(opts: RegisterAuthTokensSweepJobOpts)
       },
       'auth-tokens sweep complete',
     );
-    await enqueueNextAuthTokensSweep({ scheduledJobs: opts.scheduledJobs, nowFn: now });
+    // Re-arm path: dedup OFF — the in-flight (still-locked, not-yet-completed)
+    // current job would otherwise be seen as a pending duplicate and block the
+    // re-enqueue, killing the chain. See JSDoc on RegisterAuthTokensSweepJobOpts.
+    await enqueueNextAuthTokensSweep({
+      scheduledJobs: opts.scheduledJobs,
+      nowFn: now,
+      dedup: false,
+    });
   });
 }
 
 /**
  * Enqueue the next daily sweep at 03:00 UTC strictly after `now`.
- * Idempotent via the dedup-on-account-and-type flag — a pending
- * pending row for this job_type with account_id IS NULL is a no-op.
+ *
+ * `dedup` (default `true`) maps straight to the repo's
+ * `dedupOnAccountAndType` flag — a pending row for this job_type with
+ * account_id IS NULL no-ops the enqueue. Callers MUST pick deliberately:
+ *
+ *   - BOOTSTRAP on app start → dedup:true (default). Prevents a
+ *     crash/restart from leaving two parallel sweep chains running.
+ *   - RE-ARM from inside the handler → dedup:false. The current job is
+ *     still locked + non-completed when the handler runs, so it looks
+ *     like a pending duplicate to the dedup check; dedup:true here would
+ *     no-op every re-arm and the chain would die after one tick. The
+ *     single locked executor guarantees one handler run → one next
+ *     enqueue, so no fan-out risk.
  */
 export async function enqueueNextAuthTokensSweep(opts: {
   scheduledJobs: ScheduledJobsService;
   nowFn?: () => number;
+  /** See JSDoc: true (default) for bootstrap, false for the in-handler re-arm. */
+  dedup?: boolean;
 }): Promise<{ enqueued: boolean }> {
   const now = (opts.nowFn ?? Date.now)();
   return opts.scheduledJobs.enqueue({
@@ -126,7 +162,7 @@ export async function enqueueNextAuthTokensSweep(opts: {
     accountId: null,
     payload: {},
     runAt: nextSweepRunAt(new Date(now)),
-    dedupOnAccountAndType: true,
+    dedupOnAccountAndType: opts.dedup ?? true,
   });
 }
 
