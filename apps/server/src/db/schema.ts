@@ -1793,6 +1793,12 @@ export const agentSessions = pgTable(
       dataType: () => 'bytea',
     })('gui_control_key_ciphertext'),
     mode: text('mode').notNull().default('ai'),
+    // 6.c / #15 (migration 0066) — per-session model picker. Which Claude
+    // 4.x model the AI agent runs; drives the per-model cost-to-serve rate
+    // via the api-types CLAUDE_MODELS registry. Existing rows default to
+    // 'claude-opus-4-7' (the prior hardcoded model); SDK/dashboard pick at
+    // create-time. CHECK constraint lives in the migration.
+    model: text('model').notNull().default('claude-opus-4-7'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
