@@ -56,27 +56,26 @@ describe('services/agent-decomposer-claude content parity', () => {
     );
   });
 
-  it('5-constant catalog pinned: ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages" + ANTHROPIC_VERSION_HEADER = "2023-06-01" + MODEL = "claude-opus-4-7" + MAX_OUTPUT_TOKENS = 2048 + MAX_RETRIES_5XX = 1 + DEFAULT_RETRY_BACKOFF_MS = 1000. Drift to the wrong API URL would call Anthropic legacy endpoints; drift to a different version header would silently break on wire-format changes; drift to a different model would diverge from the cost-rate-table', () => {
+  it('5-constant catalog pinned: ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages" + ANTHROPIC_VERSION_HEADER = "2023-06-01" + MAX_OUTPUT_TOKENS = 2048 + MAX_RETRIES_5XX = 1 + DEFAULT_RETRY_BACKOFF_MS = 1000. Drift to the wrong API URL would call Anthropic legacy endpoints; drift to a different version header would silently break on wire-format changes. (The model id is no longer a constant — it is the session-picked model per 6.c, defaulting to DEFAULT_AGENT_MODEL.)', () => {
     expect(body).toMatch(
       /const ANTHROPIC_API_URL = 'https:\/\/api\.anthropic\.com\/v1\/messages';/,
     );
     expect(body).toMatch(/const ANTHROPIC_VERSION_HEADER = '2023-06-01';/);
-    expect(body).toMatch(/const MODEL = 'claude-opus-4-7';/);
     expect(body).toMatch(/const MAX_OUTPUT_TOKENS = 2048;/);
     expect(body).toMatch(/const MAX_RETRIES_5XX = 1;/);
     expect(body).toMatch(/const DEFAULT_RETRY_BACKOFF_MS = 1000;/);
+    // The hardcoded MODEL const was retired with the per-session picker.
+    expect(body).not.toMatch(/const MODEL = /);
   });
 
-  it("v2-#4 Q.1.e pricing rate-table pinned: CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK = 5 + CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK = 25 (Opus 4.7 real list price). + 'Sourced from https://www.anthropic.com/pricing — verify quarterly + on model version bumps. If the rate is wrong, historical rows keep their recorded cost (we don't recompute), so the audit trail stays internally consistent even when the rate-table drifts.' framing — pinned so the rate-table source URL + verify-quarterly + no-recompute-on-drift contract stay documented", () => {
-    expect(body).toMatch(/const CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK = 5;/);
-    expect(body).toMatch(/const CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK = 25;/);
-    expect(body).toMatch(/Sourced from\s*\n?\s*\/\/ https:\/\/www\.anthropic\.com\/pricing/);
+  it("6.c / #15 per-model rate sourcing pinned: imports CLAUDE_MODELS + DEFAULT_AGENT_MODEL from @driftstack/api-types; makeClaudeUsage looks up CLAUDE_MODELS[model] for the per-call cost (replacing the hardcoded Opus PER_MTOK consts). + 'If a rate is wrong, historical rows keep their recorded cost (we don't recompute), so the audit trail stays internally consistent even when the rate-table drifts.' framing — pinned so the registry-sourced-rate + no-recompute-on-drift contract stay documented", () => {
     expect(body).toMatch(
-      /verify quarterly \+ on model\s*\n?\s*\/\/ version bumps\. If the rate is wrong, historical rows keep their/,
+      /import \{ CLAUDE_MODELS, DEFAULT_AGENT_MODEL, type AgentModel \} from '@driftstack\/api-types';/,
     );
-    expect(body).toMatch(
-      /recorded cost \(we don't recompute\), so the audit trail stays\s*\n?\s*\/\/ internally consistent even when the rate-table drifts\./,
-    );
+    expect(body).toMatch(/const rate = CLAUDE_MODELS\[model\];/);
+    expect(body).toMatch(/const model = args\.model \?\? DEFAULT_AGENT_MODEL;/);
+    expect(body).not.toMatch(/CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK/);
+    expect(body).toMatch(/historical rows keep their recorded cost \(we don't recompute\)/);
   });
 
   it("AUP pre-filter shared-corpus framing pinned: 'identical to the deterministic decomposer's corpus so the same obvious-abuse short-circuit applies before any LLM call. The model itself acts as a second filter via the system prompt; this layer exists so a known-abusive task can never bill the API or appear in Anthropic logs.' — pinned so the dual-filter (pre-API + system-prompt) + never-billed-never-logged-in-Anthropic contract all stay documented", () => {

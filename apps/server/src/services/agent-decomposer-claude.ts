@@ -24,6 +24,7 @@
 //   - Malformed JSON content → throws (the wire is broken; surfacing
 //     a refuse would silently mask the bug).
 
+import { CLAUDE_MODELS, DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import type {
   AgentDecomposer,
   AgentIntent,
@@ -34,20 +35,16 @@ import type {
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION_HEADER = '2023-06-01';
-const MODEL = 'claude-opus-4-7';
 const MAX_OUTPUT_TOKENS = 2048;
 const MAX_RETRIES_5XX = 1;
 const DEFAULT_RETRY_BACKOFF_MS = 1000;
 
-// v2-#4 Q.1.e — Anthropic public list pricing per million tokens for
-// claude-opus-4-7. Used to compute the per-call USD cents recorded in
-// usage_records.metadata.cost_usd_cents. Sourced from
-// https://www.anthropic.com/pricing — verify quarterly + on model
-// version bumps. If the rate is wrong, historical rows keep their
-// recorded cost (we don't recompute), so the audit trail stays
-// internally consistent even when the rate-table drifts.
-const CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK = 5;
-const CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK = 25;
+// v2-#4 Q.1.e / 6.c (#15) — per-call USD cents (recorded in
+// usage_records.metadata.cost_usd_cents) are computed from the per-model
+// Anthropic list-price rate in the api-types CLAUDE_MODELS registry
+// (cents/1k), keyed by the session's selected model. If a rate is wrong,
+// historical rows keep their recorded cost (we don't recompute), so the
+// audit trail stays internally consistent even when the rate-table drifts.
 
 // AUP pre-filter — identical to the deterministic decomposer's corpus
 // so the same obvious-abuse short-circuit applies before any LLM call.
@@ -134,6 +131,10 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
   }
 
   async decompose(args: DecomposeArgs): Promise<DecomposeResult> {
+    // 6.c / #15 — the session's picked Claude 4.x model (defaults to
+    // Opus 4.7 when unset); drives the Anthropic call + the per-model
+    // cost-to-serve rate via CLAUDE_MODELS.
+    const model = args.model ?? DEFAULT_AGENT_MODEL;
     // 1. Pre-API AUP filter — short-circuit obvious abuse cases so the
     //    Anthropic API never sees them (don't put abusive prompts into
     //    third-party logs, don't bill the customer for an inevitable
@@ -147,7 +148,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
         kind: 'refuse',
         refuseReason: aupRefusal,
         tokensConsumed: estimateTokens(args.task, args.history),
-        usage: makeClaudeUsage(0, 0),
+        usage: makeClaudeUsage(0, 0, model),
       };
     }
 
@@ -159,7 +160,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
         kind: 'refuse',
         refuseReason: 'token budget exhausted; start a new session',
         tokensConsumed: 0,
-        usage: makeClaudeUsage(0, 0),
+        usage: makeClaudeUsage(0, 0, model),
       };
     }
 
@@ -176,7 +177,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
     //    plans + executor results.
     const messages = buildMessages(args);
     const body = JSON.stringify({
-      model: MODEL,
+      model,
       max_tokens: MAX_OUTPUT_TOKENS,
       system: SYSTEM_PROMPT,
       messages,
@@ -187,8 +188,9 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
 
     // 6. Parse the response. Token accounting comes from the API's
     //    usage block — input + output combined, since the customer
-    //    pays for both halves of the trip.
-    return parseAnthropicResponse(response);
+    //    pays for both halves of the trip. The model threads through so
+    //    the recorded cost uses its per-model rate.
+    return parseAnthropicResponse(response, model);
   }
 
   private async callWithRetry(body: string, apiKey: string): Promise<AnthropicResponseJson> {
@@ -269,7 +271,7 @@ function buildMessages(args: DecomposeArgs): AgentRequestMessage[] {
   return messages;
 }
 
-function parseAnthropicResponse(json: AnthropicResponseJson): DecomposeResult {
+function parseAnthropicResponse(json: AnthropicResponseJson, model: AgentModel): DecomposeResult {
   const textBlock = json.content.find((c) => c.type === 'text' && typeof c.text === 'string');
   if (!textBlock || typeof textBlock.text !== 'string') {
     throw new Error('Anthropic response missing text content block');
@@ -296,7 +298,7 @@ function parseAnthropicResponse(json: AnthropicResponseJson): DecomposeResult {
   const inputTokens = json.usage?.input_tokens ?? 0;
   const outputTokens = json.usage?.output_tokens ?? 0;
   const tokensConsumed = inputTokens + outputTokens;
-  const usage = makeClaudeUsage(inputTokens, outputTokens);
+  const usage = makeClaudeUsage(inputTokens, outputTokens, model);
 
   if (kind === 'plan') {
     const intents = parseIntents(obj.intents);
@@ -329,17 +331,23 @@ function parseAnthropicResponse(json: AnthropicResponseJson): DecomposeResult {
  * conservative upper bound on what we'd bill if/when bundled-LLM
  * billing turns on).
  */
-function makeClaudeUsage(inputTokens: number, outputTokens: number): DecomposeUsage {
-  const inputCostUsd = (inputTokens / 1_000_000) * CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK;
-  const outputCostUsd = (outputTokens / 1_000_000) * CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK;
-  const totalUsd = inputCostUsd + outputCostUsd;
-  const costUsdCents = Math.ceil(totalUsd * 100);
+function makeClaudeUsage(
+  inputTokens: number,
+  outputTokens: number,
+  model: AgentModel = DEFAULT_AGENT_MODEL,
+): DecomposeUsage {
+  // Per-model Anthropic list-price rate (cents per 1k tokens) from the
+  // canonical registry. Math.ceil so micro-rows don't undercount.
+  const rate = CLAUDE_MODELS[model];
+  const inputCents = (inputTokens / 1000) * rate.inputCentsPer1k;
+  const outputCents = (outputTokens / 1000) * rate.outputCentsPer1k;
+  const costUsdCents = Math.ceil(inputCents + outputCents);
   return {
     decomposerKind: 'claude',
     anthropicInputTokens: inputTokens,
     anthropicOutputTokens: outputTokens,
     costUsdCents,
-    model: MODEL,
+    model,
   };
 }
 
@@ -423,10 +431,7 @@ async function safeReadBody(res: Response): Promise<string> {
 export const __TEST_ONLY__ = {
   SYSTEM_PROMPT,
   AUP_REFUSAL_PATTERNS,
-  MODEL,
   ANTHROPIC_API_URL,
   ANTHROPIC_VERSION_HEADER,
-  CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK,
-  CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK,
   makeClaudeUsage,
 };

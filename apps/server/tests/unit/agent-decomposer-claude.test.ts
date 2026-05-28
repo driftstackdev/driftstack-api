@@ -319,7 +319,7 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(headers['content-type']).toBe('application/json');
     });
 
-    it('targets the locked Claude Opus 4.7 model id', async () => {
+    it('defaults to Claude Opus 4.7 when no model is picked', async () => {
       const { fetch, calls } = sequenceFetch([
         jsonResponse({ kind: 'clarify', clarifyingQuestion: 'q?' }),
       ]);
@@ -327,7 +327,16 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       await dec.decompose(defaultArgs({ task: 'ambiguous' }));
       const body = JSON.parse(calls[0]!.init.body as string) as { model: string };
       expect(body.model).toBe('claude-opus-4-7');
-      expect(__TEST_ONLY__.MODEL).toBe('claude-opus-4-7');
+    });
+
+    it('threads the session-picked model (6.c) into the Anthropic request body', async () => {
+      const { fetch, calls } = sequenceFetch([
+        jsonResponse({ kind: 'clarify', clarifyingQuestion: 'q?' }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await dec.decompose(defaultArgs({ task: 'ambiguous', model: 'claude-haiku-4-5' }));
+      const body = JSON.parse(calls[0]!.init.body as string) as { model: string };
+      expect(body.model).toBe('claude-haiku-4-5');
     });
 
     it('threads archetype into the user message + system prompt into request body', async () => {

@@ -23,6 +23,9 @@
  * question / refusal. Stored per agent-session in `agent_sessions`
  * (D1 design doc; landed under a separate slice).
  */
+
+import type { AgentModel } from '@driftstack/api-types';
+
 export interface TranscriptEntry {
   /** ISO timestamp the entry was created. */
   at: string;
@@ -179,6 +182,14 @@ export interface DecomposeArgs {
    * NEVER echoed into transcript or error responses.
    */
   byokAnthropicApiKey?: string;
+  /**
+   * 6.c / #15 — Claude 4.x model the AI agent runs this turn, sourced
+   * from the session's `agent_sessions.model`. The ClaudeAgentDecomposer
+   * looks up its per-model cost-to-serve rate in the api-types
+   * CLAUDE_MODELS registry; defaults to DEFAULT_AGENT_MODEL (Opus 4.7)
+   * when unset. The DeterministicAgentDecomposer ignores it (no LLM call).
+   */
+  model?: AgentModel;
 }
 
 /**
