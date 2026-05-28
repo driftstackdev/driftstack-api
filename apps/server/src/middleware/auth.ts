@@ -26,6 +26,16 @@ declare module 'fastify' {
   }
   interface FastifyInstance {
     requireAuth: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    /**
+     * SSE/EventSource auth. Identical to {@link requireAuth} except it
+     * ALSO accepts the bearer token from a `?ds_token=` query param —
+     * the browser `EventSource` API can't set an `Authorization`
+     * header. The header still wins when present. Opt-in per-route:
+     * wire it ONLY on `text/event-stream` routes (query-string
+     * credentials can surface in access logs). Implements the
+     * documented transcript-stream contract (apps/docs api/agent-sessions).
+     */
+    requireAuthEventSource: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     requireScope: (
       scope: ApiKeyScope,
     ) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -115,6 +125,54 @@ function authPlugin(
   };
 
   app.decorate('requireAuth', requireAuth);
+
+  // SSE/EventSource auth — accepts the bearer token from `?ds_token=`
+  // when no Authorization header is present (EventSource can't set
+  // headers). Standalone (NOT a wrapper around requireAuth) so the
+  // proven header-only path stays byte-for-byte unchanged. The header
+  // wins when both are supplied. See the FastifyInstance decl above.
+  const requireAuthEventSource = async (
+    request: FastifyRequest,
+    _reply: FastifyReply,
+  ): Promise<void> => {
+    try {
+      let token: string;
+      if (request.headers.authorization) {
+        token = extractBearerToken(request.headers.authorization);
+      } else {
+        const query = request.query as { ds_token?: unknown } | undefined;
+        const dsToken =
+          query !== undefined && typeof query.ds_token === 'string' ? query.ds_token : undefined;
+        if (dsToken === undefined || dsToken.length === 0) {
+          throw new UnauthorizedError('Missing Authorization header or ds_token query param.');
+        }
+        token = dsToken;
+      }
+      const ctx = await authenticate(
+        opts.authRepo,
+        token,
+        opts.authCache,
+        new Date(),
+        opts.authCoalescer,
+        opts.staffEmails ?? new Set(),
+      );
+      request.account = ctx;
+      try {
+        opts.metrics?.inc(METRIC_NAMES.authTotal, { outcome: 'ok' });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
+    } catch (err) {
+      try {
+        opts.metrics?.inc(METRIC_NAMES.authTotal, { outcome: classifyAuthError(err) });
+      } catch {
+        // Swallow; metrics are best-effort.
+      }
+      throw err;
+    }
+  };
+
+  app.decorate('requireAuthEventSource', requireAuthEventSource);
 
   app.decorate('requireScope', (scope: ApiKeyScope) => {
     return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {

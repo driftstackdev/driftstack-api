@@ -501,9 +501,13 @@ export function registerAgentSessionsRoutes(
   // disconnect: client sends the last `index` it saw; server replays
   // every entry with index > last-id, then live-streams new appends.
   if (transcriptEventBus !== undefined) {
-    app.get<{ Params: { id: string } }>(
+    app.get<{ Params: { id: string }; Querystring: { ds_token?: string } }>(
       '/v1/agent-sessions/:id/transcript',
-      { preHandler: [app.requireAuth, app.rateLimit('global')] },
+      // SSE: EventSource can't set an Authorization header, so this
+      // route also accepts the bearer token via `?ds_token=` (documented
+      // contract — apps/docs api/agent-sessions). requireAuthEventSource
+      // reads the query fallback; the header still wins when present.
+      { preHandler: [app.requireAuthEventSource, app.rateLimit('global')] },
       async (req, reply) => {
         const ctx = requireCtx(req);
         const session = await sessions.get(req.params.id);

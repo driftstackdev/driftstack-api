@@ -1,13 +1,17 @@
 // W394.B — drift guard for apps/server/src/middleware/auth.ts.
 // Auth plugin: validates Authorization header, attaches account
-// context to request.account, and provides 3 decorators on the
-// Fastify instance — requireAuth, requireScope, requireMfaFresh.
+// context to request.account, and provides 4 decorators on the
+// Fastify instance — requireAuth, requireAuthEventSource, requireScope,
+// requireMfaFresh.
 // V-353e step-up MFA gate is the load-bearing addition; drift here
 // either always-blocks legitimate fresh sessions or always-allows
 // stale ones.
 //
 //   • requireAuth: extractBearerToken → authenticate → set
 //     request.account.
+//   • requireAuthEventSource: like requireAuth but ALSO accepts the
+//     bearer token from a `?ds_token=` query param (SSE/EventSource
+//     can't set headers); header wins. Opt-in per-route.
 //   • requireScope: optional preHandler factory; calls requireAuth
 //     if request.account null.
 //   • V-353e requireMfaFresh: 4 bypass cases (no MfaService wired /
@@ -45,9 +49,12 @@ describe('W394.B apps/server/src/middleware/auth.ts content parity', () => {
     );
   });
 
-  it('FastifyInstance type augmentation: requireAuth + requireScope (factory) + requireMfaFresh (factory)', () => {
+  it('FastifyInstance type augmentation: requireAuth + requireAuthEventSource + requireScope (factory) + requireMfaFresh (factory)', () => {
     expect(body).toMatch(
       /requireAuth: \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>;/,
+    );
+    expect(body).toMatch(
+      /requireAuthEventSource: \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>;/,
     );
     expect(body).toMatch(
       /requireScope: \(\s*\n?\s*scope: ApiKeyScope,\s*\n?\s*\) => \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>;/,

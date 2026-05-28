@@ -897,9 +897,9 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
           transcriptList.innerHTML = '';
         }
         // EventSource doesn't support custom Authorization headers.
-        // The server-side route accepts the bearer token via cookie OR
-        // a query string param (?ds_token=) as a fallback for SSE
-        // clients — pin the route layer's contract here.
+        // The server-side route (requireAuthEventSource) accepts the
+        // bearer token via a `?ds_token=` query string param as a
+        // fallback for SSE clients — pin the route layer's contract here.
         const url =
           apiBaseUrl +
           '/v1/agent-sessions/' +

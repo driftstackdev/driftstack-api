@@ -6,7 +6,8 @@
 //
 //   - decorateRequest('account') as the per-request auth-context
 //     anchor (typed via declare-module Fastify augmentation)
-//   - 3 decorators on the Fastify instance: requireAuth, requireScope,
+//   - 4 decorators on the Fastify instance: requireAuth,
+//     requireAuthEventSource (SSE ds_token query fallback), requireScope,
 //     requireMfaFresh (V-353e step-up gate)
 //   - DEFAULT_MFA_FRESHNESS_SECONDS = 15 * 60 (15 minutes per
 //     V-353a Q4 verdict) — matches cross-SDK W682
@@ -46,13 +47,16 @@ describe('W712 server-side auth middleware parity', () => {
     expect(existsSync(AUTH_MIDDLEWARE), `missing ${AUTH_MIDDLEWARE}`).toBe(true);
   });
 
-  it('CRITICAL Fastify type augmentation pinned — declare module fastify adds `account` to FastifyRequest + 3 decorator methods to FastifyInstance. The augmentation is what gives TypeScript route handlers visibility into the account context without per-route generics.', () => {
+  it('CRITICAL Fastify type augmentation pinned — declare module fastify adds `account` to FastifyRequest + 4 decorator methods to FastifyInstance. The augmentation is what gives TypeScript route handlers visibility into the account context without per-route generics.', () => {
     const src = read(AUTH_MIDDLEWARE);
 
     expect(src).toMatch(/declare module 'fastify' \{/);
     expect(src).toMatch(/interface FastifyRequest \{\s*\n?\s*account: AccountContext \| null;/);
     expect(src).toMatch(/interface FastifyInstance \{/);
     expect(src).toMatch(/requireAuth:/);
+    // SSE/EventSource auth variant — accepts the bearer token from a
+    // `?ds_token=` query param (EventSource can't set headers).
+    expect(src).toMatch(/requireAuthEventSource:/);
     expect(src).toMatch(/requireScope:/);
     expect(src).toMatch(/requireMfaFresh:/);
   });
@@ -80,6 +84,7 @@ describe('W712 server-side auth middleware parity', () => {
     const src = read(AUTH_MIDDLEWARE);
     expect(src).toMatch(/app\.decorateRequest\('account', null\)/);
     expect(src).toMatch(/app\.decorate\('requireAuth', requireAuth\)/);
+    expect(src).toMatch(/app\.decorate\('requireAuthEventSource', requireAuthEventSource\)/);
   });
 
   it("CRITICAL requireScope decorator factory pinned — returns a per-route hook that calls requireAuth first (if needed) then requireScope on the context. The 2-step shape is what lets routes compose `app.requireScope('admin')` directly in route options without manual auth chaining.", () => {
@@ -148,10 +153,11 @@ describe('W712 server-side auth middleware parity', () => {
     expect(src).toMatch(/mfaService\?: MfaService \| null;/);
   });
 
-  it('Server auth-middleware 5-invariant cluster — 3 decorators (requireAuth/requireScope/requireMfaFresh) + 15-min DEFAULT_MFA_FRESHNESS + Bearer extraction + 5-arg authenticate() + bypass-on-API-key. Drift on any would fragment the canonical auth gate.', () => {
+  it('Server auth-middleware invariant cluster — 4 decorators (requireAuth/requireAuthEventSource/requireScope/requireMfaFresh) + 15-min DEFAULT_MFA_FRESHNESS + Bearer extraction + 5-arg authenticate() + bypass-on-API-key. Drift on any would fragment the canonical auth gate.', () => {
     const src = read(AUTH_MIDDLEWARE);
 
     expect(src).toMatch(/requireAuth/);
+    expect(src).toMatch(/requireAuthEventSource/);
     expect(src).toMatch(/requireScope/);
     expect(src).toMatch(/requireMfaFresh/);
     expect(src).toMatch(/15 \* 60/);
