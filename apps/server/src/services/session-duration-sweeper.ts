@@ -17,7 +17,10 @@
 // ScheduledJobsService and re-arms itself after each run, same shape as the
 // auth-tokens sweeper. Cadence is short (every 2 min) because a 20-min cap
 // needs reasonably prompt enforcement — a session is destroyed within ~2
-// min of crossing 20 min.
+// min of crossing 20 min. The re-arm enqueues with dedup OFF (the still-
+// locked current job would otherwise be mistaken for a pending duplicate);
+// only the bootstrap enqueue dedups, to keep one chain across restarts.
+// See `enqueueNextSessionDurationSweep` JSDoc for the full reasoning.
 
 import { type AccountTier, AccountTierSchema } from '@driftstack/api-types';
 import { maxSessionMinutesFor, type SessionRepo, type SessionsService } from './sessions.js';
@@ -159,26 +162,55 @@ export interface RegisterSessionDurationSweepJobOpts {
 /**
  * Wire the duration sweeper onto the ScheduledJobsService. The handler runs
  * one tick then re-arms the next run at `now + SESSION_DURATION_SWEEP_
- * INTERVAL_MS`. Re-enqueue is idempotent via the V-202d dedup-on-account-
- * and-type flag (job_type `sessions.duration_sweep`, account_id NULL) so a
- * crash/restart can't leave two sweep chains running.
+ * INTERVAL_MS`.
+ *
+ * The re-arm MUST enqueue with `dedup: false`. The poller (scheduled-jobs.ts
+ * `runOne`) runs `await handler(job)` THEN `await markComplete(job)`, so when
+ * this handler fires the CURRENTLY-EXECUTING job is still locked and has
+ * `completed_at IS NULL`. The repo's `dedupOnAccountAndType` treats any row
+ * with `completed_at IS NULL AND failed_at IS NULL` as a pending duplicate —
+ * it does NOT exclude the in-flight job — so a dedup:true re-arm would see
+ * the running job, no-op, and the sweep chain would DIE after one run (only
+ * the bootstrap-on-restart enqueue would ever fire). Because a single locked
+ * executor processes this job, one handler run produces exactly one next
+ * enqueue, so skipping dedup here can't fan out into duplicate chains.
  */
 export function registerSessionDurationSweepJob(opts: RegisterSessionDurationSweepJobOpts): void {
   const now = opts.nowFn ?? Date.now;
   opts.scheduledJobs.register(SESSION_DURATION_SWEEP_JOB_TYPE, async (_job: ScheduledJobRow) => {
     await opts.sweeper.tickOnce(new Date(now()));
-    await enqueueNextSessionDurationSweep({ scheduledJobs: opts.scheduledJobs, nowFn: now });
+    // Re-arm path: dedup OFF — the in-flight (still-locked, not-yet-completed)
+    // current job would otherwise be seen as a pending duplicate and block the
+    // re-enqueue, killing the chain. See JSDoc above.
+    await enqueueNextSessionDurationSweep({
+      scheduledJobs: opts.scheduledJobs,
+      nowFn: now,
+      dedup: false,
+    });
   });
 }
 
 /**
  * Enqueue the next duration sweep at `now + SESSION_DURATION_SWEEP_INTERVAL_
- * MS`. Idempotent via the dedup-on-account-and-type flag — a pending row for
- * this job_type with account_id IS NULL is a no-op.
+ * MS`.
+ *
+ * `dedup` (default `true`) maps straight to the repo's
+ * `dedupOnAccountAndType` flag — a pending row for this job_type with
+ * account_id IS NULL no-ops the enqueue. Callers MUST pick deliberately:
+ *
+ *   - BOOTSTRAP on app start → dedup:true (default). Prevents a crash/restart
+ *     from leaving two parallel sweep chains running.
+ *   - RE-ARM from inside the handler → dedup:false. The current job is still
+ *     locked + non-completed when the handler runs, so it looks like a pending
+ *     duplicate to the dedup check; dedup:true here would no-op every re-arm
+ *     and the chain would die after one tick. The single locked executor
+ *     guarantees one handler run → one next enqueue, so no fan-out risk.
  */
 export async function enqueueNextSessionDurationSweep(opts: {
   scheduledJobs: ScheduledJobsService;
   nowFn?: () => number;
+  /** See JSDoc: true (default) for bootstrap, false for the in-handler re-arm. */
+  dedup?: boolean;
 }): Promise<{ enqueued: boolean }> {
   const now = (opts.nowFn ?? Date.now)();
   return opts.scheduledJobs.enqueue({
@@ -186,6 +218,6 @@ export async function enqueueNextSessionDurationSweep(opts: {
     accountId: null,
     payload: {},
     runAt: new Date(now + SESSION_DURATION_SWEEP_INTERVAL_MS),
-    dedupOnAccountAndType: true,
+    dedupOnAccountAndType: opts.dedup ?? true,
   });
 }

@@ -20,11 +20,18 @@ import {
   SESSION_DURATION_SWEEP_JOB_TYPE,
   SessionDurationSweeperService,
   durationCutoffsFor,
+  enqueueNextSessionDurationSweep,
+  registerSessionDurationSweepJob,
 } from '../../src/services/session-duration-sweeper.js';
 import { SessionsService } from '../../src/services/sessions.js';
 import { InMemorySessionsRepo } from '../integration/_helpers/in-memory-sessions-repo.js';
 import type { Driver } from '../../src/drivers/types.js';
 import type { Logger } from '../../src/lib/logger.js';
+import type {
+  EnqueueScheduledJobInput,
+  ScheduledJobHandler,
+  ScheduledJobsService,
+} from '../../src/services/scheduled-jobs.js';
 
 const NOW = new Date('2026-05-27T12:00:00.000Z');
 const MIN = 60 * 1000;
@@ -223,5 +230,87 @@ describe('SessionDurationSweeperService — free-tier auto-destroy safety', () =
   it('job type is sessions.duration_sweep + cadence is 2 minutes', () => {
     expect(SESSION_DURATION_SWEEP_JOB_TYPE).toBe('sessions.duration_sweep');
     expect(SESSION_DURATION_SWEEP_INTERVAL_MS).toBe(2 * 60 * 1000);
+  });
+});
+
+// Minimal fake that models the REAL repo dedup semantics so the re-arm
+// chain can be exercised without a database. `enqueue` no-ops when
+// `dedupOnAccountAndType` is true AND a non-completed job with the same
+// (jobType, accountId) already exists — exactly the predicate
+// (`completed_at IS NULL AND failed_at IS NULL`) the poller leaves the
+// in-flight, still-locked current job in while it runs the handler.
+class FakeScheduledJobs {
+  /** Enqueued jobs; `completed` flips when a job is marked complete. */
+  readonly jobs: Array<{ jobType: string; accountId: string | null; completed: boolean }> = [];
+  private readonly handlers = new Map<string, ScheduledJobHandler>();
+
+  register(jobType: string, handler: ScheduledJobHandler): void {
+    this.handlers.set(jobType, handler);
+  }
+
+  enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }> {
+    if (input.dedupOnAccountAndType) {
+      const dup = this.jobs.some(
+        (j) => !j.completed && j.jobType === input.jobType && j.accountId === input.accountId,
+      );
+      if (dup) return Promise.resolve({ enqueued: false });
+    }
+    this.jobs.push({ jobType: input.jobType, accountId: input.accountId, completed: false });
+    return Promise.resolve({ enqueued: true });
+  }
+
+  getHandler(jobType: string): ScheduledJobHandler {
+    const h = this.handlers.get(jobType);
+    if (!h) throw new Error(`no handler registered for ${jobType}`);
+    return h;
+  }
+
+  pendingOfType(jobType: string): number {
+    return this.jobs.filter((j) => !j.completed && j.jobType === jobType).length;
+  }
+}
+
+describe('SessionDurationSweeperService — re-arm survives an in-flight job', () => {
+  // PINS THE RE-ARM-SURVIVES-IN-FLIGHT-JOB CONTRACT. This is the test that
+  // SHOULD have caught the staging bug where the sweep only ran once per
+  // bootstrap. The real poller runs `await handler(job)` BEFORE
+  // `await markComplete(job)`, so when the handler re-arms, the current job
+  // is still present + non-completed. A dedup:true re-arm would see it as a
+  // pending duplicate and no-op — the chain dies. The re-arm MUST use
+  // dedup:false so the next run is always enqueued. FAILS pre-fix
+  // (re-arm with dedup:true → no second job); PASSES post-fix.
+  it('re-arms a SECOND sweep job even while the current job is still in-flight', async () => {
+    const scheduledJobs = new FakeScheduledJobs() as unknown as ScheduledJobsService;
+    const fake = scheduledJobs as unknown as FakeScheduledJobs;
+
+    // tickOnce is a no-op — this test only exercises the scheduling chain,
+    // not the destroy logic (covered by the cases above).
+    const sweeper = {
+      tickOnce: () => Promise.resolve({ destroyed: 0, candidates: 0 }),
+    } as unknown as SessionDurationSweeperService;
+
+    registerSessionDurationSweepJob({ scheduledJobs, sweeper, logger: silentLogger });
+
+    // (a) bootstrap-enqueue one sweep job (default dedup:true) → 1 pending.
+    await enqueueNextSessionDurationSweep({ scheduledJobs });
+    expect(fake.pendingOfType(SESSION_DURATION_SWEEP_JOB_TYPE)).toBe(1);
+
+    // (b) run the handler WHILE that bootstrap job is still present +
+    //     non-completed (the poller has not called markComplete yet),
+    //     mimicking runOne's handler-before-markComplete ordering.
+    const handler = fake.getHandler(SESSION_DURATION_SWEEP_JOB_TYPE);
+    await handler({
+      id: 'job-1',
+      jobType: SESSION_DURATION_SWEEP_JOB_TYPE,
+      accountId: null,
+      payload: {},
+      runAt: NOW,
+      attempts: 1,
+      maxAttempts: 5,
+    });
+
+    // (c) the chain re-armed: a SECOND sweep job exists despite the first
+    //     still being in-flight.
+    expect(fake.pendingOfType(SESSION_DURATION_SWEEP_JOB_TYPE)).toBe(2);
   });
 });
