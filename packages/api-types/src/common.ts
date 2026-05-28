@@ -154,6 +154,44 @@ export const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = {
 };
 
 /**
+ * 6.g — saved-proxy (egress endpoint) count cap per tier. Every session
+ * must launch through a proxy (a session on the bare datacenter IP is not
+ * permitted), so free gets exactly 1 (BYO SOCKS5; no OpenVPN/WireGuard —
+ * see TierFeatures.vpnEgress). Paid tiers scale up + unlock VPN egress.
+ * `'custom'` = negotiated (Enterprise). Mirrors the PROFILES_PER_TIER
+ * shape; server-side enforcement reads this at the saved-proxy create
+ * gate (egress backend partly stubbed today → enforced when it lands).
+ */
+export const PROXIES_PER_TIER: Record<AccountTier, number | 'custom'> = {
+  free: 1,
+  solo_manual: 10,
+  team_manual: 25,
+  agency_manual: 50,
+  api_starter: 25,
+  api_builder: 100,
+  api_scale: 500,
+  enterprise: 'custom',
+};
+
+/**
+ * 6.g — maximum wall-clock duration (minutes) for a single session before
+ * auto-destroy. `null` = unlimited (paid tiers). Free is capped so it
+ * reads as an evaluation tier (bounds the fleet-slot cost-to-serve and
+ * deters sustained free use) without needing a daily-usage meter. The
+ * session service enforces this at create + via the idle/duration sweep.
+ */
+export const MAX_SESSION_MINUTES_PER_TIER: Record<AccountTier, number | null> = {
+  free: 20,
+  solo_manual: null,
+  team_manual: null,
+  agency_manual: null,
+  api_starter: null,
+  api_builder: null,
+  api_scale: null,
+  enterprise: null,
+};
+
+/**
  * V-219 — per-tier rate-limit defaults (token-bucket capacity + refill).
  *
  * One config per `(tier, bucketKey)`. Two bucket keys are defined today:
@@ -294,6 +332,13 @@ export interface TierFeatures {
   aiAgent: boolean;
   /** LLM billing model when aiAgent is true; `null` when off. */
   llmBilling: LlmBilling;
+  /**
+   * 6.g — OpenVPN / WireGuard egress profiles allowed on this tier.
+   * `false` on free (SOCKS5 proxy only — see PROXIES_PER_TIER); all
+   * paid tiers `true`. (Every tier needs at least one proxy: a session
+   * on the bare datacenter IP is not permitted.)
+   */
+  vpnEgress: boolean;
   /** Vestigial; always false (the perpetual free tier replaced the one-time trial_pack). TODO(6.b): remove with the trial billing logic. */
   trialPack: boolean;
 }
@@ -306,6 +351,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     apiAccess: false,
     aiAgent: false,
     llmBilling: null,
+    vpnEgress: false,
     trialPack: false,
   },
   solo_manual: {
@@ -315,6 +361,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     apiAccess: true,
     aiAgent: false,
     llmBilling: null,
+    vpnEgress: true,
     trialPack: false,
   },
   team_manual: {
@@ -324,6 +371,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_only',
+    vpnEgress: true,
     trialPack: false,
   },
   agency_manual: {
@@ -333,6 +381,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_only',
+    vpnEgress: true,
     trialPack: false,
   },
   api_starter: {
@@ -342,6 +391,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_only',
+    vpnEgress: true,
     trialPack: false,
   },
   api_builder: {
@@ -351,6 +401,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
+    vpnEgress: true,
     trialPack: false,
   },
   api_scale: {
@@ -360,6 +411,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
+    vpnEgress: true,
     trialPack: false,
   },
   enterprise: {
@@ -369,6 +421,7 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     apiAccess: true,
     aiAgent: true,
     llmBilling: 'byok_or_bundled_custom',
+    vpnEgress: true,
     trialPack: false,
   },
 };

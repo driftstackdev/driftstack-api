@@ -142,6 +142,18 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     );
   });
 
+  it('6.g PROXIES_PER_TIER: free 1 (BYO SOCKS5; every session needs a proxy) / solo 10 / scaling to enterprise custom', () => {
+    expect(body).toMatch(
+      /export const PROXIES_PER_TIER: Record<AccountTier, number \| 'custom'> = \{\s*\n?\s*free: 1,\s*\n?\s*solo_manual: 10,\s*\n?\s*team_manual: 25,\s*\n?\s*agency_manual: 50,\s*\n?\s*api_starter: 25,\s*\n?\s*api_builder: 100,\s*\n?\s*api_scale: 500,\s*\n?\s*enterprise: 'custom',\s*\n?\s*\};/,
+    );
+  });
+
+  it('6.g MAX_SESSION_MINUTES_PER_TIER: free 20-min auto-destroy cap; paid tiers null (unlimited)', () => {
+    expect(body).toMatch(
+      /export const MAX_SESSION_MINUTES_PER_TIER: Record<AccountTier, number \| null> = \{\s*\n?\s*free: 20,\s*\n?\s*solo_manual: null,\s*\n?\s*team_manual: null,\s*\n?\s*agency_manual: null,\s*\n?\s*api_starter: null,\s*\n?\s*api_builder: null,\s*\n?\s*api_scale: null,\s*\n?\s*enterprise: null,\s*\n?\s*\};/,
+    );
+  });
+
   it('TIER_CONCURRENT_SESSION_LIMITS: primary metering primitive on paid tiers; (N+1)th triggers concurrency_limit_exceeded HTTP 429; enterprise: 32 sentinel floor for smallest custom contract (per-account overrides bump higher)', () => {
     expect(body).toMatch(
       /\*\s*Concurrent session limit per tier — the primary metering primitive\s*\n?\s*\*\s*on paid tiers\. A customer can have up to N sessions in `creating` \/\s*\n?\s*\*\s*`ready` \/ `busy` state simultaneously; creating an \(N\+1\)th triggers\s*\n?\s*\*\s*`concurrency_limit_exceeded` \(HTTP 429\)\./,
@@ -208,21 +220,22 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     expect(body).toMatch(/apiAccess: boolean;/);
     expect(body).toMatch(/aiAgent: boolean;/);
     expect(body).toMatch(/llmBilling: LlmBilling;/);
+    expect(body).toMatch(/vpnEgress: boolean;/);
     expect(body).toMatch(/trialPack: boolean;/);
   });
 
   it('TIER_FEATURES Record: free (test env + apiAccess false + aiAgent false) + team_manual (apiAccess true + aiAgent true + byok_only) + api_builder (byok_or_bundled) + enterprise (custom profiles + byok_or_bundled_custom)', () => {
     expect(body).toMatch(
-      /free: \{\s*\n?\s*concurrentSessions: 1,\s*\n?\s*profiles: 1,\s*\n?\s*apiKeyEnvironment: 'test',\s*\n?\s*apiAccess: false,\s*\n?\s*aiAgent: false,\s*\n?\s*llmBilling: null,\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
+      /free: \{\s*\n?\s*concurrentSessions: 1,\s*\n?\s*profiles: 1,\s*\n?\s*apiKeyEnvironment: 'test',\s*\n?\s*apiAccess: false,\s*\n?\s*aiAgent: false,\s*\n?\s*llmBilling: null,\s*\n?\s*vpnEgress: false,\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /team_manual: \{\s*\n?\s*concurrentSessions: 3,\s*\n?\s*profiles: 50,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_only',\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
+      /team_manual: \{\s*\n?\s*concurrentSessions: 3,\s*\n?\s*profiles: 50,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_only',\s*\n?\s*vpnEgress: true,\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /api_builder: \{\s*\n?\s*concurrentSessions: 8,\s*\n?\s*profiles: 100,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled',\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
+      /api_builder: \{\s*\n?\s*concurrentSessions: 8,\s*\n?\s*profiles: 100,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled',\s*\n?\s*vpnEgress: true,\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /enterprise: \{\s*\n?\s*concurrentSessions: 32,\s*\n?\s*profiles: 'custom',\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled_custom',\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
+      /enterprise: \{\s*\n?\s*concurrentSessions: 32,\s*\n?\s*profiles: 'custom',\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled_custom',\s*\n?\s*vpnEgress: true,\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
     );
   });
 
