@@ -1686,6 +1686,83 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // V-541.D — customer-facing per-cycle cost surface. Scoped to the
+  // calling account (account id pinned to ctx, not a URL param). The
+  // customer surface omits operator-tuned threshold caps; it returns
+  // only the account's actual spend + where it sits vs its thresholds.
+  const CostThresholdStateOpenApi = z
+    .enum(['under-soft', 'between-soft-and-hard', 'over-hard'])
+    .openapi('CostThresholdState');
+  const CostBreakdownOpenApi = z
+    .object({
+      computeCents: z.number().int().nonnegative(),
+      storageCents: z.number().int().nonnegative(),
+      egressCents: z.number().int().nonnegative(),
+      emailCents: z.number().int().nonnegative(),
+      llmCents: z.number().int().nonnegative(),
+      totalCents: z.number().int().nonnegative(),
+      thresholdState: CostThresholdStateOpenApi,
+    })
+    .openapi('CostBreakdown');
+  const AccountCostResponseOpenApi = z
+    .object({
+      account_id: z.string(),
+      billing_cycle: z.string().regex(/^\d{4}-\d{2}$/),
+      tier: AccountTierSchema,
+      breakdown: CostBreakdownOpenApi,
+    })
+    .openapi('AccountCostResponse');
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/cost',
+    summary: 'Read the calling account cost breakdown for a billing cycle',
+    tags: ['account'],
+    security: auth,
+    request: {
+      query: z.object({
+        billing_cycle: z
+          .string()
+          .regex(/^\d{4}-\d{2}$/)
+          .optional(),
+      }),
+    },
+    responses: {
+      200: {
+        description:
+          'Per-cycle cost breakdown. A fresh account with no usage gets a zero breakdown (not 404).',
+        content: { 'application/json': { schema: AccountCostResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+
+  // GUI notification panel SSE stream. One per-account stream surfaces
+  // every NotificationEvent the server publishes (cost.threshold_alert
+  // today). No JSON body — text/event-stream frames. No Last-Event-ID
+  // resume in v0.1 (the bus is in-memory only).
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/account/me/notifications',
+    summary: 'Subscribe to the calling account notification event stream (SSE)',
+    tags: ['account'],
+    security: auth,
+    responses: {
+      200: {
+        description:
+          'SSE stream of per-account notification events (text/event-stream). Each frame carries an `event:` discriminator (e.g. cost.threshold_alert) and a JSON `data:` payload; heartbeat comments keep the connection alive.',
+        content: {
+          'text/event-stream': {
+            schema: z.string().openapi('AccountNotificationsStream', {
+              description:
+                'Server-sent event stream of NotificationEvent frames for the calling account.',
+            }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+
   // Cross-account rate-limit overrides list (admin)
   const ListAdminOverridesQueryOpenApi = z.object({
     limit: z.number().int().min(1).max(100).optional(),
@@ -2575,6 +2652,38 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'AI chat agent not enabled on this deployment.',
         content: problemContent,
       },
+    },
+  });
+
+  // Arc 2 sub-slice 8.3 — SSE transcript stream. text/event-stream, no
+  // JSON body. Last-Event-ID resume: the client sends the last entry
+  // `index` it saw; the server replays every later entry, then live-
+  // streams new appends. Registers only when the transcript event bus
+  // is wired deploy-side.
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/agent-sessions/{id}/transcript',
+    summary: 'Stream the agent-session transcript as Server-Sent Events (SSE)',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+    },
+    responses: {
+      200: {
+        description:
+          'SSE stream of agent-session transcript events (text/event-stream). Supports Last-Event-ID resume: send the last entry index seen and the server replays subsequent entries before live-streaming new appends.',
+        content: {
+          'text/event-stream': {
+            schema: z.string().openapi('AgentSessionTranscriptStream', {
+              description:
+                'Server-sent event stream of transcript.entry frames; each frame carries an `id:` (the entry index) and a JSON `data:` payload of { index, entry }.',
+            }),
+          },
+        },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
     },
   });
   registerRoute(r, {
@@ -4064,6 +4173,40 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Profile.',
         content: { 'application/json': { schema: ProfileSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  // 2026-05-20 — one-shot "launch this profile" verb. Equivalent to
+  // POST /v1/sessions with { profile_id, archetype: <profile.archetype>,
+  // proxy: <optional from body> } but saves a round-trip + name-lookup.
+  // Optional body overrides (proxy / label); everything else comes from
+  // the profile. Returns the created session (201). Requires
+  // write:sessions. The handler lives in routes/sessions.ts.
+  const LaunchProfileRequestOpenApi = z
+    .object({
+      label: z.string().optional(),
+      proxy: z.record(z.unknown()).optional(),
+    })
+    .openapi('LaunchProfileRequest');
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/profiles/{id}/launch',
+    summary: 'Launch a session from a saved profile (one-shot profile verb)',
+    tags: ['profiles'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: { content: { 'application/json': { schema: LaunchProfileRequestOpenApi } } },
+    },
+    responses: {
+      201: {
+        description: 'Session created from the profile.',
+        content: { 'application/json': { schema: CreateSessionResponseSchema } },
+      },
+      404: {
+        description: 'Profile not found (or owned by another account).',
+        content: problemContent,
       },
       ...errors4xx,
     },

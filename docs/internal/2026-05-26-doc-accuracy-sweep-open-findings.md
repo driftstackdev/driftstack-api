@@ -32,7 +32,7 @@ the numbered list below.
   - #7 — `pointerToViewport` object-contain mis-mapping (multi-archetype blocker, latent).
   - #2 — [RESOLVED 2026-05-27] runbook referenced a one-shot sweep script that was never built (+ stale "not yet wired" section); rewritten to the real wired scheduled-job mechanism.
   - #9 — env-vars doc completeness — RESOLVED (6 vars documented; residual: confirm `NOWPAYMENTS_IPN_CALLBACK_URL` before crypto LIVE).
-  - #11 — OpenAPI spec is a curated subset of the documented customer surface (decide complete vs curated).
+  - #11 — [RESOLVED 2026-05-28] founder chose "complete surface"; added the 4 missing customer endpoints (`/v1/account/cost`, `/v1/account/me/notifications`, `/v1/agent-sessions/:id/transcript`, `/v1/profiles/:id/launch`) to the spec + CORE coverage allowlist + regenerated the (stale-since-2026-05-18) sdk-python openapi.json snapshot.
 
 ## Open — need your call
 
@@ -285,6 +285,7 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
     the 6 paid tiers in lockstep.
 
 11. **OpenAPI spec is a subset of the documented customer surface (low).**
+    **[RESOLVED 2026-05-28]** Founder chose the complete-surface option; the 4 confirmed-missing endpoints below are now registered in the spec + added to the `openapi-route-coverage` CORE allowlist, and the sdk-python openapi.json snapshot was regenerated (it had been stale since 2026-05-18; the substring-based W622 sync test masked the drift — a follow-up could tighten W622 to an exact path-set assertion). The two SSE endpoints (`/v1/agent-sessions/:id/transcript`, `/v1/account/me/notifications`) are represented as `text/event-stream` responses with a string schema + description.
     Several customer endpoints that have a Markdown doc page on
     docs.driftstack.dev are absent from the hand-written OpenAPI spec
     (`apps/server/src/lib/openapi.ts`), so they don't appear in the

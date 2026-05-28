@@ -63,6 +63,9 @@ describe('OpenAPI spec generation', () => {
         '/v1/account/audit-log',
         '/v1/account/audit-log/export',
         '/v1/account/email-preferences',
+        // V-541.D — customer cost surface + GUI notification SSE stream
+        '/v1/account/cost',
+        '/v1/account/me/notifications',
         // V-386 / V-387 — account self-edit surface + avatar
         '/v1/account/me',
         '/v1/account/me/avatar',
@@ -141,6 +144,8 @@ describe('OpenAPI spec generation', () => {
         // V-456 profile base CRUD
         '/v1/profiles',
         '/v1/profiles/{id}',
+        // one-shot launch-from-profile verb (handler in routes/sessions.ts)
+        '/v1/profiles/{id}/launch',
         // V-313 profile clone
         '/v1/profiles/{id}/clone',
         // V-312 profile snapshots
@@ -162,6 +167,7 @@ describe('OpenAPI spec generation', () => {
         // AI-D — agent chat sessions
         '/v1/agent-sessions',
         '/v1/agent-sessions/{id}',
+        '/v1/agent-sessions/{id}/transcript',
         '/v1/agent-sessions/{id}/handback',
         '/v1/agent-sessions/{id}/input-event',
         '/v1/agent-sessions/{id}/livekit-token',
