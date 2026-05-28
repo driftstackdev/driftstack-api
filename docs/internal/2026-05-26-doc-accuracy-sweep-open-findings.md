@@ -22,7 +22,7 @@ the numbered list below.
   - #14 — [RESOLVED 2026-05-27] BYOK rotation email + status-pill linked to 404 dashboard routes; repointed both to the API docs (BYOK stays API-only).
 - **Latent, high-impact on a planned event:**
   - #12 — V-173 forward-path webhook delivery signs bare-hex; breaks ALL SDK verification on the durable-impl cutover. (Fix #12 + #13 together — one webhook-signature pass; both rooted in a missing server-sign→SDK-verify e2e test.)
-  - #15 — LLM cost rate card models 4o-mini but the agent runs Opus 4.7 (~100× under-estimate); inert until LLM usage metering lands, then (a) under-reports bundled-LLM margin alerts AND (b) makes the customer-facing bundled-LLM budget soft-cap deplete ~100× too slowly (customers get ~100× more bundled Opus than the cap intends). Rate must be right in the writer BEFORE bundled-LLM goes LIVE. (Fix with #6 / V-541.J/K — same deferred metering subsystem.)
+  - #15 — [RESOLVED 2026-05-28] cost rate card corrected to real Anthropic list price (Opus 4.7 $5/$25; was 4o-mini) AND a per-session model picker shipped end-to-end (Claude 4.x: Opus 4.7 / Sonnet 4.6 / Haiku 4.5) — CLAUDE_MODELS registry + migration 0066 agent_sessions.model + decomposer sources the per-model rate + create-session/SDK/dashboard surfaces. Customer picks a model; cost recorded at that model's list-price rate. Founder-confirmed real-list-price basis.
 - **Contract / intent decisions (pick a direction, then align sources):**
   - #5 — [RESOLVED 2026-05-27, 0a3e5cca] webhook retry count fixed to the documented 5 retries / 6 attempts (founder approved option a); all 3 impls bumped to MAX=6, customer docs reconciled, the toothless guard now asserts numeric cross-source equality.
   - #10 — [RESOLVED 2026-05-27, e6cb9b99] resolved by deletion: `trial_pack` removed from `TIER_PRICE_CENTS`, so crypto checkout no longer accepts it — matching the quote route. Both agree now; the free tier is $0/not purchasable.
@@ -425,7 +425,23 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
     intended-but-unbuilt vs. deliberately API-only is a product call, and the
     email body is parity-pinned.
 
-15. **LLM cost-to-serve rate card models OpenAI 4o-mini but the agent uses
+15. **[RESOLVED 2026-05-28] — corrected to real Anthropic list price + per-session model picker shipped.**
+    Resolution: `cost-defaults.ts` LLM rate corrected from 4o-mini to Claude
+    Opus 4.7's **real** list price ($5/$25 per MTok = 0.5c/2.5c per 1k — founder
+    chose real list price over the originally-quoted $15/$75, which was the
+    retired Opus 4.1 rate); `agent-decomposer-claude.ts` now sources its
+    per-call rate from the new api-types `CLAUDE_MODELS` registry keyed by the
+    session's model. A per-session model picker shipped end-to-end: migration
+    0066 `agent_sessions.model` → create-session request → AgentRuntime →
+    decompose() per-model rate, exposed via all 3 SDKs + the dashboard composer
+    dropdown (Opus 4.7 / Sonnet 4.6 / Haiku 4.5; default Opus). The customer-
+    facing bundled-LLM budget soft-cap (b) now depletes at the correct per-model
+    rate. NOTE the true _enforcement_ of a token budget still rides on the
+    deferred usage-metering writers (V-541.J/K) — but the RATE the writer will
+    use is now correct, which was the load-bearing pre-LIVE requirement.
+    Original finding below for reference.
+
+    **LLM cost-to-serve rate card models OpenAI 4o-mini but the agent uses
     Claude Opus 4.7 — ~100× under-estimate (latent, gated with #6).**
     `cost-defaults.ts` sets `llmCentsPer1kInputTokens: 0.015` /
     `llmCentsPer1kOutputTokens: 0.06` with comments "OpenAI 4o-mini input/
