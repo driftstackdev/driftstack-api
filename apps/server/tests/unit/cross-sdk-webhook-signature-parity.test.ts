@@ -114,7 +114,7 @@ describe('W678 cross-SDK webhook-signature format parity', () => {
     expect(py).toMatch(/300|5 ?\* ?60/);
   });
 
-  it('CRITICAL V-359 headerPrev rotation grace — all 3 SDKs support a SECOND signature header (`x-driftstack-signature-prev`) for the 24h rotation grace window. The "EITHER header OR headerPrev matching the secret" pattern lets customers who haven\'t rolled the new secret to their verifier still pass during the dual-sign window.', () => {
+  it('CRITICAL V-359 headerPrev fallback — all 3 SDKs expose the optional previous-secret signature input (headerPrev / HeaderPrev / header_prev) for backward-compat. Driftstack does NOT emit a separate header; during rotation the prev HMAC is a second v1= inside the main x-driftstack-signature header, which the verifier already checks. The "EITHER header OR headerPrev matching the secret" pattern stays, but passing header alone covers rotation deliveries.', () => {
     const ts = read(TS_WSIG);
     const go = read(GO_WSIG);
     const py = read(PY_WSIG);
@@ -126,8 +126,8 @@ describe('W678 cross-SDK webhook-signature format parity', () => {
     // sdk-go: HeaderPrev field on options.
     expect(go).toMatch(/HeaderPrev/);
 
-    // sdk-python: header_prev kwarg or similar.
-    expect(py).toMatch(/header_prev|HEADER_PREV|signature-prev/);
+    // sdk-python: header_prev kwarg.
+    expect(py).toMatch(/header_prev/);
   });
 
   it('All 3 SDKs reference the Stripe-style format anchor in comments/docs. The "Stripe-style" wording is load-bearing — drift to dropping the reference would lose the connection between Driftstack\'s format and the well-known Stripe convention that customers may already understand.', () => {

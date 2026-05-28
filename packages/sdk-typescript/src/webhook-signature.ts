@@ -35,12 +35,14 @@ export interface VerifySignatureInput {
   body: string | Uint8Array | ArrayBuffer;
   header: string | string[] | undefined;
   /**
-   * V-359 — optional second signature header for the rotation grace
-   * window. Read from `x-driftstack-signature-prev` on the inbound
-   * request (Driftstack emits it for 24h after a secret rotation).
-   * The verifier accepts EITHER `header` OR `headerPrev` matching the
-   * `secret`, so customers who haven't yet rolled the new secret to
-   * their verifier still pass during the rotation window.
+   * V-359 — OPTIONAL fallback for a separately-supplied previous-secret
+   * signature. Driftstack does NOT emit a separate header: during a
+   * rotation grace window the previous-secret HMAC is included as a
+   * second `v1=` inside the main `x-driftstack-signature` header
+   * (`t=,v1=<new>,v1=<old>`), which the verifier already checks. So
+   * passing `header` alone verifies rotation deliveries correctly and
+   * this input is rarely needed. When set, the verifier accepts EITHER
+   * `header` OR `headerPrev` matching the `secret`.
    */
   headerPrev?: string | string[] | undefined;
   secret: string;

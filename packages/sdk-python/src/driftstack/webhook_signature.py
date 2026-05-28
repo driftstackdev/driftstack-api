@@ -118,13 +118,15 @@ def verify_webhook_signature(
     ``request.get_data()``; FastAPI: ``await request.body()``;
     Django: ``request.body``).
 
-    V-359 — ``header_prev`` is the optional second signature header
-    Driftstack emits during the 24h secret-rotation grace window
-    (read from ``x-driftstack-signature-prev`` on the inbound
-    request). When set, the verifier accepts EITHER ``header`` OR
-    ``header_prev`` matching ``secret``, so customers who haven't
-    yet rolled the new secret across their verifier still pass
-    during the rotation window.
+    V-359 — ``header_prev`` is an OPTIONAL fallback for a
+    separately-supplied previous-secret signature. Driftstack does
+    NOT emit a separate header: during a rotation grace window the
+    previous-secret HMAC is included as a second ``v1=`` inside the
+    main ``x-driftstack-signature`` header (``t=,v1=<new>,v1=<old>``),
+    which the verifier already checks. So passing ``header`` alone
+    verifies rotation deliveries correctly and this input is rarely
+    needed. When set, the verifier accepts EITHER ``header`` OR
+    ``header_prev`` matching ``secret``.
     """
     body_bytes = body.encode("utf-8") if isinstance(body, str) else bytes(body)
     now = now_seconds if now_seconds is not None else time.time()

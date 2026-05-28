@@ -87,9 +87,14 @@ describe('W424.B packages/sdk-typescript/src/webhook-signature.ts content parity
     );
   });
 
-  it('CRITICAL V-359 headerPrev JSDoc — 6-line invariant pinned: read from `x-driftstack-signature-prev` + Driftstack emits for 24h after rotation + verifier accepts EITHER header OR headerPrev matching the secret + "customers who haven\'t yet rolled the new secret to their verifier still pass during the rotation window". Drift to dropping the EITHER framing would break the rotation contract.', () => {
+  it('CRITICAL V-359 headerPrev JSDoc — accuracy invariant: it is an OPTIONAL fallback for a separately-supplied previous-secret signature, Driftstack does NOT emit a separate header (prev HMAC is a second v1= inside the main x-driftstack-signature header), and the verifier accepts EITHER header OR headerPrev matching the secret. Drift back to claiming a separate `x-driftstack-signature-prev` header is emitted would contradict the corrected customer docs.', () => {
+    expect(body).toMatch(/\* V-359 — OPTIONAL fallback for a separately-supplied previous-secret/);
+    expect(body).toMatch(/\* signature\. Driftstack does NOT emit a separate header:/);
+    expect(body).toMatch(/\* second `v1=` inside the main `x-driftstack-signature` header/);
+    expect(body).toMatch(/\* passing `header` alone verifies rotation deliveries correctly and/);
+    expect(body).toMatch(/\* `header` OR `headerPrev` matching the `secret`\./);
     expect(body).toMatch(
-      /\/\*\*\s*\n?\s*\*\s*V-359 — optional second signature header for the rotation grace\s*\n?\s*\*\s*window\. Read from `x-driftstack-signature-prev` on the inbound\s*\n?\s*\*\s*request \(Driftstack emits it for 24h after a secret rotation\)\.\s*\n?\s*\*\s*The verifier accepts EITHER `header` OR `headerPrev` matching the\s*\n?\s*\*\s*`secret`, so customers who haven't yet rolled the new secret to\s*\n?\s*\*\s*their verifier still pass during the rotation window\.\s*\n?\s*\*\/\s*\n?\s*headerPrev\?: string \| string\[\] \| undefined;\s*\n?\s*secret: string;/,
+      /headerPrev\?: string \| string\[\] \| undefined;\s*\n?\s*secret: string;/,
     );
   });
 

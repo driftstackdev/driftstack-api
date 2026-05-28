@@ -20,13 +20,14 @@ type VerifyWebhookOptions struct {
 	Tolerance time.Duration
 	// Now overrides time.Now for tests.
 	Now time.Time
-	// HeaderPrev is the optional second signature header Driftstack
-	// emits during the 24h secret-rotation grace window (read from
-	// X-Driftstack-Signature-Prev on the inbound request). When set,
-	// VerifyWebhookSignature accepts EITHER `header` OR `HeaderPrev`
-	// matching `secret`, so customers who haven't rolled the new
-	// secret across their verifier still pass during the rotation
-	// window. V-359.
+	// HeaderPrev is an OPTIONAL fallback for a separately-supplied
+	// previous-secret signature. Driftstack does NOT emit a separate
+	// header: during a rotation grace window the previous-secret HMAC
+	// is included as a second v1= inside the main X-Driftstack-Signature
+	// header (t=,v1=<new>,v1=<old>), which the verifier already checks.
+	// So passing `header` alone verifies rotation deliveries correctly
+	// and this input is rarely needed. When set, VerifyWebhookSignature
+	// accepts EITHER `header` OR `HeaderPrev` matching `secret`. V-359.
 	HeaderPrev string
 }
 
@@ -43,9 +44,13 @@ type VerifyWebhookOptions struct {
 // need to use a raw-body access path (e.g. read req.Body once and
 // preserve it).
 //
-// V-359 — when the rotation grace is in flight, callers pass
-// VerifyWebhookOptions.HeaderPrev (the second X-Driftstack-Signature-Prev
-// header). The verifier accepts either header matching `secret`.
+// V-359 — Driftstack does NOT emit a separate prev header: during a
+// rotation grace window the previous-secret HMAC arrives as a second
+// v1= inside the same X-Driftstack-Signature header, which is already
+// verified above, so passing `header` alone covers rotation. The
+// optional VerifyWebhookOptions.HeaderPrev is a rarely-needed fallback
+// for a separately-supplied previous-secret signature; when set, the
+// verifier accepts either header matching `secret`.
 func VerifyWebhookSignature(body []byte, header string, secret string, opts ...VerifyWebhookOptions) bool {
 	tolerance := DefaultWebhookTolerance
 	now := time.Now()

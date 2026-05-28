@@ -54,24 +54,22 @@ describe('W816 cross-SDK webhook-signature parity', () => {
 
   // ─── V-359 dual-signature rotation grace ──────────────────────
 
-  it('CRITICAL all 3 implementations support V-359 dual-signature 24h rotation grace window via headerPrev / HeaderPrev / x-driftstack-signature-prev. Drift would break the rotation grace contract — verifiers reject the new signature for 24h after a rotation.', () => {
-    expect(read(TS)).toMatch(/V-359 — optional second signature header for the rotation grace/);
+  it('CRITICAL all 3 implementations support the V-359 headerPrev / HeaderPrev / header_prev fallback input AND accurately state Driftstack does NOT emit a separate header (prev HMAC is a second v1= inside the main x-driftstack-signature header). The fallback stays for backward-compat; drift back to claiming a separate prev header is emitted would contradict the corrected customer docs.', () => {
+    expect(read(TS)).toMatch(/V-359 — OPTIONAL fallback for a separately-supplied previous-secret/);
     expect(read(TS)).toMatch(/headerPrev\?: string \| string\[\] \| undefined;/);
-    expect(read(TS)).toMatch(/`x-driftstack-signature-prev` on the inbound/);
+    expect(read(TS)).toMatch(/Driftstack does NOT emit a separate header:/);
     expect(read(PY)).toMatch(/Mirrors :func:`verifyWebhookSignature` from the TypeScript SDK/);
+    expect(read(PY)).toMatch(/Driftstack does\s*\n\s*NOT emit a separate header:/);
     expect(read(GO)).toMatch(
-      /HeaderPrev is the optional second signature header Driftstack\s*\n\s+\/\/ emits during the 24h secret-rotation grace window/,
+      /HeaderPrev is an OPTIONAL fallback for a separately-supplied\s*\n\s+\/\/ previous-secret signature\. Driftstack does NOT emit a separate/,
     );
-    expect(read(GO)).toMatch(/X-Driftstack-Signature-Prev on the inbound request/);
   });
 
-  it("CRITICAL all 3 implementations document the 'accept EITHER header OR headerPrev' verification logic. The dual-accept ensures customers who haven't yet rolled the new secret to their verifier still pass during the rotation window.", () => {
+  it("CRITICAL all 3 implementations document the 'accept EITHER header OR headerPrev' fallback logic. The dual-accept stays for backward-compat, but passing `header` alone already verifies rotation deliveries.", () => {
     expect(read(TS)).toMatch(
-      /The verifier accepts EITHER `header` OR `headerPrev` matching the\s+\* `secret`/,
+      /accepts EITHER\s*\n\s+\* `header` OR `headerPrev` matching the `secret`\./,
     );
-    expect(read(GO)).toMatch(
-      /VerifyWebhookSignature accepts EITHER `header` OR `HeaderPrev`\s*\n\s+\/\/ matching `secret`/,
-    );
+    expect(read(GO)).toMatch(/accepts EITHER `header` OR `HeaderPrev` matching `secret`\. V-359\./);
   });
 
   // ─── 300s tolerance default ───────────────────────────────────

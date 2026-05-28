@@ -66,17 +66,18 @@ describe('W594.B packages/sdk-go/webhook_signature.go content parity', () => {
     expect(body).toMatch(/Tolerance time\.Duration/);
     expect(body).toMatch(/\/\/ Now overrides time\.Now for tests\./);
     expect(body).toMatch(/Now time\.Time/);
-    expect(body).toMatch(/\/\/ HeaderPrev is the optional second signature header Driftstack/);
-    expect(body).toMatch(/\/\/ emits during the 24h secret-rotation grace window \(read from/);
-    expect(body).toMatch(/\/\/ X-Driftstack-Signature-Prev on the inbound request\)\./);
+    expect(body).toMatch(/\/\/ HeaderPrev is an OPTIONAL fallback for a separately-supplied/);
+    expect(body).toMatch(/\/\/ previous-secret signature\. Driftstack does NOT emit a separate/);
+    expect(body).toMatch(/\/\/ is included as a second v1= inside the main X-Driftstack-Signature/);
     expect(body).toMatch(/HeaderPrev string/);
   });
 
-  it('V-359 HeaderPrev rotation-grace contract: "VerifyWebhookSignature accepts EITHER `header` OR `HeaderPrev` matching `secret`, so customers who haven\'t rolled the new secret across their verifier still pass during the rotation window." This is what makes the 24h dual-sign window non-breaking for customer verifier deployments.', () => {
-    expect(body).toMatch(/\/\/ VerifyWebhookSignature accepts EITHER `header` OR `HeaderPrev`/);
-    expect(body).toMatch(/\/\/ matching `secret`, so customers who haven't rolled the new/);
-    expect(body).toMatch(/\/\/ secret across their verifier still pass during the rotation/);
-    expect(body).toMatch(/\/\/ window\. V-359\./);
+  it('V-359 HeaderPrev rotation-grace contract: "passing `header` alone verifies rotation deliveries correctly and this input is rarely needed. When set, VerifyWebhookSignature accepts EITHER `header` OR `HeaderPrev` matching `secret`." The accept-EITHER fallback stays, but the doc now correctly states no separate prev header is emitted.', () => {
+    expect(body).toMatch(/\/\/ So passing `header` alone verifies rotation deliveries correctly/);
+    expect(body).toMatch(/\/\/ and this input is rarely needed\. When set, VerifyWebhookSignature/);
+    expect(body).toMatch(
+      /\/\/ accepts EITHER `header` OR `HeaderPrev` matching `secret`\. V-359\./,
+    );
   });
 
   it('VerifyWebhookSignature contract: Stripe-style "t=<unix-seconds>,v1=<hex hmac>" header format + HMAC payload "HMAC-SHA256(<unix-seconds>.<raw body>, <webhook secret>)" + never-panics-returns-false + raw-body-not-re-encoded-JSON warning pinned. Drift to a different payload concatenation would invalidate every existing customer verifier mid-flight.', () => {

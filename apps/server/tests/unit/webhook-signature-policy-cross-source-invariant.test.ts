@@ -81,20 +81,17 @@ describe('W905 webhook signature policy cross-source invariant', () => {
 
   // ─── V-359 HeaderPrev rotation-grace acceptance ──────────────
 
-  it("CRITICAL V-359 anchor + 'verifier accepts EITHER header matching secret' framing for HeaderPrev. The dual-header acceptance is what lets customers roll their verifier across infra during the 24h rotation grace window.", () => {
+  it("CRITICAL V-359 anchor + 'verifier accepts EITHER header matching secret' fallback framing for HeaderPrev. The accept-EITHER fallback stays for backward-compat, but passing `header` alone already verifies rotation deliveries.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/sdk-go/webhook_signature.go'));
     expect(p).toMatch(/V-359/);
-    expect(p).toMatch(/VerifyWebhookSignature accepts EITHER `header` OR `HeaderPrev`/);
-    expect(p).toMatch(/matching `secret`/);
-    expect(p).toMatch(/customers who haven't rolled the new/);
-    expect(p).toMatch(/secret across their verifier still pass during the rotation/);
-    expect(p).toMatch(/window\. V-359\./);
+    expect(p).toMatch(/accepts EITHER `header` OR `HeaderPrev` matching `secret`\. V-359\./);
   });
 
-  it("CRITICAL VerifyWebhookOptions.HeaderPrev framing — 'optional second signature header Driftstack ... X-Driftstack-Signature-Prev on the inbound request'. The pre-typed option teaches Go consumers how to wire dual-header verification.", () => {
+  it('CRITICAL VerifyWebhookOptions.HeaderPrev framing — accurately states it is an OPTIONAL fallback and Driftstack does NOT emit a separate header (prev HMAC is a second v1= inside the main X-Driftstack-Signature header). Drift back to claiming a separate prev header is emitted would contradict the corrected customer docs.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/sdk-go/webhook_signature.go'));
-    expect(p).toMatch(/HeaderPrev is the optional second signature header Driftstack/);
-    expect(p).toMatch(/X-Driftstack-Signature-Prev on the inbound request/);
+    expect(p).toMatch(/HeaderPrev is an OPTIONAL fallback for a separately-supplied/);
+    expect(p).toMatch(/previous-secret signature\. Driftstack does NOT emit a separate/);
+    expect(p).toMatch(/second v1= inside the main X-Driftstack-Signature/);
   });
 
   // ─── Docs cross-reference ────────────────────────────────────

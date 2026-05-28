@@ -99,13 +99,14 @@ describe('W586.C packages/sdk-python/src/driftstack/webhook_signature.py content
     expect(body).toMatch(/constant time\. Returns ``False`` on any failure mode — never/);
     expect(body).toMatch(/raises\./);
     expect(body).toMatch(/``body`` must be the EXACT raw bytes the server signed\./);
-    expect(body).toMatch(/V-359 — ``header_prev`` is the optional second signature header/);
-    expect(body).toMatch(/Driftstack emits during the 24h secret-rotation grace window/);
-    expect(body).toMatch(/\(read from ``x-driftstack-signature-prev`` on the inbound/);
-    expect(body).toMatch(/request\)\. When set, the verifier accepts EITHER ``header`` OR/);
-    expect(body).toMatch(/``header_prev`` matching ``secret``, so customers who haven't/);
-    expect(body).toMatch(/yet rolled the new secret across their verifier still pass/);
-    expect(body).toMatch(/during the rotation window\./);
+    expect(body).toMatch(/V-359 — ``header_prev`` is an OPTIONAL fallback for a/);
+    expect(body).toMatch(/separately-supplied previous-secret signature\. Driftstack does/);
+    expect(body).toMatch(/NOT emit a separate header:/);
+    expect(body).toMatch(
+      /second ``v1=`` inside the\s*\n?\s*main ``x-driftstack-signature`` header/,
+    );
+    expect(body).toMatch(/passing ``header`` alone/);
+    expect(body).toMatch(/``header`` OR\s*\n?\s*``header_prev`` matching ``secret``\./);
     expect(body).toMatch(
       /body_bytes = body\.encode\("utf-8"\) if isinstance\(body, str\) else bytes\(body\)/,
     );

@@ -335,10 +335,11 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
     to production. (Follow-on DONE: customer docs + all 3 SDK quickstarts +
     marketing webhook docs corrected — they had told customers to read a
     separate `x-driftstack-signature-prev` header that no server path emits;
-    rotation verifies from the compound dual-`v1=` single header. RESIDUAL:
-    the SDK _source_ doc-comments (webhook_signature.{ts,py,go}) still claim
-    Driftstack "emits" the separate header — a 3-SDK lockstep doc-comment
-    follow-up; the `headerPrev` API itself stays as backward-compat.)
+    rotation verifies from the compound dual-`v1=` single header. The SDK
+    _source_ doc-comments (webhook_signature.{ts,py,go}) were ALSO corrected
+    (they had claimed Driftstack "emits" the separate header) — the
+    `headerPrev`/`header_prev`/`HeaderPrev` API itself stays as backward-
+    compat. #12 fully closed: code + docs + SDK comments all aligned.)
     The published contract is a Stripe-style compound header:
     `X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>`, HMAC-SHA256 over
     `<t>.<body>` — documented in `webhooks/events.md:64`, verified by all
