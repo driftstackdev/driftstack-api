@@ -999,8 +999,12 @@ const navSections: NavSection[] = [
           });
           let es;
           try {
+            // EventSource can't set an Authorization header; the route
+            // (requireAuthEventSource) accepts the bearer token via the
+            // ?ds_token= query param — same contract as the transcript
+            // stream.
             const url =
-              apiBaseUrl + '/v1/account/me/notifications?token=' + encodeURIComponent(token);
+              apiBaseUrl + '/v1/account/me/notifications?ds_token=' + encodeURIComponent(token);
             es = new EventSource(url);
           } catch (_) {
             return;

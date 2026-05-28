@@ -18,10 +18,13 @@ additive, low-latency notification path.
 
 `GET /v1/account/me/notifications`
 
-Auth: standard Bearer-key header. Native `EventSource` clients lack
-header support — pair the request with a polyfill that sets headers,
-or use your runtime's authenticated fetch (Tauri's invoke bridge,
-Node's `eventsource` package, etc.).
+Auth: bearer token via `Authorization: Bearer <token>` header OR
+`?ds_token=<token>` query-string fallback. The browser `EventSource`
+API can't set custom headers, so the query-string fallback exists for
+that case (the same contract as the [transcript stream](/api/agent-sessions/));
+the header still wins when both are supplied. Server-side runtimes that
+can set headers (Tauri's invoke bridge, Node's `eventsource` package,
+etc.) should prefer the header.
 
 ## Frame shape
 

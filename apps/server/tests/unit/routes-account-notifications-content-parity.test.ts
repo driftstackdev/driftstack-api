@@ -6,7 +6,9 @@
 //   • Opt-in registration: route lives behind a notificationBus
 //     dep — when omitted, NO route registered (mirrors transcript
 //     stream pattern).
-//   • Per-accountId scope via requireAuth + ctx.account.id.
+//   • Per-accountId scope via requireAuthEventSource + ctx.account.id
+//     (SSE route — accepts the bearer token via ?ds_token= since
+//     EventSource can't set an Authorization header).
 //   • SSE headers: text/event-stream + no-cache + keep-alive +
 //     x-accel-buffering: no.
 //   • Frame shape: `event: <kind>` + `data: <JSON>` + double-LF.
@@ -35,9 +37,12 @@ describe('routes/account-notifications.ts content parity', () => {
     expect(body).toMatch(/if \(bus === undefined\) return;/);
   });
 
-  it("route at GET /v1/account/me/notifications + requireAuth + rateLimit('global')", () => {
-    expect(body).toMatch(/app\.get\(\s*\n?\s*'\/v1\/account\/me\/notifications',/);
-    expect(body).toMatch(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\]/);
+  it("route at GET /v1/account/me/notifications + requireAuthEventSource (SSE ds_token fallback) + rateLimit('global')", () => {
+    expect(body).toMatch(/'\/v1\/account\/me\/notifications',/);
+    // SSE route: EventSource can't set headers, so auth accepts the
+    // bearer token via ?ds_token= (requireAuthEventSource). Drift back
+    // to plain requireAuth would 401 every browser EventSource connect.
+    expect(body).toMatch(/preHandler: \[app\.requireAuthEventSource, app\.rateLimit\('global'\)\]/);
   });
 
   it('per-accountId scope: ctx.account.id from requireCtx drives bus.subscribe key', () => {

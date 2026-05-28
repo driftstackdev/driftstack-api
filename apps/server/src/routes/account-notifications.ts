@@ -49,9 +49,12 @@ export function registerAccountNotificationsRoutes(
   if (bus === undefined) return; // opt-in wire-up; absent → no route
   const heartbeatMs = opts.heartbeatMs ?? DEFAULT_HEARTBEAT_MS;
 
-  app.get(
+  app.get<{ Querystring: { ds_token?: string } }>(
     '/v1/account/me/notifications',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // SSE: EventSource can't set an Authorization header, so this route
+    // also accepts the bearer token via `?ds_token=` (requireAuthEventSource).
+    // The header still wins when present.
+    { preHandler: [app.requireAuthEventSource, app.rateLimit('global')] },
     (req, reply) => {
       const ctx = requireCtx(req);
       const accountId = ctx.account.id;

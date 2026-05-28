@@ -204,8 +204,12 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/'incident\.broadcast',/);
     expect(body).toMatch(/'audit\.high_severity',/);
     expect(body).toMatch(/'session\.errored',/);
+    // SSE: EventSource can't set an Authorization header, so the bearer
+    // token rides in the ?ds_token= query param (server-side
+    // requireAuthEventSource reads it) — same contract as the transcript
+    // stream. Drift back to ?token= would 401 every notification connect.
     expect(body).toMatch(
-      /apiBaseUrl \+\s*\n?\s*'\/v1\/account\/me\/notifications\?token=' \+ encodeURIComponent\(token\)/,
+      /apiBaseUrl \+\s*\n?\s*'\/v1\/account\/me\/notifications\?ds_token=' \+ encodeURIComponent\(token\)/,
     );
     expect(body).toMatch(/new EventSource\(url\)/);
     expect(body).toMatch(/es\.addEventListener\(kind,/);
