@@ -58,6 +58,9 @@ type AgentSession struct {
 	CreatedByUserID *string `json:"created_by_user_id"`
 	// Arc 2 sub-slice 8.5 (v2-#8) — operational mode.
 	Mode string `json:"mode"`
+	// 6.c — the Claude 4.x model the AI agent runs for this session
+	// (set at create-time; defaults to "claude-opus-4-7").
+	Model string `json:"model"`
 	// Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
 	// discriminator. nil when mode != "pair". {kind: "ai-driving" |
 	// "takeover-pending" | ...} when mode == "pair"; see the
@@ -80,6 +83,10 @@ type CreateAgentSessionRequest struct {
 	// omits the field on the wire so the server applies its default
 	// ('ai').
 	Mode string `json:"mode,omitempty"`
+	// 6.c — Claude 4.x model the AI agent runs. Empty string omits the
+	// field so the server applies its default ('claude-opus-4-7').
+	// Valid: "claude-opus-4-7" | "claude-sonnet-4-6" | "claude-haiku-4-5".
+	Model string `json:"model,omitempty"`
 }
 
 // AgentMessageResponse is the discriminated turn-result. Branch on

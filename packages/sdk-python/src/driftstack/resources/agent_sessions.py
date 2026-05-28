@@ -74,7 +74,10 @@ class AgentSessionsResource:
         """Create a new agent chat session.
 
         Body shape (all fields optional): ``{"driftstack_session_id"?: ...,
-        "token_budget"?: int}``.
+        "token_budget"?: int, "mode"?: "manual"|"ai"|"pair",
+        "model"?: "claude-opus-4-7"|"claude-sonnet-4-6"|"claude-haiku-4-5"}``.
+        ``model`` (6.c) picks the Claude 4.x model the AI agent runs;
+        defaults server-side to ``"claude-opus-4-7"``.
 
         ``idempotency_key`` (optional, v2-#19) is forwarded as the
         ``Idempotency-Key`` request header — Stripe-pattern dedupe. The

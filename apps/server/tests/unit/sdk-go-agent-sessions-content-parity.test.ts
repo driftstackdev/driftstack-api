@@ -57,6 +57,8 @@ describe('sdk-go agent_sessions content parity', () => {
     expect(body).toMatch(/ClosedAt\s+\*string\s+`json:"closed_at"`/);
     expect(body).toMatch(/CreatedByUserID\s+\*string\s+`json:"created_by_user_id"`/);
     expect(body).toMatch(/Mode\s+string\s+`json:"mode"`/);
+    // 6.c — per-session model picker field on the read shape.
+    expect(body).toMatch(/Model\s+string\s+`json:"model"`/);
     expect(body).toMatch(/LiveKit\s+\*LiveKitInfo\s+`json:"livekit,omitempty"`/);
   });
 
@@ -65,6 +67,8 @@ describe('sdk-go agent_sessions content parity', () => {
       /\/\/ Arc 2 sub-slice 8\.5 \(v2-#8\) — operational mode\. Empty string\s*\n?\s*\/\/ omits the field on the wire so the server applies its default\s*\n?\s*\/\/ \('ai'\)\./,
     );
     expect(body).toMatch(/Mode string `json:"mode,omitempty"`/);
+    // 6.c — model picker field on the request shape (omitempty → server default).
+    expect(body).toMatch(/Model string `json:"model,omitempty"`/);
   });
 
   it('AgentMessageResponse discriminated union: \'Branch on Kind: "plan-executed" (Intents + Results + OK populated), "clarify" (ClarifyingQuestion populated), or "refuse" (RefuseReason populated).\' — pinned so the 3-variant discriminator framing stays documented (note: logged-manual is implicit via Kind="logged-manual" + only Session populated; drift to dropping discriminator framing would force Go callers to guess which fields to read)', () => {

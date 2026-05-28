@@ -75,6 +75,9 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     );
     expect(body).toMatch(/def handback\(self, agent_session_id: str\) -> dict\[str, Any\]:/);
     expect(body).toMatch(/def livekit_token\(self, agent_session_id: str\) -> LiveKitInfo:/);
+    // 6.c — create() docstring documents the per-session model body field
+    // (Python is loose-dict, so the docstring is the typed surface).
+    expect(body).toMatch(/"model"\?: "claude-opus-4-7"\|"claude-sonnet-4-6"\|"claude-haiku-4-5"/);
   });
 
   it('Async AsyncAgentSessionsResource 9-method mirror pinned. Drift would break asyncio + FastAPI consumers OR break the sync/async parity contract', () => {

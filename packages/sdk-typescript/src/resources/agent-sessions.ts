@@ -95,6 +95,11 @@ export interface AgentSession {
    */
   mode: 'manual' | 'ai' | 'pair';
   /**
+   * 6.c — the Claude 4.x model the AI agent runs for this session
+   * (set at create-time; defaults to 'claude-opus-4-7').
+   */
+  model: 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
+  /**
    * Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
    * discriminator. `null` when mode != 'pair'; carries the
    * `{kind: 'ai-driving' | 'takeover-pending' | ...}` shape (see
@@ -126,6 +131,12 @@ export interface CreateAgentSessionRequest {
    * enables the takeover state-machine (sub-slice 8.7).
    */
   mode?: 'manual' | 'ai' | 'pair';
+  /**
+   * 6.c — the Claude 4.x model the AI agent runs for this session.
+   * Defaults server-side to 'claude-opus-4-7' when omitted. Picking a
+   * cheaper model (Sonnet 4.6 / Haiku 4.5) lowers cost-to-serve.
+   */
+  model?: 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
 }
 
 export type AgentIntent =

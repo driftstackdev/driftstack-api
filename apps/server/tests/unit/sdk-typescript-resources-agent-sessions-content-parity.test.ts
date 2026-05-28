@@ -60,6 +60,8 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/closed_at: string \| null;/);
     expect(body).toMatch(/created_by_user_id: string \| null;/);
     expect(body).toMatch(/mode: 'manual' \| 'ai' \| 'pair';/);
+    // 6.c — per-session model picker field on the read shape.
+    expect(body).toMatch(/model: 'claude-opus-4-7' \| 'claude-sonnet-4-6' \| 'claude-haiku-4-5';/);
     expect(body).toMatch(/pair_mode_state: \{ kind: string; \[k: string\]: unknown \} \| null;/);
     expect(body).toMatch(/livekit\?: LiveKitInfo;/);
   });
