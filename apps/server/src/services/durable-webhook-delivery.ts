@@ -23,8 +23,8 @@
 // attempt). The existing webhook_deliveries.attempts integer column
 // stores the count.
 
-import { createHmac } from 'node:crypto';
 import { and, asc, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { signWebhookPayload } from '../lib/webhook-signing.js';
 import type {
   DlqManager,
   EnqueueDeliveryOpts,
@@ -416,19 +416,24 @@ export class DurableWebhookWorker {
     };
 
     try {
-      const signature = signPayload(endpoint.secret, body, emittedAtSec);
-      // V-359 — dual-sign during the rotation grace period. When the
-      // customer's verifier sees both headers, they should accept
-      // EITHER as valid: the current secret post-rotation OR the
-      // previous secret while their infra rolls forward. Header is
-      // omitted entirely when prev is null or its grace has expired.
+      // V-359 — dual-sign during the rotation grace period. The
+      // canonical signer emits a SINGLE `x-driftstack-signature`
+      // header in Stripe-style `t=<sec>,v1=<curr>[,v1=<prev>]` form;
+      // the SDK verifier parses the `t=` + every `v1=` from that one
+      // header and accepts if ANY matches, so a customer holding
+      // EITHER the current or the previous secret passes while they
+      // roll the new secret across their infra. The second `v1=` is
+      // included only when prev is non-null and still in grace.
       const prevInGrace =
         endpoint.secretPrev !== null &&
         endpoint.secretPrevExpiresAt !== null &&
         endpoint.secretPrevExpiresAt.getTime() > this.now();
-      const signaturePrev = prevInGrace
-        ? signPayload(endpoint.secretPrev as string, body, emittedAtSec)
-        : null;
+      const sigHeader = signWebhookPayload({
+        body,
+        secret: endpoint.secret,
+        ...(prevInGrace ? { secretPrev: endpoint.secretPrev as string } : {}),
+        timestampSec: emittedAtSec,
+      });
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
       try {
@@ -438,9 +443,7 @@ export class DurableWebhookWorker {
             'content-type': 'application/json',
             'x-driftstack-event-id': delivery.eventId,
             'x-driftstack-event-type': delivery.eventType,
-            'x-driftstack-emitted-at': emittedAtSec.toString(),
-            'x-driftstack-signature': signature,
-            ...(signaturePrev !== null ? { 'x-driftstack-signature-prev': signaturePrev } : {}),
+            'x-driftstack-signature': sigHeader,
           },
           body,
           signal: controller.signal,
@@ -552,13 +555,6 @@ export class DurableWebhookWorker {
       .where(eq(webhookDeliveries.id, delivery.id));
     return 'retried';
   }
-}
-
-/** v1 signature: HMAC-SHA256 over `<emittedAtSec>.<body>`, hex-encoded. */
-export function signPayload(secret: string, body: string, emittedAtSec: number): string {
-  return createHmac('sha256', secret)
-    .update(`${emittedAtSec.toString()}.${body}`, 'utf-8')
-    .digest('hex');
 }
 
 async function loadAttempts(database: Database, deliveryId: string): Promise<DeliveryAttempt[]> {

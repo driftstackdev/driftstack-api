@@ -37,8 +37,9 @@
 //     session.completed | session.failed | quota.warning_80pct |
 //     quota.exceeded | api_key.revoked.
 //
-//   signPayload — v1 signature is HMAC-SHA256 over
-//   '<emittedAtSec>.<body>', hex-encoded. Stripe-style.
+//   Signing delegated to canonical signWebhookPayload — single
+//   x-driftstack-signature header 't=<sec>,v1=<hex>[,v1=<prevHex>]'
+//   (HMAC-SHA256 over '<sec>.<body>'). SDK-verifiable; no bare hex.
 //
 // stays in lockstep across
 // apps/server/src/services/durable-webhook-delivery.ts.
@@ -46,14 +47,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   BACKOFF_MS_BY_ATTEMPT,
   DEFAULT_TIMEOUT_MS,
   DEFAULT_MAX_ATTEMPTS,
-  signPayload,
 } from '../../src/services/durable-webhook-delivery.js';
+import { signWebhookPayload } from '../../src/lib/webhook-signing.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -169,28 +169,22 @@ describe('W918 V-173 durable-webhook-delivery cross-source invariant', () => {
     expect(p).toMatch(/\| 'api_key\.revoked';/);
   });
 
-  // ─── signPayload v1 HMAC-SHA256 hex ──────────────────────────
+  // ─── canonical signWebhookPayload delegation ─────────────────
 
-  it("CRITICAL signPayload framing — 'v1 signature: HMAC-SHA256 over <emittedAtSec>.<body>, hex-encoded'. The Stripe-style timestamp.body signing is what defends against replay-without-timestamp-rotation.", () => {
+  it('CRITICAL the durable sender delegates signing to the canonical signWebhookPayload (single t=,v1= header) — no local bare-hex signPayload remains. This is what keeps the emitted header SDK-verifiable on production cutover (finding #12).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/durable-webhook-delivery.ts'));
-    expect(p).toMatch(/v1 signature: HMAC-SHA256 over `<emittedAtSec>\.<body>`, hex-encoded/);
+    expect(p).toMatch(/import \{ signWebhookPayload \} from '\.\.\/lib\/webhook-signing\.js';/);
+    expect(p).toMatch(/const sigHeader = signWebhookPayload\(\{/);
+    expect(p).toMatch(/'x-driftstack-signature': sigHeader,/);
+    expect(p).not.toMatch(/export function signPayload\(/);
   });
 
-  it('CRITICAL signPayload mechanically computes HMAC-SHA256 over emittedAtSec.body. The runtime parity check prevents drift between the JSDoc framing and the actual implementation.', () => {
-    const secret = 'whsec_test_secret';
-    const body = '{"event":"session.completed","id":"sess_abc"}';
-    const emittedAtSec = 1747370000;
-    const expected = createHmac('sha256', secret)
-      .update(`${emittedAtSec}.${body}`, 'utf-8')
-      .digest('hex');
-    expect(signPayload(secret, body, emittedAtSec)).toBe(expected);
-    expect(signPayload(secret, body, emittedAtSec)).toMatch(/^[0-9a-f]{64}$/);
-  });
-
-  it('CRITICAL signPayload produces different outputs for different timestamps (replay-defense). Drift to a body-only signature would let attackers replay old payloads with a stolen signature.', () => {
-    const sig1 = signPayload('s', 'body', 1000);
-    const sig2 = signPayload('s', 'body', 2000);
-    expect(sig1).not.toBe(sig2);
+  it('CRITICAL signWebhookPayload emits Stripe-style t=,v1= over <timestampSec>.<body> (replay-defense via timestamp). Different timestamps → different signatures.', () => {
+    const header = signWebhookPayload({ body: 'b', secret: 's', timestampSec: 1747370000 });
+    expect(header).toMatch(/^t=1747370000,v1=[0-9a-f]{64}$/);
+    const a = signWebhookPayload({ body: 'body', secret: 's', timestampSec: 1000 });
+    const b = signWebhookPayload({ body: 'body', secret: 's', timestampSec: 2000 });
+    expect(a).not.toBe(b);
   });
 
   it('test file metadata — file exists at canonical path', () => {

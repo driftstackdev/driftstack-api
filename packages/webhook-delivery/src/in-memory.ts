@@ -497,7 +497,6 @@ class DeliveryWorker {
           'content-type': 'application/json',
           'x-driftstack-event-id': payload.eventId,
           'x-driftstack-event-type': payload.eventType,
-          'x-driftstack-emitted-at': payload.emittedAtSec.toString(),
           'x-driftstack-signature': signature,
         },
         body: payload.body,
@@ -509,10 +508,17 @@ class DeliveryWorker {
   }
 }
 
-/** v1 signature: hex-encoded HMAC-SHA256 over `<emittedAtSec>.<body>`. */
+/**
+ * Build the canonical `x-driftstack-signature` header value:
+ * Stripe-style `t=<emittedAtSec>,v1=<hex>`, where the hex is
+ * HMAC-SHA256 over `<emittedAtSec>.<body>`. The single-header
+ * `t=,v1=` shape is what the SDK's verifyWebhookSignature parses;
+ * a bare hex would silently fail customer verification.
+ */
 export function signPayload(secret: string, payload: DeliveryPayload): string {
   const data = `${payload.emittedAtSec.toString()}.${payload.body}`;
-  return createHmac('sha256', secret).update(data, 'utf-8').digest('hex');
+  const hex = createHmac('sha256', secret).update(data, 'utf-8').digest('hex');
+  return `t=${payload.emittedAtSec.toString()},v1=${hex}`;
 }
 
 function dlqReasonFromAttempts(attempts: readonly DeliveryAttempt[]): string {

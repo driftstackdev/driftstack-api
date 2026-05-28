@@ -94,9 +94,11 @@ describe('round-trip with SDK verifier', () => {
 // signWebhookPayload WITH `secretPrev` during a rotation grace
 // window, emitting the Stripe-style dual-`v1=` single header
 // `x-driftstack-signature: t=…,v1=<new>,v1=<old>`. (The forward-path
-// durable-webhook-delivery.ts instead emits two SEPARATE headers
-// `x-driftstack-signature` + `x-driftstack-signature-prev`; the SDK
-// verifier accepts that form via the `headerPrev` input.)
+// durable-webhook-delivery.ts now emits the SAME compound dual-`v1=`
+// single header — finding #12 aligned it to route through
+// signWebhookPayload, replacing the old bare-hex digest + separate
+// `x-driftstack-signature-prev` header that the SDK verifier couldn't
+// parse on cutover.)
 //
 // Finding #13 fix: the SDK verifier now collects EVERY `v1=` and
 // accepts if our HMAC matches ANY (constant-time per candidate), so

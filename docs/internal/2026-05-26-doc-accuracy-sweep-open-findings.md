@@ -21,7 +21,7 @@ the numbered list below.
   - #13 — RESOLVED 2026-05-27: webhook rotation-grace dual-`v1=` verification fixed across all 3 SDKs (collect-all-`v1`, accept any). Was a LIVE-path bug.
   - #14 — [RESOLVED 2026-05-27] BYOK rotation email + status-pill linked to 404 dashboard routes; repointed both to the API docs (BYOK stays API-only).
 - **Latent, high-impact on a planned event:**
-  - #12 — V-173 forward-path webhook delivery signs bare-hex; breaks ALL SDK verification on the durable-impl cutover. (Fix #12 + #13 together — one webhook-signature pass; both rooted in a missing server-sign→SDK-verify e2e test.)
+  - #12 — [RESOLVED 2026-05-28] founder-approved; routed the durable + package webhook signing through the canonical `t=,v1=` header (dropped bare-hex + the separate `x-driftstack-emitted-at` / `x-driftstack-signature-prev` headers) + added the missing server-sign→SDK-verify e2e tests (written first, confirmed failing pre-fix). Forward path now verifies identically to production.
   - #15 — [RESOLVED 2026-05-28] cost rate card corrected to real Anthropic list price (Opus 4.7 $5/$25; was 4o-mini) AND a per-session model picker shipped end-to-end (Claude 4.x: Opus 4.7 / Sonnet 4.6 / Haiku 4.5) — CLAUDE_MODELS registry + migration 0066 agent_sessions.model + decomposer sources the per-model rate + create-session/SDK/dashboard surfaces. Customer picks a model; cost recorded at that model's list-price rate. Founder-confirmed real-list-price basis.
 - **Contract / intent decisions (pick a direction, then align sources):**
   - #5 — [RESOLVED 2026-05-27, 0a3e5cca] webhook retry count fixed to the documented 5 retries / 6 attempts (founder approved option a); all 3 impls bumped to MAX=6, customer docs reconciled, the toothless guard now asserts numeric cross-source equality.
@@ -321,6 +321,20 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
 
 12. **Forward-path webhook delivery signs with an incompatible header
     scheme — breaks SDK verification on cutover (latent, high-impact).**
+    **[RESOLVED 2026-05-28]** Founder-approved. Routed BOTH the durable path
+    (`durable-webhook-delivery.ts` — now imports `signWebhookPayload`) and
+    the package path (`packages/webhook-delivery/in-memory.ts` — replicates
+    the format locally since it can't import apps/server) through the
+    canonical `t=<sec>,v1=<hex>[,v1=<prevHex>]` single header; dropped the
+    bare-hex digest + the separate `x-driftstack-emitted-at` /
+    `x-driftstack-signature-prev` headers. Added the missing
+    server-sign→SDK-verify e2e tests (durable sender → captured header →
+    real SDK `verifyWebhookSignature`; package `signPayload` → verifier),
+    written first + confirmed failing against the old bare-hex. HMAC input
+    unchanged; full suite green. The forward path now verifies identically
+    to production. (Residual: customer-facing SDK/webhook docs that still
+    describe a separate `x-driftstack-signature-prev` header for reading —
+    a doc-accuracy follow-up; no server path emits it now.)
     The published contract is a Stripe-style compound header:
     `X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>`, HMAC-SHA256 over
     `<t>.<body>` — documented in `webhooks/events.md:64`, verified by all

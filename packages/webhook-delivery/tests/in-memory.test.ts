@@ -89,11 +89,14 @@ function build(
 }
 
 describe('signPayload', () => {
-  it('matches HMAC-SHA256 of <emittedAtSec>.<body>', () => {
-    const expected = createHmac('sha256', ENDPOINT.signingSecret)
+  it('returns canonical t=<emittedAtSec>,v1=<hex HMAC over emittedAtSec.body>', () => {
+    const hex = createHmac('sha256', ENDPOINT.signingSecret)
       .update(`${PAYLOAD.emittedAtSec.toString()}.${PAYLOAD.body}`, 'utf-8')
       .digest('hex');
-    expect(signPayload(ENDPOINT.signingSecret, PAYLOAD)).toBe(expected);
+    expect(signPayload(ENDPOINT.signingSecret, PAYLOAD)).toBe(
+      `t=${PAYLOAD.emittedAtSec.toString()},v1=${hex}`,
+    );
+    expect(signPayload(ENDPOINT.signingSecret, PAYLOAD)).toMatch(/^t=\d+,v1=[0-9a-f]{64}$/);
   });
 });
 
@@ -208,7 +211,7 @@ describe('processTick — happy path delivery', () => {
     expect(calls[0]?.url).toBe(ENDPOINT.url);
   });
 
-  it('signs the request with v1 HMAC over emittedAtSec.body', async () => {
+  it('signs the request with the canonical t=,v1= signature header', async () => {
     const { fn, calls } = captureFetch(() => ({ status: 200 }));
     const { handles } = build(fn);
     await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
@@ -217,9 +220,12 @@ describe('processTick — happy path delivery', () => {
     expect(call.headers['x-driftstack-signature']).toBe(
       signPayload(ENDPOINT.signingSecret, PAYLOAD),
     );
+    expect(call.headers['x-driftstack-signature']).toMatch(/^t=\d+,v1=[0-9a-f]{64}$/);
     expect(call.headers['x-driftstack-event-id']).toBe(PAYLOAD.eventId);
     expect(call.headers['x-driftstack-event-type']).toBe(PAYLOAD.eventType);
-    expect(call.headers['x-driftstack-emitted-at']).toBe(PAYLOAD.emittedAtSec.toString());
+    // emitted-at is folded into the `t=` of the signature header — no
+    // separate x-driftstack-emitted-at header.
+    expect(call.headers['x-driftstack-emitted-at']).toBeUndefined();
   });
 });
 

@@ -44,11 +44,12 @@
 //   • recordAttempt: success → status='delivered' + nextAttemptAtMs:
 //     null; toDlq → DlqEntry move + delete from queue; retry →
 //     status='pending' + nextAttemptAtMs = now + backoff.
-//   • fetchWithTimeout: AbortController + 4 x-driftstack-* headers
-//     (event-id + event-type + emitted-at + signature) + content-
-//     type application/json.
-//   • signPayload: v1 = HMAC-SHA256(secret, `${emittedAtSec}.${body}`)
-//     framing pinned.
+//   • fetchWithTimeout: AbortController + 3 x-driftstack-* headers
+//     (event-id + event-type + signature) + content-type
+//     application/json.
+//   • signPayload: canonical `t=<emittedAtSec>,v1=<hex>` header where
+//     hex = HMAC-SHA256(secret, `${emittedAtSec}.${body}`); SDK-
+//     verifiable single-header form.
 //   • dlqReasonFromAttempts: `${count}× ${outcome}: ${errorMessage}`.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -210,20 +211,25 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
     );
   });
 
-  it('fetchWithTimeout: AbortController with setTimeout for timeout; 4 x-driftstack-* headers (event-id + event-type + emitted-at + signature) + content-type application/json + body: payload.body; finally clearTimeout', () => {
+  it('fetchWithTimeout: AbortController with setTimeout for timeout; 3 x-driftstack-* headers (event-id + event-type + signature) + content-type application/json + body: payload.body; finally clearTimeout', () => {
     expect(body).toMatch(
       /const controller = new AbortController\(\);\s*\n?\s*const timer = setTimeout\(\(\) => controller\.abort\(\), timeoutMs\);/,
     );
     expect(body).toMatch(
-      /headers: \{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*'x-driftstack-event-id': payload\.eventId,\s*\n?\s*'x-driftstack-event-type': payload\.eventType,\s*\n?\s*'x-driftstack-emitted-at': payload\.emittedAtSec\.toString\(\),\s*\n?\s*'x-driftstack-signature': signature,\s*\n?\s*\},/,
+      /headers: \{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*'x-driftstack-event-id': payload\.eventId,\s*\n?\s*'x-driftstack-event-type': payload\.eventType,\s*\n?\s*'x-driftstack-signature': signature,\s*\n?\s*\},/,
     );
     expect(body).toMatch(/finally \{\s*\n?\s*clearTimeout\(timer\);\s*\n?\s*\}/);
   });
 
-  it("signPayload framing pinned: 'v1 signature: hex-encoded HMAC-SHA256 over `<emittedAtSec>.<body>`.' + createHmac('sha256', secret).update(`${emittedAtSec}.${body}`, 'utf-8').digest('hex')", () => {
+  it('signPayload returns the canonical t=<emittedAtSec>,v1=<hex> header (HMAC-SHA256 over `<emittedAtSec>.<body>`), matching the SDK verifier', () => {
+    expect(body).toMatch(/Stripe-style `t=<emittedAtSec>,v1=<hex>`/);
     expect(body).toMatch(
-      /\/\*\* v1 signature: hex-encoded HMAC-SHA256 over `<emittedAtSec>\.<body>`\. \*\/\s*\n?\s*export function signPayload\(secret: string, payload: DeliveryPayload\): string \{\s*\n?\s*const data = `\$\{payload\.emittedAtSec\.toString\(\)\}\.\$\{payload\.body\}`;\s*\n?\s*return createHmac\('sha256', secret\)\.update\(data, 'utf-8'\)\.digest\('hex'\);\s*\n?\s*\}/,
+      /const data = `\$\{payload\.emittedAtSec\.toString\(\)\}\.\$\{payload\.body\}`;/,
     );
+    expect(body).toMatch(
+      /const hex = createHmac\('sha256', secret\)\.update\(data, 'utf-8'\)\.digest\('hex'\);/,
+    );
+    expect(body).toMatch(/return `t=\$\{payload\.emittedAtSec\.toString\(\)\},v1=\$\{hex\}`;/);
   });
 
   it("dlqReasonFromAttempts: `${count}× ${outcome}: ${errorMessage ?? '(no message)'}` format", () => {

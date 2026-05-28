@@ -26,13 +26,14 @@
 //   • DurableWebhookWorker.processTick: SELECT FOR UPDATE SKIP
 //     LOCKED claim → flip to in_flight in same txn → deliver loop
 //     → success/dlq/retry branch.
-//   • V-359 dual-sign during rotation grace: x-driftstack-
-//     signature-prev header included only when secretPrev in grace
-//     window.
-//   • Headers: x-driftstack-event-id / event-type / emitted-at /
-//     signature + signaturePrev (optional).
-//   • signPayload: HMAC-SHA256 over `<emittedAtSec>.<body>`,
-//     hex-encoded.
+//   • V-359 dual-sign during rotation grace: prev secret folded into
+//     a second `v1=` of the single x-driftstack-signature header via
+//     signWebhookPayload, only when secretPrev in grace window.
+//   • Headers: x-driftstack-event-id / event-type / signature
+//     (canonical t=,v1= form). No separate emitted-at / signature-prev.
+//   • Signing delegated to canonical signWebhookPayload
+//     (apps/server/src/lib/webhook-signing.ts) — single-header
+//     `t=<sec>,v1=<hex>[,v1=<prevHex>]`, SDK-verifiable.
 //   • AbortController timeout + 200-char responseExcerpt truncation
 //     + 5xx/timeout → retry with backoff; attempts >= MAX_ATTEMPTS
 //     → status=dlq.
@@ -127,27 +128,21 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     );
   });
 
-  it('V-359 dual-sign: x-driftstack-signature-prev header included only when secretPrev in grace window', () => {
+  it('V-359 dual-sign: prev secret folded into a second v1= via signWebhookPayload, only when secretPrev in grace window', () => {
+    expect(body).toMatch(/const prevInGrace =\s*\n?\s*endpoint\.secretPrev !== null &&/);
+    expect(body).toMatch(/endpoint\.secretPrevExpiresAt\.getTime\(\) > this\.now\(\);/);
     expect(body).toMatch(
-      /\/\/ V-359 — dual-sign during the rotation grace period\. When the\s*\n?\s*\/\/ customer's verifier sees both headers, they should accept\s*\n?\s*\/\/ EITHER as valid: the current secret post-rotation OR the\s*\n?\s*\/\/ previous secret while their infra rolls forward\. Header is\s*\n?\s*\/\/ omitted entirely when prev is null or its grace has expired\./,
-    );
-    expect(body).toMatch(
-      /const prevInGrace =\s*\n?\s*endpoint\.secretPrev !== null &&\s*\n?\s*endpoint\.secretPrevExpiresAt !== null &&\s*\n?\s*endpoint\.secretPrevExpiresAt\.getTime\(\) > this\.now\(\);/,
-    );
-    expect(body).toMatch(
-      /const signaturePrev = prevInGrace\s*\n?\s*\?\s*signPayload\(endpoint\.secretPrev as string, body, emittedAtSec\)\s*\n?\s*:\s*null;/,
-    );
-    expect(body).toMatch(
-      /\.\.\.\(signaturePrev !== null \? \{ 'x-driftstack-signature-prev': signaturePrev \} : \{\}\),/,
+      /const sigHeader = signWebhookPayload\(\{\s*\n?\s*body,\s*\n?\s*secret: endpoint\.secret,\s*\n?\s*\.\.\.\(prevInGrace \? \{ secretPrev: endpoint\.secretPrev as string \} : \{\}\),\s*\n?\s*timestampSec: emittedAtSec,\s*\n?\s*\}\);/,
     );
   });
 
-  it('deliver headers: 4 x-driftstack-* headers (event-id / event-type / emitted-at / signature) + content-type', () => {
+  it('deliver headers: 3 x-driftstack-* headers (event-id / event-type / signature) + content-type; no emitted-at or signature-prev header', () => {
     expect(body).toMatch(/'content-type': 'application\/json',/);
     expect(body).toMatch(/'x-driftstack-event-id': delivery\.eventId,/);
     expect(body).toMatch(/'x-driftstack-event-type': delivery\.eventType,/);
-    expect(body).toMatch(/'x-driftstack-emitted-at': emittedAtSec\.toString\(\),/);
-    expect(body).toMatch(/'x-driftstack-signature': signature,/);
+    expect(body).toMatch(/'x-driftstack-signature': sigHeader,/);
+    expect(body).not.toMatch(/'x-driftstack-emitted-at':/);
+    expect(body).not.toMatch(/'x-driftstack-signature-prev':/);
   });
 
   it('deliver outcome: 2xx → success; non-2xx → http_error; AbortError|TimeoutError → timeout; else → transport_error; 200-char responseExcerpt truncation', () => {
@@ -172,11 +167,9 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).toMatch(/nextAttemptAt: new Date\(this\.now\(\) \+ backoffMs\),/);
   });
 
-  it('signPayload: HMAC-SHA256 over `<emittedAtSec>.<body>`, hex-encoded (v1 signature)', () => {
-    expect(body).toMatch(/v1 signature: HMAC-SHA256 over `<emittedAtSec>\.<body>`, hex-encoded\./);
-    expect(body).toMatch(
-      /export function signPayload\(secret: string, body: string, emittedAtSec: number\): string \{\s*\n?\s*return createHmac\('sha256', secret\)\s*\n?\s*\.update\(`\$\{emittedAtSec\.toString\(\)\}\.\$\{body\}`, 'utf-8'\)\s*\n?\s*\.digest\('hex'\);/,
-    );
+  it('signing delegated to the canonical signWebhookPayload (t=,v1= header); no local bare-hex signPayload', () => {
+    expect(body).toMatch(/import \{ signWebhookPayload \} from '\.\.\/lib\/webhook-signing\.js';/);
+    expect(body).not.toMatch(/export function signPayload\(/);
   });
 
   it('rowToDeliveryRecord: terminal states (delivered/failed/dlq) → nextAttemptAtMs=null; else getTime()', () => {
@@ -198,8 +191,8 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).toMatch(/const now = deps\.now \?\? \(\(\) => Date\.now\(\)\);/);
   });
 
-  it('imports: createHmac + drizzle-orm helpers (and/asc/desc/eq/inArray/lt/or/sql) + webhook-delivery package types + Database + schema', () => {
-    expect(body).toMatch(/import \{ createHmac \} from 'node:crypto';/);
+  it('imports: drizzle-orm helpers (and/asc/desc/eq/inArray/lt/or/sql) + signWebhookPayload + webhook-delivery package types + Database + schema', () => {
+    expect(body).toMatch(/import \{ signWebhookPayload \} from '\.\.\/lib\/webhook-signing\.js';/);
     expect(body).toMatch(
       /import \{ and, asc, desc, eq, inArray, lt, or, sql \} from 'drizzle-orm';/,
     );

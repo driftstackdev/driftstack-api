@@ -30,9 +30,10 @@ describe('webhook signature-header name cross-source invariant', () => {
   const sdkTs = read(SDK_TS);
   const sdkPy = read(SDK_PY);
 
-  it('services/durable-webhook-delivery emits both x-driftstack-signature + x-driftstack-signature-prev during rotation', () => {
-    expect(delivery).toMatch(/'x-driftstack-signature': signature,/);
-    expect(delivery).toMatch(/'x-driftstack-signature-prev': signaturePrev/);
+  it('services/durable-webhook-delivery emits the canonical single x-driftstack-signature header (rotation prev folded into a second v1= via signWebhookPayload, not a separate header)', () => {
+    expect(delivery).toMatch(/'x-driftstack-signature': sigHeader,/);
+    expect(delivery).toMatch(/const sigHeader = signWebhookPayload\(\{/);
+    expect(delivery).not.toMatch(/'x-driftstack-signature-prev':/);
   });
 
   it('services/webhook-worker emits x-driftstack-signature', () => {
