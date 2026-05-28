@@ -46,8 +46,8 @@ const DEFAULT_RETRY_BACKOFF_MS = 1000;
 // version bumps. If the rate is wrong, historical rows keep their
 // recorded cost (we don't recompute), so the audit trail stays
 // internally consistent even when the rate-table drifts.
-const CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK = 15;
-const CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK = 75;
+const CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK = 5;
+const CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK = 25;
 
 // AUP pre-filter — identical to the deterministic decomposer's corpus
 // so the same obvious-abuse short-circuit applies before any LLM call.

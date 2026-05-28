@@ -67,9 +67,9 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/const DEFAULT_RETRY_BACKOFF_MS = 1000;/);
   });
 
-  it("v2-#4 Q.1.e pricing rate-table pinned: CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK = 15 + CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK = 75. + 'Sourced from https://www.anthropic.com/pricing — verify quarterly + on model version bumps. If the rate is wrong, historical rows keep their recorded cost (we don't recompute), so the audit trail stays internally consistent even when the rate-table drifts.' framing — pinned so the rate-table source URL + verify-quarterly + no-recompute-on-drift contract stay documented", () => {
-    expect(body).toMatch(/const CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK = 15;/);
-    expect(body).toMatch(/const CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK = 75;/);
+  it("v2-#4 Q.1.e pricing rate-table pinned: CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK = 5 + CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK = 25 (Opus 4.7 real list price). + 'Sourced from https://www.anthropic.com/pricing — verify quarterly + on model version bumps. If the rate is wrong, historical rows keep their recorded cost (we don't recompute), so the audit trail stays internally consistent even when the rate-table drifts.' framing — pinned so the rate-table source URL + verify-quarterly + no-recompute-on-drift contract stay documented", () => {
+    expect(body).toMatch(/const CLAUDE_OPUS_4_7_INPUT_USD_PER_MTOK = 5;/);
+    expect(body).toMatch(/const CLAUDE_OPUS_4_7_OUTPUT_USD_PER_MTOK = 25;/);
     expect(body).toMatch(/Sourced from\s*\n?\s*\/\/ https:\/\/www\.anthropic\.com\/pricing/);
     expect(body).toMatch(
       /verify quarterly \+ on model\s*\n?\s*\/\/ version bumps\. If the rate is wrong, historical rows keep their/,

@@ -49,10 +49,10 @@ describe('V-541.G — production cost-monitoring wiring', () => {
     expect(summary).not.toBeNull();
     // Centralised rates: compute=0.05 cents/min × 4000 = 200 cents.
     expect(summary?.breakdown.computeCents).toBe(200);
-    // LLM input: 500k tokens / 1000 × 1.5 cents (Opus 4.7) = 750 cents.
-    expect(summary?.breakdown.llmCents).toBe(750);
+    // LLM input: 500k tokens / 1000 × 0.5 cents (Opus 4.7 list) = 250 cents.
+    expect(summary?.breakdown.llmCents).toBe(250);
     // Total is the sum.
-    expect(summary?.breakdown.totalCents).toBe(950);
+    expect(summary?.breakdown.totalCents).toBe(450);
   });
 
   it('uses DEFAULT_TIER_THRESHOLDS_DERIVED → solo_manual carries (4740, 7110) — derived-from-price, not hand-tuned', async () => {

@@ -34,13 +34,13 @@ export const DEFAULT_COST_RATES: CostRates = {
   // Postmark transactional bulk rate, €0.001/send.
   emailCentsPerSend: 0.1,
   // Anthropic Claude Opus 4.7 list price (the model the agent actually
-  // runs — agent-decomposer-claude.ts) — $15/1M input = 1.5c/1k. The
-  // prior 4o-mini figure (0.015c/1k) under-estimated cost-to-serve ~100×.
+  // runs — agent-decomposer-claude.ts) — $5/1M input = 0.5c/1k. The
+  // prior 4o-mini figure (0.015c/1k) under-estimated cost-to-serve ~33×.
   // USD list price treated ~1:1 with the EUR-cent accounting unit here;
-  // a future per-model picker will source per-model rates (#15).
-  llmCentsPer1kInputTokens: 1.5,
-  // Anthropic Claude Opus 4.7 list price — $75/1M output = 7.5c/1k.
-  llmCentsPer1kOutputTokens: 7.5,
+  // the per-model picker (#15) sources per-model rates from CLAUDE_MODELS.
+  llmCentsPer1kInputTokens: 0.5,
+  // Anthropic Claude Opus 4.7 list price — $25/1M output = 2.5c/1k.
+  llmCentsPer1kOutputTokens: 2.5,
 };
 
 /**
