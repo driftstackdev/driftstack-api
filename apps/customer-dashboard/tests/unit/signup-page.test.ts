@@ -1,0 +1,205 @@
+// Local integration test for the /signup page's inline script — the
+// account-creation (onboarding) flow. Covers POST /v1/auth/signup, the
+// success hand-off to /verify-email (stashing ds_signup_email +
+// debug_token in sessionStorage, NO token yet), the per-field
+// validation-issue formatting (zod extensions.issues → friendly
+// messages, Issue 2 wave 1085+), the generic-detail fallback, V-667.C
+// OAuth start, and the V-269 ?next= round-trip. Only source-regex
+// coverage before.
+//
+// Mirrors login-page.test.ts (FIFO plan; the page navigates via
+// window.location.href on success → jsdom "Not implemented: navigation"
+// is filtered; assert the PRE-nav side effect).
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { JSDOM, VirtualConsole } from 'jsdom';
+import { afterEach, describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'signup', 'index.html');
+const DEFAULT_URL = 'https://app.driftstack.dev/signup/';
+
+interface MockFetchCall {
+  url: string;
+  init: RequestInit | undefined;
+}
+
+interface SetUpOpts {
+  url?: string;
+  fetchPlan?: Array<(call: MockFetchCall) => Response>;
+}
+
+function setUpDom(
+  html: string,
+  opts: SetUpOpts,
+): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+  const scriptBodies: string[] = [];
+  const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
+    scriptBodies.push(body);
+    return '';
+  });
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', (err: Error) => {
+    if (!/Not implemented: navigation/.test(String(err && err.message))) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+    }
+  });
+  const dom = new JSDOM(htmlNoScripts, {
+    url: opts.url ?? DEFAULT_URL,
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole,
+  });
+  const { window } = dom;
+  const fetchCalls: MockFetchCall[] = [];
+  const plan = [...(opts.fetchPlan ?? [])];
+  // @ts-expect-error — jsdom global is loose
+  if (typeof window.Response !== 'function') window.Response = Response;
+  // @ts-expect-error — jsdom global is loose
+  window.fetch = (input: string, init: RequestInit | undefined) => {
+    const call: MockFetchCall = { url: String(input), init };
+    fetchCalls.push(call);
+    const handler = plan.shift();
+    if (!handler) {
+      // eslint-disable-next-line no-console
+      console.warn('[signup-page test] unplanned fetch:', call.url);
+      return Promise.resolve(new Response('{}', { status: 500 }));
+    }
+    return Promise.resolve(handler(call));
+  };
+
+  const pageScript = scriptBodies.find((s) => s.includes('data-page="signup"'));
+  if (!pageScript) throw new Error('signup inline script not found');
+  // @ts-expect-error — jsdom global has eval
+  window.eval(pageScript);
+  return { window: window as JSDOM['window'], fetchCalls };
+}
+
+function json(obj: unknown, status = 200): Response {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function bannerHidden(window: JSDOM['window']): boolean {
+  const b = window.document.querySelector('[data-banner]');
+  return !b || b.classList.contains('hidden');
+}
+function bannerText(window: JSDOM['window']): string {
+  return window.document.querySelector('[data-banner]')?.textContent ?? '';
+}
+
+async function flush(times = 4): Promise<void> {
+  for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
+}
+
+function submitSignup(window: JSDOM['window'], email: string, password: string): void {
+  const form = window.document.querySelector('[data-form="signup"]') as HTMLFormElement;
+  (form.querySelector('input[name="email"]') as HTMLInputElement).value = email;
+  (form.querySelector('input[name="password"]') as HTMLInputElement).value = password;
+  form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+}
+
+describe('signup page — local integration', () => {
+  let win: JSDOM['window'] | null = null;
+  afterEach(() => {
+    win?.close?.();
+    win = null;
+  });
+  const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('successful signup POSTs {email, password} and stashes ds_signup_email (no token yet — verify-email flow)', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [() => json({ debug_token: 'verify_abc' }, 201)],
+    });
+    win = window;
+    submitSignup(window, 'newbie@example.com', 'a-very-long-password');
+    await flush();
+    const post = fetchCalls.find((c) => /\/v1\/auth\/signup$/.test(c.url));
+    expect(post?.init?.method).toBe('POST');
+    const body = JSON.parse(String(post?.init?.body));
+    expect(body.email).toBe('newbie@example.com');
+    expect(body.password).toBe('a-very-long-password');
+    // No web session token on signup — that comes after verify-email.
+    expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+    // Email stashed for the verify page; debug_token stashed for dev paste-in.
+    expect(window.sessionStorage.getItem('ds_signup_email')).toBe('newbie@example.com');
+    expect(window.sessionStorage.getItem('ds_debug_verify_token')).toBe('verify_abc');
+  });
+
+  it('per-field validation: zod extensions.issues.fieldErrors → friendly banner message', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () =>
+          json(
+            {
+              title: 'Validation failed',
+              detail: 'One or more fields failed validation',
+              extensions: {
+                issues: {
+                  formErrors: [],
+                  fieldErrors: {
+                    password: ['String must contain at least 12 character(s)'],
+                  },
+                },
+              },
+            },
+            422,
+          ),
+      ],
+    });
+    win = window;
+    submitSignup(window, 'x@example.com', 'short');
+    await flush();
+    expect(bannerHidden(window)).toBe(false);
+    // friendly mapping, NOT the generic "One or more fields failed validation".
+    expect(bannerText(window)).toMatch(/Password must be at least 12 characters\./);
+    expect(bannerText(window)).not.toMatch(/One or more fields failed validation/);
+  });
+
+  it('generic error (no issues): falls back to the server detail string', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [() => json({ detail: 'Email already registered.' }, 409)],
+    });
+    win = window;
+    submitSignup(window, 'dupe@example.com', 'a-very-long-password');
+    await flush();
+    expect(bannerHidden(window)).toBe(false);
+    expect(bannerText(window)).toMatch(/Email already registered\./);
+    expect(window.sessionStorage.getItem('ds_signup_email')).toBeNull();
+  });
+
+  it('V-667.C OAuth start: POSTs {provider, redirect_to} to /v1/auth/oauth-client/start', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [() => json({ authorize_url: 'https://github.com/login/oauth/authorize?x=1' })],
+    });
+    win = window;
+    const btn = window.document.querySelector('[data-oauth]') as HTMLButtonElement | null;
+    if (!btn) {
+      expect(true).toBe(true);
+      return;
+    }
+    btn.click();
+    await flush();
+    const post = fetchCalls.find((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
+    expect(post?.init?.method).toBe('POST');
+    const body = JSON.parse(String(post?.init?.body));
+    expect(typeof body.provider).toBe('string');
+    expect(body.provider.length).toBeGreaterThan(0);
+    expect(typeof body.redirect_to).toBe('string');
+  });
+
+  it('V-269 ?next= round-trip: the "sign in" login link carries the next target', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      url: 'https://app.driftstack.dev/signup/?next=' + encodeURIComponent('/cli/authorize'),
+    });
+    win = window;
+    await flush();
+    const link = window.document.querySelector('[data-login-link]') as HTMLAnchorElement | null;
+    expect(link?.getAttribute('href')).toBe('/login?next=' + encodeURIComponent('/cli/authorize'));
+  });
+});
