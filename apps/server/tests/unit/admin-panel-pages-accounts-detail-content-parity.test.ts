@@ -100,7 +100,7 @@ describe('W490.C apps/admin-panel/src/pages/accounts/[id].astro content parity',
 
   it("V-281 audit-only support tooling: addSupportNote prompts for free-form note (max 2000 chars) and POSTs to /audit-note; recordRefund prompts for external_reference (Stripe charge/payment_intent/invoice id) + amount_cents (positive int) + reason (required) and POSTs to /refund-record with 'Reminder: actual refund is issued via Stripe dashboard — this endpoint is audit-only.' confirmation — pinned so the audit-only framing survives (drift to actual refund integration would couple admin panel to Stripe API and could double-issue refunds)", () => {
     expect(body).toMatch(
-      /function addSupportNote\(\) \{\s*\n?\s*const note = window\.prompt\(\s*\n?\s*'Support note \(free-form, max 2000 chars\)\. Recorded on this customer\\'s audit log \+ admin audit:',\s*\n?\s*\);/,
+      /async function addSupportNote\(\) \{\s*\n?\s*const note = await window\.driftstackPrompt\(\s*\n?\s*'Support note \(free-form, max 2000 chars\)\. Recorded on this customer\\'s audit log \+ admin audit:',/,
     );
     expect(body).toMatch(
       /'Refund recorded\. Reminder: actual refund is issued via Stripe dashboard — this endpoint is audit-only\.',/,

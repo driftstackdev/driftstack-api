@@ -581,12 +581,16 @@ const accountId = account.id;
           });
       }
 
-      function changeTier() {
-        const tier = window.prompt(
+      async function changeTier() {
+        const tier = await window.driftstackPrompt(
           'New tier (one of free / solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale / enterprise):',
+          { placeholder: 'e.g. api_starter', confirmLabel: 'Change tier' },
         );
         if (!tier) return;
-        const reason = window.prompt('Reason for tier change (optional, max 500 chars):') || '';
+        const reason =
+          (await window.driftstackPrompt('Reason for tier change (optional, max 500 chars):', {
+            placeholder: 'optional',
+          })) || '';
         const body = { tier: tier.trim() };
         if (reason.trim()) body.reason = reason.trim();
         showBanner('Changing tier to ' + tier + '…');
@@ -607,8 +611,12 @@ const accountId = account.id;
           });
       }
 
-      function suspend() {
-        const reason = window.prompt('Reason for suspending this account (optional, max 500 chars):') || '';
+      async function suspend() {
+        const reason =
+          (await window.driftstackPrompt(
+            'Reason for suspending this account (optional, max 500 chars):',
+            { placeholder: 'optional', confirmLabel: 'Suspend' },
+          )) || '';
         const body = {};
         if (reason.trim()) body.reason = reason.trim();
         showBanner('Suspending account…');
@@ -628,8 +636,12 @@ const accountId = account.id;
           });
       }
 
-      function unsuspend() {
-        const reason = window.prompt('Reason for unsuspending (optional, max 500 chars):') || '';
+      async function unsuspend() {
+        const reason =
+          (await window.driftstackPrompt('Reason for unsuspending (optional, max 500 chars):', {
+            placeholder: 'optional',
+            confirmLabel: 'Unsuspend',
+          })) || '';
         const body = {};
         if (reason.trim()) body.reason = reason.trim();
         showBanner('Unsuspending account…');
@@ -728,9 +740,10 @@ const accountId = account.id;
       });
 
       // V-281 — audit-only support tooling.
-      function addSupportNote() {
-        const note = window.prompt(
+      async function addSupportNote() {
+        const note = await window.driftstackPrompt(
           'Support note (free-form, max 2000 chars). Recorded on this customer\'s audit log + admin audit:',
+          { placeholder: 'note…', confirmLabel: 'Record note' },
         );
         if (!note || !note.trim()) return;
         showBanner('Recording support note…');
@@ -749,18 +762,24 @@ const accountId = account.id;
           });
       }
 
-      function recordRefund() {
-        const externalRef = window.prompt(
+      async function recordRefund() {
+        const externalRef = await window.driftstackPrompt(
           'Stripe charge / payment_intent / invoice id (the actual refund happens via Stripe dashboard):',
+          { placeholder: 'ch_… / pi_… / in_…' },
         );
         if (!externalRef || !externalRef.trim()) return;
-        const amountStr = window.prompt('Refund amount in cents (e.g. 299 for $2.99):');
+        const amountStr = await window.driftstackPrompt('Refund amount in cents (e.g. 299 for $2.99):', {
+          placeholder: '299',
+        });
         const amount_cents = Number(amountStr);
         if (!Number.isInteger(amount_cents) || amount_cents <= 0) {
           showBanner('Refund amount must be a positive integer (cents).');
           return;
         }
-        const reason = window.prompt('Reason (recorded in customer audit log + admin audit):');
+        const reason = await window.driftstackPrompt(
+          'Reason (recorded in customer audit log + admin audit):',
+          { confirmLabel: 'Record refund' },
+        );
         if (!reason || !reason.trim()) {
           showBanner('Refund reason is required.');
           return;
