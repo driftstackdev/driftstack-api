@@ -1,20 +1,33 @@
-"""Recipes resource — /v1/recipes (AI-B4, write-only at v1.0).
+"""Recipes resource — /v1/recipes (AI-B4).
 
-Mirrors the TypeScript RecipesResource. Server registers the route as
-a 503 ``FeatureUnavailable`` stub until both ``recipesRepo`` and
+Mirrors the TypeScript RecipesResource. Server registers the routes as
+503 ``FeatureUnavailable`` stubs until both ``recipesRepo`` and
 ``agentSessionsRepo`` are wired in AppDeps; SDK surface is stable so
 consumers compile ahead of time.
 
-V1.0 scope is intentionally narrow — ``create`` only. Read / list /
-execute / delete surfaces are v1.1 D2/D3.
+Surface: ``create`` + ``list`` + ``get`` + ``delete`` (the
+read/management path was pulled forward from the v1.1 D2/D3 defer —
+V-530.I/.J). Recipe EXECUTION stays v1.1 (gated on the harness executor).
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
+from urllib.parse import quote, urlencode
 
 from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.pagination import aiterate_paginated, iterate_paginated
 from driftstack.resources._common import coerce_body
+
+
+def _encode_query(query: dict[str, Any]) -> str:
+    items: list[tuple[str, str]] = []
+    for key, value in query.items():
+        if value is None:
+            continue
+        items.append((key, str(value)))
+    return urlencode(items)
 
 
 class RecipesResource:
@@ -47,6 +60,31 @@ class RecipesResource:
             body["description"] = description
         return self._http.request("POST", "/v1/recipes", json_body=coerce_body(body))
 
+    def list(self, *, limit: int | None = None, cursor: str | None = None) -> dict[str, Any]:
+        """List the account's recipes, newest first. Cursor-paginated."""
+        qs = _encode_query({"limit": limit, "cursor": cursor})
+        path = "/v1/recipes" + (f"?{qs}" if qs else "")
+        return self._http.request("GET", path)
+
+    def iterate(self, *, limit: int | None = None) -> Iterator[dict[str, Any]]:
+        """Lazily walk every recipe, handling cursor handoff."""
+
+        def fetch_page(cursor: str | None) -> dict[str, Any]:
+            return self.list(limit=limit, cursor=cursor)
+
+        return iterate_paginated(fetch_page)
+
+    def get(self, recipe_id: str) -> dict[str, Any]:
+        """Fetch a single recipe in full (includes ``intent_log``).
+
+        404 if missing or owned by another account (existence not leaked).
+        """
+        return self._http.request("GET", f"/v1/recipes/{quote(recipe_id, safe='')}")
+
+    def delete(self, recipe_id: str) -> None:
+        """Delete a recipe. 404 if missing or owned by another account."""
+        self._http.request("DELETE", f"/v1/recipes/{quote(recipe_id, safe='')}")
+
 
 class AsyncRecipesResource:
     """Async AI-B4 recipe library."""
@@ -68,3 +106,22 @@ class AsyncRecipesResource:
         if description is not None:
             body["description"] = description
         return await self._http.request("POST", "/v1/recipes", json_body=coerce_body(body))
+
+    async def list(self, *, limit: int | None = None, cursor: str | None = None) -> dict[str, Any]:
+        qs = _encode_query({"limit": limit, "cursor": cursor})
+        path = "/v1/recipes" + (f"?{qs}" if qs else "")
+        return await self._http.request("GET", path)
+
+    def iterate(self, *, limit: int | None = None) -> AsyncIterator[dict[str, Any]]:
+        """Async variant of :meth:`RecipesResource.iterate`."""
+
+        async def fetch_page(cursor: str | None) -> dict[str, Any]:
+            return await self.list(limit=limit, cursor=cursor)
+
+        return aiterate_paginated(fetch_page)
+
+    async def get(self, recipe_id: str) -> dict[str, Any]:
+        return await self._http.request("GET", f"/v1/recipes/{quote(recipe_id, safe='')}")
+
+    async def delete(self, recipe_id: str) -> None:
+        await self._http.request("DELETE", f"/v1/recipes/{quote(recipe_id, safe='')}")
