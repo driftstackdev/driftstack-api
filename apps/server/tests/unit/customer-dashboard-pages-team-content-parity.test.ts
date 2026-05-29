@@ -103,9 +103,10 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
     );
   });
 
-  it("Empty-state: members → 'No team members yet. Invite one above.' / invites → 'No pending invites.' — pinned so the two empty states stay distinct (drift to identical copy would lose the 'next step: invite' affordance on the members empty)", () => {
-    expect(body).toMatch(/No team members yet\. Invite one above\./);
-    expect(body).toMatch(/No pending invites\./);
+  it("Empty-state (2026-05-29 polished icon+headline+body, consistent with snapshots/recipes): members → headline 'No team members yet' + body 'Invite one above to collaborate…' / invites → headline 'No pending invites' + body 'Invitations you send will appear here…' — pinned so the two empty states stay distinct (drift to identical copy would lose the 'next step: invite' affordance on the members empty) and use the shared emptyState() helper", () => {
+    expect(body).toMatch(/function emptyState\(iconPath, headline, body\)/);
+    expect(body).toMatch(/'No team members yet',\s*\n?\s*'Invite one above to collaborate/);
+    expect(body).toMatch(/'No pending invites',\s*\n?\s*'Invitations you send will appear here/);
   });
 
   it('file exists at canonical path', () => {
