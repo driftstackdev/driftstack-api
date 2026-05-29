@@ -23,25 +23,26 @@ describe('sdk-typescript resources/recipes content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("AI-B4 module-level framing pinned: 'write-only recipe library. Snapshots a finished agent-session's intent_log + transcript so the customer can later replay the same flow without re-paying the LLM decomposition cost.' — pinned so the replay-without-re-paying-LLM-cost value-prop survives (drift to dropping the no-replay-cost framing would mislead customers about what recipes solve)", () => {
+  it("AI-B4 module-level framing pinned: 'recipe library. Snapshots a finished agent-session's intent_log + transcript so the customer can later replay the same flow without re-paying the LLM decomposition cost.' — pinned so the replay-without-re-paying-LLM-cost value-prop survives (drift to dropping the no-replay-cost framing would mislead customers about what recipes solve)", () => {
     expect(body).toMatch(
-      /\/\/ AI-B4 — write-only recipe library\. Snapshots a finished\s*\n?\s*\/\/ agent-session's intent_log \+ transcript so the customer can\s*\n?\s*\/\/ later replay the same flow without re-paying the LLM\s*\n?\s*\/\/ decomposition cost\./,
+      /\/\/ AI-B4 — recipe library\. Snapshots a finished agent-session's\s*\n?\s*\/\/ intent_log \+ transcript so the customer can later replay the same\s*\n?\s*\/\/ flow without re-paying the LLM decomposition cost\./,
     );
   });
 
-  it("v1.0 narrow surface framing pinned: 'V1.0 SDK surface is intentionally narrow: create() — POST /v1/recipes' + 'Read / list / execute / delete surfaces are v1.1 D2/D3 scope.' — pinned so the 1-method-for-now contract + the v1.1 expansion plan stay explicit (drift to adding more methods in v1.0 would expand the surface without the corresponding server endpoints; drift to dropping the v1.1 scope reference would orphan the roadmap)", () => {
+  it("surface framing pinned: 'SDK surface: create + list + get + delete' + 'The read/management path (list/get/delete) was pulled forward from the v1.1 D2/D3 defer (V-530.I/.J); recipe EXECUTION stays v1.1 (harness-executor-gated).' — pinned so the create+list+get+delete surface + the execution-stays-gated contract stay explicit (drift to adding an execute() would diverge from the server, which has no execution route)", () => {
+    expect(body).toMatch(/\/\/ SDK surface: create \+ list \+ get \+ delete\./);
     expect(body).toMatch(
-      /\/\/ V1\.0 SDK surface is intentionally narrow:\s*\n?\s*\/\/ {3}- create\(\) — POST \/v1\/recipes/,
-    );
-    expect(body).toMatch(
-      /\/\/ Read \/ list \/ execute \/ delete surfaces are v1\.1 D2\/D3 scope\./,
+      /\/\/ \(list\/get\/delete\) was pulled forward from the v1\.1 D2\/D3 defer\s*\n?\s*\/\/ \(V-530\.I\/\.J\); recipe EXECUTION stays v1\.1 \(harness-executor-gated\)\./,
     );
   });
 
   it("503 activation-gate framing pinned: 'When the route is gated 503 (recipesRepo OR agentSessionsRepo not wired in the deploy's AppDeps), the SDK propagates the FeatureUnavailableError; callers branch on the typed error the same way they do for billing / egress / agent-sessions.' — pinned so the dual-repo gating contract + the cross-feature error-handling parallel stay explicit (drift would mislead consumers about which repos drive the 503; drift to dropping the cross-feature pattern reference would orphan the typed-error handling pattern from its peers)", () => {
-    expect(body).toMatch(
-      /\/\/ When the route is gated 503 \(recipesRepo OR agentSessionsRepo\s*\n?\s*\/\/ not wired in the deploy's AppDeps\), the SDK propagates the\s*\n?\s*\/\/ FeatureUnavailableError; callers branch on the typed error\s*\n?\s*\/\/ the same way they do for billing \/ egress \/ agent-sessions\./,
-    );
+    // Match the distinctive phrases rather than the exact line-wrap
+    // (robust to prose re-wrapping).
+    expect(body).toMatch(/When the route is gated 503 \(recipesRepo OR agentSessionsRepo/);
+    expect(body).toMatch(/the SDK propagates the/);
+    expect(body).toMatch(/FeatureUnavailableError; callers branch on the typed error/);
+    expect(body).toMatch(/billing \/ egress \/ agent-sessions\./);
   });
 
   it("Recipe interface 8-field surface: id + account_id + agent_session_id (nullable) + label + description (nullable) + intent_count + created_at + updated_at. Drift to making agent_session_id NOT nullable would break the recipe-survives-agent-session-cleanup contract; drift to dropping intent_count would force the dashboard to fetch the full intent_log just to render 'N intents' summary", () => {
@@ -91,12 +92,22 @@ describe('sdk-typescript resources/recipes content parity', () => {
     );
   });
 
-  it('RecipesResource class + 1-method shape pinned: just create(body: CreateRecipeRequest): Promise<Recipe>. Drift to adding read/list/execute/delete methods in v1.0 would diverge from the server route surface (which only exposes POST /v1/recipes in v1.0) + would break the v1.1 D2/D3 expansion plan', () => {
+  it('RecipesResource method surface pinned: create + list + iterate + get + delete (read/management). EXECUTION is NOT present (no execute() — recipe execution stays gated on the harness executor; an execute() here would diverge from the server, which has no execution route).', () => {
     expect(body).toMatch(/export class RecipesResource \{/);
     expect(body).toMatch(/create\(body: CreateRecipeRequest\): Promise<Recipe>/);
-    expect(body).not.toMatch(/list\(/);
-    expect(body).not.toMatch(/delete\(/);
+    expect(body).toMatch(/list\(query: PaginationQueryInput = \{\}\): Promise<RecipesListPage>/);
+    expect(body).toMatch(/get\(id: string\): Promise<RecipeDetail>/);
+    expect(body).toMatch(/delete\(id: string\): Promise<void>/);
     expect(body).not.toMatch(/execute\(/);
+  });
+
+  it('RecipeDetail + RecipesListPage shapes pinned: get() returns the full recipe incl. intent_log; list() returns { data, has_more, next_cursor }', () => {
+    expect(body).toMatch(
+      /export interface RecipeDetail extends Recipe \{\s*\n?\s*intent_log: AgentIntent\[\];/,
+    );
+    expect(body).toMatch(
+      /export interface RecipesListPage \{\s*\n?\s*data: Recipe\[\];\s*\n?\s*has_more: boolean;\s*\n?\s*next_cursor: string \| null;/,
+    );
   });
 
   it("POST /v1/recipes path constant pinned. Drift to a different path would break the route binding; the resource is collection-scoped (POST /v1/recipes, not /v1/agent-sessions/:id/recipes) because the agent_session_id is in the body (matches the V-205 'flat resource hierarchy' convention)", () => {

@@ -1,18 +1,19 @@
-// AI-B4 — write-only recipe library. Snapshots a finished
-// agent-session's intent_log + transcript so the customer can
-// later replay the same flow without re-paying the LLM
-// decomposition cost.
+// AI-B4 — recipe library. Snapshots a finished agent-session's
+// intent_log + transcript so the customer can later replay the same
+// flow without re-paying the LLM decomposition cost.
 //
-// V1.0 SDK surface is intentionally narrow:
-//   - create() — POST /v1/recipes
-//
-// Read / list / execute / delete surfaces are v1.1 D2/D3 scope.
-// When the route is gated 503 (recipesRepo OR agentSessionsRepo
-// not wired in the deploy's AppDeps), the SDK propagates the
-// FeatureUnavailableError; callers branch on the typed error
-// the same way they do for billing / egress / agent-sessions.
+// SDK surface: create + list + get + delete. The read/management path
+// (list/get/delete) was pulled forward from the v1.1 D2/D3 defer
+// (V-530.I/.J); recipe EXECUTION stays v1.1 (harness-executor-gated).
+// When the route is gated 503 (recipesRepo OR agentSessionsRepo not
+// wired in the deploy's AppDeps), the SDK propagates the
+// FeatureUnavailableError; callers branch on the typed error the same
+// way they do for billing / egress / agent-sessions.
 
+import type { PaginationQueryInput } from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';
+import { iteratePaginated } from '../pagination.js';
+import type { AgentIntent } from './agent-sessions.js';
 
 export interface Recipe {
   /** `rec_<uuid>` minted by the server. */
@@ -29,6 +30,18 @@ export interface Recipe {
   intent_count: number;
   created_at: string;
   updated_at: string;
+}
+
+/** The full recipe returned by get() — adds the replayable intent_log
+ *  to the list metadata. (list() items omit it for payload weight.) */
+export interface RecipeDetail extends Recipe {
+  intent_log: AgentIntent[];
+}
+
+export interface RecipesListPage {
+  data: Recipe[];
+  has_more: boolean;
+  next_cursor: string | null;
 }
 
 export interface CreateRecipeRequest {
@@ -62,6 +75,47 @@ export class RecipesResource {
       method: 'POST',
       path: '/v1/recipes',
       body,
+    });
+  }
+
+  /** List the calling account's recipes, newest first. Cursor-paginated. */
+  list(query: PaginationQueryInput = {}): Promise<RecipesListPage> {
+    return this.http.request<RecipesListPage>({
+      method: 'GET',
+      path: '/v1/recipes',
+      query: {
+        ...(query.limit !== undefined ? { limit: query.limit } : {}),
+        ...(query.cursor !== undefined ? { cursor: query.cursor } : {}),
+      },
+    });
+  }
+
+  /**
+   * Lazily iterate every recipe for the calling account, walking
+   * cursor pages automatically. See `iteratePaginated` for semantics.
+   */
+  iterate(opts: { limit?: number } = {}): AsyncGenerator<Recipe, void, void> {
+    return iteratePaginated<Recipe>((cursor) =>
+      this.list({
+        ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+        ...(cursor !== null ? { cursor } : {}),
+      }),
+    );
+  }
+
+  /** Get a single recipe in full, including the replayable intent_log. */
+  get(id: string): Promise<RecipeDetail> {
+    return this.http.request<RecipeDetail>({
+      method: 'GET',
+      path: `/v1/recipes/${encodeURIComponent(id)}`,
+    });
+  }
+
+  /** Delete a recipe. 404 if missing or owned by another account. */
+  delete(id: string): Promise<void> {
+    return this.http.request<void>({
+      method: 'DELETE',
+      path: `/v1/recipes/${encodeURIComponent(id)}`,
     });
   }
 }
