@@ -110,6 +110,76 @@ ORCHESTRATOR-STATE.md.
 **Tier-3 verdict 2026-05-16:** BYOK Anthropic for v1.0; bundled-LLM
 billing deferred to v1.1.
 
+### Pair-mode takeover / handback — harness↔control-plane event contract (OPEN — needs Agent-1 + harness)
+
+**Problem (the `*-pending` stick):** the pair-mode state machine
+(`apps/server/src/services/agent-pair-mode-state.ts`) is a 6-state
+reducer. The customer-facing routes drive only the _request_ half:
+
+| Route                                  | Transition fired                                                              | Resulting state                        |
+| -------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------- |
+| `POST /v1/agent-sessions/:id/takeover` | `takeover-request` (or `takeover-request-queued` if a decompose is in flight) | `takeover-pending` / `takeover-queued` |
+| `POST /v1/agent-sessions/:id/handback` | `handback-request`                                                            | `handback-pending`                     |
+
+The transitions that DRAIN those pending states —
+`takeover-grant` (→ `human-driving`) and `handback-complete`
+(→ `ai-driving`) — exist in the reducer but **nothing fires them**, and
+there is **no control-plane surface for the harness to fire them**. So a
+session that requests takeover sits in `takeover-pending` forever. The
+grant/complete signal must come from the harness once it has actually
+flipped WebRTC input routing (AI executor paused / human input wired, or
+vice-versa) — only the harness knows when the swap physically happened.
+
+**Proposed contract (Agent-2 builds the control-plane half; Agent-1's harness calls it):**
+
+- Control-plane surface (Agent 2): a fleet-authed signal carrying
+  `{ session_id, transition: 'takeover-grant' | 'handback-complete' }`.
+  **Recommended mechanism: a new fleet-authed route**
+  `POST /v1/fleet/agent-sessions/:id/pair-mode/transition` (same
+  `FleetNodeAuth` + nonce-replay defence as `/v1/fleet/events`), which
+  applies the transition via `applyPairModeTransition` + `setPairModeState`
+  and emits the existing `agent_session.pair_mode.*` customer audit/event
+  rows. Alternative considered: piggyback on the `/v1/fleet/events`
+  WebSocket channel — rejected for now because that channel is itself a
+  pending stub and a discrete idempotent POST is easier to test + retry.
+- Harness side (Agent 1): after the executor pause / input-routing flip
+  completes, call the route with the matching transition. Idempotent —
+  re-firing `takeover-grant` from `human-driving` is a no-op 200 (mirror
+  the existing reducer's idempotent arms).
+- Invalid-transition handling: the reducer throws
+  `InvalidPairModeTransition`; the route maps it to 409 (the harness
+  raced a customer decline / heartbeat-timeout — safe to drop).
+
+This stays behind the agent-sessions activation gate (503 when
+`agentSessionsService` is unwired), same as the sibling routes.
+
+### `POST /v1/agent-sessions/:id/abort` (OPEN — contract proposal, not yet built)
+
+There is **no documented spec** for abort today — only an internal
+"three consecutive same-intent failures abort the run" auto-stop in
+`ai-chat-agent-layer-design.md`. Proposed customer-facing contract for
+review before build:
+
+- **Purpose:** customer cancels an in-flight agent run (the decompose /
+  execute loop kicked off by `POST /:id/message`).
+- **Shape:** `POST /v1/agent-sessions/:id/abort` → 200
+  `{ aborted: true, run_id }`; 409 if no run is in flight; activation
+  -gated 503.
+- **Semantics:** sets a cancel flag the `AgentExecutor` checks between
+  intents (cooperative cancel — never mid-intent, to avoid leaving the
+  browser session in a half-applied state); the current intent finishes,
+  the run stops, the transcript records an `aborted` terminal event.
+- **Dependency:** the real harness-wired `AgentExecutor` (AI-B2.b,
+  pending) must honour the cancel flag. The route + flag + transcript
+  event can be built + tested control-plane-side ahead of that (mirrors
+  takeover/handback being built before the harness emit), but the flag
+  is a no-op until AI-B2.b lands.
+
+**Status:** both contracts above are **proposals pending founder/Agent-1
+alignment** — documented here so Agent 2 doesn't ship a harness-facing
+shape the harness then can't match. Once aligned, Agent 2 builds the
+control-plane halves gated + tested.
+
 ---
 
 ## Other landed cross-agent surfaces (reference)
