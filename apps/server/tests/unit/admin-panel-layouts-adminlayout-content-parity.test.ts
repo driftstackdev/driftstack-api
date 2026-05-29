@@ -31,6 +31,12 @@ describe('admin-panel layouts/AdminLayout content parity', () => {
     expect(body).toMatch(/window\.driftstackPrompt = function \(message, opts\)/);
   });
 
+  it('2026-05-29 modal UX hardening: body scroll-lock while open + backdrop-click-to-dismiss — pinned so the admin modals behave like professional dialogs (no background scroll, click-outside cancels)', () => {
+    expect(body).toMatch(/document\.body\.style\.overflow = 'hidden'/);
+    expect(body).toMatch(/document\.body\.style\.overflow = ''/);
+    expect(body).toMatch(/if \(e\.target === overlay\)/);
+  });
+
   it('Props contract pinned: title (required) + description (optional, defaults to staff-only-tagline). Drift to a different shape would break every admin page', () => {
     expect(body).toMatch(
       /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\}/,

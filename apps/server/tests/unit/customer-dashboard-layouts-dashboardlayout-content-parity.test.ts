@@ -44,6 +44,12 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     expect(body).toMatch(/window\.driftstackPrompt = function \(message, opts\)/);
   });
 
+  it('2026-05-29 modal UX hardening: body scroll-lock while open + backdrop-click-to-dismiss — pinned so the branded modals behave like professional dialogs (no background scroll, click-outside cancels). Drift would regress the modals to a less-polished feel', () => {
+    expect(body).toMatch(/document\.body\.style\.overflow = 'hidden'/);
+    expect(body).toMatch(/document\.body\.style\.overflow = ''/);
+    expect(body).toMatch(/if \(e\.target === overlay\)/);
+  });
+
   it("Props interface 3-field shape: title (required) + description (optional default + Driftstack catchphrase) + withSidebar (optional default true). Drift to dropping withSidebar would force onboarding pages to render the side-nav (which requires auth that onboarding hasn't completed yet)", () => {
     expect(body).toMatch(
       /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\/\*\* When true, render the side-nav\. Onboarding pages opt out\. \*\/\s*\n?\s*withSidebar\?: boolean;\s*\n?\s*\}/,
