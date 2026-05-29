@@ -35,10 +35,13 @@ export interface DeliveryEndpoint {
 export interface DeliveryConfig {
   /** Per-attempt HTTP timeout in ms. Default 10_000. */
   timeoutMs?: number;
-  /** Max attempts before DLQ. Default 5. */
+  /**
+   * Max attempts before DLQ. Default 6 (the initial delivery + 5
+   * retries; see DEFAULT_MAX_ATTEMPTS). The retry backoff schedule is
+   * the fixed BACKOFF_MS_BY_ATTEMPT table (1m / 5m / 15m / 30m / 60m),
+   * not configurable per-endpoint.
+   */
   maxAttempts?: number;
-  /** Backoff base in ms. Default 1000 (1s, 2s, 4s, 8s, 16s for 5 attempts). */
-  backoffBaseMs?: number;
 }
 
 /** Per-event delivery payload as the queue reads it. */

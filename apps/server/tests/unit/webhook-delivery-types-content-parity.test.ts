@@ -11,9 +11,10 @@
 //   • DeliveryEndpoint: 7 fields (id + accountId + url + eventTypes
 //     + signingSecret + active + optional config); 'https:// only;
 //     http:// rejected at registration time' guard pinned.
-//   • DeliveryConfig: 3 optional fields with default values pinned
-//     (timeoutMs 10_000, maxAttempts 5, backoffBaseMs 1000 with
-//     '1s, 2s, 4s, 8s, 16s for 5 attempts' curve pinned).
+//   • DeliveryConfig: 2 optional fields pinned (timeoutMs 10_000,
+//     maxAttempts 6 = initial + 5 retries; backoff is the fixed
+//     BACKOFF_MS_BY_ATTEMPT table 1m/5m/15m/30m/60m, not configurable).
+//     Dead backoffBaseMs field removed 2026-05-29.
 //   • DeliveryPayload: 4 fields (eventId + eventType + emittedAtSec
 //     + body); 'NOT when delivery is attempted' caveat pinned.
 //   • DeliveryAttempt: 7 fields incl. outcome 4-state union
@@ -62,16 +63,15 @@ describe('W451.A packages/webhook-delivery/src/types.ts content parity', () => {
     );
   });
 
-  it("DeliveryConfig: 3 optional fields with defaults pinned — timeoutMs default 10_000, maxAttempts default 5, backoffBaseMs default 1000 with '1s, 2s, 4s, 8s, 16s for 5 attempts' curve", () => {
+  it('DeliveryConfig: 2 optional fields pinned — timeoutMs default 10_000, maxAttempts default 6 (initial + 5 retries; backoff is the fixed BACKOFF_MS_BY_ATTEMPT table, not configurable). The dead backoffBaseMs field was removed 2026-05-29.', () => {
     expect(body).toMatch(
       /\/\*\* Per-attempt HTTP timeout in ms\. Default 10_000\. \*\/\s*\n?\s*timeoutMs\?: number;/,
     );
-    expect(body).toMatch(
-      /\/\*\* Max attempts before DLQ\. Default 5\. \*\/\s*\n?\s*maxAttempts\?: number;/,
-    );
-    expect(body).toMatch(
-      /\/\*\* Backoff base in ms\. Default 1000 \(1s, 2s, 4s, 8s, 16s for 5 attempts\)\. \*\/\s*\n?\s*backoffBaseMs\?: number;/,
-    );
+    expect(body).toMatch(/Max attempts before DLQ\. Default 6 \(the initial delivery \+ 5/);
+    expect(body).toMatch(/retries; see DEFAULT_MAX_ATTEMPTS\)\./);
+    expect(body).toMatch(/BACKOFF_MS_BY_ATTEMPT table \(1m \/ 5m \/ 15m \/ 30m \/ 60m\)/);
+    // backoffBaseMs was a dead (never-read) field — removed 2026-05-29.
+    expect(body).not.toMatch(/backoffBaseMs/);
   });
 
   it("DeliveryPayload: 4 fields (eventId + eventType + emittedAtSec + body); 'UNIX timestamp seconds when the event was emitted (NOT when delivery is attempted)' caveat pinned", () => {
