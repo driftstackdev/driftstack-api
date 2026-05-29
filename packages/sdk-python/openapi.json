@@ -10500,6 +10500,154 @@
       }
     },
     "/v1/admin/incidents": {
+      "get": {
+        "summary": "List incidents (admin; V-295)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["public", "all"],
+              "description": "'public' returns only public incidents; 'all' (default) returns everything."
+            },
+            "required": false,
+            "description": "'public' returns only public incidents; 'all' (default) returns everything.",
+            "name": "scope",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "ISO-8601 timestamp; filter to incidents started since this time."
+            },
+            "required": false,
+            "description": "ISO-8601 timestamp; filter to incidents started since this time.",
+            "name": "since",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Incidents (newest first), filtered by scope/since/limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "body": {
+                            "type": "string"
+                          },
+                          "severity": {
+                            "type": "string",
+                            "enum": ["minor", "major", "outage"]
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": ["investigating", "identified", "monitoring", "resolved"]
+                          },
+                          "started_at": {
+                            "type": "string"
+                          },
+                          "resolved_at": {
+                            "type": ["string", "null"]
+                          },
+                          "components_affected": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "public": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "title",
+                          "body",
+                          "severity",
+                          "status",
+                          "started_at",
+                          "resolved_at",
+                          "components_affected",
+                          "public"
+                        ]
+                      }
+                    }
+                  },
+                  "required": ["data"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "summary": "Create an incident (admin; V-295)",
         "tags": ["admin"],

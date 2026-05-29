@@ -244,6 +244,14 @@ describe('OpenAPI spec generation', () => {
     expect(p?.post).toBeDefined();
   });
 
+  it('GET /v1/admin/incidents (list) is documented alongside POST (the GET method was missing once)', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const p = (spec.paths ?? {})['/v1/admin/incidents'] as Record<string, unknown> | undefined;
+    expect(p?.get).toBeDefined();
+    expect(p?.post).toBeDefined();
+  });
+
   it('all admin endpoints carry the "admin" tag (for docs filtering)', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();

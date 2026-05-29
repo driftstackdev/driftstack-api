@@ -2014,6 +2014,37 @@ function buildRegistry(): OpenAPIRegistry {
     status: z.enum(['investigating', 'identified', 'monitoring', 'resolved']).optional(),
   });
   registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/incidents',
+    summary: 'List incidents (admin; V-295)',
+    tags: ['admin'],
+    security: auth,
+    request: {
+      query: z.object({
+        scope: z
+          .enum(['public', 'all'])
+          .optional()
+          .describe("'public' returns only public incidents; 'all' (default) returns everything."),
+        since: z
+          .string()
+          .optional()
+          .describe('ISO-8601 timestamp; filter to incidents started since this time.'),
+        limit: z.coerce.number().int().min(1).max(100).optional(),
+      }),
+    },
+    responses: {
+      200: {
+        description: 'Incidents (newest first), filtered by scope/since/limit.',
+        content: {
+          'application/json': {
+            schema: z.object({ data: z.array(AdminIncidentResponseOpenApi) }),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
     method: 'post',
     path: '/v1/admin/incidents',
     summary: 'Create an incident (admin; V-295)',
