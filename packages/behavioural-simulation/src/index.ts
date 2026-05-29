@@ -51,6 +51,10 @@ export type {
 } from './idle.js';
 export { generateIdlePeriod, generateIdleSequence, IDLE_DEFAULTS } from './idle.js';
 
+// V-530.F — keyboard cadence generator (human-realistic typing rhythm).
+export type { KeyboardCadenceDefaults } from './keyboard.js';
+export { generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS } from './keyboard.js';
+
 // V-530.E — multi-touch gesture sequencing.
 export type {
   FingerSample,

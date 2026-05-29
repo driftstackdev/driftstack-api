@@ -107,6 +107,16 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
     );
   });
 
+  it("V-530.F framing pinned: 'keyboard cadence generator (human-realistic typing rhythm).' + KeyboardCadenceDefaults type + generateKeyboardCadence + KEYBOARD_CADENCE_DEFAULTS value exports", () => {
+    expect(body).toMatch(
+      /\/\/ V-530\.F — keyboard cadence generator \(human-realistic typing rhythm\)\./,
+    );
+    expect(body).toMatch(/export type \{ KeyboardCadenceDefaults \} from '\.\/keyboard\.js';/);
+    expect(body).toMatch(
+      /export \{ generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS \} from '\.\/keyboard\.js';/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

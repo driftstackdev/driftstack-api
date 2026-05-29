@@ -55,6 +55,13 @@ describe('W595.C packages/behavioural-simulation/src/index.ts content parity', (
     expect(body).toMatch(
       /^export \{\s*\n\s*generatePinchGesture,\s*\n\s*generateTwoFingerScrollGesture,\s*\n\s*generateThreeFingerSwipeGesture,\s*\n\s*interleaveGestureStream,\s*\n\} from '\.\/multi-touch\.js';/m,
     );
+    // V-530.F — keyboard cadence generator (human-realistic typing rhythm).
+    expect(body).toMatch(
+      /\/\/ V-530\.F — keyboard cadence generator \(human-realistic typing rhythm\)\./,
+    );
+    expect(body).toMatch(
+      /^export \{ generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS \} from '\.\/keyboard\.js';$/m,
+    );
   });
 
   it('file exists at canonical path', () => {
