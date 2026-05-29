@@ -219,8 +219,8 @@ without re-prompting for credentials.
 { "token": "<session to revoke>" }
 ```
 
-Returns `204 No Content`. Subsequent requests with that token
-return `401 Unauthorized`.
+Returns `200` with `{ "ok": true }`. Subsequent requests with that
+token return `401 Unauthorized`.
 
 ## Sessions list + revoke
 

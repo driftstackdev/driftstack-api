@@ -172,11 +172,11 @@ describe('W764 docs /api/auth content parity', () => {
     );
   });
 
-  it('CRITICAL logout 204 + subsequent-401 framing pinned. Drift to a different status would let SDK consumers misclassify.', () => {
+  it('CRITICAL logout 200 { ok } + subsequent-401 framing pinned. The route + LogoutResponseSchema + all 3 SDKs use 200 with a { ok: true } body (NOT 204 — the doc said 204 No Content once, which contradicted the SDK response type).', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Returns `204 No Content`\. Subsequent requests with that token\s*\n?return `401 Unauthorized`\./,
+      /Returns `200` with `\{ "ok": true \}`\. Subsequent requests with that\s*\n?token return `401 Unauthorized`\./,
     );
   });
 
