@@ -1,21 +1,27 @@
 package driftstack
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+	"net/url"
+	"strconv"
+)
 
-// RecipesResource handles /v1/recipes (AI-B4; write-only at v1.0).
-// Mirrors the TypeScript + Python RecipesResource.
+// RecipesResource handles /v1/recipes (AI-B4). Mirrors the TypeScript
+// + Python RecipesResource.
 //
-// Server registers this endpoint as a 503 FeatureUnavailable stub
+// Server registers these endpoints as 503 FeatureUnavailable stubs
 // until both recipesRepo and agentSessionsRepo are wired in AppDeps.
 // SDK surface is stable so consumers compile ahead of time.
 //
-// V1.0 SDK surface is intentionally narrow — Create only. Read /
-// list / execute / delete surfaces are v1.1 D2/D3.
+// Surface: Create + List + Get + Delete (the read/management path was
+// pulled forward from the v1.1 D2/D3 defer — V-530.I/.J). Recipe
+// EXECUTION stays v1.1 (gated on the harness executor).
 type RecipesResource struct {
 	client *Client
 }
 
-// Recipe is the read envelope returned by Create.
+// Recipe is the list/create metadata envelope.
 type Recipe struct {
 	ID             string  `json:"id"`
 	AccountID      string  `json:"account_id"`
@@ -25,6 +31,27 @@ type Recipe struct {
 	IntentCount    int     `json:"intent_count"`
 	CreatedAt      string  `json:"created_at"`
 	UpdatedAt      string  `json:"updated_at"`
+}
+
+// RecipeDetail is the full recipe returned by Get — it embeds the list
+// metadata and adds the replayable IntentLog (raw JSON, matching the
+// agent-session transcript intent representation).
+type RecipeDetail struct {
+	Recipe
+	IntentLog []json.RawMessage `json:"intent_log"`
+}
+
+// RecipesListPage is a page of recipes, newest first.
+type RecipesListPage struct {
+	Data       []Recipe `json:"data"`
+	HasMore    bool     `json:"has_more"`
+	NextCursor *string  `json:"next_cursor"`
+}
+
+// ListRecipesQuery holds the pagination knobs for List / Iterate.
+type ListRecipesQuery struct {
+	Limit  int
+	Cursor string
 }
 
 // CreateRecipeRequest is the body for Create.
@@ -51,4 +78,83 @@ func (r *RecipesResource) Create(ctx context.Context, body CreateRecipeRequest) 
 		return nil, err
 	}
 	return &out, nil
+}
+
+// List returns a page of the account's recipes, newest first. Pass nil
+// for defaults.
+func (r *RecipesResource) List(ctx context.Context, query *ListRecipesQuery) (*RecipesListPage, error) {
+	var out RecipesListPage
+	q := url.Values{}
+	if query != nil {
+		if query.Limit > 0 {
+			q.Set("limit", strconv.Itoa(query.Limit))
+		}
+		if query.Cursor != "" {
+			q.Set("cursor", query.Cursor)
+		}
+	}
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/recipes",
+		query:  q,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Iterate yields every recipe across cursor pages. The callback returns
+// false to stop early; an error from the callback is propagated back.
+func (r *RecipesResource) Iterate(ctx context.Context, query *ListRecipesQuery, fn func(*Recipe) (bool, error)) error {
+	cursor := ""
+	limit := 0
+	if query != nil {
+		limit = query.Limit
+		cursor = query.Cursor
+	}
+	for {
+		page, err := r.List(ctx, &ListRecipesQuery{Limit: limit, Cursor: cursor})
+		if err != nil {
+			return err
+		}
+		for i := range page.Data {
+			cont, err := fn(&page.Data[i])
+			if err != nil {
+				return err
+			}
+			if !cont {
+				return nil
+			}
+		}
+		if page.NextCursor == nil || *page.NextCursor == "" {
+			return nil
+		}
+		cursor = *page.NextCursor
+	}
+}
+
+// Get fetches a single recipe in full, including the replayable
+// IntentLog. A missing or cross-account id returns 404 (existence not
+// leaked) — propagated as an error.
+func (r *RecipesResource) Get(ctx context.Context, recipeID string) (*RecipeDetail, error) {
+	var out RecipeDetail
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/recipes/" + url.PathEscape(recipeID),
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Delete removes a recipe. Unlike Profiles.Delete this is NOT
+// idempotent — a missing or cross-account id returns 404 (propagated
+// as an error), matching the server's deliberate existence-non-leak.
+func (r *RecipesResource) Delete(ctx context.Context, recipeID string) error {
+	return r.client.do(ctx, requestOptions{
+		method: "DELETE",
+		path:   "/v1/recipes/" + url.PathEscape(recipeID),
+	})
 }

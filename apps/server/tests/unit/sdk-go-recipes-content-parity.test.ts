@@ -24,22 +24,21 @@ describe('sdk-go recipes content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Module-level RecipesResource framing pinned: 'RecipesResource handles /v1/recipes (AI-B4; write-only at v1.0). Mirrors the TypeScript + Python RecipesResource.' — pinned so the AI-B4 anchor + cross-SDK TS + Python mirror references survive (drift would orphan the Go SDK from its peers)", () => {
+  it("Module-level RecipesResource framing pinned: 'RecipesResource handles /v1/recipes (AI-B4). Mirrors the TypeScript + Python RecipesResource.' — pinned so the AI-B4 anchor + cross-SDK TS + Python mirror references survive (drift would orphan the Go SDK from its peers)", () => {
     expect(body).toMatch(
-      /\/\/ RecipesResource handles \/v1\/recipes \(AI-B4; write-only at v1\.0\)\.\s*\n?\s*\/\/ Mirrors the TypeScript \+ Python RecipesResource\./,
+      /\/\/ RecipesResource handles \/v1\/recipes \(AI-B4\)\. Mirrors the TypeScript\s*\n?\s*\/\/ \+ Python RecipesResource\./,
     );
   });
 
-  it("503 activation-gate dual-repo framing pinned: 'Server registers this endpoint as a 503 FeatureUnavailable stub until both recipesRepo and agentSessionsRepo are wired in AppDeps. SDK surface is stable so consumers compile ahead of time.' — pinned so the dual-repo (recipesRepo + agentSessionsRepo) AND-gate stays documented (drift to a single-repo gate would mismatch the server's actual activation logic)", () => {
+  it("503 activation-gate dual-repo framing pinned: 'Server registers these endpoints as 503 FeatureUnavailable stubs until both recipesRepo and agentSessionsRepo are wired in AppDeps. SDK surface is stable so consumers compile ahead of time.' — pinned so the dual-repo (recipesRepo + agentSessionsRepo) AND-gate stays documented (drift to a single-repo gate would mismatch the server's actual activation logic)", () => {
     expect(body).toMatch(
-      /\/\/ Server registers this endpoint as a 503 FeatureUnavailable stub\s*\n?\s*\/\/ until both recipesRepo and agentSessionsRepo are wired in AppDeps\.\s*\n?\s*\/\/ SDK surface is stable so consumers compile ahead of time\./,
+      /\/\/ Server registers these endpoints as 503 FeatureUnavailable stubs\s*\n?\s*\/\/ until both recipesRepo and agentSessionsRepo are wired in AppDeps\.\s*\n?\s*\/\/ SDK surface is stable so consumers compile ahead of time\./,
     );
   });
 
-  it("v1.0 narrow surface framing pinned: 'V1.0 SDK surface is intentionally narrow — Create only. Read / list / execute / delete surfaces are v1.1 D2/D3.' — pinned so the v1.0-narrow + v1.1-expansion contract stays explicit (drift to adding more methods in v1.0 would expand beyond the server-side scope)", () => {
-    expect(body).toMatch(
-      /\/\/ V1\.0 SDK surface is intentionally narrow — Create only\. Read \/\s*\n?\s*\/\/ list \/ execute \/ delete surfaces are v1\.1 D2\/D3\./,
-    );
+  it("surface framing pinned: 'Surface: Create + List + Get + Delete (the read/management path was pulled forward from the v1.1 D2/D3 defer — V-530.I/.J). Recipe EXECUTION stays v1.1 (gated on the harness executor).' — pinned so the Create+List+Get+Delete surface + the execution-stays-gated contract stay explicit (drift to adding an Execute would diverge from the server, which has no execution route)", () => {
+    expect(body).toMatch(/\/\/ Surface: Create \+ List \+ Get \+ Delete/);
+    expect(body).toMatch(/\/\/ EXECUTION stays v1\.1 \(gated on the harness executor\)\./);
   });
 
   it('Recipe Go struct 8-field surface: ID + AccountID + AgentSessionID (*string nullable) + Label + Description (*string nullable) + IntentCount + CreatedAt + UpdatedAt. Drift to making AgentSessionID non-pointer would break the ON DELETE SET NULL cleanup contract; drift to dropping IntentCount would force Go customers to fetch the full intent_log just for a count', () => {
@@ -72,12 +71,27 @@ describe('sdk-go recipes content parity', () => {
     );
   });
 
-  it('RecipesResource 1-method shape pinned (Create only). Drift to adding Read/List/Execute/Delete in v1.0 would diverge from the server scope + would create an SDK surface ahead of server support', () => {
+  it('RecipesResource method surface pinned: Create + List + Iterate + Get + Delete (read/management). No Execute — recipe execution stays gated on the harness executor (an Execute here would diverge from the server, which has no execution route)', () => {
     expect(body).toMatch(/type RecipesResource struct \{/);
-    expect(body).not.toMatch(/func \(r \*RecipesResource\) List\(/);
-    expect(body).not.toMatch(/func \(r \*RecipesResource\) Delete\(/);
+    expect(body).toMatch(
+      /func \(r \*RecipesResource\) List\(ctx context\.Context, query \*ListRecipesQuery\) \(\*RecipesListPage, error\)/,
+    );
+    expect(body).toMatch(
+      /func \(r \*RecipesResource\) Get\(ctx context\.Context, recipeID string\) \(\*RecipeDetail, error\)/,
+    );
+    expect(body).toMatch(
+      /func \(r \*RecipesResource\) Delete\(ctx context\.Context, recipeID string\) error/,
+    );
     expect(body).not.toMatch(/func \(r \*RecipesResource\) Execute\(/);
-    expect(body).not.toMatch(/func \(r \*RecipesResource\) Get\(/);
+  });
+
+  it('RecipeDetail + RecipesListPage shapes pinned: Get returns the full recipe incl. IntentLog ([]json.RawMessage); List returns { Data, HasMore, NextCursor }', () => {
+    expect(body).toMatch(
+      /type RecipeDetail struct \{\s+Recipe\s+IntentLog\s+\[\]json\.RawMessage\s+`json:"intent_log"`/,
+    );
+    expect(body).toMatch(
+      /type RecipesListPage struct \{\s+Data\s+\[\]Recipe\s+`json:"data"`\s+HasMore\s+bool\s+`json:"has_more"`\s+NextCursor\s+\*string\s+`json:"next_cursor"`/,
+    );
   });
 
   it('POST /v1/recipes path constant pinned. Drift to a different path would break the route binding; the resource is collection-scoped because the agent_session_id is in the body (matches the V-205 flat-resource-hierarchy convention)', () => {
