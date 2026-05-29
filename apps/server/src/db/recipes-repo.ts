@@ -127,4 +127,21 @@ export class DrizzleRecipesRepo implements RecipesRepo {
       hasMore && data.length > 0 ? (data[data.length - 1] as RecipeRecord).id : null;
     return { data, hasMore, nextCursor };
   }
+
+  async getById(args: { accountId: string; id: string }): Promise<RecipeRecord | null> {
+    const [row] = await this.database.db
+      .select()
+      .from(recipes)
+      .where(and(eq(recipes.id, args.id), eq(recipes.accountId, args.accountId)))
+      .limit(1);
+    return row ? rowToRecord(row) : null;
+  }
+
+  async deleteById(args: { accountId: string; id: string }): Promise<boolean> {
+    const deleted = await this.database.db
+      .delete(recipes)
+      .where(and(eq(recipes.id, args.id), eq(recipes.accountId, args.accountId)))
+      .returning({ id: recipes.id });
+    return deleted.length > 0;
+  }
 }

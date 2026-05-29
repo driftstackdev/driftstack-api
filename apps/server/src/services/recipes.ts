@@ -1,10 +1,11 @@
-// AI-B4 — recipes persistence (write-only at v1.0). A recipe is a
-// snapshot of a finished agent_session's intent_log + transcript so
-// the customer can replay the same flow later via the SDK without
-// re-paying the LLM decomposition cost.
+// AI-B4 — recipes persistence. A recipe is a snapshot of a finished
+// agent_session's intent_log + transcript so the customer can replay
+// the same flow later via the SDK without re-paying the LLM
+// decomposition cost.
 //
-// V1.0 scope is intentionally narrow — POST /v1/recipes only. The
-// read / list / execute / delete surfaces are v1.1 D2/D3.
+// Surface: create + list + getById + deleteById (the read/management
+// path was pulled forward from the v1.1 D2/D3 defer — V-530.I/.J).
+// Recipe EXECUTION stays v1.1 (gated on the harness-wired executor).
 //
 // Migration: 0044_recipes.sql. Schema follows the same text-PK +
 // jsonb-payload pattern as agent_sessions.
@@ -85,6 +86,19 @@ export interface RecipesRepo {
    * Read-path only; recipe EXECUTION stays gated on the harness executor.
    */
   list(args: ListRecipesArgs): Promise<ListRecipesPage>;
+
+  /**
+   * V-530.J (D2) — fetch one recipe, scoped to the account. Returns null
+   * when missing OR owned by another account (existence is never leaked
+   * cross-account — the route maps null → 404).
+   */
+  getById(args: { accountId: string; id: string }): Promise<RecipeRecord | null>;
+
+  /**
+   * V-530.J (D3) — delete one recipe, scoped to the account. Returns true
+   * iff a row was deleted; false = missing or not owned (route → 404).
+   */
+  deleteById(args: { accountId: string; id: string }): Promise<boolean>;
 }
 
 const DEFAULT_RECIPE_PAGE = 50;
@@ -146,6 +160,20 @@ export class InMemoryRecipesRepo implements RecipesRepo {
     const nextCursor =
       hasMore && data.length > 0 ? (data[data.length - 1] as RecipeRecord).id : null;
     return { data, hasMore, nextCursor };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async getById(args: { accountId: string; id: string }): Promise<RecipeRecord | null> {
+    const row = this.rows.get(args.id);
+    return row !== undefined && row.accountId === args.accountId ? row : null;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async deleteById(args: { accountId: string; id: string }): Promise<boolean> {
+    const row = this.rows.get(args.id);
+    if (row === undefined || row.accountId !== args.accountId) return false;
+    this.rows.delete(args.id);
+    return true;
   }
 }
 

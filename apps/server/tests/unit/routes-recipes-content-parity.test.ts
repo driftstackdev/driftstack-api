@@ -25,10 +25,12 @@ describe('routes/recipes content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("AI-B4 module-level framing pinned: 'POST /v1/recipes route surface. Write-only at v1.0; read / list / execute / delete are v1.1 D2/D3 scope.' — pinned so the AI-B4 anchor + write-only-v1.0 + v1.1-D2-D3-scope contract all stay documented", () => {
+  it('AI-B4 module-level framing pinned: recipe library routes (create + list + detail + delete); read/management pulled fwd from v1.1 D2/D3 (V-530.I/.J); EXECUTION stays v1.1 (harness-executor-gated)', () => {
     expect(body).toMatch(
-      /\/\/ AI-B4 — POST \/v1\/recipes route surface\. Write-only at v1\.0; read \/\s*\n?\s*\/\/ list \/ execute \/ delete are v1\.1 D2\/D3 scope\./,
+      /\/\/ AI-B4 — recipe library routes\. POST \/v1\/recipes \(create\) \+ GET/,
     );
+    expect(body).toMatch(/pulled forward from the v1\.1 D2\/D3 defer \(V-530\.I\/\.J\); recipe/);
+    expect(body).toMatch(/EXECUTION stays v1\.1 \(gated on the harness-wired AgentExecutor\)\./);
   });
 
   it('Activation-gate Wave 1119+ framing pinned: \'when both recipesRepo + agentSessionsRepo are wired in AppDeps, registerRecipesRoutes runs. When omitted, registerRecipesDisabledRoutes surfaces 503 FeatureUnavailable so SDK + dashboard get a machine-readable "not yet enabled" signal vs 404.\' — pinned so the dual-dep + 503-vs-404 + machine-readable-signal contract all stay documented', () => {

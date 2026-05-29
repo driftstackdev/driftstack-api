@@ -24,16 +24,17 @@ describe('services/recipes content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("AI-B4 module-level framing pinned: 'recipes persistence (write-only at v1.0). A recipe is a snapshot of a finished agent_session's intent_log + transcript so the customer can replay the same flow later via the SDK without re-paying the LLM decomposition cost.' — pinned so the replay-without-re-paying-LLM-cost value-prop survives + the AI-B4 anchor stays explicit (drift to dropping the value-prop would orphan the recipe surface from its motivation)", () => {
+  it('AI-B4 module-level framing pinned: recipes persistence + the replay-without-re-paying-LLM-cost value-prop (the AI-B4 anchor stays explicit; drift to dropping the value-prop would orphan the recipe surface from its motivation)', () => {
     expect(body).toMatch(
-      /\/\/ AI-B4 — recipes persistence \(write-only at v1\.0\)\. A recipe is a\s*\n?\s*\/\/ snapshot of a finished agent_session's intent_log \+ transcript so\s*\n?\s*\/\/ the customer can replay the same flow later via the SDK without\s*\n?\s*\/\/ re-paying the LLM decomposition cost\./,
+      /\/\/ AI-B4 — recipes persistence\. A recipe is a snapshot of a finished\s*\n?\s*\/\/ agent_session's intent_log \+ transcript so the customer can replay\s*\n?\s*\/\/ the same flow later via the SDK without re-paying the LLM\s*\n?\s*\/\/ decomposition cost\./,
     );
   });
 
-  it("v1.0 narrow scope framing pinned: 'V1.0 scope is intentionally narrow — POST /v1/recipes only. The read / list / execute / delete surfaces are v1.1 D2/D3.' — pinned so the v1.0-narrow vs. v1.1-expansion contract stays explicit on the server side (matches the SDK-side framing)", () => {
+  it('surface framing pinned: create + list + getById + deleteById (read/management pulled fwd from v1.1 D2/D3 — V-530.I/.J); EXECUTION stays v1.1 (harness-executor-gated)', () => {
     expect(body).toMatch(
-      /\/\/ V1\.0 scope is intentionally narrow — POST \/v1\/recipes only\. The\s*\n?\s*\/\/ read \/ list \/ execute \/ delete surfaces are v1\.1 D2\/D3\./,
+      /\/\/ Surface: create \+ list \+ getById \+ deleteById \(the read\/management\s*\n?\s*\/\/ path was pulled forward from the v1\.1 D2\/D3 defer — V-530\.I\/\.J\)\./,
     );
+    expect(body).toMatch(/Recipe EXECUTION stays v1\.1 \(gated on the harness-wired executor\)\./);
   });
 
   it("Migration framing pinned: 'Migration: 0044_recipes.sql. Schema follows the same text-PK + jsonb-payload pattern as agent_sessions.' — pinned so the schema-version anchor (0044) + the cross-table pattern reference survive (drift would orphan operators from the migration that introduced the recipes table)", () => {

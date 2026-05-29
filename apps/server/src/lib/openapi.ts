@@ -3124,6 +3124,59 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // GET /v1/recipes/:id — fetch one recipe in full, including the
+  // intent_log (the replayable automation). V-530.J / D2. 404 on
+  // missing/cross-account (existence not leaked).
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/recipes/{id}',
+    summary: 'Fetch a saved recipe in full (includes intent_log)',
+    tags: ['agent-chat'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description:
+          'The recipe, including the `intent_log` (ordered AgentIntent array) on top of the list metadata.',
+        content: { 'application/json': { schema: z.object({}) } },
+      },
+      404: {
+        description: 'Recipe not found (also returned cross-account — existence is not leaked).',
+        content: problemContent,
+      },
+      ...errors4xx,
+      503: {
+        description:
+          'Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.',
+        content: problemContent,
+      },
+    },
+  });
+
+  // DELETE /v1/recipes/:id — delete one recipe. V-530.J / D3. `write`
+  // scope (mutation). 204 on success; 404 on missing/cross-account.
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/recipes/{id}',
+    summary: 'Delete a saved recipe',
+    tags: ['agent-chat'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      204: { description: 'Recipe deleted. No content.' },
+      404: {
+        description: 'Recipe not found (also returned cross-account — existence is not leaked).',
+        content: problemContent,
+      },
+      ...errors4xx,
+      503: {
+        description:
+          'Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.',
+        content: problemContent,
+      },
+    },
+  });
+
   // ── V-820 — fleet events stream (operator-only; not customer-facing) ──
   // Currently registers as a 503 FeatureUnavailable stub regardless of
   // AppDeps wiring — the WebSocket handler + fastify-websocket plugin +

@@ -1,5 +1,8 @@
-// AI-B4 — POST /v1/recipes route surface. Write-only at v1.0; read /
-// list / execute / delete are v1.1 D2/D3 scope.
+// AI-B4 — recipe library routes. POST /v1/recipes (create) + GET
+// /v1/recipes (list) + GET /v1/recipes/:id (detail) + DELETE
+// /v1/recipes/:id. The read/management path (list/get/delete) was
+// pulled forward from the v1.1 D2/D3 defer (V-530.I/.J); recipe
+// EXECUTION stays v1.1 (gated on the harness-wired AgentExecutor).
 //
 // Activation gate matches the rest of Wave 1119+: when both
 // recipesRepo + agentSessionsRepo are wired in AppDeps,
@@ -53,6 +56,17 @@ function publicRecipe(rec: RecipeRecord): PublicRecipe {
     created_at: rec.createdAt.toISOString(),
     updated_at: rec.updatedAt.toISOString(),
   };
+}
+
+// Detail view (GET /:id) carries the full intent_log — the replayable
+// automation steps — on top of the list metadata. The transcript
+// snapshot stays internal (heavy; not needed for recipe management).
+interface PublicRecipeDetail extends PublicRecipe {
+  intent_log: ReadonlyArray<AgentIntent>;
+}
+
+function publicRecipeDetail(rec: RecipeRecord): PublicRecipeDetail {
+  return { ...publicRecipe(rec), intent_log: rec.intentLog };
 }
 
 export interface RecipesRoutesDeps {
@@ -123,6 +137,32 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
       };
     },
   );
+
+  // V-530.J (D2) — fetch one recipe in full (includes the intent_log).
+  // `read` scope. Cross-account / missing → 404 (existence not leaked).
+  app.get<{ Params: { id: string } }>(
+    '/v1/recipes/:id',
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const rec = await recipes.getById({ accountId: ctx.account.id, id: req.params.id });
+      if (rec === null) throw new NotFoundError(`Recipe ${req.params.id} not found.`);
+      return publicRecipeDetail(rec);
+    },
+  );
+
+  // V-530.J (D3) — delete one recipe. `write` scope (mutation, mirrors
+  // POST). 204 on success; cross-account / missing → 404.
+  app.delete<{ Params: { id: string } }>(
+    '/v1/recipes/:id',
+    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
+    async (req, reply) => {
+      const ctx = requireCtx(req);
+      const deleted = await recipes.deleteById({ accountId: ctx.account.id, id: req.params.id });
+      if (!deleted) throw new NotFoundError(`Recipe ${req.params.id} not found.`);
+      return reply.code(204).send();
+    },
+  );
 }
 
 // Disabled stub — registered when recipesRepo OR agentSessionsRepo is
@@ -145,4 +185,6 @@ export function registerRecipesDisabledRoutes(app: FastifyInstance): void {
   };
   app.post('/v1/recipes', stub);
   app.get('/v1/recipes', stub);
+  app.get('/v1/recipes/:id', stub);
+  app.delete('/v1/recipes/:id', stub);
 }

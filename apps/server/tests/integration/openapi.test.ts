@@ -176,8 +176,10 @@ describe('OpenAPI spec generation', () => {
         '/v1/agent-sessions/{id}/takeover',
         // LK arc — per-Mac LiveKit credentials registration
         '/v1/mac-nodes/register',
-        // AI-B4 — write-only recipe library (Q.5.d)
+        // AI-B4 + V-530.I/.J — recipe library: create + list + get/delete
+        // (read-path pulled fwd from v1.1 D2/D3; execution stays gated).
         '/v1/recipes',
+        '/v1/recipes/{id}',
         // V-820 — operator-only fleet event stream
         '/v1/fleet/events',
         // V-459 public status surface

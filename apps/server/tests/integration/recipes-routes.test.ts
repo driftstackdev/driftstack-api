@@ -8,8 +8,9 @@
 //      must belong to the calling account; cross-account 404 (no
 //      existence disclosure).
 //
-// The route is write-only at v1.0; read / list / execute / delete
-// land at v1.1. These tests exercise just the POST surface.
+// POST (create) + GET (list + detail) + DELETE are wired; recipe
+// EXECUTION stays v1.1 (harness-executor-gated). These tests exercise
+// the create + list + get/delete surfaces.
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
@@ -310,5 +311,92 @@ describe('V-530.I GET /v1/recipes — list (wired)', () => {
     const allLabels = [...firstBody.data, ...secondBody.data].map((r) => r.label);
     expect(new Set(allLabels)).toEqual(new Set(['one', 'two', 'three']));
     expect(allLabels).toHaveLength(3);
+  });
+});
+
+describe('V-530.J GET + DELETE /v1/recipes/:id (wired)', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  async function createRecipe(label: string): Promise<string> {
+    const session = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const agentSessionId = session.json<{ id: string }>().id;
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/recipes',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { agent_session_id: agentSessionId, label },
+    });
+    return res.json<{ id: string }>().id;
+  }
+
+  it('GET /:id returns the full recipe including intent_log', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createRecipe('detail me');
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/recipes/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ id: string; label: string; intent_log: unknown[] }>();
+    expect(body.id).toBe(id);
+    expect(body.label).toBe('detail me');
+    expect(Array.isArray(body.intent_log)).toBe(true);
+  });
+
+  it('GET /:id → 404 for an unknown id', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/recipes/rec_inmem_does_not_exist',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('DELETE /:id removes the recipe (204), then GET → 404', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createRecipe('delete me');
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/recipes/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(del.statusCode).toBe(204);
+    const after = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/recipes/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(after.statusCode).toBe(404);
+  });
+
+  it('DELETE /:id → 404 for an unknown id', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/recipes/rec_inmem_missing',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('DELETE /:id → 403 with a read-only key (mutation requires write)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true, scopes: ['read'] });
+    const res = await fx.app.inject({
+      method: 'DELETE',
+      url: '/v1/recipes/rec_inmem_anything',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(403);
   });
 });

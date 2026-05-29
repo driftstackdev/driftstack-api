@@ -231,3 +231,41 @@ describe('V-530.I InMemoryRecipesRepo.list', () => {
     expect(page.data.map((r) => r.label)).toEqual(['third', 'second', 'first']);
   });
 });
+
+describe('V-530.J InMemoryRecipesRepo.getById + deleteById', () => {
+  async function seedOne(accountId: string): Promise<string> {
+    const repo = REPO_SINGLETON;
+    const r = await repo.create({
+      accountId,
+      agentSessionId: 'agt_inmem_x',
+      label: `recipe for ${accountId}`,
+      intentLog: SAMPLE_INTENTS,
+      transcriptSnapshot: SAMPLE_TRANSCRIPT,
+    });
+    return r.id;
+  }
+  let REPO_SINGLETON: InMemoryRecipesRepo;
+
+  it('getById returns the row for the owner, null for a different account or missing id', async () => {
+    REPO_SINGLETON = new InMemoryRecipesRepo();
+    const id = await seedOne('acc_1');
+    expect((await REPO_SINGLETON.getById({ accountId: 'acc_1', id }))?.id).toBe(id);
+    expect(await REPO_SINGLETON.getById({ accountId: 'acc_2', id })).toBeNull();
+    expect(
+      await REPO_SINGLETON.getById({ accountId: 'acc_1', id: 'rec_inmem_missing' }),
+    ).toBeNull();
+  });
+
+  it('deleteById removes the owner row (true) and is a no-op for cross-account / missing (false)', async () => {
+    REPO_SINGLETON = new InMemoryRecipesRepo();
+    const id = await seedOne('acc_1');
+    // cross-account delete is refused + leaves the row intact
+    expect(await REPO_SINGLETON.deleteById({ accountId: 'acc_2', id })).toBe(false);
+    expect(await REPO_SINGLETON.getById({ accountId: 'acc_1', id })).not.toBeNull();
+    // owner delete succeeds + the row is gone
+    expect(await REPO_SINGLETON.deleteById({ accountId: 'acc_1', id })).toBe(true);
+    expect(await REPO_SINGLETON.getById({ accountId: 'acc_1', id })).toBeNull();
+    // second delete is a no-op
+    expect(await REPO_SINGLETON.deleteById({ accountId: 'acc_1', id })).toBe(false);
+  });
+});
