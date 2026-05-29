@@ -242,7 +242,7 @@ export interface AppDeps {
   accountLifecycleService: AccountLifecycleService;
   /**
    * V-202d — generic time-shifted job dispatcher (`scheduled_jobs` table).
-   * Optional — when omitted, the trial-pack expiry email and any future
+   * Optional — when omitted, the auth-token sweep and any other
    * cron-shaped work is silenced. Tests that don't exercise scheduled
    * jobs pass null/undefined.
    */
@@ -315,7 +315,7 @@ export interface AppDeps {
    * only when this AND profilesService are both wired.
    */
   profileSnapshotsService?: ProfileSnapshotsService;
-  /** V-082: billing service (Stripe checkout / portal / trial-pack). Optional. */
+  /** V-082: billing service (Stripe checkout / portal). Optional. */
   billingService?: BillingService;
   /**
    * EG-API-1.2 — customer-configurable egress service per planning 133.

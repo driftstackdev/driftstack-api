@@ -75,57 +75,49 @@ describe('W943 V-088 StripeBillingProvider cross-source invariant', () => {
 
   // ─── implements BillingProvider + 4 methods ──────────────────
 
-  it('CRITICAL StripeBillingProvider implements BillingProvider — declares 4 methods matching the V-082 interface: ensureCustomer + createSubscriptionCheckout + createTrialPackCheckout + createPortalSession. The 4-method 1:1 mapping is the V-088/V-082 contract.', () => {
+  it('CRITICAL StripeBillingProvider implements BillingProvider — declares 3 methods matching the V-082 interface: ensureCustomer + createSubscriptionCheckout + createPortalSession (createTrialPackCheckout removed 2026-05-27 with the trial_pack retirement). The 1:1 mapping is the V-088/V-082 contract.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-billing-provider.ts'));
     expect(p).toMatch(/export class StripeBillingProvider implements BillingProvider \{/);
     expect(p).toMatch(/async ensureCustomer\(args: \{/);
     expect(p).toMatch(/async createSubscriptionCheckout\(args: \{/);
-    expect(p).toMatch(/async createTrialPackCheckout\(args: \{/);
     expect(p).toMatch(/async createPortalSession\(args: \{/);
+    expect(p).not.toMatch(/createTrialPackCheckout/);
   });
 
   // ─── Method-to-StripeApiClient delegation map ────────────────
 
-  it('CRITICAL method-to-client delegation — ensureCustomer → this.client.createCustomer + createSubscriptionCheckout → this.client.createSubscriptionCheckoutSession + createTrialPackCheckout → this.client.createOneTimeCheckoutSession + createPortalSession → this.client.createBillingPortalSession. The 4-method 1:1 delegation keeps the provider thin.', () => {
+  it('CRITICAL method-to-client delegation — ensureCustomer → this.client.createCustomer + createSubscriptionCheckout → this.client.createSubscriptionCheckoutSession + createPortalSession → this.client.createBillingPortalSession. The 1:1 delegation keeps the provider thin (createTrialPackCheckout → createOneTimeCheckoutSession removed 2026-05-27).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-billing-provider.ts'));
     expect(p).toMatch(/await this\.client\.createCustomer\(/);
     expect(p).toMatch(/await this\.client\.createSubscriptionCheckoutSession\(/);
-    expect(p).toMatch(/await this\.client\.createOneTimeCheckoutSession\(/);
     expect(p).toMatch(/await this\.client\.createBillingPortalSession\(/);
+    expect(p).not.toMatch(/createOneTimeCheckoutSession/);
   });
 
   // ─── driftstack_account_id metadata propagation ──────────────
 
   it("CRITICAL driftstack_account_id metadata propagation — every customer / session create path attaches 'metadata: { driftstack_account_id: args.accountId, ... }'. The metadata gives Stripe webhooks a stable account-id back-pointer.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-billing-provider.ts'));
-    // 3 places: ensureCustomer + createSubscriptionCheckout + createTrialPackCheckout.
+    // 2 places: ensureCustomer + createSubscriptionCheckout (createTrialPackCheckout removed 2026-05-27).
     const matches = p.match(/driftstack_account_id: args\.accountId/g) ?? [];
-    expect(matches.length).toBeGreaterThanOrEqual(3);
-  });
-
-  // ─── Trial-pack 2-key metadata ───────────────────────────────
-
-  it("CRITICAL trial-pack metadata has 2 keys — driftstack_account_id + driftstack_purchase_kind: 'trial_pack'. The 2-key metadata is what lets Stripe webhooks distinguish trial-pack one-time purchases from subscription Checkouts.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-billing-provider.ts'));
-    expect(p).toMatch(
-      /driftstack_account_id: args\.accountId,\s*\n\s+driftstack_purchase_kind: 'trial_pack',/,
-    );
-  });
-
-  it('CRITICAL trial-pack uses createOneTimeCheckoutSession — NOT createSubscriptionCheckoutSession. The one-time-vs-subscription split matches the ADR-003 trial-pack-is-not-a-sub design.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-billing-provider.ts'));
-    expect(p).toMatch(
-      /async createTrialPackCheckout\(args: \{[\s\S]+?await this\.client\.createOneTimeCheckoutSession\(\{/,
-    );
-  });
-
-  // ─── clientReferenceId set on both checkouts ─────────────────
-
-  it('CRITICAL both checkouts set clientReferenceId: args.accountId — Stripe-native cross-reference in addition to metadata. The 2-field cross-reference (clientReferenceId + metadata.driftstack_account_id) gives webhooks 2 ways to back-resolve the account.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-billing-provider.ts'));
-    // 2 places: createSubscriptionCheckout + createTrialPackCheckout.
-    const matches = p.match(/clientReferenceId: args\.accountId,/g) ?? [];
     expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  // ─── Trial-pack purchase path retired 2026-05-27 ─────────────
+
+  it('CRITICAL trial-pack purchase path fully retired 2026-05-27 — no createTrialPackCheckout method and no trial_pack purchase-kind metadata remain in the provider.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-billing-provider.ts'));
+    expect(p).not.toMatch(/createTrialPackCheckout/);
+    expect(p).not.toMatch(/trial_pack/);
+  });
+
+  // ─── clientReferenceId set on the subscription checkout ──────
+
+  it('CRITICAL the subscription checkout sets clientReferenceId: args.accountId — Stripe-native cross-reference in addition to metadata. The 2-field cross-reference (clientReferenceId + metadata.driftstack_account_id) gives webhooks 2 ways to back-resolve the account.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-billing-provider.ts'));
+    // 1 place: createSubscriptionCheckout (trial-pack checkout removed 2026-05-27).
+    const matches = p.match(/clientReferenceId: args\.accountId,/g) ?? [];
+    expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
   // ─── ensureCustomer arg shape ────────────────────────────────
@@ -148,11 +140,11 @@ describe('W943 V-088 StripeBillingProvider cross-source invariant', () => {
 
   // ─── Checkout return shape — { url, sessionId } ──────────────
 
-  it('CRITICAL checkout methods return { url: result.url, sessionId: result.id }. The 2-field return shape matches BillingProvider.createSubscriptionCheckout + createTrialPackCheckout return contracts; drift would break route-layer redirect handling.', () => {
+  it('CRITICAL checkout method returns { url: result.url, sessionId: result.id }. The 2-field return shape matches BillingProvider.createSubscriptionCheckout return contract; drift would break route-layer redirect handling.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-billing-provider.ts'));
-    // 2 places: createSubscriptionCheckout + createTrialPackCheckout.
+    // 1 place: createSubscriptionCheckout (createTrialPackCheckout removed 2026-05-27).
     const matches = p.match(/return \{ url: result\.url, sessionId: result\.id \};/g) ?? [];
-    expect(matches.length).toBeGreaterThanOrEqual(2);
+    expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
   // ─── createPortalSession returns single-field { url } ────────

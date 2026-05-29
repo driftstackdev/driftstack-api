@@ -128,11 +128,11 @@ describe('W954 V-073 + ADR-004 usage cross-source invariant', () => {
 
   // ─── ADR-004 paid-tier-unmetered framing ─────────────────────
 
-  it("CRITICAL ADR-004 framing — 'Per ADR-004: paid tiers are concurrent-only; hours metering exists ONLY for the trial pack (via accounts.trial_pack_credit_cents decrement at session_end per ADR-003 — independent of this map). All TIER_QUOTAS values are now null (unmetered) across every tier'. The ADR-004 + concurrent-only + trial-pack-only design is the unmetered-paid policy.", () => {
+  it("CRITICAL ADR-004 framing — 'Per ADR-004: paid tiers are concurrent-only; no hours metering remains (the one-time trial_pack that decremented a prepaid credit at session_end was retired 2026-05-27). All TIER_QUOTAS values are now null (unmetered) across every tier'. The ADR-004 + concurrent-only design is the unmetered-paid policy.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/usage.ts'));
-    expect(p).toMatch(/Per ADR-004: paid tiers are concurrent-only; hours metering exists/);
-    expect(p).toMatch(/ONLY for the trial pack \(via `accounts\.trial_pack_credit_cents`/);
-    expect(p).toMatch(/decrement at session_end per ADR-003 — independent of this map\)\./);
+    expect(p).toMatch(/Per ADR-004: paid tiers are concurrent-only; no hours metering/);
+    expect(p).toMatch(/remains \(the one-time trial_pack that decremented a prepaid/);
+    expect(p).toMatch(/credit at session_end was retired 2026-05-27\)\./);
     expect(p).toMatch(/All TIER_QUOTAS values are now `null` \(unmetered\) across every/);
     expect(p).toMatch(/tier;/);
   });

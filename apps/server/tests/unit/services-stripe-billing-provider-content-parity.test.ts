@@ -77,11 +77,9 @@ describe('W410.B apps/server/src/services/stripe-billing-provider.ts content par
     );
   });
 
-  it("createTrialPackCheckout: createOneTimeCheckoutSession + metadata{driftstack_account_id, driftstack_purchase_kind:'trial_pack'}", () => {
-    expect(body).toMatch(/async createTrialPackCheckout\(args: \{/);
-    expect(body).toMatch(
-      /const result = await this\.client\.createOneTimeCheckoutSession\(\{\s*\n?\s*customerId: args\.customerId,\s*\n?\s*priceId: args\.priceId,\s*\n?\s*successUrl: args\.successUrl,\s*\n?\s*cancelUrl: args\.cancelUrl,\s*\n?\s*clientReferenceId: args\.accountId,\s*\n?\s*metadata: \{\s*\n?\s*driftstack_account_id: args\.accountId,\s*\n?\s*driftstack_purchase_kind: 'trial_pack',\s*\n?\s*\},\s*\n?\s*\}\);/,
-    );
+  it('createTrialPackCheckout fully removed 2026-05-27 (trial_pack retirement)', () => {
+    expect(body).not.toMatch(/createTrialPackCheckout/);
+    expect(body).not.toMatch(/trial_pack/);
   });
 
   it('createPortalSession: { customerId, returnUrl } → { url }', () => {

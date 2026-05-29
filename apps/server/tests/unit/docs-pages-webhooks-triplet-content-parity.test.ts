@@ -145,14 +145,15 @@ describe('W787 docs webhooks/ triplet content parity', () => {
       'api_key.minted',
       'subscription.changed',
       'subscription.cancelled',
-      'trial_pack.purchased',
-      'trial_pack.expired',
       'webhook_endpoint.created',
       'webhook_endpoint.deleted',
     ];
     for (const ev of plannedEvents) {
       expect(p, `planned event ${ev}`).toMatch(new RegExp(`\\| \`${ev.replace(/\./g, '\\.')}\``));
     }
+    // trial_pack.purchased / trial_pack.expired removed 2026-05-27 with the
+    // trial_pack retirement.
+    expect(p).not.toMatch(/trial_pack\./);
   });
 
   it('CRITICAL evt_<uuid> common-envelope shape pinned — id + type + account_id + emitted_at + data. Drift to a different envelope would break SDK type discriminators.', () => {

@@ -151,9 +151,9 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
 }
 
 // Wave 1119 / Slice 1119.2 B1 server-side leg — when Stripe env is not
-// configured (no STRIPE_SECRET_KEY / DRIFTSTACK_TIER_PRICE_IDS /
-// STRIPE_TRIAL_PACK_PRICE_ID), `registerBillingRoutes` doesn't run and
-// the four `/v1/billing/*` paths fall through to the global 404 handler.
+// configured (no STRIPE_SECRET_KEY / DRIFTSTACK_TIER_PRICE_IDS),
+// `registerBillingRoutes` doesn't run and the `/v1/billing/*` paths
+// fall through to the global 404 handler.
 // That's the wrong signal for an *intentionally unconfigured* feature:
 // 404 reads as "this endpoint doesn't exist" (typo? wrong version?) when
 // the right read is "this server isn't wired for billing yet."
@@ -179,7 +179,6 @@ export function registerBillingDisabledRoutes(app: FastifyInstance): void {
   };
 
   app.post('/v1/billing/checkout-session', stub);
-  app.post('/v1/billing/trial-pack', stub);
   app.post('/v1/billing/portal-session', stub);
   app.get('/v1/billing', stub);
   // v2-#26 — disabled-route counterpart so the dashboard's 503 path

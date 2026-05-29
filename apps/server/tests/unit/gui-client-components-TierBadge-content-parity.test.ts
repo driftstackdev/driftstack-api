@@ -46,10 +46,11 @@ describe('W477.A apps/gui-client/src/components/TierBadge.tsx content parity', (
     );
   });
 
-  it("AccountTier 9-value union (free | trial_pack | solo_manual | team_manual | agency_manual | api_starter | api_builder | api_scale | enterprise) — pinned so a tier rename in the schema doesn't drop the typed surface here", () => {
+  it("AccountTier 8-value union (free | solo_manual | team_manual | agency_manual | api_starter | api_builder | api_scale | enterprise) — pinned so a tier rename in the schema doesn't drop the typed surface here (trial_pack removed 2026-05-27)", () => {
     expect(body).toMatch(
-      /export type AccountTier =\s*\n?\s*\| 'free'\s*\n?\s*\| 'trial_pack'\s*\n?\s*\| 'solo_manual'\s*\n?\s*\| 'team_manual'\s*\n?\s*\| 'agency_manual'\s*\n?\s*\| 'api_starter'\s*\n?\s*\| 'api_builder'\s*\n?\s*\| 'api_scale'\s*\n?\s*\| 'enterprise';/,
+      /export type AccountTier =\s*\n?\s*\| 'free'\s*\n?\s*\| 'solo_manual'\s*\n?\s*\| 'team_manual'\s*\n?\s*\| 'agency_manual'\s*\n?\s*\| 'api_starter'\s*\n?\s*\| 'api_builder'\s*\n?\s*\| 'api_scale'\s*\n?\s*\| 'enterprise';/,
     );
+    expect(body).not.toMatch(/'trial_pack'/);
   });
 
   it("TierBadgeProps: tier 'Accepts any tier string for forward-compat with new tiers landed on the server before the client rebuilds. `AccountTier` is the documented happy-path set; unknown tiers render as-is.' + label? override + size? 'sm'|'md' 'Default `md` matches surrounding body text.'", () => {
@@ -58,22 +59,24 @@ describe('W477.A apps/gui-client/src/components/TierBadge.tsx content parity', (
     );
   });
 
-  it("TIER_LABEL 9-entry: 'Free', 'Trial Pack', 'Solo Manual', 'Team Manual', 'Agency Manual', 'API Starter', 'API Builder', 'API Scale', 'Enterprise' — Title Case + API uppercase preserved", () => {
+  it("TIER_LABEL 8-entry: 'Free', 'Solo Manual', 'Team Manual', 'Agency Manual', 'API Starter', 'API Builder', 'API Scale', 'Enterprise' — Title Case + API uppercase preserved (trial_pack removed 2026-05-27)", () => {
     expect(body).toMatch(
-      /const TIER_LABEL: Record<string, string> = \{\s*\n?\s*free: 'Free',\s*\n?\s*trial_pack: 'Trial Pack',\s*\n?\s*solo_manual: 'Solo Manual',\s*\n?\s*team_manual: 'Team Manual',\s*\n?\s*agency_manual: 'Agency Manual',\s*\n?\s*api_starter: 'API Starter',\s*\n?\s*api_builder: 'API Builder',\s*\n?\s*api_scale: 'API Scale',\s*\n?\s*enterprise: 'Enterprise',\s*\n?\s*\};/,
+      /const TIER_LABEL: Record<string, string> = \{\s*\n?\s*free: 'Free',\s*\n?\s*solo_manual: 'Solo Manual',\s*\n?\s*team_manual: 'Team Manual',\s*\n?\s*agency_manual: 'Agency Manual',\s*\n?\s*api_starter: 'API Starter',\s*\n?\s*api_builder: 'API Builder',\s*\n?\s*api_scale: 'API Scale',\s*\n?\s*enterprise: 'Enterprise',\s*\n?\s*\};/,
     );
+    expect(body).not.toMatch(/'Trial Pack'/);
   });
 
-  it('Tone 4-union (neutral | paid | enterprise | trial) + TIER_TONE 9-entry: free→neutral, trial_pack→trial, *_manual→paid, api_*→paid, enterprise→enterprise — pinned so enterprise customers stay visually differentiated from regular paid tiers (white-glove signal)', () => {
-    expect(body).toMatch(/type Tone = 'neutral' \| 'paid' \| 'enterprise' \| 'trial';/);
+  it('Tone 3-union (neutral | paid | enterprise) + TIER_TONE 8-entry: free→neutral, *_manual→paid, api_*→paid, enterprise→enterprise — pinned so enterprise customers stay visually differentiated from regular paid tiers (white-glove signal); trial tone removed 2026-05-27', () => {
+    expect(body).toMatch(/type Tone = 'neutral' \| 'paid' \| 'enterprise';/);
     expect(body).toMatch(
-      /const TIER_TONE: Record<string, Tone> = \{\s*\n?\s*free: 'neutral',\s*\n?\s*trial_pack: 'trial',\s*\n?\s*solo_manual: 'paid',\s*\n?\s*team_manual: 'paid',\s*\n?\s*agency_manual: 'paid',\s*\n?\s*api_starter: 'paid',\s*\n?\s*api_builder: 'paid',\s*\n?\s*api_scale: 'paid',\s*\n?\s*enterprise: 'enterprise',\s*\n?\s*\};/,
+      /const TIER_TONE: Record<string, Tone> = \{\s*\n?\s*free: 'neutral',\s*\n?\s*solo_manual: 'paid',\s*\n?\s*team_manual: 'paid',\s*\n?\s*agency_manual: 'paid',\s*\n?\s*api_starter: 'paid',\s*\n?\s*api_builder: 'paid',\s*\n?\s*api_scale: 'paid',\s*\n?\s*enterprise: 'enterprise',\s*\n?\s*\};/,
     );
+    expect(body).not.toMatch(/'trial'/);
   });
 
-  it("TONE_CLASSES 4-entry: neutral→bg-surface-inset, trial→bg-status-info/15, paid→bg-status-success/15, enterprise→bg-accent/15 (accent token, not a success-tier reuse — pinned so Enterprise isn't visually identical to paid tiers); SIZE_CLASSES sm (px-1.5 py-0.5 text-xs) + md (px-2 py-0.5 text-sm)", () => {
+  it("TONE_CLASSES 3-entry: neutral→bg-surface-inset, paid→bg-status-success/15, enterprise→bg-accent/15 (accent token, not a success-tier reuse — pinned so Enterprise isn't visually identical to paid tiers); SIZE_CLASSES sm (px-1.5 py-0.5 text-xs) + md (px-2 py-0.5 text-sm); trial tone removed 2026-05-27", () => {
     expect(body).toMatch(
-      /const TONE_CLASSES: Record<Tone, string> = \{\s*\n?\s*neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',\s*\n?\s*trial: 'bg-status-info\/15 text-status-info border-status-info\/30',\s*\n?\s*paid: 'bg-status-success\/15 text-status-success border-status-success\/30',\s*\n?\s*enterprise: 'bg-accent\/15 text-accent border-accent\/30',\s*\n?\s*\};/,
+      /const TONE_CLASSES: Record<Tone, string> = \{\s*\n?\s*neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',\s*\n?\s*paid: 'bg-status-success\/15 text-status-success border-status-success\/30',\s*\n?\s*enterprise: 'bg-accent\/15 text-accent border-accent\/30',\s*\n?\s*\};/,
     );
     expect(body).toMatch(
       /const SIZE_CLASSES: Record<NonNullable<TierBadgeProps\['size'\]>, string> = \{\s*\n?\s*sm: 'px-1\.5 py-0\.5 text-xs',\s*\n?\s*md: 'px-2 py-0\.5 text-sm',\s*\n?\s*\};/,

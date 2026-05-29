@@ -12822,7 +12822,7 @@
     },
     "/v1/billing": {
       "get": {
-        "summary": "Read the calling account billing state (subscription + trial pack)",
+        "summary": "Read the calling account billing state (subscription)",
         "tags": ["billing"],
         "security": [
           {
@@ -12831,7 +12831,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Subscription row + trial-pack credit/expiry/redemption state.",
+            "description": "Subscription row (null when the account has never subscribed).",
             "content": {
               "application/json": {
                 "schema": {

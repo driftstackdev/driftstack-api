@@ -25,13 +25,14 @@ describe('W765 docs /api/billing content parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('CRITICAL frontmatter title + description pinned. Matches W760 /api index "$2.99 trial pack, Stripe Customer Portal redirect, billing-state read" framing.', () => {
+  it('CRITICAL frontmatter title + description pinned. Matches W760 /api index "Subscriptions, Stripe Customer Portal redirect, billing-state read" framing (trial pack retired 2026-05-27).', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: Billing\n/);
     expect(p).toMatch(
-      /description: Subscriptions, the \$2\.99 trial pack, the Stripe Customer Portal redirect, and reading your current billing state\./,
+      /description: Subscriptions, the Stripe Customer Portal redirect, and reading your current billing state\./,
     );
+    expect(p).not.toMatch(/trial pack/);
   });
 
   it("CRITICAL thin-layer-over-Stripe framing pinned. The 'All Driftstack billing is a thin layer over Stripe. The Driftstack API mints checkout sessions + portal URLs; the customer interacts with the Stripe-hosted UI directly' wording is the load-bearing PCI-out-of-scope architecture framing.", () => {
@@ -53,7 +54,7 @@ describe('W765 docs /api/billing content parity', () => {
     expect(p).toMatch(/audit-log \+ email notifications\./);
   });
 
-  it('CRITICAL GET /v1/billing response shape pinned — subscription + trial_pack. Matches publicSubscription() in apps/server/src/routes/billing.ts and SubscriptionSchema in packages/api-types/src/billing.ts. The previous pin asserted fictional fields (`id`, `billing_period`, `current_period_start`) that the route never returns + omitted real fields (`stripe_subscription_id`, `canceled_at`, `created_at`, `updated_at`). Refreshed against the source-of-truth.', () => {
+  it('CRITICAL GET /v1/billing response shape pinned — subscription only (trial_pack envelope removed 2026-05-27). Matches publicSubscription() in apps/server/src/routes/billing.ts and SubscriptionSchema in packages/api-types/src/billing.ts. The previous pin asserted fictional fields (`id`, `billing_period`, `current_period_start`) that the route never returns + omitted real fields (`stripe_subscription_id`, `canceled_at`, `created_at`, `updated_at`). Refreshed against the source-of-truth.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/"subscription": \{/);
@@ -74,17 +75,14 @@ describe('W765 docs /api/billing content parity', () => {
     // CreateCheckoutSessionRequest, so a page-wide not-match would
     // wrongly fire on that block).
     const responseBlockStart = p.indexOf('"subscription": {');
-    const responseBlockEnd = p.indexOf('"trial_pack":', responseBlockStart);
+    const responseBlockEnd = p.indexOf('## Start a subscription', responseBlockStart);
     const responseBlock = p.slice(responseBlockStart, responseBlockEnd);
     expect(responseBlock).not.toMatch(/"id": "sub_<uuid>"/);
     expect(responseBlock).not.toMatch(/"billing_period":/);
     expect(responseBlock).not.toMatch(/"current_period_start":/);
-    // trial_pack block stays.
-    expect(p).toMatch(/"trial_pack": \{/);
-    expect(p).toMatch(/"active": false/);
-    expect(p).toMatch(/"credit_cents_remaining": 0/);
-    expect(p).toMatch(/"expires_at": null/);
-    expect(p).toMatch(/"redeemed": false/);
+    // trial_pack envelope removed 2026-05-27 — the GET /v1/billing
+    // response no longer carries it (the route returns subscription only).
+    expect(p).not.toMatch(/"trial_pack": \{/);
   });
 
   it("CRITICAL subscription-null-on-never-subscribed framing pinned. The 'subscription is null when the account has never subscribed' wording is the load-bearing customer-state framing — drift would let SDK consumers crash on null.", () => {
@@ -93,12 +91,11 @@ describe('W765 docs /api/billing content parity', () => {
     expect(p).toMatch(/`subscription` is `null` when the account has never subscribed\./);
   });
 
-  it("CRITICAL trial_pack.active 14-day window framing pinned. The 'trial_pack.active is true while the customer has unspent credit and the 14-day window hasn\\'t elapsed' wording is the canonical 14-day trial TTL.", () => {
+  it('CRITICAL trial_pack billing-state framing fully removed 2026-05-27 — the doc no longer documents a trial_pack.active / 14-day-window field (the GET /v1/billing response carries subscription only).', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /`trial_pack\.active` is `true` while the customer has unspent\s*\n?credit and the 14-day window hasn't elapsed\./,
-    );
+    expect(p).not.toMatch(/trial_pack\.active/);
+    expect(p).not.toMatch(/14-day window/);
   });
 
   it('CRITICAL POST /v1/billing/checkout-session body shape pinned — tier + billing_period + success_url + cancel_url. Drift to dropping a field would break the SDK flow.', () => {
@@ -117,12 +114,12 @@ describe('W765 docs /api/billing content parity', () => {
     expect(p).toMatch(/Customers self-hosting Driftstack configure the allowlist/);
   });
 
-  it('CRITICAL trial-pack $2.99 + 299¢ + $0.18-per-concurrent-hour + ~16-hours pinned. The math is the load-bearing customer-pricing framing — drift would mismatch W751 dashboard $2.99 once-per-account copy.', () => {
+  it('CRITICAL trial-pack pricing section fully removed 2026-05-27 — the doc no longer documents a one-time $2.99 / 299¢ trial pack (replaced by the perpetual free tier).', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /The trial pack is a one-time \$2\.99 charge that credits 299¢ of\s*\n?session-time at the API Starter overage rate \(\$0\.18 \/ concurrent-\s*\n?hour\); ~16 hours of use\. Once-per-account\./,
-    );
+    expect(p).not.toMatch(/\$2\.99/);
+    expect(p).not.toMatch(/299¢/);
+    expect(p).not.toMatch(/Start the trial pack/);
   });
 
   it("CRITICAL portal-URL single-use + short-lived + no-cache framing pinned. The 'The portal URL is single-use and short-lived. Mint a fresh one each time the customer clicks \"Manage subscription\" — don\\'t cache' wording is the load-bearing SDK-consumer guidance.", () => {
@@ -165,17 +162,17 @@ describe('W765 docs /api/billing content parity', () => {
     );
     // Mutation endpoints require admin:billing (broad admin / account_owner satisfy).
     expect(p).toMatch(
-      /mutation\s*\n?endpoints \(start trial, checkout, manage-portal\) require the\s*\n?`admin:billing` scope \(a broad `admin` or `account_owner` key also\s*\n?satisfies it\)\./,
+      /mutation\s*\n?endpoints \(checkout, manage-portal\) require the `admin:billing`\s*\n?scope \(a broad `admin` or `account_owner` key also satisfies it\)\./,
     );
   });
 
-  it('CRITICAL 4-endpoint canonical action set pinned — GET /v1/billing + POST /v1/billing/checkout-session + POST /v1/billing/trial-pack + POST /v1/billing/portal-session.', () => {
+  it('CRITICAL 3-endpoint canonical action set pinned — GET /v1/billing + POST /v1/billing/checkout-session + POST /v1/billing/portal-session (trial-pack endpoint retired 2026-05-27).', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/`GET \/v1\/billing`/);
     expect(p).toMatch(/`POST \/v1\/billing\/checkout-session`/);
-    expect(p).toMatch(/`POST \/v1\/billing\/trial-pack`/);
     expect(p).toMatch(/`POST \/v1\/billing\/portal-session`/);
+    expect(p).not.toMatch(/`POST \/v1\/billing\/trial-pack`/);
   });
 
   it('CRITICAL checkout response shape — { checkout_url, checkout_session_id } pinned. Drift would mismatch SDK consumer expectations.', () => {

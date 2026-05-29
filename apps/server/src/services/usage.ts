@@ -42,9 +42,9 @@ const ALL_TYPES: UsageRecordType[] = [
 // Tier quotas. null = unmetered.
 // ───────────────────────────────────────────────────────────────────────────
 
-// Per ADR-004: paid tiers are concurrent-only; hours metering exists
-// ONLY for the trial pack (via `accounts.trial_pack_credit_cents`
-// decrement at session_end per ADR-003 — independent of this map).
+// Per ADR-004: paid tiers are concurrent-only; no hours metering
+// remains (the one-time trial_pack that decremented a prepaid
+// credit at session_end was retired 2026-05-27).
 // All TIER_QUOTAS values are now `null` (unmetered) across every
 // tier; the `session_minute` usage_record_type stays as the granular
 // ledger primitive for analytics + abuse detection but is not gated

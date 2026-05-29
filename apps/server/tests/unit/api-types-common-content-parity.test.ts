@@ -221,21 +221,22 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     expect(body).toMatch(/aiAgent: boolean;/);
     expect(body).toMatch(/llmBilling: LlmBilling;/);
     expect(body).toMatch(/vpnEgress: boolean;/);
-    expect(body).toMatch(/trialPack: boolean;/);
+    // trialPack: boolean removed 2026-05-27 with the trial_pack retirement.
+    expect(body).not.toMatch(/trialPack/);
   });
 
   it('TIER_FEATURES Record: free (test env + apiAccess false + aiAgent false) + team_manual (apiAccess true + aiAgent true + byok_only) + api_builder (byok_or_bundled) + enterprise (custom profiles + byok_or_bundled_custom)', () => {
     expect(body).toMatch(
-      /free: \{\s*\n?\s*concurrentSessions: 1,\s*\n?\s*profiles: 1,\s*\n?\s*apiKeyEnvironment: 'test',\s*\n?\s*apiAccess: false,\s*\n?\s*aiAgent: false,\s*\n?\s*llmBilling: null,\s*\n?\s*vpnEgress: false,\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
+      /free: \{\s*\n?\s*concurrentSessions: 1,\s*\n?\s*profiles: 1,\s*\n?\s*apiKeyEnvironment: 'test',\s*\n?\s*apiAccess: false,\s*\n?\s*aiAgent: false,\s*\n?\s*llmBilling: null,\s*\n?\s*vpnEgress: false,\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /team_manual: \{\s*\n?\s*concurrentSessions: 3,\s*\n?\s*profiles: 50,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_only',\s*\n?\s*vpnEgress: true,\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
+      /team_manual: \{\s*\n?\s*concurrentSessions: 3,\s*\n?\s*profiles: 50,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_only',\s*\n?\s*vpnEgress: true,\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /api_builder: \{\s*\n?\s*concurrentSessions: 8,\s*\n?\s*profiles: 100,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled',\s*\n?\s*vpnEgress: true,\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
+      /api_builder: \{\s*\n?\s*concurrentSessions: 8,\s*\n?\s*profiles: 100,\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled',\s*\n?\s*vpnEgress: true,\s*\n?\s*\},/,
     );
     expect(body).toMatch(
-      /enterprise: \{\s*\n?\s*concurrentSessions: 32,\s*\n?\s*profiles: 'custom',\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled_custom',\s*\n?\s*vpnEgress: true,\s*\n?\s*trialPack: false,\s*\n?\s*\},/,
+      /enterprise: \{\s*\n?\s*concurrentSessions: 32,\s*\n?\s*profiles: 'custom',\s*\n?\s*apiKeyEnvironment: 'live',\s*\n?\s*apiAccess: true,\s*\n?\s*aiAgent: true,\s*\n?\s*llmBilling: 'byok_or_bundled_custom',\s*\n?\s*vpnEgress: true,\s*\n?\s*\},/,
     );
   });
 

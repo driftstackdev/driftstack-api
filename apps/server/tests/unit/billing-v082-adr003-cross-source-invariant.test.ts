@@ -64,14 +64,14 @@ describe('W939 V-082 + ADR-003 billing cross-source invariant', () => {
     expect(p).toMatch(/Billing service \(V-082\)\./);
   });
 
-  it("CRITICAL 3-operation framing — 'Three customer-facing operations: 1. Checkout-session 2. Trial-pack 3. Customer portal'. The 3-op + 1-read surface is the customer-facing API.", () => {
+  it("CRITICAL 2-operation framing — 'Two customer-facing operations: 1. Checkout-session 2. Customer portal'. The 2-op + 1-read surface is the customer-facing API (Trial-pack op removed 2026-05-27 with the trial_pack retirement).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/billing.ts'));
-    expect(p).toMatch(/Three customer-facing operations:/);
+    expect(p).toMatch(/Two customer-facing operations:/);
     expect(p).toMatch(/1\. Checkout-session — start a paid-tier subscription/);
-    expect(p).toMatch(/2\. Trial-pack — start the \$2\.99 one-time pre-paid credit per/);
-    expect(p).toMatch(/3\. Customer portal — open Stripe Customer Portal for self-service/);
+    expect(p).toMatch(/2\. Customer portal — open Stripe Customer Portal for self-service/);
     expect(p).toMatch(/Plus one read:/);
-    expect(p).toMatch(/4\. GetBillingState — current subscription row \(if any\) \+ trial-pack/);
+    expect(p).toMatch(/3\. GetBillingState — current subscription row \(if any\)/);
+    expect(p).not.toMatch(/Trial-pack/);
   });
 
   // ─── Checkout idempotence + Stripe-handles-dup ───────────────
@@ -85,12 +85,12 @@ describe('W939 V-082 + ADR-003 billing cross-source invariant', () => {
     expect(p).toMatch(/"user already has a sub" path inside Checkout\)/);
   });
 
-  // ─── ADR-003 trial-pack ──────────────────────────────────────
+  // ─── ADR-003 trial-pack retired 2026-05-27 ───────────────────
 
-  it("CRITICAL ADR-003 trial-pack framing — 'Trial-pack — start the $2.99 one-time pre-paid credit per ADR-003. Same Checkout shell, one-time price id (not a sub)'. The $2.99 + one-time + same-shell is the ADR-003 design.", () => {
+  it('CRITICAL trial-pack billing op fully retired 2026-05-27 — billing.ts no longer documents a one-time $2.99 trial-pack operation (replaced by the perpetual free tier).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/billing.ts'));
-    expect(p).toMatch(/Trial-pack — start the \$2\.99 one-time pre-paid credit per/);
-    expect(p).toMatch(/ADR-003\. Same Checkout shell, one-time price id \(not a sub\)/);
+    expect(p).not.toMatch(/Trial-pack/);
+    expect(p).not.toMatch(/\$2\.99/);
   });
 
   // ─── Customer portal 409 on missing customer ─────────────────

@@ -58,7 +58,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(
       /API keys are scoped to the account that created them\. The key prefix \(`ds_live_`\) tells you it's a production key\./,
     );
-    expect(p).toMatch(/Trial-pack and pre-billing accounts get the same key shape\./);
+    expect(p).toMatch(/Free and pre-billing accounts get the same key shape\./);
   });
 
   it('CRITICAL quickstart 3-language install commands pinned — npm/pip/go-get matching W778 SDK installation. Drift would let SDK adopters drift between install pages.', () => {

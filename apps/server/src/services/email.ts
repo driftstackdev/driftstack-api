@@ -378,9 +378,9 @@ const TEMPLATES = {
   'signup-welcome': {
     subject: 'Welcome to Driftstack',
     text: (v) =>
-      `Your Driftstack account is ready.\n\nNext steps:\n  1. Pick a tier or grab the $2.99 trial pack at ${v.dashboardUrl}\n  2. Mint your first API key from the dashboard\n  3. Run your first session via the SDK\n\nAny questions: reply to this email.\n\n— Driftstack`,
+      `Your Driftstack account is ready.\n\nNext steps:\n  1. Start free or pick a paid tier at ${v.dashboardUrl}\n  2. Mint your first API key from the dashboard\n  3. Run your first session via the SDK\n\nAny questions: reply to this email.\n\n— Driftstack`,
     html: (v) =>
-      `<p>Your Driftstack account is ready.</p><p>Next steps:</p><ol><li>Pick a tier or grab the <strong>$2.99 trial pack</strong> at <a href="${v.dashboardUrl}">${v.dashboardUrl}</a></li><li>Mint your first API key from the dashboard</li><li>Run your first session via the SDK</li></ol><p>Any questions: reply to this email.</p><p>— Driftstack</p>`,
+      `<p>Your Driftstack account is ready.</p><p>Next steps:</p><ol><li>Start free or pick a paid tier at <a href="${v.dashboardUrl}">${v.dashboardUrl}</a></li><li>Mint your first API key from the dashboard</li><li>Run your first session via the SDK</li></ol><p>Any questions: reply to this email.</p><p>— Driftstack</p>`,
   },
   'session-failed-first': {
     subject: 'Driftstack — your first session failure',
@@ -515,13 +515,9 @@ const TEMPLATES = {
       `<p>Driftstack posted an update on an open service-status incident.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Incident:</strong></td><td>${v.title}</td></tr><tr><td><strong>Severity:</strong></td><td>${v.severity}</td></tr><tr><td><strong>Current status:</strong></td><td>${v.status}</td></tr><tr><td><strong>Update posted:</strong></td><td>${v.incidentTime} (UTC)</td></tr></table><p><strong>Update:</strong><br />${v.message}</p><p>Live status: <a href="${v.statusPageUrl}">${v.statusPageUrl}</a><br />Unsubscribe: <a href="${v.unsubscribeLink}">${v.unsubscribeLink}</a></p><p>— Driftstack</p>`,
   },
   // V-486 — DRAFT copy. Quota-warning fires once per account per
-  // billing period when concurrent-cap utilisation crosses 80%, OR
-  // when trial-pack credit drops below 20% of the original 299¢.
-  // Caller dedupes via `quotaWarnEmailSentAt` (concurrent variant)
-  // / `trialPackLowCreditEmailSentAt` (credit variant). Templates
-  // share one alias because the copy paths converge — they both
-  // tell the customer "you're approaching the ceiling, here's the
-  // upgrade path."
+  // billing period when concurrent-cap utilisation crosses 80%.
+  // Caller dedupes via `quotaWarnEmailSentAt`. Tells the customer
+  // "you're approaching the ceiling, here's the upgrade path."
   'quota-warning': {
     subject: 'Driftstack — approaching your tier limit',
     text: (v) =>

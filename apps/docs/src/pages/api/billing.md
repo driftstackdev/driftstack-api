@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Billing
-description: Subscriptions, the $2.99 trial pack, the Stripe Customer Portal redirect, and reading your current billing state.
+description: Subscriptions, the Stripe Customer Portal redirect, and reading your current billing state.
 ---
 
 # Billing
@@ -34,12 +34,6 @@ Returns:
     "canceled_at": null,
     "created_at": "2026-05-01T00:00:00Z",
     "updated_at": "2026-05-01T00:00:00Z"
-  },
-  "trial_pack": {
-    "active": false,
-    "credit_cents_remaining": 0,
-    "expires_at": null,
-    "redeemed": false
   }
 }
 ```
@@ -54,9 +48,6 @@ The id is `stripe_subscription_id` (the live Stripe-side id, prefix
 Stripe cancellation timestamp — non-null only when the
 subscription has been cancelled; `cancel_at_period_end=true` is
 distinct (cancellation is scheduled but not yet effective).
-
-`trial_pack.active` is `true` while the customer has unspent
-credit and the 14-day window hasn't elapsed.
 
 ## Start a subscription
 
@@ -79,22 +70,6 @@ customer to `checkout_url`; Stripe handles card collection +
 `success_url` and `cancel_url` are validated against an allowlist
 . Customers self-hosting Driftstack configure the allowlist
 in their deployment env.
-
-## Start the trial pack
-
-`POST /v1/billing/trial-pack`
-
-```json
-{
-  "success_url": "https://your.app/billing/success",
-  "cancel_url": "https://your.app/billing/cancel"
-}
-```
-
-Returns the same `{ checkout_url, checkout_session_id }` shape.
-The trial pack is a one-time $2.99 charge that credits 299¢ of
-session-time at the API Starter overage rate ($0.18 / concurrent-
-hour); ~16 hours of use. Once-per-account.
 
 ## Open the Stripe Customer Portal
 
@@ -135,6 +110,5 @@ per-team-context. Team owners manage their own billing; team
 members never see the owner's billing state.
 
 Read endpoints (GET) accept a bearer with `read` scope; mutation
-endpoints (start trial, checkout, manage-portal) require the
-`admin:billing` scope (a broad `admin` or `account_owner` key also
-satisfies it).
+endpoints (checkout, manage-portal) require the `admin:billing`
+scope (a broad `admin` or `account_owner` key also satisfies it).

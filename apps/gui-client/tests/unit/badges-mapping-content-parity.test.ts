@@ -36,12 +36,11 @@ function read(p: string): string {
 describe('W384.B gui-client TierBadge content parity', () => {
   const body = read(TIER);
 
-  it('V-534.M framing pinned + AccountTier union: 9 literals', () => {
+  it('V-534.M framing pinned + AccountTier union: 8 literals (trial_pack removed 2026-05-27)', () => {
     expect(body).toMatch(/V-534\.M — TierBadge presentational component/);
     expect(body).toMatch(/export type AccountTier =/);
     for (const id of [
       'free',
-      'trial_pack',
       'solo_manual',
       'team_manual',
       'agency_manual',
@@ -52,11 +51,11 @@ describe('W384.B gui-client TierBadge content parity', () => {
     ]) {
       expect(body, `tier literal missing in AccountTier: ${id}`).toMatch(new RegExp(`'${id}'`));
     }
+    expect(body).not.toMatch(/'trial_pack'/);
   });
 
-  it('TIER_LABEL: 9 keys with canonical human labels', () => {
+  it('TIER_LABEL: 8 keys with canonical human labels (trial_pack removed 2026-05-27)', () => {
     expect(body).toMatch(/free: 'Free',/);
-    expect(body).toMatch(/trial_pack: 'Trial Pack',/);
     expect(body).toMatch(/solo_manual: 'Solo Manual',/);
     expect(body).toMatch(/team_manual: 'Team Manual',/);
     expect(body).toMatch(/agency_manual: 'Agency Manual',/);
@@ -64,15 +63,15 @@ describe('W384.B gui-client TierBadge content parity', () => {
     expect(body).toMatch(/api_builder: 'API Builder',/);
     expect(body).toMatch(/api_scale: 'API Scale',/);
     expect(body).toMatch(/enterprise: 'Enterprise',/);
+    expect(body).not.toMatch(/Trial Pack/);
   });
 
-  it('Tone union: 4 literals (neutral/paid/enterprise/trial)', () => {
-    expect(body).toMatch(/type Tone = 'neutral' \| 'paid' \| 'enterprise' \| 'trial';/);
+  it('Tone union: 3 literals (neutral/paid/enterprise) — trial tone removed 2026-05-27', () => {
+    expect(body).toMatch(/type Tone = 'neutral' \| 'paid' \| 'enterprise';/);
   });
 
-  it('TIER_TONE map: free=neutral / trial_pack=trial / 6 paid / enterprise=enterprise', () => {
+  it('TIER_TONE map: free=neutral / 6 paid / enterprise=enterprise (trial_pack removed 2026-05-27)', () => {
     expect(body).toMatch(/free: 'neutral',/);
-    expect(body).toMatch(/trial_pack: 'trial',/);
     expect(body).toMatch(/solo_manual: 'paid',/);
     expect(body).toMatch(/team_manual: 'paid',/);
     expect(body).toMatch(/agency_manual: 'paid',/);
@@ -80,11 +79,12 @@ describe('W384.B gui-client TierBadge content parity', () => {
     expect(body).toMatch(/api_builder: 'paid',/);
     expect(body).toMatch(/api_scale: 'paid',/);
     expect(body).toMatch(/enterprise: 'enterprise',/);
+    expect(body).not.toMatch(/'trial'/);
   });
 
-  it('TONE_CLASSES: 4 tone → tailwind class mappings (neutral/trial/paid/enterprise)', () => {
+  it('TONE_CLASSES: 3 tone → tailwind class mappings (neutral/paid/enterprise) — trial removed 2026-05-27', () => {
     expect(body).toMatch(/neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',/);
-    expect(body).toMatch(/trial: 'bg-status-info\/15 text-status-info border-status-info\/30',/);
+    expect(body).not.toMatch(/trial: 'bg-status-info/);
     expect(body).toMatch(
       /paid: 'bg-status-success\/15 text-status-success border-status-success\/30',/,
     );

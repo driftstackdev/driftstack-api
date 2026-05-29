@@ -224,7 +224,7 @@ describe('createEmailService — configured', () => {
     const c = client.calls[0] as Record<string, string>;
     expect(c.Subject).toContain('Welcome');
     expect(c.TextBody).toContain('https://app.driftstack.dev/select-tier');
-    expect(c.TextBody).toContain('$2.99 trial pack');
+    expect(c.TextBody).toContain('Start free or pick a paid tier');
   });
 
   it('session-failed-first template', async () => {

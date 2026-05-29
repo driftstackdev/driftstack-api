@@ -36,8 +36,6 @@ site (when it lands as a Tier 3 visual surface).
 | `api_key.minted`                    | [PLANNED]  | New API key issued                                               |
 | `subscription.changed`              | [PLANNED]  | Tier changed via Stripe                                          |
 | `subscription.cancelled`            | [PLANNED]  | Subscription cancelled                                           |
-| `trial_pack.purchased`              | [PLANNED]  | $2.99 trial pack purchased                                       |
-| `trial_pack.expired`                | [PLANNED]  | Trial pack expired (14-day window closed)                        |
 | `webhook_endpoint.created`          | [PLANNED]  | New webhook endpoint registered                                  |
 | `webhook_endpoint.deleted`          | [PLANNED]  | Webhook endpoint deleted                                         |
 
@@ -332,12 +330,6 @@ Stripe webhook handler-driven. When the customer changes tier or
 cancels via the Stripe customer portal, a Driftstack-side webhook
 fires so the customer's own systems can react (e.g. update billing
 dashboards).
-
-### `trial_pack.purchased` / `trial_pack.expired` [PLANNED]
-
-Trial-pack-specific lifecycle events. `purchased` fires on the Stripe
-checkout completion event; `expired` fires from the trial-pack
-expiry job (which doesn't yet exist — see notes).
 
 ### `webhook_endpoint.created` / `webhook_endpoint.deleted` / `webhook_endpoint.secret_rotated` [PLANNED]
 

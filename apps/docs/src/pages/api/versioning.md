@@ -123,9 +123,9 @@ When `/v2/*` does ship, expect:
   server only ever sends event types the customer already opted into.
   New event types are then additive at the wire level; subscription is
   opt-in.
-- **`/v1/billing/*`** — Stripe-driven; subscription/trial-pack
-  state shapes are stable across `/v1/*`'s lifetime. Mid-major
-  changes here are extremely unlikely.
+- **`/v1/billing/*`** — Stripe-driven; subscription state shapes
+  are stable across `/v1/*`'s lifetime. Mid-major changes here are
+  extremely unlikely.
 - **`/v1/admin/*`** — internal-staff surface. Breaking changes
   don't trigger external deprecation cycle; staff updates the
   panel + the docs in lock-step.

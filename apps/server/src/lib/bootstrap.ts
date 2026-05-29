@@ -906,12 +906,12 @@ export async function createProductionDeps(
     throw new Error(stripeKeySafety.reason);
   }
 
-  // V-082 + V-088: Billing service. Activates only when all three of
-  // STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS + STRIPE_TRIAL_PACK_PRICE_ID
-  // are configured (the StripeBillingProvider needs the secret key
-  // for API calls; tier price ids are needed to map tier → Stripe
-  // Checkout price). When any is missing, billingService is undefined
-  // and routes simply don't register.
+  // V-082 + V-088: Billing service. Activates only when both
+  // STRIPE_SECRET_KEY + DRIFTSTACK_TIER_PRICE_IDS are configured (the
+  // StripeBillingProvider needs the secret key for API calls; tier
+  // price ids are needed to map tier → Stripe Checkout price). When
+  // either is missing, billingService is undefined and routes simply
+  // don't register.
   let billingService: BillingService | undefined;
   if (config.stripe?.secretKey !== undefined && config.stripe.tierPrices !== undefined) {
     const stripeApi = new StripeApiClient({

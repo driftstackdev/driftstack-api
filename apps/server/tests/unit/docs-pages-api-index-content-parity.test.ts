@@ -103,11 +103,12 @@ describe('W760 docs /api index page content parity', () => {
     expect(p).toMatch(/Snapshots — capture \/ list \/ restore \/ delete\./);
   });
 
-  it('CRITICAL /api/billing $2.99 trial-pack pinned. Matches W751 dashboard billing once-per-account framing.', () => {
+  it('CRITICAL /api/billing summary pinned — subscriptions + Stripe Customer Portal + billing-state read (trial pack retired 2026-05-27).', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/subscriptions, \$2\.99 trial pack, Stripe Customer/);
+    expect(p).toMatch(/subscriptions, Stripe Customer/);
     expect(p).toMatch(/Portal redirect, billing-state read\./);
+    expect(p).not.toMatch(/trial pack/);
   });
 
   it('CRITICAL OpenAPI canonical URL pinned — https://api.driftstack.dev/openapi.json. Drift would mismatch the SDK regeneration source-of-truth.', () => {
@@ -121,7 +122,7 @@ describe('W760 docs /api index page content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Bearer API keys \(<code>ds_live_…<\/code> for production,/);
-    expect(p).toMatch(/<code>ds_test_…<\/code> for trial-pack tier\)\./);
+    expect(p).toMatch(/<code>ds_test_…<\/code> for the free tier\)\./);
   });
 
   it('CRITICAL web-session sha256-hashed-opaque-tokens framing pinned. Drift to suggesting a JWT/symmetric framing would diverge from the V-079 dashboard-session lifecycle.', () => {

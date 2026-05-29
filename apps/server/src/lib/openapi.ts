@@ -208,8 +208,8 @@ function buildRegistry(): OpenAPIRegistry {
   // them once at the top keeps the codegen output deterministic).
   r.register('AdminAccount', AdminAccountResponseSchema);
   r.register('AdminAuditLogEntry', AdminAuditLogEntrySchema);
-  // Billing resource — GET /v1/billing returns subscription mirror +
-  // trial-pack state. Schema lives in @driftstack/api-types/billing
+  // Billing resource — GET /v1/billing returns the subscription
+  // mirror. Schema lives in @driftstack/api-types/billing
   // already; registering it here lifts it from anonymous-inline to a
   // named #/components/schemas/GetBillingStateResponse ref so pydantic
   // regen produces a typed class (matches TS+Go SDK shapes).
@@ -2476,12 +2476,12 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/billing',
-    summary: 'Read the calling account billing state (subscription + trial pack)',
+    summary: 'Read the calling account billing state (subscription)',
     tags: ['billing'],
     security: auth,
     responses: {
       200: {
-        description: 'Subscription row + trial-pack credit/expiry/redemption state.',
+        description: 'Subscription row (null when the account has never subscribed).',
         content: { 'application/json': { schema: GetBillingStateResponseSchema } },
       },
       ...errors4xx,

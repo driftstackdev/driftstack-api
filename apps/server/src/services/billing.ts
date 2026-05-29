@@ -1,25 +1,21 @@
 // Billing service (V-082).
 //
-// Three customer-facing operations:
+// Two customer-facing operations:
 //
 //   1. Checkout-session — start a paid-tier subscription. Idempotent
 //      from the customer's perspective: hitting create twice for the
 //      same tier returns two valid Checkout URLs (Stripe handles the
 //      "user already has a sub" path inside Checkout).
 //
-//   2. Trial-pack — start the $2.99 one-time pre-paid credit per
-//      ADR-003. Same Checkout shell, one-time price id (not a sub).
-//
-//   3. Customer portal — open Stripe Customer Portal for self-service
+//   2. Customer portal — open Stripe Customer Portal for self-service
 //      plan change / payment-method update / cancellation. Requires
 //      the account to have a `stripe_customer_id` set; failure to
 //      bootstrap one before portal is a 409.
 //
 // Plus one read:
 //
-//   4. GetBillingState — current subscription row (if any) + trial-pack
-//      state. Used by the customer dashboard to render plan + remaining
-//      trial credit.
+//   3. GetBillingState — current subscription row (if any). Used by the
+//      customer dashboard to render the current plan.
 //
 // Stripe API access is gated behind `BillingProvider` so tests run
 // against an in-memory provider without touching real Stripe.

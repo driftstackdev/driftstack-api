@@ -89,8 +89,8 @@ export interface StripeWebhooksRepo {
   /**
    * Set the account's `tier` column. Used when subscription state
    * transitions imply a tier change (e.g. subscription.created →
-   * upgrade from trial_pack to api_builder; subscription.deleted →
-   * downgrade to trial_pack).
+   * upgrade from free to api_builder; subscription.deleted →
+   * downgrade to free).
    *
    * Returns the previous tier so callers can detect a real change
    * (V-226 audit emit only fires when previousTier !== new tier).

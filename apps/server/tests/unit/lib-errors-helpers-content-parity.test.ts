@@ -114,9 +114,8 @@ describe('W392.C apps/server/src/lib/errors-helpers.ts content parity', () => {
     expect(body).toMatch(
       /The single guard call replaces\s*\n?\s*\*\s*`if \(tier === 'X' \|\| tier === 'Y'\) throw …` style scattered\s*\n?\s*\*\s*conditionals — when a tier's feature row in\s*\n?\s*\*\s*`packages\/api-types\/src\/common\.ts:TIER_FEATURES` flips, every\s*\n?\s*\*\s*call site picks it up automatically/,
     );
-    expect(body).toMatch(
-      /Today's matrix: only `aiAgent` is gated this way\. `trialPack` is\s*\n?\s*\*\s*exposed mainly for read-side decisions \(apiKeyEnvironment\)/,
-    );
+    expect(body).toMatch(/Today's matrix: only `aiAgent` is gated this way\. Future features/);
+    expect(body).not.toMatch(/trialPack/);
   });
 
   it('requireTierFeature: signature + TIER_FEATURES[tier][feature] check + ForbiddenError detail', () => {

@@ -24,7 +24,7 @@ After signing up and verifying your email:
 export DRIFTSTACK_API_KEY="ds_live_…"
 ```
 
-API keys are scoped to the account that created them. The key prefix (`ds_live_`) tells you it's a production key. Trial-pack and pre-billing accounts get the same key shape.
+API keys are scoped to the account that created them. The key prefix (`ds_live_`) tells you it's a production key. Free and pre-billing accounts get the same key shape.
 
 ## 2. Install the SDK
 

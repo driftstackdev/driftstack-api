@@ -32,16 +32,9 @@ describe('Wave 1119 / Slice 1119.2 — /v1/billing/* with billing disabled', () 
     expect(body.detail).toMatch(/Billing is not configured on this server/);
   });
 
-  it('POST /v1/billing/trial-pack → 503 FeatureUnavailable', async () => {
-    fx = await buildTestApp({ disableBilling: true });
-    const res = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/billing/trial-pack',
-      payload: {},
-    });
-    expect(res.statusCode).toBe(503);
-    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
-  });
+  // POST /v1/billing/trial-pack was retired 2026-05-27 (trial_pack
+  // retirement) — the route is no longer registered on either the
+  // enabled or disabled billing surface.
 
   it('POST /v1/billing/portal-session → 503 FeatureUnavailable', async () => {
     fx = await buildTestApp({ disableBilling: true });

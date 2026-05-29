@@ -29,8 +29,9 @@ describe('docs/api/email-preferences content parity', () => {
       /1\. \*\*Operational\*\* — non-optional\. Required for the service to\s*\n?\s*work \(signup verification, password reset, billing-failure\s*\n?\s*notice, subscription-cancellation confirmation, security\s*\n?\s*notices\)\. You cannot opt out of these\./,
     );
     expect(body).toMatch(
-      /2\. \*\*Transactional \/ informational\*\* — opt-outable\. Welcome\s*\n?\s*email, first-session activation milestone, tier-change\s*\n?\s*confirmation, trial-pack lifecycle, billing receipts,\s*\n?\s*renewal reminders\./,
+      /2\. \*\*Transactional \/ informational\*\* — opt-outable\. Welcome\s*\n?\s*email, first-session activation milestone, tier-change\s*\n?\s*confirmation, billing receipts, renewal reminders\./,
     );
+    expect(body).not.toMatch(/trial-pack lifecycle/);
   });
 
   it("DPA-affirmative-choice legal posture framing pinned: 'The endpoint surface is intentionally narrow: list current preferences, set one preference. Per-event opt-in is the unit; there's no \"opt out of everything optional\" shorthand because the legal posture (per the DPA) requires that we deliver each opt-out as an affirmative customer choice.' — pinned so the per-event-unit + no-bulk-opt-out + DPA-affirmative-choice-rationale contract all stay documented (drift to a bulk opt-out would weaken the GDPR-compliant affirmative-choice posture)", () => {

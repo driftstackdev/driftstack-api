@@ -73,26 +73,8 @@ describe('StripeBillingProvider.createSubscriptionCheckout', () => {
   });
 });
 
-describe('StripeBillingProvider.createTrialPackCheckout', () => {
-  it('uses payment mode + trial-pack metadata', async () => {
-    const { client, calls } = makeClient(
-      stubOk({ id: 'cs_test_tp', url: 'https://checkout.stripe.com/c/pay/cs_test_tp' }),
-    );
-    const provider = new StripeBillingProvider(client);
-
-    await provider.createTrialPackCheckout({
-      customerId: 'cus_x',
-      priceId: 'price_trial',
-      successUrl: 'https://app/s',
-      cancelUrl: 'https://app/c',
-      accountId: 'acc-uuid',
-    });
-    expect(calls[0]!.body).toContain('mode=payment');
-    expect(calls[0]!.body).toContain(
-      'payment_intent_data%5Bmetadata%5D%5Bdriftstack_purchase_kind%5D=trial_pack',
-    );
-  });
-});
+// StripeBillingProvider.createTrialPackCheckout was removed 2026-05-27 with
+// the trial_pack retirement (replaced by the perpetual free tier).
 
 describe('StripeBillingProvider.createPortalSession', () => {
   it('returns the portal url', async () => {

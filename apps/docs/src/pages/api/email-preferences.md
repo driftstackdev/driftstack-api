@@ -14,8 +14,8 @@ Driftstack sends two categories of email:
    notices). You cannot opt out of these.
 2. **Transactional / informational** — opt-outable. Welcome
    email, first-session activation milestone, tier-change
-   confirmation, trial-pack lifecycle, billing receipts,
-   renewal reminders. Customers control these via the
+   confirmation, billing receipts, renewal reminders. Customers
+   control these via the
    endpoints below.
 
 The endpoint surface is intentionally narrow: list current

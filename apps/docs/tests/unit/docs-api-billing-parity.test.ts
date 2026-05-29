@@ -44,16 +44,12 @@ describe('W254.C docs/api/billing ↔ /v1/billing route parity', () => {
     expect(serverRegisters('/v1/billing/checkout-session')).toBe(true);
   });
 
-  it('POST /v1/billing/trial-pack is documented + registered', () => {
-    expect(doc).toMatch(/POST \/v1\/billing\/trial-pack/);
-    expect(serverRegisters('/v1/billing/trial-pack')).toBe(true);
+  it('POST /v1/billing/trial-pack fully retired 2026-05-27 — not documented + not registered', () => {
+    expect(doc).not.toMatch(/\/v1\/billing\/trial-pack/);
+    expect(serverRegisters('/v1/billing/trial-pack')).toBe(false);
   });
 
   it('subscription ids use the sub_ prefix (Stripe-side id, exposed verbatim — Driftstack does not mint a separate id)', () => {
     expect(doc).toMatch(/"stripe_subscription_id":\s*"sub_/);
-  });
-
-  it('trial pack uses the documented 14-day window', () => {
-    expect(doc).toMatch(/14-day window/);
   });
 });

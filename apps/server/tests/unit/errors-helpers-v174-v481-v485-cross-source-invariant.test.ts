@@ -162,12 +162,12 @@ describe('W967 errors-helpers V-174 + V-481 + V-485 cross-source invariant', () 
     expect(p).toMatch(/call site picks it up automatically\./);
   });
 
-  it("CRITICAL V-485 feature-matrix framing — 'Today's matrix: only aiAgent is gated this way. trialPack is exposed mainly for read-side decisions (apiKeyEnvironment). Future features (customArchetypes, multiRegion, …) extend TierFeatures and pass through the same guard'. The aiAgent-only-today + extensible-via-TierFeatures is the V-485 scope.", () => {
+  it("CRITICAL V-485 feature-matrix framing — 'Today's matrix: only aiAgent is gated this way. Future features (customArchetypes, multiRegion, …) extend TierFeatures and pass through the same guard'. The aiAgent-only-today + extensible-via-TierFeatures is the V-485 scope. (trialPack reference removed 2026-05-27.)", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/errors-helpers.ts'));
-    expect(p).toMatch(/Today's matrix: only `aiAgent` is gated this way\. `trialPack` is/);
-    expect(p).toMatch(/exposed mainly for read-side decisions \(apiKeyEnvironment\)\. Future/);
-    expect(p).toMatch(/features \(`customArchetypes`, `multiRegion`, …\) extend/);
-    expect(p).toMatch(/`TierFeatures` and pass through the same guard\./);
+    expect(p).toMatch(/Today's matrix: only `aiAgent` is gated this way\. Future features/);
+    expect(p).toMatch(/\(`customArchetypes`, `multiRegion`, …\) extend `TierFeatures` and pass/);
+    expect(p).toMatch(/through the same guard\./);
+    expect(p).not.toMatch(/trialPack/);
   });
 
   // ─── requireTierFeature error message ────────────────────────

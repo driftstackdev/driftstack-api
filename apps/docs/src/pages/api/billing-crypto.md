@@ -12,10 +12,10 @@ payment address per order; the customer sends crypto; NowPayments
 posts an IPN to Driftstack when the payment is confirmed on-chain;
 Driftstack activates the subscription tier.
 
-Crypto checkout is enabled for paid tiers ($79/mo and above). The
-$2.99 trial pack is **card-only** — NowPayments enforces a USD-
-equivalent floor (~$19.16) below which payments are rejected as
-`amount_too_low`.
+Crypto checkout is enabled for paid tiers ($79/mo and above).
+NowPayments enforces a USD-equivalent floor (~$19.16) below which
+payments are rejected as `amount_too_low`; every current tier is
+well above it.
 
 ## Create a checkout order
 
@@ -63,20 +63,20 @@ dashboard if needed).
 
 ### Supported products
 
-| Product slug    | Price (USD) | Floor cleared                   |
-| --------------- | ----------- | ------------------------------- |
-| `solo_manual`   | $79/mo      | yes                             |
-| `team_manual`   | $249/mo     | yes                             |
-| `agency_manual` | $699/mo     | yes                             |
-| `api_starter`   | $149/mo     | yes                             |
-| `api_builder`   | $499/mo     | yes                             |
-| `api_scale`     | $1,499/mo   | yes                             |
-| `trial_pack`    | $2.99       | NO — returns `provider: 'stub'` |
+| Product slug    | Price (USD) | Floor cleared |
+| --------------- | ----------- | ------------- |
+| `solo_manual`   | $79/mo      | yes           |
+| `team_manual`   | $249/mo     | yes           |
+| `agency_manual` | $699/mo     | yes           |
+| `api_starter`   | $149/mo     | yes           |
+| `api_builder`   | $499/mo     | yes           |
+| `api_scale`     | $1,499/mo   | yes           |
 
 The server short-circuits to the stub posture (`provider: 'stub'`
 
-- null payment fields) for products priced below the
-  NowPayments-USD floor; no upstream call is made.
+- null payment fields) for any product priced below the
+  NowPayments-USD floor; no upstream call is made. No current tier
+  is below the floor, but the guard remains.
 
 ## Order status lifecycle
 

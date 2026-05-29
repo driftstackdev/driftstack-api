@@ -35,7 +35,7 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(body).toMatch(/<code>https:\/\/api\.driftstack\.dev\/openapi\.json<\/code>;/);
     expect(body).toMatch(/rendered via Scalar UI on the API host at <code>\/docs\/<\/code>\./);
     expect(body).toMatch(/<code>ds_live_…<\/code> for production,/);
-    expect(body).toMatch(/<code>ds_test_…<\/code> for trial-pack tier/);
+    expect(body).toMatch(/<code>ds_test_…<\/code> for the free tier/);
     expect(body).toMatch(/x-ratelimit-remaining/);
     expect(body).toMatch(/<code>retry-after<\/code>/);
     expect(existsSync(P('index.astro'))).toBe(true);

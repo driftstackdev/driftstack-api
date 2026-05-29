@@ -7,7 +7,6 @@
 
 export type AccountTier =
   | 'free'
-  | 'trial_pack'
   | 'solo_manual'
   | 'team_manual'
   | 'agency_manual'
@@ -29,7 +28,6 @@ export interface TierBadgeProps {
 
 const TIER_LABEL: Record<string, string> = {
   free: 'Free',
-  trial_pack: 'Trial Pack',
   solo_manual: 'Solo Manual',
   team_manual: 'Team Manual',
   agency_manual: 'Agency Manual',
@@ -39,11 +37,10 @@ const TIER_LABEL: Record<string, string> = {
   enterprise: 'Enterprise',
 };
 
-type Tone = 'neutral' | 'paid' | 'enterprise' | 'trial';
+type Tone = 'neutral' | 'paid' | 'enterprise';
 
 const TIER_TONE: Record<string, Tone> = {
   free: 'neutral',
-  trial_pack: 'trial',
   solo_manual: 'paid',
   team_manual: 'paid',
   agency_manual: 'paid',
@@ -55,7 +52,6 @@ const TIER_TONE: Record<string, Tone> = {
 
 const TONE_CLASSES: Record<Tone, string> = {
   neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',
-  trial: 'bg-status-info/15 text-status-info border-status-info/30',
   paid: 'bg-status-success/15 text-status-success border-status-success/30',
   enterprise: 'bg-accent/15 text-accent border-accent/30',
 };

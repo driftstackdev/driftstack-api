@@ -7,7 +7,6 @@ import { TierBadge, tierLabelFor, tierToneFor } from '../../src/components/TierB
 describe('V-534.M tierLabelFor', () => {
   it('maps every known tier id to a human-readable label', () => {
     expect(tierLabelFor('free')).toBe('Free');
-    expect(tierLabelFor('trial_pack')).toBe('Trial Pack');
     expect(tierLabelFor('solo_manual')).toBe('Solo Manual');
     expect(tierLabelFor('api_builder')).toBe('API Builder');
     expect(tierLabelFor('enterprise')).toBe('Enterprise');
@@ -19,9 +18,8 @@ describe('V-534.M tierLabelFor', () => {
 });
 
 describe('V-534.M tierToneFor', () => {
-  it('free → neutral, trial → trial, paid tiers → paid, enterprise → enterprise', () => {
+  it('free → neutral, paid tiers → paid, enterprise → enterprise', () => {
     expect(tierToneFor('free')).toBe('neutral');
-    expect(tierToneFor('trial_pack')).toBe('trial');
     expect(tierToneFor('solo_manual')).toBe('paid');
     expect(tierToneFor('agency_manual')).toBe('paid');
     expect(tierToneFor('api_builder')).toBe('paid');
@@ -68,7 +66,7 @@ describe('V-534.M TierBadge rendering', () => {
     expect(paidEl.querySelector('span')?.className).toContain('status-success');
     const { container: enterpriseEl } = render(<TierBadge tier="enterprise" />);
     expect(enterpriseEl.querySelector('span')?.className).toContain('accent');
-    const { container: trialEl } = render(<TierBadge tier="trial_pack" />);
-    expect(trialEl.querySelector('span')?.className).toContain('status-info');
+    const { container: neutralEl } = render(<TierBadge tier="free" />);
+    expect(neutralEl.querySelector('span')?.className).toContain('surface-inset');
   });
 });

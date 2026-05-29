@@ -64,9 +64,9 @@ describe('W316.A /api/billing ↔ billing route parity', () => {
     expect(page).toContain('GET /v1/billing');
   });
 
-  it('covers checkout-session + portal-session + trial-pack', () => {
+  it('covers checkout-session + portal-session (trial-pack retired 2026-05-27)', () => {
     expect(page).toContain('/v1/billing/checkout-session');
     expect(page).toContain('/v1/billing/portal-session');
-    expect(page).toContain('/v1/billing/trial-pack');
+    expect(page).not.toContain('/v1/billing/trial-pack');
   });
 });

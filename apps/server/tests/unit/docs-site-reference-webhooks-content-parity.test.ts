@@ -126,9 +126,8 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
       /\| `test\.ping`\s+\| \[LIVE\]\s+\| Synthetic test event from POST \/v1\/webhooks\/:id\/test/,
     );
     expect(body).toMatch(/\| `session\.created`\s+\| \[PLANNED\]\s+\|/);
-    expect(body).toMatch(
-      /\| `trial_pack\.purchased`\s+\| \[PLANNED\]\s+\| \$2\.99 trial pack purchased/,
-    );
+    // trial_pack.purchased / .expired [PLANNED] rows removed 2026-05-27.
+    expect(body).not.toMatch(/trial_pack\./);
     expect(body).toMatch(/^## Common envelope$/m);
     expect(body).toMatch(/"id": "evt_<uuid>"/);
     expect(body).toMatch(/"type": "<event-type>"/);

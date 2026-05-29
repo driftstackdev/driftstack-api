@@ -339,8 +339,6 @@ export interface TierFeatures {
    * on the bare datacenter IP is not permitted.)
    */
   vpnEgress: boolean;
-  /** Vestigial; always false (the perpetual free tier replaced the one-time trial_pack). TODO(6.b): remove with the trial billing logic. */
-  trialPack: boolean;
 }
 
 export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
@@ -352,7 +350,6 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     aiAgent: false,
     llmBilling: null,
     vpnEgress: false,
-    trialPack: false,
   },
   solo_manual: {
     concurrentSessions: 1,
@@ -362,7 +359,6 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     aiAgent: false,
     llmBilling: null,
     vpnEgress: true,
-    trialPack: false,
   },
   team_manual: {
     concurrentSessions: 3,
@@ -372,7 +368,6 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     aiAgent: true,
     llmBilling: 'byok_only',
     vpnEgress: true,
-    trialPack: false,
   },
   agency_manual: {
     concurrentSessions: 8,
@@ -382,7 +377,6 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     aiAgent: true,
     llmBilling: 'byok_only',
     vpnEgress: true,
-    trialPack: false,
   },
   api_starter: {
     concurrentSessions: 2,
@@ -392,7 +386,6 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     aiAgent: true,
     llmBilling: 'byok_only',
     vpnEgress: true,
-    trialPack: false,
   },
   api_builder: {
     concurrentSessions: 8,
@@ -402,7 +395,6 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
     vpnEgress: true,
-    trialPack: false,
   },
   api_scale: {
     concurrentSessions: 24,
@@ -412,7 +404,6 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
     vpnEgress: true,
-    trialPack: false,
   },
   enterprise: {
     concurrentSessions: 32,
@@ -422,7 +413,6 @@ export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
     aiAgent: true,
     llmBilling: 'byok_or_bundled_custom',
     vpnEgress: true,
-    trialPack: false,
   },
 };
 

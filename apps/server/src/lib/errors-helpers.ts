@@ -83,10 +83,9 @@ export function hasScope(ctx: AccountContext, required: ApiKeyScope): boolean {
  * `packages/api-types/src/common.ts:TIER_FEATURES` flips, every
  * call site picks it up automatically.
  *
- * Today's matrix: only `aiAgent` is gated this way. `trialPack` is
- * exposed mainly for read-side decisions (apiKeyEnvironment). Future
- * features (`customArchetypes`, `multiRegion`, …) extend
- * `TierFeatures` and pass through the same guard.
+ * Today's matrix: only `aiAgent` is gated this way. Future features
+ * (`customArchetypes`, `multiRegion`, …) extend `TierFeatures` and pass
+ * through the same guard.
  */
 export function requireTierFeature(tier: AccountTier, feature: TierBooleanFeature): void {
   if (TIER_FEATURES[tier][feature]) return;

@@ -63,7 +63,7 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
     );
   });
 
-  it('CRITICAL TierFeatures interface 6-field shape pinned — concurrentSessions + profiles + apiKeyEnvironment + aiAgent + llmBilling + trialPack. Drift to dropping a field would force every consumer to gate on something else.', () => {
+  it('CRITICAL TierFeatures interface shape pinned — concurrentSessions + profiles + apiKeyEnvironment + aiAgent + llmBilling (trialPack removed 2026-05-27 with the trial_pack retirement). Drift to dropping a field would force every consumer to gate on something else.', () => {
     const c = read(COMMON);
 
     expect(c).toMatch(/export interface TierFeatures \{/);
@@ -72,7 +72,7 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
     expect(c).toMatch(/apiKeyEnvironment: 'test' \| 'live';/);
     expect(c).toMatch(/aiAgent: boolean;/);
     expect(c).toMatch(/llmBilling: LlmBilling;/);
-    expect(c).toMatch(/trialPack: boolean;/);
+    expect(c).not.toMatch(/trialPack/);
   });
 
   it('CRITICAL apiKeyEnvironment is "test" on free + "live" elsewhere. The test/live split is what determines whether the minted Stripe key is sandboxed or real. Drift to "live" on free would let free keys charge real money.', () => {

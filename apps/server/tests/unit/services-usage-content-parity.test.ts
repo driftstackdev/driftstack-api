@@ -77,9 +77,9 @@ describe('W408.B apps/server/src/services/usage.ts content parity', () => {
     );
   });
 
-  it('ADR-004 framing pinned: paid tiers concurrent-only; trial-pack hours via trial_pack_credit_cents per ADR-003; all TIER_QUOTAS null', () => {
+  it('ADR-004 framing pinned: paid tiers concurrent-only; no hours metering remains (trial_pack retired 2026-05-27); all TIER_QUOTAS null', () => {
     expect(body).toMatch(
-      /\/\/ Per ADR-004: paid tiers are concurrent-only; hours metering exists\s*\n?\s*\/\/ ONLY for the trial pack \(via `accounts\.trial_pack_credit_cents`\s*\n?\s*\/\/ decrement at session_end per ADR-003 — independent of this map\)\./,
+      /\/\/ Per ADR-004: paid tiers are concurrent-only; no hours metering\s*\n?\s*\/\/ remains \(the one-time trial_pack that decremented a prepaid\s*\n?\s*\/\/ credit at session_end was retired 2026-05-27\)\./,
     );
     expect(body).toMatch(
       /\/\/ All TIER_QUOTAS values are now `null` \(unmetered\) across every\s*\n?\s*\/\/ tier; the `session_minute` usage_record_type stays as the granular\s*\n?\s*\/\/ ledger primitive for analytics \+ abuse detection but is not gated\s*\n?\s*\/\/ against a per-tier cap\./,

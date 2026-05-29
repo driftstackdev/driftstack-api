@@ -48,27 +48,6 @@ export class StripeBillingProvider implements BillingProvider {
     return { url: result.url, sessionId: result.id };
   }
 
-  async createTrialPackCheckout(args: {
-    customerId: string;
-    priceId: string;
-    successUrl: string;
-    cancelUrl: string;
-    accountId: string;
-  }): Promise<{ url: string; sessionId: string }> {
-    const result = await this.client.createOneTimeCheckoutSession({
-      customerId: args.customerId,
-      priceId: args.priceId,
-      successUrl: args.successUrl,
-      cancelUrl: args.cancelUrl,
-      clientReferenceId: args.accountId,
-      metadata: {
-        driftstack_account_id: args.accountId,
-        driftstack_purchase_kind: 'trial_pack',
-      },
-    });
-    return { url: result.url, sessionId: result.id };
-  }
-
   async createPortalSession(args: {
     customerId: string;
     returnUrl: string;

@@ -44,17 +44,15 @@ function read(p: string): string {
 describe('W407.C apps/server/src/services/billing.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-082 framing pinned: 3-write (checkout / trial-pack / portal) + 1-read (getBillingState)', () => {
+  it('V-082 framing pinned: 2-write (checkout / portal) + 1-read (getBillingState); trial-pack op retired 2026-05-27', () => {
     expect(body).toMatch(/Billing service \(V-082\)\./);
     expect(body).toMatch(
       /1\. Checkout-session — start a paid-tier subscription\. Idempotent\s*\n?\s*\/\/\s*from the customer's perspective: hitting create twice for the\s*\n?\s*\/\/\s*same tier returns two valid Checkout URLs \(Stripe handles the\s*\n?\s*\/\/\s*"user already has a sub" path inside Checkout\)\./,
     );
     expect(body).toMatch(
-      /2\. Trial-pack — start the \$2\.99 one-time pre-paid credit per\s*\n?\s*\/\/\s*ADR-003\. Same Checkout shell, one-time price id \(not a sub\)\./,
+      /2\. Customer portal — open Stripe Customer Portal for self-service\s*\n?\s*\/\/\s*plan change \/ payment-method update \/ cancellation\./,
     );
-    expect(body).toMatch(
-      /3\. Customer portal — open Stripe Customer Portal for self-service\s*\n?\s*\/\/\s*plan change \/ payment-method update \/ cancellation\./,
-    );
+    expect(body).not.toMatch(/Trial-pack/);
     expect(body).toMatch(
       /Stripe API access is gated behind `BillingProvider` so tests run\s*\n?\s*\/\/\s*against an in-memory provider without touching real Stripe\./,
     );
