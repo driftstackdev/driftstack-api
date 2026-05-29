@@ -27,6 +27,15 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
+  it('2026-05-29 branded confirm modal: the [data-ds-confirm] overlay markup + the global window.driftstackConfirm(message, opts) → Promise<boolean> helper are present (the dashboard-wide replacement for native window.confirm — "no more alert boxes"). Drift here breaks every page that awaits driftstackConfirm before a destructive action', () => {
+    expect(body).toMatch(/data-ds-confirm\b/);
+    expect(body).toMatch(/data-ds-confirm-message/);
+    expect(body).toMatch(/data-ds-confirm-ok/);
+    expect(body).toMatch(/data-ds-confirm-cancel/);
+    expect(body).toMatch(/window\.driftstackConfirm = function \(message, opts\)/);
+    expect(body).toMatch(/return new Promise\(function \(resolve\)/);
+  });
+
   it("Props interface 3-field shape: title (required) + description (optional default + Driftstack catchphrase) + withSidebar (optional default true). Drift to dropping withSidebar would force onboarding pages to render the side-nav (which requires auth that onboarding hasn't completed yet)", () => {
     expect(body).toMatch(
       /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\/\*\* When true, render the side-nav\. Onboarding pages opt out\. \*\/\s*\n?\s*withSidebar\?: boolean;\s*\n?\s*\}/,

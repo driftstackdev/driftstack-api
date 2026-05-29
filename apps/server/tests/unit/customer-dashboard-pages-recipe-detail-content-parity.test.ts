@@ -72,8 +72,10 @@ describe('apps/customer-dashboard/src/pages/recipes/[id].astro content parity', 
     expect(body).toMatch(/\(source session deleted\)/);
   });
 
-  it('delete: confirm-gated DELETE /v1/recipes/:id → on 204 redirect to /recipes', () => {
-    expect(body).toMatch(/window\.confirm\('Delete this recipe\? This cannot be undone\.'\)/);
+  it('delete: branded-confirm-gated DELETE /v1/recipes/:id → on 204 redirect to /recipes', () => {
+    expect(body).toMatch(
+      /await window\.driftstackConfirm\(\s*\n?\s*'Delete this recipe\? This cannot be undone\.',/,
+    );
     expect(body).toMatch(
       /authedFetch\('\/v1\/recipes\/' \+ encodeURIComponent\(recipeId\), \{ method: 'DELETE' \}\)/,
     );

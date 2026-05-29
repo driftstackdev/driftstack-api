@@ -217,12 +217,14 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function wireDeleteButtons() {
         list.querySelectorAll('[data-delete]').forEach((btn) => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const id = btn.getAttribute('data-delete');
             const label = btn.getAttribute('data-delete-label') || '(unnamed)';
-            if (!window.confirm('Delete recipe "' + label + '"? This cannot be undone.')) {
-              return;
-            }
+            const ok = await window.driftstackConfirm(
+              'Delete recipe "' + label + '"? This cannot be undone.',
+              { confirmLabel: 'Delete' },
+            );
+            if (!ok) return;
             authedFetch('/v1/recipes/' + encodeURIComponent(id), {
               method: 'DELETE',
             })

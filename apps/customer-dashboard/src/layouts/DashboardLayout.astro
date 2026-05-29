@@ -591,6 +591,82 @@ const navSections: NavSection[] = [
           <slot />
         </main>
       </div>
+
+      {/* 2026-05-29 — branded confirmation modal. Replaces native
+          window.confirm() across the dashboard (founder: "avoid these
+          alert boxes everywhere"). Pages call the global
+          window.driftstackConfirm(message, opts?) → Promise<boolean>.
+          Hidden by default; the inline helper below wires show/resolve. */}
+      <div
+        data-ds-confirm
+        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ds-confirm-message"
+      >
+        <div class="w-full max-w-md rounded-xl border border-white/10 bg-surface-raised p-6 shadow-2xl">
+          <p
+            data-ds-confirm-message
+            id="ds-confirm-message"
+            class="text-sm text-ink-primary"
+          >
+          </p>
+          <div class="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              data-ds-confirm-cancel
+              class="rounded-lg border border-white/10 px-4 py-2 text-sm text-ink-secondary hover:text-ink-primary"
+              >Cancel</button
+            >
+            <button
+              type="button"
+              data-ds-confirm-ok
+              class="rounded-lg bg-glow-red px-4 py-2 text-sm font-medium text-white hover:bg-glow-red/90"
+              >Confirm</button
+            >
+          </div>
+        </div>
+      </div>
+      <script is:inline>
+        {`
+          // 2026-05-29 — window.driftstackConfirm(message, opts?) → Promise<boolean>.
+          // Branded replacement for native window.confirm(). opts.confirmLabel
+          // overrides the OK button text. Falls back to native confirm only if
+          // the modal markup is somehow absent (defensive). Escape / Cancel
+          // resolve false; Confirm resolves true.
+          (function () {
+            window.driftstackConfirm = function (message, opts) {
+              return new Promise(function (resolve) {
+                var overlay = document.querySelector('[data-ds-confirm]');
+                if (!overlay) {
+                  resolve(window.confirm(message));
+                  return;
+                }
+                var msg = overlay.querySelector('[data-ds-confirm-message]');
+                var ok = overlay.querySelector('[data-ds-confirm-ok]');
+                var cancel = overlay.querySelector('[data-ds-confirm-cancel]');
+                if (msg) msg.textContent = message;
+                if (ok) ok.textContent = (opts && opts.confirmLabel) || 'Confirm';
+                overlay.classList.remove('hidden');
+                if (ok && ok.focus) ok.focus();
+                function done(result) {
+                  overlay.classList.add('hidden');
+                  if (ok) ok.removeEventListener('click', onOk);
+                  if (cancel) cancel.removeEventListener('click', onCancel);
+                  document.removeEventListener('keydown', onKey);
+                  resolve(result);
+                }
+                function onOk() { done(true); }
+                function onCancel() { done(false); }
+                function onKey(e) { if (e.key === 'Escape') done(false); }
+                if (ok) ok.addEventListener('click', onOk);
+                if (cancel) cancel.addEventListener('click', onCancel);
+                document.addEventListener('keydown', onKey);
+              });
+            };
+          })();
+        `}
+      </script>
       <script is:inline define:vars={{ apiBaseUrl }}>
         // V-331 — "Acting as" picker + global helper.
         // Exposes window.driftstackActAsHeaders() returning either

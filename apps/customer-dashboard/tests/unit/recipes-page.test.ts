@@ -63,8 +63,14 @@ function setUpDom(
     return Promise.resolve(handler(call));
   };
   if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
-  // The delete flow is window.confirm-gated; jsdom doesn't implement it.
-  window.confirm = () => opts.confirmReturns ?? true;
+  // Delete is gated by the branded window.driftstackConfirm modal
+  // (injected by DashboardLayout, not eval'd here) → stub it to a
+  // resolved Promise. Keep window.confirm stubbed as a defensive
+  // fallback.
+  const confirmResult = opts.confirmReturns ?? true;
+  // @ts-expect-error — jsdom global is loose
+  window.driftstackConfirm = () => Promise.resolve(confirmResult);
+  window.confirm = () => confirmResult;
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="recipes"'));
   if (!pageScript) throw new Error('recipes inline script not found');

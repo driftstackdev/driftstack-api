@@ -224,8 +224,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       function wireDelete() {
         const btn = root.querySelector('[data-delete]');
         if (!btn) return;
-        btn.addEventListener('click', () => {
-          if (!window.confirm('Delete this recipe? This cannot be undone.')) return;
+        btn.addEventListener('click', async () => {
+          const confirmed = await window.driftstackConfirm(
+            'Delete this recipe? This cannot be undone.',
+            { confirmLabel: 'Delete' },
+          );
+          if (!confirmed) return;
           btn.disabled = true;
           btn.textContent = 'Deleting…';
           authedFetch('/v1/recipes/' + encodeURIComponent(recipeId), { method: 'DELETE' })

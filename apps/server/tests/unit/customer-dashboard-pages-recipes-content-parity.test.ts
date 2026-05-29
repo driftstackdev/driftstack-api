@@ -53,10 +53,11 @@ describe('apps/customer-dashboard/src/pages/recipes.astro content parity', () =>
     expect(body).toMatch(/nextCursor = body\.next_cursor \|\| null;/);
   });
 
-  it("DELETE /v1/recipes/:id: window.confirm + encodeURIComponent on id + 204-only success + reload()-from-first-page — pinned so customers can't accidentally delete (confirm-required), the RFC-compliant 204 is the only success path, and a delete re-walks pagination from page 1 (drift to splicing in place would corrupt cursor boundaries)", () => {
+  it("DELETE /v1/recipes/:id: branded driftstackConfirm + encodeURIComponent on id + 204-only success + reload()-from-first-page — pinned so customers can't accidentally delete (confirm-required), the RFC-compliant 204 is the only success path, and a delete re-walks pagination from page 1 (drift to splicing in place would corrupt cursor boundaries)", () => {
     expect(body).toMatch(
-      /if \(!window\.confirm\('Delete recipe "' \+ label \+ '"\? This cannot be undone\.'\)\) \{/,
+      /await window\.driftstackConfirm\(\s*\n?\s*'Delete recipe "' \+ label \+ '"\? This cannot be undone\.',/,
     );
+    expect(body).toMatch(/if \(!ok\) return;/);
     expect(body).toMatch(
       /authedFetch\('\/v1\/recipes\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*\}\)/,
     );
