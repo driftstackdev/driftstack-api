@@ -12505,8 +12505,22 @@
           }
         },
         "responses": {
-          "204": {
-            "description": "Session revoked."
+          "200": {
+            "description": "Session revoked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "enum": [true]
+                    }
+                  },
+                  "required": ["ok"]
+                }
+              }
+            }
           },
           "400": {
             "description": "Validation failed.",

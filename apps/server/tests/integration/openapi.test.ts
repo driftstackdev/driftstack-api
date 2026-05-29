@@ -270,6 +270,16 @@ describe('OpenAPI spec generation', () => {
     }
   });
 
+  it('POST /v1/auth/logout documents 200 with a body (the route returns 200 { ok }, not 204 no-content)', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const logout = (spec.paths ?? {})['/v1/auth/logout'] as
+      | Record<string, { responses?: Record<string, unknown> }>
+      | undefined;
+    expect(logout?.post?.responses?.['200']).toBeDefined();
+    expect(logout?.post?.responses?.['204']).toBeUndefined();
+  });
+
   it('all admin endpoints carry the "admin" tag (for docs filtering)', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();

@@ -2409,7 +2409,10 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: LogoutRequestSchema } } },
     },
     responses: {
-      204: { description: 'Session revoked.' },
+      200: {
+        description: 'Session revoked.',
+        content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+      },
       ...errors4xx,
     },
   });
