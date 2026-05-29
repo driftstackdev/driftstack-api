@@ -127,6 +127,18 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
     );
   });
 
+  it("V-530.H framing pinned: 'typo-aware typing sequence' + 3 type re-exports (GenerateTypingSequenceOpts + KeystrokeEvent + TypingSequence) + 3 value exports (DEFAULT_TYPO_PROBABILITY + generateTypingSequence + replayTypingSequence)", () => {
+    expect(body).toMatch(
+      /\/\/ V-530\.H — typo-aware typing sequence \(file 05 §"Typing behavior"\)\./,
+    );
+    expect(body).toMatch(
+      /export type \{\s*\n\s*GenerateTypingSequenceOpts,\s*\n\s*KeystrokeEvent,\s*\n\s*TypingSequence,\s*\n\} from '\.\/typing-sequence\.js';/,
+    );
+    expect(body).toMatch(
+      /export \{\s*\n\s*DEFAULT_TYPO_PROBABILITY,\s*\n\s*generateTypingSequence,\s*\n\s*replayTypingSequence,\s*\n\} from '\.\/typing-sequence\.js';/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

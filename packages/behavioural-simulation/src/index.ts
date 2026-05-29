@@ -59,6 +59,18 @@ export { generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS } from './keyboard.j
 export type { PersonaId } from './profiles.js';
 export { DEFAULT_PERSONA_ID, getProfile, listProfiles, PROFILE_CATALOGUE } from './profiles.js';
 
+// V-530.H — typo-aware typing sequence (file 05 §"Typing behavior").
+export type {
+  GenerateTypingSequenceOpts,
+  KeystrokeEvent,
+  TypingSequence,
+} from './typing-sequence.js';
+export {
+  DEFAULT_TYPO_PROBABILITY,
+  generateTypingSequence,
+  replayTypingSequence,
+} from './typing-sequence.js';
+
 // V-530.E — multi-touch gesture sequencing.
 export type {
   FingerSample,

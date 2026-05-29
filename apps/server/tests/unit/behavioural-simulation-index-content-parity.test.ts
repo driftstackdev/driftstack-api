@@ -70,6 +70,16 @@ describe('W595.C packages/behavioural-simulation/src/index.ts content parity', (
     expect(body).toMatch(
       /export \{ DEFAULT_PERSONA_ID, getProfile, listProfiles, PROFILE_CATALOGUE \} from '\.\/profiles\.js';/,
     );
+    // V-530.H — typo-aware typing sequence.
+    expect(body).toMatch(
+      /\/\/ V-530\.H — typo-aware typing sequence \(file 05 §"Typing behavior"\)\./,
+    );
+    expect(body).toMatch(
+      /^export type \{\s*\n\s*GenerateTypingSequenceOpts,\s*\n\s*KeystrokeEvent,\s*\n\s*TypingSequence,\s*\n\} from '\.\/typing-sequence\.js';/m,
+    );
+    expect(body).toMatch(
+      /^export \{\s*\n\s*DEFAULT_TYPO_PROBABILITY,\s*\n\s*generateTypingSequence,\s*\n\s*replayTypingSequence,\s*\n\} from '\.\/typing-sequence\.js';/m,
+    );
   });
 
   it('file exists at canonical path', () => {
