@@ -192,6 +192,30 @@ as the existing `apps/customer-dashboard/src/pages/sessions/[id]/replay.astro`
 "copy curl" block — extend the transformation table to cover the
 full intent vocabulary.
 
+**⚠️ BLOCKED 2026-05-29 — the "pure transformation" premise is stale.**
+The `AgentIntent` vocabulary (the decomposer/executor internal plan, in
+`agent-decomposer.ts`) has **diverged** from the public SDK request
+schemas (`packages/api-types/src/sessions.ts`); they are different
+abstraction layers, not a field rename:
+
+| AgentIntent                                                                | Public SDK request (`/v1/sessions/:id/*`)                                                                                            |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `interact { action: 'tap'\|'type'\|'scroll'\|'swipe', selector?, value? }` | `interact { action: tap{selector} \| type{selector,text,delay_ms} \| scroll{selector?,delta_x,delta_y} \| press{key}, timeout_ms? }` |
+| `wait { condition: 'idle'\|'selector_visible', selector?, timeoutMs? }`    | `wait { condition: selector{selector} \| selector_hidden \| url_matches{pattern} \| time{ms}, timeout_ms? }`                         |
+| `capture { capture: 'screenshot'\|'dom_snapshot'\|'pdf' }`                 | (no faithful 1:1 public mapping verified)                                                                                            |
+| `navigate { url }`                                                         | `navigate { url, timeout_ms?, wait_until }` ✓ (maps cleanly)                                                                         |
+
+Gaps with **no faithful SDK target**: interact `swipe`, wait `idle`,
+the capture verbs, and `timeoutMs`→`timeout_ms`. A naive transform
+would emit broken copy-paste code (e.g. a `swipe` or `idle` call the
+SDK rejects). **Prerequisite:** reconcile the two vocabularies — either
+(a) align `AgentIntent` to the public schema shapes, or (b) add a
+verified, total `AgentIntent → SDK request` translation table (and
+decide what to do with the no-target verbs). Until then A3 is held;
+shipping lossy codegen is worse than no button. A4 (recipe save) was
+landed instead — it persists the raw intent log via `POST /v1/recipes`
+and is unaffected by this divergence.
+
 ### A4. Recipe save flow
 
 "Save recipe" on the composer (or in the post-run summary) opens a
