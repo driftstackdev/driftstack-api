@@ -62,6 +62,14 @@ describe('W595.C packages/behavioural-simulation/src/index.ts content parity', (
     expect(body).toMatch(
       /^export \{ generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS \} from '\.\/keyboard\.js';$/m,
     );
+    // V-530.G — canonical behavioural persona catalogue.
+    expect(body).toMatch(
+      /\/\/ V-530\.G — canonical behavioural persona catalogue \(file 05 §"Persona model"\)\./,
+    );
+    expect(body).toMatch(/export type \{ PersonaId \} from '\.\/profiles\.js';/);
+    expect(body).toMatch(
+      /export \{ DEFAULT_PERSONA_ID, getProfile, listProfiles, PROFILE_CATALOGUE \} from '\.\/profiles\.js';/,
+    );
   });
 
   it('file exists at canonical path', () => {

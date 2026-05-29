@@ -117,6 +117,16 @@ describe('W450.B packages/behavioural-simulation/src/index.ts content parity', (
     );
   });
 
+  it("V-530.G framing pinned: 'canonical behavioural persona catalogue' + PersonaId type + DEFAULT_PERSONA_ID + getProfile + listProfiles + PROFILE_CATALOGUE value exports", () => {
+    expect(body).toMatch(
+      /\/\/ V-530\.G — canonical behavioural persona catalogue \(file 05 §"Persona model"\)\./,
+    );
+    expect(body).toMatch(/export type \{ PersonaId \} from '\.\/profiles\.js';/);
+    expect(body).toMatch(
+      /export \{ DEFAULT_PERSONA_ID, getProfile, listProfiles, PROFILE_CATALOGUE \} from '\.\/profiles\.js';/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

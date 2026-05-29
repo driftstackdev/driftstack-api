@@ -55,6 +55,10 @@ export { generateIdlePeriod, generateIdleSequence, IDLE_DEFAULTS } from './idle.
 export type { KeyboardCadenceDefaults } from './keyboard.js';
 export { generateKeyboardCadence, KEYBOARD_CADENCE_DEFAULTS } from './keyboard.js';
 
+// V-530.G — canonical behavioural persona catalogue (file 05 §"Persona model").
+export type { PersonaId } from './profiles.js';
+export { DEFAULT_PERSONA_ID, getProfile, listProfiles, PROFILE_CATALOGUE } from './profiles.js';
+
 // V-530.E — multi-touch gesture sequencing.
 export type {
   FingerSample,
