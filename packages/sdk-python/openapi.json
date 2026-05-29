@@ -18737,18 +18737,18 @@
           }
         },
         "responses": {
-          "200": {
-            "description": "Confirmation email sent (always 200 — no enumeration signal).",
+          "202": {
+            "description": "Confirmation email sent (always 202 — no enumeration signal).",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean"
+                    "message": {
+                      "type": "string"
                     }
                   },
-                  "required": ["ok"]
+                  "required": ["message"]
                 }
               }
             }
@@ -18757,24 +18757,21 @@
       }
     },
     "/v1/status/subscribe/confirm": {
-      "post": {
+      "get": {
         "summary": "Confirm a status-subscription email via token",
         "tags": ["status"],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "token": {
-                    "type": "string"
-                  }
-                },
-                "required": ["token"]
-              }
-            }
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Opaque token from the confirm/unsubscribe email link."
+            },
+            "required": true,
+            "description": "Opaque token from the confirm/unsubscribe email link.",
+            "name": "token",
+            "in": "query"
           }
-        },
+        ],
         "responses": {
           "200": {
             "description": "Subscription confirmed.",
@@ -18783,11 +18780,11 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean"
+                    "message": {
+                      "type": "string"
                     }
                   },
-                  "required": ["ok"]
+                  "required": ["message"]
                 }
               }
             }
@@ -18796,24 +18793,21 @@
       }
     },
     "/v1/status/subscribe/unsubscribe": {
-      "post": {
+      "get": {
         "summary": "Unsubscribe an email from status notifications via token",
         "tags": ["status"],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "token": {
-                    "type": "string"
-                  }
-                },
-                "required": ["token"]
-              }
-            }
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Opaque token from the confirm/unsubscribe email link."
+            },
+            "required": true,
+            "description": "Opaque token from the confirm/unsubscribe email link.",
+            "name": "token",
+            "in": "query"
           }
-        },
+        ],
         "responses": {
           "200": {
             "description": "Unsubscribed.",
@@ -18822,11 +18816,11 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "ok": {
-                      "type": "boolean"
+                    "message": {
+                      "type": "string"
                     }
                   },
-                  "required": ["ok"]
+                  "required": ["message"]
                 }
               }
             }

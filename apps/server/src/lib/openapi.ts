@@ -3766,14 +3766,15 @@ function buildRegistry(): OpenAPIRegistry {
   const StatusSubscribeRequestOpenApi = z.object({
     email: z.string().email(),
   });
+  // All three routes reply with a human-readable `message` (the route impls
+  // return `{ message }`, never `{ ok }`).
   const StatusSubscribeResponseOpenApi = z.object({
-    ok: z.boolean(),
+    message: z.string(),
   });
-  const StatusUnsubscribeRequestOpenApi = z.object({
-    token: z.string(),
-  });
-  const StatusConfirmRequestOpenApi = z.object({
-    token: z.string(),
+  // confirm + unsubscribe carry the opaque token as a query param on a GET
+  // (the link in the email is a plain click), not a JSON request body.
+  const StatusTokenQueryOpenApi = z.object({
+    token: z.string().describe('Opaque token from the confirm/unsubscribe email link.'),
   });
   registerRoute(r, {
     method: 'get',
@@ -3837,19 +3838,19 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: StatusSubscribeRequestOpenApi } } },
     },
     responses: {
-      200: {
-        description: 'Confirmation email sent (always 200 — no enumeration signal).',
+      202: {
+        description: 'Confirmation email sent (always 202 — no enumeration signal).',
         content: { 'application/json': { schema: StatusSubscribeResponseOpenApi } },
       },
     },
   });
   registerRoute(r, {
-    method: 'post',
+    method: 'get',
     path: '/v1/status/subscribe/confirm',
     summary: 'Confirm a status-subscription email via token',
     tags: ['status'],
     request: {
-      body: { content: { 'application/json': { schema: StatusConfirmRequestOpenApi } } },
+      query: StatusTokenQueryOpenApi,
     },
     responses: {
       200: {
@@ -3859,12 +3860,12 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
   registerRoute(r, {
-    method: 'post',
+    method: 'get',
     path: '/v1/status/subscribe/unsubscribe',
     summary: 'Unsubscribe an email from status notifications via token',
     tags: ['status'],
     request: {
-      body: { content: { 'application/json': { schema: StatusUnsubscribeRequestOpenApi } } },
+      query: StatusTokenQueryOpenApi,
     },
     responses: {
       200: {

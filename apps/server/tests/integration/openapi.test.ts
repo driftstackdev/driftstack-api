@@ -211,6 +211,31 @@ describe('OpenAPI spec generation', () => {
     );
   });
 
+  it('status double-opt-in spec mirrors the routes: subscribe POST→202, confirm/unsubscribe GET with ?token= (these drifted to POST+body once)', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const paths = (spec.paths ?? {}) as Record<
+      string,
+      Record<
+        string,
+        { parameters?: Array<{ name?: string; in?: string }>; responses?: Record<string, unknown> }
+      >
+    >;
+    // subscribe: POST, 202 (the route does reply.code(202) + the status site
+    // checks `res.status === 202`; the spec said 200 once).
+    expect(paths['/v1/status/subscribe']?.post?.responses?.['202']).toBeDefined();
+    expect(paths['/v1/status/subscribe']?.post?.responses?.['200']).toBeUndefined();
+    // confirm + unsubscribe are GET with a `token` query param — they're email
+    // link clicks. A POST+body spec (the prior drift) would 404 against the
+    // real GET routes and mislead any SDK generated from the spec.
+    for (const p of ['/v1/status/subscribe/confirm', '/v1/status/subscribe/unsubscribe']) {
+      expect(paths[p]?.get).toBeDefined();
+      expect(paths[p]?.post).toBeUndefined();
+      const params = paths[p]?.get?.parameters ?? [];
+      expect(params.some((pr) => pr.name === 'token' && pr.in === 'query')).toBe(true);
+    }
+  });
+
   it('all admin endpoints carry the "admin" tag (for docs filtering)', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();
