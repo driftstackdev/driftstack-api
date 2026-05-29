@@ -1,0 +1,247 @@
+// Local integration test for the /team page's inline script
+// (V-298c / V-326e team RBAC). The page manages two lists — members
+// and pending invites — and the invite/remove flows are real
+// customer-facing mutations (POST /v1/team/invites, DELETE
+// /v1/team/members/:id) with only source-regex coverage before. Loads
+// the BUILT page, mocks localStorage + fetch with a stateful URL
+// router (the page fires two concurrent load fetches — members +
+// invites — and every mutation refreshes both), eval's the script, and
+// asserts the real hydrated-DOM branches.
+//
+// Mirrors profiles-page.test.ts. NOTE: /team renders inline empty-state
+// <li>s into [data-members-list] / [data-invites-list] rather than
+// toggling a [data-empty] section, so assertions check list text /
+// row buttons, not hidden classes.
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { JSDOM } from 'jsdom';
+import { afterEach, describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'team', 'index.html');
+const PAGE_URL = 'https://app.driftstack.dev/team/';
+
+interface MockFetchCall {
+  url: string;
+  init: RequestInit | undefined;
+}
+
+interface SetUpOpts {
+  token?: string;
+  confirmReturns?: boolean;
+  route: (call: MockFetchCall) => Response;
+}
+
+function setUpDom(
+  html: string,
+  opts: SetUpOpts,
+): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+  const scriptBodies: string[] = [];
+  const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
+    scriptBodies.push(body);
+    return '';
+  });
+  const dom = new JSDOM(htmlNoScripts, {
+    url: PAGE_URL,
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  const fetchCalls: MockFetchCall[] = [];
+  // @ts-expect-error — jsdom global is loose
+  if (typeof window.Response !== 'function') window.Response = Response;
+  // @ts-expect-error — jsdom global is loose
+  window.fetch = (input: string, init: RequestInit | undefined) => {
+    const call: MockFetchCall = { url: String(input), init };
+    fetchCalls.push(call);
+    return Promise.resolve(opts.route(call));
+  };
+  if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+  window.confirm = () => opts.confirmReturns ?? true;
+
+  const pageScript = scriptBodies.find((s) => s.includes('data-page="team"'));
+  if (!pageScript) throw new Error('team inline script not found');
+  // @ts-expect-error — jsdom global has eval
+  window.eval(pageScript);
+  return { window: window as JSDOM['window'], fetchCalls };
+}
+
+function text(window: JSDOM['window'], selector: string): string {
+  return window.document.querySelector(selector)?.textContent ?? '';
+}
+
+function json(obj: unknown, status = 200): Response {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+async function flush(times = 6): Promise<void> {
+  for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
+}
+
+interface Member {
+  id: string;
+  member_email: string;
+  role: string;
+  accepted_at: string;
+}
+interface Invite {
+  id: string;
+  invitee_email: string;
+  created_at: string;
+  expires_at: string;
+}
+
+// Stateful router over mutable members[] + invites[]. POST invite →
+// 202 (the page treats 202 as success); DELETE member → 204.
+function makeRouter(members: Member[], invites: Invite[]): (c: MockFetchCall) => Response {
+  let invSeq = 0;
+  return (call: MockFetchCall): Response => {
+    const method = (call.init?.method || 'GET').toUpperCase();
+    const u = call.url;
+    if (/\/v1\/team\/members$/.test(u) && method === 'GET') return json({ data: members });
+    if (/\/v1\/team\/invites$/.test(u) && method === 'GET') return json({ data: invites });
+    if (/\/v1\/team\/invites$/.test(u) && method === 'POST') {
+      const body = JSON.parse(String(call.init?.body || '{}'));
+      invites.push({
+        id: 'inv_new' + invSeq++,
+        invitee_email: body.email,
+        created_at: '2026-05-29T10:00:00.000Z',
+        expires_at: '2026-06-05T10:00:00.000Z',
+      });
+      return json({ status: 'invited' }, 202);
+    }
+    const rm = u.match(/\/v1\/team\/members\/([^/]+)$/);
+    if (rm && method === 'DELETE') {
+      const i = members.findIndex((m) => m.id === rm[1]);
+      if (i >= 0) members.splice(i, 1);
+      return new Response(null, { status: 204 });
+    }
+    // eslint-disable-next-line no-console
+    console.warn('[team-page test] unrouted fetch:', method, u);
+    return json({}, 500);
+  };
+}
+
+const MEMBER: Member = {
+  id: 'mem_a',
+  member_email: 'alice@example.com',
+  role: 'member',
+  accepted_at: '2026-05-20T10:00:00.000Z',
+};
+const INVITE: Invite = {
+  id: 'inv_a',
+  invitee_email: 'bob@example.com',
+  created_at: '2026-05-18T10:00:00.000Z',
+  expires_at: '2026-05-25T10:00:00.000Z',
+};
+
+describe('team page — local integration', () => {
+  let win: JSDOM['window'] | null = null;
+  afterEach(() => {
+    win?.close?.();
+    win = null;
+  });
+  const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('empty: both lists render their inline empty states', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter([], []),
+    });
+    win = window;
+    await flush();
+    expect(fetchCalls.some((c) => /\/v1\/team\/members$/.test(c.url))).toBe(true);
+    expect(fetchCalls.some((c) => /\/v1\/team\/invites$/.test(c.url))).toBe(true);
+    expect(text(window, '[data-members-list]')).toMatch(/No team members yet/);
+    expect(text(window, '[data-invites-list]')).toMatch(/No pending invites/);
+  });
+
+  it('non-empty: renders the member (with Remove) + the pending invite', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter([{ ...MEMBER }], [{ ...INVITE }]),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-members-list]')).toContain('alice@example.com');
+    expect(window.document.querySelector('[data-remove="mem_a"]')).toBeTruthy();
+    const invites = text(window, '[data-invites-list]');
+    expect(invites).toContain('bob@example.com');
+    expect(invites.toLowerCase()).toContain('pending');
+  });
+
+  it('invite: POSTs {email, role} and the new invite appears after refresh', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter([], []),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-invite]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-invite-form]') as HTMLFormElement;
+    (form.querySelector('input[name="email"]') as HTMLInputElement).value = 'carol@example.com';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    const post = fetchCalls.find(
+      (c) => c.init?.method === 'POST' && /\/v1\/team\/invites$/.test(c.url),
+    );
+    expect(post).toBeTruthy();
+    const body = JSON.parse(String(post?.init?.body));
+    expect(body.email).toBe('carol@example.com');
+    expect(typeof body.role).toBe('string');
+    expect(text(window, '[data-invites-list]')).toContain('carol@example.com');
+  });
+
+  it('invite validation: empty email shows "Email is required." inline, fires no POST', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter([], []),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-show-invite]') as HTMLButtonElement).click();
+    const form = window.document.querySelector('[data-invite-form]') as HTMLFormElement;
+    (form.querySelector('input[name="email"]') as HTMLInputElement).value = '   ';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    const err = window.document.querySelector('[data-invite-error]');
+    expect(err?.classList.contains('hidden')).toBe(false);
+    expect(err?.textContent).toMatch(/Email is required\./);
+    expect(fetchCalls.some((c) => c.init?.method === 'POST')).toBe(false);
+  });
+
+  it('remove: confirm-gated DELETE /v1/team/members/:id then refresh drops the member', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      confirmReturns: true,
+      route: makeRouter([{ ...MEMBER }], []),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-members-list]')).toContain('alice@example.com');
+    (window.document.querySelector('[data-remove="mem_a"]') as HTMLButtonElement).click();
+    await flush();
+    const del = fetchCalls.find((c) => c.init?.method === 'DELETE');
+    expect(del?.url).toMatch(/\/v1\/team\/members\/mem_a$/);
+    expect(text(window, '[data-members-list]')).toMatch(/No team members yet/);
+  });
+
+  it('remove cancelled at confirm: no DELETE fired, member stays', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      confirmReturns: false,
+      route: makeRouter([{ ...MEMBER }], []),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-remove="mem_a"]') as HTMLButtonElement).click();
+    await flush();
+    expect(fetchCalls.some((c) => c.init?.method === 'DELETE')).toBe(false);
+    expect(text(window, '[data-members-list]')).toContain('alice@example.com');
+  });
+});
