@@ -563,13 +563,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       function wireRevokeButtons() {
         const buttons = ul.querySelectorAll('[data-revoke]');
         buttons.forEach((btn) => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const id = btn.getAttribute('data-revoke');
             const name = btn.getAttribute('data-revoke-name') || '(unnamed)';
-            const ok = window.confirm(
+            const ok = await window.driftstackConfirm(
               'Revoke "' +
                 name +
                 '"? Apps using this key will start receiving 401 immediately. This cannot be undone.',
+              { confirmLabel: 'Revoke' },
             );
             if (!ok) return;
             btn.disabled = true;
@@ -657,13 +658,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       function wireRotateButtons() {
         const buttons = ul.querySelectorAll('[data-rotate]');
         buttons.forEach((btn) => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const id = btn.getAttribute('data-rotate');
             const name = btn.getAttribute('data-rotate-name') || '(unnamed)';
-            const ok = window.confirm(
+            const ok = await window.driftstackConfirm(
               'Rotate "' +
                 name +
                 '"? A new plaintext is shown ONCE; the old key keeps working for a 24h grace period so you can swap deployments without downtime.',
+              { confirmLabel: 'Rotate' },
             );
             if (!ok) return;
             btn.disabled = true;

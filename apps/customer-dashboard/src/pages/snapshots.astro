@@ -346,10 +346,14 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function wireDeleteButtons() {
         list.querySelectorAll('[data-delete]').forEach((btn) => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const id = btn.getAttribute('data-delete');
             const label = btn.getAttribute('data-delete-label') || '(unnamed)';
-            if (!window.confirm('Delete snapshot "' + label + '"? This cannot be undone.')) {
+            const confirmed = await window.driftstackConfirm(
+              'Delete snapshot "' + label + '"? This cannot be undone.',
+              { confirmLabel: 'Delete' },
+            );
+            if (!confirmed) {
               return;
             }
             authedFetch('/v1/profile-snapshots/' + encodeURIComponent(id), {

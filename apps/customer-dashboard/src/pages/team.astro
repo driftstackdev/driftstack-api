@@ -303,13 +303,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!membersList) return;
         const buttons = membersList.querySelectorAll('[data-remove]');
         buttons.forEach(function (btn) {
-          btn.addEventListener('click', function () {
+          btn.addEventListener('click', async function () {
             const id = btn.getAttribute('data-remove');
             const email = btn.getAttribute('data-remove-email') || '(unknown)';
-            const ok = window.confirm(
+            const ok = await window.driftstackConfirm(
               'Remove ' +
                 email +
                 ' from the team? They keep their Driftstack account but lose team access.',
+              { confirmLabel: 'Remove' },
             );
             if (!ok) return;
             const token = getToken();

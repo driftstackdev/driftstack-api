@@ -911,10 +911,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       function wireCloneButtons() {
         const buttons = list.querySelectorAll('[data-clone]');
         buttons.forEach((btn) => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const id = btn.getAttribute('data-clone');
             const name = btn.getAttribute('data-clone-name') || '(unnamed)';
-            if (!window.confirm('Clone profile "' + name + '"?')) return;
+            if (!(await window.driftstackConfirm('Clone profile "' + name + '"?', { confirmLabel: 'Clone' })))
+              return;
             btn.disabled = true;
             btn.textContent = 'Cloning…';
             authedFetch('/v1/profiles/' + encodeURIComponent(id) + '/clone', {
@@ -1012,13 +1013,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       function wireDeleteButtons() {
         const buttons = list.querySelectorAll('[data-delete]');
         buttons.forEach((btn) => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const id = btn.getAttribute('data-delete');
             const name = btn.getAttribute('data-delete-name') || '(unnamed)';
-            const ok = window.confirm(
+            const ok = await window.driftstackConfirm(
               'Delete profile "' +
                 name +
                 '"? Cookies + storage are wiped. Sessions currently bound to this profile will fail unless you set force=true. This cannot be undone.',
+              { confirmLabel: 'Delete' },
             );
             if (!ok) return;
             btn.disabled = true;

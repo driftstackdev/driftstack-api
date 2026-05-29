@@ -75,9 +75,12 @@ describe('W495.B apps/customer-dashboard/src/pages/snapshots.astro content parit
     expect(body).toMatch(/showBanner\('Restored to new profile: ' \+ \(body\.name \|\| name\)\);/);
   });
 
-  it("DELETE /v1/profile-snapshots/:id delete endpoint: window.confirm + 204-only success + encodeURIComponent on id — pinned so customers can't accidentally delete a snapshot (confirm-required) and the server's RFC-compliant 204-no-content is the only success path (drift to accepting non-204 would mask delete failures as success)", () => {
+  it("DELETE /v1/profile-snapshots/:id delete endpoint: branded driftstackConfirm + 204-only success + encodeURIComponent on id — pinned so customers can't accidentally delete a snapshot (confirm-required) and the server's RFC-compliant 204-no-content is the only success path (drift to accepting non-204 would mask delete failures as success)", () => {
     expect(body).toMatch(
-      /if \(!window\.confirm\('Delete snapshot "' \+ label \+ '"\? This cannot be undone\.'\)\) \{\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*authedFetch\('\/v1\/profile-snapshots\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*\}\)\s*\n?\s*\.then\(\(r\) => \{\s*\n?\s*if \(r\.status === 204\) \{/,
+      /await window\.driftstackConfirm\(\s*\n?\s*'Delete snapshot "' \+ label \+ '"\? This cannot be undone\.',/,
+    );
+    expect(body).toMatch(
+      /authedFetch\('\/v1\/profile-snapshots\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*\}\)\s*\n?\s*\.then\(\(r\) => \{\s*\n?\s*if \(r\.status === 204\) \{/,
     );
   });
 

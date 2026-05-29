@@ -76,7 +76,10 @@ function setUpDom(
     return Promise.resolve(handler(call));
   };
   if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
-  window.confirm = () => opts.confirmReturns ?? true;
+  const __cr = opts.confirmReturns ?? true;
+  // @ts-expect-error — driftstackConfirm is injected by DashboardLayout (not eval'd here)
+  window.driftstackConfirm = () => Promise.resolve(__cr);
+  window.confirm = () => __cr;
   window.HTMLElement.prototype.scrollIntoView = () => {};
   // jsdom can't navigate; the page reloads after create/delete. No-op it
   // so the post-success reload doesn't throw inside the handler.

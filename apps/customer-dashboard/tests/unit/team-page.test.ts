@@ -59,7 +59,10 @@ function setUpDom(
     return Promise.resolve(opts.route(call));
   };
   if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
-  window.confirm = () => opts.confirmReturns ?? true;
+  const __cr = opts.confirmReturns ?? true;
+  // @ts-expect-error — driftstackConfirm is injected by DashboardLayout (not eval'd here)
+  window.driftstackConfirm = () => Promise.resolve(__cr);
+  window.confirm = () => __cr;
 
   const pageScript = scriptBodies.find((s) => s.includes('data-page="team"'));
   if (!pageScript) throw new Error('team inline script not found');

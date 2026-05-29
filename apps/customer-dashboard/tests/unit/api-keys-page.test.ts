@@ -62,7 +62,10 @@ function setUpDom(
     return Promise.resolve(handler(call));
   };
   if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
-  window.confirm = () => opts.confirmReturns ?? true;
+  const __cr = opts.confirmReturns ?? true;
+  // @ts-expect-error — driftstackConfirm is injected by DashboardLayout (not eval'd here)
+  window.driftstackConfirm = () => Promise.resolve(__cr);
+  window.confirm = () => __cr;
   // jsdom doesn't implement these; the reveal panes call scrollIntoView,
   // and copy buttons (not exercised here) touch navigator.clipboard.
   window.HTMLElement.prototype.scrollIntoView = () => {};

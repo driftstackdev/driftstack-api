@@ -593,7 +593,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!btn) return;
         const id = btn.getAttribute('data-id');
         if (!id || !token) return;
-        if (!window.confirm('Delete this saved proxy?')) return;
+        if (!(await window.driftstackConfirm('Delete this saved proxy?', { confirmLabel: 'Delete' })))
+          return;
         try {
           const res = await fetch(apiBaseUrl + '/v1/proxies/' + encodeURIComponent(id), {
             method: 'DELETE',

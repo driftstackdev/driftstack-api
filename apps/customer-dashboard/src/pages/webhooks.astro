@@ -1138,10 +1138,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       function wireDeleteButtons() {
         const buttons = ul.querySelectorAll('[data-delete]');
         buttons.forEach((btn) => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const id = btn.getAttribute('data-delete');
             if (!id) return;
-            if (!window.confirm('Delete webhook endpoint ' + id + '? This cannot be undone.')) {
+            const confirmed = await window.driftstackConfirm(
+              'Delete webhook endpoint ' + id + '? This cannot be undone.',
+              { confirmLabel: 'Delete' },
+            );
+            if (!confirmed) {
               return;
             }
             btn.disabled = true;
@@ -1237,15 +1241,16 @@ const apiBaseUrl = resolveApiBaseUrl();
       function wireRotateButtons() {
         const buttons = ul.querySelectorAll('[data-rotate]');
         buttons.forEach((btn) => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const id = btn.getAttribute('data-rotate');
             if (!id) return;
             if (
-              !window.confirm(
+              !(await window.driftstackConfirm(
                 'Rotate signing secret for ' +
                   id +
                   '?\n\nThe new secret is shown ONCE. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries.',
-              )
+                { confirmLabel: 'Rotate secret' },
+              ))
             ) {
               return;
             }

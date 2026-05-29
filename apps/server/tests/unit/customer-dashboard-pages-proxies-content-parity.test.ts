@@ -66,10 +66,10 @@ describe('EG-API-1.5 apps/customer-dashboard/src/pages/proxies.astro content par
     expect(body).toMatch(/'No saved proxies yet\.'/);
   });
 
-  it('delete handler wires DELETE /v1/proxies/<id> via delegated click + window.confirm guard', () => {
+  it('delete handler wires DELETE /v1/proxies/<id> via delegated click + branded driftstackConfirm guard', () => {
     expect(body).toMatch(/method: 'DELETE'/);
     expect(body).toMatch(/'\/v1\/proxies\/' \+ encodeURIComponent\(id\)/);
-    expect(body).toMatch(/window\.confirm\('Delete this saved proxy\?'\)/);
+    expect(body).toMatch(/window\.driftstackConfirm\('Delete this saved proxy\?'/);
   });
 
   it('Phase 2 OpenVPN + Phase 3 WireGuard placeholder cards pinned (planning 133 phased roadmap)', () => {

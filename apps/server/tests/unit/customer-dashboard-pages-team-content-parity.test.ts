@@ -56,12 +56,12 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
     expect(body).toMatch(/if \(!r\.ok && r\.status !== 202\) \{/);
   });
 
-  it("DELETE /v1/team/members/:id contract: encodeURIComponent on id + 204-or-r.ok success + window.confirm before fire — pinned so customers can't accidentally remove a team-mate (confirm-required) + the server's 204 success path maps correctly (drift to requiring 200 would mark valid removals as failures)", () => {
+  it("DELETE /v1/team/members/:id contract: encodeURIComponent on id + 204-or-r.ok success + branded driftstackConfirm before fire — pinned so customers can't accidentally remove a team-mate (confirm-required) + the server's 204 success path maps correctly (drift to requiring 200 would mark valid removals as failures)", () => {
     expect(body).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/team\/members\/' \+ encodeURIComponent\(id\), \{\s*\n?\s*method: 'DELETE',\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*\}\)\s*\n?\s*\.then\(function \(r\) \{\s*\n?\s*if \(!r\.ok && r\.status !== 204\) throw new Error\('HTTP ' \+ r\.status\);/,
     );
     expect(body).toMatch(
-      /const ok = window\.confirm\(\s*\n?\s*'Remove ' \+\s*\n?\s*email \+\s*\n?\s*' from the team\? They keep their Driftstack account but lose team access\.',\s*\n?\s*\);/,
+      /const ok = await window\.driftstackConfirm\(\s*\n?\s*'Remove ' \+\s*\n?\s*email \+\s*\n?\s*' from the team\? They keep their Driftstack account but lose team access\.',/,
     );
   });
 

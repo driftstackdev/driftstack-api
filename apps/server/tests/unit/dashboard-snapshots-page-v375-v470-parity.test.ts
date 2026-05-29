@@ -111,7 +111,7 @@ describe('W756 dashboard /snapshots page V-375 + V-470 parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /window\.confirm\('Delete snapshot "' \+ label \+ '"\? This cannot be undone\.'\)/,
+      /window\.driftstackConfirm\(\s*\n?\s*'Delete snapshot "' \+ label \+ '"\? This cannot be undone\.',/,
     );
   });
 
