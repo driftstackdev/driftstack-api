@@ -608,7 +608,7 @@ const navSections: NavSection[] = [
           <p
             data-ds-confirm-message
             id="ds-confirm-message"
-            class="text-sm text-ink-primary"
+            class="whitespace-pre-line text-sm text-ink-primary"
           >
           </p>
           <div class="mt-6 flex justify-end gap-3">
@@ -662,6 +662,97 @@ const navSections: NavSection[] = [
                 if (ok) ok.addEventListener('click', onOk);
                 if (cancel) cancel.addEventListener('click', onCancel);
                 document.addEventListener('keydown', onKey);
+              });
+            };
+          })();
+        `}
+      </script>
+
+      {/* 2026-05-29 — branded prompt modal. Replaces native
+          window.prompt(). Pages call window.driftstackPrompt(message,
+          opts?) → Promise<string|null> (null on Cancel/Escape). opts:
+          defaultValue, placeholder, confirmLabel. Enter submits. */}
+      <div
+        data-ds-prompt
+        class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ds-prompt-message"
+      >
+        <div class="w-full max-w-md rounded-xl border border-white/10 bg-surface-raised p-6 shadow-2xl">
+          <p
+            data-ds-prompt-message
+            id="ds-prompt-message"
+            class="whitespace-pre-line text-sm text-ink-primary"
+          >
+          </p>
+          <input
+            type="text"
+            data-ds-prompt-input
+            class="mt-4 w-full rounded-lg border border-white/10 bg-surface-base px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-glow-red focus:outline-none"
+          />
+          <div class="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              data-ds-prompt-cancel
+              class="rounded-lg border border-white/10 px-4 py-2 text-sm text-ink-secondary hover:text-ink-primary"
+              >Cancel</button
+            >
+            <button
+              type="button"
+              data-ds-prompt-ok
+              class="rounded-lg bg-glow-red px-4 py-2 text-sm font-medium text-white hover:bg-glow-red/90"
+              >OK</button
+            >
+          </div>
+        </div>
+      </div>
+      <script is:inline>
+        {`
+          // 2026-05-29 — window.driftstackPrompt(message, opts?) → Promise<string|null>.
+          // Branded replacement for native window.prompt(). Resolves the
+          // input string on OK / Enter, or null on Cancel / Escape. opts:
+          // defaultValue, placeholder, confirmLabel. Falls back to native
+          // prompt only if the modal markup is absent (defensive).
+          (function () {
+            window.driftstackPrompt = function (message, opts) {
+              return new Promise(function (resolve) {
+                var overlay = document.querySelector('[data-ds-prompt]');
+                if (!overlay) {
+                  resolve(window.prompt(message, (opts && opts.defaultValue) || ''));
+                  return;
+                }
+                var msg = overlay.querySelector('[data-ds-prompt-message]');
+                var input = overlay.querySelector('[data-ds-prompt-input]');
+                var ok = overlay.querySelector('[data-ds-prompt-ok]');
+                var cancel = overlay.querySelector('[data-ds-prompt-cancel]');
+                if (msg) msg.textContent = message;
+                if (ok) ok.textContent = (opts && opts.confirmLabel) || 'OK';
+                if (input) {
+                  input.value = (opts && opts.defaultValue) || '';
+                  input.setAttribute('placeholder', (opts && opts.placeholder) || '');
+                }
+                overlay.classList.remove('hidden');
+                if (input && input.focus) {
+                  input.focus();
+                  if (input.select) input.select();
+                }
+                function done(result) {
+                  overlay.classList.add('hidden');
+                  if (ok) ok.removeEventListener('click', onOk);
+                  if (cancel) cancel.removeEventListener('click', onCancel);
+                  if (input) input.removeEventListener('keydown', onKey);
+                  document.removeEventListener('keydown', onDocKey);
+                  resolve(result);
+                }
+                function onOk() { done(input ? input.value : ''); }
+                function onCancel() { done(null); }
+                function onKey(e) { if (e.key === 'Enter') { e.preventDefault(); onOk(); } }
+                function onDocKey(e) { if (e.key === 'Escape') done(null); }
+                if (ok) ok.addEventListener('click', onOk);
+                if (cancel) cancel.addEventListener('click', onCancel);
+                if (input) input.addEventListener('keydown', onKey);
+                document.addEventListener('keydown', onDocKey);
               });
             };
           })();

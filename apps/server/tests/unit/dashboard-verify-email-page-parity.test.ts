@@ -115,7 +115,7 @@ describe('W735 customer-dashboard verify-email.astro page parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/let resendEmail = sessionStorage\.getItem\('ds_signup_email'\)/);
-    expect(p).toMatch(/resendEmail = window\.prompt\('Email address used at signup:'\)/);
+    expect(p).toMatch(/await window\.driftstackPrompt\('Email address used at signup:', \{/);
     expect(p).toMatch(
       /Server is shape-stable, so the success message\s*\n\s+\/\/ is identical regardless of whether the email matched/,
     );

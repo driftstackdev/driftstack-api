@@ -68,8 +68,8 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toMatch(/#187 — self-service resend of the signup-verification email/);
     expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/auth\/resend-verification'/);
     expect(read(AUTH_ROUTE)).toContain("'/v1/auth/resend-verification'");
-    // Email fallback prompt when sessionStorage is empty.
-    expect(body).toMatch(/resendEmail = window\.prompt\('Email address used at signup:'\) \|\| ''/);
+    // Email fallback prompt when sessionStorage is empty (branded modal).
+    expect(body).toMatch(/await window\.driftstackPrompt\('Email address used at signup:', \{/);
   });
 
   it('resend anti-double-click: 60s disable post-success (per-IP 3/min cap protection)', () => {

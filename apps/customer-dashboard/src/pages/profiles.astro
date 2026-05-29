@@ -714,17 +714,17 @@ const apiBaseUrl = resolveApiBaseUrl();
       function wireTransferButtons() {
         const buttons = list.querySelectorAll('[data-transfer]');
         buttons.forEach((btn) => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const id = btn.getAttribute('data-transfer');
             const name = btn.getAttribute('data-transfer-name') || 'profile';
             if (!id) return;
-            const recipientRaw = window.prompt(
+            const recipientRaw = await window.driftstackPrompt(
               'Transfer "' +
                 name +
                 '" to another Driftstack account.\n\n' +
                 "Paste the recipient's account id (they can copy it from /settings).\n" +
                 'Format: acc_<uuid>',
-              '',
+              { placeholder: 'acc_<uuid>', confirmLabel: 'Continue' },
             );
             if (!recipientRaw) return;
             const recipient = recipientRaw.trim();
@@ -732,17 +732,17 @@ const apiBaseUrl = resolveApiBaseUrl();
               showBanner('Recipient id must be in the form acc_<uuid>.');
               return;
             }
-            if (
-              !window.confirm(
-                'This will move "' +
-                  name +
-                  '" to ' +
-                  recipient +
-                  '.\n\n' +
-                  'The profile will be removed from YOUR account and counts toward the ' +
-                  "recipient's tier limit + monthly import quota. Continue?",
-              )
-            ) {
+            const proceed = await window.driftstackConfirm(
+              'This will move "' +
+                name +
+                '" to ' +
+                recipient +
+                '.\n\n' +
+                'The profile will be removed from YOUR account and counts toward the ' +
+                "recipient's tier limit + monthly import quota. Continue?",
+              { confirmLabel: 'Transfer' },
+            );
+            if (!proceed) {
               return;
             }
             btn.disabled = true;

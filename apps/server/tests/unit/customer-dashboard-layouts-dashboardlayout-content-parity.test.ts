@@ -36,6 +36,14 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     expect(body).toMatch(/return new Promise\(function \(resolve\)/);
   });
 
+  it('2026-05-29 branded prompt modal: the [data-ds-prompt] overlay + text input + the global window.driftstackPrompt(message, opts) → Promise<string|null> helper are present (branded replacement for native window.prompt; null on Cancel/Escape, Enter submits). Drift breaks every page that awaits driftstackPrompt for text input', () => {
+    expect(body).toMatch(/data-ds-prompt\b/);
+    expect(body).toMatch(/data-ds-prompt-input/);
+    expect(body).toMatch(/data-ds-prompt-ok/);
+    expect(body).toMatch(/data-ds-prompt-cancel/);
+    expect(body).toMatch(/window\.driftstackPrompt = function \(message, opts\)/);
+  });
+
   it("Props interface 3-field shape: title (required) + description (optional default + Driftstack catchphrase) + withSidebar (optional default true). Drift to dropping withSidebar would force onboarding pages to render the side-nav (which requires auth that onboarding hasn't completed yet)", () => {
     expect(body).toMatch(
       /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\/\*\* When true, render the side-nav\. Onboarding pages opt out\. \*\/\s*\n?\s*withSidebar\?: boolean;\s*\n?\s*\}/,

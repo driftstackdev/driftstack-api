@@ -187,11 +187,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       const resendBtn = root.querySelector('[data-action="resend"]');
       const resendStatus = root.querySelector('[data-field="resend-status"]');
       if (resendBtn) {
-        resendBtn.addEventListener('click', () => {
+        resendBtn.addEventListener('click', async () => {
           banner.classList.add('hidden');
           let resendEmail = sessionStorage.getItem('ds_signup_email');
           if (!resendEmail) {
-            resendEmail = window.prompt('Email address used at signup:') || '';
+            resendEmail =
+              (await window.driftstackPrompt('Email address used at signup:', {
+                placeholder: 'you@example.com',
+              })) || '';
             resendEmail = resendEmail.trim();
             if (!resendEmail) return;
           }

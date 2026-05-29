@@ -102,9 +102,11 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
     );
   });
 
-  it("Resend missing-email prompt fallback: !resendEmail → window.prompt('Email address used at signup:') + trim + bail if empty — pinned so the resend works even when sessionStorage was cleared (drift to silently bailing would leave customers with no path to resend if they cleared cookies or moved devices)", () => {
+  it("Resend missing-email prompt fallback: !resendEmail → branded window.driftstackPrompt('Email address used at signup:') + trim + bail if empty — pinned so the resend works even when sessionStorage was cleared (drift to silently bailing would leave customers with no path to resend if they cleared cookies or moved devices)", () => {
+    expect(body).toMatch(/let resendEmail = sessionStorage\.getItem\('ds_signup_email'\);/);
+    expect(body).toMatch(/\(await window\.driftstackPrompt\('Email address used at signup:', \{/);
     expect(body).toMatch(
-      /let resendEmail = sessionStorage\.getItem\('ds_signup_email'\);\s*\n?\s*if \(!resendEmail\) \{\s*\n?\s*resendEmail = window\.prompt\('Email address used at signup:'\) \|\| '';\s*\n?\s*resendEmail = resendEmail\.trim\(\);\s*\n?\s*if \(!resendEmail\) return;\s*\n?\s*\}/,
+      /resendEmail = resendEmail\.trim\(\);\s*\n?\s*if \(!resendEmail\) return;/,
     );
   });
 
