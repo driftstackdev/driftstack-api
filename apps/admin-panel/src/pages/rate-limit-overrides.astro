@@ -316,10 +316,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      function clear(prefixedAccountId, bucketKey) {
+      async function clear(prefixedAccountId, bucketKey) {
         if (!token) return;
-        const proceed = window.confirm(
+        const proceed = await window.driftstackConfirm(
           'Clear the ' + bucketKey + ' override for ' + prefixedAccountId + '?',
+          { confirmLabel: 'Clear' },
         );
         if (!proceed) return;
         showBanner('Clearing override…');

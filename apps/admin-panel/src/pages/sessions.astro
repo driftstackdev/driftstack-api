@@ -351,9 +351,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       // double-clicks. The button is dynamically rendered so we grab
       // a reference to the exact element clicked + restore it on
       // success/error.
-      function destroy(id, btn) {
+      async function destroy(id, btn) {
         if (!token) return;
-        const reason = window.prompt('Reason for force-destroying ' + id + ' (optional):') || '';
+        const reason =
+          (await window.driftstackPrompt('Reason for force-destroying ' + id + ' (optional):', {
+            placeholder: 'optional',
+            confirmLabel: 'Force-destroy',
+          })) || '';
         const body = {};
         if (reason.trim()) body.reason = reason.trim();
         const originalText = btn ? btn.textContent : '';

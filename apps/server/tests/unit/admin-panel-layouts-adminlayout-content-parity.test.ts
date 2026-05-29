@@ -23,6 +23,14 @@ describe('admin-panel layouts/AdminLayout content parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
+  it('2026-05-29 branded confirm + prompt modals: the [data-ds-confirm] + [data-ds-prompt] overlays + the global window.driftstackConfirm / window.driftstackPrompt helpers are present (admin-side replacement for native confirm/prompt — "no alert boxes"). Drift breaks every admin page that awaits these before a destructive/reason-collecting action', () => {
+    expect(body).toMatch(/data-ds-confirm\b/);
+    expect(body).toMatch(/data-ds-prompt\b/);
+    expect(body).toMatch(/data-ds-prompt-input/);
+    expect(body).toMatch(/window\.driftstackConfirm = function \(message, opts\)/);
+    expect(body).toMatch(/window\.driftstackPrompt = function \(message, opts\)/);
+  });
+
   it('Props contract pinned: title (required) + description (optional, defaults to staff-only-tagline). Drift to a different shape would break every admin page', () => {
     expect(body).toMatch(
       /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\}/,

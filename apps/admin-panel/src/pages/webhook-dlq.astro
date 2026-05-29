@@ -337,14 +337,15 @@ const apiBaseUrl = resolveApiBaseUrl();
       // this; the admin audit log entry (webhook_delivery.discarded)
       // is the only forensic trace. Confirm() before firing so a
       // mis-click doesn't destroy evidence.
-      function discard(id) {
+      async function discard(id) {
         if (!token) return;
         if (
-          !window.confirm(
+          !(await window.driftstackConfirm(
             'Discard webhook delivery ' +
               id +
               '? This is irrecoverable — the payload + retry history are deleted. The action is audit-logged.',
-          )
+            { confirmLabel: 'Discard' },
+          ))
         ) {
           return;
         }

@@ -71,7 +71,7 @@ describe('W489.A apps/admin-panel/src/pages/rate-limit-overrides.astro content p
 
   it("Clear-now DELETE endpoint contract: /v1/admin/accounts/{encodeURIComponent(id)}/quota-override?bucket_key={encodeURIComponent(bucketKey)} + method:'DELETE' + Bearer auth + credentials:'include' + window.confirm pre-prompt — pinned so the destructive action requires explicit confirmation + URL encoding handles the colon in bucket-keys like 'sessions:create' (raw colon would break path parsing)", () => {
     expect(body).toMatch(
-      /window\.confirm\(\s*\n?\s*'Clear the ' \+ bucketKey \+ ' override for ' \+ prefixedAccountId \+ '\?',\s*\n?\s*\);/,
+      /await window\.driftstackConfirm\(\s*\n?\s*'Clear the ' \+ bucketKey \+ ' override for ' \+ prefixedAccountId \+ '\?',/,
     );
     expect(body).toMatch(
       /apiBaseUrl \+\s*\n?\s*'\/v1\/admin\/accounts\/' \+\s*\n?\s*encodeURIComponent\(prefixedAccountId\) \+\s*\n?\s*'\/quota-override\?bucket_key=' \+\s*\n?\s*encodeURIComponent\(bucketKey\),\s*\n?\s*\{\s*\n?\s*method: 'DELETE',/,

@@ -88,7 +88,7 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
 
   it("Force-unsubscribe contract: POST /v1/admin/status-subscribers/{encodeURIComponent(id)}/force-unsubscribe with empty {} body + Bearer auth + content-type:application/json + window.confirm prompt referencing admin_audit_log — pinned so the destructive action requires explicit confirmation and the URL encoding doesn't break on subscriber-IDs with special chars. 2026-05-21 — fetch URL prefixed by apiBaseUrl (same fix as the GET above).", () => {
     expect(body).toMatch(
-      /window\.confirm\(\s*\n?\s*'Force-unsubscribe ' \+\s*\n?\s*email \+\s*\n?\s*'\? Writes admin_audit_log\. Customer can re-subscribe via the public form\.',\s*\n?\s*\);/,
+      /await window\.driftstackConfirm\(\s*\n?\s*'Force-unsubscribe ' \+\s*\n?\s*email \+\s*\n?\s*'\? Writes admin_audit_log\. Customer can re-subscribe via the public form\.',/,
     );
     expect(body).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/admin\/status-subscribers\/' \+ encodeURIComponent\(id\) \+ '\/force-unsubscribe', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*body: '\{\}',\s*\n?\s*\}\)/,

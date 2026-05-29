@@ -188,6 +188,113 @@ const navItems = [
         <slot />
       </main>
     </div>
+
+    {/* 2026-05-29 — branded confirm + prompt modals. Replace native
+        window.confirm/prompt across the admin panel (founder: "no alert
+        boxes everywhere"). Pages call window.driftstackConfirm(message,
+        opts?) -> Promise<boolean> and window.driftstackPrompt(message,
+        opts?) -> Promise<string|null>. Admin light-theme palette. */}
+    <div
+      data-ds-confirm
+      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ds-confirm-message"
+    >
+      <div class="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
+        <p data-ds-confirm-message id="ds-confirm-message" class="whitespace-pre-line text-sm text-slate-900"></p>
+        <div class="mt-6 flex justify-end gap-3">
+          <button type="button" data-ds-confirm-cancel class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="button" data-ds-confirm-ok class="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800">Confirm</button>
+        </div>
+      </div>
+    </div>
+    <div
+      data-ds-prompt
+      class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="ds-prompt-message"
+    >
+      <div class="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
+        <p data-ds-prompt-message id="ds-prompt-message" class="whitespace-pre-line text-sm text-slate-900"></p>
+        <input type="text" data-ds-prompt-input class="mt-4 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-oxblood-700 focus:outline-none" />
+        <div class="mt-6 flex justify-end gap-3">
+          <button type="button" data-ds-prompt-cancel class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="button" data-ds-prompt-ok class="rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white hover:bg-oxblood-800">OK</button>
+        </div>
+      </div>
+    </div>
+    <script is:inline>
+      {`
+        // 2026-05-29 — branded window.driftstackConfirm / driftstackPrompt
+        // for the admin panel. Mirror of the DashboardLayout helpers.
+        // driftstackConfirm(message, opts) -> Promise<boolean>;
+        // driftstackPrompt(message, opts) -> Promise<string|null>.
+        (function () {
+          window.driftstackConfirm = function (message, opts) {
+            return new Promise(function (resolve) {
+              var overlay = document.querySelector('[data-ds-confirm]');
+              if (!overlay) { resolve(window.confirm(message)); return; }
+              var msg = overlay.querySelector('[data-ds-confirm-message]');
+              var ok = overlay.querySelector('[data-ds-confirm-ok]');
+              var cancel = overlay.querySelector('[data-ds-confirm-cancel]');
+              if (msg) msg.textContent = message;
+              if (ok) ok.textContent = (opts && opts.confirmLabel) || 'Confirm';
+              overlay.classList.remove('hidden');
+              if (ok && ok.focus) ok.focus();
+              function done(result) {
+                overlay.classList.add('hidden');
+                if (ok) ok.removeEventListener('click', onOk);
+                if (cancel) cancel.removeEventListener('click', onCancel);
+                document.removeEventListener('keydown', onKey);
+                resolve(result);
+              }
+              function onOk() { done(true); }
+              function onCancel() { done(false); }
+              function onKey(e) { if (e.key === 'Escape') done(false); }
+              if (ok) ok.addEventListener('click', onOk);
+              if (cancel) cancel.addEventListener('click', onCancel);
+              document.addEventListener('keydown', onKey);
+            });
+          };
+          window.driftstackPrompt = function (message, opts) {
+            return new Promise(function (resolve) {
+              var overlay = document.querySelector('[data-ds-prompt]');
+              if (!overlay) { resolve(window.prompt(message, (opts && opts.defaultValue) || '')); return; }
+              var msg = overlay.querySelector('[data-ds-prompt-message]');
+              var input = overlay.querySelector('[data-ds-prompt-input]');
+              var ok = overlay.querySelector('[data-ds-prompt-ok]');
+              var cancel = overlay.querySelector('[data-ds-prompt-cancel]');
+              if (msg) msg.textContent = message;
+              if (ok) ok.textContent = (opts && opts.confirmLabel) || 'OK';
+              if (input) {
+                input.value = (opts && opts.defaultValue) || '';
+                input.setAttribute('placeholder', (opts && opts.placeholder) || '');
+              }
+              overlay.classList.remove('hidden');
+              if (input && input.focus) { input.focus(); if (input.select) input.select(); }
+              function done(result) {
+                overlay.classList.add('hidden');
+                if (ok) ok.removeEventListener('click', onOk);
+                if (cancel) cancel.removeEventListener('click', onCancel);
+                if (input) input.removeEventListener('keydown', onKey);
+                document.removeEventListener('keydown', onDocKey);
+                resolve(result);
+              }
+              function onOk() { done(input ? input.value : ''); }
+              function onCancel() { done(null); }
+              function onKey(e) { if (e.key === 'Enter') { e.preventDefault(); onOk(); } }
+              function onDocKey(e) { if (e.key === 'Escape') done(null); }
+              if (ok) ok.addEventListener('click', onOk);
+              if (cancel) cancel.addEventListener('click', onCancel);
+              if (input) input.addEventListener('keydown', onKey);
+              document.addEventListener('keydown', onDocKey);
+            });
+          };
+        })();
+      `}
+    </script>
     <script is:inline>
       {
         /*

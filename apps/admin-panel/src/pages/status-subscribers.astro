@@ -226,13 +226,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!list) return;
         const buttons = list.querySelectorAll('[data-force-unsub]');
         buttons.forEach(function (btn) {
-          btn.addEventListener('click', function () {
+          btn.addEventListener('click', async function () {
             const id = btn.getAttribute('data-force-unsub');
             const email = btn.getAttribute('data-email');
-            const ok = window.confirm(
+            const ok = await window.driftstackConfirm(
               'Force-unsubscribe ' +
                 email +
                 '? Writes admin_audit_log. Customer can re-subscribe via the public form.',
+              { confirmLabel: 'Force-unsubscribe' },
             );
             if (!ok) return;
             const token = getToken();

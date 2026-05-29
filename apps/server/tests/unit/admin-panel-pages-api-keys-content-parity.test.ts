@@ -67,9 +67,12 @@ describe('W489.C apps/admin-panel/src/pages/api-keys.astro content parity', () =
     );
   });
 
-  it("Reason REQUIRED on revoke: window.prompt('Reason for revoking N (required):') → !reason || !reason.trim() → 'Revoke cancelled — reason is required.' banner + bail — pinned so the audit-row 'reason' field never lands empty (drift to optional reason would break the customer-facing 'revoked by Driftstack: <reason>' surface)", () => {
+  it("Reason REQUIRED on revoke: branded driftstackPrompt('Reason for revoking N (required):') → !reason || !reason.trim() → 'Revoke cancelled — reason is required.' banner + bail — pinned so the audit-row 'reason' field never lands empty (drift to optional reason would break the customer-facing 'revoked by Driftstack: <reason>' surface)", () => {
     expect(body).toMatch(
-      /const reason = window\.prompt\('Reason for revoking ' \+ id \+ ' \(required\):'\);\s*\n?\s*if \(!reason \|\| !reason\.trim\(\)\) \{\s*\n?\s*showBanner\('Revoke cancelled — reason is required\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
+      /const reason = await window\.driftstackPrompt\('Reason for revoking ' \+ id \+ ' \(required\):', \{/,
+    );
+    expect(body).toMatch(
+      /if \(!reason \|\| !reason\.trim\(\)\) \{\s*\n?\s*showBanner\('Revoke cancelled — reason is required\.'\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
   });
 

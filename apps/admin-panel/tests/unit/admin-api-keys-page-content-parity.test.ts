@@ -84,8 +84,10 @@ describe('W362.C admin-panel /api-keys page content parity', () => {
     );
   });
 
-  it('required-reason gate in revoke() handler (window.prompt + non-empty trim)', () => {
-    expect(body).toMatch(/window\.prompt\('Reason for revoking ' \+ id \+ ' \(required\):'\)/);
+  it('required-reason gate in revoke() handler (branded driftstackPrompt + non-empty trim)', () => {
+    expect(body).toMatch(
+      /await window\.driftstackPrompt\('Reason for revoking ' \+ id \+ ' \(required\):', \{/,
+    );
     expect(body).toMatch(/Revoke cancelled — reason is required/);
     expect(body).toMatch(/body: JSON\.stringify\(\{ reason: reason\.trim\(\) \}\)/);
   });

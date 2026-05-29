@@ -95,7 +95,7 @@ describe('W363.C admin-panel /rate-limit-overrides page content parity', () => {
 
   it('clear-now confirm dialog cites the bucket + account id (admin-action transparency)', () => {
     expect(body).toMatch(
-      /window\.confirm\(\s*'Clear the ' \+ bucketKey \+ ' override for ' \+ prefixedAccountId/,
+      /await window\.driftstackConfirm\(\s*'Clear the ' \+ bucketKey \+ ' override for ' \+ prefixedAccountId/,
     );
   });
 

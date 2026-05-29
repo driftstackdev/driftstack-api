@@ -350,9 +350,12 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      function revoke(id) {
+      async function revoke(id) {
         if (!token) return;
-        const reason = window.prompt('Reason for revoking ' + id + ' (required):');
+        const reason = await window.driftstackPrompt('Reason for revoking ' + id + ' (required):', {
+          placeholder: 'e.g. suspected leak',
+          confirmLabel: 'Revoke',
+        });
         if (!reason || !reason.trim()) {
           showBanner('Revoke cancelled — reason is required.');
           return;

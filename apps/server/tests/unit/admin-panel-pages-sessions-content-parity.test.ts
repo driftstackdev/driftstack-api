@@ -73,9 +73,12 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
     );
   });
 
-  it("POST /v1/admin/sessions/{encodeURIComponent(id)}/destroy contract: optional reason via window.prompt → trimmed → JSON.stringify({reason}) body (empty reason → empty object {}); Bearer auth + content-type:application/json + credentials:'include' — pinned so the optional-reason pattern lands the audit row with the operator's text when provided, and the URL encoding handles session-IDs safely", () => {
+  it("POST /v1/admin/sessions/{encodeURIComponent(id)}/destroy contract: optional reason via branded driftstackPrompt → trimmed → JSON.stringify({reason}) body (empty reason → empty object {}); Bearer auth + content-type:application/json + credentials:'include' — pinned so the optional-reason pattern lands the audit row with the operator's text when provided, and the URL encoding handles session-IDs safely", () => {
     expect(body).toMatch(
-      /const reason = window\.prompt\('Reason for force-destroying ' \+ id \+ ' \(optional\):'\) \|\| '';\s*\n?\s*const body = \{\};\s*\n?\s*if \(reason\.trim\(\)\) body\.reason = reason\.trim\(\);/,
+      /await window\.driftstackPrompt\('Reason for force-destroying ' \+ id \+ ' \(optional\):', \{/,
+    );
+    expect(body).toMatch(
+      /const body = \{\};\s*\n?\s*if \(reason\.trim\(\)\) body\.reason = reason\.trim\(\);/,
     );
     expect(body).toMatch(
       /fetch\(apiBaseUrl \+ '\/v1\/admin\/sessions\/' \+ encodeURIComponent\(id\) \+ '\/destroy', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*authorization: 'Bearer ' \+ token,\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*\},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(body\),\s*\n?\s*\}\)/,
