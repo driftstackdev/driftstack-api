@@ -1,0 +1,138 @@
+---
+import StatusLayout from '../../layouts/StatusLayout.astro';
+
+// V-657 followup — status-subscription UNSUBSCRIBE landing page. Every
+// status email carries a one-click unsubscribe link to the status-site
+// path `/subscribe/unsubscribe?token=` (see
+// StatusSubscribersService.unsubscribeLink:
+// `${baseUrl}/subscribe/unsubscribe?token=...`). On load we read
+// `?token=` and call GET /v1/status/subscribe/unsubscribe?token=, then
+// render the result.
+//
+// IMPORTANT: the API endpoint is a GET with a `?token=` query (a
+// one-click email-link), NOT a POST with a JSON body. We mirror the GET
+// contract here.
+//
+// No JavaScript framework — pure inline script — so the page renders
+// even when the control plane is degraded (static-served from Cloudflare
+// Pages; only the unsubscribe call touches the control plane).
+const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.dev';
+---
+
+<StatusLayout title="Driftstack — Unsubscribe from status emails">
+  <section class="mb-8">
+    <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Unsubscribe</p>
+    <h1 class="mt-2 text-3xl font-semibold tracking-tight text-ink-primary">
+      Unsubscribe from status emails
+    </h1>
+  </section>
+
+  <section class="mb-12">
+    <!-- Default pane: the unsubscribe call fires on load. -->
+    <div
+      id="unsub-pending"
+      class="rounded-lg border border-white/10 bg-surface-raised p-6 shadow-sm"
+      role="status"
+      aria-live="polite"
+    >
+      <p class="text-sm text-ink-secondary">Unsubscribing…</p>
+    </div>
+
+    <!-- Success pane (200): unsubscribed. -->
+    <div
+      id="unsub-success"
+      class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-6 shadow-sm"
+      role="status"
+      aria-live="polite"
+    >
+      <p class="text-sm font-medium text-emerald-300">You've been unsubscribed.</p>
+      <p class="mt-3 text-sm text-ink-secondary">
+        We won't send you any more service-status emails. You can
+        <a href="/subscribe" class="underline hover:text-ink-primary">subscribe again</a>
+        any time.
+      </p>
+    </div>
+
+    <!-- Error pane (400 / 404 / 429 / network). -->
+    <div
+      id="unsub-error"
+      class="hidden rounded-lg border border-red-500/30 bg-red-500/5 p-6 shadow-sm"
+      role="alert"
+      aria-live="assertive"
+    >
+      <p id="unsub-error-message" class="text-sm font-medium text-red-300"></p>
+      <p class="mt-3 text-sm text-ink-secondary">
+        If you keep receiving emails, use the unsubscribe link in the most
+        recent one — links from older emails expire when a newer email is
+        sent.
+      </p>
+    </div>
+  </section>
+
+  <section class="text-xs text-ink-muted">
+    <p>
+      One-click unsubscribe: every status email carries this link in its
+      footer. We never send marketing or promotional email from the status
+      list.
+    </p>
+  </section>
+</StatusLayout>
+
+<script is:inline define:vars={{ API_BASE }}>
+  const pending = document.getElementById('unsub-pending');
+  const success = document.getElementById('unsub-success');
+  const errorPane = document.getElementById('unsub-error');
+  const errorMessage = document.getElementById('unsub-error-message');
+
+  function showError(message) {
+    if (pending) pending.classList.add('hidden');
+    if (success) success.classList.add('hidden');
+    if (errorMessage) errorMessage.textContent = message;
+    if (errorPane) errorPane.classList.remove('hidden');
+  }
+
+  function showSuccess() {
+    if (pending) pending.classList.add('hidden');
+    if (errorPane) errorPane.classList.add('hidden');
+    if (success) success.classList.remove('hidden');
+  }
+
+  async function unsubscribe() {
+    const token = new URLSearchParams(window.location.search).get('token');
+    if (!token) {
+      showError('This unsubscribe link is missing its token. Use the link directly from your email.');
+      return;
+    }
+    try {
+      const res = await fetch(
+        `${API_BASE}/v1/status/subscribe/unsubscribe?token=${encodeURIComponent(token)}`,
+        { method: 'GET', headers: { accept: 'application/json' } },
+      );
+      if (res.status === 200) {
+        showSuccess();
+        return;
+      }
+      // RFC 7807 problem+json carries a user-friendly `detail`.
+      let detail = '';
+      try {
+        const body = await res.json();
+        detail = (body && (body.detail || body.message)) || '';
+      } catch {
+        /* non-JSON body */
+      }
+      if (res.status === 400) {
+        showError(detail || 'This unsubscribe link is malformed.');
+      } else if (res.status === 404) {
+        showError(detail || 'This unsubscribe link is invalid.');
+      } else if (res.status === 429) {
+        showError('Too many attempts from this IP. Try again in a minute.');
+      } else {
+        showError(detail || `Couldn't unsubscribe you (HTTP ${res.status}).`);
+      }
+    } catch {
+      showError("Couldn't reach the status API. Your network may be blocking the request.");
+    }
+  }
+
+  unsubscribe();
+</script>
