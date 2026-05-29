@@ -1363,6 +1363,10 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
     throw new FeatureUnavailableError(detail);
   };
   app.post('/v1/agent-sessions', stub);
+  // The list endpoint is gated too — the dashboard's "recent sessions"
+  // call must surface the documented 503 activation message, not a bare
+  // 404 (same rationale as the takeover/handback/mode stubs below).
+  app.get('/v1/agent-sessions', stub);
   app.get('/v1/agent-sessions/:id', stub);
   app.post('/v1/agent-sessions/:id/message', stub);
   app.delete('/v1/agent-sessions/:id', stub);

@@ -2633,6 +2633,24 @@ function buildRegistry(): OpenAPIRegistry {
   });
   registerRoute(r, {
     method: 'get',
+    path: '/v1/agent-sessions',
+    summary: "List the account's agent chat sessions (newest first, capped at 100)",
+    tags: ['agent-chat'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Agent sessions for the authenticated account.',
+        content: { 'application/json': { schema: z.object({ data: z.array(z.object({})) }) } },
+      },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
     path: '/v1/agent-sessions/{id}',
     summary: 'Read agent session state (transcript_length + budget + status)',
     tags: ['agent-chat'],

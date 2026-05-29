@@ -236,6 +236,14 @@ describe('OpenAPI spec generation', () => {
     }
   });
 
+  it('GET /v1/agent-sessions (list) is documented alongside POST (the GET method was missing once)', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const p = (spec.paths ?? {})['/v1/agent-sessions'] as Record<string, unknown> | undefined;
+    expect(p?.get).toBeDefined();
+    expect(p?.post).toBeDefined();
+  });
+
   it('all admin endpoints carry the "admin" tag (for docs filtering)', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();

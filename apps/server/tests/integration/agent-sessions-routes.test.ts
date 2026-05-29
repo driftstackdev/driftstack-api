@@ -31,6 +31,17 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
   });
 
+  it('GET /v1/agent-sessions (list) → 503 FeatureUnavailable (the list stub was missing — the dashboard "recent sessions" call hit a bare 404)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
+  });
+
   it('POST /v1/agent-sessions/:id/message → 503', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
