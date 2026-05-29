@@ -23,6 +23,7 @@ const RESOURCE_FILE: Record<string, string> = {
   sessions: 'sessions.py',
   profiles: 'profiles.py',
   profile_snapshots: 'profile_snapshots.py',
+  recipes: 'recipes.py',
   api_keys: 'api_keys.py',
   usage: 'usage.py',
   webhooks: 'webhooks.py',

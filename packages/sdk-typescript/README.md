@@ -73,6 +73,12 @@ client.profileSnapshots.get(id)
 client.profileSnapshots.restore(id, body)                   // creates a NEW profile
 client.profileSnapshots.delete(id)
 
+client.recipes.create(body)             // AI-B4 — snapshot an agent-session's intent_log
+client.recipes.list(query?)             // cursor-paginated, newest first
+client.recipes.iterate(opts?)
+client.recipes.get(id)                  // full recipe incl. replayable intent_log
+client.recipes.delete(id)               // execution stays v1.1 (harness-executor-gated)
+
 client.apiKeys.create(body)             // requires admin scope
 client.apiKeys.list()
 client.apiKeys.rotate(id, options?)     // V-296 — 24h grace, plaintext shown once

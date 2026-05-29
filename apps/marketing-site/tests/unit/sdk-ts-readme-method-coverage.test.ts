@@ -25,6 +25,7 @@ const RESOURCE_FILE: Record<string, string> = {
   sessions: 'sessions.ts',
   profiles: 'profiles.ts',
   profileSnapshots: 'profile-snapshots.ts',
+  recipes: 'recipes.ts',
   apiKeys: 'api-keys.ts',
   webhooks: 'webhooks.ts',
   team: 'team.ts',

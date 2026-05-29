@@ -56,6 +56,7 @@ Every public API endpoint is a typed method on a resource accessor. All take `co
 | `client.Sessions`         | `Create`, `List`, `Get`, `Navigate`, `Interact`, `Wait`, `GetState`, `Capture`, `Destroy`                                                     |
 | `client.Profiles`         | `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`, `Clone` (V-313)                                                                       |
 | `client.ProfileSnapshots` | `Capture`, `ListForProfile`, `List`, `Iterate`, `Get`, `Restore`, `Delete` (V-312)                                                            |
+| `client.Recipes`          | `Create`, `List`, `Iterate`, `Get`, `Delete` (AI-B4 — snapshot an agent-session's intent_log; execution stays v1.1)                           |
 | `client.APIKeys`          | `Create`, `List`, `Rotate` (V-296), `Revoke`                                                                                                  |
 | `client.Usage`            | `CurrentPeriod`                                                                                                                               |
 | `client.Webhooks`         | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`, `ReplayDelivery` (V-307)                                                                 |

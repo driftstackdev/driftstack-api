@@ -23,6 +23,7 @@ const RESOURCE_FILE: Record<string, string> = {
   Sessions: 'sessions.go',
   Profiles: 'profiles.go',
   ProfileSnapshots: 'profile_snapshots.go',
+  Recipes: 'recipes.go',
   APIKeys: 'api_keys.go',
   Usage: 'usage.go',
   Webhooks: 'webhooks.go',
