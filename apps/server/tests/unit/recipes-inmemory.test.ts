@@ -166,3 +166,68 @@ describe('AI-B4 InMemoryRecipesRepo.create', () => {
     expect(r1.id).not.toBe(r2.id);
   });
 });
+
+describe('V-530.I InMemoryRecipesRepo.list', () => {
+  async function seed(): Promise<InMemoryRecipesRepo> {
+    let t = 1_000_000;
+    const repo = new InMemoryRecipesRepo(() => new Date((t += 1000)));
+    // 3 recipes for acc_1 (created oldest→newest) + 1 for acc_2.
+    for (const label of ['first', 'second', 'third']) {
+      await repo.create({
+        accountId: 'acc_1',
+        agentSessionId: 'agt_inmem_x',
+        label,
+        intentLog: SAMPLE_INTENTS,
+        transcriptSnapshot: SAMPLE_TRANSCRIPT,
+      });
+    }
+    await repo.create({
+      accountId: 'acc_2',
+      agentSessionId: 'agt_inmem_y',
+      label: 'other-account',
+      intentLog: SAMPLE_INTENTS,
+      transcriptSnapshot: SAMPLE_TRANSCRIPT,
+    });
+    return repo;
+  }
+
+  it('returns the account rows newest-first, isolated by account', async () => {
+    const repo = await seed();
+    const page = await repo.list({ accountId: 'acc_1' });
+    expect(page.data.map((r) => r.label)).toEqual(['third', 'second', 'first']);
+    expect(page.hasMore).toBe(false);
+    expect(page.nextCursor).toBeNull();
+    // acc_2's recipe never leaks into acc_1's list.
+    expect(page.data.every((r) => r.accountId === 'acc_1')).toBe(true);
+
+    const other = await repo.list({ accountId: 'acc_2' });
+    expect(other.data.map((r) => r.label)).toEqual(['other-account']);
+  });
+
+  it('keyset-paginates via limit + cursor with no gaps or repeats', async () => {
+    const repo = await seed();
+    const first = await repo.list({ accountId: 'acc_1', limit: 2 });
+    expect(first.data.map((r) => r.label)).toEqual(['third', 'second']);
+    expect(first.hasMore).toBe(true);
+    expect(first.nextCursor).toBe(first.data[1]!.id);
+
+    const second = await repo.list({ accountId: 'acc_1', limit: 2, cursor: first.nextCursor! });
+    expect(second.data.map((r) => r.label)).toEqual(['first']);
+    expect(second.hasMore).toBe(false);
+    expect(second.nextCursor).toBeNull();
+  });
+
+  it('empty account → empty page', async () => {
+    const repo = await seed();
+    const page = await repo.list({ accountId: 'acc_nobody' });
+    expect(page.data).toEqual([]);
+    expect(page.hasMore).toBe(false);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('a foreign/unknown cursor is ignored (returns the first page, never another account rows)', async () => {
+    const repo = await seed();
+    const page = await repo.list({ accountId: 'acc_1', cursor: 'rec_inmem_does_not_exist' });
+    expect(page.data.map((r) => r.label)).toEqual(['third', 'second', 'first']);
+  });
+});

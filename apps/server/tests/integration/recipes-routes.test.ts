@@ -217,3 +217,98 @@ describe('AI-B4 POST /v1/recipes — disabled stub (no agentSessionsRepo)', () =
     expect(res.json<{ type: string }>().type).toMatch(/feature-unavailable/);
   });
 });
+
+describe('V-530.I GET /v1/recipes — list (wired)', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  async function seedRecipe(label: string): Promise<void> {
+    const session = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    const agentSessionId = session.json<{ id: string }>().id;
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/recipes',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { agent_session_id: agentSessionId, label },
+    });
+    if (res.statusCode !== 201) throw new Error(`seed failed: ${res.statusCode}`);
+  }
+
+  it('empty account → { data: [], has_more: false, next_cursor: null }', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/recipes',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ data: unknown[]; has_more: boolean; next_cursor: string | null }>();
+    expect(body.data).toEqual([]);
+    expect(body.has_more).toBe(false);
+    expect(body.next_cursor).toBeNull();
+  });
+
+  it('lists saved recipes with the metadata shape (set-wise — within-same-ms order is the id-keyset tiebreak, not insertion)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    await seedRecipe('alpha');
+    await seedRecipe('beta');
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/recipes',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{
+      data: Array<{ id: string; label: string; intent_count: number; created_at: string }>;
+      has_more: boolean;
+    }>();
+    expect(body.data).toHaveLength(2);
+    expect(new Set(body.data.map((r) => r.label))).toEqual(new Set(['alpha', 'beta']));
+    expect(body.data[0]!.id).toMatch(/^rec_inmem_/);
+    expect(typeof body.data[0]!.intent_count).toBe('number');
+    expect(typeof body.data[0]!.created_at).toBe('string');
+    expect(body.has_more).toBe(false);
+  });
+
+  it('paginates via limit + cursor — complete + gap-free across pages', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    await seedRecipe('one');
+    await seedRecipe('two');
+    await seedRecipe('three');
+    const first = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/recipes?limit=2',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const firstBody = first.json<{
+      data: Array<{ label: string }>;
+      has_more: boolean;
+      next_cursor: string;
+    }>();
+    expect(firstBody.data).toHaveLength(2);
+    expect(firstBody.has_more).toBe(true);
+
+    const second = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/recipes?limit=2&cursor=${encodeURIComponent(firstBody.next_cursor)}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const secondBody = second.json<{ data: Array<{ label: string }>; has_more: boolean }>();
+    expect(secondBody.data).toHaveLength(1);
+    expect(secondBody.has_more).toBe(false);
+
+    // The two pages together cover all 3 recipes with no overlap (the
+    // keyset guarantee — stable + gap-free even with tied timestamps).
+    const allLabels = [...firstBody.data, ...secondBody.data].map((r) => r.label);
+    expect(new Set(allLabels)).toEqual(new Set(['one', 'two', 'three']));
+    expect(allLabels).toHaveLength(3);
+  });
+});

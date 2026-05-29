@@ -52,6 +52,21 @@ export interface CreateRecipeArgs {
   transcriptSnapshot: ReadonlyArray<TranscriptEntry>;
 }
 
+export interface ListRecipesArgs {
+  accountId: string;
+  /** Page size (default 50, max 100 — clamped by the repo). */
+  limit?: number;
+  /** Opaque cursor = the id of the last recipe on the prior page. */
+  cursor?: string;
+}
+
+export interface ListRecipesPage {
+  data: RecipeRecord[];
+  hasMore: boolean;
+  /** The id to pass as the next `cursor`, or null when the page is the last. */
+  nextCursor: string | null;
+}
+
 export interface RecipesRepo {
   /**
    * Snapshot a recipe row. MUST be idempotent on (accountId,
@@ -62,7 +77,18 @@ export interface RecipesRepo {
    * mints a fresh id per insert.
    */
   create(args: CreateRecipeArgs): Promise<RecipeRecord>;
+
+  /**
+   * V-530.I (D2) — list the account's recipes, newest first. Keyset
+   * pagination on (createdAt DESC, id DESC), mirroring the prod-proven
+   * profiles-repo so same-timestamp rows can't drop at a page boundary.
+   * Read-path only; recipe EXECUTION stays gated on the harness executor.
+   */
+  list(args: ListRecipesArgs): Promise<ListRecipesPage>;
 }
+
+const DEFAULT_RECIPE_PAGE = 50;
+const MAX_RECIPE_PAGE = 100;
 
 /**
  * In-memory implementation for unit tests + the disabled-routes
@@ -91,6 +117,35 @@ export class InMemoryRecipesRepo implements RecipesRepo {
     };
     this.rows.set(id, record);
     return record;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async list(args: ListRecipesArgs): Promise<ListRecipesPage> {
+    const limit = Math.min(args.limit ?? DEFAULT_RECIPE_PAGE, MAX_RECIPE_PAGE);
+    // (createdAt DESC, id DESC) — same total order as the Drizzle keyset.
+    let rows = [...this.rows.values()]
+      .filter((r) => r.accountId === args.accountId)
+      .sort((a, b) => {
+        const t = b.createdAt.getTime() - a.createdAt.getTime();
+        if (t !== 0) return t;
+        return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+      });
+
+    if (args.cursor !== undefined) {
+      const cur = this.rows.get(args.cursor);
+      if (cur !== undefined && cur.accountId === args.accountId) {
+        const curT = cur.createdAt.getTime();
+        rows = rows.filter(
+          (r) => r.createdAt.getTime() < curT || (r.createdAt.getTime() === curT && r.id < cur.id),
+        );
+      }
+    }
+
+    const hasMore = rows.length > limit;
+    const data = rows.slice(0, limit);
+    const nextCursor =
+      hasMore && data.length > 0 ? (data[data.length - 1] as RecipeRecord).id : null;
+    return { data, hasMore, nextCursor };
   }
 }
 

@@ -13,10 +13,20 @@
 //     orchestrator handoff #3 Q.5.
 
 import { randomUUID } from 'node:crypto';
+import { and, desc, eq, lt, or } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { recipes } from './schema.js';
 import type { AgentIntent, TranscriptEntry } from '../services/agent-decomposer.js';
-import type { CreateRecipeArgs, RecipeRecord, RecipesRepo } from '../services/recipes.js';
+import type {
+  CreateRecipeArgs,
+  ListRecipesArgs,
+  ListRecipesPage,
+  RecipeRecord,
+  RecipesRepo,
+} from '../services/recipes.js';
+
+const DEFAULT_RECIPE_PAGE = 50;
+const MAX_RECIPE_PAGE = 100;
 
 function rowToRecord(row: typeof recipes.$inferSelect): RecipeRecord {
   return {
@@ -78,5 +88,43 @@ export class DrizzleRecipesRepo implements RecipesRepo {
       throw new Error('Recipe insert returned no rows');
     }
     return rowToRecord(row);
+  }
+
+  async list(args: ListRecipesArgs): Promise<ListRecipesPage> {
+    const limit = Math.min(args.limit ?? DEFAULT_RECIPE_PAGE, MAX_RECIPE_PAGE);
+
+    // Keyset on (createdAt DESC, id DESC). Resolve the cursor row first
+    // (scoped to the account) so a forged/foreign cursor can't leak rows.
+    let cursorWhere;
+    if (args.cursor !== undefined) {
+      const [cursorRow] = await this.database.db
+        .select({ createdAt: recipes.createdAt, id: recipes.id })
+        .from(recipes)
+        .where(and(eq(recipes.id, args.cursor), eq(recipes.accountId, args.accountId)))
+        .limit(1);
+      if (cursorRow !== undefined) {
+        cursorWhere = or(
+          lt(recipes.createdAt, cursorRow.createdAt),
+          and(eq(recipes.createdAt, cursorRow.createdAt), lt(recipes.id, cursorRow.id)),
+        );
+      }
+    }
+
+    const rows = await this.database.db
+      .select()
+      .from(recipes)
+      .where(
+        cursorWhere !== undefined
+          ? and(eq(recipes.accountId, args.accountId), cursorWhere)
+          : eq(recipes.accountId, args.accountId),
+      )
+      .orderBy(desc(recipes.createdAt), desc(recipes.id))
+      .limit(limit + 1);
+
+    const hasMore = rows.length > limit;
+    const data = rows.slice(0, limit).map(rowToRecord);
+    const nextCursor =
+      hasMore && data.length > 0 ? (data[data.length - 1] as RecipeRecord).id : null;
+    return { data, hasMore, nextCursor };
   }
 }

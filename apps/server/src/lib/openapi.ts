@@ -3093,6 +3093,37 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
 
+  // GET /v1/recipes — list the caller's saved recipes, newest first
+  // (V-530.I / D2 read-path). Keyset-paginated (limit + opaque cursor).
+  // Recipe EXECUTION stays gated on the harness executor; this is
+  // read-only. 503 when the recipe library isn't wired.
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/recipes',
+    summary: 'List saved recipes (newest first, keyset-paginated)',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      query: z.object({
+        limit: z.coerce.number().int().min(1).max(100).optional(),
+        cursor: z.string().optional(),
+      }),
+    },
+    responses: {
+      200: {
+        description:
+          'Page of recipes. Each item is the metadata shape (id, label, description, agent_session_id, intent_count, timestamps) — not the full intent_log. `next_cursor` is null on the last page.',
+        content: { 'application/json': { schema: z.object({}) } },
+      },
+      ...errors4xx,
+      503: {
+        description:
+          'Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.',
+        content: problemContent,
+      },
+    },
+  });
+
   // ── V-820 — fleet events stream (operator-only; not customer-facing) ──
   // Currently registers as a 503 FeatureUnavailable stub regardless of
   // AppDeps wiring — the WebSocket handler + fastify-websocket plugin +

@@ -9,6 +9,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import { PaginationQuerySchema } from '@driftstack/api-types';
 import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/errors.js';
 import type { RecipesRepo, RecipeRecord } from '../services/recipes.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
@@ -98,6 +99,30 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
       return reply.code(201).send(publicRecipe(created));
     },
   );
+
+  // V-530.I (D2) — list the caller's saved recipes, newest first.
+  // Read-path only (recipe execution stays gated on the harness
+  // executor). `read` scope; keyset-paginated via the shared
+  // PaginationQuerySchema (limit + opaque cursor).
+  app.get(
+    '/v1/recipes',
+    { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const parsed = PaginationQuerySchema.safeParse(req.query ?? {});
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      const page = await recipes.list({
+        accountId: ctx.account.id,
+        limit: parsed.data.limit,
+        ...(parsed.data.cursor !== undefined ? { cursor: parsed.data.cursor } : {}),
+      });
+      return {
+        data: page.data.map(publicRecipe),
+        has_more: page.hasMore,
+        next_cursor: page.nextCursor,
+      };
+    },
+  );
 }
 
 // Disabled stub — registered when recipesRepo OR agentSessionsRepo is
@@ -119,4 +144,5 @@ export function registerRecipesDisabledRoutes(app: FastifyInstance): void {
     throw new FeatureUnavailableError(detail);
   };
   app.post('/v1/recipes', stub);
+  app.get('/v1/recipes', stub);
 }
