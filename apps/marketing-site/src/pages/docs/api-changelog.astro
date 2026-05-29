@@ -22,6 +22,23 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>2026-05</h2>
     <ul>
       <li>
+        <strong>API — Recipe library read &amp; management endpoints.</strong>
+        The recipe library gains its read/management path:
+        <code>GET /v1/recipes</code> (cursor-paginated list, newest
+        first), <code>GET /v1/recipes/&#123;id&#125;</code> (a single
+        recipe in full, including the replayable
+        <code>intent_log</code>), and
+        <code>DELETE /v1/recipes/&#123;id&#125;</code> (204 No Content;
+        not idempotent). Joins the existing <code>POST /v1/recipes</code>
+        capture endpoint, and ships across the TypeScript / Python / Go
+        SDKs (<code>recipes.list</code> / <code>.get</code> /
+        <code>.delete</code>) plus a new Recipes page in the customer
+        dashboard. Backward-compatible — all additive. Recipe
+        <em>execution</em> (replay against a new agent-session) remains
+        on the v1.1 roadmap. Full reference at
+        <a href="https://docs.driftstack.dev/api/recipes/">/api/recipes</a>.
+      </li>
+      <li>
         <strong>API — Live video for agent sessions (LiveKit WebRTC).</strong>
         New <code>POST /v1/agent-sessions/&#123;id&#125;/livekit-token</code>
         endpoint mints a per-Mac LiveKit JWT for WebRTC subscribers
