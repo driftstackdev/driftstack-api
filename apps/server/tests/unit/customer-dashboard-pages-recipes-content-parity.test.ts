@@ -71,6 +71,10 @@ describe('apps/customer-dashboard/src/pages/recipes.astro content parity', () =>
     );
   });
 
+  it('row label links to the recipe detail view (/recipes/:id) — pinned so the list does not dead-end (the detail page consumes the built GET /v1/recipes/:id endpoint); drift to a bare <p> would orphan the detail view', () => {
+    expect(body).toMatch(/'<a href="\/recipes\/' \+\s*\n?\s*encodeURIComponent\(r\.id\) \+/);
+  });
+
   it("source-session-deleted indicator: agent_session_id === null → '(source session deleted)' — pinned so customers see when a recipe's source agent-session was cleaned up (the FK is ON DELETE SET NULL server-side; drift to dropping would leave a bare 'from ' label)", () => {
     expect(body).toMatch(/r\.agent_session_id === null/);
     expect(body).toMatch(/<em>\(source session deleted\)<\/em>/);

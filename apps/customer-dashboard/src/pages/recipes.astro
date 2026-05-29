@@ -137,9 +137,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         return (
           '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
-          '<p class="text-base font-medium text-ink-primary">' +
+          // Label links to the detail view (GET /v1/recipes/:id) so the
+          // customer can inspect the recipe's intent steps before keeping
+          // or deleting it.
+          '<a href="/recipes/' +
+          encodeURIComponent(r.id) +
+          '" class="text-base font-medium text-ink-primary hover:text-glow-red hover:underline">' +
           escapeHtml(r.label || '(no label)') +
-          '</p>' +
+          '</a>' +
           '<p class="mt-1 font-mono text-xs text-ink-muted">' +
           escapeHtml(r.id) +
           '</p>' +
