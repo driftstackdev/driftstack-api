@@ -262,36 +262,6 @@ describe('createEmailService — configured', () => {
     expect(c.TextBody).toContain('2026-06-01');
   });
 
-  it('trial-pack-purchased template', async () => {
-    const logger = makeLogger();
-    const client = makeStubClient();
-    const svc = createEmailService({ config, logger, client });
-    await svc.sendTrialPackPurchased({
-      to: 'user@example.com',
-      creditCentsRemaining: 299,
-      expiresAt: new Date('2026-05-19T00:00:00Z'),
-      dashboardUrl: 'https://app.driftstack.dev/',
-    });
-    const c = client.calls[0] as Record<string, string>;
-    expect(c.Subject).toContain('$2.99 trial pack');
-    expect(c.TextBody).toContain('299 cents');
-    expect(c.TextBody).toContain('2026-05-19');
-  });
-
-  it('trial-pack-expired template', async () => {
-    const logger = makeLogger();
-    const client = makeStubClient();
-    const svc = createEmailService({ config, logger, client });
-    await svc.sendTrialPackExpired({
-      to: 'user@example.com',
-      upgradeUrl: 'https://app.driftstack.dev/select-tier',
-    });
-    const c = client.calls[0] as Record<string, string>;
-    expect(c.Subject).toContain('trial pack expired');
-    expect(c.TextBody).toContain('https://app.driftstack.dev/select-tier');
-    expect(c.TextBody).toContain('once per account');
-  });
-
   // V-553.B-1 — coverage for the 7 templates that ship behind feature
   // flags but were missing direct send-path tests in the W43 audit.
 

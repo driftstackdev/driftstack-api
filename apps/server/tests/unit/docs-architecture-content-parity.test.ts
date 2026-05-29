@@ -142,7 +142,7 @@ describe('W548.A /docs/architecture.md content parity', () => {
     );
   });
 
-  it("V-202c AccountLifecycleService + V-202d ScheduledJobsService framing pinned: '## Lifecycle event dispatcher (V-202c / V-202b)' + 'Customer-facing events that pair an audit-log entry with a transactional email go through `AccountLifecycleService`' + 'Account row lookup (`AccountLifecycleRepo.findForLifecycle`)' + 'Audit-log emit (when applicable for the event kind) via `AccountAuditService.record`.' + 'Email-preference opt-out check via `EmailPreferencesService.shouldSend`.' + 'Atomic dedup mark (when applicable) — e.g. `accounts.first_failure_email_sent_at` for `session.failed.first`.' + '`EmailService` send.' + 'Best-effort by contract: errors during dispatch are caught + logged warn, never propagate to the caller.' + 'session.failed.first' + 'subscription.tier_changed' + 'subscription.trial_pack_purchased' + 'subscription.trial_pack_expired' + '## Scheduled jobs (V-202d)' + '`SELECT … FOR UPDATE SKIP LOCKED` in a CTE → `UPDATE … RETURNING`' + 'trial_pack.expired' — pinned so the V-202c/V-202b 5-step-fanout + best-effort-never-propagate + 4-event-kind (session.failed.first + 3 subscription kinds) + V-202d FOR-UPDATE-SKIP-LOCKED atomic claim + trial_pack.expired first handler commitment survives", () => {
+  it("V-202c AccountLifecycleService + V-202d ScheduledJobsService framing pinned: '## Lifecycle event dispatcher (V-202c / V-202b)' + 'Customer-facing events that pair an audit-log entry with a transactional email go through `AccountLifecycleService`' + 'Account row lookup (`AccountLifecycleRepo.findForLifecycle`)' + 'Audit-log emit (when applicable for the event kind) via `AccountAuditService.record`.' + 'Email-preference opt-out check via `EmailPreferencesService.shouldSend`.' + 'Atomic dedup mark (when applicable) — e.g. `accounts.first_failure_email_sent_at` for `session.failed.first`.' + '`EmailService` send.' + 'Best-effort by contract: errors during dispatch are caught + logged warn, never propagate to the caller.' + 'session.failed.first' + 'session.success.first' + 'subscription.tier_changed' + 'subscription.renewal_reminder' + '## Scheduled jobs (V-202d)' + '`SELECT … FOR UPDATE SKIP LOCKED` in a CTE → `UPDATE … RETURNING`' + 'auth_tokens.sweep' — pinned so the V-202c/V-202b 5-step-fanout + best-effort-never-propagate + 4-event-kind union + V-202d FOR-UPDATE-SKIP-LOCKED atomic claim + registered-handler list survives. (Trial-pack kinds + trial_pack.expired handler removed with the dead trial_pack lifecycle.)", () => {
     expect(body).toMatch(/## Lifecycle event dispatcher \(V-202c \/ V-202b\)/);
     expect(body).toMatch(
       /Customer-facing events that pair an audit-log entry with a transactional email go through `AccountLifecycleService`/,
@@ -162,12 +162,16 @@ describe('W548.A /docs/architecture.md content parity', () => {
       /Best-effort by contract: errors during dispatch are caught \+ logged warn, never propagate to the caller\./,
     );
     expect(body).toMatch(/`session\.failed\.first`/);
+    expect(body).toMatch(/`session\.success\.first`/);
     expect(body).toMatch(/`subscription\.tier_changed`/);
-    expect(body).toMatch(/`subscription\.trial_pack_purchased`/);
-    expect(body).toMatch(/`subscription\.trial_pack_expired`/);
+    expect(body).toMatch(/`subscription\.renewal_reminder`/);
+    // Trial-pack kinds removed with the dead trial_pack lifecycle.
+    expect(body).not.toMatch(/`subscription\.trial_pack_purchased`/);
+    expect(body).not.toMatch(/`subscription\.trial_pack_expired`/);
     expect(body).toMatch(/## Scheduled jobs \(V-202d\)/);
     expect(body).toMatch(/`SELECT … FOR UPDATE SKIP LOCKED` in a CTE → `UPDATE … RETURNING`/);
-    expect(body).toMatch(/First registered handler: `trial_pack\.expired`/);
+    expect(body).toMatch(/Registered handlers today: `auth_tokens\.sweep`/);
+    expect(body).not.toMatch(/First registered handler: `trial_pack\.expired`/);
   });
 
   it("Driver interface + ADR-004 tier model + D-NNN cross-reference framing pinned: '## Driver abstraction' + 'interface Driver {' + 'createSession(spec: SessionSpec): Promise<DriverSession>;' + 'navigate(sessionId: string, url: string, opts?: NavigateOpts)' + 'interact(sessionId: string, action: InteractionAction)' + 'capture(sessionId: string, kind: CaptureKind)' + 'destroy(sessionId: string): Promise<void>;' + '## Tier model (ADR-004)' + 'Two ladders (Manual + API), concurrent-only metering on paid tiers, hours metering only on the trial pack via `accounts.trial_pack_credit_cents` decrement.' + '`TIER_CONCURRENT_SESSION_LIMITS`, `PROFILES_PER_TIER`' + '**D-019 / ADR-004** — Two-ladder pricing + concurrent-only metering.' + '**D-027 / ADR-002** — Stripe-only payment rail at launch.' + '**ADR-003** — Paid trial pack ($2.99 / 14 days / $0.18-per-hour decrement) replaces a free tier.' + '**D-028** — Web sessions are opaque sha256-hashed tokens (not JWT).' + '**D-030** — Inbound Stripe webhook idempotency via `processed_stripe_events` PK.' + '**ADR-001** — Hetzner for control-plane hosting.' + 'Long-form ADRs live under `docs/adr/`. Short D-NNN entries with autonomy levels live in `docs/decisions.md`.' — pinned so the Driver-7-method-interface + ADR-004 two-ladder + ADR-002 Stripe-only + ADR-003 trial-pack-$2.99/14d/$0.18/h + D-028 opaque-sha256 + D-030 processed_stripe_events-PK + ADR-001 Hetzner + ADR-vs-D-NNN naming commitment survives", () => {

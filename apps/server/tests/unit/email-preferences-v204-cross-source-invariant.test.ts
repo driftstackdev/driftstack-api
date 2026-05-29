@@ -4,9 +4,10 @@
 //
 //   V-204 anchor — 'per-account email notification preferences'.
 //
-//   6-event opt-out scope (lifecycle emails customers can disable):
+//   4-event opt-out scope (lifecycle emails customers can disable):
 //     signup-welcome / session-failed-first / tier-changed /
-//     trial-pack-purchased / trial-pack-expired / billing-receipt.
+//     billing-receipt. (trial-pack-purchased/expired removed with
+//     the dead trial_pack lifecycle.)
 //
 //   5-event security/financial bypass (always-send, never opt-outable):
 //     signup-verification / password-reset / billing-failure /
@@ -66,11 +67,12 @@ describe('W929 V-204 email-preferences cross-source invariant', () => {
 
   // ─── Lifecycle opt-out scope framing ─────────────────────────
 
-  it('CRITICAL header pins 6-event lifecycle opt-out — \'Customers opt out of "lifecycle" emails (signup-welcome, session-failed-first, tier-changed, trial-pack-purchased, trial-pack-expired, billing-receipt)\'. The 6-event opt-out set is what customers control via the dashboard.', () => {
+  it('CRITICAL header pins 4-event lifecycle opt-out — \'Customers opt out of "lifecycle" emails (signup-welcome, session-failed-first, tier-changed, billing-receipt)\'. The 4-event opt-out set is what customers control via the dashboard (the trial-pack pair was removed with the dead trial_pack lifecycle).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/email-preferences.ts'));
     expect(p).toMatch(/Customers opt out of "lifecycle" emails \(signup-welcome, session-/);
-    expect(p).toMatch(/failed-first, tier-changed, trial-pack-purchased, trial-pack-/);
-    expect(p).toMatch(/expired, billing-receipt\)/);
+    expect(p).toMatch(/failed-first, tier-changed, billing-receipt\)/);
+    expect(p).not.toMatch(/trial-pack-purchased/);
+    expect(p).not.toMatch(/trial-pack-expired/);
   });
 
   // ─── Security/financial bypass framing ───────────────────────
@@ -95,17 +97,17 @@ describe('W929 V-204 email-preferences cross-source invariant', () => {
 
   // ─── 8-event list() coverage ─────────────────────────────────
 
-  it('CRITICAL list() returns 8 events — 6 lifecycle (V-204) + session-success-first (V-304a) + billing-renewal-reminder (V-327). The 8-event union covers all opt-outable emails the customer-dashboard surfaces.', () => {
+  it('CRITICAL list() returns 6 events — 4 lifecycle (V-204) + session-success-first (V-304a) + billing-renewal-reminder (V-327). The 6-event union covers all opt-outable emails the customer-dashboard surfaces (the trial-pack pair was removed with the dead trial_pack lifecycle).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/email-preferences.ts'));
     expect(p).toMatch(/const allEvents: OptOutableEmailEvent\[\] = \[/);
     expect(p).toMatch(/'signup-welcome',/);
     expect(p).toMatch(/'session-failed-first',/);
     expect(p).toMatch(/'session-success-first',/);
     expect(p).toMatch(/'tier-changed',/);
-    expect(p).toMatch(/'trial-pack-purchased',/);
-    expect(p).toMatch(/'trial-pack-expired',/);
     expect(p).toMatch(/'billing-receipt',/);
     expect(p).toMatch(/'billing-renewal-reminder',/);
+    expect(p).not.toMatch(/'trial-pack-purchased',/);
+    expect(p).not.toMatch(/'trial-pack-expired',/);
   });
 
   // ─── EmailPreferenceRecord 4-field shape ─────────────────────

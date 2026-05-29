@@ -427,8 +427,7 @@ export async function createProductionDeps(
 
   // V-202c / V-202b — account lifecycle dispatcher (paired audit emit +
   // email send for events that have both surfaces). Wires
-  // `session.failed.first`, `subscription.tier_changed`,
-  // `subscription.trial_pack_purchased`. V-202b moved the V-226
+  // `session.failed.first`, `subscription.tier_changed`. V-202b moved the V-226
   // tier-change audit emit from StripeWebhooksService into
   // lifecycle.handleTierChanged so the audit + email pair lives behind
   // one call (founder verdict 2026-05-05).

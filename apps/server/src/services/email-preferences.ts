@@ -1,8 +1,7 @@
 // V-204 — per-account email notification preferences.
 //
 // Customers opt out of "lifecycle" emails (signup-welcome, session-
-// failed-first, tier-changed, trial-pack-purchased, trial-pack-
-// expired, billing-receipt). Security + financial emails (signup-
+// failed-first, tier-changed, billing-receipt). Security + financial emails (signup-
 // verification, password-reset, billing-failure, subscription-
 // cancellation, support-ack) bypass this gate entirely — they
 // always send.
@@ -62,8 +61,6 @@ export class EmailPreferencesService {
       'session-failed-first',
       'session-success-first',
       'tier-changed',
-      'trial-pack-purchased',
-      'trial-pack-expired',
       'billing-receipt',
       'billing-renewal-reminder',
     ];

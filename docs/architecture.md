@@ -197,9 +197,11 @@ Best-effort by contract: errors during dispatch are caught + logged warn, never 
 Event kinds wired today (`LifecycleEvent` discriminated union):
 
 - `session.failed.first` — V-202c. Emitted from `SessionsService.runWithFailureCapture`. One-shot per account (column-based dedup).
+- `session.success.first` — V-304a. First successful session on the account. One-shot per account (column-based dedup).
 - `subscription.tier_changed` — V-202b. Emitted from `StripeWebhooksService.handleSubscriptionUpsert` / `handleSubscriptionDeleted`. Audit + email; short-circuits on no-op transitions.
-- `subscription.trial_pack_purchased` — V-202b. Emitted from `StripeWebhooksService.handleCheckoutCompleted` (mode=payment).
-- `subscription.trial_pack_expired` — V-202d. Emitted from the `trial_pack.expired` `scheduled_jobs` handler.
+- `subscription.renewal_reminder` — V-327. Emitted from the Stripe `invoice.upcoming` webhook (~7 days before renewal). Email-only.
+
+(The two `trial_pack` lifecycle kinds were removed with the dead trial_pack lifecycle — no production path ever emitted them.)
 
 Adding a new lifecycle event = extend the discriminated union, add a handler in the service, optionally extend `AccountLifecycleServiceConfig` for any new templating URLs, and add an opt-out preference key in `OptOutableEmailEvent` if the email should be customer-suppressible.
 
@@ -211,7 +213,7 @@ Adding a new lifecycle event = extend the discriminated union, add a handler in 
 - `processTick(now)` — atomic claim (`SELECT … FOR UPDATE SKIP LOCKED` in a CTE → `UPDATE … RETURNING`), dispatch each claimed row to its registered handler, mark complete / retry-with-exponential-backoff / failed-permanently. Multi-replica safe: concurrent workers across processes never claim the same row.
 - `register(jobType, handler)` — handler registry keyed by `job_type`. Unhandled `job_type` values mark the row failed with operator-visible error.
 
-First registered handler: `trial_pack.expired` → delegates to `accountLifecycleService.emit({ kind: 'subscription.trial_pack_expired' })`. Future cron-shaped jobs (subscription renewal reminders, end-of-month rollups, cleanup jobs) reuse the same table by adding a `job_type` discriminator + handler — no new table.
+Registered handlers today: `auth_tokens.sweep` (expired auth-token GC), `sessions.duration_sweep` (free-tier session auto-destroy), `cost.recompute_nightly` (usage cost rollup) — each self-re-arms by enqueuing its next run from its own handler. Future cron-shaped jobs (end-of-month rollups, cleanup jobs) reuse the same table by adding a `job_type` discriminator + handler — no new table.
 
 The `setInterval(processTick, ...)` poller is constructed but not yet auto-started in bootstrap (covers both `ScheduledJobsService` and `ValidationHarnessService`); founder approval pending on cadence. Tests + manual `processTick` calls work today.
 

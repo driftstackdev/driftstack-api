@@ -133,7 +133,7 @@ export class StripeWebhooksService {
     /**
      * V-226 / V-202b — optional account-lifecycle dispatcher. When wired,
      * Stripe handler points emit lifecycle events
-     * (`subscription.tier_changed`, `subscription.trial_pack_purchased`)
+     * (`subscription.tier_changed`)
      * which fan out into audit log + transactional email at one call
      * site. V-226 originally did the audit emit directly here; V-202b
      * relocated the emit into `AccountLifecycleService.handleTierChanged`

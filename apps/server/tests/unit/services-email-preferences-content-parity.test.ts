@@ -5,11 +5,12 @@
 // opt-out (regulatory risk for unsolicited marketing) OR adds a
 // password-reset to the opt-outable set (catastrophic for security).
 //
-//   • V-204 framing pinned + opt-outable cluster (6 lifecycle:
-//     signup-welcome, session-failed-first, tier-changed, trial-pack-
-//     purchased, trial-pack-expired, billing-receipt) vs bypass
-//     cluster (5 security/financial: signup-verification, password-
-//     reset, billing-failure, subscription-cancellation, support-ack).
+//   • V-204 framing pinned + opt-outable cluster (4 lifecycle:
+//     signup-welcome, session-failed-first, tier-changed,
+//     billing-receipt) vs bypass cluster (5 security/financial:
+//     signup-verification, password-reset, billing-failure,
+//     subscription-cancellation, support-ack). (trial-pack-purchased/
+//     expired removed with the dead trial_pack lifecycle.)
 //   • Storage convention: absence-of-row = opted-in default; steady-
 //     state zero rows per account.
 //   • EmailPreferenceRecord: 4 fields (accountId / eventType /
@@ -43,8 +44,10 @@ describe('W400.A apps/server/src/services/email-preferences.ts content parity', 
   it('V-204 framing pinned + opt-out cluster (lifecycle) vs bypass cluster (security + financial)', () => {
     expect(body).toMatch(/V-204 — per-account email notification preferences\./);
     expect(body).toMatch(
-      /Customers opt out of "lifecycle" emails \(signup-welcome, session-\s*\n?\s*\/\/\s*failed-first, tier-changed, trial-pack-purchased, trial-pack-\s*\n?\s*\/\/\s*expired, billing-receipt\)\./,
+      /Customers opt out of "lifecycle" emails \(signup-welcome, session-\s*\n?\s*\/\/\s*failed-first, tier-changed, billing-receipt\)\./,
     );
+    expect(body).not.toMatch(/trial-pack-purchased/);
+    expect(body).not.toMatch(/trial-pack-expired/);
     expect(body).toMatch(
       /Security \+ financial emails \(signup-\s*\n?\s*\/\/\s*verification, password-reset, billing-failure, subscription-\s*\n?\s*\/\/\s*cancellation, support-ack\) bypass this gate entirely — they\s*\n?\s*\/\/\s*always send\./,
     );
@@ -94,16 +97,16 @@ describe('W400.A apps/server/src/services/email-preferences.ts content parity', 
     );
   });
 
-  it('list: 8-entry allEvents matrix pinned (signup-welcome / session-failed-first / session-success-first / tier-changed / trial-pack-purchased / trial-pack-expired / billing-receipt / billing-renewal-reminder)', () => {
+  it('list: 6-entry allEvents matrix pinned (signup-welcome / session-failed-first / session-success-first / tier-changed / billing-receipt / billing-renewal-reminder; trial-pack pair removed with the dead trial_pack lifecycle)', () => {
     expect(body).toMatch(/const allEvents: OptOutableEmailEvent\[\] = \[/);
     expect(body).toMatch(/'signup-welcome',/);
     expect(body).toMatch(/'session-failed-first',/);
     expect(body).toMatch(/'session-success-first',/);
     expect(body).toMatch(/'tier-changed',/);
-    expect(body).toMatch(/'trial-pack-purchased',/);
-    expect(body).toMatch(/'trial-pack-expired',/);
     expect(body).toMatch(/'billing-receipt',/);
     expect(body).toMatch(/'billing-renewal-reminder',/);
+    expect(body).not.toMatch(/'trial-pack-purchased',/);
+    expect(body).not.toMatch(/'trial-pack-expired',/);
   });
 
   it('list: absent-row default returns optedIn=true + updatedAt=new Date(0) epoch sentinel ("never customised")', () => {

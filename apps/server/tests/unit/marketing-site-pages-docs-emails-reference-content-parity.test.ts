@@ -69,12 +69,9 @@ describe('W519.C apps/marketing-site/src/pages/docs/emails-reference.astro conte
     expect(body).toMatch(
       /<tr><td><strong>tier-changed<\/strong><\/td><td>Tier upgrade or downgrade lands\.<\/td><\/tr>/,
     );
-    expect(body).toMatch(
-      /<tr><td><strong>trial-pack-purchased<\/strong><\/td><td>Trial Pack one-time credit purchased\.<\/td><\/tr>/,
-    );
-    expect(body).toMatch(
-      /<tr><td><strong>trial-pack-expired<\/strong><\/td><td>Trial Pack expiry deadline reached\.<\/td><\/tr>/,
-    );
+    // Trial-pack rows removed with the dead trial_pack lifecycle.
+    expect(body).not.toMatch(/<strong>trial-pack-purchased<\/strong>/);
+    expect(body).not.toMatch(/<strong>trial-pack-expired<\/strong>/);
   });
 
   it('Billing 4-template framing pinned. Re-enabled by slice 236 after restoring the V-304b anchor on the billing-renewal-reminder row at emails-reference.astro:91 (same anchor-dropped-to-bare-space pattern as the slice 235 V-304a restore on the same page)', () => {

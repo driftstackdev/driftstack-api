@@ -6,10 +6,11 @@
 //     - signup-verification, password-reset, billing-failure,
 //       subscription-cancellation, support-ack.
 //
-//   Opt-outable (8, matches OptOutableEmailEventSchema):
+//   Opt-outable (6, matches OptOutableEmailEventSchema):
 //     - signup-welcome, session-failed-first, session-success-first,
-//       tier-changed, trial-pack-purchased, trial-pack-expired,
-//       billing-receipt, billing-renewal-reminder.
+//       tier-changed, billing-receipt, billing-renewal-reminder.
+//       (trial-pack-purchased/expired removed with the dead
+//        trial_pack lifecycle.)
 //
 //   Operational (other):
 //     - status-subscription-confirmation, status-subscription-welcome,
@@ -53,8 +54,6 @@ const OPT_OUTABLE_TEMPLATES = [
   'session-failed-first',
   'session-success-first',
   'tier-changed',
-  'trial-pack-purchased',
-  'trial-pack-expired',
   'billing-receipt',
   'billing-renewal-reminder',
 ] as const;
@@ -81,16 +80,19 @@ describe('W883 Email-template registry cross-source invariant', () => {
     }
   });
 
-  // ─── 8 opt-outable templates present + match Zod schema ──────
+  // ─── 6 opt-outable templates present + match Zod schema ──────
 
-  it('CRITICAL apps/server/src/services/email.ts TEMPLATES has all 8 opt-outable templates. The 8 match the OptOutableEmailEventSchema exactly — every opt-outable event has a template; every template that is opt-outable has a schema entry.', () => {
+  it('CRITICAL apps/server/src/services/email.ts TEMPLATES has all 6 opt-outable templates. The 6 match the OptOutableEmailEventSchema exactly — every opt-outable event has a template; every template that is opt-outable has a schema entry. (The trial-pack pair was removed with the dead trial_pack lifecycle.)', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/email.ts'));
     for (const t of OPT_OUTABLE_TEMPLATES) {
       expect(p, `TEMPLATES must include '${t}'`).toMatch(new RegExp(`'${t}': \\{`));
     }
+    // Trial-pack templates removed — assert GONE so they can't regress back.
+    expect(p).not.toMatch(/'trial-pack-purchased': \{/);
+    expect(p).not.toMatch(/'trial-pack-expired': \{/);
   });
 
-  it('CRITICAL OPT_OUTABLE_TEMPLATES (8) MATCHES OptOutableEmailEventSchema (8). Both source-of-truth lists must agree element-by-element.', () => {
+  it('CRITICAL OPT_OUTABLE_TEMPLATES (6) MATCHES OptOutableEmailEventSchema (6). Both source-of-truth lists must agree element-by-element.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     const m = p.match(/OptOutableEmailEventSchema = z\.enum\(\[([\s\S]+?)\]\)/);
     expect(m).not.toBeNull();
@@ -140,15 +142,15 @@ describe('W883 Email-template registry cross-source invariant', () => {
     }
   });
 
-  // ─── Cardinality: 5 + 8 + 7 = 20 → registry has ≥ 20 ─────────
+  // ─── Cardinality: 5 + 6 + 9 = 20 → registry has ≥ 20 ─────────
 
-  it('CRITICAL email template registry has at least 22 templates (5 critical + 8 opt-outable + 9 operational). Future templates may add to the operational bucket without breaking this; if total drops below 22, drift dropped a known-required template.', () => {
+  it('CRITICAL email template registry has at least 20 templates (5 critical + 6 opt-outable + 9 operational). Future templates may add to the operational bucket without breaking this; if total drops below 20, drift dropped a known-required template. (The trial-pack pair was removed with the dead trial_pack lifecycle: opt-outable 8→6.)', () => {
     expect(CRITICAL_PATH_TEMPLATES.length).toBe(5);
-    expect(OPT_OUTABLE_TEMPLATES.length).toBe(8);
+    expect(OPT_OUTABLE_TEMPLATES.length).toBe(6);
     expect(OPERATIONAL_TEMPLATES.length).toBe(9);
     const totalKnown =
       CRITICAL_PATH_TEMPLATES.length + OPT_OUTABLE_TEMPLATES.length + OPERATIONAL_TEMPLATES.length;
-    expect(totalKnown).toBe(22);
+    expect(totalKnown).toBe(20);
   });
 
   // ─── EmailService interface header pinned ─────────────────────

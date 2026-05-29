@@ -7,15 +7,12 @@
 // retries on transient failure / fails permanently when attempts
 // exhaust).
 //
-// First consumer: trial-pack expiry. When a customer purchases the
-// trial pack, an enqueue at `expiresAt` schedules a
-// `trial_pack.expired` job. The handler delegates to
-// AccountLifecycleService.emit({ kind: 'subscription.trial_pack_expired' })
-// which fires the email (opt-out aware).
-//
-// Future consumers (subscription renewal reminders, usage rollups,
-// cleanup jobs) just register a handler for their job_type and
-// enqueue rows. No new table.
+// Consumers register a handler keyed by job_type and enqueue rows —
+// no new table per consumer. Live consumers: `auth_tokens.sweep`
+// (expired auth-token GC), `sessions.duration_sweep` (free-tier
+// session auto-destroy), `cost.recompute_nightly` (usage cost
+// rollup). Each self-re-arms by enqueuing its next run from its own
+// handler.
 
 import type { Logger } from '../lib/logger.js';
 
@@ -37,9 +34,8 @@ export interface EnqueueScheduledJobInput {
   /**
    * When true, `enqueue` no-ops if a pending job (completed_at IS NULL
    * AND failed_at IS NULL) already exists with the same
-   * (account_id, job_type). Used by trial-pack expiry to ensure one
-   * pending job per account regardless of how many times the purchase
-   * webhook re-fires.
+   * (account_id, job_type). Used to ensure one pending job per account
+   * regardless of how many times the triggering event re-fires.
    */
   dedupOnAccountAndType?: boolean;
 }
@@ -111,7 +107,7 @@ export class ScheduledJobsService {
     await Promise.all(due.map((job) => this.runOne(job, now)));
     // Info log on the rare non-empty tick — gives ops/founder a
     // single-line audit trail when cadence-fire jobs (auth-tokens
-    // sweep, cost nightly, trial-pack expiry) actually fire,
+    // sweep, cost nightly, session duration sweep) actually fire,
     // without flooding logs on the 60s empty-tick majority.
     this.logger.info(
       {

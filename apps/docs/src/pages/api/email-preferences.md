@@ -42,8 +42,6 @@ Response (200):
     { "event_type": "session-success-first", "opted_in": true },
     { "event_type": "session-failed-first", "opted_in": true },
     { "event_type": "tier-changed", "opted_in": true },
-    { "event_type": "trial-pack-purchased", "opted_in": true },
-    { "event_type": "trial-pack-expired", "opted_in": true },
     { "event_type": "billing-receipt", "opted_in": true },
     { "event_type": "billing-renewal-reminder", "opted_in": true }
   ]
@@ -94,8 +92,6 @@ Required scope: `write` or `account_owner`.
 | `session-success-first`    | One-time activation milestone               | opt-in  |
 | `session-failed-first`     | One-time first-failure notice               | opt-in  |
 | `tier-changed`             | Confirmation when subscription tier changes | opt-in  |
-| `trial-pack-purchased`     | $2.99 trial pack confirmation               | opt-in  |
-| `trial-pack-expired`       | 14-day window closed                        | opt-in  |
 | `billing-receipt`          | Successful payment receipt                  | opt-in  |
 | `billing-renewal-reminder` | 7-days-before-renewal heads-up              | opt-in  |
 

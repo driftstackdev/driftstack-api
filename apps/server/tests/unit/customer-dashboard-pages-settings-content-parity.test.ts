@@ -41,15 +41,15 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     );
   });
 
-  it('V-204 EMAIL_EVENTS 8-entry list: signup-welcome / session-failed-first / session-success-first / tier-changed / trial-pack-purchased / trial-pack-expired / billing-receipt / billing-renewal-reminder — pinned so the customer-facing opt-outable email taxonomy stays consistent with OptOutableEmailEventSchema (drift to dropping any would orphan customers from opting out of a lifecycle email they receive; drift to adding security/financial events would let customers opt out of must-deliver emails)', () => {
+  it('V-204 EMAIL_EVENTS 6-entry list: signup-welcome / session-failed-first / session-success-first / tier-changed / billing-receipt / billing-renewal-reminder — pinned so the customer-facing opt-outable email taxonomy stays consistent with OptOutableEmailEventSchema (drift to dropping any would orphan customers from opting out of a lifecycle email they receive; drift to adding security/financial events would let customers opt out of must-deliver emails). The trial-pack pair was removed with the dead trial_pack lifecycle.', () => {
     expect(body).toMatch(/type: 'signup-welcome',/);
     expect(body).toMatch(/type: 'session-failed-first',/);
     expect(body).toMatch(/type: 'session-success-first',/);
     expect(body).toMatch(/type: 'tier-changed',/);
-    expect(body).toMatch(/type: 'trial-pack-purchased',/);
-    expect(body).toMatch(/type: 'trial-pack-expired',/);
     expect(body).toMatch(/type: 'billing-receipt',/);
     expect(body).toMatch(/type: 'billing-renewal-reminder',/);
+    expect(body).not.toMatch(/type: 'trial-pack-purchased',/);
+    expect(body).not.toMatch(/type: 'trial-pack-expired',/);
   });
 
   it("Security-vs-lifecycle email framing pinned: 'Security + financial emails (signup verification, password reset, billing failure, subscription cancellation, support replies) always go out. Below are the optional lifecycle emails — toggle off any you don't want.' — pinned so the must-deliver vs. opt-outable distinction stays explicit (drift to dropping the security/financial framing would let customers think they can opt out of billing-failure or password-reset emails, breaking the security model)", () => {

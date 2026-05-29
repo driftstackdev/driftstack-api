@@ -168,14 +168,6 @@ function createRecordingEmailService(realService: EmailService): {
       record('tier-changed', args);
       await realService.sendTierChanged(args);
     },
-    sendTrialPackPurchased: async (args) => {
-      record('trial-pack-purchased', args);
-      await realService.sendTrialPackPurchased(args);
-    },
-    sendTrialPackExpired: async (args) => {
-      record('trial-pack-expired', args);
-      await realService.sendTrialPackExpired(args);
-    },
     sendStatusSubscriptionConfirmation: async (args) => {
       record('status-subscription-confirmation', args);
       await realService.sendStatusSubscriptionConfirmation(args);

@@ -7,8 +7,7 @@
 //
 //   • V-202c / V-202b framing pinned: single emit(accountId, event)
 //     abstraction (founder verdict 2026-05-05); V-202c session.failed.
-//     first; V-202b subscription.tier_changed + subscription.trial_
-//     pack_purchased.
+//     first; V-202b subscription.tier_changed.
 //   • Best-effort posture: dispatch errors warn-logged + swallowed;
 //     caller's primary path (Stripe handler / session failure / etc)
 //     never blocked.
@@ -18,10 +17,10 @@
 //     non-tier mutation noise).
 //   • Email-preference opt-outs honored via
 //     EmailPreferencesService.shouldSend.
-//   • LifecycleEvent: 6-kind union (session.failed.first /
+//   • LifecycleEvent: 4-kind union (session.failed.first /
 //     session.success.first / subscription.tier_changed /
-//     subscription.trial_pack_purchased / subscription.trial_pack_
-//     expired / subscription.renewal_reminder).
+//     subscription.renewal_reminder). (trial_pack_purchased/expired
+//     removed with the dead trial_pack lifecycle.)
 //   • V-304a session.success.first: atomic-check-and-set first-success
 //     dedup (mirror pattern of failed.first).
 //   • V-202b handleTierChanged: short-circuit on fromTier===toTier;
@@ -70,13 +69,13 @@ describe('W406.C apps/server/src/services/account-lifecycle.ts content parity', 
     );
   });
 
-  it('LifecycleEvent: 6-kind union (session.failed.first / session.success.first / subscription.tier_changed / trial_pack_purchased / trial_pack_expired / renewal_reminder)', () => {
+  it('LifecycleEvent: 4-kind union (session.failed.first / session.success.first / subscription.tier_changed / renewal_reminder)', () => {
     expect(body).toMatch(/export type LifecycleEvent =/);
     expect(body).toMatch(/\| \{\s*\n?\s*kind: 'session\.failed\.first';/);
     expect(body).toMatch(/\| \{\s*\n?\s*kind: 'session\.success\.first';/);
     expect(body).toMatch(/\| \{\s*\n?\s*kind: 'subscription\.tier_changed';/);
-    expect(body).toMatch(/\| \{\s*\n?\s*kind: 'subscription\.trial_pack_purchased';/);
-    expect(body).toMatch(/\| \{\s*\n?\s*kind: 'subscription\.trial_pack_expired';/);
+    expect(body).not.toMatch(/kind: 'subscription\.trial_pack_purchased';/);
+    expect(body).not.toMatch(/kind: 'subscription\.trial_pack_expired';/);
     expect(body).toMatch(
       /\/\/ V-327 — fires when Stripe's `invoice\.upcoming` webhook arrives\s*\n?\s*\/\/ \(~7 days before renewal\)\. Email-only; no audit row[\s\S]+?kind: 'subscription\.renewal_reminder';/,
     );
@@ -185,25 +184,15 @@ describe('W406.C apps/server/src/services/account-lifecycle.ts content parity', 
     expect(body).toMatch(/private readonly accountAudit: AccountAuditService \| null = null,/);
   });
 
-  it("handleTrialPackPurchased: opt-out check 'trial-pack-purchased' + sendTrialPackPurchased with creditCentsRemaining + dashboardUrl", () => {
-    expect(body).toMatch(
-      /const allowed = await this\.emailPreferences\.shouldSend\(accountId, 'trial-pack-purchased'\);/,
-    );
-    expect(body).toMatch(
-      /await this\.email\.sendTrialPackPurchased\(\{\s*\n?\s*to: account\.email,\s*\n?\s*creditCentsRemaining: event\.creditCents,\s*\n?\s*expiresAt: event\.expiresAt,\s*\n?\s*dashboardUrl: this\.dashboardUrl,/,
-    );
+  it('handleTrialPackPurchased + handleTrialPackExpired removed with the dead trial_pack lifecycle', () => {
+    expect(body).not.toMatch(/handleTrialPackPurchased/);
+    expect(body).not.toMatch(/handleTrialPackExpired/);
+    expect(body).not.toMatch(/sendTrialPack/);
+    expect(body).not.toMatch(/'trial-pack-purchased'/);
+    expect(body).not.toMatch(/'trial-pack-expired'/);
   });
 
-  it("handleTrialPackExpired: opt-out check 'trial-pack-expired' + upgradeUrl=billingPortalUrl (where customers pick paid tier)", () => {
-    expect(body).toMatch(
-      /const allowed = await this\.emailPreferences\.shouldSend\(accountId, 'trial-pack-expired'\);/,
-    );
-    expect(body).toMatch(
-      /\/\/ Upgrade URL points to the billing page where customers pick a paid tier\.\s*\n?\s*upgradeUrl: this\.billingPortalUrl,/,
-    );
-  });
-
-  it('AccountLifecycleServiceConfig: 3 URL fields (docsBaseUrl + V-202b billingPortalUrl + V-202b dashboardUrl)', () => {
+  it('AccountLifecycleServiceConfig: 3 URL fields (docsBaseUrl + V-202b billingPortalUrl + V-304a dashboardUrl)', () => {
     expect(body).toMatch(/export interface AccountLifecycleServiceConfig \{/);
     expect(body).toMatch(/docsBaseUrl: string;/);
     expect(body).toMatch(
@@ -211,7 +200,7 @@ describe('W406.C apps/server/src/services/account-lifecycle.ts content parity', 
     );
     expect(body).toMatch(/billingPortalUrl: string;/);
     expect(body).toMatch(
-      /V-202b — Customer dashboard URL surfaced in trial-pack-purchased\s*\n?\s*\*\s*email\. Same root as the verify-email \/ login URLs\./,
+      /V-304a — Customer dashboard URL surfaced in the first-successful-\s*\n?\s*\*\s*session email\. Same root as the verify-email \/ login URLs\./,
     );
     expect(body).toMatch(/dashboardUrl: string;/);
   });

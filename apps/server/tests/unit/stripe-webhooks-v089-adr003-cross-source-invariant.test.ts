@@ -189,13 +189,14 @@ describe('W955 V-089 + ADR-003 stripe-webhooks cross-source invariant', () => {
 
   // ─── V-226 / V-202b lifecycle dispatcher framing ─────────────
 
-  it("CRITICAL V-226 / V-202b lifecycle dispatcher framing — 'V-226 / V-202b — optional account-lifecycle dispatcher. When wired, Stripe handler points emit lifecycle events (subscription.tier_changed, subscription.trial_pack_purchased) which fan out into audit log + transactional email at one call site. V-226 originally did the audit emit directly here; V-202b'. The V-226→V-202b refactor consolidated audit + email into a single dispatcher.", () => {
+  it("CRITICAL V-226 / V-202b lifecycle dispatcher framing — 'V-226 / V-202b — optional account-lifecycle dispatcher. When wired, Stripe handler points emit lifecycle events (subscription.tier_changed) which fan out into audit log + transactional email at one call site. V-226 originally did the audit emit directly here; V-202b'. The V-226→V-202b refactor consolidated audit + email into a single dispatcher. (trial_pack_purchased removed with the dead trial_pack lifecycle.)", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/stripe-webhooks.ts'));
     expect(p).toMatch(/V-226 \/ V-202b — optional account-lifecycle dispatcher\. When wired,/);
     expect(p).toMatch(/Stripe handler points emit lifecycle events/);
-    expect(p).toMatch(/\(`subscription\.tier_changed`, `subscription\.trial_pack_purchased`\)/);
+    expect(p).toMatch(/\(`subscription\.tier_changed`\)/);
     expect(p).toMatch(/which fan out into audit log \+ transactional email at one call/);
     expect(p).toMatch(/site\./);
+    expect(p).not.toMatch(/`subscription\.trial_pack_purchased`/);
   });
 
   // ─── 5+ subscription event types dispatched ──────────────────

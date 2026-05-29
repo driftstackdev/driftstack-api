@@ -22,8 +22,6 @@
 //   - support-ack (auto-reply when support@ receives a message)
 //   - session-failed-first        (V-202; first-failure-only, V-090)
 //   - tier-changed                (V-202)
-//   - trial-pack-purchased        (V-202)
-//   - trial-pack-expired          (V-202)
 //   - oauth-pending-verification  (V-667.C; verdict-1 merge confirm)
 
 import { ServerClient as PostmarkClient } from 'postmark';
@@ -90,15 +88,6 @@ export interface EmailService {
     effectiveAt: Date;
     portalUrl: string;
   }): Promise<void>;
-  /** V-202 — trial-pack purchase confirmation. */
-  sendTrialPackPurchased(args: {
-    to: string;
-    creditCentsRemaining: number;
-    expiresAt: Date;
-    dashboardUrl: string;
-  }): Promise<void>;
-  /** V-202 — trial-pack expiry notice. Fires from the expiry job. */
-  sendTrialPackExpired(args: { to: string; upgradeUrl: string }): Promise<void>;
   /**
    * V-295c3 — public-status-page subscriber double-opt-in confirmation.
    * `confirmLink` is the URL containing the plaintext confirm token.
@@ -416,20 +405,6 @@ const TEMPLATES = {
     html: (v) =>
       `<p>Your Driftstack subscription has been changed from <strong>${v.fromTier}</strong> to <strong>${v.toTier}</strong>, effective <strong>${v.effectiveAt}</strong> (UTC).</p><p><a href="${v.portalUrl}">Manage subscription</a></p><p>— Driftstack</p>`,
   },
-  'trial-pack-purchased': {
-    subject: 'Driftstack — $2.99 trial pack purchased',
-    text: (v) =>
-      `Your $2.99 trial pack is active.\n\nCredit remaining: ${v.creditCentsRemaining} cents (~16 hours of iPhone Safari sessions at $0.18/hr)\nExpires: ${v.expiresAt} (UTC, 14 days)\n\nReady when you are: ${v.dashboardUrl}\n\nAfter the trial pack expires, your account stays free — no auto-charge. Pick a paid tier any time.\n\n— Driftstack`,
-    html: (v) =>
-      `<p>Your <strong>$2.99 trial pack</strong> is active.</p><ul><li><strong>Credit remaining:</strong> ${v.creditCentsRemaining} cents (~16 hours of iPhone Safari sessions at $0.18/hr)</li><li><strong>Expires:</strong> ${v.expiresAt} (UTC, 14 days)</li></ul><p>Ready when you are: <a href="${v.dashboardUrl}">${v.dashboardUrl}</a></p><p>After the trial pack expires, your account stays free — no auto-charge. Pick a paid tier any time.</p><p>— Driftstack</p>`,
-  },
-  'trial-pack-expired': {
-    subject: 'Driftstack — trial pack expired',
-    text: (v) =>
-      `Your Driftstack trial pack has expired (14-day window closed). Your account stays active but at $0/month — no charges.\n\nPick a paid tier when you're ready: ${v.upgradeUrl}\n\nThe trial pack is once per account; subsequent activity goes through a regular subscription.\n\n— Driftstack`,
-    html: (v) =>
-      `<p>Your Driftstack trial pack has expired (14-day window closed). Your account stays active but at <strong>$0/month</strong> — no charges.</p><p>Pick a paid tier when you're ready: <a href="${v.upgradeUrl}">${v.upgradeUrl}</a></p><p>The trial pack is once per account; subsequent activity goes through a regular subscription.</p><p>— Driftstack</p>`,
-  },
   // V-295c3 — DRAFT copy. Tier-3 review-gated; founder may revise the
   // copy before launch. Engineering scaffolding ships unchanged.
   'status-subscription-confirmation': {
@@ -622,8 +597,6 @@ export function createEmailService({
       sendSessionFailedFirst: async () => {},
       sendSessionSuccessFirst: async () => {},
       sendTierChanged: async () => {},
-      sendTrialPackPurchased: async () => {},
-      sendTrialPackExpired: async () => {},
       sendStatusSubscriptionConfirmation: async () => {},
       sendStatusSubscriptionWelcome: async () => {},
       sendStatusIncidentNotification: async () => {},
@@ -724,13 +697,6 @@ export function createEmailService({
         effectiveAt: effectiveAt.toISOString(),
         portalUrl,
       }),
-    sendTrialPackPurchased: ({ to, creditCentsRemaining, expiresAt, dashboardUrl }) =>
-      send('trial-pack-purchased', to, {
-        creditCentsRemaining: String(creditCentsRemaining),
-        expiresAt: expiresAt.toISOString(),
-        dashboardUrl,
-      }),
-    sendTrialPackExpired: ({ to, upgradeUrl }) => send('trial-pack-expired', to, { upgradeUrl }),
     sendStatusSubscriptionConfirmation: ({ to, confirmLink, expiresAt }) =>
       send('status-subscription-confirmation', to, {
         confirmLink,

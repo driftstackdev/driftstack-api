@@ -6,8 +6,6 @@
 // so call sites stay consistent as the set of lifecycle events grows.
 // V-202c landed `session.failed.first`. V-202b adds:
 //   - `subscription.tier_changed` (paired audit emit + tier-changed email)
-//   - `subscription.trial_pack_purchased` (email-only — no audit; no
-//      tier flip in the current flow)
 //
 // Contract notes:
 //   - Best-effort by design. Errors during dispatch are caught + logged
@@ -74,14 +72,6 @@ export type LifecycleEvent =
       stripeEventId: string;
     }
   | {
-      kind: 'subscription.trial_pack_purchased';
-      creditCents: number;
-      expiresAt: Date;
-    }
-  | {
-      kind: 'subscription.trial_pack_expired';
-    }
-  | {
       // V-327 — fires when Stripe's `invoice.upcoming` webhook arrives
       // (~7 days before renewal). Email-only; no audit row (the
       // upcoming-charge isn't a state change, just a heads-up). Per
@@ -109,8 +99,8 @@ export interface AccountLifecycleServiceConfig {
    */
   billingPortalUrl: string;
   /**
-   * V-202b — Customer dashboard URL surfaced in trial-pack-purchased
-   * email. Same root as the verify-email / login URLs.
+   * V-304a — Customer dashboard URL surfaced in the first-successful-
+   * session email. Same root as the verify-email / login URLs.
    */
   dashboardUrl: string;
 }
@@ -150,12 +140,6 @@ export class AccountLifecycleService {
           return;
         case 'subscription.tier_changed':
           await this.handleTierChanged(accountId, event);
-          return;
-        case 'subscription.trial_pack_purchased':
-          await this.handleTrialPackPurchased(accountId, event);
-          return;
-        case 'subscription.trial_pack_expired':
-          await this.handleTrialPackExpired(accountId);
           return;
         case 'subscription.renewal_reminder':
           await this.handleRenewalReminder(accountId, event);
@@ -298,38 +282,6 @@ export class AccountLifecycleService {
       toTier: event.toTier,
       effectiveAt: event.effectiveAt,
       portalUrl: this.billingPortalUrl,
-    });
-  }
-
-  private async handleTrialPackPurchased(
-    accountId: string,
-    event: { creditCents: number; expiresAt: Date },
-  ): Promise<void> {
-    const allowed = await this.emailPreferences.shouldSend(accountId, 'trial-pack-purchased');
-    if (!allowed) return;
-
-    const account = await this.repo.findForLifecycle(accountId);
-    if (account === null) return;
-
-    await this.email.sendTrialPackPurchased({
-      to: account.email,
-      creditCentsRemaining: event.creditCents,
-      expiresAt: event.expiresAt,
-      dashboardUrl: this.dashboardUrl,
-    });
-  }
-
-  private async handleTrialPackExpired(accountId: string): Promise<void> {
-    const allowed = await this.emailPreferences.shouldSend(accountId, 'trial-pack-expired');
-    if (!allowed) return;
-
-    const account = await this.repo.findForLifecycle(accountId);
-    if (account === null) return;
-
-    await this.email.sendTrialPackExpired({
-      to: account.email,
-      // Upgrade URL points to the billing page where customers pick a paid tier.
-      upgradeUrl: this.billingPortalUrl,
     });
   }
 

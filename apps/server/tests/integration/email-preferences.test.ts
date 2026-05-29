@@ -31,7 +31,7 @@ describe('GET /v1/account/email-preferences', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<ListResponse>();
-    expect(body.data.length).toBe(8);
+    expect(body.data.length).toBe(6);
     expect(body.data.every((p) => p.opted_in)).toBe(true);
     const types = body.data.map((p) => p.event_type).sort();
     expect(types).toEqual([
@@ -41,8 +41,6 @@ describe('GET /v1/account/email-preferences', () => {
       'session-success-first',
       'signup-welcome',
       'tier-changed',
-      'trial-pack-expired',
-      'trial-pack-purchased',
     ]);
   });
 });
@@ -78,14 +76,14 @@ describe('PUT /v1/account/email-preferences', () => {
       method: 'PUT',
       url: '/v1/account/email-preferences',
       headers: auth(fx),
-      payload: { event_type: 'trial-pack-purchased', opted_in: false },
+      payload: { event_type: 'session-success-first', opted_in: false },
     });
     // Re-opt in.
     const reopen = await fx.app.inject({
       method: 'PUT',
       url: '/v1/account/email-preferences',
       headers: auth(fx),
-      payload: { event_type: 'trial-pack-purchased', opted_in: true },
+      payload: { event_type: 'session-success-first', opted_in: true },
     });
     expect(reopen.statusCode).toBe(204);
 

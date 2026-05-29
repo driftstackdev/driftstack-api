@@ -120,10 +120,9 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
       /V-304a — first successful session notice\. Once-per-account; caller dedupes[\s\S]+?sendSessionSuccessFirst\(args: \{/,
     );
     expect(body).toMatch(/sendTierChanged\(args: \{/);
-    expect(body).toMatch(/sendTrialPackPurchased\(args: \{/);
-    expect(body).toMatch(
-      /sendTrialPackExpired\(args: \{ to: string; upgradeUrl: string \}\): Promise<void>;/,
-    );
+    // sendTrialPackPurchased + sendTrialPackExpired removed with the dead trial_pack lifecycle.
+    expect(body).not.toMatch(/sendTrialPackPurchased\(/);
+    expect(body).not.toMatch(/sendTrialPackExpired\(/);
     expect(body).toMatch(
       /V-295c3 — public-status-page subscriber double-opt-in confirmation[\s\S]+?sendStatusSubscriptionConfirmation\(args: \{/,
     );
@@ -135,7 +134,7 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
     expect(body).toMatch(/readonly isConfigured: boolean;/);
   });
 
-  it('Templates: 17-entry inline TEMPLATES object satisfies Record<string, Template> with signup-verification + password-reset + billing-receipt/failure/renewal-reminder + subscription-cancellation + support-ack + signup-welcome + session-failed-first/success-first + tier-changed + trial-pack-purchased/expired + status-subscription-confirmation/welcome + team-invite + status-incident-created/resolved + quota-warning + session-event-digest', () => {
+  it('Templates: inline TEMPLATES object satisfies Record<string, Template> with signup-verification + password-reset + billing-receipt/failure/renewal-reminder + subscription-cancellation + support-ack + signup-welcome + session-failed-first/success-first + tier-changed + status-subscription-confirmation/welcome + team-invite + status-incident-created/resolved + quota-warning + session-event-digest (trial-pack-purchased/expired removed with the dead trial_pack lifecycle)', () => {
     expect(body).toMatch(/const TEMPLATES = \{/);
     expect(body).toMatch(/'signup-verification': \{/);
     expect(body).toMatch(/'password-reset': \{/);
@@ -148,8 +147,8 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
     expect(body).toMatch(/'session-failed-first': \{/);
     expect(body).toMatch(/'session-success-first': \{/);
     expect(body).toMatch(/'tier-changed': \{/);
-    expect(body).toMatch(/'trial-pack-purchased': \{/);
-    expect(body).toMatch(/'trial-pack-expired': \{/);
+    expect(body).not.toMatch(/'trial-pack-purchased': \{/);
+    expect(body).not.toMatch(/'trial-pack-expired': \{/);
     expect(body).toMatch(/'status-subscription-confirmation': \{/);
     expect(body).toMatch(/'status-subscription-welcome': \{/);
     expect(body).toMatch(/'team-invite': \{/);

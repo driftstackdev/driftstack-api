@@ -62,10 +62,19 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
     );
   });
 
-  it('OptOutableEmailEvent enum: 7 values pinned (signup-welcome / session-failed-first / V-304a session-success-first / tier-changed / trial-pack-purchased+expired / billing-receipt / V-304b billing-renewal-reminder Stripe invoice.upcoming)', () => {
-    expect(body).toMatch(
-      /export const OptOutableEmailEventSchema = z\.enum\(\[\s*\n?\s*'signup-welcome',\s*\n?\s*'session-failed-first',\s*\n?\s*\/\/ V-304a — first successful session activation milestone email\.\s*\n?\s*'session-success-first',\s*\n?\s*'tier-changed',\s*\n?\s*'trial-pack-purchased',\s*\n?\s*'trial-pack-expired',\s*\n?\s*'billing-receipt',\s*\n?\s*\/\/ V-304b — 7-days-before-renewal reminder\. Driven by Stripe\s*\n?\s*\/\/ invoice\.upcoming webhook\.\s*\n?\s*'billing-renewal-reminder',\s*\n?\s*\]\);/,
-    );
+  it('OptOutableEmailEvent enum: 6 values pinned (signup-welcome / session-failed-first / V-304a session-success-first / tier-changed / billing-receipt / V-304b billing-renewal-reminder Stripe invoice.upcoming). Discrete pins (no long \\s* chain) per the catastrophic-backtracking lesson.', () => {
+    expect(body).toMatch(/export const OptOutableEmailEventSchema = z\.enum\(\[/);
+    expect(body).toMatch(/'signup-welcome',/);
+    expect(body).toMatch(/'session-failed-first',/);
+    expect(body).toMatch(/\/\/ V-304a — first successful session activation milestone email\./);
+    expect(body).toMatch(/'session-success-first',/);
+    expect(body).toMatch(/'tier-changed',/);
+    expect(body).toMatch(/'billing-receipt',/);
+    expect(body).toMatch(/\/\/ V-304b — 7-days-before-renewal reminder\. Driven by Stripe/);
+    expect(body).toMatch(/'billing-renewal-reminder',/);
+    // Trial-pack values removed with the dead trial_pack lifecycle.
+    expect(body).not.toMatch(/'trial-pack-purchased'/);
+    expect(body).not.toMatch(/'trial-pack-expired'/);
     expect(body).toMatch(
       /export const EmailPreferenceSchema = z\.object\(\{\s*\n?\s*event_type: OptOutableEmailEventSchema,\s*\n?\s*opted_in: z\.boolean\(\),\s*\n?\s*\}\);/,
     );

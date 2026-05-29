@@ -121,39 +121,30 @@ describe('W915 V-202d ScheduledJobs dispatcher cross-source invariant', () => {
     expect(backoff(4)).toBe(480_000);
   });
 
-  // ─── dedupOnAccountAndType for trial-pack ────────────────────
+  // ─── dedupOnAccountAndType ───────────────────────────────────
 
-  it("CRITICAL EnqueueScheduledJobInput.dedupOnAccountAndType comment pins 'enqueue no-ops if a pending job (completed_at IS NULL AND failed_at IS NULL) already exists with the same (account_id, job_type). Used by trial-pack expiry to ensure one pending job per account regardless of how many times the purchase webhook re-fires'. The 2-column dedup is what makes the dispatcher idempotent under webhook re-fires.", () => {
+  it("CRITICAL EnqueueScheduledJobInput.dedupOnAccountAndType comment pins 'enqueue no-ops if a pending job (completed_at IS NULL AND failed_at IS NULL) already exists with the same (account_id, job_type). Used to ensure one pending job per account regardless of how many times the triggering event re-fires'. The 2-column dedup is what makes the dispatcher idempotent under event re-fires.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/scheduled-jobs.ts'));
     expect(p).toMatch(
       /When true, `enqueue` no-ops if a pending job \(completed_at IS NULL\s*\n\s*\*\s*AND failed_at IS NULL\) already exists with the same/,
     );
-    expect(p).toMatch(/\(account_id, job_type\)\. Used by trial-pack expiry to ensure one/);
-    expect(p).toMatch(
-      /pending job per account regardless of how many times the purchase\s*\n\s*\*\s*webhook re-fires/,
-    );
+    expect(p).toMatch(/\(account_id, job_type\)\. Used to ensure one pending job per account/);
+    expect(p).toMatch(/regardless of how many times the triggering event re-fires/);
   });
 
-  // ─── First consumer = trial-pack expiry ──────────────────────
+  // ─── Consumer-registration + no-new-table framing ────────────
 
-  it("CRITICAL header pins first-consumer — 'First consumer: trial-pack expiry. When a customer purchases the trial pack, an enqueue at expiresAt schedules a trial_pack.expired job. The handler delegates to AccountLifecycleService.emit({ kind: subscription.trial_pack_expired }) which fires the email (opt-out aware)'. The trial-pack-expiry is the V-202b feature that drove V-202d design.", () => {
+  it("CRITICAL header pins the consumer model — 'Consumers register a handler keyed by job_type and enqueue rows — no new table per consumer. Live consumers: auth_tokens.sweep / sessions.duration_sweep / cost.recompute_nightly. Each self-re-arms by enqueuing its next run from its own handler'. (The trial_pack.expired first-consumer was removed with the dead trial_pack lifecycle.)", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/scheduled-jobs.ts'));
-    expect(p).toMatch(/First consumer: trial-pack expiry/);
-    expect(p).toMatch(/schedules a\s*\n\/\/ `trial_pack\.expired` job/);
-    expect(p).toMatch(
-      /AccountLifecycleService\.emit\(\{ kind: 'subscription\.trial_pack_expired' \}\)/,
-    );
-    expect(p).toMatch(/fires the email \(opt-out aware\)/);
-  });
-
-  // ─── No-table-needed framing for future consumers ────────────
-
-  it("CRITICAL header pins 'Future consumers (subscription renewal reminders, usage rollups, cleanup jobs) just register a handler for their job_type and enqueue rows. No new table'. The no-new-table framing is the extension contract.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/scheduled-jobs.ts'));
-    expect(p).toMatch(
-      /Future consumers \(subscription renewal reminders, usage rollups,\s*\n\/\/ cleanup jobs\) just register a handler for their job_type and/,
-    );
-    expect(p).toMatch(/enqueue rows\. No new table/);
+    expect(p).toMatch(/Consumers register a handler keyed by job_type and enqueue rows/);
+    expect(p).toMatch(/no new table per consumer/);
+    expect(p).toMatch(/`auth_tokens\.sweep`/);
+    expect(p).toMatch(/`sessions\.duration_sweep`/);
+    expect(p).toMatch(/`cost\.recompute_nightly`/);
+    expect(p).toMatch(/Each self-re-arms by enqueuing its next run from its own/);
+    // Trial-pack job framing removed — assert GONE so it can't regress.
+    expect(p).not.toMatch(/First consumer: trial-pack expiry/);
+    expect(p).not.toMatch(/trial_pack\.expired/);
   });
 
   // ─── No-handler-registered branch ────────────────────────────

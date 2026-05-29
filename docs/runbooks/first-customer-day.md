@@ -138,7 +138,7 @@ since week 1?"
 - `docs/deployment/dr-runbook.md` — disaster recovery procedures
 - `apps/server/src/services/email.ts` — V-486 + V-304 email
   templates (signup-welcome, session-success-first,
-  trial-pack-purchased, support-ack)
+  tier-changed, support-ack)
 - `apps/marketing-site/src/data/sub-processors.ts` — V-308a +
   V-478 sub-processor change-log (notify the customer of any
   amendments during their first week)

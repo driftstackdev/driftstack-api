@@ -45,15 +45,15 @@ describe('docs/api/email-preferences content parity', () => {
     expect(body).toMatch(/Response: `204 No Content`\./);
   });
 
-  it('8-opt-outable-event roster pinned: signup-welcome + session-success-first + session-failed-first + tier-changed + trial-pack-purchased + trial-pack-expired + billing-receipt + billing-renewal-reminder. All default opt-in. Drift to changing the enum would mismatch the OptOutableEmailEventSchema source-of-truth', () => {
+  it('6-opt-outable-event roster pinned: signup-welcome + session-success-first + session-failed-first + tier-changed + billing-receipt + billing-renewal-reminder. All default opt-in. Drift to changing the enum would mismatch the OptOutableEmailEventSchema source-of-truth. (The trial-pack pair was removed with the dead trial_pack lifecycle.)', () => {
     expect(body).toMatch(/\|\s*`signup-welcome`/);
     expect(body).toMatch(/\|\s*`session-success-first`/);
     expect(body).toMatch(/\|\s*`session-failed-first`/);
     expect(body).toMatch(/\|\s*`tier-changed`/);
-    expect(body).toMatch(/\|\s*`trial-pack-purchased`/);
-    expect(body).toMatch(/\|\s*`trial-pack-expired`/);
     expect(body).toMatch(/\|\s*`billing-receipt`/);
     expect(body).toMatch(/\|\s*`billing-renewal-reminder`/);
+    expect(body).not.toMatch(/`trial-pack-purchased`/);
+    expect(body).not.toMatch(/`trial-pack-expired`/);
   });
 
   it('7-always-send-NOT-opt-outable roster pinned: signup-verification (required to activate) + password-reset (security-critical) + billing-failure (payment retry) + subscription-cancellation (confirmation of irreversible action) + support-ack (customer-initiated thread reply) + status-incident-created/resolved (only to customers subscribed via /status, separate opt-in) + GDPR Art. 34 security notices. Drift to allowing opt-out of any operational class would break customer-protection invariant + likely violate GDPR for security notices', () => {

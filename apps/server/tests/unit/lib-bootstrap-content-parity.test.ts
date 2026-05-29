@@ -20,8 +20,8 @@
 //   • V-202b/c lifecycle service (paired audit emit + email send);
 //     founder verdict 2026-05-05 moved tier-change audit into
 //     lifecycle.handleTierChanged.
-//   • V-202d scheduled-jobs dispatcher with `trial_pack.expired`
-//     handler.
+//   • V-202d scheduled-jobs dispatcher (the `trial_pack.expired`
+//     handler was removed 2026-05-27 with the trial_pack retirement).
 //   • V-225 audit wiring for webhook + profile lifecycle.
 //   • V-100 admin force-actions take direct repo + driver access.
 //   • V-237 profilesRepo feeds /v1/account/me.
@@ -118,10 +118,11 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
-  it('V-202c/V-202b lifecycle framing pinned: paired audit-emit + email-send for events with both surfaces (session.failed.first / subscription.tier_changed / subscription.trial_pack_purchased); V-202b moved V-226 tier-change audit emit from StripeWebhooksService into lifecycle.handleTierChanged (founder verdict 2026-05-05) — pair behind ONE call', () => {
+  it('V-202c/V-202b lifecycle framing pinned: paired audit-emit + email-send for events with both surfaces (session.failed.first / subscription.tier_changed); V-202b moved V-226 tier-change audit emit from StripeWebhooksService into lifecycle.handleTierChanged (founder verdict 2026-05-05) — pair behind ONE call. (trial_pack_purchased removed with the dead trial_pack lifecycle.)', () => {
     expect(body).toMatch(
-      /\/\/ V-202c \/ V-202b — account lifecycle dispatcher \(paired audit emit \+\s*\n?\s*\/\/ email send for events that have both surfaces\)\. Wires\s*\n?\s*\/\/ `session\.failed\.first`, `subscription\.tier_changed`,\s*\n?\s*\/\/ `subscription\.trial_pack_purchased`\. V-202b moved the V-226\s*\n?\s*\/\/ tier-change audit emit from StripeWebhooksService into\s*\n?\s*\/\/ lifecycle\.handleTierChanged so the audit \+ email pair lives behind\s*\n?\s*\/\/ one call \(founder verdict 2026-05-05\)\./,
+      /\/\/ V-202c \/ V-202b — account lifecycle dispatcher \(paired audit emit \+\s*\n?\s*\/\/ email send for events that have both surfaces\)\. Wires\s*\n?\s*\/\/ `session\.failed\.first`, `subscription\.tier_changed`\. V-202b moved the V-226\s*\n?\s*\/\/ tier-change audit emit from StripeWebhooksService into\s*\n?\s*\/\/ lifecycle\.handleTierChanged so the audit \+ email pair lives behind\s*\n?\s*\/\/ one call \(founder verdict 2026-05-05\)\./,
     );
+    expect(body).not.toMatch(/`subscription\.trial_pack_purchased`/);
     expect(body).toMatch(/accountAuditService, \/\/ V-202b — required for tier_changed audit emit/);
   });
 

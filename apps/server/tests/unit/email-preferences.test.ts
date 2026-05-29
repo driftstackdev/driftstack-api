@@ -22,8 +22,6 @@ const ALL_EVENTS: OptOutableEmailEvent[] = [
   'session-failed-first',
   'session-success-first',
   'tier-changed',
-  'trial-pack-purchased',
-  'trial-pack-expired',
   'billing-receipt',
   'billing-renewal-reminder',
 ];
@@ -100,7 +98,7 @@ describe('V-553.B-7 EmailPreferencesService.list — default-opted-in synthesis'
     expect(persisted).toBeDefined();
     expect(persisted?.optedIn).toBe(false);
     expect(persisted?.updatedAt.toISOString()).toBe('2026-05-01T00:00:00.000Z');
-    // The other 7 events remain default-opted-in.
+    // The other 5 events remain default-opted-in.
     const others = rows.filter((r) => r.eventType !== 'billing-receipt');
     expect(others.every((r) => r.optedIn)).toBe(true);
   });

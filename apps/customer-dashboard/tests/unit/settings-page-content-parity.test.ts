@@ -47,9 +47,10 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
       ...(OptOutableEmailEventSchema._def as { values: readonly string[] }).values,
     ];
     expect(types.sort()).toEqual([...schemaVals].sort());
-    // 8 total today — pin the count so a 9th type can't slip
+    // 6 total today (the trial-pack pair was removed with the dead
+    // trial_pack lifecycle) — pin the count so a 7th type can't slip
     // into the schema without updating the page.
-    expect(types.length).toBe(8);
+    expect(types.length).toBe(6);
   });
 
   it('V-204 /v1/account/email-preferences registered server-side + wired on page', () => {

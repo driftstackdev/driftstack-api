@@ -6,12 +6,10 @@
 //   lifecycle events that pair an audit-log emit and/or a
 //   transactional email send' (founder verdict 2026-05-05).
 //
-//   LifecycleEvent discriminated union (6 kinds):
+//   LifecycleEvent discriminated union (4 kinds):
 //     - 'session.failed.first'         (V-202c)
 //     - 'session.success.first'        (V-304a)
 //     - 'subscription.tier_changed'    (V-202b)
-//     - 'subscription.trial_pack_purchased' (V-202b)
-//     - 'subscription.trial_pack_expired'   (V-202b)
 //     - 'subscription.renewal_reminder'     (V-327)
 //
 //   Contract: best-effort by design. Errors caught + logged warn,
@@ -75,15 +73,16 @@ describe('W916 V-202b/c AccountLifecycle emit dispatcher cross-source invariant'
 
   // ─── 6-kind LifecycleEvent discriminated union ───────────────
 
-  it("CRITICAL LifecycleEvent discriminated union has EXACTLY 6 kinds — 'session.failed.first' (V-202c) + 'session.success.first' (V-304a) + 'subscription.tier_changed' (V-202b) + 'subscription.trial_pack_purchased' + 'subscription.trial_pack_expired' + 'subscription.renewal_reminder' (V-327). The 6-kind union covers every customer-facing lifecycle moment.", () => {
+  it("CRITICAL LifecycleEvent discriminated union has EXACTLY 4 kinds — 'session.failed.first' (V-202c) + 'session.success.first' (V-304a) + 'subscription.tier_changed' (V-202b) + 'subscription.renewal_reminder' (V-327). The 4-kind union covers every customer-facing lifecycle moment. (The trial_pack_purchased/expired pair was removed with the dead trial_pack lifecycle.)", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/account-lifecycle.ts'));
     expect(p).toMatch(/export type LifecycleEvent =/);
     expect(p).toMatch(/kind: 'session\.failed\.first';/);
     expect(p).toMatch(/kind: 'session\.success\.first';/);
     expect(p).toMatch(/kind: 'subscription\.tier_changed';/);
-    expect(p).toMatch(/kind: 'subscription\.trial_pack_purchased';/);
-    expect(p).toMatch(/kind: 'subscription\.trial_pack_expired';/);
     expect(p).toMatch(/kind: 'subscription\.renewal_reminder';/);
+    // Trial-pack kinds removed — assert they are GONE so the union can't regress.
+    expect(p).not.toMatch(/kind: 'subscription\.trial_pack_purchased';/);
+    expect(p).not.toMatch(/kind: 'subscription\.trial_pack_expired';/);
   });
 
   // ─── Best-effort + never-propagate framing ───────────────────

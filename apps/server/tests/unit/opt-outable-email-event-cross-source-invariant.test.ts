@@ -1,19 +1,22 @@
-// W864 — OptOutableEmailEvent 8-value cross-source invariant.
+// W864 — OptOutableEmailEvent 6-value cross-source invariant.
 // One-hundred-ninetieth in the drift-guard series. Pins the V-202
 // + V-304a + V-304b opt-outable email-event roster:
 //
 //   Lifecycle (3): signup-welcome + session-failed-first +
 //                  session-success-first.
 //   Account (1):  tier-changed.
-//   Trial-pack (2): trial-pack-purchased + trial-pack-expired.
 //   Billing (2): billing-receipt + billing-renewal-reminder.
+//
+// (The trial-pack-purchased / trial-pack-expired pair was removed
+// with the dead trial_pack lifecycle — no production path ever
+// emitted those emails.)
 //
 // stays in lockstep across:
 //   - packages/api-types/src/accounts.ts (Zod canonical source).
 //   - apps/server/src/services/email-preferences.ts (allEvents
 //     defaults list — server iterates this to render the
 //     preferences table).
-//   - apps/customer-dashboard/src/pages/settings.astro (8
+//   - apps/customer-dashboard/src/pages/settings.astro (6
 //     toggle entries — one per opt-outable event).
 //
 // CRITICAL POLICY NOTE: Security + financial emails (signup-
@@ -40,8 +43,6 @@ const OPT_OUTABLE_EVENTS = [
   'session-failed-first',
   'session-success-first',
   'tier-changed',
-  'trial-pack-purchased',
-  'trial-pack-expired',
   'billing-receipt',
   'billing-renewal-reminder',
 ] as const;
@@ -59,7 +60,7 @@ const FORBIDDEN_CRITICAL_PATH_EVENTS = [
 describe('W864 OptOutableEmailEvent cross-source invariant', () => {
   // ─── api-types canonical source ──────────────────────────────
 
-  it('CRITICAL packages/api-types/src/accounts.ts OptOutableEmailEventSchema = z.enum([8 values]). The 8-value closed-roster is what email-preference toggle UI + per-event server-side shouldSend gates pivot on.', () => {
+  it('CRITICAL packages/api-types/src/accounts.ts OptOutableEmailEventSchema = z.enum([6 values]). The 6-value closed-roster is what email-preference toggle UI + per-event server-side shouldSend gates pivot on.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     expect(p).toMatch(/export const OptOutableEmailEventSchema = z\.enum\(\[/);
     const m = p.match(/OptOutableEmailEventSchema = z\.enum\(\[([\s\S]+?)\]\)/);
@@ -95,7 +96,7 @@ describe('W864 OptOutableEmailEvent cross-source invariant', () => {
 
   // ─── Server services/email-preferences.ts allEvents list ─────
 
-  it('CRITICAL apps/server/src/services/email-preferences.ts allEvents defaults list iterates ALL 8 opt-outable events. The server renders the preferences API response from this list — drift would silently let an event arrive without a corresponding preference row.', () => {
+  it('CRITICAL apps/server/src/services/email-preferences.ts allEvents defaults list iterates ALL 6 opt-outable events. The server renders the preferences API response from this list — drift would silently let an event arrive without a corresponding preference row.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/email-preferences.ts'));
     expect(p).toMatch(/const allEvents: OptOutableEmailEvent\[\] = \[/);
     const m = p.match(/const allEvents: OptOutableEmailEvent\[\] = \[([\s\S]+?)\];/);
@@ -110,7 +111,7 @@ describe('W864 OptOutableEmailEvent cross-source invariant', () => {
 
   // ─── Customer-dashboard settings.astro toggle entries ────────
 
-  it("CRITICAL apps/customer-dashboard/src/pages/settings.astro renders 8 toggle entries — one per opt-outable event. The dashboard renders 'type: <event-name>' fields for each; drift to missing a toggle would silently let customers be unable to opt out of that event from the UI.", () => {
+  it("CRITICAL apps/customer-dashboard/src/pages/settings.astro renders 6 toggle entries — one per opt-outable event. The dashboard renders 'type: <event-name>' fields for each; drift to missing a toggle would silently let customers be unable to opt out of that event from the UI.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro'));
     for (const e of OPT_OUTABLE_EVENTS) {
       expect(p, `settings.astro missing toggle for '${e}'`).toMatch(
@@ -121,8 +122,8 @@ describe('W864 OptOutableEmailEvent cross-source invariant', () => {
 
   // ─── Cardinality + category split ────────────────────────────
 
-  it('CRITICAL OptOutableEmailEvent = EXACTLY 8 values across 4 categories — 3 lifecycle (signup/session-failed-first/session-success-first) + 1 account (tier-changed) + 2 trial-pack + 2 billing. The 3/1/2/2 split is what the dashboard groups by visually.', () => {
-    expect(OPT_OUTABLE_EVENTS.length).toBe(8);
+  it('CRITICAL OptOutableEmailEvent = EXACTLY 6 values across 3 categories — 3 lifecycle (signup/session-failed-first/session-success-first) + 1 account (tier-changed) + 2 billing. The 3/1/2 split is what the dashboard groups by visually.', () => {
+    expect(OPT_OUTABLE_EVENTS.length).toBe(6);
     const lifecycle = OPT_OUTABLE_EVENTS.filter(
       (e) =>
         e === 'signup-welcome' || e === 'session-failed-first' || e === 'session-success-first',
@@ -132,7 +133,7 @@ describe('W864 OptOutableEmailEvent cross-source invariant', () => {
     const billing = OPT_OUTABLE_EVENTS.filter((e) => e.startsWith('billing-'));
     expect(lifecycle.length).toBe(3);
     expect(account.length).toBe(1);
-    expect(trial.length).toBe(2);
+    expect(trial.length).toBe(0);
     expect(billing.length).toBe(2);
   });
 
@@ -153,7 +154,7 @@ describe('W864 OptOutableEmailEvent cross-source invariant', () => {
 
   // ─── kebab-case naming convention ────────────────────────────
 
-  it("CRITICAL all 8 events follow the 'kebab-case' naming convention (no snake_case, no camelCase, no dots). The naming is uniform across the roster — drift to mixed conventions would break filter UI key-matching.", () => {
+  it("CRITICAL all 6 events follow the 'kebab-case' naming convention (no snake_case, no camelCase, no dots). The naming is uniform across the roster — drift to mixed conventions would break filter UI key-matching.", () => {
     for (const e of OPT_OUTABLE_EVENTS) {
       expect(e, `Event '${e}' must be kebab-case (no _ or . or uppercase)`).toMatch(
         /^[a-z]+(-[a-z]+)+$/,

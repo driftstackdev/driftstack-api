@@ -7,11 +7,12 @@
 //   • V-202d framing pinned: bootstrap-driven setInterval poller calling
 //     processTick(now); SELECT FOR UPDATE SKIP LOCKED claim; per-job-type
 //     handler dispatch; mark complete / retry / failed.
-//   • First-consumer framing pinned: trial-pack expiry enqueue at
-//     expiresAt, dispatches to AccountLifecycleService.emit
-//     ({ kind: 'subscription.trial_pack_expired' }).
-//   • Future-consumer framing pinned: "No new table" — just register a
-//     handler + enqueue rows.
+//   • Consumer-model framing pinned: register a handler keyed by
+//     job_type + enqueue rows; no new table per consumer. Live
+//     consumers: auth_tokens.sweep / sessions.duration_sweep /
+//     cost.recompute_nightly; each self-re-arms from its handler.
+//     (The trial_pack.expired first-consumer was removed with the
+//     dead trial_pack lifecycle.)
 //   • Defaults: batchSize=25, retryBackoffBaseMs=60_000.
 //   • register(): last-write-wins map insert.
 //   • No-handler path: markFailed with descriptive lastError ("no handler
@@ -47,16 +48,14 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
     );
   });
 
-  it('First-consumer framing pinned: trial-pack expiry → AccountLifecycleService.emit subscription.trial_pack_expired', () => {
-    expect(body).toMatch(
-      /First consumer: trial-pack expiry\. When a customer purchases the\s*\n?\s*\/\/\s*trial pack, an enqueue at `expiresAt` schedules a\s*\n?\s*\/\/\s*`trial_pack\.expired` job\. The handler delegates to\s*\n?\s*\/\/\s*AccountLifecycleService\.emit\(\{ kind: 'subscription\.trial_pack_expired' \}\)\s*\n?\s*\/\/\s*which fires the email \(opt-out aware\)\./,
-    );
-  });
-
-  it('Future-consumer framing pinned: register handler + enqueue rows; "No new table"', () => {
-    expect(body).toMatch(
-      /Future consumers \(subscription renewal reminders, usage rollups,\s*\n?\s*\/\/\s*cleanup jobs\) just register a handler for their job_type and\s*\n?\s*\/\/\s*enqueue rows\. No new table\./,
-    );
+  it('Consumer-model framing pinned: register handler + enqueue rows; "no new table per consumer"; live consumers listed; trial_pack.expired GONE', () => {
+    expect(body).toMatch(/Consumers register a handler keyed by job_type and enqueue rows/);
+    expect(body).toMatch(/no new table per consumer/);
+    expect(body).toMatch(/`auth_tokens\.sweep`/);
+    expect(body).toMatch(/`sessions\.duration_sweep`/);
+    expect(body).toMatch(/`cost\.recompute_nightly`/);
+    expect(body).not.toMatch(/First consumer: trial-pack expiry/);
+    expect(body).not.toMatch(/trial_pack\.expired/);
   });
 
   it('Defaults: batchSize=25 + retryBackoffBaseMs=60_000', () => {
@@ -76,7 +75,7 @@ describe('W409.B apps/server/src/services/scheduled-jobs.ts content parity', () 
 
   it('dedupOnAccountAndType framing pinned: pending = completed_at IS NULL AND failed_at IS NULL; one pending job per account regardless of webhook re-fires', () => {
     expect(body).toMatch(
-      /When true, `enqueue` no-ops if a pending job \(completed_at IS NULL\s*\n?\s*\*\s*AND failed_at IS NULL\) already exists with the same\s*\n?\s*\*\s*\(account_id, job_type\)\. Used by trial-pack expiry to ensure one\s*\n?\s*\*\s*pending job per account regardless of how many times the purchase\s*\n?\s*\*\s*webhook re-fires\./,
+      /When true, `enqueue` no-ops if a pending job \(completed_at IS NULL\s*\n?\s*\*\s*AND failed_at IS NULL\) already exists with the same\s*\n?\s*\*\s*\(account_id, job_type\)\. Used to ensure one pending job per account\s*\n?\s*\*\s*regardless of how many times the triggering event re-fires\./,
     );
     expect(body).toMatch(/dedupOnAccountAndType\?: boolean;/);
   });

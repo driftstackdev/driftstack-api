@@ -40,19 +40,19 @@ describe('docs api/email-preferences content parity', () => {
     expect(body).toMatch(/affirmative customer choice/);
   });
 
-  it('8 opt-outable event types pinned (drift to dropping any would silently remove customer control over that mail type)', () => {
+  it('6 opt-outable event types pinned (drift to dropping any would silently remove customer control over that mail type; the trial-pack pair was removed with the dead trial_pack lifecycle)', () => {
     for (const eventType of [
       'signup-welcome',
       'session-success-first',
       'session-failed-first',
       'tier-changed',
-      'trial-pack-purchased',
-      'trial-pack-expired',
       'billing-receipt',
       'billing-renewal-reminder',
     ]) {
       expect(body, `event_type ${eventType}`).toContain(`"event_type": "${eventType}"`);
     }
+    expect(body).not.toContain('"event_type": "trial-pack-purchased"');
+    expect(body).not.toContain('"event_type": "trial-pack-expired"');
   });
 
   it('Team RBAC framing pinned (member-AND-admin read access on owner preferences)', () => {

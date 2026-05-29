@@ -210,12 +210,6 @@ export async function startTestServer(): Promise<TestServer> {
   const scheduledJobsService = new ScheduledJobsService(scheduledJobsRepo, logger, {
     workerId: 'e2e-test-worker',
   });
-  scheduledJobsService.register('trial_pack.expired', async (job) => {
-    if (job.accountId === null) return;
-    await accountLifecycleService.emit(job.accountId, {
-      kind: 'subscription.trial_pack_expired',
-    });
-  });
 
   const sessionsService = new SessionsService({
     repo: sessionsRepo,

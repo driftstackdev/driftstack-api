@@ -32,8 +32,6 @@ export const OptOutableEmailEventSchema = z.enum([
   // V-304a — first successful session activation milestone email.
   'session-success-first',
   'tier-changed',
-  'trial-pack-purchased',
-  'trial-pack-expired',
   'billing-receipt',
   // V-304b — 7-days-before-renewal reminder. Driven by Stripe
   // invoice.upcoming webhook.

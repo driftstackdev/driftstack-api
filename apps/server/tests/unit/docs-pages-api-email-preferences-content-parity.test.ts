@@ -53,7 +53,7 @@ describe('W771 docs /api/email-preferences content parity', () => {
     );
   });
 
-  it('CRITICAL 8-event opt-outable catalog pinned. Drift to dropping any would let SDK consumers misjudge which events can be silenced.', () => {
+  it('CRITICAL 6-event opt-outable catalog pinned. Drift to dropping any would let SDK consumers misjudge which events can be silenced. (The trial-pack pair was removed with the dead trial_pack lifecycle.)', () => {
     const p = read(PAGE);
 
     for (const event of [
@@ -61,14 +61,14 @@ describe('W771 docs /api/email-preferences content parity', () => {
       'session-success-first',
       'session-failed-first',
       'tier-changed',
-      'trial-pack-purchased',
-      'trial-pack-expired',
       'billing-receipt',
       'billing-renewal-reminder',
     ]) {
       expect(p, `opt-outable event ${event}`).toMatch(new RegExp(`"event_type": "${event}"`));
       expect(p, `opt-outable event ${event} table row`).toMatch(new RegExp(`\\| \`${event}\``));
     }
+    expect(p).not.toMatch(/"event_type": "trial-pack-purchased"/);
+    expect(p).not.toMatch(/"event_type": "trial-pack-expired"/);
   });
 
   it('CRITICAL critical-emails-not-opt-outable 7-event catalog pinned — signup-verification + password-reset + billing-failure + subscription-cancellation + support-ack + status-incident-* + GDPR Art 34 security notices. Drift to letting any of these be opt-outable would erode customer-comms safety.', () => {
