@@ -12,9 +12,11 @@ plus the full transcript at the moment of capture. Recipes let
 customers replay the same flow later without re-paying the LLM
 decompose cost.
 
-At v1.0 the surface is write-only: `POST /v1/recipes`. Read /
-list / execute / delete land at v1.1 (D2/D3 scope per the v2-#37
-queue).
+The v1.0 surface covers create, list, read, and delete:
+`POST /v1/recipes`, `GET /v1/recipes`, `GET /v1/recipes/{id}`, and
+`DELETE /v1/recipes/{id}`. Recipe execution — replaying a recipe
+against a new agent-session — lands at v1.1 (D2/D3 scope per the
+v2-#37 queue).
 
 ## Resource shape
 
@@ -34,9 +36,9 @@ queue).
 `agent_session_id` is `null` when the originating agent-session
 has been deleted (ON DELETE SET NULL — the recipe survives the
 source session's lifecycle). `intent_count` is the length of the
-flattened intent_log; the actual intent array is captured but
-not surfaced at v1.0 (it lands with the read/list endpoints at
-v1.1).
+flattened intent_log. The list endpoint omits the intent array for
+payload weight; fetch a single recipe with `GET /v1/recipes/{id}`
+to get the full replayable `intent_log`.
 
 ## Create
 
@@ -58,6 +60,50 @@ Request body:
 - `description` — optional. Up to 2000 characters.
 
 Response `201 Created` returns the resource above.
+
+## List
+
+`GET /v1/recipes`
+
+Lists the calling account's recipes, newest first. Cursor-paginated:
+
+- `limit` — optional. 1-100, defaults to 50.
+- `cursor` — optional. Opaque cursor from a prior page's `next_cursor`.
+
+Response `200 OK`:
+
+```json
+{
+  "data": [],
+  "has_more": true,
+  "next_cursor": "<opaque> | null"
+}
+```
+
+Each `data` entry is the resource shape above **without** the
+`intent_log` array — list items carry only `intent_count` for
+payload weight. Fetch a single recipe to get the replayable
+intents. `next_cursor` is `null` on the last page.
+
+## Get one
+
+`GET /v1/recipes/{id}`
+
+Returns a single recipe in full, including the replayable
+`intent_log` array (the list endpoint omits it). A non-existent id
+— or one belonging to another account — returns 404; the server
+doesn't distinguish missing from forbidden, to avoid leaking
+existence.
+
+## Delete
+
+`DELETE /v1/recipes/{id}`
+
+Deletes a recipe. Response `204 No Content`. A non-existent id — or
+one belonging to another account — returns 404, the same
+anti-enumeration contract as the rest of the customer surface.
+Delete is **not** idempotent: deleting an already-deleted recipe
+returns 404, not 204.
 
 ## Intent log assembly
 
@@ -85,12 +131,8 @@ recipe is still useful as a transcript-only snapshot.
 
 ## Upcoming (v1.1)
 
-- `GET /v1/recipes` — list the calling account's recipes
-- `GET /v1/recipes/{id}` — read one recipe + its intent_log
-- `POST /v1/recipes/{id}/execute` — replay against a new
+- `POST /v1/recipes/{id}/execute` — replay a recipe against a new
   agent-session, skipping the decompose step
-- `DELETE /v1/recipes/{id}` — delete (with the same audit log
-  pattern as the rest of the customer surface)
 
-These ship in the v1.1 D2/D3 scope per the Driftstack design
+This ships in the v1.1 D2/D3 scope per the Driftstack design
 verdict on the v2-#37 queue.

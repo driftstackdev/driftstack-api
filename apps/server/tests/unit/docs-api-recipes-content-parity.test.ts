@@ -29,9 +29,12 @@ describe('docs/api/recipes content parity', () => {
     );
   });
 
-  it("v1.0 write-only + v1.1 D2/D3 scope framing pinned: 'At v1.0 the surface is write-only: POST /v1/recipes. Read / list / execute / delete land at v1.1 (D2/D3 scope per the v2-#37 queue).' — pinned so the v1.0-write-only-narrow-surface + v1.1-D2-D3-roadmap-scope contract all stay documented (drift to shipping read/list at v1.0 would over-promise + open audit-log gaps)", () => {
+  it("v1.0 create/list/read/delete surface + execute-stays-v1.1 framing pinned: 'The v1.0 surface covers create, list, read, and delete: POST /v1/recipes, GET /v1/recipes, GET /v1/recipes/{id}, and DELETE /v1/recipes/{id}. Recipe execution — replaying a recipe against a new agent-session — lands at v1.1 (D2/D3 scope per the v2-#37 queue).' — pinned so the read/management path is documented as SHIPPED while execution stays gated on the harness executor (drift to re-listing list/get/delete as 'upcoming' would under-document the live surface; drift to documenting execute as shipped would over-promise the harness-gated path)", () => {
     expect(body).toMatch(
-      /At v1\.0 the surface is write-only: `POST \/v1\/recipes`\. Read \/\s*\n?\s*list \/ execute \/ delete land at v1\.1 \(D2\/D3 scope per the v2-#37\s*\n?\s*queue\)\./,
+      /The v1\.0 surface covers create, list, read, and delete:\s*\n?\s*`POST \/v1\/recipes`, `GET \/v1\/recipes`, `GET \/v1\/recipes\/\{id\}`, and\s*\n?\s*`DELETE \/v1\/recipes\/\{id\}`\. Recipe execution — replaying a recipe/,
+    );
+    expect(body).toMatch(
+      /against a new agent-session — lands at v1\.1 \(D2\/D3 scope per the\s*\n?\s*v2-#37 queue\)\./,
     );
   });
 
@@ -43,7 +46,7 @@ describe('docs/api/recipes content parity', () => {
       /`agent_session_id` is `null` when the originating agent-session\s*\n?\s*has been deleted \(ON DELETE SET NULL — the recipe survives the\s*\n?\s*source session's lifecycle\)\./,
     );
     expect(body).toMatch(
-      /`intent_count` is the length of the\s*\n?\s*flattened intent_log; the actual intent array is captured but\s*\n?\s*not surfaced at v1\.0 \(it lands with the read\/list endpoints at\s*\n?\s*v1\.1\)\./,
+      /`intent_count` is the length of the\s*\n?\s*flattened intent_log\. The list endpoint omits the intent array for\s*\n?\s*payload weight; fetch a single recipe with `GET \/v1\/recipes\/\{id\}`\s*\n?\s*to get the full replayable `intent_log`\./,
     );
   });
 
@@ -65,12 +68,43 @@ describe('docs/api/recipes content parity', () => {
     );
   });
 
-  it('Errors table 4-row roster pinned: 400 validation + 404 not-found + 401 unauthorized + 503 feature-unavailable. + Upcoming-v1.1 4-endpoint roadmap (GET list + GET id + POST id/execute + DELETE id) — pinned so the 4-error-status + 4-future-endpoints-roadmap contract all stay documented', () => {
+  it('Errors table 4-row roster pinned: 400 validation + 404 not-found + 401 unauthorized + 503 feature-unavailable. + Upcoming-v1.1 reduced to the single execute endpoint (list/get/delete shipped at v1.0, so only POST /v1/recipes/{id}/execute remains gated on the harness executor) — pinned so the 4-error-status + execution-stays-the-only-upcoming-endpoint contract stay documented', () => {
     expect(body).toMatch(/\|\s*400 \| validation/);
     expect(body).toMatch(/\|\s*404 \| not-found/);
     expect(body).toMatch(/\|\s*401 \| unauthorized/);
     expect(body).toMatch(/\|\s*503 \| feature-unavailable/);
-    expect(body).toMatch(/- `GET \/v1\/recipes` — list the calling account's recipes/);
-    expect(body).toMatch(/- `POST \/v1\/recipes\/\{id\}\/execute` — replay against a new/);
+    expect(body).toMatch(
+      /## Upcoming \(v1\.1\)\s*\n\s*\n- `POST \/v1\/recipes\/\{id\}\/execute` — replay a recipe against a new\s*\n\s*agent-session, skipping the decompose step/,
+    );
+    // list/get/delete are no longer "upcoming" — they must NOT appear
+    // under any "land at v1.1" / "Upcoming" framing now that they ship.
+    expect(body).not.toMatch(/- `GET \/v1\/recipes` — list the calling account's recipes/);
+  });
+
+  it('List endpoint documented as shipped: GET /v1/recipes cursor-paginated (limit 1-100 default 50 + opaque cursor + { data, has_more, next_cursor } envelope, intent_log omitted from list items) — pinned so the read path is documented as live and matches the keyset-pagination contract the route + SDKs implement', () => {
+    expect(body).toMatch(/## List\s*\n\s*\n`GET \/v1\/recipes`/);
+    expect(body).toMatch(/- `limit` — optional\. 1-100, defaults to 50\./);
+    expect(body).toMatch(
+      /- `cursor` — optional\. Opaque cursor from a prior page's `next_cursor`\./,
+    );
+    expect(body).toMatch(/"has_more": true,\s*\n\s*"next_cursor": "<opaque> \| null"/);
+  });
+
+  it('Get-one endpoint documented as shipped: GET /v1/recipes/{id} returns the full recipe incl. the replayable intent_log + cross-account 404 anti-enumeration — pinned so the detail path is documented as live and the existence-leak-prevention contract stays explicit', () => {
+    expect(body).toMatch(/## Get one\s*\n\s*\n`GET \/v1\/recipes\/\{id\}`/);
+    expect(body).toMatch(
+      /including the replayable\s*\n?\s*`intent_log` array \(the list endpoint omits it\)\./,
+    );
+    expect(body).toMatch(
+      /doesn't distinguish missing from forbidden, to avoid leaking\s*\n?\s*existence\./,
+    );
+  });
+
+  it('Delete endpoint documented as shipped: DELETE /v1/recipes/{id} returns 204 + NOT idempotent (already-deleted returns 404) + cross-account 404 — pinned so the non-idempotent contract (matching the SDKs, which propagate the 404 rather than swallowing it) stays explicit', () => {
+    expect(body).toMatch(/## Delete\s*\n\s*\n`DELETE \/v1\/recipes\/\{id\}`/);
+    expect(body).toMatch(/Deletes a recipe\. Response `204 No Content`\./);
+    expect(body).toMatch(
+      /Delete is \*\*not\*\* idempotent: deleting an already-deleted recipe\s*\n?\s*returns 404, not 204\./,
+    );
   });
 });

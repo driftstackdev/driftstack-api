@@ -67,7 +67,7 @@ describe('W369.A marketing-site /roadmap page content parity', () => {
       'Public status page',
       'OAuth signup (Google · GitHub)',
       'API key rotation with grace window',
-      'Recipe library (write-only at v1.0)',
+      'Recipe library (capture + manage at v1.0)',
       'Agent sessions — natural-language automation with AI / manual / pair modes',
     ]);
   });

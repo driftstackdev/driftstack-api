@@ -92,7 +92,8 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     expect(body).toMatch(
       /\{\/\* W210 — the Recipe library card pointed at \/docs\/recipes,\s*\n?\s*which doesn't exist yet on the marketing-site \/docs\/\* mirror\./,
     );
-    expect(body).toMatch(/The recipe library IS shipped at v1\.0 in its write-only form/);
+    expect(body).toMatch(/The recipe library IS shipped at v1\.0 with create, list, read,/);
+    expect(body).toMatch(/recipe execution stays v1\.1/);
     expect(body).toMatch(/apps\/docs\/src\/pages\/api\/recipes\.md page is live at/);
     expect(body).toMatch(/docs\.driftstack\.dev\/api\/recipes\//);
     // Drift sentinel — the pre-slice-144 "Phase 3 deliverable"

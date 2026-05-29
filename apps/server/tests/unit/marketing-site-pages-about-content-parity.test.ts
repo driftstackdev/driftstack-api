@@ -72,18 +72,21 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     );
   });
 
-  it("'Honest scope' posture (slice 143 update — recipe library shipped at v1.0 write-only per slice 121, so the prior 'recipe libraries are Phase 3' framing contradicted the roadmap NOW section and the docs/api/recipes.md docs page; behavioural simulation still genuinely Phase 3 so stays in the no-vaporware line. Drift to claiming SOC 2 still trips the integrity check; drift to re-Phase-3-ing recipes would reopen the marketing-vs-reality gap)", () => {
+  it("'Honest scope' posture (recipe library shipped at v1.0 with create/list/read/delete — only execution stays v1.1 — so the line now reads 'with create, list, read, and delete … recipe execution lands at v1.1'; behavioural simulation still genuinely Phase 3 so stays in the no-vaporware line. Drift to claiming SOC 2 still trips the integrity check; drift to re-Phase-3-ing recipes OR back to a 'write-only form' claim would reopen the marketing-vs-reality gap now that the read/management path ships)", () => {
     expect(body).toMatch(
-      /We say no to things we can't ship well\. Behavioural simulation\s*\n?\s*is Phase 3 — we'll talk about it when it ships, not before\. The\s*\n?\s*recipe library is live at v1\.0 in its write-only form/,
+      /We say no to things we can't ship well\. Behavioural simulation\s*\n?\s*is Phase 3 — we'll talk about it when it ships, not before\. The\s*\n?\s*recipe library is live at v1\.0 with create, list, read, and/,
     );
-    expect(body).toMatch(/read \/ list \/\s*\n?\s*execute \/ delete land at v1\.1/);
+    expect(body).toMatch(/recipe\); recipe execution lands at v1\.1/);
     expect(body).toMatch(
-      /SOC 2 is a future-revenue\s*\n?\s*milestone, not today's marketing line\./,
+      /SOC 2 is a\s*\n?\s*future-revenue milestone, not today's marketing line\./,
     );
     // Drift sentinel — the pre-slice-143 "recipe libraries are Phase 3"
     // shape was wrong (contradicted slice 121's roadmap NOW promotion
     // + the live docs/api/recipes.md page). MUST NOT come back.
     expect(body).not.toMatch(/Behavioural simulation\s*\n?\s*and recipe libraries are Phase 3/);
+    // Drift sentinel — the read/management path shipped at v1.0, so the
+    // old "write-only form" framing is now inaccurate. MUST NOT come back.
+    expect(body).not.toMatch(/recipe library is live at v1\.0 in its write-only form/);
   });
 
   it('V-506 Operating commitments doc-comment framing pinned: \'transparency commitments. Surfaces public-facing trust signals already shipped (security audit cadence, DR runbooks, incident protocol, source-escrow for self-hosted) so the about page is not just "what we are" but "what we commit to". Visible in the About narrative because customers evaluating us read this page before /security and /trust.\' — pinned so the why-on-about-not-just-trust placement rationale survives', () => {

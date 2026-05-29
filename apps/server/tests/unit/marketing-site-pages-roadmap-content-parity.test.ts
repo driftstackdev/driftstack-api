@@ -75,17 +75,20 @@ describe('W499.B apps/marketing-site/src/pages/roadmap.astro content parity', ()
     expect(body).toMatch(/title: 'Public status page',/);
     expect(body).toMatch(/title: 'OAuth signup \(Google · GitHub\)',/);
     expect(body).toMatch(/title: 'API key rotation with grace window',/);
-    expect(body).toMatch(/title: 'Recipe library \(write-only at v1\.0\)',/);
+    expect(body).toMatch(/title: 'Recipe library \(capture \+ manage at v1\.0\)',/);
     expect(body).toMatch(
       /title: 'Agent sessions — natural-language automation with AI \/ manual \/ pair modes',/,
     );
     // Pre-M.6 single-archetype framing must NOT return.
     expect(body).not.toMatch(/iPhone 16 Pro · iOS 18\.7 · Safari 26\.4 fingerprint parity/);
     // Pre-2026-05-19 NEXT-only title for recipes must NOT return —
-    // promotion to NOW also dropped the unbounded "Recipe library"
-    // label in favor of "(write-only at v1.0)" to set v1.0-scope
-    // expectations explicitly.
+    // promotion to NOW dropped the unbounded "Recipe library" label for
+    // a scope-qualified one; once list/get/delete shipped, the qualifier
+    // moved from "(write-only at v1.0)" to "(capture + manage at v1.0)".
     expect(body).not.toMatch(/title: 'Recipe library',/);
+    // The read/management path shipped, so the "write-only" qualifier is
+    // now inaccurate and MUST NOT come back.
+    expect(body).not.toMatch(/title: 'Recipe library \(write-only at v1\.0\)',/);
   });
 
   it("NEXT section 3-item list (post-2026-05-19 promotion: status-site + OAuth + api-key rotation + recipes graduated to NOW; remaining surface is account deletion + WebRTC stream + workflow recording): 'Account deletion (GDPR Article 17)' + 'Live session WebRTC stream' + 'Workflow recording' — pinned so the active-engineering surface stays consistent (drift to dropping Account deletion would orphan the GDPR Article 17 compliance promise; drift to re-adding the 4 promoted items would re-introduce the stale 'NEXT' framing for things customers can already use today)", () => {

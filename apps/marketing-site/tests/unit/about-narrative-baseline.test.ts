@@ -47,7 +47,7 @@ describe('W334.B /about narrative baseline', () => {
   });
 
   it("honest scope: SOC 2 framed as future-revenue milestone, not today's marketing (the about page still pins this string; the parallel security.astro 'SOC 2 is on the roadmap' was reframed per F-5 to 'SOC 2 is not yet certified' but the about-page wording is independent)", () => {
-    expect(body).toMatch(/SOC 2 is a future-revenue\s+milestone, not\s+today's marketing/i);
+    expect(body).toMatch(/SOC 2 is a\s+future-revenue\s+milestone, not\s+today's marketing/i);
   });
 
   it('F-5 (Issue 5) customer-configurable egress framing on about page: the prior "(the last is on the roadmap; see /trust/security-overview for what\'s shipped today)" parenthetical was rewritten in scoped commit 87e37383 to "(SOCKS5 · WireGuard · OpenVPN — see /trust/security-overview for the security posture)". Aspirational "on the roadmap" language is gone from this page; the honest-disclosure surface for the egress impl state is now security.astro (gated by W499.D against actual server source).', () => {
