@@ -1927,7 +1927,7 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: AdminAuditNoteRequestOpenApi } } },
     },
     responses: {
-      200: {
+      201: {
         description: 'Note recorded.',
         content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
       },
@@ -1950,7 +1950,7 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: AdminRefundRecordRequestOpenApi } } },
     },
     responses: {
-      200: {
+      201: {
         description:
           'Refund recorded for audit. Money movement happens via Stripe dashboard manually per V-280 launch-day runbook.',
         content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
@@ -2054,7 +2054,7 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: AdminIncidentCreateRequestOpenApi } } },
     },
     responses: {
-      200: {
+      201: {
         description: 'Incident created.',
         content: { 'application/json': { schema: AdminIncidentResponseOpenApi } },
       },
@@ -2086,7 +2086,7 @@ function buildRegistry(): OpenAPIRegistry {
       body: { content: { 'application/json': { schema: AdminIncidentUpdateRequestOpenApi } } },
     },
     responses: {
-      200: {
+      201: {
         description: 'Update appended; incident timeline reflects the new entry.',
         content: { 'application/json': { schema: AdminIncidentResponseOpenApi } },
       },

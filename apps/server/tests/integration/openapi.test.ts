@@ -252,6 +252,24 @@ describe('OpenAPI spec generation', () => {
     expect(p?.post).toBeDefined();
   });
 
+  it('admin create/append endpoints document 201 (the routes reply.code(201); the spec said 200 once)', () => {
+    _clearSpecCache();
+    const spec = generateOpenApiSpec();
+    const paths = (spec.paths ?? {}) as Record<
+      string,
+      Record<string, { responses?: Record<string, unknown> }>
+    >;
+    for (const p of [
+      '/v1/admin/accounts/{id}/audit-note',
+      '/v1/admin/accounts/{id}/refund-record',
+      '/v1/admin/incidents',
+      '/v1/admin/incidents/{id}/updates',
+    ]) {
+      expect(paths[p]?.post?.responses?.['201']).toBeDefined();
+      expect(paths[p]?.post?.responses?.['200']).toBeUndefined();
+    }
+  });
+
   it('all admin endpoints carry the "admin" tag (for docs filtering)', () => {
     _clearSpecCache();
     const spec = generateOpenApiSpec();

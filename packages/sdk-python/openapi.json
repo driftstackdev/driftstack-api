@@ -10180,7 +10180,7 @@
           }
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Note recorded.",
             "content": {
               "application/json": {
@@ -10279,7 +10279,7 @@
           }
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Refund recorded for audit. Money movement happens via Stripe dashboard manually per V-280 launch-day runbook.",
             "content": {
               "application/json": {
@@ -10699,7 +10699,7 @@
           }
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Incident created.",
             "content": {
               "application/json": {
@@ -10946,7 +10946,7 @@
           }
         },
         "responses": {
-          "200": {
+          "201": {
             "description": "Update appended; incident timeline reflects the new entry.",
             "content": {
               "application/json": {
