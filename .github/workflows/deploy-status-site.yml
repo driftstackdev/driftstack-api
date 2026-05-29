@@ -1,0 +1,86 @@
+# Status site — deploy pipeline.
+#
+# Triggered on push to main. Builds the Astro static site at
+# `apps/status-site/` and deploys the resulting `dist/` to Cloudflare
+# Pages via the `wrangler` CLI. Mirrors deploy-docs.yml.
+#
+# Path-filtered: only runs when something under `apps/status-site/`,
+# this workflow file, or the shared root manifests changes.
+#
+# Skipped (build-only, exit 0) if `CLOUDFLARE_API_TOKEN` is unset.
+#
+# Required GitHub secrets (repository-wide; shared with the other site
+# deploys):
+#   - CLOUDFLARE_API_TOKEN   — token with `Cloudflare Pages — Edit`.
+#   - CLOUDFLARE_ACCOUNT_ID  — Cloudflare account ID.
+#
+# Required repository variable:
+#   - CLOUDFLARE_STATUS_SITE_PROJECT_NAME — Pages project slug
+#                                            (`driftstack-status`).
+#
+# Custom domain + DNS (status.driftstack.dev → the Pages project) are
+# configured in the Cloudflare dashboard / DNS for the driftstack.dev
+# zone. Setup runbook: docs/founder-actions/v660-status-site-cloudflare-setup.md.
+
+name: Deploy status site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/status-site/**'
+      - '.github/workflows/deploy-status-site.yml'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-status-site-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build + deploy to Cloudflare Pages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    environment:
+      name: status-site-production
+      url: https://status.driftstack.dev
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies (workspace-aware)
+        run: npm install --no-audit
+
+      - name: Build status site
+        run: npm run build --workspace apps/status-site
+
+      - name: Deploy to Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PROJECT_NAME: ${{ vars.CLOUDFLARE_STATUS_SITE_PROJECT_NAME }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "CLOUDFLARE_API_TOKEN unset — skipping Cloudflare Pages upload."
+            echo "Build artifact is at apps/status-site/dist/ and verified above."
+            exit 0
+          fi
+          if [ -z "${PROJECT_NAME}" ]; then
+            echo "CLOUDFLARE_STATUS_SITE_PROJECT_NAME variable unset — set as a repo variable in Settings → Variables."
+            exit 1
+          fi
+          npx --yes wrangler@^3 pages deploy apps/status-site/dist \
+            --project-name="${PROJECT_NAME}" \
+            --branch="${GITHUB_REF_NAME}" \
+            --commit-hash="${GITHUB_SHA}" \
+            --commit-message="${GITHUB_SHA::8} — $(git log -1 --pretty=%s)"
