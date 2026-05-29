@@ -43,13 +43,14 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     );
   });
 
-  it('navItems 14-entry catalog pinned: Overview + Profiles + Snapshots + Sessions + Agent sessions + API keys + Proxies + Usage + Billing + Subscription + Webhooks + Audit log + Team + Settings. Drift to dropping Agent sessions would orphan the AI-chat surface; drift to dropping Proxies would hide the EGRESS surface; drift to dropping Team would break the V-298 team-RBAC navigation. 2026-05-21 — items now carry an `icon` field + group into navSections (Browse / Connectivity / Account); each item still matched on (href, label) but with the new `, icon: ICON.X }` suffix.', () => {
+  it('navItems 15-entry catalog pinned: Overview + Profiles + Snapshots + Sessions + Agent sessions + Recipes + API keys + Proxies + Usage + Billing + Subscription + Webhooks + Audit log + Team + Settings. Drift to dropping Agent sessions would orphan the AI-chat surface; drift to dropping Recipes would hide the AI-B4 recipe-library surface; drift to dropping Proxies would hide the EGRESS surface; drift to dropping Team would break the V-298 team-RBAC navigation. 2026-05-21 — items now carry an `icon` field + group into navSections (Browse / Connectivity / Account); each item still matched on (href, label) but with the new `, icon: ICON.X }` suffix.', () => {
     const items: Array<[string, string]> = [
       ['/', 'Overview'],
       ['/profiles', 'Profiles'],
       ['/snapshots', 'Snapshots'],
       ['/sessions', 'Sessions'],
       ['/agent-sessions', 'Agent sessions'],
+      ['/recipes', 'Recipes'],
       ['/api-keys', 'API keys'],
       ['/proxies', 'Proxies'],
       ['/usage', 'Usage'],

@@ -63,7 +63,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack`;/);
   });
 
-  it('14 navItems pinned in canonical order (v2-#8 sub-slice 8.24 added /agent-sessions between /sessions and /api-keys — primary differentiator per 2026-05-17 AI-chat-+-manual-live-feature-APPROVED-for-v1.0 verdict). 2026-05-21 — navItems were grouped into navSections (Browse / Connectivity / Account) with an icon field per item; parser scans navSections for the same (href, label) entries.', () => {
+  it('15 navItems pinned in canonical order (v2-#8 sub-slice 8.24 added /agent-sessions between /sessions and /api-keys — primary differentiator per 2026-05-17 AI-chat-+-manual-live-feature-APPROVED-for-v1.0 verdict; /recipes added after /agent-sessions for the AI-B4 recipe-library surface). 2026-05-21 — navItems were grouped into navSections (Browse / Connectivity / Account) with an icon field per item; parser scans navSections for the same (href, label) entries.', () => {
     // 2026-05-21 — scan the navSections array (replaces the legacy flat
     // navItems). Items now carry an `icon` field; match (href, label)
     // pairs across all sections, preserving the encounter order.
@@ -80,6 +80,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
       { href: '/snapshots', label: 'Snapshots' },
       { href: '/sessions', label: 'Sessions' },
       { href: '/agent-sessions', label: 'Agent sessions' },
+      { href: '/recipes', label: 'Recipes' },
       { href: '/api-keys', label: 'API keys' },
       { href: '/proxies', label: 'Proxies' },
       { href: '/webhooks', label: 'Webhooks' },
@@ -184,6 +185,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(existsSync(resolve(dir, 'profiles.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'snapshots.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'sessions.astro'))).toBe(true);
+    expect(existsSync(resolve(dir, 'recipes.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'api-keys.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'usage.astro'))).toBe(true);
     expect(existsSync(resolve(dir, 'billing.astro'))).toBe(true);
