@@ -74,7 +74,7 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
   it("Subscription 2-state render: sub present → card.remove('hidden') + 'tier · status' line + 'Period ends {date}' / sub absent → empty.remove('hidden') — pinned so the two states stay mutually-exclusive in display (drift to showing both subscription + no-sub would surface contradictory UI). The retired trial-pack credit card was removed alongside the trial tier.", () => {
     expect(body).toMatch(/if \(sub\) \{\s*\n?\s*if \(card\) card\.classList\.remove\('hidden'\);/);
     expect(body).toMatch(
-      /if \(line\) line\.textContent = String\(sub\.tier\) \+ ' · ' \+ String\(sub\.status\);/,
+      /if \(line\) line\.textContent = tierLabel\(sub\.tier\) \+ ' · ' \+ String\(sub\.status\);/,
     );
     expect(body).toMatch(
       /if \(period\) period\.textContent = 'Period ends ' \+ fmtIsoDay\(sub\.current_period_end\) \+ '\.';/,

@@ -12,6 +12,7 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 // (Astro's hybrid mode is intentionally avoided here).
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
+import { TIER_DISPLAY_NAMES } from '../data/mocks.ts';
 const apiBaseUrl = resolveApiBaseUrl();
 ---
 
@@ -215,7 +216,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     </section>
   </div>
 
-  <script is:inline define:vars={{ apiBaseUrl }}>
+  <script is:inline define:vars={{ apiBaseUrl, tierDisplayNames: TIER_DISPLAY_NAMES }}>
     (function () {
       const root = document.querySelector('[data-page="overview"]');
       if (!root) return;
@@ -248,6 +249,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       function fmtIsoDay(iso) {
         if (!iso) return '—';
         return new Date(iso).toISOString().slice(0, 10);
+      }
+
+      // Map the backend tier id to its human plan name (Personal / Team /
+      // Agency / API Starter …) so the customer never sees a raw id like
+      // "solo_manual". Falls back to the id if an unknown tier appears.
+      function tierLabel(t) {
+        return (t && tierDisplayNames[t]) || t || '—';
       }
 
       const token = getToken();
@@ -295,7 +303,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           const nameEl = root.querySelector('[data-account-name]');
           if (nameEl) nameEl.textContent = me.name || me.email || '—';
           const tierEl = root.querySelector('[data-account-tier]');
-          if (tierEl) tierEl.textContent = String(me.tier || '—');
+          if (tierEl) tierEl.textContent = tierLabel(me.tier);
 
           const concurrent = root.querySelector('[data-stat-concurrent]');
           if (concurrent) concurrent.textContent = String(me.concurrent_session_active ?? 0);
@@ -392,7 +400,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (sub) {
             if (card) card.classList.remove('hidden');
             const line = root.querySelector('[data-subscription-line]');
-            if (line) line.textContent = String(sub.tier) + ' · ' + String(sub.status);
+            if (line) line.textContent = tierLabel(sub.tier) + ' · ' + String(sub.status);
             const period = root.querySelector('[data-subscription-period]');
             if (period) period.textContent = 'Period ends ' + fmtIsoDay(sub.current_period_end) + '.';
           } else if (empty) {

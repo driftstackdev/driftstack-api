@@ -1,6 +1,6 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
-import { MOCK_ACCOUNT, MOCK_SUBSCRIPTION } from '../data/mocks.ts';
+import { MOCK_ACCOUNT, MOCK_SUBSCRIPTION, TIER_DISPLAY_NAMES } from '../data/mocks.ts';
 
 // V-183 — progressive-enhancement wiring against /v1/billing.
 // SSG renders mock for instant paint; inline <script> fetches live
@@ -63,7 +63,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           <div>
             <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Subscription</p>
             <h2 class="mt-2 text-xl font-semibold text-ink-primary" data-field="sub-tier">
-              {MOCK_SUBSCRIPTION ? MOCK_SUBSCRIPTION.tier : 'No active subscription'}
+              {MOCK_SUBSCRIPTION ? TIER_DISPLAY_NAMES[MOCK_SUBSCRIPTION.tier] : 'No active subscription'}
             </h2>
           <p class="mt-2 text-sm text-ink-secondary" data-field="sub-summary">
             {
@@ -136,7 +136,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     from localStorage, fetches /v1/billing for state, wires action
     the portal button to its POST endpoint with redirect on response.
   -->
-  <script is:inline define:vars={{ apiBaseUrl }}>
+  <script is:inline define:vars={{ apiBaseUrl, tierDisplayNames: TIER_DISPLAY_NAMES }}>
     (function () {
       const root = document.querySelector('[data-page="billing"]');
       if (!root) return;
@@ -147,6 +147,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!banner) return;
         banner.textContent = text;
         banner.classList.remove('hidden');
+      }
+
+      // Backend tier id → human plan name, so the customer sees "Personal"
+      // not "solo_manual" on their own billing page.
+      function tierLabel(t) {
+        return (t && tierDisplayNames[t]) || t || '—';
       }
 
       function setText(field, text) {
@@ -234,7 +240,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           // Subscription card.
           if (body.subscription) {
             const sub = body.subscription;
-            setText('sub-tier', sub.tier);
+            setText('sub-tier', tierLabel(sub.tier));
             const summary =
               'Renews ' +
               fmtIso(sub.current_period_end) +

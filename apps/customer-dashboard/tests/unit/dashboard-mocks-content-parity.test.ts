@@ -136,4 +136,16 @@ describe('W383.B customer-dashboard src/data/mocks.ts content parity', () => {
   it('@driftstack/api-types package exists (canonical source)', () => {
     expect(existsSync(resolve(REPO_ROOT, 'packages/api-types/package.json'))).toBe(true);
   });
+
+  it('TIER_DISPLAY_NAMES: canonical id→human-label map (all 8 tiers; Manual ladder = Personal/Team/Agency)', () => {
+    // Single source of truth so overview + billing show "Personal" not
+    // the raw "solo_manual". Pin the renamed Manual-ladder labels so they
+    // can't silently drift back to the ids or the old names.
+    expect(body).toMatch(/export const TIER_DISPLAY_NAMES: Record<AccountTier, string> = \{/);
+    expect(body).toMatch(/solo_manual: 'Personal'/);
+    expect(body).toMatch(/team_manual: 'Team'/);
+    expect(body).toMatch(/agency_manual: 'Agency'/);
+    expect(body).toMatch(/free: 'Free'/);
+    expect(body).toMatch(/enterprise: 'Enterprise'/);
+  });
 });

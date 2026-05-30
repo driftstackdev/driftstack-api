@@ -11,6 +11,22 @@ import {
   type Subscription,
 } from '@driftstack/api-types';
 
+// Customer-facing display name for each backend tier id. Single source
+// of truth so the account overview + billing pages stop rendering the
+// raw id (e.g. "solo_manual") and instead show the human plan name that
+// marketing + /select-tier use. The Manual ladder was renamed to
+// Personal / Team / Agency on 2026-05-29; the ids are unchanged.
+export const TIER_DISPLAY_NAMES: Record<AccountTier, string> = {
+  free: 'Free',
+  solo_manual: 'Personal',
+  team_manual: 'Team',
+  agency_manual: 'Agency',
+  api_starter: 'API Starter',
+  api_builder: 'API Builder',
+  api_scale: 'API Scale',
+  enterprise: 'Enterprise',
+};
+
 export interface MockAccount {
   id: string;
   email: string;

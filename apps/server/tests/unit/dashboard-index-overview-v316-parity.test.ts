@@ -142,7 +142,7 @@ describe('W748 dashboard index/overview V-316 live-data parity', () => {
 
     expect(i).toMatch(/const sub = b\.subscription;/);
     expect(i).toMatch(
-      /if \(line\) line\.textContent = String\(sub\.tier\) \+ ' · ' \+ String\(sub\.status\)/,
+      /if \(line\) line\.textContent = tierLabel\(sub\.tier\) \+ ' · ' \+ String\(sub\.status\)/,
     );
     expect(i).toMatch(/'Period ends ' \+ fmtIsoDay\(sub\.current_period_end\) \+ '\.'/);
     expect(i).toMatch(/\} else if \(empty\) \{\s*\n\s+empty\.classList\.remove\('hidden'\);/);
