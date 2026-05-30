@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AgentModelSchema, DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -60,6 +61,18 @@ describe('docs/pages/api/agent-sessions content parity', () => {
 
   it("3-mode-enum 'mode': 'ai | manual | pair' field shape pinned in resource. Drift to a 4th mode or renaming any of the 3 would mismatch the DB CHECK constraint + route layer + Drizzle repo + customer SDK", () => {
     expect(body).toMatch(/"mode": "ai \| manual \| pair"/);
+  });
+
+  it("Per-session model picker (#15) pinned in resource + create body: 'model' field listing claude-opus-4-7 | claude-sonnet-4-6 | claude-haiku-4-5 with claude-opus-4-7 as the omitted-default. The values + default are DERIVED from AgentModelSchema.options / DEFAULT_AGENT_MODEL, so adding/renaming a model or changing the default must update agent-sessions.md in lockstep — drift would leave the route's `model: AgentModelSchema.optional()` create field undocumented or misdocumented.", () => {
+    // Structural shape: the inline pipe-separated field in both JSON blocks.
+    expect(body).toMatch(/"model": "claude-opus-4-7 \| claude-sonnet-4-6 \| claude-haiku-4-5"/);
+    // Source-derived: every AgentModelSchema option must be documented (a 4th
+    // model added to the enum but not the doc fails here).
+    for (const m of AgentModelSchema.options) {
+      expect(body, `agent-sessions.md must document model '${m}'`).toContain(m);
+    }
+    // The omitted-default must name DEFAULT_AGENT_MODEL.
+    expect(body).toContain(`defaults to \`${DEFAULT_AGENT_MODEL}\``);
   });
 
   it("3-status-enum 'status': 'active | paused | closed' field shape pinned in resource + 'Closed sessions return 409' state-machine guard. Drift to dropping the paused state would simplify the lifecycle but break the pair-mode-takeover-suspend pattern", () => {

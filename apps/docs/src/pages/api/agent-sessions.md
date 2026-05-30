@@ -40,6 +40,7 @@ Three operational modes:
   "transcript_length": 12,
   "created_by_user_id": "<user-uuid> | null",
   "mode": "ai | manual | pair",
+  "model": "claude-opus-4-7 | claude-sonnet-4-6 | claude-haiku-4-5",
   "pair_mode_state": "{ \"kind\": ... } | null",
   "created_at": "<ISO-8601>",
   "updated_at": "<ISO-8601>",
@@ -81,6 +82,7 @@ Request body (all fields optional):
 ```json
 {
   "mode": "ai | manual | pair",
+  "model": "claude-opus-4-7 | claude-sonnet-4-6 | claude-haiku-4-5",
   "driftstack_session_id": "ses_<uuid>",
   "token_budget": 100000
 }
@@ -94,9 +96,11 @@ Headers:
 
 Response `201 Created` returns the resource above.
 
-If `mode` is omitted the server defaults to `ai`. `token_budget`
-defaults to the deployment-configured value (typically 100,000
-tokens). The optional `driftstack_session_id` ties the agent
+If `mode` is omitted the server defaults to `ai`. If `model` is
+omitted it defaults to `claude-opus-4-7` — the `model` selects which
+Claude 4.x model the AI agent runs, and applies in `ai` and `pair`
+mode. `token_budget` defaults to the deployment-configured value
+(typically 100,000 tokens). The optional `driftstack_session_id` ties the agent
 session to a pre-existing driver session; without it the runtime
 spawns one on the first executed intent.
 
