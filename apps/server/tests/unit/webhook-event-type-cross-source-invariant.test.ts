@@ -1,17 +1,20 @@
-// W852 — WebhookEventType 6-value roster cross-source invariant.
+// W852 — WebhookEventType 9-value roster cross-source invariant.
 // One-hundred-seventy-eighth in the drift-guard series. Pins the
-// 6-value WebhookEventType closed-roster:
+// 9-value WebhookEventType closed-roster:
 //   1. session.completed
 //   2. session.failed
 //   3. quota.warning_80pct
 //   4. quota.exceeded
 //   5. api_key.revoked
-//   6. test.ping (V-356 — server-only, not subscribable).
+//   6. session.egress_capability_changed (Arc 5 EGRESS eg.7).
+//   7. test.ping (V-356 — server-only, not subscribable).
+//   8. crypto.order.paid (V-666 — 2026-05-22).
+//   9. crypto.order.failed (V-666 — 2026-05-22).
 // stays in lockstep across:
 //   - packages/api-types/src/webhooks.ts (Zod canonical source).
 //   - apps/server/src/db/schema.ts pgEnum (Postgres runtime enum).
 //   - packages/sdk-go/types.go (Go SDK closed-enum consts).
-//   - apps/customer-dashboard/src/pages/webhooks.astro (5
+//   - apps/customer-dashboard/src/pages/webhooks.astro (8
 //     subscribable checkboxes per V-356; test.ping is NOT
 //     subscribable).
 //
@@ -44,6 +47,9 @@ const ALL_WEBHOOK_EVENTS = [
   'api_key.revoked',
   'test.ping',
   'session.egress_capability_changed',
+  // V-666 (2026-05-22) — crypto-order terminal events.
+  'crypto.order.paid',
+  'crypto.order.failed',
 ] as const;
 
 const SUBSCRIBABLE_EVENTS = [
@@ -53,12 +59,15 @@ const SUBSCRIBABLE_EVENTS = [
   'quota.exceeded',
   'api_key.revoked',
   'session.egress_capability_changed',
+  // V-666 (2026-05-22) — crypto-order terminal events (subscribable).
+  'crypto.order.paid',
+  'crypto.order.failed',
 ] as const;
 
 describe('W852 WebhookEventType cross-source invariant', () => {
   // ─── api-types canonical source ──────────────────────────────
 
-  it('CRITICAL packages/api-types/src/webhooks.ts WebhookEventTypeSchema = z.enum([...7 values...]). The 7-value closed-roster is the contract every consumer pivots on (Arc 5 EGRESS eg.7 added session.egress_capability_changed).', () => {
+  it('CRITICAL packages/api-types/src/webhooks.ts WebhookEventTypeSchema = z.enum([...9 values...]). The 9-value closed-roster is the contract every consumer pivots on (Arc 5 EGRESS eg.7 added session.egress_capability_changed; V-666 added crypto.order.paid + crypto.order.failed).', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     expect(p).toMatch(/export const WebhookEventTypeSchema = z\.enum\(\[/);
     for (const ev of ALL_WEBHOOK_EVENTS) {
@@ -68,7 +77,7 @@ describe('W852 WebhookEventType cross-source invariant', () => {
     }
   });
 
-  it('CRITICAL packages/api-types/src/webhooks.ts SubscribableWebhookEventTypeSchema is the 6-value subset EXCLUDING test.ping. Per V-356, test.ping is server-only — dispatched ONLY via POST /v1/webhooks/:id/test endpoint, never via subscription. Arc 5 EGRESS eg.7 added session.egress_capability_changed as the 6th subscribable.', () => {
+  it('CRITICAL packages/api-types/src/webhooks.ts SubscribableWebhookEventTypeSchema is the 8-value subset EXCLUDING test.ping. Per V-356, test.ping is server-only — dispatched ONLY via POST /v1/webhooks/:id/test endpoint, never via subscription. Arc 5 EGRESS eg.7 added session.egress_capability_changed; V-666 added crypto.order.paid + crypto.order.failed as the 7th + 8th subscribable.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     const m = p.match(/SubscribableWebhookEventTypeSchema = z\.enum\(\[([\s\S]+?)\]\)/);
     expect(m, 'SubscribableWebhookEventTypeSchema declaration must match').not.toBeNull();
@@ -108,7 +117,7 @@ describe('W852 WebhookEventType cross-source invariant', () => {
 
   // ─── Go SDK closed-enum consts ───────────────────────────────
 
-  it('CRITICAL packages/sdk-go/types.go declares 6 WebhookEventType consts — EventSessionCompleted + EventSessionFailed + EventQuotaWarning80Pct + EventQuotaExceeded + EventAPIKeyRevoked + EventTestPing. Each maps to one canonical event string. Drift would break Go customers who pattern-match on consts.', () => {
+  it('CRITICAL packages/sdk-go/types.go declares 9 WebhookEventType consts — EventSessionCompleted + EventSessionFailed + EventQuotaWarning80Pct + EventQuotaExceeded + EventAPIKeyRevoked + EventSessionEgressCapabilityChanged + EventTestPing + EventCryptoOrderPaid + EventCryptoOrderFailed. Each maps to one canonical event string. Drift would break Go customers who pattern-match on consts.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/sdk-go/types.go'));
     expect(p).toMatch(/type WebhookEventType string/);
     expect(p).toMatch(/EventSessionCompleted +WebhookEventType = "session\.completed"/);
@@ -116,7 +125,12 @@ describe('W852 WebhookEventType cross-source invariant', () => {
     expect(p).toMatch(/EventQuotaWarning80Pct WebhookEventType = "quota\.warning_80pct"/);
     expect(p).toMatch(/EventQuotaExceeded +WebhookEventType = "quota\.exceeded"/);
     expect(p).toMatch(/EventAPIKeyRevoked +WebhookEventType = "api_key\.revoked"/);
+    expect(p).toMatch(
+      /EventSessionEgressCapabilityChanged +WebhookEventType = "session\.egress_capability_changed"/,
+    );
     expect(p).toMatch(/EventTestPing WebhookEventType = "test\.ping"/);
+    expect(p).toMatch(/EventCryptoOrderPaid +WebhookEventType = "crypto\.order\.paid"/);
+    expect(p).toMatch(/EventCryptoOrderFailed +WebhookEventType = "crypto\.order\.failed"/);
   });
 
   it("CRITICAL Go SDK 'closed enum' framing pinned. The 'closed enum of supported webhook events' comment threads the type-system intent (vs an open-string enum). Drift to weakening the framing would invite a Go SDK consumer to invent their own consts.", () => {
@@ -126,7 +140,7 @@ describe('W852 WebhookEventType cross-source invariant', () => {
 
   // ─── customer-dashboard subscribable-checkbox rendering ──────
 
-  it('CRITICAL apps/customer-dashboard/src/pages/webhooks.astro renders checkboxes for ALL 5 SUBSCRIBABLE events (NOT test.ping). The form pivots on these exact event-strings as checkbox values; drift to missing a checkbox would silently let customers be unable to subscribe to that event in the dashboard.', () => {
+  it('CRITICAL apps/customer-dashboard/src/pages/webhooks.astro renders checkboxes for ALL 8 SUBSCRIBABLE events (NOT test.ping). The form pivots on these exact event-strings as checkbox values; drift to missing a checkbox would silently let customers be unable to subscribe to that event in the dashboard.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/webhooks.astro'));
     for (const ev of SUBSCRIBABLE_EVENTS) {
       expect(p, `webhooks.astro missing checkbox value='${ev}'`).toMatch(
@@ -146,11 +160,11 @@ describe('W852 WebhookEventType cross-source invariant', () => {
     expect(p).toMatch(/V-356/);
   });
 
-  // ─── 7 + 6 cardinality (was 6 + 5 pre-Arc-5-eg.7) ───────────
+  // ─── 9 + 8 cardinality (6+5 pre-egress; 7+6 pre-V-666-crypto) ───
 
-  it('CRITICAL WebhookEventType = exactly 7 values + SubscribableWebhookEventType = exactly 6 (7 minus test.ping). Arc 5 EGRESS eg.7 added session.egress_capability_changed; previous 6/5 cardinality bumped to 7/6.', () => {
-    expect(ALL_WEBHOOK_EVENTS.length).toBe(7);
-    expect(SUBSCRIBABLE_EVENTS.length).toBe(6);
+  it('CRITICAL WebhookEventType = exactly 9 values + SubscribableWebhookEventType = exactly 8 (9 minus test.ping). Arc 5 EGRESS eg.7 added session.egress_capability_changed; V-666 (2026-05-22) added crypto.order.paid + crypto.order.failed — cardinality 6/5 → 7/6 → 9/8.', () => {
+    expect(ALL_WEBHOOK_EVENTS.length).toBe(9);
+    expect(SUBSCRIBABLE_EVENTS.length).toBe(8);
     expect(SUBSCRIBABLE_EVENTS.length).toBe(ALL_WEBHOOK_EVENTS.length - 1);
   });
 

@@ -95,12 +95,21 @@ const (
 	EventQuotaWarning80Pct WebhookEventType = "quota.warning_80pct"
 	EventQuotaExceeded     WebhookEventType = "quota.exceeded"
 	EventAPIKeyRevoked     WebhookEventType = "api_key.revoked"
+	// Arc 5 EGRESS eg.7 — fired when a SOCKS5 session's egress
+	// capability report is ingested; subscribable so customers can
+	// branch on proxy-health changes without a GET.
+	EventSessionEgressCapabilityChanged WebhookEventType = "session.egress_capability_changed"
 	// V-356 — synthetic test event sent only via
 	// POST /v1/webhooks/:id/test. Customers cannot subscribe to it
 	// (the create / update Zod schemas reject it); it's dispatched
 	// regardless of subscription so customers can verify their
 	// handler signature-checks correctly before relying on real events.
 	EventTestPing WebhookEventType = "test.ping"
+	// V-666 — crypto-order terminal transitions, fired by the IPN
+	// handler on pending/confirming/partial → paid|failed. Subscribable
+	// so crypto-checkout integrators can react in their own accounting.
+	EventCryptoOrderPaid   WebhookEventType = "crypto.order.paid"
+	EventCryptoOrderFailed WebhookEventType = "crypto.order.failed"
 )
 
 // WebhookDeliveryStatus.

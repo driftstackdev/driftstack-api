@@ -128,7 +128,7 @@ describe('W728 api-types core-enum source-of-truth parity', () => {
 
   // --- WebhookEventType + SubscribableWebhookEventType -------------
 
-  it('CRITICAL WebhookEventType 6-value closed roster pinned — session.completed + session.failed + quota.warning_80pct + quota.exceeded + api_key.revoked + test.ping. Drift to renaming would break every customer webhook consumer.', () => {
+  it('CRITICAL WebhookEventType 9-value closed roster pinned — session.completed + session.failed + quota.warning_80pct + quota.exceeded + api_key.revoked + session.egress_capability_changed + test.ping + crypto.order.paid + crypto.order.failed. Drift to renaming would break every customer webhook consumer.', () => {
     const w = read(WEBHOOKS);
 
     expect(w).toMatch(/export const WebhookEventTypeSchema = z\.enum\(\[/);
@@ -138,14 +138,17 @@ describe('W728 api-types core-enum source-of-truth parity', () => {
       'quota.warning_80pct',
       'quota.exceeded',
       'api_key.revoked',
+      'session.egress_capability_changed',
       'test.ping',
+      'crypto.order.paid',
+      'crypto.order.failed',
     ]) {
       const escaped = e.replace(/\./g, '\\.');
       expect(w, `event ${e}`).toMatch(new RegExp(`'${escaped}'`));
     }
   });
 
-  it('CRITICAL V-356 SubscribableWebhookEventType is the 5-value subset EXCLUDING test.ping. The test.ping event is dispatched ONLY via POST /v1/webhooks/:id/test; customers cannot subscribe (UpdateSubscriptionsSchema rejects). Drift to including test.ping in subscribable would let customers configure subscriptions that never deliver.', () => {
+  it('CRITICAL V-356 SubscribableWebhookEventType is the 8-value subset EXCLUDING test.ping. The test.ping event is dispatched ONLY via POST /v1/webhooks/:id/test; customers cannot subscribe (UpdateSubscriptionsSchema rejects). Drift to including test.ping in subscribable would let customers configure subscriptions that never deliver.', () => {
     const w = read(WEBHOOKS);
 
     expect(w).toMatch(
@@ -153,7 +156,7 @@ describe('W728 api-types core-enum source-of-truth parity', () => {
     );
     expect(w).toMatch(/export const SubscribableWebhookEventTypeSchema = z\.enum\(\[/);
 
-    // Subscribable enum has 5 entries — test.ping NOT included.
+    // Subscribable enum has 8 entries — test.ping NOT included.
     const subscribableBlock = w.match(
       /SubscribableWebhookEventTypeSchema = z\.enum\(\[([\s\S]+?)\]\)/,
     )?.[1];
@@ -165,6 +168,9 @@ describe('W728 api-types core-enum source-of-truth parity', () => {
       'quota.warning_80pct',
       'quota.exceeded',
       'api_key.revoked',
+      'session.egress_capability_changed',
+      'crypto.order.paid',
+      'crypto.order.failed',
     ]) {
       const escaped = e.replace(/\./g, '\\.');
       expect(subscribableBlock, `subscribable ${e}`).toMatch(new RegExp(`'${escaped}'`));

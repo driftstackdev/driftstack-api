@@ -9,7 +9,7 @@
 //   - SessionPurpose (3 values; V-169)
 //   - CaptureKind (3 values)
 //   - WebhookDeliveryStatus (5 values)
-//   - WebhookEventType (6 values)
+//   - WebhookEventType (9 values)
 //
 // Source-of-truth in `packages/api-types/src/sessions.ts` +
 // `packages/api-types/src/webhooks.ts`. The Python SDK consumes the
@@ -106,14 +106,19 @@ describe('v2-#14 cross-SDK enum roster parity', () => {
   });
 
   it('CRITICAL WebhookEventType — closed roster across api-types + Go', () => {
-    // WebhookEventType includes test.ping (V-356 synthetic event).
+    // WebhookEventType includes test.ping (V-356 synthetic event),
+    // session.egress_capability_changed (Arc 5 EGRESS eg.7), and the
+    // V-666 crypto-order pair (crypto.order.paid / crypto.order.failed).
     const opts = WebhookEventTypeSchema.options;
     expect(opts).toContain('session.completed');
     expect(opts).toContain('session.failed');
     expect(opts).toContain('quota.warning_80pct');
     expect(opts).toContain('quota.exceeded');
     expect(opts).toContain('api_key.revoked');
+    expect(opts).toContain('session.egress_capability_changed');
     expect(opts).toContain('test.ping');
+    expect(opts).toContain('crypto.order.paid');
+    expect(opts).toContain('crypto.order.failed');
 
     const go = read(SDK_GO_TYPES);
     expect(go).toMatch(/"session\.completed"/);
@@ -121,7 +126,10 @@ describe('v2-#14 cross-SDK enum roster parity', () => {
     expect(go).toMatch(/"quota\.warning_80pct"/);
     expect(go).toMatch(/"quota\.exceeded"/);
     expect(go).toMatch(/"api_key\.revoked"/);
+    expect(go).toMatch(/"session\.egress_capability_changed"/);
     expect(go).toMatch(/"test\.ping"/);
+    expect(go).toMatch(/"crypto\.order\.paid"/);
+    expect(go).toMatch(/"crypto\.order\.failed"/);
   });
 
   it('CRITICAL no SDK exports an enum value that api-types does NOT — drift would surface customer-visible values without a source-of-truth pin', () => {
