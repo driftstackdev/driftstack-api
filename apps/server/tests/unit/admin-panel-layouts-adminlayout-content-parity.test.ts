@@ -44,6 +44,11 @@ describe('admin-panel layouts/AdminLayout content parity', () => {
     );
   });
 
+  it('a11y focus trap: both modals cycle Tab/Shift+Tab within their focusable controls so keyboard focus cannot escape to the page behind the overlay (WCAG 2.4.3 dialog pattern)', () => {
+    expect(body.match(/if \(e\.key === 'Tab'\)/g)?.length).toBe(2);
+    expect(body).toMatch(/e\.shiftKey && document\.activeElement === f\[0\]/);
+  });
+
   it('Props contract pinned: title (required) + description (optional, defaults to staff-only-tagline). Drift to a different shape would break every admin page', () => {
     expect(body).toMatch(
       /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\}/,

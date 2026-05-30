@@ -258,7 +258,15 @@ const navItems = [
               function onOk() { done(true); }
               function onCancel() { done(false); }
               function onOverlay(e) { if (e.target === overlay) done(false); }
-              function onKey(e) { if (e.key === 'Escape') done(false); }
+              function onKey(e) {
+                if (e.key === 'Escape') { done(false); return; }
+                if (e.key === 'Tab') {
+                  var f = [cancel, ok].filter(function (el) { return el; });
+                  if (!f.length) return;
+                  if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+                  else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+                }
+              }
               if (ok) ok.addEventListener('click', onOk);
               if (cancel) cancel.addEventListener('click', onCancel);
               overlay.addEventListener('click', onOverlay);
@@ -298,7 +306,15 @@ const navItems = [
               function onCancel() { done(null); }
               function onOverlay(e) { if (e.target === overlay) done(null); }
               function onKey(e) { if (e.key === 'Enter') { e.preventDefault(); onOk(); } }
-              function onDocKey(e) { if (e.key === 'Escape') done(null); }
+              function onDocKey(e) {
+                if (e.key === 'Escape') { done(null); return; }
+                if (e.key === 'Tab') {
+                  var f = [input, cancel, ok].filter(function (el) { return el; });
+                  if (!f.length) return;
+                  if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+                  else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+                }
+              }
               if (ok) ok.addEventListener('click', onOk);
               if (cancel) cancel.addEventListener('click', onCancel);
               if (input) input.addEventListener('keydown', onKey);

@@ -58,6 +58,11 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     );
   });
 
+  it('a11y focus trap: both modals cycle Tab/Shift+Tab within their focusable controls so keyboard focus cannot escape to the page behind the overlay (WCAG 2.4.3 dialog pattern)', () => {
+    expect(body.match(/if \(e\.key === 'Tab'\)/g)?.length).toBe(2);
+    expect(body).toMatch(/e\.shiftKey && document\.activeElement === f\[0\]/);
+  });
+
   it("Props interface 3-field shape: title (required) + description (optional default + Driftstack catchphrase) + withSidebar (optional default true). Drift to dropping withSidebar would force onboarding pages to render the side-nav (which requires auth that onboarding hasn't completed yet)", () => {
     expect(body).toMatch(
       /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\/\*\* When true, render the side-nav\. Onboarding pages opt out\. \*\/\s*\n?\s*withSidebar\?: boolean;\s*\n?\s*\}/,
