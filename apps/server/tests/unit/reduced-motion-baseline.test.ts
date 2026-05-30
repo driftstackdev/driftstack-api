@@ -35,4 +35,9 @@ describe('prefers-reduced-motion global baseline across apps', () => {
       expect(css).toMatch(/transition-duration: 0\.01ms !important/);
     });
   }
+
+  it('gui-client restores a visible :focus-visible indicator (its global :focus{outline:none} would otherwise leave non-.btn elements — e.g. the sidebar nav buttons — focus-invisible) (WCAG 2.4.7)', () => {
+    const css = readFileSync(resolve(REPO_ROOT, 'apps/gui-client/src/styles/index.css'), 'utf8');
+    expect(css).toMatch(/:focus-visible\s*\{[\s\S]*?outline:\s*2px solid/);
+  });
 });

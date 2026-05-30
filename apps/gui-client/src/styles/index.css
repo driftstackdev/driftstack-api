@@ -14,6 +14,17 @@
     outline: none;
   }
 
+  /* …but every keyboard-focusable element still needs a VISIBLE focus
+     indicator (WCAG 2.4.7), not only the .btn-* / .form-input classes.
+     The sidebar nav buttons + any ad-hoc interactive element would
+     otherwise be focus-invisible. Restore one for :focus-visible
+     (keyboard) globally; mouse :focus stays ring-free. */
+  :focus-visible {
+    outline: 2px solid theme('colors.accent.ring');
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
   ::selection {
     background: theme('colors.accent.subtle');
     color: theme('colors.ink.primary');
