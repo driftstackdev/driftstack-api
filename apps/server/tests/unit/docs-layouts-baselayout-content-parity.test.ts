@@ -59,6 +59,17 @@ describe('docs layouts/BaseLayout content parity', () => {
     expect(body).toMatch(/<meta name="twitter:card" content="summary_large_image" \/>/);
   });
 
+  it('og:image + twitter:image point at the marketing-site PNG card (per the V-250 "OG images point at the marketing site default" comment). A summary_large_image twitter:card with NO image renders no preview, so these must be present + must be the PNG (SVG og:images are not rendered by Twitter/X, Facebook, LinkedIn, Slack)', () => {
+    expect(body).toMatch(
+      /<meta property="og:image" content="https:\/\/driftstack\.dev\/og-default\.png" \/>/,
+    );
+    expect(body).toMatch(/<meta property="og:image:width" content="1200" \/>/);
+    expect(body).toMatch(/<meta property="og:image:height" content="630" \/>/);
+    expect(body).toMatch(
+      /<meta name="twitter:image" content="https:\/\/driftstack\.dev\/og-default\.png" \/>/,
+    );
+  });
+
   it('Favicon + base.css imports pinned: drift would break the docs-site visual identity or strip the brand-mark from browser tabs', () => {
     expect(body).toMatch(/import '\.\.\/styles\/base\.css';/);
     expect(body).toMatch(
