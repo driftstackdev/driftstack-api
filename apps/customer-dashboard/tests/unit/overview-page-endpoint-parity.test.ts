@@ -57,6 +57,16 @@ describe('W337.C dashboard /index overview endpoint parity', () => {
     expect(body).toContain("localStorage.getItem('ds_web_session_token')");
   });
 
+  it('getJson surfaces the problem+json detail (W151/W152), not the internal path + raw status', () => {
+    // The account/me failure is the one user-visible error on this
+    // landing page; it must read as a human message, not leak
+    // "/v1/account/me returned 500". Pin the b.detail extraction + the
+    // clean banner copy, and assert the old path-leaking throw is gone.
+    expect(body).toMatch(/throw new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\)/);
+    expect(body).toContain('Could not load your account: ');
+    expect(body).not.toMatch(/throw new Error\(path \+ ' returned ' \+ r\.status\)/);
+  });
+
   it('routes through the team-RBAC act-as helper installed by DashboardLayout', () => {
     // The "self-scope returns {}" comment is load-bearing — it
     // documents that the request behaves identically when no

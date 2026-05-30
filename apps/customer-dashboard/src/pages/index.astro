@@ -276,7 +276,16 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       async function getJson(path) {
         const r = await fetch(apiBaseUrl + path, { headers });
-        if (!r.ok) throw new Error(path + ' returned ' + r.status);
+        if (!r.ok) {
+          // Surface the server's problem+json `detail` (W151/W152 baseline)
+          // rather than the internal path + raw status, so a visible
+          // failure reads as a human message ("Your session has expired.")
+          // instead of "/v1/account/me returned 500".
+          const b = await r.json().catch(function () {
+            return {};
+          });
+          throw new Error(b.detail || 'HTTP ' + r.status);
+        }
         return r.json();
       }
 
@@ -299,7 +308,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (profilesCap && me.profile_cap != null) profilesCap.textContent = ' / ' + me.profile_cap;
         })
         .catch(function (err) {
-          showBanner('Could not load account: ' + err.message);
+          showBanner(
+            'Could not load your account: ' +
+              (err && err.message ? err.message : 'network error'),
+          );
         })
         .finally(function () {
           // 2026-05-21 — DashboardLayout opacity-gate signal. The Overview
