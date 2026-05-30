@@ -1,0 +1,175 @@
+// Local integration test for the admin /sessions page's inline script,
+// focused on the operator FORCE-DESTROY flow (a staff admin kills a
+// customer's live session, with an OPTIONAL audited reason). A wiring
+// bug here either blocks support/incident response or mis-shapes the
+// audit body. Loads the built dist page, mocks localStorage + fetch
+// with a stateful URL router, and stubs the branded
+// window.driftstackPrompt (injected by AdminLayout). Admin pages are
+// static (prerendered), so the built dist HTML is loadable.
+//
+// Mirrors admin-api-keys-page.test.ts. Key contrast: the reason is
+// OPTIONAL here — empty reason still destroys, and the POST body must
+// be {} (not {reason:''}).
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { JSDOM } from 'jsdom';
+import { afterEach, describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'sessions', 'index.html');
+const PAGE_URL = 'https://admin.driftstack.dev/sessions/';
+
+interface MockFetchCall {
+  url: string;
+  init: RequestInit | undefined;
+}
+interface AdminSession {
+  id: string;
+  archetype: string;
+  account_id: string;
+  status: string;
+}
+interface SetUpOpts {
+  promptReturns?: string | null;
+  route: (call: MockFetchCall) => Response;
+}
+
+function setUpDom(
+  html: string,
+  opts: SetUpOpts,
+): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+  const scriptBodies: string[] = [];
+  const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
+    scriptBodies.push(body);
+    return '';
+  });
+  const dom = new JSDOM(htmlNoScripts, {
+    url: PAGE_URL,
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  const fetchCalls: MockFetchCall[] = [];
+  // @ts-expect-error — jsdom global is loose
+  if (typeof window.Response !== 'function') window.Response = Response;
+  // @ts-expect-error — jsdom global is loose
+  window.fetch = (input: string, init: RequestInit | undefined) => {
+    const call: MockFetchCall = { url: String(input), init };
+    fetchCalls.push(call);
+    return Promise.resolve(opts.route(call));
+  };
+  window.localStorage.setItem('ds_web_session_token', 'staff-tok');
+  const pr = opts.promptReturns === undefined ? 'support ticket #42' : opts.promptReturns;
+  // @ts-expect-error — driftstackPrompt is injected by AdminLayout
+  window.driftstackPrompt = () => Promise.resolve(pr);
+
+  const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-sessions"'));
+  if (!pageScript) throw new Error('admin sessions inline script not found');
+  // @ts-expect-error — jsdom global has eval
+  window.eval(pageScript);
+  return { window: window as JSDOM['window'], fetchCalls };
+}
+
+function json(obj: unknown, status = 200): Response {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+async function flush(times = 6): Promise<void> {
+  for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
+}
+
+function mkSession(over: Partial<AdminSession> = {}): AdminSession {
+  return {
+    id: 'agt_' + Math.random().toString(36).slice(2, 8),
+    archetype: 'iphone16pro_ios18_7_safari26_4',
+    account_id: 'acc_1',
+    status: 'running',
+    ...over,
+  };
+}
+
+function makeRouter(sessions: AdminSession[]): (c: MockFetchCall) => Response {
+  return (call: MockFetchCall): Response => {
+    const method = (call.init?.method || 'GET').toUpperCase();
+    const u = call.url.replace(/^https?:\/\/[^/]+/, '');
+    const destroy = u.match(/\/v1\/admin\/sessions\/([^/?]+)\/destroy$/);
+    if (destroy && method === 'POST') {
+      const s = sessions.find((x) => x.id === destroy[1]);
+      if (s) s.status = 'destroyed';
+      return json({ ok: true });
+    }
+    if (/\/v1\/admin\/sessions(\?|$)/.test(u) && method === 'GET') {
+      return json({ data: sessions });
+    }
+    return json({}, 404);
+  };
+}
+
+describe('admin sessions page — force-destroy (operator)', () => {
+  let win: JSDOM['window'] | null = null;
+  afterEach(() => {
+    win?.close?.();
+    win = null;
+  });
+  const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('renders sessions: a running session gets Force-destroy; a destroyed one does not', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: makeRouter([
+        mkSession({ id: 'agt_live', status: 'running' }),
+        mkSession({ id: 'agt_done', status: 'destroyed' }),
+      ]),
+    });
+    win = window;
+    await flush();
+    expect(
+      window.document.querySelector('[data-action="destroy"][data-id="agt_live"]'),
+    ).toBeTruthy();
+    expect(window.document.querySelector('[data-action="destroy"][data-id="agt_done"]')).toBeNull();
+  });
+
+  it('destroy WITH reason: POSTs /:id/destroy {reason}, then refresh removes the action', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      promptReturns: 'abuse — ToS violation',
+      route: makeRouter([mkSession({ id: 'agt_live', status: 'running' })]),
+    });
+    win = window;
+    await flush();
+    (
+      window.document.querySelector(
+        '[data-action="destroy"][data-id="agt_live"]',
+      ) as HTMLButtonElement
+    ).click();
+    await flush();
+    const post = fetchCalls.find(
+      (c) => c.init?.method === 'POST' && /\/v1\/admin\/sessions\/agt_live\/destroy$/.test(c.url),
+    );
+    expect(post).toBeTruthy();
+    expect(JSON.parse(String(post?.init?.body))).toEqual({ reason: 'abuse — ToS violation' });
+    expect(window.document.querySelector('[data-action="destroy"][data-id="agt_live"]')).toBeNull();
+  });
+
+  it('destroy WITHOUT reason (optional): still destroys, POST body is {} (not {reason:""})', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      promptReturns: '',
+      route: makeRouter([mkSession({ id: 'agt_live', status: 'running' })]),
+    });
+    win = window;
+    await flush();
+    (
+      window.document.querySelector(
+        '[data-action="destroy"][data-id="agt_live"]',
+      ) as HTMLButtonElement
+    ).click();
+    await flush();
+    const post = fetchCalls.find(
+      (c) => c.init?.method === 'POST' && /\/v1\/admin\/sessions\/agt_live\/destroy$/.test(c.url),
+    );
+    expect(post).toBeTruthy();
+    expect(JSON.parse(String(post?.init?.body))).toEqual({});
+  });
+});
