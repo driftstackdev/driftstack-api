@@ -8,7 +8,15 @@
 // Usage: const confirm = useConfirm(); ... if (!(await confirm(msg))) return;
 // Resolves true on Confirm, false on Cancel / backdrop / Escape.
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
 export interface ConfirmOptions {
   /** Label for the affirmative button (default 'Confirm'). */
@@ -47,17 +55,42 @@ export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Elem
     });
   }, []);
 
-  // Escape cancels while the dialog is open.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const confirmBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Full WCAG 2.4.3 dialog focus management while the dialog is open
+  // (mirrors the web DashboardLayout/AdminLayout branded modals): move
+  // focus into the dialog on open, trap Tab/Shift+Tab within it, and
+  // restore focus to the trigger on close. Escape cancels.
   useEffect(() => {
     if (pending === null) return;
+    const prevFocus = document.activeElement as HTMLElement | null;
+    confirmBtnRef.current?.focus();
     function onKey(e: KeyboardEvent): void {
       if (e.key === 'Escape') {
         e.preventDefault();
         settle(false);
+        return;
+      }
+      if (e.key === 'Tab') {
+        const focusables = dialogRef.current?.querySelectorAll<HTMLElement>('button');
+        if (!focusables || focusables.length === 0) return;
+        const first = focusables[0]!;
+        const last = focusables[focusables.length - 1]!;
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
       }
     }
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (prevFocus && prevFocus.focus) prevFocus.focus();
+    };
   }, [pending, settle]);
 
   return (
@@ -65,6 +98,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Elem
       {children}
       {pending !== null && (
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
@@ -78,7 +112,12 @@ export function ConfirmProvider({ children }: { children: ReactNode }): JSX.Elem
               <button type="button" className="btn-secondary" onClick={() => settle(false)}>
                 Cancel
               </button>
-              <button type="button" className="btn-primary" onClick={() => settle(true)}>
+              <button
+                ref={confirmBtnRef}
+                type="button"
+                className="btn-primary"
+                onClick={() => settle(true)}
+              >
                 {pending.confirmLabel}
               </button>
             </div>

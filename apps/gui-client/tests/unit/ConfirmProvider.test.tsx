@@ -100,4 +100,33 @@ describe('ConfirmProvider / useConfirm (desktop branded confirm)', () => {
     await waitFor(() => expect(results).toEqual([false]));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+
+  // WCAG 2.4.3 dialog focus management (parity with the web branded modals).
+  it('moves focus into the dialog (the Confirm button) when it opens', async () => {
+    renderWithProvider(() => {});
+    const trigger = screen.getByRole('button', { name: 'trigger' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const confirmBtn = await screen.findByRole('button', { name: 'Remove' });
+    await waitFor(() => expect(document.activeElement).toBe(confirmBtn));
+  });
+
+  it('restores focus to the trigger when the dialog closes', async () => {
+    renderWithProvider(() => {});
+    const trigger = screen.getByRole('button', { name: 'trigger' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it('traps Tab within the dialog: Tab from the last control wraps to the first', async () => {
+    renderWithProvider(() => {});
+    fireEvent.click(screen.getByRole('button', { name: 'trigger' }));
+    const cancelBtn = await screen.findByRole('button', { name: 'Cancel' });
+    const confirmBtn = screen.getByRole('button', { name: 'Remove' });
+    confirmBtn.focus(); // last focusable
+    fireEvent.keyDown(window, { key: 'Tab' });
+    await waitFor(() => expect(document.activeElement).toBe(cancelBtn)); // wrapped to first
+  });
 });
