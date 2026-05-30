@@ -185,6 +185,17 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!banner) return;
         banner.classList.add('hidden');
       }
+      // On a failed requeue/discard, surface the server's problem+json
+      // `detail` (W151/W152) so the operator sees why — e.g. "Delivery
+      // already discarded" / "already requeued" when another operator
+      // beat them to it — instead of a bare "HTTP 409". The load fetch
+      // keeps its own graceful "couldn't load" fallback.
+      function mutationError(r) {
+        return r
+          .json()
+          .catch(() => ({}))
+          .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+      }
       function escapeHtml(s) {
         return String(s).replace(
           /[&<>"']/g,
@@ -322,7 +333,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           credentials: 'include',
           body: '{}',
         })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((r) => (r.ok ? r.json() : mutationError(r)))
           .then(() => {
             showBanner('Requeued ' + id + '. Refreshing list…');
             load();
@@ -359,7 +370,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           credentials: 'include',
           body: '{}',
         })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((r) => (r.ok ? r.json() : mutationError(r)))
           .then(() => {
             showBanner('Discarded ' + id + '. Refreshing list…');
             load();

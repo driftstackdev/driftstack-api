@@ -92,4 +92,16 @@ describe('W360.C admin-panel /webhook-dlq page content parity', () => {
     expect(body).toMatch(/data-action="requeue"/);
     expect(body).toMatch(/function requeue\(id\)/);
   });
+
+  it('requeue/discard failures surface the server problem+json detail via mutationError (W151/W152)', () => {
+    // Concurrent operators on a shared DLQ can race; a refused
+    // requeue/discard ("already requeued", "already discarded") must
+    // explain itself rather than show a bare "HTTP 409". Pin the helper +
+    // both mutations routing through it (the load fetch keeps its own
+    // graceful fallback and is unaffected).
+    expect(body).toMatch(/function mutationError\(r\)/);
+    expect(body).toMatch(/b\.detail \|\| 'HTTP ' \+ r\.status/);
+    const usages = body.match(/r\.ok \? r\.json\(\) : mutationError\(r\)/g) ?? [];
+    expect(usages.length).toBe(2);
+  });
 });
