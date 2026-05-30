@@ -1,0 +1,183 @@
+// Behavioural coverage for the admin Overview (index) page —
+// apps/admin-panel/src/pages/index.astro. The operator's landing page: count
+// tiles (active / suspended / total accounts, webhook DLQ depth) from
+// /v1/admin/overview + a recent-admin-actions feed from /v1/admin/audit-log.
+// Untested until now; this locks the response field reads (the same field-drift
+// class that silently broke the Cost page) and the auth-gate / 403 paths.
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { JSDOM, VirtualConsole } from 'jsdom';
+import { afterEach, describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'index.html');
+const PAGE_URL = 'https://admin.driftstack.dev/';
+
+interface MockFetchCall {
+  url: string;
+  init: RequestInit | undefined;
+}
+
+interface SetUpOpts {
+  token?: string;
+  route: (call: MockFetchCall) => Response;
+}
+
+function setUpDom(
+  html: string,
+  opts: SetUpOpts,
+): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+  const scriptBodies: string[] = [];
+  const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
+    scriptBodies.push(body);
+    return '';
+  });
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', () => {});
+  const dom = new JSDOM(htmlNoScripts, {
+    url: PAGE_URL,
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole,
+  });
+  const { window } = dom;
+  const fetchCalls: MockFetchCall[] = [];
+  // @ts-expect-error — jsdom global is loose
+  if (typeof window.Response !== 'function') window.Response = Response;
+  // @ts-expect-error — jsdom global is loose
+  window.fetch = (input: string, init: RequestInit | undefined) => {
+    const call: MockFetchCall = { url: String(input), init };
+    fetchCalls.push(call);
+    return Promise.resolve(opts.route(call));
+  };
+  if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+  // @ts-expect-error — injected by AdminLayout
+  window.dashboardHydrated = () => {};
+
+  const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-overview"'));
+  if (!pageScript) throw new Error('admin-overview inline script not found');
+  // @ts-expect-error — jsdom global has eval
+  window.eval(pageScript);
+  return { window: window as JSDOM['window'], fetchCalls };
+}
+
+function text(window: JSDOM['window'], selector: string): string {
+  return window.document.querySelector(selector)?.textContent?.trim() ?? '';
+}
+
+function json(obj: unknown, status = 200): Response {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function makeRouter(opts: {
+  overview?: Record<string, unknown>;
+  overviewStatus?: number;
+  audit?: Array<Record<string, unknown>>;
+  auditStatus?: number;
+}): (c: MockFetchCall) => Response {
+  return (call) => {
+    if (/\/v1\/admin\/audit-log/.test(call.url)) {
+      return json({ data: opts.audit ?? [] }, opts.auditStatus ?? 200);
+    }
+    if (/\/v1\/admin\/overview/.test(call.url)) {
+      return json(opts.overview ?? {}, opts.overviewStatus ?? 200);
+    }
+    return json({}, 404);
+  };
+}
+
+async function flush(times = 8): Promise<void> {
+  for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
+}
+
+let win: JSDOM['window'] | undefined;
+afterEach(() => {
+  win?.close?.();
+  win = undefined;
+});
+
+describe('admin-panel Overview (index.astro) behaviour', () => {
+  it('no session token: shows the staff-admin banner and makes no API call', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      route: () => {
+        throw new Error('must not fetch when unauthenticated');
+      },
+    });
+    win = window;
+    await flush();
+    expect(fetchCalls.length).toBe(0);
+    expect(text(window, '[data-banner]')).toContain('Sign in with a staff admin account');
+  });
+
+  it('live data: count tiles + total annotation + DLQ depth populate from /v1/admin/overview', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: { active: 42, suspended: 3, deleted: 5, total: 50 },
+          webhooks: { dlq_depth: 7 },
+        },
+        audit: [],
+      }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-field="active-accounts"]')).toBe('42');
+    expect(text(window, '[data-field="suspended-accounts"]')).toBe('3');
+    expect(text(window, '[data-field="total-accounts-annotation"]')).toContain('of 50 total');
+    expect(text(window, '[data-field="dlq-depth"]')).toBe('7');
+  });
+
+  it('recent-actions feed renders an admin action with actor, action, result, and target', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: { accounts: { active: 1, suspended: 0, total: 1 }, webhooks: { dlq_depth: 0 } },
+        audit: [
+          {
+            admin_account_id: 'acc_adm1',
+            action: 'account.suspend',
+            result: 'success',
+            timestamp: '2026-05-20T10:00:00.000Z',
+            target_account_id: 'acc_t1',
+          },
+        ],
+      }),
+    });
+    win = window;
+    await flush();
+    const feed = text(window, '[data-list="recent-audits"]');
+    expect(feed).toContain('acc_adm1');
+    expect(feed).toContain('account.suspend');
+    expect(feed).toContain('success');
+    expect(feed).toContain('acc_t1');
+  });
+
+  it('empty audit feed: shows the no-actions message', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: { accounts: { active: 0, suspended: 0, total: 0 }, webhooks: { dlq_depth: 0 } },
+        audit: [],
+      }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-list="recent-audits"]')).toContain('No admin actions recorded yet');
+  });
+
+  it('403: surfaces the admin-scope-required message', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({ overviewStatus: 403, auditStatus: 403 }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-banner]')).toContain('admin scope required');
+  });
+});
