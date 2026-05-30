@@ -62,3 +62,18 @@
     @apply rounded-lg border border-slate-200 bg-white p-6 shadow-sm;
   }
 }
+
+/* Global reduced-motion baseline (admin had none). Un-layered + !important
+   so it wins over Tailwind's animate-* / transition utilities — operators
+   who prefer reduced motion get near-instant animations + transitions
+   instead of the skeleton pulses, spinners, and fades. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
