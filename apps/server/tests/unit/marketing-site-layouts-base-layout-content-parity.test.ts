@@ -107,7 +107,7 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     expect(body).toMatch(/import Header from '\.\.\/components\/Header\.astro';/);
     expect(body).toMatch(/import Footer from '\.\.\/components\/Footer\.astro';/);
     expect(body).toMatch(/<Header \/>/);
-    expect(body).toMatch(/<main class="flex-1">/);
+    expect(body).toMatch(/<main\b[^>]*\bclass="flex-1">/);
     expect(body).toMatch(/<slot \/>/);
     expect(body).toMatch(/<Footer \/>/);
   });

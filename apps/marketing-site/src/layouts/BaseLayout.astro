@@ -65,6 +65,13 @@ const ogImageUrl = new URL(ogImage ?? '/og-default.svg', Astro.site).toString();
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=2" />
   </head>
   <body class="relative">
+    {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR users skip the nav. */}
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-glow-red focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+    >
+      Skip to main content
+    </a>
     <!-- Ambient background layer: radial glow + faint grid pattern. -->
     <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">
       <div class="absolute inset-0 grid-bg opacity-60"></div>
@@ -73,7 +80,7 @@ const ogImageUrl = new URL(ogImage ?? '/og-default.svg', Astro.site).toString();
     </div>
 
     <Header />
-    <main class="flex-1">
+    <main id="main-content" tabindex="-1" class="flex-1">
       <slot />
     </main>
     <Footer />

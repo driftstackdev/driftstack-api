@@ -111,10 +111,17 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     );
   });
 
-  it('renders <Header /> + <slot /> in <main class="flex-1"> + <Footer />', () => {
+  it('renders <Header /> + <slot /> in <main class="flex-1"> + <Footer />, with the skip-link target on <main>', () => {
     expect(body).toMatch(/<Header \/>/);
-    expect(body).toMatch(/<main class="flex-1">\s*\n?\s*<slot \/>\s*\n?\s*<\/main>/);
+    expect(body).toMatch(/<main\b[^>]*\bclass="flex-1">\s*<slot \/>\s*<\/main>/);
+    expect(body).toMatch(/<main\b[^>]*\bid="main-content"[^>]*\btabindex="-1"/);
     expect(body).toMatch(/<Footer \/>/);
+  });
+
+  it('WCAG 2.4.1 skip link: a "Skip to main content" anchor targets #main-content (sr-only until focused)', () => {
+    expect(body).toMatch(/href="#main-content"/);
+    expect(body).toMatch(/sr-only focus:not-sr-only/);
+    expect(body).toMatch(/Skip to main content/);
   });
 
   it('html lang="en" + charset UTF-8 + viewport meta', () => {

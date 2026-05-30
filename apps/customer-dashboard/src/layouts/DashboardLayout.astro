@@ -194,6 +194,13 @@ const navSections: NavSection[] = [
     }
   </head>
   <body class="relative">
+    {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR users skip the sidebar nav. */}
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-glow-red focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+    >
+      Skip to main content
+    </a>
     {/*
       V-219* — brand alignment with marketing site:
         - Sidebar header: D-badge (gradient-accent) + lowercase font-mono
@@ -496,6 +503,8 @@ const navSections: NavSection[] = [
           )
         }
         <main
+          id="main-content"
+          tabindex="-1"
           class="flex-1"
           data-hydrate="pending"
           style="opacity: 0; transition: opacity 0.18s ease-out"

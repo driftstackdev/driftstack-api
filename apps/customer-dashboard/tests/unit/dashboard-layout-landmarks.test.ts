@@ -18,8 +18,16 @@ function read(p: string): string {
 describe('W282.B DashboardLayout accessibility landmarks', () => {
   const body = read(LAYOUT);
 
-  it('layout declares a <main> landmark', () => {
+  it('layout declares a <main> landmark (with the skip-link target id + tabindex)', () => {
     expect(body).toMatch(/<main\b/);
+    expect(body).toMatch(/<main\b[^>]*\bid="main-content"/);
+    expect(body).toMatch(/<main\b[^>]*\btabindex="-1"/);
+  });
+
+  it('WCAG 2.4.1 skip link: "Skip to main content" anchor → #main-content (sr-only until focused)', () => {
+    expect(body).toMatch(/href="#main-content"/);
+    expect(body).toMatch(/sr-only focus:not-sr-only/);
+    expect(body).toMatch(/Skip to main content/);
   });
 
   it('layout exposes a role=status region for screen-reader status updates', () => {
