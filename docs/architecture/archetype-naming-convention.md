@@ -40,6 +40,33 @@ Mapped from identifier in `packages/api-types/src/common.ts:ARCHETYPE_DISPLAY_LA
 Marketing-site, customer-dashboard, admin-panel, and GUI client all import
 `archetypeDisplayLabel(id)` rather than rendering the raw identifier.
 
+## Multi-archetype registry
+
+The platform is NOT a single-device product — it models a matrix of iPhone /
+iPad models across iOS + Safari versions. `packages/api-types/src/common.ts`
+exports `ARCHETYPE_REGISTRY`, the single-source-of-truth catalogue. Each
+`ArchetypeConfig` carries `id` / `displayLabel` / `device` / `iosVersion` /
+`safariVersion` / `canvasFamily`, plus a `status`:
+
+- `launch` — fingerprint atlas populated; the current default at v1.0.
+- `reference` — a captured reference archetype (e.g. the Family A baseline).
+- `planned` — a recognized slug whose atlas is not yet populated (placeholder).
+
+`ARCHETYPE_DISPLAY_LABEL` and `archetypeDisplayLabel(id)` are DERIVED from the
+registry, so adding a device is adding one registry entry — not editing a
+hardcoded list. Slugs must match Agent-1's atlas naming (the identifier shape
+above). Registering a slug as `planned` before its atlas lands is expected:
+the customer-facing selector surfaces only populated (`launch` / `reference`)
+archetypes, and a `planned` entry "lights up" automatically when its status
+flips.
+
+**Changing the launch default is a status flip, not a system-wide swap.**
+Point the new entry to `status: 'launch'` (and the prior default away) — the
+registry already recognizes the slug, so there is no slug-rename sweep across
+the codebase. The multi-surface coordination below applies only to a true
+identifier-FORMAT change (e.g. the V-136 rename), not to promoting a new
+launch default.
+
 ## When the locked archetype changes
 
 Every iOS major version bump (iOS 19, iOS 20, ...) requires a coordinated

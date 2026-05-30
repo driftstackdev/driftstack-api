@@ -99,6 +99,21 @@ describe('W559.A /docs/architecture/archetype-naming-convention.md content parit
     expect(body).toMatch(/`apps\/server\/src\/services\/sessions\.ts`/);
   });
 
+  it('Multi-archetype registry section pinned: the platform models a device matrix (NOT single-device); ARCHETYPE_REGISTRY is the source of truth; launch/reference/planned status; display labels DERIVE from it; launch-default change = status flip not a system-wide swap — pinned so the registry-architecture commitment (954db754) survives in the doc', () => {
+    expect(body).toMatch(/## Multi-archetype registry/);
+    expect(body).toMatch(/The platform is NOT a single-device product/);
+    expect(body).toMatch(/exports `ARCHETYPE_REGISTRY`, the single-source-of-truth catalogue/);
+    expect(body).toMatch(/- `launch` —/);
+    expect(body).toMatch(/- `reference` —/);
+    expect(body).toMatch(/- `planned` —/);
+    expect(body).toMatch(
+      /`ARCHETYPE_DISPLAY_LABEL` and `archetypeDisplayLabel\(id\)` are DERIVED from the\s*\n?\s*registry/,
+    );
+    expect(body).toMatch(
+      /\*\*Changing the launch default is a status flip, not a system-wide swap\.\*\*/,
+    );
+  });
+
   it("Don't-include 4-row + parallel-rationale framing pinned: '## Don't include in the identifier' + 'Patch version (`18.7.1`) — fingerprint-stable across patches.' + 'Build number (`22F76`) — internal Apple identifier, not customer-relevant.' + 'Region (`en_US`) — locale is a separate axis' + 'Profile id — profiles are an orthogonal concept' + '## Rationale for parallel iOS + Safari versioning' + 'Apple shipped **iOS 18.7 with Safari 26.4** in a recent release.' + 'Pre-V-136 the codebase used `iphone16pro_ios26_4_1` — conflating the Safari version' + 'with a fictional \"iOS 26.4.1\" that doesn't exist.' + 'Safari 26 is \"Safari 18 evolved\"' — pinned so the 4-don't-include (patch + build-22F76 + region-en_US + profile-id) + iOS-18.7-Safari-26.4 + pre-V-136-conflate-fix + Safari-18-evolved commitment survives", () => {
     expect(body).toMatch(/## Don't include in the identifier/);
     expect(body).toMatch(/- Patch version \(`18\.7\.1`\) — fingerprint-stable across patches\./);
