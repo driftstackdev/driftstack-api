@@ -24,3 +24,4 @@ export * from './livekit.js';
 export * from './agent-input-event.js';
 export * from './agent-models.js';
 export * from './agent-sessions.js';
+export * from './agent-intents.js';

@@ -121,6 +121,8 @@ import {
   SavedProxyConfigSchema,
   AgentModelSchema,
   AgentSessionSchema,
+  AgentIntentSchema,
+  IntentResultSchema,
 } from '@driftstack/api-types';
 
 const PaginatedSessionsSchema = z.object({
@@ -185,6 +187,8 @@ function buildRegistry(): OpenAPIRegistry {
   r.register('ApiKey', ApiKeySchema);
   r.register('Session', SessionSchema);
   r.register('AgentSession', AgentSessionSchema);
+  r.register('AgentIntent', AgentIntentSchema);
+  r.register('IntentResult', IntentResultSchema);
   r.register('SessionState', SessionStateSchema);
   r.register('Problem', ProblemSchema);
   r.register('UsagePeriodSummary', UsagePeriodSummarySchema);
@@ -2775,8 +2779,8 @@ function buildRegistry(): OpenAPIRegistry {
               z.object({
                 kind: z.literal('plan-executed'),
                 session: AgentSessionSchema,
-                intents: z.array(z.object({})),
-                results: z.array(z.object({})),
+                intents: z.array(AgentIntentSchema),
+                results: z.array(IntentResultSchema),
                 ok: z.boolean(),
               }),
               z.object({

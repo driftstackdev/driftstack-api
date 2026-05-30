@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AgentSessionSchema } from '@driftstack/api-types';
+import { AgentSessionSchema, AgentIntentSchema, IntentResultSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -52,5 +52,29 @@ describe('agent-session response schema parity', () => {
     const sessionFields = oapi.match(/session: AgentSessionSchema,/g) ?? [];
     // 3 union members each carry the updated session envelope.
     expect(sessionFields.length).toBe(3);
+  });
+
+  it('OpenAPI types the message turn-result intents/results arrays (were z.array(z.object({}))); AgentIntent/IntentResult cover the route vocabulary', () => {
+    const oapi = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
+    expect(oapi).toMatch(/intents: z\.array\(AgentIntentSchema\)/);
+    expect(oapi).toMatch(/results: z\.array\(IntentResultSchema\)/);
+    // Route parity: the decomposer's AgentIntent union member count == the schema's
+    // (a 5th verb added to the route but not api-types fails here).
+    const decomposer = read(resolve(REPO_ROOT, 'apps/server/src/services/agent-decomposer.ts'));
+    const intentBlock = decomposer.match(/export type AgentIntent =([\s\S]+?)\n\n/)?.[1] ?? '';
+    const routeVerbCount = (intentBlock.match(/kind: '/g) ?? []).length;
+    expect(routeVerbCount).toBe(4);
+    expect(AgentIntentSchema.options).toHaveLength(routeVerbCount);
+    expect(IntentResultSchema.options).toHaveLength(2);
+    // The closed verb vocabulary parses under the schema.
+    expect(AgentIntentSchema.safeParse({ kind: 'navigate', url: 'https://x' }).success).toBe(true);
+    expect(AgentIntentSchema.safeParse({ kind: 'capture', capture: 'pdf' }).success).toBe(true);
+    expect(
+      IntentResultSchema.safeParse({
+        kind: 'success',
+        intent: { kind: 'wait', condition: 'idle' },
+        summary: 'ok',
+      }).success,
+    ).toBe(true);
   });
 });
