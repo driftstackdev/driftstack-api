@@ -152,4 +152,96 @@ describe('admin-panel Cost (cost.astro) config-load behaviour', () => {
     await flush();
     expect(text(window, '[data-banner]')).toContain('returned 500');
   });
+
+  it('account query: strips the acc_ prefix, fetches the breakdown, and renders total + soft/hard at 2-decimals', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (/\/v1\/admin\/cost\/accounts\/test123/.test(call.url)) {
+          return json({
+            account_id: 'test123',
+            billing_cycle: '2026-05',
+            tier: 'api_builder',
+            breakdown: {
+              computeCents: 1000,
+              storageCents: 500,
+              egressCents: 200,
+              emailCents: 100,
+              llmCents: 300,
+              totalCents: 2100,
+              thresholdState: 'between-soft-and-hard',
+            },
+            thresholds: { softCents: 1550, hardCents: 5000 },
+          });
+        }
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
+    const input = form.querySelector('input[name="account_id"]') as HTMLInputElement;
+    input.value = 'acc_test123';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    // The acc_ prefix is stripped before hitting the cost endpoint.
+    expect(fetchCalls.some((c) => /\/v1\/admin\/cost\/accounts\/test123/.test(c.url))).toBe(true);
+    const result = text(window, '[data-field="account-result"]');
+    expect(result).toContain('$21.00'); // totalCents 2100
+    expect(result).toContain('between-soft-and-hard'); // threshold state badge
+    expect(result).toContain('$15.50'); // soft warn 1550c
+    expect(result).toContain('$50.00'); // hard cap 5000c
+  });
+
+  it('account query 404: surfaces the no-usage message', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (/\/v1\/admin\/cost\/accounts\//.test(call.url)) return json({ detail: 'none' }, 404);
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="account-query"]') as HTMLFormElement;
+    (form.querySelector('input[name="account_id"]') as HTMLInputElement).value = 'acc_missing';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(text(window, '[data-banner]')).toContain('no usage in the requested cycle');
+  });
+
+  it('top accounts: two-step fetch (accounts → overview) renders the money table', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      adminToken: 'admtok',
+      route: (call) => {
+        if (/\/v1\/admin\/accounts\?/.test(call.url)) {
+          return json({ data: [{ id: 'acc_a1' }] });
+        }
+        if (/\/v1\/admin\/cost\/overview\?/.test(call.url)) {
+          return json({
+            summaries: [
+              {
+                account_id: 'a1',
+                tier: 'api_builder',
+                breakdown: { totalCents: 2100, thresholdState: 'between-soft-and-hard' },
+                thresholds: { softCents: 1550, hardCents: 5000 },
+              },
+            ],
+          });
+        }
+        return json({ rates: {}, tierThresholds: {} });
+      },
+    });
+    win = window;
+    await flush();
+    const btn = window.document.querySelector('[data-button="refresh-top"]') as HTMLButtonElement;
+    btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+    await flush();
+    const top = text(window, '[data-field="top-result"]');
+    expect(top).toContain('a1');
+    expect(top).toContain('api_builder');
+    expect(top).toContain('$21.00');
+    expect(top).toContain('$15.50');
+    expect(top).toContain('$50.00');
+  });
 });
