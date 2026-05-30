@@ -66,7 +66,9 @@ describe('W345.C admin /audit-log filter + lifecycle parity', () => {
   it('result-only filtering is client-side (server schema does not accept result yet)', () => {
     // Catches a future server addition that should remove the
     // client-side filter pass.
-    expect(page).toMatch(/entries\.filter\(\(e\) => e\.result === resultFilter\)/);
+    expect(page).toMatch(
+      /entries\.filter\(\(e\) => String\(e\.result\)\.startsWith\(resultFilter\)\)/,
+    );
     expect(schemaSrc).not.toMatch(/result:\s*z\.enum/);
   });
 

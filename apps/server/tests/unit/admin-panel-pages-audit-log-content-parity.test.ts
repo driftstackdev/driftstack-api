@@ -75,9 +75,10 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
     expect(body).toMatch(/resultEl\.addEventListener\('change', scheduleLoad\)/);
   });
 
-  it('Client-side result-filter: result = entries.filter((e) => e.result === resultFilter) after fetch — pinned so the result-only filter stays client-side until the server endpoint adds a `result` query param (drift to a query-param result filter would silently no-op since the endpoint ignores unknown params)', () => {
+  it('Client-side result-filter: entries.filter on a startsWith(resultFilter) PREFIX match (not exact ===) — failures are audited as `error: <code>`, so an exact "error" match never hit them; stays client-side until the server endpoint adds a result query param', () => {
+    expect(body).toMatch(/const resultFilter = resultEl \? resultEl\.value : '';/);
     expect(body).toMatch(
-      /const resultFilter = resultEl \? resultEl\.value : '';\s*\n?\s*if \(resultFilter\) \{\s*\n?\s*entries = entries\.filter\(\(e\) => e\.result === resultFilter\);\s*\n?\s*\}/,
+      /entries = entries\.filter\(\(e\) => String\(e\.result\)\.startsWith\(resultFilter\)\);/,
     );
   });
 

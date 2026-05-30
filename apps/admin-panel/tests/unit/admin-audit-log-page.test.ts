@@ -86,14 +86,15 @@ const SUCCESS_ENTRY = {
   action: 'profile.force_delete',
   result: 'success',
 };
-// The result <select> offers value="error" (not "failure") for the non-success
-// case, and rowHtml badges anything !== 'success' as an error — so a non-success
-// row carries result: 'error'.
+// Failures are audited as `error: <code>` by every admin route's catch block
+// (NOT a bare 'error'), and the result <select> offers value="error". The
+// client filter must therefore PREFIX-match — using a realistic value here is
+// what exercises the bug (an exact === 'error' filter would never match this).
 const ERROR_ENTRY = {
   admin_account_id: 'acc_adm2',
   timestamp: '2026-05-21T08:30:00.000Z',
   action: 'account.suspend',
-  result: 'error',
+  result: 'error: forbidden',
 };
 
 let win: JSDOM['window'] | undefined;

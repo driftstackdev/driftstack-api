@@ -256,7 +256,12 @@ const apiBaseUrl = resolveApiBaseUrl();
             let entries = body.data || [];
             const resultFilter = resultEl ? resultEl.value : '';
             if (resultFilter) {
-              entries = entries.filter((e) => e.result === resultFilter);
+              // Failures are audited as `error: <code>` (every admin route's
+              // catch block), so an exact === 'error' match never hit them and
+              // "Errors only" silently showed nothing. Prefix-match instead:
+              // 'success' matches the exact success result, 'error' matches
+              // every `error: <code>` variant.
+              entries = entries.filter((e) => String(e.result).startsWith(resultFilter));
             }
             if (tbody) {
               if (entries.length === 0) {
