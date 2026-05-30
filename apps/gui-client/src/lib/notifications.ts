@@ -9,13 +9,11 @@
 // the JSON-encoded NotificationEvent matching the server union.
 //
 // Authentication note: native EventSource lacks header support, so
-// this lib accepts an explicit `url` (caller-built; any auth scheme
-// the runtime supports — Tauri's invoke-fetch bridge for the GUI;
-// `event-source-polyfill` for plain web). The route on the server
-// uses the standard requireAuth Bearer-header preHandler; the GUI
-// glue to thread the apiKey into the EventSource handshake lives at
-// the call site, not in this lib. v0.2 will pick one bridge once
-// the GUI's actual integration shape is concrete.
+// this lib accepts an explicit `url` (caller-built). The server route
+// authenticates via requireAuthEventSource, which reads the bearer
+// from a `?ds_token=` query param (EventSource can't set an
+// Authorization header). The call site builds that URL via
+// notificationStreamUrl() (lib/notification-stream-url.ts).
 //
 // Reconnect: the browser-native EventSource auto-reconnects on
 // transient drops (default 3s backoff). For a v0.2 follow-up we'll

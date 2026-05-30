@@ -11,6 +11,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { subscribeNotifications, type NotificationEvent } from './notifications';
+import { notificationStreamUrl } from './notification-stream-url';
 import { useSettings } from './SettingsContext';
 
 const DEFAULT_RING_SIZE = 16;
@@ -55,14 +56,7 @@ export function useNotifications(opts: UseNotificationsOpts = {}): UseNotificati
       setConnection('idle');
       return;
     }
-    const trimmed = baseUrl.replace(/\/+$/, '');
-    // Caller-built URL; auth threading is a runtime concern (see
-    // notifications.ts header). The GUI prefers the Tauri invoke-
-    // fetch bridge once available; v0.1 uses a `?token=` query-param
-    // bridge that the server is expected to accept alongside the
-    // standard requireAuth Bearer header (server-side glue lands
-    // in a v0.2 follow-up; see design doc).
-    const url = `${trimmed}/v1/account/me/notifications?token=${encodeURIComponent(apiKey)}`;
+    const url = notificationStreamUrl(baseUrl, apiKey);
     const close = subscribeNotifications({
       url,
       onEvent: (event) => {
