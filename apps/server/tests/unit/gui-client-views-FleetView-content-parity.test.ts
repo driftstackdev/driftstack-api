@@ -97,9 +97,12 @@ describe('W482.C apps/gui-client/src/views/FleetView.tsx content parity', () => 
     );
   });
 
-  it('destroy guard: window.confirm(`Remove "${member.label}" from the fleet?`) early-return if !confirmed + then removeFleetMember + clean up pings[id] entry (delete) + refresh() — pinned so accidental Remove clicks have an abort path with no recoverable trash bin', () => {
+  it('destroy guard: branded useConfirm(`Remove "${member.label}" from the fleet?`) early-return if !confirmed + then removeFleetMember + clean up pings[id] entry (delete) + refresh() — pinned so accidental Remove clicks have an abort path with no recoverable trash bin (window.confirm is flaky in the Tauri WKWebView, so the branded modal is the reliable shape)', () => {
     expect(body).toMatch(
-      /async function destroy\(member: FleetMember\): Promise<void> \{\s*\n?\s*if \(!window\.confirm\(`Remove "\$\{member\.label\}" from the fleet\?`\)\) return;\s*\n?\s*await removeFleetMember\(member\.id\);\s*\n?\s*setPings\(\(prev\) => \{\s*\n?\s*const next = \{ \.\.\.prev \};\s*\n?\s*delete next\[member\.id\];\s*\n?\s*return next;\s*\n?\s*\}\);\s*\n?\s*await refresh\(\);\s*\n?\s*\}/,
+      /async function destroy\(member: FleetMember\): Promise<void> \{\s*\n?\s*if \(!\(await confirm\(`Remove "\$\{member\.label\}" from the fleet\?`, \{ confirmLabel: 'Remove' \}\)\)\)\s*\n?\s*return;/,
+    );
+    expect(body).toMatch(
+      /await removeFleetMember\(member\.id\);\s*\n?\s*setPings\(\(prev\) => \{\s*\n?\s*const next = \{ \.\.\.prev \};\s*\n?\s*delete next\[member\.id\];\s*\n?\s*return next;\s*\n?\s*\}\);\s*\n?\s*await refresh\(\);/,
     );
   });
 

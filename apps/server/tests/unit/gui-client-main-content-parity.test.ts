@@ -40,9 +40,10 @@ describe('W486.B apps/gui-client/src/main.tsx content parity', () => {
     expect(body).toMatch(/if \(!root\) throw new Error\('root element missing'\);/);
   });
 
-  it("createRoot(root).render wraps <App /> in <StrictMode> — pinned so StrictMode stays at the top of the tree (drift to bare <App /> drops React's double-invoke detection for unsafe lifecycle patterns)", () => {
+  it('createRoot(root).render wraps <App /> in <ConfirmProvider> inside <StrictMode> — pinned so StrictMode stays at the top of the tree (double-invoke detection) and the branded ConfirmProvider wraps the app (so useConfirm works everywhere, replacing Tauri-flaky window.confirm)', () => {
+    expect(body).toMatch(/import \{ ConfirmProvider \} from '\.\/components\/ConfirmProvider';/);
     expect(body).toMatch(
-      /createRoot\(root\)\.render\(\s*\n?\s*<StrictMode>\s*\n?\s*<App \/>\s*\n?\s*<\/StrictMode>,\s*\n?\s*\);/,
+      /createRoot\(root\)\.render\(\s*\n?\s*<StrictMode>\s*\n?\s*<ConfirmProvider>\s*\n?\s*<App \/>\s*\n?\s*<\/ConfirmProvider>\s*\n?\s*<\/StrictMode>,\s*\n?\s*\);/,
     );
   });
 

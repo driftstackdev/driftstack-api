@@ -17,6 +17,7 @@ import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { useSettings } from '../lib/SettingsContext';
 import { isCloudBaseUrl } from '../lib/telemetry';
+import { useConfirm } from '../components/ConfirmProvider';
 
 const CLOUD_URL = 'https://api.driftstack.dev';
 const SELF_HOSTED_DEFAULT = 'http://localhost:3000';
@@ -28,6 +29,7 @@ type TestState =
   | { kind: 'fail'; message: string };
 
 export function SettingsView(): JSX.Element {
+  const confirm = useConfirm();
   const { settings, update, loading } = useSettings();
   const [draftKey, setDraftKey] = useState(settings.apiKey ?? '');
   const [draftUrl, setDraftUrl] = useState(settings.baseUrl);
@@ -207,18 +209,21 @@ export function SettingsView(): JSX.Element {
             type="button"
             className="btn-secondary mt-3"
             onClick={() => {
-              if (
-                window.confirm(
-                  'Sign out of this device? This forgets the API key locally; the key is NOT revoked on the server. Revoke it from the dashboard if you want to fully invalidate it.',
-                )
-              ) {
-                setDraftKey('');
-                void update({
-                  apiKey: null,
-                  baseUrl: settings.baseUrl,
-                  telemetryOptIn: settings.telemetryOptIn,
-                });
-              }
+              void (async () => {
+                if (
+                  await confirm(
+                    'Sign out of this device? This forgets the API key locally; the key is NOT revoked on the server. Revoke it from the dashboard if you want to fully invalidate it.',
+                    { confirmLabel: 'Sign out' },
+                  )
+                ) {
+                  setDraftKey('');
+                  void update({
+                    apiKey: null,
+                    baseUrl: settings.baseUrl,
+                    telemetryOptIn: settings.telemetryOptIn,
+                  });
+                }
+              })();
             }}
           >
             Sign out

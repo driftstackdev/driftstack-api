@@ -22,6 +22,7 @@ import {
   type FleetMemberPing,
   type DraftValidation,
 } from '../lib/fleet-members';
+import { useConfirm } from '../components/ConfirmProvider';
 
 interface FormState {
   draft: FleetMemberDraft;
@@ -37,6 +38,7 @@ const EMPTY_DRAFT: FleetMemberDraft = {
 };
 
 export function FleetView(): JSX.Element {
+  const confirm = useConfirm();
   const [members, setMembers] = useState<FleetMember[]>([]);
   const [pings, setPings] = useState<Record<string, FleetMemberPing | 'pending'>>({});
   const [loading, setLoading] = useState(true);
@@ -108,7 +110,8 @@ export function FleetView(): JSX.Element {
   }
 
   async function destroy(member: FleetMember): Promise<void> {
-    if (!window.confirm(`Remove "${member.label}" from the fleet?`)) return;
+    if (!(await confirm(`Remove "${member.label}" from the fleet?`, { confirmLabel: 'Remove' })))
+      return;
     await removeFleetMember(member.id);
     setPings((prev) => {
       const next = { ...prev };

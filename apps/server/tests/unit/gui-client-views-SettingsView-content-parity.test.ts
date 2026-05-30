@@ -87,9 +87,9 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     );
   });
 
-  it("Sign-out window.confirm pinned with 'Sign out of this device? This forgets the API key locally; the key is NOT revoked on the server. Revoke it from the dashboard if you want to fully invalidate it.' wording — pinned so customer understands the difference between local sign-out and full server-side revocation", () => {
+  it("Sign-out branded useConfirm pinned with 'Sign out of this device? This forgets the API key locally; the key is NOT revoked on the server. Revoke it from the dashboard if you want to fully invalidate it.' wording — pinned so customer understands the difference between local sign-out and full server-side revocation (migrated off window.confirm, which is flaky in the Tauri WKWebView)", () => {
     expect(body).toMatch(
-      /window\.confirm\(\s*\n?\s*'Sign out of this device\? This forgets the API key locally; the key is NOT revoked on the server\. Revoke it from the dashboard if you want to fully invalidate it\.',\s*\n?\s*\)/,
+      /await confirm\(\s*\n?\s*'Sign out of this device\? This forgets the API key locally; the key is NOT revoked on the server\. Revoke it from the dashboard if you want to fully invalidate it\.',/,
     );
   });
 
