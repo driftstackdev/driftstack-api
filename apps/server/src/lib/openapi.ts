@@ -833,7 +833,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       params: z.object({ id: z.string() }),
       query: z.object({
-        bucket_key: z.enum(['global', 'sessions:create']),
+        bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']),
       }),
     },
     responses: {
@@ -1521,7 +1521,7 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   const RateLimitBucketOpenApi = z.object({
-    bucket_key: z.enum(['global', 'sessions:create']),
+    bucket_key: z.enum(['global', 'sessions:create', 'agent_sessions:message']),
     capacity: z.number().int().positive(),
     refill_per_second: z.number().positive(),
     source: z.enum(['tier_default', 'override']),
