@@ -49,6 +49,7 @@ import {
   ApiError,
   BadRequestError,
   ConflictError,
+  InternalError,
   NotFoundError,
   TierLimitError,
   UnauthorizedError,
@@ -294,6 +295,41 @@ describe('W965 errors lib RFC 7807 cross-source invariant', () => {
       cause: originalError,
     });
     expect(err.cause).toBe(originalError);
+  });
+
+  // ─── 500 cause never leaks into the problem body (CWE-209) ───
+
+  it("CRITICAL InternalError preserves the cause on the Error object (for logs) but toProblem() does NOT spread it into the response body. The error-handler wraps every unknown 5xx as `new InternalError('...', err)` passing `err` as the CAUSE (not extensions) — this runtime guard ensures a Postgres/Drizzle error's table/column/constraint/SQL detail stays log-only and never reaches the customer (the never-leak-raw-messages invariant; CWE-209 info-disclosure).", () => {
+    // node-postgres errors carry enumerable own props that WOULD leak
+    // if the cause were ever spread into the body (e.g. via a refactor
+    // that routed cause into `extensions`). The handler-source parity
+    // test can't catch that — only this behavioural assertion can.
+    const pgLikeCause = Object.assign(new Error('duplicate key value violates unique constraint'), {
+      code: '23505',
+      table: 'accounts',
+      column: 'email',
+      constraint: 'accounts_email_key',
+      detail: 'Key (email)=(victim@example.com) already exists.',
+      schema: 'public',
+    });
+    const err = new InternalError('An unexpected error occurred.', pgLikeCause);
+    // Cause IS preserved on the Error object so server-side logs surface it.
+    expect(err.cause).toBe(pgLikeCause);
+    // Body is EXACTLY the 5 safe RFC 7807 fields — toEqual fails if ANY
+    // cause prop (code/table/column/constraint/detail/schema) leaks in.
+    const problem = err.toProblem('/v1/sessions/abc');
+    expect(problem).toEqual({
+      type: err.type,
+      title: 'Internal Server Error',
+      status: 500,
+      detail: 'An unexpected error occurred.',
+      instance: '/v1/sessions/abc',
+    });
+    for (const leakyKey of ['code', 'table', 'column', 'constraint', 'schema', 'cause']) {
+      expect(problem, `problem body must NOT leak '${leakyKey}'`).not.toHaveProperty(leakyKey);
+    }
+    // `detail` IS present but MUST be the generic message, not the pg detail.
+    expect(problem.detail).toBe('An unexpected error occurred.');
   });
 
   // ─── ApiError default message = detail OR title ──────────────
