@@ -10,7 +10,7 @@
 //   • fullTitle: 'Driftstack' → 'Driftstack' (no suffix);
 //     otherwise '<title> · Driftstack' (middle-dot separator).
 //   • canonical = new URL(pathname, Astro.site).toString().
-//   • ogImageUrl absolute-resolution via new URL(...) + /og-default.svg
+//   • ogImageUrl absolute-resolution via new URL(...) + /og-default.png
 //     site-root fallback.
 //   • OG/Twitter meta: og:type=website + og:image 1200x630 +
 //     twitter:card=summary_large_image.
@@ -44,17 +44,21 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     );
   });
 
-  it("ogImage per-page-override framing + /og-default.svg fallback pinned: 'Optional per-page social-card image (absolute URL or `/`-rooted path). Defaults to the site-wide `/og-default.svg` when not supplied. Pages that want a custom card pass it explicitly.' + 'ogImage?: string;' + 'Resolve OG image to an absolute URL so social crawlers can fetch it without the path-resolution headaches some platforms have with relative paths. Defaults to /og-default.svg at the site root — Cloudflare Pages serves anything in apps/marketing-site/public/ at the root when build runs.' + 'const ogImageUrl = new URL(ogImage ?? \"/og-default.svg\", Astro.site).toString();' — pinned so the per-page-override + /og-default.svg-fallback + absolute-resolution + Cloudflare-Pages-public-mount commitment survives", () => {
+  it("ogImage per-page-override framing + /og-default.png fallback pinned: 'Optional per-page social-card image (absolute URL or `/`-rooted path). Defaults to the site-wide `/og-default.png` when not supplied. Pages that want a custom card pass it explicitly.' + 'ogImage?: string;' + 'Resolve OG image to an absolute URL so social crawlers can fetch it without the path-resolution headaches some platforms have with relative paths. Defaults to /og-default.png at the site root — Cloudflare Pages serves anything in apps/marketing-site/public/ at the root when build runs.' + 'const ogImageUrl = new URL(ogImage ?? \"/og-default.png\", Astro.site).toString();' — pinned so the per-page-override + /og-default.png-fallback + absolute-resolution + Cloudflare-Pages-public-mount commitment survives", () => {
     expect(body).toMatch(
-      /\* Optional per-page social-card image \(absolute URL or `\/`-rooted\s*\n?\s*\* path\)\. Defaults to the site-wide `\/og-default\.svg` when not\s*\n?\s*\* supplied\. Pages that want a custom card pass it explicitly\./,
+      /\* Optional per-page social-card image \(absolute URL or `\/`-rooted\s*\n?\s*\* path\)\. Defaults to the site-wide `\/og-default\.png` when not\s*\n?\s*\* supplied\. Pages that want a custom card pass it explicitly\./,
     );
     expect(body).toMatch(/ogImage\?: string;/);
     expect(body).toMatch(
-      /\/\/ Resolve OG image to an absolute URL so social crawlers can fetch it\s*\n?\s*\/\/ without the path-resolution headaches some platforms have with\s*\n?\s*\/\/ relative paths\. Defaults to \/og-default\.svg at the site root —\s*\n?\s*\/\/ Cloudflare Pages serves anything in apps\/marketing-site\/public\/\s*\n?\s*\/\/ at the root when build runs\./,
+      /\/\/ Resolve OG image to an absolute URL so social crawlers can fetch it\s*\n?\s*\/\/ without the path-resolution headaches some platforms have with\s*\n?\s*\/\/ relative paths\. Defaults to \/og-default\.png at the site root —\s*\n?\s*\/\/ Cloudflare Pages serves anything in apps\/marketing-site\/public\/\s*\n?\s*\/\/ at the root when build runs\./,
     );
     expect(body).toMatch(
-      /const ogImageUrl = new URL\(ogImage \?\? '\/og-default\.svg', Astro\.site\)\.toString\(\);/,
+      /const ogImageUrl = new URL\(ogImage \?\? '\/og-default\.png', Astro\.site\)\.toString\(\);/,
     );
+    // The PNG (not SVG) rationale is pinned so nobody silently reverts the
+    // default to the SVG (which social crawlers don't render).
+    expect(body).toMatch(/PNG, NOT SVG: Twitter\/X, Facebook,/);
+    expect(body).toMatch(/scripts\/gen-og-image\.mjs/);
   });
 
   it("default-description tagline + fullTitle separator + canonical framing pinned: 'iPhone Safari sessions, on demand. Premium fidelity for the device that matters.' default description + 'const fullTitle = title === \"Driftstack\" ? title : `${title} · Driftstack`;' middle-dot separator + 'const canonical = new URL(pathname, Astro.site).toString();' — pinned so the canonical-tagline + Driftstack-no-suffix + middle-dot-title-separator + Astro.site-canonical commitment survives", () => {

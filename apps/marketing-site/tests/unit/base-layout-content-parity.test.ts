@@ -16,7 +16,7 @@
 //     twitter:card=summary_large_image/twitter:title/description/
 //     image).
 //   • Inline SVG favicon (oxblood #722F37 D-badge).
-//   • /og-default.svg fallback for ogImage.
+//   • /og-default.png fallback for ogImage.
 //   • Header + Footer components imported.
 //   • <slot /> inside <main class="flex-1">.
 
@@ -74,10 +74,10 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     expect(body).toMatch(/<link rel="canonical" href=\{canonical\} \/>/);
   });
 
-  it('OG image fallback: /og-default.svg at the site root', () => {
-    expect(body).toMatch(/Defaults to \/og-default\.svg at the site root/);
+  it('OG image fallback: /og-default.png at the site root', () => {
+    expect(body).toMatch(/Defaults to \/og-default\.png at the site root/);
     expect(body).toMatch(
-      /const ogImageUrl = new URL\(ogImage \?\? '\/og-default\.svg', Astro\.site\)\.toString\(\);/,
+      /const ogImageUrl = new URL\(ogImage \?\? '\/og-default\.png', Astro\.site\)\.toString\(\);/,
     );
   });
 
@@ -130,8 +130,8 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
   });
 
-  it('og-default.svg fallback file exists in public/', () => {
-    expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/public/og-default.svg'))).toBe(true);
+  it('og-default.png fallback file exists in public/', () => {
+    expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/public/og-default.png'))).toBe(true);
   });
 
   it('Header + Footer components exist', () => {
