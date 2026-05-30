@@ -85,12 +85,19 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     );
   });
 
-  it('single max-w-3xl content container (narrow, focused — not the wide marketing-site max-w-6xl)', () => {
-    expect(body).toMatch(/<main class="mx-auto max-w-3xl px-6 py-10">/);
+  it('single max-w-3xl content container (narrow, focused — not the wide marketing-site max-w-6xl), with the skip-link target', () => {
+    expect(body).toMatch(/<main\b[^>]*\bclass="mx-auto max-w-3xl px-6 py-10">/);
+    expect(body).toMatch(/<main\b[^>]*\bid="main-content"[^>]*\btabindex="-1"/);
   });
 
   it('renders <slot /> inside <main>', () => {
     expect(body).toMatch(/<main[^>]*>\s*\n?\s*<slot \/>\s*\n?\s*<\/main>/);
+  });
+
+  it('WCAG 2.4.1 skip link: "Skip to main content" anchor → #main-content (sr-only until focused)', () => {
+    expect(body).toMatch(/href="#main-content"/);
+    expect(body).toMatch(/sr-only focus:not-sr-only/);
+    expect(body).toMatch(/Skip to main content/);
   });
 
   it('R13 html lang="en" + dark header + min-h-screen body — replaces the prior bg-white header + bg-slate-50 body split after the status-site dark migration', () => {

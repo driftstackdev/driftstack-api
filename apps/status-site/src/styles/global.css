@@ -34,3 +34,19 @@
     overflow-x: auto;
   }
 }
+
+/* Global reduced-motion baseline — matches the other customer-facing
+   surfaces. Un-layered + !important so it wins over Tailwind's animate-* /
+   transition utilities; motion-sensitive users (often checking status
+   during a stressful incident) get near-instant animations instead of the
+   pulsing status indicators. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

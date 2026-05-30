@@ -19,6 +19,13 @@ const { title } = Astro.props;
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=2" />
   </head>
   <body class="min-h-screen">
+    {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR users skip the header nav. */}
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-glow-red focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+    >
+      Skip to main content
+    </a>
     <header class="border-b border-white/10 bg-surface-raised">
       <div class="mx-auto flex max-w-3xl items-center justify-between px-6 py-5">
         <a href="/" class="flex items-center gap-2 text-sm">
@@ -40,7 +47,7 @@ const { title } = Astro.props;
         </nav>
       </div>
     </header>
-    <main class="mx-auto max-w-3xl px-6 py-10">
+    <main id="main-content" tabindex="-1" class="mx-auto max-w-3xl px-6 py-10">
       <slot />
     </main>
     <footer class="mt-12 border-t border-white/10 bg-surface-raised">
