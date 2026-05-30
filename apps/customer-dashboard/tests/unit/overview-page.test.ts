@@ -195,7 +195,7 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     expect(isHidden(window, '[data-sessions-list]')).toBe(true);
   });
 
-  it('sessions: a running session renders id + status + a FRIENDLY archetype label + readable date (no raw slug or ISO)', async () => {
+  it('sessions: an active (busy) session renders id + status + a FRIENDLY archetype label + readable date (no raw slug or ISO)', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: makeRouter({
@@ -203,7 +203,10 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
         sessions: [
           {
             id: 'sess_live1',
-            status: 'running',
+            // Real session statuses are creating|ready|busy|destroyed|errored
+            // (services/sessions.ts) — 'busy' is a live (non-terminal) session
+            // the overview counts as active. (Was a fictional 'running'.)
+            status: 'busy',
             archetype: 'iphone16pro_ios18_7_safari26_4',
             created_at: '2026-05-20T10:00:00.000Z',
           },
@@ -216,7 +219,7 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     expect(isHidden(window, '[data-sessions-list]')).toBe(false);
     const listText = text(window, '[data-sessions-list]');
     expect(listText).toContain('sess_live1');
-    expect(listText).toContain('running');
+    expect(listText).toContain('busy');
     // The destroyed session is filtered out of the active list.
     expect(listText).not.toContain('sess_dead');
     // Archetype renders as the friendly registry label, never the raw slug.
