@@ -3573,7 +3573,7 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       query: z.object({
-        days: z.string().optional().describe('Defaults to 30; max 90.'),
+        days: z.string().optional().describe('Defaults to 7; max 90.'),
       }),
     },
     responses: {
