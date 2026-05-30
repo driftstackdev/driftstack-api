@@ -40,6 +40,7 @@ import type {
   DeliveryStatus,
   DlqEntry,
 } from '@driftstack/webhook-delivery';
+import type { WebhookEventType } from '@driftstack/api-types';
 import type { Database } from '../db/client.js';
 import { webhookDeliveries, webhookDeliveryAttempts, webhookEndpoints } from '../db/schema.js';
 import { METRIC_NAMES } from './metrics-registry.js';
@@ -75,14 +76,6 @@ export interface ProcessTickResult {
   retried: number;
   dlqed: number;
 }
-
-/** Allowed event_type values for the `webhook_event_type` enum (per schema.ts). */
-type WebhookEventType =
-  | 'session.completed'
-  | 'session.failed'
-  | 'quota.warning_80pct'
-  | 'quota.exceeded'
-  | 'api_key.revoked';
 
 /**
  * Construct the durable webhook-delivery system. Returns the

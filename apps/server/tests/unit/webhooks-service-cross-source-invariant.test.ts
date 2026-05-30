@@ -13,10 +13,12 @@
 //   event-worthy thing happens; it fans out one delivery row per
 //   subscribed endpoint'.
 //
-//   WebhookEventType 6-value union (5 customer-subscribable +
+//   WebhookEventType 9-value union (8 customer-subscribable +
 //   1 V-356 test-only):
 //     - 'session.completed' / 'session.failed' / 'quota.warning_80pct'
-//       / 'quota.exceeded' / 'api_key.revoked' (5 customer events).
+//       / 'quota.exceeded' / 'api_key.revoked' /
+//       'session.egress_capability_changed' / 'crypto.order.paid' /
+//       'crypto.order.failed' (8 customer events).
 //     - 'test.ping' — 'V-356 — synthetic event sent only via POST
 //       /v1/webhooks/:id/test. Customers cannot subscribe to it (Zod
 //       schemas reject it) — the test endpoint dispatches regardless

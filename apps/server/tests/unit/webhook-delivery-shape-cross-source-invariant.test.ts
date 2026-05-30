@@ -75,7 +75,7 @@ describe('W898 WebhookDelivery shape + V-512 DLQ cross-source invariant', () => 
     expect(p).toMatch(/delivered_at: Iso8601Schema\.nullable\(\)/);
   });
 
-  it('CRITICAL WebhookDelivery.event_type uses WebhookEventTypeSchema (6-value enum NOT subscribable subset). The 6-value covers all events INCLUDING test.ping — admin DLQ-view shows test-ping deliveries too.', () => {
+  it('CRITICAL WebhookDelivery.event_type uses WebhookEventTypeSchema (9-value enum NOT subscribable subset). The 9-value covers all events INCLUDING test.ping — admin DLQ-view shows test-ping deliveries too.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     expect(p).toMatch(
       /WebhookDeliverySchema = z\.object\(\{[\s\S]+?event_type: WebhookEventTypeSchema/,

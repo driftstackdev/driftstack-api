@@ -157,16 +157,14 @@ describe('W918 V-173 durable-webhook-delivery cross-source invariant', () => {
     expect(p).toMatch(/dlqed: number;/);
   });
 
-  // ─── WebhookEventType 5-value enum ───────────────────────────
+  // ─── WebhookEventType imported from the canonical (not re-declared) ──
 
-  it("CRITICAL WebhookEventType has 5 values per schema.ts — 'session.completed' | 'session.failed' | 'quota.warning_80pct' | 'quota.exceeded' | 'api_key.revoked'. The 5-event enum is what schema's webhook_event_type pgEnum mirrors.", () => {
+  it('CRITICAL durable-webhook-delivery.ts imports WebhookEventType from @driftstack/api-types (the canonical 9-value roster) instead of re-declaring a local stale union. The event_type cast then tracks the canonical automatically — a local duplicate previously drifted to 5 values (missing test.ping / egress / the V-666 crypto pair).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/durable-webhook-delivery.ts'));
-    expect(p).toMatch(/Allowed event_type values for the `webhook_event_type` enum/);
-    expect(p).toMatch(/\| 'session\.completed'/);
-    expect(p).toMatch(/\| 'session\.failed'/);
-    expect(p).toMatch(/\| 'quota\.warning_80pct'/);
-    expect(p).toMatch(/\| 'quota\.exceeded'/);
-    expect(p).toMatch(/\| 'api_key\.revoked';/);
+    expect(p).toMatch(/import type \{ WebhookEventType \} from '@driftstack\/api-types';/);
+    expect(p).toMatch(/eventType: opts\.payload\.eventType as WebhookEventType/);
+    // No drift-prone local re-declaration of the union.
+    expect(p).not.toMatch(/type WebhookEventType =/);
   });
 
   // ─── canonical signWebhookPayload delegation ─────────────────

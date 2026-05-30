@@ -81,10 +81,11 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     expect(body).toMatch(/export const DEFAULT_MAX_ATTEMPTS = 6;/);
   });
 
-  it('WebhookEventType: 5-literal union (session.completed/session.failed/quota.warning_80pct/quota.exceeded/api_key.revoked)', () => {
-    expect(body).toMatch(
-      /type WebhookEventType =\s*\n?\s*\| 'session\.completed'\s*\n?\s*\| 'session\.failed'\s*\n?\s*\| 'quota\.warning_80pct'\s*\n?\s*\| 'quota\.exceeded'\s*\n?\s*\| 'api_key\.revoked';/,
-    );
+  it('WebhookEventType: imported from @driftstack/api-types (canonical 9-value roster), not re-declared locally', () => {
+    expect(body).toMatch(/import type \{ WebhookEventType \} from '@driftstack\/api-types';/);
+    // No drift-prone local re-declaration (was a stale 5-value union missing
+    // test.ping / egress / the V-666 crypto pair).
+    expect(body).not.toMatch(/type WebhookEventType =/);
   });
 
   it('enqueue: insert row status=pending + attempts=0 + nextAttemptAt=now; replay: flips to pending + deliveredAt null', () => {
