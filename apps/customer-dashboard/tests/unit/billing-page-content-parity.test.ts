@@ -73,6 +73,16 @@ describe('W360.B customer-dashboard /billing page content parity', () => {
     expect(body).toMatch(/Manage in Stripe portal/);
   });
 
+  it('no-subscription state hides the portal/cancel actions (no dead Stripe call for a free account) + relabels the plan CTA to "Choose a plan"', () => {
+    // A free account has no Stripe customer/portal and nothing to cancel.
+    expect(body).toMatch(/if \(portalBtn\) portalBtn\.classList\.add\('hidden'\)/);
+    expect(body).toMatch(/if \(cancelBtn\) cancelBtn\.classList\.add\('hidden'\)/);
+    expect(body).toMatch(/setText\('plan-cta', 'Choose a plan'\)/);
+    // …and the paid branch re-shows the portal + restores "Change plan".
+    expect(body).toMatch(/if \(portalBtn\) portalBtn\.classList\.remove\('hidden'\)/);
+    expect(body).toMatch(/setText\('plan-cta', 'Change plan'\)/);
+  });
+
   it('action button wired to POST /v1/billing/portal-session (registered)', () => {
     expect(body).toContain("authedFetch('/v1/billing/portal-session'");
     expect(route).toContain("'/v1/billing/portal-session'");

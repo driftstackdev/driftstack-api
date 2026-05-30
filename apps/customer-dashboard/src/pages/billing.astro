@@ -86,7 +86,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
       <div class="mt-6 flex flex-wrap gap-3">
         <button type="button" class="btn-primary" data-action="portal">Manage in Stripe portal</button>
-        <a href="/select-tier" class="btn-secondary">Change plan</a>
+        <a href="/select-tier" class="btn-secondary" data-field="plan-cta">Change plan</a>
         <button
           type="button"
           data-action="cancel"
@@ -248,6 +248,9 @@ const apiBaseUrl = resolveApiBaseUrl();
               (sub.cancel_at_period_end ? 'set to cancel at period end' : 'auto-renews');
             setText('sub-summary', summary);
             setText('sub-status-badge', (sub.status || '').replace(/_/g, ' '));
+            // Paid subscriber: portal + (conditionally) cancel apply.
+            if (portalBtn) portalBtn.classList.remove('hidden');
+            setText('plan-cta', 'Change plan');
             // Cancel button visibility.
             if (cancelBtn) {
               if (sub.cancel_at_period_end) cancelBtn.classList.add('hidden');
@@ -260,7 +263,12 @@ const apiBaseUrl = resolveApiBaseUrl();
               'Upgrade to a paid tier to unlock concurrent caps + archetype access.',
             );
             setText('sub-status-badge', 'no subscription');
+            // No subscription → no Stripe customer/portal and nothing to
+            // cancel; hide both so they can't lead to a dead Stripe call.
+            // The plan CTA becomes "Choose a plan" (not "Change").
+            if (portalBtn) portalBtn.classList.add('hidden');
             if (cancelBtn) cancelBtn.classList.add('hidden');
+            setText('plan-cta', 'Choose a plan');
           }
         })
         .catch((err) => {
