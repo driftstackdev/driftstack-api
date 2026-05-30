@@ -27,6 +27,14 @@ describe('docs layout DX affordances (copy button + section anchors)', () => {
     expect(body).toMatch(/window\.location\.origin \+ window\.location\.pathname/);
   });
 
+  it('builds an "On this page" TOC from the h2 sections (only on pages with enough sections), inserted before the first section', () => {
+    expect(body).toMatch(/querySelectorAll\(['"]h2\[id\]['"]\)/);
+    expect(body).toMatch(/headings\.length < 3/); // skip short docs
+    expect(body).toMatch(/On this page/);
+    expect(body).toMatch(/aria-label['"], ['"]On this page/);
+    expect(body).toMatch(/article\.insertBefore\(nav, firstH2\)/);
+  });
+
   it('mounts a clipboard-copy button on every article <pre> (Clipboard-API-guarded, keyboard-accessible)', () => {
     // Guarded on Clipboard API availability.
     expect(body).toMatch(/navigator\.clipboard/);

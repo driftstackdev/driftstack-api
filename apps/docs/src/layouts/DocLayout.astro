@@ -258,4 +258,43 @@ function isActive(href: string): boolean {
       });
     })();
   </script>
+  <script is:inline>
+    {/* "On this page" table of contents — long API-reference pages need
+        section navigation. Built from the h2 ids (already anchor-able) and
+        inserted before the first section; only shown when there are enough
+        sections to be worth it. Reads each heading's first text node so the
+        appended "#" anchor link isn't included in the label. */}
+    (function () {
+      var article = document.querySelector('article');
+      if (!article) return;
+      var headings = article.querySelectorAll('h2[id]');
+      if (headings.length < 3) return;
+      var nav = document.createElement('nav');
+      nav.setAttribute('aria-label', 'On this page');
+      nav.className =
+        'not-prose mb-8 rounded-lg border border-white/10 bg-surface-raised px-5 py-4';
+      var title = document.createElement('p');
+      title.className = 'mb-2 text-xs font-medium uppercase tracking-widest text-ink-muted';
+      title.textContent = 'On this page';
+      nav.appendChild(title);
+      var ul = document.createElement('ul');
+      ul.className = 'space-y-1.5';
+      headings.forEach(function (h) {
+        var label = ((h.firstChild ? h.firstChild.textContent : h.textContent) || '')
+          .replace(/#$/, '')
+          .trim();
+        var li = document.createElement('li');
+        var a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.textContent = label;
+        a.className = 'text-sm text-ink-secondary no-underline hover:text-glow-red';
+        li.appendChild(a);
+        ul.appendChild(li);
+      });
+      nav.appendChild(ul);
+      var firstH2 = article.querySelector('h2');
+      if (firstH2) article.insertBefore(nav, firstH2);
+      else article.appendChild(nav);
+    })();
+  </script>
 </BaseLayout>
