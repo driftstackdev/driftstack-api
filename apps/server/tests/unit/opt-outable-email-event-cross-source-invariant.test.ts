@@ -30,6 +30,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { OptOutableEmailEventSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -63,6 +64,12 @@ describe('W864 OptOutableEmailEvent cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/accounts.ts OptOutableEmailEventSchema = z.enum([6 values]). The 6-value closed-roster is what email-preference toggle UI + per-event server-side shouldSend gates pivot on.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     expect(p).toMatch(/export const OptOutableEmailEventSchema = z\.enum\(\[/);
+    // EXACT canonical pin: .options must EQUAL the 6-value set, not merely
+    // contain it. A 7th value added here would silently pass the body-subset
+    // check below — including accidentally adding a critical-path (non-opt-
+    // outable) email, breaking the policy note above. .toEqual fails loudly.
+    // (Same weak-subset class as the WebhookEventType drift.)
+    expect(OptOutableEmailEventSchema.options).toEqual([...OPT_OUTABLE_EVENTS]);
     const m = p.match(/OptOutableEmailEventSchema = z\.enum\(\[([\s\S]+?)\]\)/);
     expect(m, 'OptOutableEmailEventSchema declaration must match').not.toBeNull();
     const body = m![1];
