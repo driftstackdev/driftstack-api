@@ -249,4 +249,46 @@ describe('profiles page — local integration', () => {
     expect(fetchCalls.some((c) => c.init?.method === 'DELETE')).toBe(false);
     expect(rowCount(window)).toBe(1);
   });
+
+  it('search: filters rendered rows by name; shows no-matches then restores on clear', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter([
+        makeProfile({ id: 'prof_a', name: 'Checkout flow' }),
+        makeProfile({ id: 'prof_b', name: 'Login state' }),
+      ]),
+    });
+    win = window;
+    await flush();
+    expect(rowCount(window)).toBe(2);
+    const search = window.document.querySelector('[data-profiles-search]') as HTMLInputElement;
+    expect(search).toBeTruthy();
+
+    // Term matching only one profile hides the other.
+    search.value = 'checkout';
+    search.dispatchEvent(new window.Event('input', { bubbles: true }));
+    const rows = Array.from(
+      window.document.querySelectorAll('[data-list] > li[data-profile-search]'),
+    );
+    const visible = rows.filter((li) => !li.classList.contains('hidden'));
+    expect(visible.length).toBe(1);
+    expect(visible[0]?.textContent).toContain('Checkout flow');
+
+    // Term matching nothing → the no-matches state, list hidden.
+    search.value = 'zzz-no-such-profile';
+    search.dispatchEvent(new window.Event('input', { bubbles: true }));
+    expect(isHidden(window, '[data-no-matches]')).toBe(false);
+    expect(isHidden(window, '[data-list]')).toBe(true);
+
+    // Clearing restores every row.
+    search.value = '';
+    search.dispatchEvent(new window.Event('input', { bubbles: true }));
+    expect(isHidden(window, '[data-no-matches]')).toBe(true);
+    expect(isHidden(window, '[data-list]')).toBe(false);
+    expect(
+      Array.from(window.document.querySelectorAll('[data-list] > li[data-profile-search]')).filter(
+        (li) => !li.classList.contains('hidden'),
+      ).length,
+    ).toBe(2);
+  });
 });

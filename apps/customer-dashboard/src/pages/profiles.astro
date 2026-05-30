@@ -348,6 +348,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       unauthenticated visitors never get here; authed visitors see the
       skeleton for the ~100ms it takes /v1/profiles to come back.
     */}
+    {/* Client-side name/description filter — paid tiers carry 50–500
+        profiles, so scrolling to find one is painful. Hidden until there
+        are profiles to filter (toggled in renderProfiles). */}
+    <div data-profiles-search-wrap class="mb-4 hidden">
+      <input
+        type="search"
+        data-profiles-search
+        placeholder="Search profiles by name…"
+        aria-label="Search profiles by name"
+        class="w-full rounded-md border border-white/10 bg-surface-base px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red"
+      />
+    </div>
     <ul
       data-list
       class="divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
@@ -367,6 +379,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         </li>
       ))}
     </ul>
+
+    {/* Shown when a search term matches no profiles (distinct from the
+        data-empty "no profiles yet" state, which would be misleading). */}
+    <p
+      data-no-matches
+      class="mt-4 hidden rounded-lg border border-dashed border-white/10 bg-surface-base px-6 py-8 text-center text-sm text-ink-muted"
+    >
+      No profiles match your search.
+    </p>
 
     <!-- V-284 — empty state matches the V-275 GUI ProfilesView pattern (oxblood icon + body + CTA) -->
     <div
@@ -511,7 +532,9 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function profileLi(p) {
         return (
-          '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
+          '<li data-profile-search="' +
+          escapeHtml(((p.name || '') + ' ' + (p.description || '')).toLowerCase()) +
+          '" class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
           '<p class="text-base font-medium text-ink-primary">' +
           escapeHtml(p.name) +
@@ -642,10 +665,39 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
+      // Client-side profile filter (matches name + description). Hides
+      // non-matching rendered rows + shows the data-no-matches state when a
+      // non-empty search matches nothing. Re-applied after every render so
+      // it survives the create / clone / delete refreshes.
+      function applyProfilesSearch() {
+        const input = root.querySelector('[data-profiles-search]');
+        const noMatches = root.querySelector('[data-no-matches]');
+        const q = input && input.value ? input.value.trim().toLowerCase() : '';
+        const rows = list.querySelectorAll('li[data-profile-search]');
+        if (rows.length === 0) return;
+        let visible = 0;
+        rows.forEach(function (li) {
+          const show =
+            q === '' || (li.getAttribute('data-profile-search') || '').indexOf(q) !== -1;
+          li.classList.toggle('hidden', !show);
+          if (show) visible++;
+        });
+        const noMatch = q !== '' && visible === 0;
+        list.classList.toggle('hidden', noMatch);
+        if (noMatches) noMatches.classList.toggle('hidden', !noMatch);
+      }
+
+      const profilesSearchInput = root.querySelector('[data-profiles-search]');
+      if (profilesSearchInput) {
+        profilesSearchInput.addEventListener('input', applyProfilesSearch);
+      }
+
       function renderProfiles(profiles) {
+        const searchWrap = root.querySelector('[data-profiles-search-wrap]');
         if (profiles.length === 0) {
           list.classList.add('hidden');
           empty.classList.remove('hidden');
+          if (searchWrap) searchWrap.classList.add('hidden');
         } else {
           empty.classList.add('hidden');
           list.classList.remove('hidden');
@@ -656,6 +708,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           wireExportButtons();
           wireTransferButtons();
           wireLaunchButtons();
+          if (searchWrap) searchWrap.classList.remove('hidden');
+          applyProfilesSearch();
         }
       }
 
