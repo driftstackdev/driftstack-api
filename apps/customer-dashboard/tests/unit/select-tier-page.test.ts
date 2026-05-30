@@ -1,0 +1,198 @@
+// Behavioural coverage for the Select-tier (checkout) page —
+// apps/customer-dashboard/src/pages/select-tier.astro. This is the payment
+// surface, so rendered correctness matters most: a wrong crypto amount /
+// address shown to a customer is real money lost. Source-parity tests existed;
+// this adds rendered-outcome coverage for both checkout paths against a jsdom
+// mock fetch: the Stripe checkout-session POST (+ its auth-gate + 404/503 soft
+// message) and the crypto modal (payment-detail rendering + the stub-provider
+// fallback).
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { JSDOM, VirtualConsole } from 'jsdom';
+import { afterEach, describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'select-tier', 'index.html');
+const PAGE_URL = 'https://app.driftstack.dev/select-tier/';
+
+function loadBuiltPage(): string {
+  return readFileSync(BUILT_PAGE, 'utf8');
+}
+
+interface MockFetchCall {
+  url: string;
+  init: RequestInit | undefined;
+}
+
+interface SetUpOpts {
+  token?: string;
+  route: (call: MockFetchCall) => Response;
+}
+
+function setUpDom(
+  html: string,
+  opts: SetUpOpts,
+): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+  const scriptBodies: string[] = [];
+  const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
+    scriptBodies.push(body);
+    return '';
+  });
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', () => {});
+  const dom = new JSDOM(htmlNoScripts, {
+    url: PAGE_URL,
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole,
+  });
+  const { window } = dom;
+  const fetchCalls: MockFetchCall[] = [];
+  // @ts-expect-error — jsdom global is loose
+  if (typeof window.Response !== 'function') window.Response = Response;
+  // @ts-expect-error — jsdom global is loose
+  window.fetch = (input: string, init: RequestInit | undefined) => {
+    const call: MockFetchCall = { url: String(input), init };
+    fetchCalls.push(call);
+    return Promise.resolve(opts.route(call));
+  };
+  if (opts.token !== undefined) window.localStorage.setItem('ds_web_session_token', opts.token);
+
+  const pageScript = scriptBodies.find((s) => s.includes('data-page="select-tier"'));
+  if (!pageScript) throw new Error('select-tier inline script not found');
+  // @ts-expect-error — jsdom global has eval
+  window.eval(pageScript);
+  return { window: window as JSDOM['window'], fetchCalls };
+}
+
+function text(window: JSDOM['window'], selector: string): string {
+  return window.document.querySelector(selector)?.textContent?.trim() ?? '';
+}
+
+function isHidden(window: JSDOM['window'], selector: string): boolean {
+  const el = window.document.querySelector(selector);
+  if (!el) throw new Error(`selector not found: ${selector}`);
+  return el.classList.contains('hidden');
+}
+
+function json(obj: unknown, status = 200): Response {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+async function flush(times = 8): Promise<void> {
+  for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
+}
+
+function clickFirst(window: JSDOM['window'], selector: string): void {
+  const btn = window.document.querySelector(selector) as HTMLElement | null;
+  if (!btn) throw new Error(`no element for ${selector}`);
+  btn.dispatchEvent(new window.Event('click', { bubbles: true }));
+}
+
+let win: JSDOM['window'] | undefined;
+afterEach(() => {
+  win?.close?.();
+  win = undefined;
+});
+
+describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour', () => {
+  it('Stripe buy-tier without a token: prompts to sign up, no checkout call', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: () => {
+        throw new Error('must not fetch when unauthenticated');
+      },
+    });
+    win = window;
+    clickFirst(window, '[data-action="buy-tier"]');
+    await flush();
+    expect(fetchCalls.length).toBe(0);
+    expect(text(window, '[data-banner]')).toContain('Sign up first');
+  });
+
+  it('Stripe buy-tier with a token: POSTs a monthly checkout-session for the tier', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: () => json({ checkout_url: 'https://checkout.stripe.com/c/session_test' }),
+    });
+    win = window;
+    clickFirst(window, '[data-action="buy-tier"]');
+    await flush();
+    const call = fetchCalls.find(
+      (c) =>
+        /\/v1\/billing\/checkout-session$/.test(c.url) &&
+        (c.init?.method || '').toUpperCase() === 'POST',
+    );
+    expect(call).toBeTruthy();
+    const body = JSON.parse(String(call?.init?.body));
+    expect(body.billing_period).toBe('monthly');
+    expect(typeof body.tier).toBe('string');
+    expect(body.tier.length).toBeGreaterThan(0);
+  });
+
+  it('Stripe buy-tier 503 (billing unwired): shows the "setup in progress" soft message', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: () => json({ detail: 'unwired' }, 503),
+    });
+    win = window;
+    clickFirst(window, '[data-action="buy-tier"]');
+    await flush();
+    expect(text(window, '[data-banner]')).toContain('Billing setup is still in progress');
+  });
+
+  it('crypto checkout without a token: prompts to sign in', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      route: () => {
+        throw new Error('must not fetch when unauthenticated');
+      },
+    });
+    win = window;
+    clickFirst(window, '[data-action="buy-tier-crypto"]');
+    await flush();
+    expect(fetchCalls.length).toBe(0);
+    expect(text(window, '[data-banner]')).toContain('Sign in to pay with crypto');
+  });
+
+  it('crypto checkout success: renders the exact amount, currency, address, and order id from the API', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: () =>
+        json({
+          provider: 'nowpayments',
+          pay_amount: 0.0123,
+          pay_currency: 'eth',
+          payment_address: '0xABCDEF0000000000000000000000000000001234',
+          order_id: 'ord_crypto_test1',
+        }),
+    });
+    win = window;
+    clickFirst(window, '[data-action="buy-tier-crypto"]');
+    await flush();
+    expect(isHidden(window, '[data-crypto-modal-ready]')).toBe(false);
+    expect(text(window, '[data-field="crypto-amount"]')).toBe('0.0123');
+    expect(text(window, '[data-field="crypto-currency"]')).toBe('eth');
+    expect(text(window, '[data-field="crypto-address"]')).toBe(
+      '0xABCDEF0000000000000000000000000000001234',
+    );
+    expect(text(window, '[data-field="crypto-order-id"]')).toBe('ord_crypto_test1');
+  });
+
+  it('crypto checkout stub provider: shows the manual-wire fallback with the order id', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: () => json({ provider: 'stub', order_id: 'ord_stub_1' }),
+    });
+    win = window;
+    clickFirst(window, '[data-action="buy-tier-crypto"]');
+    await flush();
+    expect(isHidden(window, '[data-crypto-modal-error]')).toBe(false);
+    const err = text(window, '[data-crypto-modal-error]');
+    expect(err).toContain("isn't fully live yet");
+    expect(err).toContain('ord_stub_1');
+  });
+});
