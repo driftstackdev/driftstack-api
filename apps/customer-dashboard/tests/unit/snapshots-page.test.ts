@@ -266,4 +266,37 @@ describe('snapshots page — local integration', () => {
     expect(fetchCalls.some((c) => c.init?.method === 'DELETE')).toBe(false);
     expect(rowCount(window)).toBe(1);
   });
+
+  it('search: filters rendered rows by label; shows no-matches then restores on clear', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [() => json({ data: [SNAP_A, SNAP_B] })],
+    });
+    win = window;
+    await flush();
+    expect(rowCount(window)).toBe(2);
+    const search = window.document.querySelector('[data-snapshots-search]') as HTMLInputElement;
+    expect(search).toBeTruthy();
+
+    // 'checkout' matches SNAP_A only.
+    search.value = 'checkout';
+    search.dispatchEvent(new window.Event('input', { bubbles: true }));
+    const visible = Array.from(
+      window.document.querySelectorAll('[data-list] > li[data-snapshot-search]'),
+    ).filter((li) => !li.classList.contains('hidden'));
+    expect(visible.length).toBe(1);
+    expect(visible[0]?.textContent).toContain('Checkout profile snap');
+
+    // No match → no-matches state, list hidden.
+    search.value = 'zzz-no-such-snapshot';
+    search.dispatchEvent(new window.Event('input', { bubbles: true }));
+    expect(isHidden(window, '[data-no-matches]')).toBe(false);
+    expect(isHidden(window, '[data-list]')).toBe(true);
+
+    // Clear restores both.
+    search.value = '';
+    search.dispatchEvent(new window.Event('input', { bubbles: true }));
+    expect(isHidden(window, '[data-no-matches]')).toBe(true);
+    expect(isHidden(window, '[data-list]')).toBe(false);
+  });
 });

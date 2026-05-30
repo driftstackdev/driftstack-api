@@ -93,11 +93,31 @@ const apiBaseUrl = resolveApiBaseUrl();
       </form>
     </div>
 
+    {/* Client-side label filter — power users accumulate many snapshots
+        across profiles. Hidden until there are snapshots (toggled in render). */}
+    <div data-snapshots-search-wrap class="mb-4 hidden">
+      <input
+        type="search"
+        data-snapshots-search
+        placeholder="Search snapshots by label…"
+        aria-label="Search snapshots by label"
+        class="w-full rounded-md border border-white/10 bg-surface-base px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red"
+      />
+    </div>
     <ul
       data-list
       class="mb-10 hidden divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
     >
     </ul>
+
+    {/* Shown when a search term matches no snapshots (distinct from the
+        data-empty "no snapshots yet" state). */}
+    <p
+      data-no-matches
+      class="mb-10 hidden rounded-lg border border-dashed border-white/10 bg-surface-raised px-6 py-8 text-center text-sm text-ink-muted"
+    >
+      No snapshots match your search.
+    </p>
 
     {/* 2026-05-23 — empty state with icon + structured headline. */}
     <div
@@ -168,7 +188,9 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function snapshotLi(s) {
         return (
-          '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
+          '<li data-snapshot-search="' +
+          escapeHtml(((s.label || '') + ' ' + (s.description || '')).toLowerCase()) +
+          '" class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
           '<p class="text-base font-medium text-ink-primary">' +
           escapeHtml(s.label || '(no label)') +
@@ -223,10 +245,39 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
+      // Client-side snapshot filter (matches label + description). Hides
+      // non-matching rendered rows + shows the data-no-matches state when a
+      // non-empty search matches nothing. Re-applied after every render so
+      // it survives restore / delete refreshes.
+      function applySnapshotsSearch() {
+        const input = root.querySelector('[data-snapshots-search]');
+        const noMatches = root.querySelector('[data-no-matches]');
+        const q = input && input.value ? input.value.trim().toLowerCase() : '';
+        const rows = list.querySelectorAll('li[data-snapshot-search]');
+        if (rows.length === 0) return;
+        let visible = 0;
+        rows.forEach(function (li) {
+          const show =
+            q === '' || (li.getAttribute('data-snapshot-search') || '').indexOf(q) !== -1;
+          li.classList.toggle('hidden', !show);
+          if (show) visible++;
+        });
+        const noMatch = q !== '' && visible === 0;
+        list.classList.toggle('hidden', noMatch);
+        if (noMatches) noMatches.classList.toggle('hidden', !noMatch);
+      }
+
+      const snapshotsSearchInput = root.querySelector('[data-snapshots-search]');
+      if (snapshotsSearchInput) {
+        snapshotsSearchInput.addEventListener('input', applySnapshotsSearch);
+      }
+
       function render(snapshots) {
+        const searchWrap = root.querySelector('[data-snapshots-search-wrap]');
         if (snapshots.length === 0) {
           list.classList.add('hidden');
           empty.classList.remove('hidden');
+          if (searchWrap) searchWrap.classList.add('hidden');
           return;
         }
         empty.classList.add('hidden');
@@ -234,6 +285,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         list.innerHTML = snapshots.map(snapshotLi).join('');
         wireRestoreButtons();
         wireDeleteButtons();
+        if (searchWrap) searchWrap.classList.remove('hidden');
+        applySnapshotsSearch();
       }
 
       // V-470 — restore flow uses an inline form instead of
