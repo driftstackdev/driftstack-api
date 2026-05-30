@@ -355,7 +355,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       <input
         type="search"
         data-profiles-search
-        placeholder="Search profiles by name…"
+        placeholder="Search profiles by name…  ( /  to focus)"
         aria-label="Search profiles by name"
         class="w-full rounded-md border border-white/10 bg-surface-base px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red"
       />
@@ -691,6 +691,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (profilesSearchInput) {
         profilesSearchInput.addEventListener('input', applyProfilesSearch);
       }
+
+      // "/" focuses the profile search (GitHub / Slack / Linear / admin
+      // accounts convention — same handler as accounts.astro). Skips when
+      // already typing in a field, and no-ops while the search is hidden
+      // (the wrap is hidden until at least one profile exists).
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key !== '/' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+        const target = ev.target;
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+        if (target instanceof HTMLElement && target.isContentEditable) return;
+        const searchWrap = root.querySelector('[data-profiles-search-wrap]');
+        if (!searchWrap || searchWrap.classList.contains('hidden')) return;
+        if (profilesSearchInput instanceof HTMLInputElement) {
+          ev.preventDefault();
+          profilesSearchInput.focus();
+          profilesSearchInput.select();
+        }
+      });
 
       function renderProfiles(profiles) {
         const searchWrap = root.querySelector('[data-profiles-search-wrap]');

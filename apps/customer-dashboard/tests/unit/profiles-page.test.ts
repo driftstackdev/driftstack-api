@@ -291,4 +291,43 @@ describe('profiles page — local integration', () => {
       ).length,
     ).toBe(2);
   });
+
+  it('"/" focuses the search when profiles exist (matches the admin accounts convention)', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter([makeProfile({ id: 'prof_a', name: 'Checkout flow' })]),
+    });
+    win = window;
+    await flush();
+    const search = window.document.querySelector('[data-profiles-search]') as HTMLInputElement;
+    expect(search).toBeTruthy();
+    // Not focused yet.
+    expect(window.document.activeElement).not.toBe(search);
+    // Pressing "/" while not in a field focuses the search.
+    const ev = new window.KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true });
+    window.document.body.dispatchEvent(ev);
+    expect(window.document.activeElement).toBe(search);
+    expect(ev.defaultPrevented).toBe(true);
+  });
+
+  it('"/" does NOT hijack typing while already in a field', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter([makeProfile({ id: 'prof_a', name: 'Checkout flow' })]),
+    });
+    win = window;
+    await flush();
+    const search = window.document.querySelector('[data-profiles-search]') as HTMLInputElement;
+    // Simulate the user typing "/" inside the create-name input.
+    const nameInput = window.document.querySelector(
+      'input[type="text"]',
+    ) as HTMLInputElement | null;
+    const typingTarget = nameInput ?? search;
+    typingTarget.focus();
+    const ev = new window.KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true });
+    typingTarget.dispatchEvent(ev);
+    // The handler bails out — no preventDefault, focus stays where it was.
+    expect(ev.defaultPrevented).toBe(false);
+    expect(window.document.activeElement).toBe(typingTarget);
+  });
 });

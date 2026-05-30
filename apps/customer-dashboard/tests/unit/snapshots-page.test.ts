@@ -299,4 +299,20 @@ describe('snapshots page — local integration', () => {
     expect(isHidden(window, '[data-no-matches]')).toBe(true);
     expect(isHidden(window, '[data-list]')).toBe(false);
   });
+
+  it('"/" focuses the search when snapshots exist (matches the admin accounts convention)', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [() => json({ data: [SNAP_A, SNAP_B] })],
+    });
+    win = window;
+    await flush();
+    const search = window.document.querySelector('[data-snapshots-search]') as HTMLInputElement;
+    expect(search).toBeTruthy();
+    expect(window.document.activeElement).not.toBe(search);
+    const ev = new window.KeyboardEvent('keydown', { key: '/', bubbles: true, cancelable: true });
+    window.document.body.dispatchEvent(ev);
+    expect(window.document.activeElement).toBe(search);
+    expect(ev.defaultPrevented).toBe(true);
+  });
 });

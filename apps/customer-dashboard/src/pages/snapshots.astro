@@ -99,7 +99,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       <input
         type="search"
         data-snapshots-search
-        placeholder="Search snapshots by label…"
+        placeholder="Search snapshots by label…  ( /  to focus)"
         aria-label="Search snapshots by label"
         class="w-full rounded-md border border-white/10 bg-surface-base px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red"
       />
@@ -271,6 +271,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (snapshotsSearchInput) {
         snapshotsSearchInput.addEventListener('input', applySnapshotsSearch);
       }
+
+      // "/" focuses the snapshot search (same convention + handler as
+      // accounts.astro / profiles.astro). Skips while typing in a field,
+      // and no-ops while the search is hidden (wrap hidden until snapshots
+      // exist).
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key !== '/' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+        const target = ev.target;
+        if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+        if (target instanceof HTMLElement && target.isContentEditable) return;
+        const searchWrap = root.querySelector('[data-snapshots-search-wrap]');
+        if (!searchWrap || searchWrap.classList.contains('hidden')) return;
+        if (snapshotsSearchInput instanceof HTMLInputElement) {
+          ev.preventDefault();
+          snapshotsSearchInput.focus();
+          snapshotsSearchInput.select();
+        }
+      });
 
       function render(snapshots) {
         const searchWrap = root.querySelector('[data-snapshots-search-wrap]');
