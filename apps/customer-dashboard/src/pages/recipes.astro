@@ -233,7 +233,15 @@ const apiBaseUrl = resolveApiBaseUrl();
                   showBanner('Recipe deleted.');
                   return reload();
                 }
-                showBanner('Delete failed: HTTP ' + r.status);
+                // Surface the server's problem+json `detail` (W151/W152)
+                // so a refused delete explains why (e.g. a scope or
+                // in-use conflict) rather than a bare "HTTP 409".
+                return r
+                  .json()
+                  .catch(() => ({}))
+                  .then((b) => {
+                    showBanner('Delete failed: ' + (b.detail || 'HTTP ' + r.status));
+                  });
               })
               .catch((err) => {
                 showBanner(

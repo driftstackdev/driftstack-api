@@ -217,6 +217,28 @@ describe('recipes page — local integration', () => {
     expect(isHidden(window, '[data-list]')).toBe(true);
   });
 
+  it('delete failure: surfaces the server problem+json detail, not a bare HTTP code, and keeps the row', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      confirmReturns: true,
+      fetchPlan: [
+        () => json({ data: [RECIPE_A], has_more: false, next_cursor: null }),
+        // DELETE → 409 problem+json with a human detail.
+        () => json({ detail: 'Recipe is referenced by an active session.' }, 409),
+      ],
+    });
+    win = window;
+    await flush();
+    expect(rowCount(window)).toBe(1);
+    (window.document.querySelector('[data-delete]') as HTMLButtonElement).click();
+    await flush(5);
+    expect(fetchCalls.some((c) => c.init?.method === 'DELETE')).toBe(true);
+    const banner = window.document.querySelector('[data-banner]')?.textContent ?? '';
+    expect(banner).toBe('Delete failed: Recipe is referenced by an active session.');
+    // A failed delete does NOT reload, so the row remains.
+    expect(rowCount(window)).toBe(1);
+  });
+
   it('delete cancelled at confirm: no DELETE fetch fired', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
