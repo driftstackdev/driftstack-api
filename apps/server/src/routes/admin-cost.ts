@@ -32,6 +32,17 @@ const OverviewQuery = z.object({
     .optional(),
 });
 
+// Normalize to the bare uuid the cost lookups need: accept either the public
+// `acc_<uuid>` form (every other admin /:id route's convention, via
+// uuidFromPrefixedId) or a bare uuid. The cost service matches accounts.id
+// (a bare uuid) directly, so strip the prefix here. Safe: a bare uuid can't
+// start with `acc_` (uuids contain no underscore). Without this, an operator
+// pasting the public `acc_<uuid>` id 404'd — the account-detail cost drill-in
+// hit exactly that. See project_admin_cost_id_prefix_inconsistency.
+export function bareAccountId(id: string): string {
+  return id.startsWith('acc_') ? id.slice(4) : id;
+}
+
 export interface RegisterAdminCostRoutesDeps {
   service: CostMonitoringService;
   /** Time source — defaults to `Date.now`. Test seam. */
@@ -54,7 +65,7 @@ export function registerAdminCostRoutes(
       const params = parseOrThrow(AccountSummaryParams, req.params);
       const query = parseOrThrow(AccountSummaryQuery, req.query);
       const summary = await deps.service.getAccountSummary({
-        accountId: params.id,
+        accountId: bareAccountId(params.id),
         billingCycle: query.billing_cycle ?? billingCycleFromDate(new Date(now())),
       });
       if (summary === null) {
@@ -86,7 +97,8 @@ export function registerAdminCostRoutes(
       const ids = query.account_ids
         .split(',')
         .map((s) => s.trim())
-        .filter(Boolean);
+        .filter(Boolean)
+        .map(bareAccountId);
       if (ids.length === 0) {
         throw new BadRequestError('account_ids must contain at least one id.');
       }

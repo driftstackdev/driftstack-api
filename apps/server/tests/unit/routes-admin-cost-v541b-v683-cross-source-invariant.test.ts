@@ -91,7 +91,11 @@ describe('W1030 routes/admin-cost V-541.B + V-683 cross-source invariant', () =>
     expect(p).toMatch(/const ids = query\.account_ids/);
     expect(p).toMatch(/\.split\(','\)/);
     expect(p).toMatch(/\.map\(\(s\) => s\.trim\(\)\)/);
-    expect(p).toMatch(/\.filter\(Boolean\);/);
+    expect(p).toMatch(/\.filter\(Boolean\)/);
+    // V-541 normalize: the cost endpoints lenient-strip acc_ so they accept the
+    // public acc_<uuid> form like sibling admin routes. See
+    // project_admin_cost_id_prefix_inconsistency.
+    expect(p).toMatch(/\.map\(bareAccountId\);/);
     expect(p).toMatch(/if \(ids\.length === 0\) \{/);
     expect(p).toMatch(/throw new BadRequestError\('account_ids must contain at least one id\.'\);/);
   });
