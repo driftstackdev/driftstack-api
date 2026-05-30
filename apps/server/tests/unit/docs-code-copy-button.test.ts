@@ -12,11 +12,19 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LAYOUT = resolve(REPO_ROOT, 'apps/docs/src/layouts/DocLayout.astro');
 
-describe('docs code-block copy button', () => {
+describe('docs layout DX affordances (copy button + section anchors)', () => {
   const body = readFileSync(LAYOUT, 'utf8');
 
   it('DocLayout exists', () => {
     expect(existsSync(LAYOUT)).toBe(true);
+  });
+
+  it('adds a hover/focus section-anchor link to every article heading with an id (deep-link discoverability + copies the URL)', () => {
+    expect(body).toMatch(/querySelectorAll\(['"]article h2\[id\], article h3\[id\]['"]\)/);
+    expect(body).toMatch(/aria-label['"], ['"]Link to this section/);
+    expect(body).toMatch(/a\.href = ['"]#['"] \+ h\.id/);
+    // clicking copies the absolute section URL.
+    expect(body).toMatch(/window\.location\.origin \+ window\.location\.pathname/);
   });
 
   it('mounts a clipboard-copy button on every article <pre> (Clipboard-API-guarded, keyboard-accessible)', () => {

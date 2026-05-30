@@ -230,4 +230,32 @@ function isActive(href: string): boolean {
       });
     })();
   </script>
+  <script is:inline>
+    {/* Section anchor links — Astro auto-generates heading ids, but there
+        was no visible affordance to grab the deep-link. Add a "#" link
+        that appears on heading hover/focus; clicking jumps to the section
+        AND copies the full URL so the section is shareable. */}
+    (function () {
+      document.querySelectorAll('article h2[id], article h3[id]').forEach(function (h) {
+        if (h.querySelector('[data-anchor]')) return;
+        h.classList.add('group');
+        var a = document.createElement('a');
+        a.href = '#' + h.id;
+        a.setAttribute('data-anchor', '');
+        a.setAttribute('aria-label', 'Link to this section');
+        a.textContent = '#';
+        a.className =
+          'ml-2 inline-block font-normal text-ink-muted no-underline opacity-0 ' +
+          'transition-opacity hover:text-glow-red focus-visible:opacity-100 group-hover:opacity-100';
+        a.addEventListener('click', function () {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(
+              window.location.origin + window.location.pathname + '#' + h.id,
+            );
+          }
+        });
+        h.appendChild(a);
+      });
+    })();
+  </script>
 </BaseLayout>
