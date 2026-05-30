@@ -1,0 +1,165 @@
+// Local integration test for the admin /status-subscribers page's
+// inline script — the operator force-unsubscribes a status-page email
+// (POST /v1/admin/status-subscribers/:id/force-unsubscribe), confirm-
+// gated + audit-logged. Loads the built dist page, mocks localStorage +
+// fetch with a stateful router, stubs the branded window.driftstackConfirm.
+// Admin pages are static → built dist HTML is loadable.
+//
+// Mirrors admin-webhook-dlq-page.test.ts. The force-unsub button only
+// renders for ACTIVE subscribers (no unsubscribed_at + has email); a
+// force-unsub flips unsubscribed_at so the refreshed row shows "no
+// action" — that's how the test asserts the effect (no empty-list churn).
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { JSDOM } from 'jsdom';
+import { afterEach, describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'status-subscribers', 'index.html');
+const PAGE_URL = 'https://admin.driftstack.dev/status-subscribers/';
+
+interface MockFetchCall {
+  url: string;
+  init: RequestInit | undefined;
+}
+interface Sub {
+  id: string;
+  email: string | null;
+  created_at: string;
+  confirmed_at: string | null;
+  unsubscribed_at: string | null;
+}
+interface SetUpOpts {
+  confirmReturns?: boolean;
+  route: (call: MockFetchCall) => Response;
+}
+
+function setUpDom(
+  html: string,
+  opts: SetUpOpts,
+): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+  const scriptBodies: string[] = [];
+  const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
+    scriptBodies.push(body);
+    return '';
+  });
+  const dom = new JSDOM(htmlNoScripts, {
+    url: PAGE_URL,
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  const fetchCalls: MockFetchCall[] = [];
+  // @ts-expect-error — jsdom global is loose
+  if (typeof window.Response !== 'function') window.Response = Response;
+  // @ts-expect-error — jsdom global is loose
+  window.fetch = (input: string, init: RequestInit | undefined) => {
+    const call: MockFetchCall = { url: String(input), init };
+    fetchCalls.push(call);
+    return Promise.resolve(opts.route(call));
+  };
+  window.localStorage.setItem('ds_web_session_token', 'staff-tok');
+  const cr = opts.confirmReturns ?? true;
+  // @ts-expect-error — driftstackConfirm is injected by AdminLayout
+  window.driftstackConfirm = () => Promise.resolve(cr);
+
+  const pageScript = scriptBodies.find((s) => s.includes('data-page="status-subscribers"'));
+  if (!pageScript) throw new Error('admin status-subscribers inline script not found');
+  // @ts-expect-error — jsdom global has eval
+  window.eval(pageScript);
+  return { window: window as JSDOM['window'], fetchCalls };
+}
+
+function json(obj: unknown, status = 200): Response {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+async function flush(times = 6): Promise<void> {
+  for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
+}
+
+function mkSub(over: Partial<Sub> = {}): Sub {
+  return {
+    id: 'sub_' + Math.random().toString(36).slice(2, 8),
+    email: 'watcher@example.com',
+    created_at: '2026-05-20T10:00:00.000Z',
+    confirmed_at: '2026-05-20T10:05:00.000Z',
+    unsubscribed_at: null,
+    ...over,
+  };
+}
+
+function makeRouter(subs: Sub[]): (c: MockFetchCall) => Response {
+  return (call: MockFetchCall): Response => {
+    const method = (call.init?.method || 'GET').toUpperCase();
+    const u = call.url.replace(/^https?:\/\/[^/]+/, '');
+    const fu = u.match(/\/v1\/admin\/status-subscribers\/([^/]+)\/force-unsubscribe$/);
+    if (fu && method === 'POST') {
+      const s = subs.find((x) => x.id === fu[1]);
+      if (s) s.unsubscribed_at = '2026-05-29T12:00:00.000Z';
+      return json({ ok: true });
+    }
+    if (/\/v1\/admin\/status-subscribers(\?|$)/.test(u) && method === 'GET') {
+      return json({ data: subs });
+    }
+    return json({}, 404);
+  };
+}
+
+describe('admin status-subscribers page — force-unsubscribe (operator)', () => {
+  let win: JSDOM['window'] | null = null;
+  afterEach(() => {
+    win?.close?.();
+    win = null;
+  });
+  const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('renders: an active subscriber gets Force-unsubscribe; an already-unsubscribed one does not', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: makeRouter([
+        mkSub({ id: 'sub_active', unsubscribed_at: null }),
+        mkSub({ id: 'sub_gone', unsubscribed_at: '2026-05-01T10:00:00.000Z' }),
+      ]),
+    });
+    win = window;
+    await flush();
+    expect(window.document.querySelector('[data-force-unsub="sub_active"]')).toBeTruthy();
+    expect(window.document.querySelector('[data-force-unsub="sub_gone"]')).toBeNull();
+  });
+
+  it('force-unsub: confirm-gated POST /:id/force-unsubscribe, then refresh drops the action', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: true,
+      route: makeRouter([mkSub({ id: 'sub_active', unsubscribed_at: null })]),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-force-unsub="sub_active"]') as HTMLButtonElement).click();
+    await flush();
+    const post = fetchCalls.find(
+      (c) =>
+        c.init?.method === 'POST' &&
+        /\/v1\/admin\/status-subscribers\/sub_active\/force-unsubscribe$/.test(c.url),
+    );
+    expect(post).toBeTruthy();
+    // After refresh the sub is unsubscribed → its row shows "no action".
+    expect(window.document.querySelector('[data-force-unsub="sub_active"]')).toBeNull();
+  });
+
+  it('force-unsub cancelled: no POST fired, the action stays', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      confirmReturns: false,
+      route: makeRouter([mkSub({ id: 'sub_active', unsubscribed_at: null })]),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-force-unsub="sub_active"]') as HTMLButtonElement).click();
+    await flush();
+    expect(fetchCalls.some((c) => c.init?.method === 'POST')).toBe(false);
+    expect(window.document.querySelector('[data-force-unsub="sub_active"]')).toBeTruthy();
+  });
+});
