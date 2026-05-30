@@ -2,11 +2,22 @@
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { MOCK_PROFILES, MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
 import {
+  ARCHETYPE_REGISTRY,
+  LOCKED_ARCHETYPE_ID,
   LOCKED_ARCHETYPE_DISPLAY_LABEL,
   PROFILES_PER_TIER,
   archetypeDisplayLabel,
   type AccountTier,
 } from '@driftstack/api-types';
+
+// The customer-selectable device catalogue = registry entries with status
+// 'launch' or 'available' (NOT internal 'reference' / unpopulated 'planned').
+// The picker grows automatically as Agent-1 populates more devices. The
+// gui-firstrun-archetype-options-registry-invariant guard keeps the GUI in
+// sync with this same set.
+const SELECTABLE_ARCHETYPES = ARCHETYPE_REGISTRY.filter(
+  (a) => a.status === 'launch' || a.status === 'available',
+);
 
 // V-136 — uses the locked PROFILES_PER_TIER constant from
 // @driftstack/api-types as single source of truth.
@@ -245,9 +256,10 @@ const apiBaseUrl = resolveApiBaseUrl();
         Create a new profile
       </h2>
       <form data-create-form class="mt-4 space-y-4">
-        {/* 2026-05-24 — archetype card surfaces the locked iPhone/iOS/Safari
-            build the profile will run under. Only one archetype is customer-
-            pickable today; the card hardens the contract instead of hiding it. */}
+        {/* 2026-05-30 — archetype PICKER. The platform models a device
+            MATRIX, not one device; the customer-selectable catalogue derives
+            from ARCHETYPE_REGISTRY (status launch|available) so more devices
+            appear here automatically as their fingerprint atlases land. */}
         <div class="rounded-md border border-white/10 bg-surface-base p-3" data-archetype-card>
           <div class="flex items-center gap-3">
             <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
@@ -257,14 +269,31 @@ const apiBaseUrl = resolveApiBaseUrl();
                 <line x1="10" y1="5" x2="14" y2="5" />
               </svg>
             </span>
-            <div class="min-w-0">
-              <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Archetype</p>
-              <p class="mt-0.5 text-sm font-medium text-ink-primary">{LOCKED_ARCHETYPE_DISPLAY_LABEL}</p>
+            <div class="min-w-0 flex-1">
+              <label
+                for="profile-archetype"
+                class="font-mono text-xs uppercase tracking-widest text-ink-muted"
+                >Device archetype</label
+              >
+              <select
+                id="profile-archetype"
+                name="archetype"
+                data-archetype-select
+                class="mt-1 w-full rounded-md border border-white/10 bg-surface-base px-3 py-2 text-sm text-ink-primary focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red"
+              >
+                {
+                  SELECTABLE_ARCHETYPES.map((a) => (
+                    <option value={a.id} selected={a.id === LOCKED_ARCHETYPE_ID}>
+                      {a.displayLabel}
+                    </option>
+                  ))
+                }
+              </select>
             </div>
           </div>
           <p class="mt-2 text-xs text-ink-muted">
-            One archetype is customer-pickable at launch. Sessions started against this
-            profile run on the iPhone-Safari fingerprint shown above.
+            The iPhone/iOS/Safari fingerprint sessions on this profile emulate.
+            More devices roll out here as their fingerprint profiles land.
           </p>
         </div>
         <div>
@@ -1347,10 +1376,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         const fd = new FormData(form);
         const name = (fd.get('name') || '').toString().trim();
         const description = (fd.get('description') || '').toString().trim();
+        const archetype = (fd.get('archetype') || '').toString().trim();
         const defaultProxyId = (fd.get('default_proxy_id') || '').toString().trim();
         if (!name) return;
         const payload = { name: name };
         if (description) payload.description = description;
+        if (archetype) payload.archetype = archetype;
         // 2026-05-24 — forward-compat: include the chosen default proxy so it
         // persists server-side once the saved-proxy storage + profile
         // default-proxy field land (EG-API-1.6). The server currently strips
