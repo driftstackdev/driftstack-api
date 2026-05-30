@@ -18,6 +18,7 @@ const BASE_CSS = [
   'apps/customer-dashboard/src/styles/base.css',
   'apps/marketing-site/src/styles/base.css',
   'apps/admin-panel/src/styles/base.css',
+  'apps/gui-client/src/styles/index.css',
 ];
 
 describe('prefers-reduced-motion global baseline across apps', () => {

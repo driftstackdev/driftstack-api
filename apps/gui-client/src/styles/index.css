@@ -88,3 +88,18 @@
            focus-visible:ring-1 focus-visible:ring-accent-ring;
   }
 }
+
+/* Global reduced-motion baseline — matches the web apps. Un-layered +
+   !important so it wins over Tailwind's animate-* / transition utilities;
+   motion-sensitive users get near-instant animations + transitions instead
+   of the skeleton pulses + state transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
