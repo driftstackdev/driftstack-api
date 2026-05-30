@@ -108,8 +108,15 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toMatch(/banner\.classList\.add\('border-red-200', 'bg-red-50', 'text-red-700'\)/);
   });
 
-  it('no-token guard: "Sign in with an admin key to load subscribers." copy', () => {
-    expect(body).toMatch(/Sign in with an admin key to load subscribers\./);
+  it('no-token + empty states: structured (headline + helper copy), matching the admin empty-state pattern', () => {
+    // No-token guard: structured empty state guiding the operator to SSO.
+    expect(body).toMatch(/Sign in to view subscribers/);
+    expect(body).toMatch(/Sign in with a staff admin key via the dashboard SSO bridge/);
+    // Empty list: headline + helper copy (not a bare one-line <li>).
+    expect(body).toMatch(/No subscribers yet/);
+    expect(body).toMatch(
+      /When visitors subscribe to incident notifications on status\.driftstack\.dev, they appear here/,
+    );
   });
 
   it('escapeHtml + fmtIso helpers (XSS-safe inline rendering, ISO normalization)', () => {
