@@ -106,19 +106,22 @@ describe('v2-#14 cross-SDK enum roster parity', () => {
   });
 
   it('CRITICAL WebhookEventType — closed roster across api-types + Go', () => {
-    // WebhookEventType includes test.ping (V-356 synthetic event),
-    // session.egress_capability_changed (Arc 5 EGRESS eg.7), and the
-    // V-666 crypto-order pair (crypto.order.paid / crypto.order.failed).
-    const opts = WebhookEventTypeSchema.options;
-    expect(opts).toContain('session.completed');
-    expect(opts).toContain('session.failed');
-    expect(opts).toContain('quota.warning_80pct');
-    expect(opts).toContain('quota.exceeded');
-    expect(opts).toContain('api_key.revoked');
-    expect(opts).toContain('session.egress_capability_changed');
-    expect(opts).toContain('test.ping');
-    expect(opts).toContain('crypto.order.paid');
-    expect(opts).toContain('crypto.order.failed');
+    // WebhookEventType: exact 9-value roster (test.ping = V-356 synthetic;
+    // session.egress_capability_changed = Arc 5 EGRESS eg.7; the crypto pair
+    // = V-666). .toEqual (not .toContain) so a FUTURE roster addition fails
+    // here — matching the other enums above + closing the subset-check gap
+    // that let the egress + crypto pair drift out of the Go SDK unnoticed.
+    expect(WebhookEventTypeSchema.options).toEqual([
+      'session.completed',
+      'session.failed',
+      'quota.warning_80pct',
+      'quota.exceeded',
+      'api_key.revoked',
+      'session.egress_capability_changed',
+      'test.ping',
+      'crypto.order.paid',
+      'crypto.order.failed',
+    ]);
 
     const go = read(SDK_GO_TYPES);
     expect(go).toMatch(/"session\.completed"/);
