@@ -105,4 +105,19 @@ describe('W367.C admin-panel /incidents/[id] (detail) page content parity', () =
       /V-344 — wires Post-update \+ Mark-resolved forms to the live[\s\S]*Replaces\s*\n?\s*\/\/\s*the V-295a alert-stubs/,
     );
   });
+
+  it('notifications use the branded data-banner / showBanner, NOT native alert() (2026-05-29 no-alert-boxes)', () => {
+    // The sign-in guard + post-failure notifications were the last two
+    // native alert() calls in the admin panel; they now route through the
+    // shared role="status" banner. Pin the helper + both call sites, and
+    // assert no actual alert() call (matched as a statement, so the
+    // explanatory comment mentioning alert() doesn't false-positive).
+    expect(body).toMatch(/data-banner/);
+    expect(body).toMatch(/function showBanner\(msg, isError\)/);
+    // post-failure routes through showBanner(..., true) not alert.
+    expect(body).toMatch(/showBanner\(\s*\n?\s*'Post failed: '/);
+    // no bare `alert(...)` statement (preceded by whitespace/`{`/`;`, i.e.
+    // a call, not the word inside a comment or "alert-stubs"/"alert()").
+    expect(body).not.toMatch(/(?:^|[;{}]|\)\s)\s*alert\(/m);
+  });
 });

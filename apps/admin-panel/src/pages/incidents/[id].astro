@@ -41,6 +41,12 @@ const isResolved = incident.status === 'resolved';
   <div class="mx-auto max-w-4xl px-6 py-10">
     <a href="/incidents" class="text-sm text-oxblood-700 hover:underline">← Back to incidents</a>
 
+    <div
+      data-banner
+      class="mt-4 mb-2 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      role="status"
+    ></div>
+
     <header class="mt-4 mb-8">
       <div class="flex flex-wrap items-center gap-2">
         <span
@@ -264,6 +270,23 @@ const isResolved = incident.status === 'resolved';
     // /v1/admin/incidents/:id/{updates,resolve} endpoints. Replaces
     // the V-295a alert-stubs.
     (function () {
+      const banner = document.querySelector('[data-banner]');
+
+      // Branded inline banner — replaces native alert() (2026-05-29
+      // "no alert boxes everywhere"). Matches the showBanner pattern used
+      // across the admin panel (status-subscribers / leads): role="status"
+      // div that swaps to a red error treatment when isError is set.
+      function showBanner(msg, isError) {
+        if (!banner) return;
+        banner.textContent = msg;
+        banner.classList.remove('hidden');
+        if (isError) {
+          banner.classList.add('border-red-200', 'bg-red-50', 'text-red-700');
+        } else {
+          banner.classList.remove('border-red-200', 'bg-red-50', 'text-red-700');
+        }
+      }
+
       function getToken() {
         try {
           return localStorage.getItem('ds_web_session_token') || '';
@@ -279,8 +302,7 @@ const isResolved = incident.status === 'resolved';
           ev.preventDefault();
           const token = getToken();
           if (!token) {
-            // eslint-disable-next-line no-alert
-            alert('Sign in with a staff admin account before posting.');
+            showBanner('Sign in with a staff admin account before posting.', true);
             return;
           }
           const fd = new FormData(form);
@@ -321,8 +343,10 @@ const isResolved = incident.status === 'resolved';
               window.location.reload();
             })
             .catch(function (err) {
-              // eslint-disable-next-line no-alert
-              alert('Post failed: ' + (err && err.message ? err.message : 'network error'));
+              showBanner(
+                'Post failed: ' + (err && err.message ? err.message : 'network error'),
+                true,
+              );
               if (submit) {
                 submit.disabled = false;
                 submit.textContent = submit.dataset.origText || 'Submit';
