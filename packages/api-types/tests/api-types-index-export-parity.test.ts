@@ -53,6 +53,7 @@ const EXPECTED_REEXPORTS = [
   'agent-models',
   'agent-sessions',
   'agent-intents',
+  'recipes',
 ] as const;
 
 describe('W384.C packages/api-types/src/index.ts public-surface content parity', () => {

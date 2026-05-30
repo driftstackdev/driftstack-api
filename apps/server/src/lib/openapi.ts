@@ -123,10 +123,18 @@ import {
   AgentSessionSchema,
   AgentIntentSchema,
   IntentResultSchema,
+  RecipeSchema,
+  RecipeDetailSchema,
 } from '@driftstack/api-types';
 
 const PaginatedSessionsSchema = z.object({
   data: z.array(SessionSchema),
+  has_more: z.boolean(),
+  next_cursor: z.string().nullable(),
+});
+
+const PaginatedRecipesSchema = z.object({
+  data: z.array(RecipeSchema),
   has_more: z.boolean(),
   next_cursor: z.string().nullable(),
 });
@@ -189,6 +197,8 @@ function buildRegistry(): OpenAPIRegistry {
   r.register('AgentSession', AgentSessionSchema);
   r.register('AgentIntent', AgentIntentSchema);
   r.register('IntentResult', IntentResultSchema);
+  r.register('Recipe', RecipeSchema);
+  r.register('RecipeDetail', RecipeDetailSchema);
   r.register('SessionState', SessionStateSchema);
   r.register('Problem', ProblemSchema);
   r.register('UsagePeriodSummary', UsagePeriodSummarySchema);
@@ -3090,7 +3100,7 @@ function buildRegistry(): OpenAPIRegistry {
       201: {
         description:
           'Recipe created. The `intent_count` field is the length of the assembled intent_log (flatMap of plan-executed transcript turns).',
-        content: { 'application/json': { schema: z.object({}) } },
+        content: { 'application/json': { schema: RecipeSchema } },
       },
       404: {
         description:
@@ -3126,7 +3136,7 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description:
           'Page of recipes. Each item is the metadata shape (id, label, description, agent_session_id, intent_count, timestamps) — not the full intent_log. `next_cursor` is null on the last page.',
-        content: { 'application/json': { schema: z.object({}) } },
+        content: { 'application/json': { schema: PaginatedRecipesSchema } },
       },
       ...errors4xx,
       503: {
@@ -3151,7 +3161,7 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description:
           'The recipe, including the `intent_log` (ordered AgentIntent array) on top of the list metadata.',
-        content: { 'application/json': { schema: z.object({}) } },
+        content: { 'application/json': { schema: RecipeDetailSchema } },
       },
       404: {
         description: 'Recipe not found (also returned cross-account — existence is not leaked).',
