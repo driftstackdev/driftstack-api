@@ -103,6 +103,10 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     expect(body).toMatch(/href="\/driftstack-mark\.svg(\?v=\d+)?"/);
   });
 
+  it('iOS apple-touch-icon points at the raster /apple-touch-icon.png — an SVG favicon alone leaves a blank/generic icon when driftstack.dev is added to an iPhone home screen (iOS requires a PNG); on-brand for an iPhone-focused product', () => {
+    expect(body).toMatch(/<link rel="apple-touch-icon" href="\/apple-touch-icon\.png" \/>/);
+  });
+
   it('doctype + viewport + canonical-link + Header/Footer-slot framing pinned: \'<!doctype html>\' + \'<html lang="en">\' + \'meta name="viewport" content="width=device-width, initial-scale=1"\' + \'link rel="canonical" href={canonical}\' + Header + main flex-1 + slot + Footer — pinned so the doctype + lang=en + viewport + canonical-link + Header/Footer-shell + main-slot commitment survives', () => {
     expect(body).toMatch(/<!doctype html>/);
     expect(body).toMatch(/<html lang="en" class="dark">/);

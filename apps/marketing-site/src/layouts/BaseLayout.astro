@@ -67,6 +67,11 @@ const ogImageUrl = new URL(ogImage ?? '/og-default.png', Astro.site).toString();
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=2" />
+    {/* iOS home-screen icon — apple-touch-icon MUST be raster (PNG); an
+        SVG favicon alone leaves driftstack.dev with a blank/generic icon
+        when added to an iPhone home screen. Generated from the brand mark
+        via scripts/gen-apple-touch-icon.mjs. */}
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body class="relative">
     {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR users skip the nav. */}

@@ -111,6 +111,10 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     );
   });
 
+  it('iOS apple-touch-icon points at the raster /apple-touch-icon.png (iOS requires a PNG; SVG favicon alone = blank home-screen icon)', () => {
+    expect(body).toMatch(/<link rel="apple-touch-icon" href="\/apple-touch-icon\.png" \/>/);
+  });
+
   it('renders <Header /> + <slot /> in <main class="flex-1"> + <Footer />, with the skip-link target on <main>', () => {
     expect(body).toMatch(/<Header \/>/);
     expect(body).toMatch(/<main\b[^>]*\bclass="flex-1">\s*<slot \/>\s*<\/main>/);
