@@ -1,6 +1,6 @@
 // W850 — AccountTier 8-value enum cross-source invariant. One-
 // hundred-seventy-sixth in the drift-guard series. Pins the V-148
-// two-ladder AccountTier enum (trial_pack + solo_manual + team_manual
+// two-ladder AccountTier enum (free + solo_manual + team_manual
 // + agency_manual + api_starter + api_builder + api_scale + enterprise)
 // is consistent across api-types schema + Go const declarations +
 // cross-app references.
@@ -8,7 +8,7 @@
 // AccountTier is the canonical pricing-tier enum:
 //   - Manual ladder: solo_manual / team_manual / agency_manual.
 //   - API ladder: api_starter / api_builder / api_scale.
-//   - Special: trial_pack (V-318 14-day trial) + enterprise.
+//   - Special: free (perpetual free tier) + enterprise.
 //
 // Drift to adding/removing a tier without coordinated SDK + dashboard
 // + billing-flow updates would break tier-checking branches across
@@ -18,6 +18,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AccountTierSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -44,6 +45,11 @@ describe('W850 AccountTier 8-value cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/common.ts declares AccountTierSchema = z.enum([...]) with the EXACT 8-value set (free + solo_manual + team_manual + agency_manual + api_starter + api_builder + api_scale + enterprise). Drift would cascade through every tier-check.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
     expect(p).toMatch(/export const AccountTierSchema = z\.enum\(\[/);
+    // EXACT canonical pin: .options must EQUAL the 8-value set, not merely
+    // contain it — a 9th tier added to the schema would silently pass the
+    // subset for-loop below (the same weak pattern that let the
+    // WebhookEventType roster drift out of the Go SDK unnoticed).
+    expect(AccountTierSchema.options).toEqual([...ACCOUNT_TIERS]);
     for (const tier of ACCOUNT_TIERS) {
       expect(p, `AccountTierSchema must include '${tier}'`).toMatch(new RegExp(`'${tier}'`));
     }
