@@ -27,9 +27,9 @@ function walk(dir: string): string[] {
 // Map of tier display-names (the strings docs actually use) to their
 // live concurrent-cap value.
 const DISPLAY_NAME_TO_CAP: Record<string, number> = {
-  'Solo Manual': TIER_CONCURRENT_SESSION_LIMITS.solo_manual,
-  'Team Manual': TIER_CONCURRENT_SESSION_LIMITS.team_manual,
-  'Agency Manual': TIER_CONCURRENT_SESSION_LIMITS.agency_manual,
+  Personal: TIER_CONCURRENT_SESSION_LIMITS.solo_manual,
+  Team: TIER_CONCURRENT_SESSION_LIMITS.team_manual,
+  Agency: TIER_CONCURRENT_SESSION_LIMITS.agency_manual,
   'API Starter': TIER_CONCURRENT_SESSION_LIMITS.api_starter,
   'API Builder': TIER_CONCURRENT_SESSION_LIMITS.api_builder,
   'API Scale': TIER_CONCURRENT_SESSION_LIMITS.api_scale,
@@ -43,7 +43,7 @@ describe('W248.D marketing-site tier-cap drift sweep', () => {
     for (const p of pages) {
       const body = readFileSync(p, 'utf8');
       for (const [name, live] of Object.entries(DISPLAY_NAME_TO_CAP)) {
-        // Match patterns like "Solo Manual: 5 concurrent" / "Solo Manual = 5"
+        // Match patterns like "Personal: 5 concurrent" / "Personal = 5"
         // — both flavours appeared in pre-W242 incarnations.
         const re = new RegExp(`${name}\\s*[:=]\\s*(\\d+)`, 'g');
         for (const m of body.matchAll(re)) {

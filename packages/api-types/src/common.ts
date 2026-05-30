@@ -307,7 +307,7 @@ export const TIER_RATE_LIMIT_DEFAULTS: Record<
  *     `apps/server/src/lib/errors-helpers.ts` throws 403 with
  *     `feature_not_available` problem-type when the gate fails.
  *   - Customer dashboard: read TIER_FEATURES directly to drive
- *     conditional UI (e.g. hide AI-agent CTA on Solo Manual).
+ *     conditional UI (e.g. hide AI-agent CTA on Personal).
  *
  * Adding a new feature: extend `TierFeatures`, populate every row
  * in `TIER_FEATURES`, then have the route handler call

@@ -3,7 +3,7 @@
 Profiles are persistent browser-state slots: cookies, localStorage,
 IndexedDB. Sessions can attach to a profile to resume a logged-in
 state across runs. The Manual ladder uses profile count as the
-tier-defining metric (Solo Manual = 10, Team Manual = 50, Agency
+tier-defining metric (Personal = 10, Team = 50, Agency
 Manual = 200); the API ladder also caps profiles per ADR-004.
 
 Walks: create → list (paginated via iterate) → get → update → delete.

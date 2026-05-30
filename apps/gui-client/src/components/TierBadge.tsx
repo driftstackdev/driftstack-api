@@ -28,9 +28,9 @@ export interface TierBadgeProps {
 
 const TIER_LABEL: Record<string, string> = {
   free: 'Free',
-  solo_manual: 'Solo Manual',
-  team_manual: 'Team Manual',
-  agency_manual: 'Agency Manual',
+  solo_manual: 'Personal',
+  team_manual: 'Team',
+  agency_manual: 'Agency',
   api_starter: 'API Starter',
   api_builder: 'API Builder',
   api_scale: 'API Scale',

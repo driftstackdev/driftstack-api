@@ -114,12 +114,12 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     expect(body).toMatch(/mint an API key bound to your account and store it in the OS keychain/);
   });
 
-  it("Mode-step framing pinned: 'Almost everyone should choose Cloud. Self-hosted is for advanced teams running their own Mac fleet — much higher cost and operational overhead.' + cloud 'Free to start, or $79/mo Solo Manual' + self-hosted 'License from $1,000/mo on top of the Mac hardware you provide' — pinned so the cloud-recommended framing + pricing anchors don't drift (trial pack retired 2026-05-27)", () => {
+  it("Mode-step framing pinned: 'Almost everyone should choose Cloud. Self-hosted is for advanced teams running their own Mac fleet — much higher cost and operational overhead.' + cloud 'Free to start, or $79/mo Personal' + self-hosted 'License from $1,000/mo on top of the Mac hardware you provide' — pinned so the cloud-recommended framing + pricing anchors don't drift (trial pack retired 2026-05-27)", () => {
     expect(body).toMatch(
       /Almost everyone should choose <strong>Cloud<\/strong>\. Self-hosted is for advanced teams\s*\n?\s*running their own Mac fleet — much higher cost and operational overhead\./,
     );
     expect(body).toMatch(
-      /<strong>Free<\/strong> to start, or <strong>\$79\/mo<\/strong> Solo Manual\./,
+      /<strong>Free<\/strong> to start, or <strong>\$79\/mo<\/strong> Personal\./,
     );
     expect(body).toMatch(
       /License from <strong>\$1,000\/mo<\/strong> on top of the Mac hardware you provide and\s*\n?\s*operate yourself\./,

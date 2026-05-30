@@ -59,9 +59,9 @@ describe('W477.A apps/gui-client/src/components/TierBadge.tsx content parity', (
     );
   });
 
-  it("TIER_LABEL 8-entry: 'Free', 'Solo Manual', 'Team Manual', 'Agency Manual', 'API Starter', 'API Builder', 'API Scale', 'Enterprise' — Title Case + API uppercase preserved (trial_pack removed 2026-05-27)", () => {
+  it("TIER_LABEL 8-entry: 'Free', 'Personal', 'Team', 'Agency', 'API Starter', 'API Builder', 'API Scale', 'Enterprise' — Title Case + API uppercase preserved (trial_pack removed 2026-05-27)", () => {
     expect(body).toMatch(
-      /const TIER_LABEL: Record<string, string> = \{\s*\n?\s*free: 'Free',\s*\n?\s*solo_manual: 'Solo Manual',\s*\n?\s*team_manual: 'Team Manual',\s*\n?\s*agency_manual: 'Agency Manual',\s*\n?\s*api_starter: 'API Starter',\s*\n?\s*api_builder: 'API Builder',\s*\n?\s*api_scale: 'API Scale',\s*\n?\s*enterprise: 'Enterprise',\s*\n?\s*\};/,
+      /const TIER_LABEL: Record<string, string> = \{\s*\n?\s*free: 'Free',\s*\n?\s*solo_manual: 'Personal',\s*\n?\s*team_manual: 'Team',\s*\n?\s*agency_manual: 'Agency',\s*\n?\s*api_starter: 'API Starter',\s*\n?\s*api_builder: 'API Builder',\s*\n?\s*api_scale: 'API Scale',\s*\n?\s*enterprise: 'Enterprise',\s*\n?\s*\};/,
     );
     expect(body).not.toMatch(/'Trial Pack'/);
   });

@@ -108,10 +108,10 @@ describe('W620 sdk-python/examples content parity', () => {
     expect(existsSync(E('pagination.py'))).toBe(true);
   });
 
-  it('profile_management.py: profiles end-to-end + V-136 LOCKED_ARCHETYPE_ID + tier counts (Solo Manual=10/Team=50/Agency=200 + ADR-004 API ladder) + 8-step flow (create → iterate → get → update D-032 → V-313 clone → V-312 snapshot → restore → cleanup) pinned', () => {
+  it('profile_management.py: profiles end-to-end + V-136 LOCKED_ARCHETYPE_ID + tier counts (Personal=10/Team=50/Agency=200 + ADR-004 API ladder) + 8-step flow (create → iterate → get → update D-032 → V-313 clone → V-312 snapshot → restore → cleanup) pinned', () => {
     const body = read(E('profile_management.py'));
     expect(body).toMatch(/^"""Profile management — profiles surface end-to-end\.$/m);
-    expect(body).toMatch(/Solo Manual = 10, Team Manual = 50, Agency/);
+    expect(body).toMatch(/Personal = 10, Team = 50, Agency/);
     expect(body).toMatch(/Manual = 200/);
     expect(body).toMatch(/the API ladder also caps profiles per ADR-004\./);
     expect(body).toMatch(/V-136 LOCKED_ARCHETYPE_ID/);

@@ -28,9 +28,9 @@ describe('W335.B /pricing section-anchor coverage', () => {
   }
 
   it('page renders one summary card per Manual ladder tier (Solo / Team / Agency)', () => {
-    expect(body).toMatch(/Solo Manual\s+—\s+\$79\/mo/);
-    expect(body).toMatch(/Team Manual\s+—\s+\$249\/mo/);
-    expect(body).toMatch(/Agency Manual\s+—\s+\$699\/mo/);
+    expect(body).toMatch(/Personal\s+—\s+\$79\/mo/);
+    expect(body).toMatch(/Team\s+—\s+\$249\/mo/);
+    expect(body).toMatch(/Agency\s+—\s+\$699\/mo/);
   });
 
   it('page renders one summary card per API ladder tier (Starter / Builder / Scale / Enterprise)', () => {

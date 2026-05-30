@@ -31,7 +31,7 @@ describe('W268.B /select-tier ↔ marketing pricing parity', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('Solo Manual / Team Manual / etc. price labels match marketing data', () => {
+  it('Personal / Team / etc. price labels match marketing data', () => {
     const pairs: Array<[string, number]> = [
       ['solo_manual', 79],
       ['team_manual', 249],

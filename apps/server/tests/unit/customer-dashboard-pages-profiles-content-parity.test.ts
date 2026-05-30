@@ -66,7 +66,7 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
 
   it("TIER_DISPLAY_ORDER 7-entry: solo_manual + team_manual + agency_manual + api_starter + api_builder + api_scale + enterprise — pinned so the tier-limits display table covers ALL 7 tiers (6 paid + enterprise) and the order matches the marketing-site pricing-page order (drift to dropping enterprise would hide the 'contact sales' destination from cap-aware customers)", () => {
     expect(body).toMatch(
-      /const TIER_DISPLAY_ORDER: ReadonlyArray<\{ id: AccountTier; label: string \}> = \[\s*\n?\s*\{ id: 'solo_manual', label: 'Solo Manual' \},\s*\n?\s*\{ id: 'team_manual', label: 'Team Manual' \},\s*\n?\s*\{ id: 'agency_manual', label: 'Agency Manual' \},\s*\n?\s*\{ id: 'api_starter', label: 'API Starter' \},\s*\n?\s*\{ id: 'api_builder', label: 'API Builder' \},\s*\n?\s*\{ id: 'api_scale', label: 'API Scale' \},\s*\n?\s*\{ id: 'enterprise', label: 'Enterprise' \},\s*\n?\s*\];/,
+      /const TIER_DISPLAY_ORDER: ReadonlyArray<\{ id: AccountTier; label: string \}> = \[\s*\n?\s*\{ id: 'solo_manual', label: 'Personal' \},\s*\n?\s*\{ id: 'team_manual', label: 'Team' \},\s*\n?\s*\{ id: 'agency_manual', label: 'Agency' \},\s*\n?\s*\{ id: 'api_starter', label: 'API Starter' \},\s*\n?\s*\{ id: 'api_builder', label: 'API Builder' \},\s*\n?\s*\{ id: 'api_scale', label: 'API Scale' \},\s*\n?\s*\{ id: 'enterprise', label: 'Enterprise' \},\s*\n?\s*\];/,
     );
   });
 

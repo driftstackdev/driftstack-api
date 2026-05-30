@@ -55,7 +55,7 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
     expect(body).toMatch(/PROFILES_PER_TIER\[t\.id\]/);
   });
 
-  it('TIERS array pinned: 6 paid tiers verbatim (Solo/Team/Agency Manual + API Starter/Builder/Scale)', () => {
+  it('TIERS array pinned: 6 paid tiers verbatim (Solo/Team/Agency + API Starter/Builder/Scale)', () => {
     const tiers = body.match(/const TIERS:[\s\S]*?\] = \[([\s\S]*?)\];/);
     expect(tiers).not.toBeNull();
     const ids = Array.from(tiers![1]!.matchAll(/id: '([a-z_]+)'/g)).map((m) => m[1] as string);

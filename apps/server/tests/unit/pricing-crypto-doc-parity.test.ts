@@ -22,9 +22,9 @@ describe('W247.C /pricing/crypto doc parity', () => {
   it('derives SUPPORTED_TIERS from API_TIERS (no hard-coded prices)', () => {
     expect(doc).toContain(`import { API_TIERS } from '../../data/pricing.ts'`);
     // No raw hard-coded stale price labels.
-    expect(doc).not.toMatch(/Solo Manual \(\$25\/mo\)/);
-    expect(doc).not.toMatch(/Team Manual \(\$80\/mo\)/);
-    expect(doc).not.toMatch(/Agency Manual \(\$300\/mo\)/);
+    expect(doc).not.toMatch(/Personal \(\$25\/mo\)/);
+    expect(doc).not.toMatch(/Team \(\$80\/mo\)/);
+    expect(doc).not.toMatch(/Agency \(\$300\/mo\)/);
     expect(doc).not.toMatch(/API Starter \(\$50\/mo\)/);
     expect(doc).not.toMatch(/API Builder \(\$250\/mo\)/);
   });

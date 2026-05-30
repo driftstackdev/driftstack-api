@@ -42,16 +42,16 @@ In practice you don't observe `creating` separately — the SDK's `sessions.crea
 
 Each tier has a hard cap on simultaneously-active sessions. Exceeding the cap returns `429 Too Many Requests` on `sessions.create()`, with a `Retry-After` header indicating when capacity will free up (worst case = soonest tracked session's idle-timeout boundary).
 
-| Tier          | Concurrent sessions |
-| ------------- | ------------------- |
-| Free          | 1                   |
-| Solo Manual   | 1                   |
-| Team Manual   | 3                   |
-| Agency Manual | 8                   |
-| API Starter   | 2                   |
-| API Builder   | 8                   |
-| API Scale     | 24                  |
-| Enterprise    | Custom              |
+| Tier        | Concurrent sessions |
+| ----------- | ------------------- |
+| Free        | 1                   |
+| Personal    | 1                   |
+| Team        | 3                   |
+| Agency      | 8                   |
+| API Starter | 2                   |
+| API Builder | 8                   |
+| API Scale   | 24                  |
+| Enterprise  | Custom              |
 
 Concurrent caps are the only metering on paid tiers — there are no hour caps and no overage charges. Run sessions for as long as your workflow needs within your concurrent cap.
 

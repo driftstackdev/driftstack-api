@@ -61,16 +61,16 @@ describe('W346.C admin /accounts list filter parity', () => {
     expect(keys).toEqual([...statuses].sort());
   });
 
-  it('tier dropdown labels use the canonical Title Case (Trial pack / Solo Manual / etc.)', () => {
+  it('tier dropdown labels use the canonical Title Case (Trial pack / Personal / etc.)', () => {
     // Pin the label text. A future "Pro" rename of api_scale needs
     // to land here too.
     const block = page.match(/<select\s+data-field="tier"[\s\S]*?<\/select>/);
     expect(block).not.toBeNull();
     for (const label of [
       'Free',
-      'Solo Manual',
-      'Team Manual',
-      'Agency Manual',
+      'Personal',
+      'Team',
+      'Agency',
       'API Starter',
       'API Builder',
       'API Scale',

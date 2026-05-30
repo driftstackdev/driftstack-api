@@ -7,7 +7,7 @@ import { TierBadge, tierLabelFor, tierToneFor } from '../../src/components/TierB
 describe('V-534.M tierLabelFor', () => {
   it('maps every known tier id to a human-readable label', () => {
     expect(tierLabelFor('free')).toBe('Free');
-    expect(tierLabelFor('solo_manual')).toBe('Solo Manual');
+    expect(tierLabelFor('solo_manual')).toBe('Personal');
     expect(tierLabelFor('api_builder')).toBe('API Builder');
     expect(tierLabelFor('enterprise')).toBe('Enterprise');
   });
@@ -34,13 +34,13 @@ describe('V-534.M tierToneFor', () => {
 describe('V-534.M TierBadge rendering', () => {
   it('renders the canonical label for a known tier', () => {
     render(<TierBadge tier="solo_manual" />);
-    expect(screen.getByText('Solo Manual')).toBeTruthy();
+    expect(screen.getByText('Personal')).toBeTruthy();
   });
 
   it('uses the explicit label override when supplied', () => {
     render(<TierBadge tier="solo_manual" label="Custom Plan" />);
     expect(screen.getByText('Custom Plan')).toBeTruthy();
-    expect(screen.queryByText('Solo Manual')).toBeNull();
+    expect(screen.queryByText('Personal')).toBeNull();
   });
 
   it('sets aria-label so screen readers announce "Tier: <label>"', () => {

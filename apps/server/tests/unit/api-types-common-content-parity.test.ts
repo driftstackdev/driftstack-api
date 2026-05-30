@@ -205,7 +205,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /\*\s*Single source of truth for "which capabilities does this tier\s*\n?\s*\*\s*unlock\?" Today the server checks `tier === 'free'` \/\s*\n?\s*\*\s*`PROFILES_PER_TIER\[tier\]` \/ `TIER_CONCURRENT_SESSION_LIMITS\[tier\]`\s*\n?\s*\*\s*in scattered call sites; this registry is the central place for\s*\n?\s*\*\s*those plus the AI-agent \+ LLM-billing gates that ship with V-487\+\./,
     );
     expect(body).toMatch(
-      /\*\s*Consumers:\s*\n?\s*\*\s*- Server: `requireTierFeature\(tier, key\)` in\s*\n?\s*\*\s*`apps\/server\/src\/lib\/errors-helpers\.ts` throws 403 with\s*\n?\s*\*\s*`feature_not_available` problem-type when the gate fails\.\s*\n?\s*\*\s*- Customer dashboard: read TIER_FEATURES directly to drive\s*\n?\s*\*\s*conditional UI \(e\.g\. hide AI-agent CTA on Solo Manual\)\./,
+      /\*\s*Consumers:\s*\n?\s*\*\s*- Server: `requireTierFeature\(tier, key\)` in\s*\n?\s*\*\s*`apps\/server\/src\/lib\/errors-helpers\.ts` throws 403 with\s*\n?\s*\*\s*`feature_not_available` problem-type when the gate fails\.\s*\n?\s*\*\s*- Customer dashboard: read TIER_FEATURES directly to drive\s*\n?\s*\*\s*conditional UI \(e\.g\. hide AI-agent CTA on Personal\)\./,
     );
     expect(body).toMatch(
       /export type LlmBilling = 'byok_only' \| 'byok_or_bundled' \| 'byok_or_bundled_custom' \| null;/,

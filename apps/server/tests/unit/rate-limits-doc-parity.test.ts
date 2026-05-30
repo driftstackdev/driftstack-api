@@ -27,8 +27,8 @@ describe('W243.B rate-limits doc parity', () => {
   it('does not invent concurrency caps that exceed live ceilings', () => {
     const max = Math.max(...Object.values(TIER_CONCURRENT_SESSION_LIMITS));
     // Forbidden literal caps from the prior revision — all higher than reality.
-    expect(doc).not.toMatch(/Team Manual:\s*5 concurrent/);
-    expect(doc).not.toMatch(/Agency Manual:\s*25 concurrent/);
+    expect(doc).not.toMatch(/Team:\s*5 concurrent/);
+    expect(doc).not.toMatch(/Agency:\s*25 concurrent/);
     expect(doc).not.toMatch(/API Starter:\s*10 concurrent/);
     expect(doc).not.toMatch(/API Builder:\s*50 concurrent/);
     expect(doc).not.toMatch(/API Scale:\s*250 concurrent/);

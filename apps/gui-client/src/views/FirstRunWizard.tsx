@@ -254,8 +254,8 @@ function ModeStep({
               </span>
             </div>
             <div className="mt-1 text-xs text-ink-secondary">
-              <strong>Free</strong> to start, or <strong>$79/mo</strong> Solo Manual. Driftstack
-              runs the fleet, handles updates, and bills via Stripe. Connects to{' '}
+              <strong>Free</strong> to start, or <strong>$79/mo</strong> Personal. Driftstack runs
+              the fleet, handles updates, and bills via Stripe. Connects to{' '}
               <span className="mono">api.driftstack.dev</span>.
             </div>
             <ul className="mt-2 space-y-0.5 text-[11px] text-ink-muted">

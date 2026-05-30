@@ -3,7 +3,7 @@
 // Profiles are persistent browser-state slots: cookies, localStorage,
 // IndexedDB. Sessions can attach to a profile to resume a logged-in
 // state across runs. The Manual ladder uses profile count as the
-// tier-defining metric (Solo Manual = 10, Team Manual = 50, Agency
+// tier-defining metric (Personal = 10, Team = 50, Agency
 // Manual = 200); the API ladder also caps profiles per ADR-004.
 //
 // This example walks: create → list (paginated) → get → update →
@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   // 2. List all profiles for this account, paginated.
   //    Using iterate() walks the cursor automatically — fine for
   //    accounts with up to a few hundred profiles. For very large
-  //    accounts (Agency Manual = 200, API Scale = 500), prefer
+  //    accounts (Agency = 200, API Scale = 500), prefer
   //    list({ limit }) + cursor pagination.
   console.log('listing all profiles…');
   let count = 0;

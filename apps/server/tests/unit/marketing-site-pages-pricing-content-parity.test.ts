@@ -13,7 +13,7 @@
 //   • Positioning band: 'Pay per concurrent session.' + 'No surprise
 //     overage bills.' framing.
 //   • V-502 'Which tier is right for me?' decision-tree section: Free
-//     $0 / Solo Manual $79 / Team Manual $249 / Agency Manual $699
+//     $0 / Personal $79 / Team $249 / Agency $699
 //     / API Starter $149 / API Builder $499 / API Scale $1,499 /
 //     Enterprise from $4,000.
 //   • Monthly/annual toggle with −20% annual savings badge.
@@ -80,18 +80,18 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(/No surprise overage bills\./);
   });
 
-  it("V-502 decision-tree section 8 tier cards: Free $0 + Solo Manual $79 + Team Manual $249 + Agency Manual $699 + API Starter $149 + API Builder $499 + API Scale $1,499 + Enterprise from $4,000 — pinned so the 8-tier 'which is right for me' decision-tree stays complete (drift to dropping any tier would orphan that-tier prospects; drift to changing a price would create marketing↔Stripe-invoice divergence)", () => {
+  it("V-502 decision-tree section 8 tier cards: Free $0 + Personal $79 + Team $249 + Agency $699 + API Starter $149 + API Builder $499 + API Scale $1,499 + Enterprise from $4,000 — pinned so the 8-tier 'which is right for me' decision-tree stays complete (drift to dropping any tier would orphan that-tier prospects; drift to changing a price would create marketing↔Stripe-invoice divergence)", () => {
     expect(body).toMatch(/Free — \$0, forever/);
-    expect(body).toMatch(/Solo Manual — \$79\/mo/);
-    expect(body).toMatch(/Team Manual — \$249\/mo/);
-    expect(body).toMatch(/Agency Manual — \$699\/mo/);
+    expect(body).toMatch(/Personal — \$79\/mo/);
+    expect(body).toMatch(/Team — \$249\/mo/);
+    expect(body).toMatch(/Agency — \$699\/mo/);
     expect(body).toMatch(/API Starter — \$149\/mo/);
     expect(body).toMatch(/API Builder — \$499\/mo/);
     expect(body).toMatch(/API Scale — \$1,499\/mo/);
     expect(body).toMatch(/Enterprise — from \$4,000\/mo/);
   });
 
-  it("Solo Manual decision-card framing pinned: 'One human clicking in the desktop GUI client; up to 10 persistent profiles. Power users running 1 session at a time across 10 different client identities' — pinned so the 1-session/10-profile/desktop-GUI Solo framing stays consistent (drift to dropping '10 persistent profiles' would create marketing↔pricing-table divergence on the per-tier profile counts)", () => {
+  it("Personal decision-card framing pinned: 'One human clicking in the desktop GUI client; up to 10 persistent profiles. Power users running 1 session at a time across 10 different client identities' — pinned so the 1-session/10-profile/desktop-GUI Solo framing stays consistent (drift to dropping '10 persistent profiles' would create marketing↔pricing-table divergence on the per-tier profile counts)", () => {
     expect(body).toMatch(
       /One human clicking in the desktop GUI client; up to 10\s*\n?\s*persistent profiles\. Power users running 1 session at a time\s*\n?\s*across 10 different client identities/,
     );

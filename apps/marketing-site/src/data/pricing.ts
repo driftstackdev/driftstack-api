@@ -77,7 +77,7 @@ export const API_TIERS: ApiTier[] = [
   {
     id: 'solo_manual',
     tierType: 'manual',
-    name: 'Solo Manual',
+    name: 'Personal',
     monthlyUsd: 79,
     annualMonthlyEquivalentUsd: 63,
     annualUsd: 758,
@@ -95,7 +95,7 @@ export const API_TIERS: ApiTier[] = [
   {
     id: 'team_manual',
     tierType: 'manual',
-    name: 'Team Manual',
+    name: 'Team',
     monthlyUsd: 249,
     annualMonthlyEquivalentUsd: 199,
     annualUsd: 2_390,
@@ -114,7 +114,7 @@ export const API_TIERS: ApiTier[] = [
   {
     id: 'agency_manual',
     tierType: 'manual',
-    name: 'Agency Manual',
+    name: 'Agency',
     monthlyUsd: 699,
     annualMonthlyEquivalentUsd: 559,
     annualUsd: 6_710,

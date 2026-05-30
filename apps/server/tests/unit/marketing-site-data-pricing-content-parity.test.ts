@@ -48,20 +48,20 @@ describe('marketing-site data/pricing content parity', () => {
   });
 
   it('Manual-ladder 3-tier price points pinned: $79 / $249 / $699 (Solo / Team / Agency). Drift would break ALL three pricing-page rows AND the changelog 2026-05-03 two-ladder-pricing entry', () => {
-    expect(body).toMatch(/name: 'Solo Manual',\s*\n?\s*monthlyUsd: 79,/);
-    expect(body).toMatch(/name: 'Team Manual',\s*\n?\s*monthlyUsd: 249,/);
+    expect(body).toMatch(/name: 'Personal',\s*\n?\s*monthlyUsd: 79,/);
+    expect(body).toMatch(/name: 'Team',\s*\n?\s*monthlyUsd: 249,/);
     expect(body).toMatch(/monthlyUsd: 699,/);
   });
 
-  it('Solo Manual concurrent=1 + 10 profiles pinned: the tier-defining caps. Drift would break the price-to-concurrent ratio that defines the tier ladder shape', () => {
+  it('Personal concurrent=1 + 10 profiles pinned: the tier-defining caps. Drift would break the price-to-concurrent ratio that defines the tier ladder shape', () => {
     expect(body).toMatch(/id: 'solo_manual',[\s\S]{0,500}profiles: 10,[\s\S]{0,200}concurrent: 1,/);
   });
 
-  it("Team Manual highlight=true pinned (the recommended Manual-tier): drift would shift the dashboard's highlighted recommendation, which affects conversion rate on the pricing page", () => {
+  it("Team highlight=true pinned (the recommended Manual-tier): drift would shift the dashboard's highlighted recommendation, which affects conversion rate on the pricing page", () => {
     expect(body).toMatch(/id: 'team_manual',[\s\S]{0,500}highlight: true,/);
   });
 
-  it("Team Manual aiAgent + llmBilling='byok_only' pinned: Manual ladder's only AI-agent tier requires BYOK (per ADR-004 founder Tier 3 spec). Drift to enabling AI on Solo would break the ladder differentiation; drift to bundled-LLM at this tier would create a billing-rail mismatch with the server-side tier configuration", () => {
+  it("Team aiAgent + llmBilling='byok_only' pinned: Manual ladder's only AI-agent tier requires BYOK (per ADR-004 founder Tier 3 spec). Drift to enabling AI on Solo would break the ladder differentiation; drift to bundled-LLM at this tier would create a billing-rail mismatch with the server-side tier configuration", () => {
     expect(body).toMatch(
       /id: 'team_manual',[\s\S]{0,800}aiAgent: true,[\s\S]{0,200}llmBilling: 'byok_only',/,
     );

@@ -157,7 +157,7 @@ describe('W619 sdk-typescript/examples content parity', () => {
     const body = read(E('profile-management.ts'));
     expect(body).toMatch(/^\/\/ Profile management — V-073 profiles surface end-to-end\.$/m);
     expect(body).toMatch(/Profiles are persistent browser-state slots: cookies, localStorage,/);
-    expect(body).toMatch(/Solo Manual = 10, Team Manual = 50, Agency/);
+    expect(body).toMatch(/Personal = 10, Team = 50, Agency/);
     expect(body).toMatch(/Manual = 200/);
     expect(body).toMatch(/the API ladder also caps profiles per ADR-004\./);
     expect(body).toMatch(/const created = await client\.profiles\.create\(\{/);

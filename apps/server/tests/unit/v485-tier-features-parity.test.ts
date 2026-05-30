@@ -49,10 +49,10 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
     );
   });
 
-  it('CRITICAL dashboard-consumer framing pinned. The "Customer dashboard: read TIER_FEATURES directly to drive conditional UI (e.g. hide AI-agent CTA on Solo Manual)" wording tells dashboard engineers this is the canonical read path.', () => {
+  it('CRITICAL dashboard-consumer framing pinned. The "Customer dashboard: read TIER_FEATURES directly to drive conditional UI (e.g. hide AI-agent CTA on Personal)" wording tells dashboard engineers this is the canonical read path.', () => {
     const c = read(COMMON);
     expect(c).toMatch(
-      /Customer dashboard: read TIER_FEATURES directly to drive\s*\n\s*\*\s*conditional UI \(e\.g\. hide AI-agent CTA on Solo Manual\)/,
+      /Customer dashboard: read TIER_FEATURES directly to drive\s*\n\s*\*\s*conditional UI \(e\.g\. hide AI-agent CTA on Personal\)/,
     );
   });
 

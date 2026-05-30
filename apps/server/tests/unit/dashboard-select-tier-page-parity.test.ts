@@ -63,9 +63,9 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
     const p = read(PAGE);
 
     const expected: Array<[string, string, string, string]> = [
-      ['solo_manual', 'Solo Manual', '$79/mo', 'Manual'],
-      ['team_manual', 'Team Manual', '$249/mo', 'Manual'],
-      ['agency_manual', 'Agency Manual', '$699/mo', 'Manual'],
+      ['solo_manual', 'Personal', '$79/mo', 'Manual'],
+      ['team_manual', 'Team', '$249/mo', 'Manual'],
+      ['agency_manual', 'Agency', '$699/mo', 'Manual'],
       ['api_starter', 'API Starter', '$149/mo', 'API'],
       ['api_builder', 'API Builder', '$499/mo', 'API'],
       ['api_scale', 'API Scale', '$1,499/mo', 'API'],

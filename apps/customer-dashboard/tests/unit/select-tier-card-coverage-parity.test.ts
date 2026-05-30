@@ -45,7 +45,17 @@ describe('W292.A /select-tier ↔ AccountTierSchema coverage', () => {
     expect(body).not.toMatch(/\bid:\s*['"]free['"]/);
   });
 
-  it('cards declare a label that matches the live tier id (capitalised words)', () => {
+  it('cards declare a sensible label for each tier id', () => {
+    // The Manual ladder now uses human plan names (Personal / Team /
+    // Agency, 2026-05-29) that are intentionally DECOUPLED from the
+    // backend id — so they're pinned explicitly here. Every other tier
+    // (the API ladder) still carries the capitalised second id-segment
+    // in its label (api_starter → "Starter", api_builder → "Builder").
+    const MANUAL_LADDER_LABELS: Record<string, string> = {
+      solo_manual: 'Personal',
+      team_manual: 'Team',
+      agency_manual: 'Agency',
+    };
     const offenders: string[] = [];
     const matches = [
       ...body.matchAll(/\{\s*id:\s*['"]([a-z_]+)['"]\s*,\s*label:\s*['"]([^'"]+)['"]/g),
@@ -53,8 +63,11 @@ describe('W292.A /select-tier ↔ AccountTierSchema coverage', () => {
     for (const m of matches) {
       const id = m[1]!;
       const label = m[2]!;
-      // Label should contain the second segment of the id (e.g.
-      // solo_manual → "Manual"; api_starter → "Starter").
+      const expectedHuman = MANUAL_LADDER_LABELS[id];
+      if (expectedHuman !== undefined) {
+        if (label !== expectedHuman) offenders.push(`${id} → ${label} (expected ${expectedHuman})`);
+        continue;
+      }
       const segment = id.split('_')[1] ?? '';
       const cap = segment.charAt(0).toUpperCase() + segment.slice(1);
       if (segment && !label.includes(cap)) {

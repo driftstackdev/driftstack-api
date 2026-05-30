@@ -117,7 +117,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
   });
 
   it('Manual ladder framing: $79/$249/$699 + 1/3/8 concurrent + unlimited hours within cap', () => {
-    expect(body).toMatch(/Solo Manual \$79\/mo · Team \$249\/mo · Agency \$699\/mo/);
+    expect(body).toMatch(/Personal \$79\/mo · Team \$249\/mo · Agency \$699\/mo/);
     expect(body).toMatch(/1 \/ 3 \/ 8 concurrent sessions per tier/);
     expect(body).toMatch(/Unlimited hours within your concurrent cap/);
   });

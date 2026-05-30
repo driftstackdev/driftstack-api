@@ -56,9 +56,9 @@ describe('W384.B gui-client TierBadge content parity', () => {
 
   it('TIER_LABEL: 8 keys with canonical human labels (trial_pack removed 2026-05-27)', () => {
     expect(body).toMatch(/free: 'Free',/);
-    expect(body).toMatch(/solo_manual: 'Solo Manual',/);
-    expect(body).toMatch(/team_manual: 'Team Manual',/);
-    expect(body).toMatch(/agency_manual: 'Agency Manual',/);
+    expect(body).toMatch(/solo_manual: 'Personal',/);
+    expect(body).toMatch(/team_manual: 'Team',/);
+    expect(body).toMatch(/agency_manual: 'Agency',/);
     expect(body).toMatch(/api_starter: 'API Starter',/);
     expect(body).toMatch(/api_builder: 'API Builder',/);
     expect(body).toMatch(/api_scale: 'API Scale',/);

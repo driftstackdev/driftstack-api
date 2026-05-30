@@ -29,9 +29,9 @@ const atLimit = profileLimit !== 'custom' && profileCount >= profileLimit;
 const limitDisplay = profileLimit === 'custom' ? 'Custom' : profileLimit.toString();
 
 const TIER_DISPLAY_ORDER: ReadonlyArray<{ id: AccountTier; label: string }> = [
-  { id: 'solo_manual', label: 'Solo Manual' },
-  { id: 'team_manual', label: 'Team Manual' },
-  { id: 'agency_manual', label: 'Agency Manual' },
+  { id: 'solo_manual', label: 'Personal' },
+  { id: 'team_manual', label: 'Team' },
+  { id: 'agency_manual', label: 'Agency' },
   { id: 'api_starter', label: 'API Starter' },
   { id: 'api_builder', label: 'API Builder' },
   { id: 'api_scale', label: 'API Scale' },

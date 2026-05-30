@@ -17,6 +17,12 @@ interface ChangelogEntry {
 
 const ENTRIES: readonly ChangelogEntry[] = [
   {
+    date: '2026-05-29',
+    category: 'pricing',
+    title: 'Manual-ladder plans renamed: Personal, Team, Agency',
+    body: 'The three Manual-ladder plans now have clearer names — Personal (formerly Solo Manual), Team (formerly Team Manual), and Agency (formerly Agency Manual) — so the personal-vs-team distinction reads at a glance. Prices, profile counts, concurrent caps, and the underlying tier identifiers are unchanged: this is a display-name change only, so existing subscriptions and API tier ids (solo_manual / team_manual / agency_manual) are unaffected. The API ladder (API Starter / Builder / Scale) and Enterprise keep their names.',
+  },
+  {
     date: '2026-05-27',
     category: 'pricing',
     title: 'Perpetual free tier replaces the one-time trial pack',

@@ -91,13 +91,13 @@ describe('W216.A profiles doc parity', () => {
     expect(PROFILES_PER_TIER.team_manual).toBe(50);
     expect(PROFILES_PER_TIER.api_scale).toBe(500);
     // Confirm each value appears in the doc's table row for the tier.
-    expect(doc).toMatch(/Solo Manual<\/td><td>10/);
+    expect(doc).toMatch(/Personal<\/td><td>10/);
     expect(doc).toMatch(/API Starter<\/td><td>25/);
-    expect(doc).toMatch(/Team Manual<\/td><td>50/);
+    expect(doc).toMatch(/Team<\/td><td>50/);
     expect(doc).toMatch(/API Scale<\/td><td>500/);
     // Rule out the stale numbers from the previous doc revision.
-    expect(doc).not.toMatch(/Solo Manual.*<\/td><td>50/);
-    expect(doc).not.toMatch(/Team Manual.*<\/td><td>250/);
+    expect(doc).not.toMatch(/Personal.*<\/td><td>50/);
+    expect(doc).not.toMatch(/Team.*<\/td><td>250/);
     expect(doc).not.toMatch(/API Scale.*<\/td><td>1000/);
   });
 });

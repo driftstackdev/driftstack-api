@@ -39,10 +39,10 @@ describe('W801 cross-SDK profile-management examples parity', () => {
     );
   });
 
-  it("CRITICAL Manual-ladder + API-ladder cap framing pinned in TS + Python — 'Solo Manual = 10, Team Manual = 50, Agency Manual = 200' + 'the API ladder also caps profiles per ADR-004'. Drift would lose the canonical profile-count-as-tier-metric anchor.", () => {
-    expect(read(TS)).toMatch(/Solo Manual = 10, Team Manual = 50, Agency\s*\n\/\/ Manual = 200/);
+  it("CRITICAL Manual-ladder + API-ladder cap framing pinned in TS + Python — 'Personal = 10, Team = 50, Agency = 200' + 'the API ladder also caps profiles per ADR-004'. Drift would lose the canonical profile-count-as-tier-metric anchor.", () => {
+    expect(read(TS)).toMatch(/Personal = 10, Team = 50, Agency\s*\n\/\/ Manual = 200/);
     expect(read(TS)).toMatch(/the API ladder also caps profiles per ADR-004/);
-    expect(read(PY)).toMatch(/Solo Manual = 10, Team Manual = 50, Agency\s*\nManual = 200/);
+    expect(read(PY)).toMatch(/Personal = 10, Team = 50, Agency\s*\nManual = 200/);
     expect(read(PY)).toMatch(/the API ladder also caps profiles per ADR-004/);
   });
 

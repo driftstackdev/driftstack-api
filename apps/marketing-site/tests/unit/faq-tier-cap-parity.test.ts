@@ -1,5 +1,5 @@
 // W261.C — drift-guard for /faq. The FAQ hardcodes the per-tier
-// concurrent cap row "Solo Manual = 1 / Team Manual = 3 / …" so the
+// concurrent cap row "Personal = 1 / Team = 3 / …" so the
 // cap numbers can rot when TIER_CONCURRENT_SESSION_LIMITS changes.
 // Pin them to the live constants.
 
@@ -20,16 +20,12 @@ function read(p: string): string {
 describe('W261.C /faq ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
   const page = read(PAGE);
 
-  it('Solo / Team / Agency Manual + API Starter / Builder / Scale caps match the schema', () => {
+  it('Solo / Team / Agency + API Starter / Builder / Scale caps match the schema', () => {
     expect(page).toMatch(
-      new RegExp(`Solo Manual = ${TIER_CONCURRENT_SESSION_LIMITS.solo_manual} concurrent`),
+      new RegExp(`Personal = ${TIER_CONCURRENT_SESSION_LIMITS.solo_manual} concurrent`),
     );
-    expect(page).toMatch(
-      new RegExp(`Team Manual = ${TIER_CONCURRENT_SESSION_LIMITS.team_manual}\\b`),
-    );
-    expect(page).toMatch(
-      new RegExp(`Agency Manual = ${TIER_CONCURRENT_SESSION_LIMITS.agency_manual}\\b`),
-    );
+    expect(page).toMatch(new RegExp(`Team = ${TIER_CONCURRENT_SESSION_LIMITS.team_manual}\\b`));
+    expect(page).toMatch(new RegExp(`Agency = ${TIER_CONCURRENT_SESSION_LIMITS.agency_manual}\\b`));
     expect(page).toMatch(
       new RegExp(`API Starter = ${TIER_CONCURRENT_SESSION_LIMITS.api_starter}\\b`),
     );
@@ -56,7 +52,7 @@ describe('W261.C /faq ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
 
   it('does not hard-code legacy cap numbers (Agency 10, API Builder 5, API Scale 20)', () => {
     // Negative checks: prior drift values we already corrected in W253.D.
-    expect(page).not.toMatch(/Agency Manual = 10\b/);
+    expect(page).not.toMatch(/Agency = 10\b/);
     expect(page).not.toMatch(/API Builder = 5\b/);
     expect(page).not.toMatch(/API Scale = 20\b/);
   });

@@ -59,9 +59,9 @@ describe('W603 apps/docs/guides pages content parity', () => {
       /Exceeding the cap returns `429` with an RFC 9457 `https:\/\/errors\.driftstack\.dev\/tier-limit` problem body/,
     );
     expect(body).toMatch(/\| Free\s+\| 1\s+\|/);
-    expect(body).toMatch(/\| Solo Manual\s+\| 10\s+\|/);
-    expect(body).toMatch(/\| Team Manual\s+\| 50\s+\|/);
-    expect(body).toMatch(/\| Agency Manual \| 200\s+\|/);
+    expect(body).toMatch(/\| Personal\s+\| 10\s+\|/);
+    expect(body).toMatch(/\| Team\s+\| 50\s+\|/);
+    expect(body).toMatch(/\| Agency\s+\| 200\s+\|/);
     expect(body).toMatch(/\| API Starter\s+\| 25\s+\|/);
     expect(body).toMatch(/\| API Builder\s+\| 100\s+\|/);
     expect(body).toMatch(/\| API Scale\s+\| 500\s+\|/);
@@ -120,9 +120,9 @@ describe('W603 apps/docs/guides pages content parity', () => {
       /`429 Too Many Requests` on `sessions\.create\(\)`, with a `Retry-After` header/,
     );
     expect(body).toMatch(/\| Free\s+\| 1\s+\|/);
-    expect(body).toMatch(/\| Solo Manual\s+\| 1\s+\|/);
-    expect(body).toMatch(/\| Team Manual\s+\| 3\s+\|/);
-    expect(body).toMatch(/\| Agency Manual \| 8\s+\|/);
+    expect(body).toMatch(/\| Personal\s+\| 1\s+\|/);
+    expect(body).toMatch(/\| Team\s+\| 3\s+\|/);
+    expect(body).toMatch(/\| Agency\s+\| 8\s+\|/);
     expect(body).toMatch(/\| API Starter\s+\| 2\s+\|/);
     expect(body).toMatch(/\| API Builder\s+\| 8\s+\|/);
     expect(body).toMatch(/\| API Scale\s+\| 24\s+\|/);

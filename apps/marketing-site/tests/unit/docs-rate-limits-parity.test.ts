@@ -1,5 +1,5 @@
 // W341.A — drift guard for /docs/rate-limits. The page hard-codes
-// the burst + sustained columns for Solo Manual and API Builder
+// the burst + sustained columns for Personal and API Builder
 // against the live TIER_RATE_LIMIT_DEFAULTS table. If somebody
 // bumps the API Builder global capacity from 1,800 to 3,600 the
 // page must follow.
@@ -24,7 +24,7 @@ function read(p: string): string {
 describe('W341.A /docs/rate-limits ↔ TIER_RATE_LIMIT_DEFAULTS parity', () => {
   const body = read(PAGE);
 
-  it('Solo Manual global bucket: 120 burst / 120 req/min matches schema', () => {
+  it('Personal global bucket: 120 burst / 120 req/min matches schema', () => {
     const cfg = TIER_RATE_LIMIT_DEFAULTS.solo_manual.global;
     expect(cfg.capacity).toBe(120);
     expect(Math.round(cfg.refill_per_second * 60)).toBe(120);
@@ -40,7 +40,7 @@ describe('W341.A /docs/rate-limits ↔ TIER_RATE_LIMIT_DEFAULTS parity', () => {
     expect(body).toContain("apiBuilderSustained: '1,800 req/min'");
   });
 
-  it('Solo Manual sessions:create: 10 burst / 2 req/min matches schema', () => {
+  it('Personal sessions:create: 10 burst / 2 req/min matches schema', () => {
     const cfg = TIER_RATE_LIMIT_DEFAULTS.solo_manual['sessions:create'];
     expect(cfg.capacity).toBe(10);
     // 1/30 per second = 2 per minute.

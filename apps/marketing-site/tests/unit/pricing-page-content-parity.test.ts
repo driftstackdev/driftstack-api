@@ -62,9 +62,9 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     // an explicit decision.
     for (const t of [
       'Free — $0, forever',
-      'Solo Manual — $79/mo',
-      'Team Manual — $249/mo',
-      'Agency Manual — $699/mo',
+      'Personal — $79/mo',
+      'Team — $249/mo',
+      'Agency — $699/mo',
       'API Starter — $149/mo',
       'API Builder — $499/mo',
       'API Scale — $1,499/mo',

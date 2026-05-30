@@ -20,9 +20,9 @@ describe('W247.B faq doc parity', () => {
 
   it('concurrent-cap FAQ answer matches TIER_CONCURRENT_SESSION_LIMITS', () => {
     const t = TIER_CONCURRENT_SESSION_LIMITS;
-    expect(doc).toMatch(new RegExp(`Solo Manual\\s*=\\s*${t.solo_manual.toString()}\\b`));
-    expect(doc).toMatch(new RegExp(`Team Manual\\s*=\\s*${t.team_manual.toString()}\\b`));
-    expect(doc).toMatch(new RegExp(`Agency Manual\\s*=\\s*${t.agency_manual.toString()}\\b`));
+    expect(doc).toMatch(new RegExp(`Personal\\s*=\\s*${t.solo_manual.toString()}\\b`));
+    expect(doc).toMatch(new RegExp(`Team\\s*=\\s*${t.team_manual.toString()}\\b`));
+    expect(doc).toMatch(new RegExp(`Agency\\s*=\\s*${t.agency_manual.toString()}\\b`));
     expect(doc).toMatch(new RegExp(`API Starter\\s*=\\s*${t.api_starter.toString()}\\b`));
     expect(doc).toMatch(new RegExp(`API Builder\\s*=\\s*${t.api_builder.toString()}\\b`));
     expect(doc).toMatch(new RegExp(`API Scale\\s*=\\s*${t.api_scale.toString()}\\b`));

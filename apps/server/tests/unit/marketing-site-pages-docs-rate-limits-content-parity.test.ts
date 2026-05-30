@@ -69,7 +69,7 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
     expect(body).toMatch(/apiBuilderSustained: '60 req\/min'/);
   });
 
-  it("Per-account-not-per-key + 'Free uses the same bucket sizes as Solo Manual' framing pinned + tier-comparison cross-link — pinned so the per-account-scope + Free-equals-Solo-Manual + /pricing/comparison-cross-ref commitments survive (drift to claiming buckets are per-key would invite key-multiplication-as-throttle-bypass)", () => {
+  it("Per-account-not-per-key + 'Free uses the same bucket sizes as Personal' framing pinned + tier-comparison cross-link — pinned so the per-account-scope + Free-equals-Solo-Manual + /pricing/comparison-cross-ref commitments survive (drift to claiming buckets are per-key would invite key-multiplication-as-throttle-bypass)", () => {
     expect(body).toMatch(
       /Buckets are <strong>per account<\/strong>, not per API key\. If\s*\n?\s*you mint 10 keys to spread your load, you're still hitting\s*\n?\s*the same buckets — the limit is on the account\./,
     );

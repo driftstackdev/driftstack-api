@@ -79,7 +79,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/concurrent: 1,[\s\S]{0,400}oneTime: false,/);
   });
 
-  it('CRITICAL Solo Manual pricing pinned — $79/mo + $63 annual-equiv + 10 profiles + 1 concurrent.', () => {
+  it('CRITICAL Personal pricing pinned — $79/mo + $63 annual-equiv + 10 profiles + 1 concurrent.', () => {
     const p = read(PRICING);
 
     expect(p).toMatch(
@@ -89,7 +89,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/id: 'solo_manual',[\s\S]{0,600}concurrent: 1,/);
   });
 
-  it('CRITICAL Team Manual pricing pinned — $249/mo + $199 annual-equiv + 50 profiles + 3 concurrent + highlight: true.', () => {
+  it('CRITICAL Team pricing pinned — $249/mo + $199 annual-equiv + 50 profiles + 3 concurrent + highlight: true.', () => {
     const p = read(PRICING);
 
     expect(p).toMatch(
@@ -100,7 +100,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/id: 'team_manual',[\s\S]{0,1000}highlight: true,/);
   });
 
-  it('CRITICAL Agency Manual pricing pinned — $699/mo + $559 annual-equiv + 200 profiles + 8 concurrent + 12h SLA Slack Connect.', () => {
+  it('CRITICAL Agency pricing pinned — $699/mo + $559 annual-equiv + 200 profiles + 8 concurrent + 12h SLA Slack Connect.', () => {
     const p = read(PRICING);
 
     expect(p).toMatch(

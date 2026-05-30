@@ -8,7 +8,7 @@
 //     perpetual free tier replaced the one-time trial pack
 //     2026-05-27; primary CTA goes to /first-session, no purchase).
 //   • Tier range "$79–$1,499 / mo" pinned to match pricing
-//     ladder bounds (Solo Manual → API Scale).
+//     ladder bounds (Personal → API Scale).
 //   • "What happens next" 3-step pinned (Stripe / first session
 //     / API key auto-mint) — the contract for the first 10
 //     minutes of paid use.
@@ -50,10 +50,8 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     // A pricing change must update this hint too — otherwise
     // /welcome under-promises or over-promises.
     expect(body).toMatch(/\$79–\$1,499 \/ mo/);
-    // "Solo Manual" + "API Scale" tier names also pinned.
-    expect(body).toMatch(
-      /Solo Manual for hand-\s*\n?\s*driven sessions, all the way up to API Scale/,
-    );
+    // "Personal" + "API Scale" tier names also pinned.
+    expect(body).toMatch(/Personal for hand-\s*\n?\s*driven sessions, all the way up to API Scale/);
   });
 
   it('"What happens next" 3-step contract pinned (Stripe / session / API key)', () => {

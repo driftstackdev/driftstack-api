@@ -84,9 +84,9 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
 
     const tierCaps: Array<[string, string]> = [
       ['Free', '1'],
-      ['Solo Manual', '1'],
-      ['Team Manual', '3'],
-      ['Agency Manual', '8'],
+      ['Personal', '1'],
+      ['Team', '3'],
+      ['Agency', '8'],
       ['API Starter', '2'],
       ['API Builder', '8'],
       ['API Scale', '24'],

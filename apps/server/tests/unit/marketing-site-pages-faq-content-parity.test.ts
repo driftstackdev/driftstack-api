@@ -9,7 +9,7 @@
 //     + Billing + payments + Bundled LLM + BYOK + EU stack + compliance
 //     + V-500 Architecture + sessions + V-500 Migrating + V-500
 //     Acceptable use + Support + reliability).
-//   • Concurrent caps: Solo/Team/Agency Manual 1/3/8 + API
+//   • Concurrent caps: Solo/Team/Agency 1/3/8 + API
 //     Starter/Builder/Scale 2/8/24.
 //   • Free-tier mechanic: $0 forever + one profile + one concurrent +
 //     manual-only (no API) + perpetual + no metering.
@@ -55,9 +55,9 @@ describe('W500.A apps/marketing-site/src/pages/faq.astro content parity', () => 
     );
   });
 
-  it("Concurrent metering 7-tier framing pinned: 'Solo Manual = 1 concurrent / Team Manual = 3 / Agency Manual = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom' — pinned so the per-tier concurrent caps stay consistent with the customer-dashboard select-tier page (drift would create cross-page price-to-cap divergence)", () => {
+  it("Concurrent metering 7-tier framing pinned: 'Personal = 1 concurrent / Team = 3 / Agency = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom' — pinned so the per-tier concurrent caps stay consistent with the customer-dashboard select-tier page (drift would create cross-page price-to-cap divergence)", () => {
     expect(body).toMatch(
-      /Solo Manual = 1 concurrent \/ Team Manual = 3 \/ Agency Manual = 8 \/ API Starter = 2 \/ API Builder = 8 \/ API Scale = 24 \/ Enterprise = custom/,
+      /Personal = 1 concurrent \/ Team = 3 \/ Agency = 8 \/ API Starter = 2 \/ API Builder = 8 \/ API Scale = 24 \/ Enterprise = custom/,
     );
   });
 

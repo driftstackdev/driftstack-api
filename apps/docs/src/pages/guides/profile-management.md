@@ -14,16 +14,16 @@ If a session doesn't bind a profile, it starts ephemeral — fresh cookies, fres
 
 Each tier has a profile cap, enforced at `POST /v1/profiles` creation time. Exceeding the cap returns `429` with an RFC 9457 `https://errors.driftstack.dev/tier-limit` problem body — the `detail` string names the tier and the cap.
 
-| Tier          | Profile cap |
-| ------------- | ----------- |
-| Free          | 1           |
-| Solo Manual   | 10          |
-| Team Manual   | 50          |
-| Agency Manual | 200         |
-| API Starter   | 25          |
-| API Builder   | 100         |
-| API Scale     | 500         |
-| Enterprise    | Custom      |
+| Tier        | Profile cap |
+| ----------- | ----------- |
+| Free        | 1           |
+| Personal    | 10          |
+| Team        | 50          |
+| Agency      | 200         |
+| API Starter | 25          |
+| API Builder | 100         |
+| API Scale   | 500         |
+| Enterprise  | Custom      |
 
 Pricing source of truth: [driftstack.dev/pricing](https://driftstack.dev/pricing).
 

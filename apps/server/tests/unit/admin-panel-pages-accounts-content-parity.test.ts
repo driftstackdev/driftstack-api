@@ -49,9 +49,9 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
 
   it('Tier filter 8-option catalogue: free / solo_manual / team_manual / agency_manual / api_starter / api_builder / api_scale / enterprise — pinned so the customer-tier vocabulary stays in sync with TierEnum in the schema (drift to 7 options would make the missing tier unfilterable from the admin panel, hiding accounts on that tier from operators)', () => {
     expect(body).toMatch(/<option value="free">Free<\/option>/);
-    expect(body).toMatch(/<option value="solo_manual">Solo Manual<\/option>/);
-    expect(body).toMatch(/<option value="team_manual">Team Manual<\/option>/);
-    expect(body).toMatch(/<option value="agency_manual">Agency Manual<\/option>/);
+    expect(body).toMatch(/<option value="solo_manual">Personal<\/option>/);
+    expect(body).toMatch(/<option value="team_manual">Team<\/option>/);
+    expect(body).toMatch(/<option value="agency_manual">Agency<\/option>/);
     expect(body).toMatch(/<option value="api_starter">API Starter<\/option>/);
     expect(body).toMatch(/<option value="api_builder">API Builder<\/option>/);
     expect(body).toMatch(/<option value="api_scale">API Scale<\/option>/);

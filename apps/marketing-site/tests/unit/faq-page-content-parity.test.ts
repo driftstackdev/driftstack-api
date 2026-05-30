@@ -10,8 +10,8 @@
 //   • Free-tier mechanics: $0 forever / one profile / one
 //     concurrent / API-within-free-limits / perpetual / no
 //     metering.
-//   • Concurrent-cap ladder (Solo Manual = 1 / Team Manual = 3
-//     / Agency Manual = 8 / API Starter = 2 / Builder = 8 /
+//   • Concurrent-cap ladder (Personal = 1 / Team = 3
+//     / Agency = 8 / API Starter = 2 / Builder = 8 /
 //     Scale = 24 / Enterprise = custom).
 //   • 429 + RFC 7807 problem-detail on cap reached.
 //   • Annual billing 20% off / 30-day cancel-before-renewal.
@@ -72,7 +72,7 @@ describe('W368.A marketing-site /faq page content parity', () => {
 
   it('concurrent-cap ladder pinned exactly (Solo=1 / Team=3 / Agency=8 / Starter=2 / Builder=8 / Scale=24)', () => {
     expect(body).toMatch(
-      /Solo Manual = 1 concurrent \/ Team Manual = 3 \/ Agency Manual = 8 \/ API Starter = 2 \/ API Builder = 8 \/ API Scale = 24 \/ Enterprise = custom/,
+      /Personal = 1 concurrent \/ Team = 3 \/ Agency = 8 \/ API Starter = 2 \/ API Builder = 8 \/ API Scale = 24 \/ Enterprise = custom/,
     );
   });
 

@@ -24,7 +24,7 @@ const OPTIONS = [
   { product: 'trial_pack', label: 'Trial pack ($2.99)', price_cents: 299, price_currency: 'USD' },
   {
     product: 'solo_manual',
-    label: 'Solo Manual ($25/mo)',
+    label: 'Personal ($25/mo)',
     price_cents: 2500,
     price_currency: 'USD',
   },

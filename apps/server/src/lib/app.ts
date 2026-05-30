@@ -658,7 +658,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // agent-session create. Without this allowance the browser
       // blocks the preflight + the POST never fires ("Failed to
       // fetch" in the UI). Founder reproduced it on /select-tier
-      // → "Pay Solo Manual with crypto" path.
+      // → "Pay Personal with crypto" path.
       'idempotency-key',
       // 2026-05-17 — BYOK Anthropic key per-request override header
       // (Q.1.c verdict). The /v1/agent-sessions/:id/message route

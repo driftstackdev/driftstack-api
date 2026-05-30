@@ -122,7 +122,7 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
   });
 
   it('two-ladder pricing teaser pinned: Manual $79/$249/$699 + API $149/$499/$1,499', () => {
-    expect(body).toMatch(/Solo Manual \$79\/mo · Team \$249\/mo · Agency \$699\/mo/);
+    expect(body).toMatch(/Personal \$79\/mo · Team \$249\/mo · Agency \$699\/mo/);
     expect(body).toMatch(/API Starter \$149\/mo · Builder \$499\/mo · Scale \$1,499\/mo/);
     expect(body).toMatch(/1 \/ 3 \/ 8 concurrent sessions per tier/);
     expect(body).toMatch(/2 \/ 8 \/ 24 concurrent sessions per tier; Enterprise custom/);

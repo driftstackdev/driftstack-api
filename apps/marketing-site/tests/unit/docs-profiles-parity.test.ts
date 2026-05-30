@@ -31,9 +31,9 @@ describe('W347.A /docs/profiles parity', () => {
   it('cap table cites every tier in PROFILES_PER_TIER with the correct number', () => {
     const expected: Record<string, string> = {
       Free: '1',
-      'Solo Manual': '10',
-      'Team Manual': '50',
-      'Agency Manual': '200',
+      Personal: '10',
+      Team: '50',
+      Agency: '200',
       'API Starter': '25',
       'API Builder': '100',
       'API Scale': '500',

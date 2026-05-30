@@ -42,12 +42,12 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     );
   });
 
-  it("Monthly-tiers framing (R6 plain language): '$79–$1,499 / mo' + Solo Manual for hand-driven sessions / API Scale", () => {
+  it("Monthly-tiers framing (R6 plain language): '$79–$1,499 / mo' + Personal for hand-driven sessions / API Scale", () => {
     expect(body).toMatch(
       /<span class="font-mono text-sm text-ink-muted">\$79–\$1,499 \/ mo<\/span>/,
     );
     expect(body).toMatch(
-      /Upgrade to a paid plan for more concurrency, more profiles, and API\s*\n?\s*access — Solo Manual for hand-\s*\n?\s*driven sessions, all the way up to API Scale for high-volume\s*\n?\s*automation\. Cancel anytime\./,
+      /Upgrade to a paid plan for more concurrency, more profiles, and API\s*\n?\s*access — Personal for hand-\s*\n?\s*driven sessions, all the way up to API Scale for high-volume\s*\n?\s*automation\. Cancel anytime\./,
     );
     expect(body).toMatch(
       /<a href="\/select-tier" class="btn-secondary mt-4 inline-flex">View tiers<\/a>/,
