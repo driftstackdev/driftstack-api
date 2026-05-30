@@ -133,6 +133,11 @@ describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
     expect(body).toMatch(/const auth = \[\{ BearerAuth: \[\] \}\];/);
   });
 
+  it('POST /v1/agent-sessions request body documents all 4 create params incl mode + model — the inline request schema once listed only driftstack_session_id + token_budget, drifting from the route CreateAgentSessionRequestSchema so the #15 model picker + operational mode were invisible to SDK codegen + the published API reference. model references AgentModelSchema (drift-proof: a new/renamed Claude model flows into the spec automatically); the trailing .optional() distinguishes the create body from the non-optional set-mode request body', () => {
+    expect(body).toMatch(/model: AgentModelSchema\.optional\(\),/);
+    expect(body).toMatch(/mode: z\.enum\(\['manual', 'ai', 'pair'\]\)\.optional\(\),/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

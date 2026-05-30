@@ -119,6 +119,7 @@ import {
   SessionStateSchema,
   SessionEgressConfigSchema,
   SavedProxyConfigSchema,
+  AgentModelSchema,
 } from '@driftstack/api-types';
 
 const PaginatedSessionsSchema = z.object({
@@ -2650,6 +2651,8 @@ function buildRegistry(): OpenAPIRegistry {
             schema: z.object({
               driftstack_session_id: z.string().min(1).optional(),
               token_budget: z.number().int().positive().optional(),
+              mode: z.enum(['manual', 'ai', 'pair']).optional(),
+              model: AgentModelSchema.optional(),
             }),
           },
         },
