@@ -1,0 +1,167 @@
+// Local integration test for the /verify-email page's inline script —
+// the onboarding-completion flow (consume the verification token, store
+// the web-session token, land on /welcome). Covers the V-184a.B
+// auto-submit-from-?token= path (spinner → POST verify → token store /
+// redirect), the auto-verify FAILURE → showFallback recovery (reveal
+// the manual paste form + banner), and the no-token manual-fallback
+// path (form shown on load, manual submit POSTs the pasted token).
+// Only source-regex coverage before.
+//
+// Mirrors signup-page.test.ts (FIFO plan; success redirects via
+// window.location.href → jsdom "Not implemented: navigation" filtered;
+// assert the pre-nav side effect). NOTE: this page toggles the HTML
+// `hidden` ATTRIBUTE (el.hidden), not a `.hidden` class.
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { JSDOM, VirtualConsole } from 'jsdom';
+import { afterEach, describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'verify-email', 'index.html');
+const TOKEN_URL = 'https://app.driftstack.dev/verify-email/?token=link_tok_123';
+const NO_TOKEN_URL = 'https://app.driftstack.dev/verify-email/';
+
+interface MockFetchCall {
+  url: string;
+  init: RequestInit | undefined;
+}
+
+interface SetUpOpts {
+  url?: string;
+  fetchPlan?: Array<(call: MockFetchCall) => Response>;
+}
+
+function setUpDom(
+  html: string,
+  opts: SetUpOpts,
+): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+  const scriptBodies: string[] = [];
+  const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
+    scriptBodies.push(body);
+    return '';
+  });
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', (err: Error) => {
+    if (!/Not implemented: navigation/.test(String(err && err.message))) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+    }
+  });
+  const dom = new JSDOM(htmlNoScripts, {
+    url: opts.url ?? TOKEN_URL,
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole,
+  });
+  const { window } = dom;
+  const fetchCalls: MockFetchCall[] = [];
+  const plan = [...(opts.fetchPlan ?? [])];
+  // @ts-expect-error — jsdom global is loose
+  if (typeof window.Response !== 'function') window.Response = Response;
+  // @ts-expect-error — jsdom global is loose
+  window.fetch = (input: string, init: RequestInit | undefined) => {
+    const call: MockFetchCall = { url: String(input), init };
+    fetchCalls.push(call);
+    const handler = plan.shift();
+    if (!handler) {
+      // eslint-disable-next-line no-console
+      console.warn('[verify-email test] unplanned fetch:', call.url);
+      return Promise.resolve(new Response('{}', { status: 500 }));
+    }
+    return Promise.resolve(handler(call));
+  };
+
+  const pageScript = scriptBodies.find((s) => s.includes('data-page="verify-email"'));
+  if (!pageScript) throw new Error('verify-email inline script not found');
+  // @ts-expect-error — jsdom global has eval
+  window.eval(pageScript);
+  return { window: window as JSDOM['window'], fetchCalls };
+}
+
+function json(obj: unknown, status = 200): Response {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+// This page toggles the HTML `hidden` attribute (el.hidden), not a class.
+function attrHidden(window: JSDOM['window'], selector: string): boolean {
+  const el = window.document.querySelector(selector) as HTMLElement | null;
+  if (!el) throw new Error(`selector not found: ${selector}`);
+  return el.hidden;
+}
+function bannerHidden(window: JSDOM['window']): boolean {
+  const b = window.document.querySelector('[data-banner]');
+  return !b || b.classList.contains('hidden');
+}
+
+async function flush(times = 4): Promise<void> {
+  for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
+}
+
+describe('verify-email page — local integration', () => {
+  let win: JSDOM['window'] | null = null;
+  afterEach(() => {
+    win?.close?.();
+    win = null;
+  });
+  const loadBuiltPage = (): string => readFileSync(BUILT_PAGE, 'utf8');
+
+  it('auto-verify success: ?token= auto-submits POST /v1/auth/verify-email {token} and stores ds_web_session_token', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [() => json({ session: { token: 'ds_web_VERIFIED' } })],
+    });
+    win = window;
+    await flush();
+    const post = fetchCalls.find((c) => /\/v1\/auth\/verify-email$/.test(c.url));
+    expect(post?.init?.method).toBe('POST');
+    expect(JSON.parse(String(post?.init?.body))).toEqual({ token: 'link_tok_123' });
+    expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_VERIFIED');
+  });
+
+  it('auto-verify failure: reveals the manual fallback form + banner, stores no token', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      url: TOKEN_URL,
+      fetchPlan: [() => json({ detail: 'This verification link has expired.' }, 400)],
+    });
+    win = window;
+    await flush();
+    // showFallback(): form revealed, spinner hidden.
+    expect(attrHidden(window, '[data-form="verify"]')).toBe(false);
+    expect(attrHidden(window, '[data-field="auto-verify-spinner"]')).toBe(true);
+    expect(bannerHidden(window)).toBe(false);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /This verification link has expired\./,
+    );
+    expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+  });
+
+  it('no token: shows the manual fallback form on load (spinner hidden, no fetch)', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), { url: NO_TOKEN_URL });
+    win = window;
+    await flush();
+    expect(attrHidden(window, '[data-form="verify"]')).toBe(false);
+    expect(attrHidden(window, '[data-field="auto-verify-spinner"]')).toBe(true);
+    expect(fetchCalls.length).toBe(0);
+  });
+
+  it('manual paste: submitting the form POSTs the pasted token + stores the session token', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: NO_TOKEN_URL,
+      fetchPlan: [() => json({ session: { token: 'ds_web_MANUAL' } })],
+    });
+    win = window;
+    await flush();
+    const form = window.document.querySelector('[data-form="verify"]') as HTMLFormElement;
+    (form.querySelector('input[name="token"]') as HTMLInputElement).value = 'pasted_tok_456';
+    form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    const post = fetchCalls.find((c) => /\/v1\/auth\/verify-email$/.test(c.url));
+    expect(JSON.parse(String(post?.init?.body))).toEqual({ token: 'pasted_tok_456' });
+    expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_MANUAL');
+  });
+});
