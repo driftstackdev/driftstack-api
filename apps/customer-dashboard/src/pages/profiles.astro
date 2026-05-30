@@ -19,6 +19,15 @@ const SELECTABLE_ARCHETYPES = ARCHETYPE_REGISTRY.filter(
   (a) => a.status === 'launch' || a.status === 'available',
 );
 
+// Friendly labels for EVERY known archetype (not just the selectable set — a
+// profile may carry an older/other slug), injected into the client script so
+// the profile list renders the SAME labels as the server. Derived through
+// archetypeDisplayLabel() so it stays the registry's single source of truth;
+// an unknown slug falls back to its raw id client-side.
+const ARCHETYPE_LABELS = Object.fromEntries(
+  ARCHETYPE_REGISTRY.map((a) => [a.id, archetypeDisplayLabel(a.id)]),
+);
+
 // V-136 — uses the locked PROFILES_PER_TIER constant from
 // @driftstack/api-types as single source of truth.
 //
@@ -508,7 +517,7 @@ const apiBaseUrl = resolveApiBaseUrl();
  — progressive-enhancement script. Live-fetches /v1/profiles +
     /v1/account/me; wires create + delete actions.
   -->
-  <script is:inline define:vars={{ apiBaseUrl }}>
+  <script is:inline define:vars={{ apiBaseUrl, archetypeLabels: ARCHETYPE_LABELS }}>
     (function () {
       const root = document.querySelector('[data-page="profiles"]');
       if (!root) return;
@@ -550,13 +559,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         return new Date(iso).toISOString().slice(0, 10);
       }
 
-      // Locked archetype identifier from packages/api-types/src/profiles.ts.
-      // Display labels mirror the server's archetypeDisplayLabel() function.
+      // Labels injected from the registry-derived archetypeLabels map (the
+      // server's archetypeDisplayLabel() source of truth), so every selectable
+      // archetype renders friendly. An unknown/aged-out slug falls back to raw.
       function archetypeLabel(slug) {
-        if (slug === 'iphone16pro_ios18_7_safari26_4') {
-          return 'iPhone 16 Pro / iOS 18.7 / Safari 26.4';
-        }
-        return slug;
+        return (archetypeLabels && archetypeLabels[slug]) || slug;
       }
 
       function profileLi(p) {

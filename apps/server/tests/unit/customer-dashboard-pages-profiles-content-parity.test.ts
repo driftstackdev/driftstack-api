@@ -136,10 +136,11 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
     expect(body).toMatch(/Sessions without a profile start ephemeral — fresh state every run\./);
   });
 
-  it("Locked archetype iphone16pro_ios18_7_safari26_4 → 'iPhone 16 Pro / iOS 18.7 / Safari 26.4' display label — pinned so the locked archetype identifier from packages/api-types/src/profiles.ts maps to the same human label as server-side archetypeDisplayLabel() (drift would let the customer see a raw slug instead of the iPhone label, breaking the 'one archetype, one device fingerprint' narrative)", () => {
-    expect(body).toMatch(
-      /if \(slug === 'iphone16pro_ios18_7_safari26_4'\) \{\s*\n?\s*return 'iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4';\s*\n?\s*\}/,
-    );
+  it('Archetype label resolves through the registry-injected archetypeLabels map, NOT a hardcoded single-archetype if/return — regression to hardcoding would let a non-default archetype render a raw slug instead of the iPhone label, breaking the device-fingerprint narrative', () => {
+    // The client label helper reads the injected map...
+    expect(body).toMatch(/archetypeLabels\[slug\]/);
+    // ...and must NOT regress to the old single-archetype hardcode.
+    expect(body).not.toMatch(/return 'iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4';/);
   });
 
   it("Tier-limit framing pinned — 'Enforced server-side at session creation' anchor stays so customers know the cap is enforced at API boundary, not a soft UI hint. 2026-05-22 — section restructured into a tier-card grid (01b4e017); the tagline shortened to 'Enforced server-side at session creation. Upgrade if you need more headroom.' Anchor text required; surrounding copy can evolve.", () => {

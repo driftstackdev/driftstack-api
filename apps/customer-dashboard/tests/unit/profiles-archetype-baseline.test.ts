@@ -1,8 +1,9 @@
 // W314.C — drift guard for /profiles page archetype baseline. The
-// dashboard's inline archetype-label helper must mirror the canonical
-// LOCKED_ARCHETYPE_ID and LOCKED_ARCHETYPE_DISPLAY_LABEL from
-// @driftstack/api-types. Catches drift if either side changes
-// without the other.
+// canonical LOCKED_ARCHETYPE_ID / LOCKED_ARCHETYPE_DISPLAY_LABEL stay
+// pinned, and the page's archetype-label map must be DERIVED from the
+// registry (archetypeDisplayLabel over ARCHETYPE_REGISTRY) rather than
+// hardcoding a single archetype — so every selectable device renders a
+// friendly label, not a raw slug.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -29,12 +30,11 @@ describe('W314.C /profiles archetype baseline', () => {
     expect(LOCKED_ARCHETYPE_DISPLAY_LABEL).toBe('iPhone 16 Pro / iOS 18.7 / Safari 26.4');
   });
 
-  it('page inline archetype-label helper hardcodes the canonical slug', () => {
-    expect(body).toContain(LOCKED_ARCHETYPE_ID);
-  });
-
-  it('page inline archetype-label helper hardcodes the canonical display label', () => {
-    expect(body).toContain(LOCKED_ARCHETYPE_DISPLAY_LABEL);
+  it('page derives the archetype-label map from the registry (no single-archetype hardcode)', () => {
+    // The label map is built from ARCHETYPE_REGISTRY via archetypeDisplayLabel(),
+    // so every selectable archetype renders friendly — not just the locked one.
+    expect(body).toMatch(/ARCHETYPE_LABELS = Object\.fromEntries/);
+    expect(body).toMatch(/archetypeDisplayLabel\(a\.id\)/);
   });
 
   it('page imports archetypeDisplayLabel from @driftstack/api-types', () => {

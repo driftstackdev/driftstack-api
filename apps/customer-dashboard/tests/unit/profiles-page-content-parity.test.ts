@@ -9,10 +9,10 @@
 //   • TIER_DISPLAY_ORDER lists exactly the 7 self-serve +
 //     enterprise tiers — not trial_pack (which has 0-profile
 //     entitlement and would show as a confusing 0 row).
-//   • LOCKED_ARCHETYPE_ID 'iphone16pro_ios18_7_safari26_4'
-//     pinned in archetypeLabel() — the only customer-facing
-//     archetype today; a server-side enum expansion that drops
-//     this slug would silently render the raw id.
+//   • The archetype picker defaults to LOCKED_ARCHETYPE_ID
+//     'iphone16pro_ios18_7_safari26_4'; labels derive from the
+//     registry (injected archetypeLabels map), so a server-side
+//     enum expansion renders friendly, not the raw id.
 //   • Snapshot-form replaces window.prompt (V-470 keyboard-
 //     accessibility decision) — load-bearing UX-debt note.
 //   • Clone + delete + import + export endpoint wiring on
@@ -69,10 +69,13 @@ describe('W361.B customer-dashboard /profiles page content parity', () => {
     expect(tierDisplaySection).not.toMatch(/'trial_pack'/);
   });
 
-  it('LOCKED_ARCHETYPE_ID pinned in archetypeLabel() (only customer-facing archetype today)', () => {
+  it('selector default tracks LOCKED_ARCHETYPE_ID from @driftstack/api-types (registry-derived; raw-id leak guarded by the injected label map)', () => {
     expect(LOCKED_ARCHETYPE_ID).toBe('iphone16pro_ios18_7_safari26_4');
-    expect(body).toContain("'iphone16pro_ios18_7_safari26_4'");
-    expect(body).toContain('iPhone 16 Pro / iOS 18.7 / Safari 26.4');
+    // The page imports the locked-archetype constant and defaults the picker to
+    // it — rather than hardcoding the slug. The slug→label derivation + the
+    // end-to-end render proof live in the server parity + behavioral suites.
+    expect(body).toContain('LOCKED_ARCHETYPE_ID');
+    expect(body).toMatch(/selected=\{a\.id === LOCKED_ARCHETYPE_ID\}/);
   });
 
   it.skip('snapshot-form replaces window.prompt (V-470 keyboard-accessibility decision)', () => {

@@ -182,6 +182,25 @@ describe('profiles page — local integration', () => {
     expect(window.document.querySelector('[data-delete="prof_a"]')).toBeTruthy();
   });
 
+  it('non-empty: a non-default archetype (iphone15pro) renders its friendly label, NOT the raw slug — proves the injected registry label map', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: makeRouter([
+        makeProfile({
+          id: 'prof_legacy',
+          name: 'Legacy profile',
+          archetype: 'iphone15pro_ios17_5_safari17_5',
+        }),
+      ]),
+    });
+    win = window;
+    await flush();
+    const text = window.document.querySelector('[data-list]')?.textContent ?? '';
+    expect(text).toContain('iPhone 15 Pro / iOS 17.5 / Safari 17.5');
+    // The raw slug must NOT leak into the row (the pre-fix bug rendered it raw).
+    expect(text).not.toContain('iphone15pro_ios17_5_safari17_5');
+  });
+
   it('create: POSTs {name} and the new profile appears after refresh', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',

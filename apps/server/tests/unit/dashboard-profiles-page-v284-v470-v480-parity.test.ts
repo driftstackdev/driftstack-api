@@ -240,12 +240,13 @@ describe('W752 dashboard /profiles page V-284 + V-470 + V-480 parity', () => {
     expect(escapeUsages).toBeGreaterThanOrEqual(14);
   });
 
-  it("CRITICAL archetypeLabel() mirrors server's archetypeDisplayLabel(). The 'iphone16pro_ios18_7_safari26_4' → 'iPhone 16 Pro / iOS 18.7 / Safari 26.4' mapping is the canonical display.", () => {
+  it('CRITICAL archetypeLabel() reads the registry-injected archetypeLabels map (define:vars wiring), so every archetype renders friendly — not a single hardcoded mapping. (Label-map construction is pinned in W314.C archetype-baseline.)', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /if \(slug === 'iphone16pro_ios18_7_safari26_4'\) \{\s*\n\s+return 'iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4';\s*\n\s+\}/,
-    );
+    // The map is injected into the client script via define:vars...
+    expect(p).toMatch(/archetypeLabels: ARCHETYPE_LABELS/);
+    // ...and the client label fn reads it (raw-id fallback for unknown slugs).
+    expect(p).toMatch(/return \(archetypeLabels && archetypeLabels\[slug\]\) \|\| slug;/);
   });
 
   it('CRITICAL 4 row-actions per profile — Clone/Export/Snapshot/Delete. Drift to adding or dropping an action would break the UX consistency with the cross-row layout.', () => {
