@@ -191,14 +191,14 @@ const apiBaseUrl = resolveApiBaseUrl();
   }
 
   function adminToken() {
-    return globalThis.localStorage?.getItem('driftstack:admin_token') ?? '';
+    return globalThis.localStorage?.getItem('ds_web_session_token') ?? '';
   }
 
   async function authedFetch(path, init = {}) {
     const token = adminToken();
     if (!token) {
       showBanner(
-        'No admin token found. Sign in with a staff admin account via the dashboard (app.driftstack.dev) — the SSO bridge stores it in localStorage as "driftstack:admin_token".',
+        'No admin token found. Sign in with a staff admin account via the dashboard (app.driftstack.dev) — the SSO bridge stores it in localStorage as "ds_web_session_token".',
       );
       throw new Error('no admin token');
     }

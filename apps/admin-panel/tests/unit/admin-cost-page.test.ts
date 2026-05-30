@@ -7,7 +7,10 @@
 // script in jsdom against a mock fetch.
 //
 // NOTE: the admin Cost page reads its bearer from localStorage key
-// "driftstack:admin_token" (SSO bridge), NOT "ds_web_session_token".
+// "ds_web_session_token" — the SAME key the AdminLayout SSO bridge writes and
+// every other admin page reads. (It previously read a never-set
+// "driftstack:admin_token", so the page always showed "No admin token found";
+// the cross-page token-key guard now prevents that drift.)
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -57,7 +60,7 @@ function setUpDom(
     return Promise.resolve(opts.route(call));
   };
   if (opts.adminToken !== undefined) {
-    window.localStorage.setItem('driftstack:admin_token', opts.adminToken);
+    window.localStorage.setItem('ds_web_session_token', opts.adminToken);
   }
   // @ts-expect-error — injected by AdminLayout
   window.dashboardHydrated = () => {};
