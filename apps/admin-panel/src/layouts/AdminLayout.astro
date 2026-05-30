@@ -241,6 +241,7 @@ const navItems = [
               var cancel = overlay.querySelector('[data-ds-confirm-cancel]');
               if (msg) msg.textContent = message;
               if (ok) ok.textContent = (opts && opts.confirmLabel) || 'Confirm';
+              var prevFocus = document.activeElement;
               overlay.classList.remove('hidden');
               document.body.style.overflow = 'hidden';
               if (ok && ok.focus) ok.focus();
@@ -251,6 +252,7 @@ const navItems = [
                 if (cancel) cancel.removeEventListener('click', onCancel);
                 overlay.removeEventListener('click', onOverlay);
                 document.removeEventListener('keydown', onKey);
+                if (prevFocus && prevFocus.focus) prevFocus.focus();
                 resolve(result);
               }
               function onOk() { done(true); }
@@ -277,6 +279,7 @@ const navItems = [
                 input.value = (opts && opts.defaultValue) || '';
                 input.setAttribute('placeholder', (opts && opts.placeholder) || '');
               }
+              var prevFocus = document.activeElement;
               overlay.classList.remove('hidden');
               document.body.style.overflow = 'hidden';
               if (input && input.focus) { input.focus(); if (input.select) input.select(); }
@@ -288,6 +291,7 @@ const navItems = [
                 if (input) input.removeEventListener('keydown', onKey);
                 overlay.removeEventListener('click', onOverlay);
                 document.removeEventListener('keydown', onDocKey);
+                if (prevFocus && prevFocus.focus) prevFocus.focus();
                 resolve(result);
               }
               function onOk() { done(input ? input.value : ''); }

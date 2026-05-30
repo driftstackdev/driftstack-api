@@ -647,6 +647,9 @@ const navSections: NavSection[] = [
                 var cancel = overlay.querySelector('[data-ds-confirm-cancel]');
                 if (msg) msg.textContent = message;
                 if (ok) ok.textContent = (opts && opts.confirmLabel) || 'Confirm';
+                // Remember what was focused (the trigger) so we can return
+                // focus there on close — keyboard users keep their place.
+                var prevFocus = document.activeElement;
                 overlay.classList.remove('hidden');
                 document.body.style.overflow = 'hidden';
                 if (ok && ok.focus) ok.focus();
@@ -657,6 +660,7 @@ const navSections: NavSection[] = [
                   if (cancel) cancel.removeEventListener('click', onCancel);
                   overlay.removeEventListener('click', onOverlay);
                   document.removeEventListener('keydown', onKey);
+                  if (prevFocus && prevFocus.focus) prevFocus.focus();
                   resolve(result);
                 }
                 function onOk() { done(true); }
@@ -737,6 +741,8 @@ const navSections: NavSection[] = [
                   input.value = (opts && opts.defaultValue) || '';
                   input.setAttribute('placeholder', (opts && opts.placeholder) || '');
                 }
+                // Remember the trigger so focus returns there on close.
+                var prevFocus = document.activeElement;
                 overlay.classList.remove('hidden');
                 document.body.style.overflow = 'hidden';
                 if (input && input.focus) {
@@ -751,6 +757,7 @@ const navSections: NavSection[] = [
                   if (input) input.removeEventListener('keydown', onKey);
                   overlay.removeEventListener('click', onOverlay);
                   document.removeEventListener('keydown', onDocKey);
+                  if (prevFocus && prevFocus.focus) prevFocus.focus();
                   resolve(result);
                 }
                 function onOk() { done(input ? input.value : ''); }

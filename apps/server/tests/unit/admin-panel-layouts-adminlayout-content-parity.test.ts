@@ -37,6 +37,13 @@ describe('admin-panel layouts/AdminLayout content parity', () => {
     expect(body).toMatch(/if \(e\.target === overlay\)/);
   });
 
+  it('a11y focus restore: both modals capture the trigger (document.activeElement) on open and return focus to it on close — pinned so keyboard operators keep their place after a confirm/prompt (WCAG 2.4.3 dialog pattern)', () => {
+    expect(body.match(/var prevFocus = document\.activeElement;/g)?.length).toBe(2);
+    expect(body.match(/if \(prevFocus && prevFocus\.focus\) prevFocus\.focus\(\);/g)?.length).toBe(
+      2,
+    );
+  });
+
   it('Props contract pinned: title (required) + description (optional, defaults to staff-only-tagline). Drift to a different shape would break every admin page', () => {
     expect(body).toMatch(
       /interface Props \{\s*\n?\s*title: string;\s*\n?\s*description\?: string;\s*\n?\s*\}/,
