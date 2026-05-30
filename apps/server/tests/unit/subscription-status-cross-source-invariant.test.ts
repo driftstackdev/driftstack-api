@@ -23,6 +23,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { SubscriptionStatusSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -48,6 +49,11 @@ describe('W856 SubscriptionStatus cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/billing.ts SubscriptionStatusSchema = z.enum([8 values]). The 8-value closed-roster mirrors Stripe subscription.status exactly.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/billing.ts'));
     expect(p).toMatch(/export const SubscriptionStatusSchema = z\.enum\(\[/);
+    // EXACT canonical pin: .options must EQUAL the 8-value Stripe-mirror set IN
+    // ORDER, not merely contain it. Although Stripe's status roster is stable,
+    // a 9th value (or a reorder) would silently pass the body-subset check below
+    // (the weak pattern that let the WebhookEventType roster drift 6→9).
+    expect(SubscriptionStatusSchema.options).toEqual([...SUBSCRIPTION_STATUSES]);
     const m = p.match(/SubscriptionStatusSchema = z\.enum\(\[([\s\S]+?)\]\)/);
     expect(m, 'SubscriptionStatusSchema declaration must match').not.toBeNull();
     const body = m![1];
