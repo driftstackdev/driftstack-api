@@ -41,4 +41,11 @@ describe('W313.C /audit-log page export parity', () => {
   it('page mentions GDPR Article 20 portability framing', () => {
     expect(page).toMatch(/GDPR Article 20|Article 20 portability/);
   });
+
+  it('export failure surfaces the problem+json detail (W151/W152), not a bare HTTP code', () => {
+    // A failed export returns problem+json (not the blob); the page must
+    // read `detail` so a refused export (e.g. an export rate-limit)
+    // explains why rather than showing "Export failed (HTTP 429)".
+    expect(page).toMatch(/throw new Error\(b\.detail \|\| 'HTTP ' \+ r\.status\)/);
+  });
 });
