@@ -430,6 +430,20 @@ const accountId = account.id;
         });
       }
 
+      // On a failed mutation (tier change / suspend / refund / override /
+      // note), surface the server's problem+json `detail` — e.g. "Refund
+      // amount exceeds the original charge" or "Unknown tier id" — so the
+      // operator sees WHY the action was refused instead of a bare
+      // "HTTP 400" (W151/W152 baseline). Load fetches keep their own
+      // 403→forbidden / 404→not-found mapping above.
+      function mutationJson(r) {
+        if (r.ok) return r.json();
+        return r
+          .json()
+          .catch(() => ({}))
+          .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+      }
+
       function applyAccount(a) {
         const titleName = a.name || a.email;
         setText('title-name', titleName);
@@ -598,7 +612,7 @@ const accountId = account.id;
           method: 'POST',
           body: JSON.stringify(body),
         })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(mutationJson)
           .then((updated) => {
             applyAccount(updated);
             showBanner('Tier changed to ' + updated.tier + '.');
@@ -624,7 +638,7 @@ const accountId = account.id;
           method: 'POST',
           body: JSON.stringify(body),
         })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(mutationJson)
           .then((updated) => {
             applyAccount(updated);
             showBanner('Account suspended.');
@@ -649,7 +663,7 @@ const accountId = account.id;
           method: 'POST',
           body: JSON.stringify(body),
         })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(mutationJson)
           .then((updated) => {
             applyAccount(updated);
             showBanner('Account unsuspended.');
@@ -700,7 +714,7 @@ const accountId = account.id;
           method: 'POST',
           body: JSON.stringify(payload),
         })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(mutationJson)
           .then(() => {
             showBanner('Override applied for bucket "' + payload.bucket_key + '".');
             hideOverrideForm();
@@ -751,7 +765,7 @@ const accountId = account.id;
           method: 'POST',
           body: JSON.stringify({ note: note.trim() }),
         })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(mutationJson)
           .then(() => {
             showBanner('Support note recorded.');
             load();
@@ -793,7 +807,7 @@ const accountId = account.id;
             reason: reason.trim(),
           }),
         })
-          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(mutationJson)
           .then(() => {
             showBanner(
               'Refund recorded. Reminder: actual refund is issued via Stripe dashboard — this endpoint is audit-only.',

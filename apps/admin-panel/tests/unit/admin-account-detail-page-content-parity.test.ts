@@ -123,4 +123,16 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
   it('localStorage key ds_web_session_token (admin-panel convention)', () => {
     expect(body).toContain('ds_web_session_token');
   });
+
+  it('mutations surface the server problem+json detail via mutationJson (W151/W152), so refusals explain why', () => {
+    // tier change / suspend / unsuspend / override / note / refund all
+    // route their non-ok response through mutationJson, which reads
+    // b.detail — so an operator sees "Refund amount exceeds the original
+    // charge" instead of a bare "HTTP 400". Pin the helper + that the six
+    // mutations use it (not the old inline bare-HTTP reject).
+    expect(body).toMatch(/function mutationJson\(r\)/);
+    expect(body).toMatch(/b\.detail \|\| 'HTTP ' \+ r\.status/);
+    const usages = body.match(/\.then\(mutationJson\)/g) ?? [];
+    expect(usages.length).toBe(6);
+  });
 });
