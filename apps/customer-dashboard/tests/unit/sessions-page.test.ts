@@ -189,6 +189,10 @@ describe('sessions page — local integration', () => {
     expect(activeText).toContain('sess_live');
     expect(activeText).toContain('sess_busy');
     expect(activeText).not.toContain('sess_gone');
+    // Archetype renders as the friendly registry label, never the raw slug
+    // (consistent with the profiles + overview pages).
+    expect(activeText).toContain('iPhone 16 Pro / iOS 18.7 / Safari 26.4');
+    expect(activeText).not.toContain('iphone16pro_ios18_7_safari26_4');
     const recentText = text(window, '[data-list="recent"]');
     expect(recentText).toContain('sess_gone');
     expect(recentText).toContain('sess_err');

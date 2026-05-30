@@ -1,7 +1,12 @@
 ---
 import DashboardLayout from '../layouts/DashboardLayout.astro';
 import { MOCK_SESSIONS, MOCK_USAGE_SUMMARY } from '../data/mocks.ts';
-import { LOCKED_ARCHETYPE_DISPLAY_LABEL, TIER_CONCURRENT_SESSION_LIMITS } from '@driftstack/api-types';
+import {
+  ARCHETYPE_REGISTRY,
+  LOCKED_ARCHETYPE_DISPLAY_LABEL,
+  TIER_CONCURRENT_SESSION_LIMITS,
+  archetypeDisplayLabel,
+} from '@driftstack/api-types';
 
 // V-180 — progressive-enhancement wiring against /v1/sessions, mirrors
 // the V-171 /usage pattern. SSG renders mock; inline <script> replaces
@@ -48,6 +53,12 @@ const recentClosedSessions = MOCK_SESSIONS.filter(
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
 const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
+// Friendly archetype labels (slug → "iPhone 16 Pro / iOS 18.7 / Safari 26.4"),
+// injected into the client script so the session list shows the same friendly
+// device label as the profiles + overview pages, not the raw slug.
+const ARCHETYPE_LABELS = Object.fromEntries(
+  ARCHETYPE_REGISTRY.map((a) => [a.id, archetypeDisplayLabel(a.id)]),
+);
 ---
 
 <DashboardLayout title="Sessions">
@@ -353,7 +364,10 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
     recent lists. Falls back to mock-rendered lists when token is
  absent or fetch fails. Mirrors /usage pattern.
   -->
-  <script is:inline define:vars={{ apiBaseUrl, tierConcurrentLimits }}>
+  <script
+    is:inline
+    define:vars={{ apiBaseUrl, tierConcurrentLimits, archetypeLabels: ARCHETYPE_LABELS }}
+  >
     (function () {
       const root = document.querySelector('[data-page="sessions"]');
       if (!root) return;
@@ -433,6 +447,12 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
         if (!iso) return '—';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
       }
+      // Map an archetype slug to its friendly label via the injected registry
+      // map; raw slug if unknown (an aged-out archetype), em-dash if absent.
+      function archetypeLabel(slug) {
+        if (!slug) return '—';
+        return (archetypeLabels && archetypeLabels[slug]) || slug;
+      }
       function fmtDuration(ms) {
         if (ms === null || ms === undefined) return '—';
         const sec = Math.floor(ms / 1000);
@@ -495,7 +515,7 @@ const tierConcurrentLimits = TIER_CONCURRENT_SESSION_LIMITS;
           warningBadge +
           '</div>' +
           '<p class="mt-1 text-xs text-ink-muted">Archetype <code class="font-mono">' +
-          escapeHtml(s.archetype) +
+          escapeHtml(archetypeLabel(s.archetype)) +
           '</code> · started ' +
           escapeHtml(fmtIso(s.created_at)) +
           profileFrag +
