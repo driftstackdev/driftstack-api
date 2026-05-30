@@ -22,6 +22,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { UsageRecordTypeSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -45,6 +46,10 @@ describe('W857 UsageRecordType cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/usage.ts UsageRecordTypeSchema = z.enum([6 values]). The 6-value closed-roster is the contract every billing-quota check pivots on.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/usage.ts'));
     expect(p).toMatch(/export const UsageRecordTypeSchema = z\.enum\(\[/);
+    // EXACT canonical pin: .options must EQUAL the 6-value set, not merely
+    // contain it — a 7th record type would silently pass the body-subset check
+    // below (the weak pattern that let the WebhookEventType roster drift).
+    expect(UsageRecordTypeSchema.options).toEqual([...USAGE_RECORD_TYPES]);
     const m = p.match(/UsageRecordTypeSchema = z\.enum\(\[([\s\S]+?)\]\)/);
     expect(m, 'UsageRecordTypeSchema declaration must match').not.toBeNull();
     const body = m![1];

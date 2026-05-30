@@ -30,6 +30,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AdminAuditActionSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -63,6 +64,11 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/admin.ts AdminAuditActionSchema = z.enum([16 values]). The 16-value closed-roster is the contract every admin audit-log gate pivots on.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
     expect(p).toMatch(/export const AdminAuditActionSchema = z\.enum\(\[/);
+    // EXACT canonical pin: .options must EQUAL the 16-value set, not merely
+    // contain it — a 17th admin action (this enum GROWS with every new admin
+    // endpoint) would silently pass the body-subset check below, the same weak
+    // pattern that let the WebhookEventType roster drift out of the Go SDK.
+    expect(AdminAuditActionSchema.options).toEqual([...ADMIN_AUDIT_ACTIONS]);
     const m = p.match(/AdminAuditActionSchema = z\.enum\(\[([\s\S]+?)\]\)/);
     expect(m, 'AdminAuditActionSchema declaration must match').not.toBeNull();
     const body = m![1];
