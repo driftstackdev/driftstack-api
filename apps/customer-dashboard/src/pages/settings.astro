@@ -1244,7 +1244,7 @@ const EMAIL_EVENTS = [
         // current row server-side.
         const groups = new Map();
         for (const s of sessions) {
-          const key = (s.os || 'Unknown OS') + ' ' + (s.browser || 'Unknown browser');
+          const key = (s.os || 'Unknown OS') + '\x00' + (s.browser || 'Unknown browser');
           const existing = groups.get(key);
           if (!existing) {
             groups.set(key, { primary: s, hiddenIds: [], count: 1 });
@@ -1342,24 +1342,31 @@ const EMAIL_EVENTS = [
       }
 
       if (webSessionsList) {
-        webSessionsList.addEventListener('click', (ev) => {
+        webSessionsList.addEventListener('click', async (ev) => {
           const target = ev.target;
           if (!target || !target.closest) return;
           const btn = target.closest('[data-revoke-id]');
           if (!btn) return;
           const id = btn.getAttribute('data-revoke-id');
           if (!id) return;
-          if (!window.confirm('Revoke this sign-in? It will need to sign in again.')) return;
+          if (
+            !(await window.driftstackConfirm(
+              'Revoke this sign-in? It will need to sign in again.',
+              { confirmLabel: 'Revoke' },
+            ))
+          )
+            return;
           revokeWebSession(id);
         });
       }
 
       if (webSessionsRevokeAllBtn) {
-        webSessionsRevokeAllBtn.addEventListener('click', () => {
+        webSessionsRevokeAllBtn.addEventListener('click', async () => {
           if (
-            !window.confirm(
+            !(await window.driftstackConfirm(
               'Sign out of every other browser? You will stay signed in here.',
-            )
+              { confirmLabel: 'Sign out others' },
+            ))
           )
             return;
           authedFetch('/v1/account/web-sessions?keep=current', { method: 'DELETE' })
@@ -1379,7 +1386,7 @@ const EMAIL_EVENTS = [
       }
 
       // V-079 — change password trigger via password-reset request.
-      function changePassword() {
+      async function changePassword() {
         if (!token) {
           showBanner('Sign in to change password.');
           return;
@@ -1389,7 +1396,10 @@ const EMAIL_EVENTS = [
         // V-217, prompt for the email so the password-reset link goes
         // to the right address. Self-derived email comes via /v1/account
         // follow-up.
-        const email = window.prompt('Enter your account email to send the password-reset link:');
+        const email = await window.driftstackPrompt(
+          'Enter your account email to send the password-reset link:',
+          { placeholder: 'you@example.com', confirmLabel: 'Send link' },
+        );
         if (!email || !email.trim()) return;
         showBanner('Sending password-reset email…');
         fetch(apiBaseUrl + '/v1/auth/password-reset/request', {
@@ -1720,22 +1730,24 @@ const EMAIL_EVENTS = [
       if (mfaVerifyBtn) mfaVerifyBtn.addEventListener('click', verifyEnrollment);
       const mfaDisable = root.querySelector('[data-button="mfa-disable"]');
       if (mfaDisable)
-        mfaDisable.addEventListener('click', () => {
+        mfaDisable.addEventListener('click', async () => {
           if (
-            !window.confirm(
+            !(await window.driftstackConfirm(
               'Disable two-factor authentication? You will be asked for a fresh code first.',
-            )
+              { confirmLabel: 'Disable 2FA' },
+            ))
           )
             return;
           performDisable();
         });
       const mfaRegen = root.querySelector('[data-button="mfa-regenerate"]');
       if (mfaRegen)
-        mfaRegen.addEventListener('click', () => {
+        mfaRegen.addEventListener('click', async () => {
           if (
-            !window.confirm(
+            !(await window.driftstackConfirm(
               'Regenerate recovery codes? Old codes are invalidated immediately.',
-            )
+              { confirmLabel: 'Regenerate' },
+            ))
           )
             return;
           performRegenerate();
@@ -1891,9 +1903,15 @@ const EMAIL_EVENTS = [
       }
 
       if (byokClearBtn) {
-        byokClearBtn.addEventListener('click', () => {
+        byokClearBtn.addEventListener('click', async () => {
           if (!token) return;
-          if (!window.confirm('Clear your stored Anthropic key? Agent sessions will fall back to the bundled key (if available on your tier).')) return;
+          if (
+            !(await window.driftstackConfirm(
+              'Clear your stored Anthropic key? Agent sessions will fall back to the bundled key (if available on your tier).',
+              { confirmLabel: 'Clear key' },
+            ))
+          )
+            return;
           fetch(apiBaseUrl + '/v1/account/me/byok-anthropic-key', {
             method: 'DELETE',
             headers: { authorization: 'Bearer ' + token },
