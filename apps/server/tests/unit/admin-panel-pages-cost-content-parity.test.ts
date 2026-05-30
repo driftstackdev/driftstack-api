@@ -67,8 +67,11 @@ describe('admin-panel pages/cost content parity', () => {
     expect(body).toMatch(
       /\/\/ per AlertThresholds in lib\/cost-estimator\.ts\. Reading\s*\n?\s*\/\/ `softWarningCents` \/ `hardCapCents` \(a previous field-name\s*\n?\s*\/\/ guess\) silently rendered every tier as "\$0\.00"\./,
     );
-    expect(body).toMatch(/\(t\.softCents \?\? 0\) \/ 100/);
-    expect(body).toMatch(/\(t\.hardCents \?\? 0\) \/ 100/);
+    // Threshold dollars render at 2-decimal precision (.toFixed(2)) — the same
+    // currency-format standard as the cents() helper used everywhere else on
+    // the page; without it a $15.50 cap rendered as "$15.5".
+    expect(body).toMatch(/\(t\.softCents \?\? 0\) \/ 100\)\.toFixed\(2\)/);
+    expect(body).toMatch(/\(t\.hardCents \?\? 0\) \/ 100\)\.toFixed\(2\)/);
   });
 
   it("CostMonitoringAccountSummary shape framing pinned: 'GET /v1/admin/cost/accounts/:id returns CostMonitoringAccountSummary (cost-monitoring.ts): { account_id, billing_cycle, breakdown: CostBreakdown, tier, thresholds: { softCents, hardCents } }'. Drift to a different shape would silently break the per-account render (the field-references in renderAccountSummary depend on this exact projection)", () => {
