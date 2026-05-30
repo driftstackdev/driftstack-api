@@ -180,9 +180,21 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.remove('hidden');
       }
 
+      // Disable submit + show a pending label while the login request is in
+      // flight (prevents double-submit, gives the user click feedback).
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const submitLabel = submitBtn ? submitBtn.textContent : '';
+      function setSubmitting(on) {
+        if (!submitBtn) return;
+        submitBtn.disabled = on;
+        submitBtn.setAttribute('aria-busy', on ? 'true' : 'false');
+        submitBtn.textContent = on ? 'Signing in…' : submitLabel;
+      }
+
       form.addEventListener('submit', (ev) => {
         ev.preventDefault();
         banner.classList.add('hidden');
+        setSubmitting(true);
         const fd = new FormData(form);
         const payload = {
           email: fd.get('email'),
@@ -229,7 +241,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch((err) => {
             showBanner(err && err.message ? err.message : 'Sign-in failed.');
-          });
+          })
+          .finally(() => setSubmitting(false));
       });
 
       // V-667.C — bind OAuth provider buttons. On click, POST
