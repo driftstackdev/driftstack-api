@@ -531,7 +531,12 @@ const accountId = account.id;
         // doesn't show "Couldn't load account" to operators just
         // inspecting tier/status.
         const costBody = root.querySelector('[data-account-cost-body]');
-        authedFetch(`/v1/admin/cost/accounts/${encodeURIComponent(prefixedId)}`)
+        // The cost route matches accounts.id (a bare uuid) directly — unlike
+        // /v1/admin/accounts/:id which uuidFromPrefixedId-strips the acc_ prefix.
+        // So it needs the RAW uuid, not prefixedId: sending the prefixed id 404s,
+        // which (soft-failed below) silently rendered "No cost data this cycle
+        // yet" for every account that actually had usage.
+        authedFetch(`/v1/admin/cost/accounts/${encodeURIComponent(accountUuid)}`)
           .then((r) => (r.ok ? r.json() : null))
           .then((b) => {
             if (!costBody) return;

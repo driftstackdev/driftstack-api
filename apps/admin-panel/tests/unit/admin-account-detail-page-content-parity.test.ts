@@ -52,6 +52,12 @@ describe('W365.C admin-panel /accounts/[id] detail page content parity', () => {
     expect(body).toMatch(/Cloudflare Pages routes \/accounts\/<uuid> to the\s*\n?\s*\/\/\s*Worker/);
   });
 
+  it('CRITICAL per-account cost fetch uses the BARE accountUuid, NOT the acc_-prefixed id — /v1/admin/cost/accounts/:id matches accounts.id (a bare uuid) directly (unlike the prefix-stripping /v1/admin/accounts/:id), so a prefixed id 404s + soft-fails to "No cost data this cycle yet"', () => {
+    expect(body).toMatch(/\/v1\/admin\/cost\/accounts\/\$\{encodeURIComponent\(accountUuid\)\}/);
+    // Regression guard: must NOT send the prefixed id to the cost endpoint.
+    expect(body).not.toMatch(/\/v1\/admin\/cost\/accounts\/\$\{encodeURIComponent\(prefixedId\)\}/);
+  });
+
   it('all 5 admin-action endpoints registered server-side', () => {
     expect(existsSync(ROUTE)).toBe(true);
     for (const r of [
