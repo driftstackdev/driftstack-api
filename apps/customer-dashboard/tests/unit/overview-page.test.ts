@@ -195,13 +195,18 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     expect(isHidden(window, '[data-sessions-list]')).toBe(true);
   });
 
-  it('sessions: a running session renders a row with its id + status', async () => {
+  it('sessions: a running session renders id + status + a FRIENDLY archetype label + readable date (no raw slug or ISO)', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: makeRouter({
         me: { name: 'A', tier: 'solo_manual' },
         sessions: [
-          { id: 'sess_live1', status: 'running', archetype: 'iphone16pro_ios18_7_safari26_4' },
+          {
+            id: 'sess_live1',
+            status: 'running',
+            archetype: 'iphone16pro_ios18_7_safari26_4',
+            created_at: '2026-05-20T10:00:00.000Z',
+          },
           { id: 'sess_dead', status: 'destroyed' },
         ],
       }),
@@ -214,6 +219,12 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
     expect(listText).toContain('running');
     // The destroyed session is filtered out of the active list.
     expect(listText).not.toContain('sess_dead');
+    // Archetype renders as the friendly registry label, never the raw slug.
+    expect(listText).toContain('iPhone 16 Pro / iOS 18.7 / Safari 26.4');
+    expect(listText).not.toContain('iphone16pro_ios18_7_safari26_4');
+    // created_at renders as YYYY-MM-DD, not the raw ISO timestamp.
+    expect(listText).toContain('2026-05-20');
+    expect(listText).not.toContain('T10:00:00');
   });
 
   it('billing: an active subscription renders the subscription card', async () => {

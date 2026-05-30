@@ -13,7 +13,15 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 import { TIER_DISPLAY_NAMES } from '../data/mocks.ts';
+import { ARCHETYPE_REGISTRY, archetypeDisplayLabel } from '@driftstack/api-types';
 const apiBaseUrl = resolveApiBaseUrl();
+
+// Friendly archetype labels (slug → "iPhone 16 Pro / iOS 18.7 / Safari 26.4"),
+// derived from the registry + injected into the client script so the active-
+// session preview never shows a customer a raw slug.
+const ARCHETYPE_LABELS = Object.fromEntries(
+  ARCHETYPE_REGISTRY.map((a) => [a.id, archetypeDisplayLabel(a.id)]),
+);
 ---
 
 <DashboardLayout title="Overview">
@@ -216,7 +224,14 @@ const apiBaseUrl = resolveApiBaseUrl();
     </section>
   </div>
 
-  <script is:inline define:vars={{ apiBaseUrl, tierDisplayNames: TIER_DISPLAY_NAMES }}>
+  <script
+    is:inline
+    define:vars={{
+      apiBaseUrl,
+      tierDisplayNames: TIER_DISPLAY_NAMES,
+      archetypeLabels: ARCHETYPE_LABELS,
+    }}
+  >
     (function () {
       const root = document.querySelector('[data-page="overview"]');
       if (!root) return;
@@ -256,6 +271,13 @@ const apiBaseUrl = resolveApiBaseUrl();
       // "solo_manual". Falls back to the id if an unknown tier appears.
       function tierLabel(t) {
         return (t && tierDisplayNames[t]) || t || '—';
+      }
+
+      // Map an archetype slug to its friendly label via the injected registry
+      // map; em-dash for a session with no archetype, raw slug if unknown.
+      function archetypeLabel(slug) {
+        if (!slug) return '—';
+        return (archetypeLabels && archetypeLabels[slug]) || slug;
       }
 
       const token = getToken();
@@ -371,9 +393,9 @@ const apiBaseUrl = resolveApiBaseUrl();
                 escapeHtml(s.id) +
                 '</p>' +
                 '<p class="mt-1 text-xs text-ink-muted">' +
-                escapeHtml(s.archetype || '—') +
+                escapeHtml(archetypeLabel(s.archetype)) +
                 ' · started ' +
-                escapeHtml(s.created_at || '') +
+                escapeHtml(fmtIsoDay(s.created_at)) +
                 '</p></div>' +
                 '<span class="rounded-full bg-emerald-400/10 px-2 py-1 text-xs font-medium uppercase tracking-wide text-emerald-300">' +
                 escapeHtml(s.status || '—') +
