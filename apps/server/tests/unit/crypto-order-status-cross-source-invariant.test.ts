@@ -31,6 +31,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { CryptoOrderStatusSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -57,6 +58,11 @@ describe('W865 CryptoOrderStatus cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/crypto-orders.ts CryptoOrderStatusSchema = z.enum([6 values]) — pending/confirming/paid/failed/partial/cancelled. The 6-value closed-roster is what the customer order-detail UI + IPN webhook handler pivot on.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
     expect(p).toMatch(/export const CryptoOrderStatusSchema = z\.enum\(\[/);
+    // EXACT canonical pin: .options must EQUAL the 6-value set, not merely
+    // contain it — a 7th status (e.g. a future 'refunded') would silently pass
+    // the body-subset check below (the weak pattern that let WebhookEventType
+    // drift). The sibling EventSource enum below is already exact-pinned.
+    expect(CryptoOrderStatusSchema.options).toEqual([...CRYPTO_ORDER_STATUSES]);
     const m = p.match(/CryptoOrderStatusSchema = z\.enum\(\[([\s\S]+?)\]\)/);
     expect(m, 'CryptoOrderStatusSchema declaration must match').not.toBeNull();
     const body = m![1];
