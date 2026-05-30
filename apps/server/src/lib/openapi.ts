@@ -3259,7 +3259,7 @@ function buildRegistry(): OpenAPIRegistry {
     .string()
     .min(1)
     .max(100)
-    .describe('Order id (ord_<36-char-uuid>; capped at 100 chars).');
+    .describe('Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).');
   registerRoute(r, {
     method: 'get',
     path: '/v1/billing/crypto-orders',
@@ -3440,7 +3440,7 @@ function buildRegistry(): OpenAPIRegistry {
     .string()
     .min(1)
     .max(100)
-    .describe('Order id (ord_<36-char-uuid>; capped at 100 chars).');
+    .describe('Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).');
   registerRoute(r, {
     method: 'get',
     path: '/v1/admin/crypto-orders',
