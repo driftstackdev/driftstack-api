@@ -130,6 +130,11 @@ describe('admin sessions page — force-destroy (operator)', () => {
       window.document.querySelector('[data-action="destroy"][data-id="agt_live"]'),
     ).toBeTruthy();
     expect(window.document.querySelector('[data-action="destroy"][data-id="agt_done"]')).toBeNull();
+    // Archetype renders as the friendly registry label, never the raw slug
+    // (consistent with the customer profiles/overview/sessions pages).
+    const pageText = window.document.body.textContent ?? '';
+    expect(pageText).toContain('iPhone 16 Pro / iOS 18.7 / Safari 26.4');
+    expect(pageText).not.toContain('iphone16pro_ios18_7_safari26_4');
   });
 
   it('destroy WITH reason: POSTs /:id/destroy {reason}, then refresh removes the action', async () => {

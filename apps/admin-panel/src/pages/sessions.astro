@@ -1,5 +1,6 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
+import { ARCHETYPE_REGISTRY, archetypeDisplayLabel } from '@driftstack/api-types';
 
 // V-192 — progressive-enhancement against /v1/admin/sessions (new in
 // V-192). SSG renders mock; an inline <script> reads ds_web_session_token
@@ -62,6 +63,12 @@ function fmtIso(iso: string | null): string {
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
+// Friendly archetype labels (slug → "iPhone 16 Pro / iOS 18.7 / Safari 26.4")
+// for the operator's session list — injected into the client script + used for
+// the SSG mock render, so the device shows readable, not a raw slug.
+const ARCHETYPE_LABELS = Object.fromEntries(
+  ARCHETYPE_REGISTRY.map((a) => [a.id, archetypeDisplayLabel(a.id)]),
+);
 ---
 
 <AdminLayout title="Sessions">
@@ -142,7 +149,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 <td class="px-4 py-3">
                   <p class="font-mono text-xs text-slate-900">{session.id}</p>
                   <p class="mt-0.5 font-mono text-[11px] text-slate-500">
-                    {session.archetype}
+                    {archetypeDisplayLabel(session.archetype)}
                   </p>
                 </td>
                 <td class="px-4 py-3">
@@ -187,7 +194,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     </p>
   </div>
 
-  <script is:inline define:vars={{ apiBaseUrl }}>
+  <script is:inline define:vars={{ apiBaseUrl, archetypeLabels: ARCHETYPE_LABELS }}>
     (function () {
       const root = document.querySelector('[data-page="admin-sessions"]');
       if (!root) return;
@@ -232,6 +239,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!iso) return '—';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
       }
+      // Friendly device label via the injected registry map; raw slug if unknown.
+      function archetypeLabel(slug) {
+        if (!slug) return '—';
+        return (archetypeLabels && archetypeLabels[slug]) || slug;
+      }
 
       function rowHtml(s) {
         const destroyBtn =
@@ -247,7 +259,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(s.id) +
           '</p>' +
           '<p class="mt-0.5 font-mono text-[11px] text-slate-500">' +
-          escapeHtml(s.archetype) +
+          escapeHtml(archetypeLabel(s.archetype)) +
           '</p></td>' +
           '<td class="px-4 py-3">' +
           '<p class="font-mono text-[11px] text-slate-500">' +
