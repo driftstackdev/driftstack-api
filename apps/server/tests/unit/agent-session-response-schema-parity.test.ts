@@ -46,4 +46,11 @@ describe('agent-session response schema parity', () => {
     // list rows
     expect(oapi).toMatch(/data: z\.array\(AgentSessionSchema\)/);
   });
+
+  it('OpenAPI types the `session` envelope on the POST /:id/message turn-result union (all 3 members — plan-executed/clarify/refuse — carried session: z.object({}) before)', () => {
+    const oapi = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
+    const sessionFields = oapi.match(/session: AgentSessionSchema,/g) ?? [];
+    // 3 union members each carry the updated session envelope.
+    expect(sessionFields.length).toBe(3);
+  });
 });

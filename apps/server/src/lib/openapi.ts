@@ -2774,19 +2774,19 @@ function buildRegistry(): OpenAPIRegistry {
             schema: z.union([
               z.object({
                 kind: z.literal('plan-executed'),
-                session: z.object({}),
+                session: AgentSessionSchema,
                 intents: z.array(z.object({})),
                 results: z.array(z.object({})),
                 ok: z.boolean(),
               }),
               z.object({
                 kind: z.literal('clarify'),
-                session: z.object({}),
+                session: AgentSessionSchema,
                 clarifying_question: z.string(),
               }),
               z.object({
                 kind: z.literal('refuse'),
-                session: z.object({}),
+                session: AgentSessionSchema,
                 refuse_reason: z.string(),
               }),
             ]),
