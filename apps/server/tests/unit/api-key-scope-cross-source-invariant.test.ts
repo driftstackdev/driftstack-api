@@ -31,6 +31,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ApiKeyScopeSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -72,6 +73,11 @@ describe('W861 ApiKeyScope cross-source invariant', () => {
   it('CRITICAL packages/api-types/src/common.ts ApiKeyScopeSchema = z.enum([19 values]) — 6 V-174 broad + 13 V-481 granular. The 19-value closed-roster is the source-of-truth for all scope-check helpers.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
     expect(p).toMatch(/export const ApiKeyScopeSchema = z\.enum\(\[/);
+    // EXACT canonical pin: .options must EQUAL the 19-value set IN ORDER, not
+    // merely contain it. This enum GROWS (V-481 added 13 granular scopes,
+    // gui_control later) — a new scope would silently pass the body-subset
+    // check below (the weak pattern that let the WebhookEventType roster drift).
+    expect(ApiKeyScopeSchema.options).toEqual([...ALL_SCOPES]);
     const m = p.match(/ApiKeyScopeSchema = z\.enum\(\[([\s\S]+?)\]\)/);
     expect(m, 'ApiKeyScopeSchema declaration must match').not.toBeNull();
     const body = m![1];
