@@ -289,6 +289,13 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     expect(body).toMatch(/id: 'iphone17_ios18_7_safari26_4',/);
     expect(body).toMatch(/id: 'iphone17_ios18_7_safari26_5',/);
     expect(body).toMatch(/id: 'iphone16pro_ios18_6_safari18_6',/);
+    // Broader launch-family device matrix registered as placeholders
+    // (founder 2026-05-30: iphone 17 / pro / pro max, iphone 16 / pro max).
+    // The platform is a DEVICE MATRIX, not one device.
+    expect(body).toMatch(/id: 'iphone17pro_ios18_7_safari26_4',/);
+    expect(body).toMatch(/id: 'iphone17promax_ios18_7_safari26_4',/);
+    expect(body).toMatch(/id: 'iphone16_ios18_7_safari26_4',/);
+    expect(body).toMatch(/id: 'iphone16promax_ios18_7_safari26_4',/);
     // The locked id is the one launch-default entry, reusing the constants
     // (no drift between LOCKED_* and the registry).
     expect(body).toMatch(

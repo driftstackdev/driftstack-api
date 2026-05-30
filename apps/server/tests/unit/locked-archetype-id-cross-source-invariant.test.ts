@@ -93,7 +93,7 @@ describe('W847 LOCKED_ARCHETYPE_ID cross-source invariant', () => {
 
   // ─── No alternate archetype identifiers anywhere ─────────────
 
-  it("CRITICAL no alternate archetype IDs (iphone15 / iphone17 / android* / chrome*) appear in source. The LOCKED_ARCHETYPE_ID is the SOLE archetype per V-136 — drift to introducing a second would break the 'single-canonical-archetype' contract.", () => {
+  it('CRITICAL no NON-iOS archetype IDs (android_pixel* / chrome_windows* / safari_macos*) appear in source — the platform emulates iOS iPhone/iPad ONLY, so a non-iOS fingerprint slug is always wrong. iOS device variants (iphone16/17/pro/pro-max) are now legitimate ARCHETYPE_REGISTRY entries (multi-archetype per founder 2026-05-30, superseding the V-136 single-canonical-archetype contract).', () => {
     const dirs = [
       'packages/api-types/src',
       'apps/server/src',
@@ -109,14 +109,11 @@ describe('W847 LOCKED_ARCHETYPE_ID cross-source invariant', () => {
     ];
     for (const f of sampleFiles) {
       const p = read(resolve(REPO_ROOT, f));
-      // Forbidden alternate archetypes.
-      const forbiddenPatterns = [
-        /\biphone15pro_/,
-        /\biphone17pro_/,
-        /\bandroid_pixel_/,
-        /\bchrome_windows_/,
-        /\bsafari_macos_/,
-      ];
+      // Forbidden NON-iOS archetypes — the platform emulates iOS iPhone/iPad
+      // ONLY. iOS device variants (iphone15pro / iphone17pro / …) are now
+      // legitimate ARCHETYPE_REGISTRY entries (multi-archetype 2026-05-30),
+      // so they are no longer forbidden; a wrong-PLATFORM slug still is.
+      const forbiddenPatterns = [/\bandroid_pixel_/, /\bchrome_windows_/, /\bsafari_macos_/];
       for (const re of forbiddenPatterns) {
         expect(p, `${f} references forbidden alternate archetype: ${re}`).not.toMatch(re);
       }

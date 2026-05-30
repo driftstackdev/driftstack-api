@@ -538,6 +538,50 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     canvasFamily: 'B',
     status: 'planned',
   },
+  // Broader launch-family device matrix (founder 2026-05-30: "we will have
+  // iphone 17, pro, pro max, iphone 16, pro max ... perhaps even iPads").
+  // Registered as `planned` placeholders on the launch Safari pairing; each
+  // is a DISTINCT fingerprint (screen/model differs), so each gets its own
+  // atlas. Slugs follow the convention; confirm against Agent-1's atlas
+  // naming when captured. iPad held until the iPad slug/OS convention is
+  // pinned (iPadOS vs ios segment). Additional Safari versions (26.2/26.3)
+  // per device are further entries added the same way.
+  {
+    id: 'iphone17pro_ios18_7_safari26_4',
+    displayLabel: 'iPhone 17 Pro / iOS 18.7 / Safari 26.4',
+    device: 'iPhone 17 Pro',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'planned',
+  },
+  {
+    id: 'iphone17promax_ios18_7_safari26_4',
+    displayLabel: 'iPhone 17 Pro Max / iOS 18.7 / Safari 26.4',
+    device: 'iPhone 17 Pro Max',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'planned',
+  },
+  {
+    id: 'iphone16_ios18_7_safari26_4',
+    displayLabel: 'iPhone 16 / iOS 18.7 / Safari 26.4',
+    device: 'iPhone 16',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'planned',
+  },
+  {
+    id: 'iphone16promax_ios18_7_safari26_4',
+    displayLabel: 'iPhone 16 Pro Max / iOS 18.7 / Safari 26.4',
+    device: 'iPhone 16 Pro Max',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'planned',
+  },
 ];
 
 /**
