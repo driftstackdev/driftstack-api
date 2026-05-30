@@ -31,6 +31,7 @@ import {
   LOCKED_ARCHETYPE_ID,
   LOCKED_ARCHETYPE_DISPLAY_LABEL,
   ARCHETYPE_DISPLAY_LABEL,
+  ARCHETYPE_REGISTRY,
 } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -86,6 +87,24 @@ describe('v2-#22 cross-SDK archetype roster parity', () => {
         ARCHETYPE_DISPLAY_LABEL[entry.id],
         `ARCHETYPE_DISPLAY_LABEL is missing an entry for ${entry.id}`,
       ).toBe(entry.display_label);
+    }
+  });
+
+  it('CRITICAL every non-deprecated roster archetype is registry customer-SELECTABLE (status launch|available) — the cross-SDK customer roster must never expose an internal `reference` baseline or an unpopulated `planned` placeholder (both of which ARE in ARCHETYPE_DISPLAY_LABEL, so the label-coverage check above would not catch it)', () => {
+    const roster = readRoster();
+    const selectable = new Set(
+      ARCHETYPE_REGISTRY.filter((a) => a.status === 'launch' || a.status === 'available').map(
+        (a) => a.id,
+      ),
+    );
+    for (const entry of roster.archetypes) {
+      // A `deprecated` roster entry is being phased out and may no longer be
+      // registry-selectable; only locked/preview entries must be selectable.
+      if (entry.status === 'deprecated') continue;
+      expect(
+        selectable.has(entry.id),
+        `roster archetype ${entry.id} (status ${entry.status}) must be a registry launch|available entry — NOT a reference/planned archetype exposed to SDK customers`,
+      ).toBe(true);
     }
   });
 
