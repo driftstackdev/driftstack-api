@@ -282,7 +282,9 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     // truth. A drift back to a single hardcoded archetype would re-break
     // the multi-archetype architecture.
     expect(body).toMatch(/export interface ArchetypeConfig \{/);
-    expect(body).toMatch(/export type ArchetypeStatus = 'launch' \| 'reference' \| 'planned';/);
+    expect(body).toMatch(
+      /export type ArchetypeStatus = 'launch' \| 'available' \| 'reference' \| 'planned';/,
+    );
     expect(body).toMatch(/export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig\[\] = \[/);
     // Slugs are registered (incl. iphone17 placeholders) so the cutover is
     // a status flip, not a system-wide slug swap.
@@ -302,8 +304,12 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /id: LOCKED_ARCHETYPE_ID,\s*\n?\s*displayLabel: LOCKED_ARCHETYPE_DISPLAY_LABEL,/,
     );
     expect(body).toMatch(/status: 'launch',/);
+    expect(body).toMatch(/status: 'available',/);
     expect(body).toMatch(/status: 'reference',/);
     expect(body).toMatch(/status: 'planned',/);
+    // The GUI FirstRunWizard's 'Legacy' archetype is now registered (source
+    // of truth for the customer-selectable catalog = launch | available).
+    expect(body).toMatch(/id: 'iphone15pro_ios17_5_safari17_5',/);
   });
 
   it('V-174 scope split framing pinned: account_owner (customer-account control via ctx.account.id) + driftstack_internal_admin (staff-only gates /v1/admin/* with admin.driftstack.dev Cloudflare Access SSO V-135 + defense-in-depth) + admin compat alias (satisfies BOTH during migration; founder-driven migration script promotes internal admin keys + re-scopes customer admin → account_owner; admin deprecated + removed after)', () => {

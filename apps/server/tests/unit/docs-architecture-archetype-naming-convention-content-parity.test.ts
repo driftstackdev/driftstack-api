@@ -104,8 +104,12 @@ describe('W559.A /docs/architecture/archetype-naming-convention.md content parit
     expect(body).toMatch(/The platform is NOT a single-device product/);
     expect(body).toMatch(/exports `ARCHETYPE_REGISTRY`, the single-source-of-truth catalogue/);
     expect(body).toMatch(/- `launch` —/);
+    expect(body).toMatch(/- `available` —/);
     expect(body).toMatch(/- `reference` —/);
     expect(body).toMatch(/- `planned` —/);
+    expect(body).toMatch(
+      /customer-selectable catalog \(GUI \/ dashboard selector\) = entries with/,
+    );
     expect(body).toMatch(
       /`ARCHETYPE_DISPLAY_LABEL` and `archetypeDisplayLabel\(id\)` are DERIVED from the\s*\n?\s*registry/,
     );

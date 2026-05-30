@@ -49,8 +49,12 @@ exports `ARCHETYPE_REGISTRY`, the single-source-of-truth catalogue. Each
 `safariVersion` / `canvasFamily`, plus a `status`:
 
 - `launch` — fingerprint atlas populated; the current default at v1.0.
-- `reference` — a captured reference archetype (e.g. the Family A baseline).
+- `available` — populated + customer-selectable, but not the default (e.g. a legacy device the GUI offers).
+- `reference` — a captured INTERNAL baseline, not customer-selectable (e.g. the Family A baseline).
 - `planned` — a recognized slug whose atlas is not yet populated (placeholder).
+
+The customer-selectable catalog (GUI / dashboard selector) = entries with
+status `launch` or `available`.
 
 `ARCHETYPE_DISPLAY_LABEL` and `archetypeDisplayLabel(id)` are DERIVED from the
 registry, so adding a device is adding one registry entry — not editing a

@@ -470,8 +470,10 @@ export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 16 Pro / iOS 18.7 / Safari
  * `status` reflects fingerprint-atlas readiness, so a new device can be
  * registered as a recognized slug BEFORE its atlas is captured:
  *   - 'launch'    — populated + the current default at v1.0
- *   - 'reference' — captured reference archetype (e.g. Family A baseline)
+ *   - 'available' — populated + customer-selectable, but NOT the default (e.g. a legacy device)
+ *   - 'reference' — captured INTERNAL baseline, not customer-selectable (e.g. the Family A baseline)
  *   - 'planned'   — recognized slug, atlas not yet populated (placeholder)
+ * The customer-selectable set the GUI/dashboard offers = status 'launch' | 'available'.
  *
  * Slugs MUST match Agent-1's atlas naming `<device>_ios<X_Y>_safari<X_Y>`
  * (docs/architecture/archetype-naming-convention.md). Add an entry when a
@@ -482,7 +484,7 @@ export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 16 Pro / iOS 18.7 / Safari
  * system-wide slug swap.
  */
 export type ArchetypeCanvasFamily = 'A' | 'B';
-export type ArchetypeStatus = 'launch' | 'reference' | 'planned';
+export type ArchetypeStatus = 'launch' | 'available' | 'reference' | 'planned';
 
 export interface ArchetypeConfig {
   /** Canonical slug, e.g. `iphone17_ios18_7_safari26_4`. */
@@ -510,6 +512,18 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'launch',
+  },
+  {
+    // The GUI FirstRunWizard already offers this as the 'Legacy' option
+    // (V-669) — registered here so the registry is the source of truth for
+    // the customer-selectable catalog. Safari 17.5 is pre-26 → Family A.
+    id: 'iphone15pro_ios17_5_safari17_5',
+    displayLabel: 'iPhone 15 Pro / iOS 17.5 / Safari 17.5',
+    device: 'iPhone 15 Pro',
+    iosVersion: '17.5',
+    safariVersion: '17.5',
+    canvasFamily: 'A',
+    status: 'available',
   },
   {
     id: 'iphone16pro_ios18_6_safari18_6',
