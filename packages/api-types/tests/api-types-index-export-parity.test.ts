@@ -51,6 +51,7 @@ const EXPECTED_REEXPORTS = [
   'livekit',
   'agent-input-event',
   'agent-models',
+  'agent-sessions',
 ] as const;
 
 describe('W384.C packages/api-types/src/index.ts public-surface content parity', () => {

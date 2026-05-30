@@ -23,3 +23,4 @@ export * from './egress.js';
 export * from './livekit.js';
 export * from './agent-input-event.js';
 export * from './agent-models.js';
+export * from './agent-sessions.js';

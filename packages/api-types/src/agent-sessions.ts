@@ -1,0 +1,41 @@
+import { z } from 'zod';
+import { AgentModelSchema } from './agent-models.js';
+import { LiveKitInfoSchema } from './livekit.js';
+
+/**
+ * Agent (AI-chat) session resource — the read shape returned by
+ * `POST /v1/agent-sessions` (201), `GET /v1/agent-sessions` (each list
+ * row), and `GET /v1/agent-sessions/{id}`. It mirrors the apps/server
+ * route's `PublicAgentSession` interface field-for-field; a route-parity
+ * drift guard pins the two in lockstep so the OpenAPI spec, SDK codegen,
+ * and the route serialization can never diverge.
+ *
+ * Before this schema existed the OpenAPI responses for those endpoints
+ * were `z.object({})` (empty), leaving the entire AI-chat resource
+ * untyped for codegen consumers (Pydantic / Go structs / TS types).
+ *
+ * `model` is sourced from {@link AgentModelSchema} so a new or renamed
+ * Claude model flows through automatically; `livekit` reuses the
+ * canonical {@link LiveKitInfoSchema} (auto-populated on create when a
+ * Mac with LiveKit credentials is available, absent otherwise).
+ */
+export const AgentSessionSchema = z.object({
+  id: z.string(),
+  account_id: z.string(),
+  driftstack_session_id: z.string().nullable(),
+  status: z.string(),
+  closed_reason: z.string().nullable(),
+  token_budget_total: z.number().int(),
+  token_budget_remaining: z.number().int(),
+  transcript_length: z.number().int(),
+  closed_at: z.string().nullable(),
+  created_by_user_id: z.string().nullable(),
+  mode: z.enum(['manual', 'ai', 'pair']),
+  model: AgentModelSchema,
+  pair_mode_state: z.object({ kind: z.string() }).passthrough().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+  livekit: LiveKitInfoSchema.optional(),
+});
+
+export type AgentSession = z.infer<typeof AgentSessionSchema>;

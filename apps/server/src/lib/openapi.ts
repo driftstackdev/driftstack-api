@@ -120,6 +120,7 @@ import {
   SessionEgressConfigSchema,
   SavedProxyConfigSchema,
   AgentModelSchema,
+  AgentSessionSchema,
 } from '@driftstack/api-types';
 
 const PaginatedSessionsSchema = z.object({
@@ -183,6 +184,7 @@ function buildRegistry(): OpenAPIRegistry {
   r.register('UpdateAccountMeRequest', UpdateAccountMeRequestSchema);
   r.register('ApiKey', ApiKeySchema);
   r.register('Session', SessionSchema);
+  r.register('AgentSession', AgentSessionSchema);
   r.register('SessionState', SessionStateSchema);
   r.register('Problem', ProblemSchema);
   r.register('UsagePeriodSummary', UsagePeriodSummarySchema);
@@ -2661,7 +2663,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       201: {
         description: 'Agent session created; transcript empty + full budget remaining.',
-        content: { 'application/json': { schema: z.object({}) } },
+        content: { 'application/json': { schema: AgentSessionSchema } },
       },
       ...errors4xx,
       503: {
@@ -2679,7 +2681,9 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Agent sessions for the authenticated account.',
-        content: { 'application/json': { schema: z.object({ data: z.array(z.object({})) }) } },
+        content: {
+          'application/json': { schema: z.object({ data: z.array(AgentSessionSchema) }) },
+        },
       },
       ...errors4xx,
       503: {
@@ -2696,8 +2700,8 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
-        description: 'Agent session envelope.',
-        content: { 'application/json': { schema: z.object({}) } },
+        description: 'Agent session resource.',
+        content: { 'application/json': { schema: AgentSessionSchema } },
       },
       404: { description: 'Agent session not found.', content: problemContent },
       ...errors4xx,
