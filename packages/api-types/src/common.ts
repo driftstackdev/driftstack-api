@@ -461,14 +461,94 @@ export const LOCKED_ARCHETYPE_ID = 'iphone16pro_ios18_7_safari26_4';
 export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 16 Pro / iOS 18.7 / Safari 26.4';
 
 /**
- * Map an internal archetype identifier to its human-readable label.
- * Falls back to the identifier itself when unknown — UIs surface the
- * raw id rather than crash. Tests can ship known-archetype labels by
- * extending this record before/after V-136.
+ * Multi-archetype registry — the catalogue of device archetypes the
+ * platform models. Driftstack is NOT a single-device product: it spans
+ * many iPhone/iPad models across iOS + Safari versions. LOCKED_ARCHETYPE_ID
+ * above is just the current launch DEFAULT (the entry whose fingerprint
+ * atlas is populated + launch-ready) — NOT the universe of archetypes.
+ *
+ * `status` reflects fingerprint-atlas readiness, so a new device can be
+ * registered as a recognized slug BEFORE its atlas is captured:
+ *   - 'launch'    — populated + the current default at v1.0
+ *   - 'reference' — captured reference archetype (e.g. Family A baseline)
+ *   - 'planned'   — recognized slug, atlas not yet populated (placeholder)
+ *
+ * Slugs MUST match Agent-1's atlas naming `<device>_ios<X_Y>_safari<X_Y>`
+ * (docs/architecture/archetype-naming-convention.md). Add an entry when a
+ * new device/version is captured — the display labels (below), the future
+ * SDK archetype union, and the dashboard archetype selector all derive
+ * from this single source instead of re-hardcoding a list. Flipping the
+ * launch default = changing which entry is `status:'launch'`, NOT a
+ * system-wide slug swap.
  */
-export const ARCHETYPE_DISPLAY_LABEL: Record<string, string> = {
-  [LOCKED_ARCHETYPE_ID]: LOCKED_ARCHETYPE_DISPLAY_LABEL,
-};
+export type ArchetypeCanvasFamily = 'A' | 'B';
+export type ArchetypeStatus = 'launch' | 'reference' | 'planned';
+
+export interface ArchetypeConfig {
+  /** Canonical slug, e.g. `iphone17_ios18_7_safari26_4`. */
+  readonly id: string;
+  /** Human-renderable label, e.g. `iPhone 17 / iOS 18.7 / Safari 26.4`. */
+  readonly displayLabel: string;
+  /** Marketing device name, e.g. `iPhone 16 Pro`, `iPad Pro`. */
+  readonly device: string;
+  /** iOS version segment of the slug, e.g. `18.7`. */
+  readonly iosVersion: string;
+  /** Safari version segment of the slug, e.g. `26.4`. */
+  readonly safariVersion: string;
+  /** Canvas pipeline family (Wave 29-408 A/B split). */
+  readonly canvasFamily: ArchetypeCanvasFamily;
+  /** Fingerprint-atlas readiness — see the enum above. */
+  readonly status: ArchetypeStatus;
+}
+
+export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
+  {
+    id: LOCKED_ARCHETYPE_ID,
+    displayLabel: LOCKED_ARCHETYPE_DISPLAY_LABEL,
+    device: 'iPhone 16 Pro',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'launch',
+  },
+  {
+    id: 'iphone16pro_ios18_6_safari18_6',
+    displayLabel: 'iPhone 16 Pro / iOS 18.6 / Safari 18.6',
+    device: 'iPhone 16 Pro',
+    iosVersion: '18.6',
+    safariVersion: '18.6',
+    canvasFamily: 'A',
+    status: 'reference',
+  },
+  {
+    id: 'iphone17_ios18_7_safari26_4',
+    displayLabel: 'iPhone 17 / iOS 18.7 / Safari 26.4',
+    device: 'iPhone 17',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'planned',
+  },
+  {
+    id: 'iphone17_ios18_7_safari26_5',
+    displayLabel: 'iPhone 17 / iOS 18.7 / Safari 26.5',
+    device: 'iPhone 17',
+    iosVersion: '18.7',
+    safariVersion: '26.5',
+    canvasFamily: 'B',
+    status: 'planned',
+  },
+];
+
+/**
+ * Map an internal archetype identifier to its human-readable label,
+ * derived from ARCHETYPE_REGISTRY (single source of truth). Falls back to
+ * the identifier itself when unknown — UIs surface the raw id rather than
+ * crash.
+ */
+export const ARCHETYPE_DISPLAY_LABEL: Record<string, string> = Object.fromEntries(
+  ARCHETYPE_REGISTRY.map((a) => [a.id, a.displayLabel]),
+);
 
 export function archetypeDisplayLabel(id: string): string {
   return ARCHETYPE_DISPLAY_LABEL[id] ?? id;

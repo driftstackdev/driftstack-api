@@ -266,12 +266,37 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     expect(body).toMatch(
       /export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4';/,
     );
+    // ARCHETYPE_DISPLAY_LABEL is now DERIVED from ARCHETYPE_REGISTRY (the
+    // multi-archetype source of truth) rather than a hand-built single
+    // entry — labels for every registered archetype, not just the locked one.
     expect(body).toMatch(
-      /export const ARCHETYPE_DISPLAY_LABEL: Record<string, string> = \{\s*\n?\s*\[LOCKED_ARCHETYPE_ID\]: LOCKED_ARCHETYPE_DISPLAY_LABEL,\s*\n?\s*\};/,
+      /export const ARCHETYPE_DISPLAY_LABEL: Record<string, string> = Object\.fromEntries\(\s*\n?\s*ARCHETYPE_REGISTRY\.map\(\(a\) => \[a\.id, a\.displayLabel\]\),\s*\n?\s*\);/,
     );
     expect(body).toMatch(
       /export function archetypeDisplayLabel\(id: string\): string \{\s*\n?\s*return ARCHETYPE_DISPLAY_LABEL\[id\] \?\? id;\s*\n?\s*\}/,
     );
+  });
+
+  it('ARCHETYPE_REGISTRY is the multi-archetype catalogue (NOT a single hardcoded device): ArchetypeConfig shape + status enum (launch/reference/planned for atlas-readiness) + the locked id is the sole status:launch entry + iphone17 slugs registered as planned placeholders', () => {
+    // The platform models a device MATRIX; the registry is the source of
+    // truth. A drift back to a single hardcoded archetype would re-break
+    // the multi-archetype architecture.
+    expect(body).toMatch(/export interface ArchetypeConfig \{/);
+    expect(body).toMatch(/export type ArchetypeStatus = 'launch' \| 'reference' \| 'planned';/);
+    expect(body).toMatch(/export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig\[\] = \[/);
+    // Slugs are registered (incl. iphone17 placeholders) so the cutover is
+    // a status flip, not a system-wide slug swap.
+    expect(body).toMatch(/id: 'iphone17_ios18_7_safari26_4',/);
+    expect(body).toMatch(/id: 'iphone17_ios18_7_safari26_5',/);
+    expect(body).toMatch(/id: 'iphone16pro_ios18_6_safari18_6',/);
+    // The locked id is the one launch-default entry, reusing the constants
+    // (no drift between LOCKED_* and the registry).
+    expect(body).toMatch(
+      /id: LOCKED_ARCHETYPE_ID,\s*\n?\s*displayLabel: LOCKED_ARCHETYPE_DISPLAY_LABEL,/,
+    );
+    expect(body).toMatch(/status: 'launch',/);
+    expect(body).toMatch(/status: 'reference',/);
+    expect(body).toMatch(/status: 'planned',/);
   });
 
   it('V-174 scope split framing pinned: account_owner (customer-account control via ctx.account.id) + driftstack_internal_admin (staff-only gates /v1/admin/* with admin.driftstack.dev Cloudflare Access SSO V-135 + defense-in-depth) + admin compat alias (satisfies BOTH during migration; founder-driven migration script promotes internal admin keys + re-scopes customer admin → account_owner; admin deprecated + removed after)', () => {
