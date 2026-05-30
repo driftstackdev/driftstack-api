@@ -32,6 +32,8 @@ import {
   AdminAccountResponseSchema,
   CreateProfileRequestSchema,
   ListProfilesResponseSchema,
+  ProfileExportEnvelopeSchema,
+  ProfileImportRequestSchema,
   ProfileSchema,
   UpdateProfileRequestSchema,
   AdminApplyIpnRequestSchema,
@@ -4402,6 +4404,71 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Cloned profile.',
         content: { 'application/json': { schema: ProfileResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+
+  // ── V-480 profile export / import (data portability) ───────────────────
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/profiles/{id}/export',
+    summary: 'Export a profile as a versioned JSON envelope (metadata-only)',
+    tags: ['profiles'],
+    security: auth,
+    request: { params: z.object({ id: z.string() }) },
+    responses: {
+      200: {
+        description: 'Versioned export envelope (re-import via POST /v1/profiles/import).',
+        content: { 'application/json': { schema: ProfileExportEnvelopeSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/profiles/import',
+    summary: 'Import a profile from a v1 export envelope (mints a fresh profile)',
+    tags: ['profiles'],
+    security: auth,
+    request: {
+      body: { content: { 'application/json': { schema: ProfileImportRequestSchema } } },
+    },
+    responses: {
+      200: {
+        description: 'Imported profile (a fresh id is minted in the caller account).',
+        content: { 'application/json': { schema: ProfileResponseOpenApi } },
+      },
+      ...errors4xx,
+    },
+  });
+  // 2026-05-22 — V-666 transfer ownership of a profile to another account
+  // by id (the recipient shares their acc_<uuid> out-of-band).
+  const TransferProfileRequestOpenApi = z.object({
+    recipient_account_id: z.string().describe('Recipient account id (acc_<uuid>).'),
+  });
+  const TransferProfileResponseOpenApi = z.object({
+    new_profile: ProfileResponseOpenApi,
+    recipient_account_id: z.string(),
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/profiles/{id}/transfer',
+    summary: 'Transfer profile ownership to another Driftstack account by id',
+    tags: ['profiles'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: { content: { 'application/json': { schema: TransferProfileRequestOpenApi } } },
+    },
+    responses: {
+      200: {
+        description: 'Profile transferred; a fresh profile is minted in the recipient account.',
+        content: { 'application/json': { schema: TransferProfileResponseOpenApi } },
+      },
+      404: {
+        description: 'Profile not found, or recipient account does not exist.',
+        content: problemContent,
       },
       ...errors4xx,
     },

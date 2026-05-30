@@ -148,6 +148,11 @@ describe('OpenAPI spec generation', () => {
         '/v1/profiles/{id}/launch',
         // V-313 profile clone
         '/v1/profiles/{id}/clone',
+        // V-480 profile export / import (data portability)
+        '/v1/profiles/{id}/export',
+        '/v1/profiles/import',
+        // V-666 profile ownership transfer
+        '/v1/profiles/{id}/transfer',
         // V-312 profile snapshots
         '/v1/profiles/{id}/snapshots',
         '/v1/profile-snapshots',
