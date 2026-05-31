@@ -124,7 +124,46 @@ describe('GET /v1/status/subscribe/confirm', () => {
     expect(welcome.vars.unsubscribeLink).toMatch(/\/subscribe\/unsubscribe\?token=/);
   });
 
-  it('404 on unknown / used token', async () => {
+  it('404 + no duplicate welcome when re-using an already-consumed confirm token', async () => {
+    // markConfirmed clears confirm_token_hash, so a re-clicked confirm link
+    // must 404 — NOT silently re-confirm, which would rotate the unsubscribe
+    // token (breaking the link in the welcome email the user already holds)
+    // and send a second welcome. Guards the single-use invariant
+    // behaviorally; the test above only asserts the post-confirm state, and a
+    // refactor dropping the hash-clear would slip past it.
+    fx = await buildTestApp();
+    await fx.app.inject({
+      method: 'POST',
+      url: '/v1/status/subscribe',
+      headers,
+      payload: { email: 'user@example.test' },
+    });
+    const token = getConfirmTokenFromLastEmail(fx);
+
+    const first = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/status/subscribe/confirm?token=${encodeURIComponent(token)}`,
+    });
+    expect(first.statusCode).toBe(200);
+    const unsubHashAfterFirst = fx.statusSubscribersRepo.getAll()[0]!.unsubscribeTokenHash;
+    const welcomeCount = fx.emailSends.filter(
+      (e) => e.template === 'status-subscription-welcome',
+    ).length;
+
+    // Re-click the same (now consumed) confirm link.
+    const second = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/status/subscribe/confirm?token=${encodeURIComponent(token)}`,
+    });
+    expect(second.statusCode).toBe(404);
+    // Unsubscribe token NOT rotated + no second welcome email sent.
+    expect(fx.statusSubscribersRepo.getAll()[0]!.unsubscribeTokenHash).toBe(unsubHashAfterFirst);
+    expect(fx.emailSends.filter((e) => e.template === 'status-subscription-welcome').length).toBe(
+      welcomeCount,
+    );
+  });
+
+  it('404 on an unknown (never-issued) confirm token', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'GET',

@@ -40,6 +40,13 @@ verified-clean, and the prioritized open queue. Companion:
   `aed6a0db` snapshot↔live-spec structural drift guard · `d845d47e` models.py
   codegen resync · `f5343158` suspend-reclaim integration wiring + full-chain test ·
   `02830641`/`b5fa7a98`/`79a5f0ab`/`a99866c6` internal docs.
+- status-subscribe: behavioral single-use guard for the confirm token (subscribe→
+  confirm→re-confirm = 404, unsubscribe token NOT rotated, no second welcome). The
+  existing "404 on unknown / used token" test only exercised an UNKNOWN token; the
+  re-use-after-confirm invariant (repo `markConfirmed` nulls `confirm_token_hash`)
+  was unguarded — renamed that test for accuracy. See surfaced #10 +
+  `project_status_subscribers_audit_clean` (subsystem otherwise CLEAN: 256-bit
+  hashed tokens, double-opt-in, per-subscriber unsub, GDPR 90d purge).
 
 ## Surfaced — real findings, fixes need a focused (non-deep-session) pass
 
@@ -129,6 +136,21 @@ verified-clean, and the prioritized open queue. Companion:
    the SSE-token log fix. At wiring: redact type-step `text` in results (reuse the
    V-494 / `lib/redact-url.ts` posture) + prefer runtime vault-injection. Builders +
    mock otherwise clean.
+10. **[LOW-MEDIUM — SURFACED 2026-05-31; founder/legal] Status-subscription
+    unsubscribe-token rotation breaks older email unsubscribe links** —
+    `project_status_subscribers_audit_clean`. The incident-notification fan-out
+    (`incident-notifications.ts:99` `rotateUnsubscribeToken`) rotates the unsubscribe
+    token on every send, so each new incident invalidates ALL prior unsubscribe links
+    (the welcome email's link breaks on the first incident). CAN-SPAM §316.5 wants the
+    opt-out functional ≥30d post-send; GDPR Art. 7(3) wants withdrawal as easy as
+    consent. Recipients can still unsub via the LATEST email or re-subscribe-then-unsub
+    (LOW-MEDIUM + low frequency). Rotation is architecturally forced (only the token
+    HASH is stored → the fan-out must mint a fresh plaintext to embed). Fix = an
+    HMAC-derived stable per-subscriber token (recomputable, never stored plaintext,
+    every email's link works) OR keep-N-recent-valid — a token-scheme redesign with
+    compliance + List-Unsubscribe-One-Click implications → **founder/legal decision,
+    don't auto-flip**. Rest of the subsystem is CLEAN (see Verified-clean + the shipped
+    single-use guard above).
 
 ## Verified clean — do NOT re-audit (re-sweep = churn)
 
