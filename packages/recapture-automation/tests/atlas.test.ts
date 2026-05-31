@@ -531,3 +531,37 @@ describe('V-533.B classifyOutcomes — direct point-query helper', () => {
     ).toBe('drifting');
   });
 });
+
+describe('V-533.B buildAtlas — snapshot determinism (order-independence)', () => {
+  it('same runs sharing an exact completedAtMs yield the same canonical snapshot regardless of input order (id tiebreaker)', () => {
+    const mk = (id: string, value: string): RecaptureRun =>
+      makeRun({
+        id,
+        archetypeId: 'arch1',
+        baselineIos: '18.7',
+        targetIos: '18.8',
+        completedAtMs: 500, // identical timestamp → exercises the id tiebreaker
+        comparisons: [
+          {
+            surfaceId: 'webgl.G3',
+            outcome: 'diff',
+            baselineValue: 'base',
+            recapturedValue: value,
+            notes: null,
+          },
+        ],
+      });
+    const runA = mk('run-a', 'A');
+    const runB = mk('run-b', 'B');
+
+    const forward = buildAtlas({ runs: [runA, runB], generatedAtMs: 1 });
+    const reversed = buildAtlas({ runs: [runB, runA], generatedAtMs: 1 });
+
+    // Order-independent (the documented buildAtlas contract).
+    expect(forward.snapshots).toEqual(reversed.snapshots);
+    // Deterministic winner: on the timestamp tie the higher id sorts last in
+    // the oldest-first walk → its value overwrites last → wins.
+    const key = 'arch1@18.8+26.4';
+    expect(forward.snapshots[key]?.surfaces['webgl.G3']?.value).toBe('B');
+  });
+});

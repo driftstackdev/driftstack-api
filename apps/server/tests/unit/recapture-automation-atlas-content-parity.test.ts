@@ -144,9 +144,10 @@ describe('W460.C packages/recapture-automation/src/atlas.ts content parity', () 
     expect(body).toMatch(/classification = 'volatile';/);
   });
 
-  it("Snapshot walk: oldest-first sort + 'Walking runs oldest-first → later writes overwrite, so the final state is the most-recent value per surface'; capture_error + missing_surface skipped from snapshot writes; capturedAtMs fallback completedAtMs ?? createdAtMs", () => {
+  it("Snapshot walk: oldest-first sort with an id tiebreaker (deterministic on equal completedAtMs — honours 'same runs in any order → same Atlas') + 'Walking runs oldest-first → later writes overwrite, so the final state is the most-recent value per surface'; capture_error + missing_surface skipped from snapshot writes; capturedAtMs fallback completedAtMs ?? createdAtMs", () => {
+    expect(body).toMatch(/const completedSorted = \[\.\.\.completed\]\.sort\(/);
     expect(body).toMatch(
-      /const completedSorted = \[\.\.\.completed\]\.sort\(\s*\n?\s*\(a, b\) => \(a\.completedAtMs \?\? 0\) - \(b\.completedAtMs \?\? 0\),\s*\n?\s*\);/,
+      /\(a, b\) =>\s*\n?\s*\(a\.completedAtMs \?\? 0\) - \(b\.completedAtMs \?\? 0\) \|\| a\.id\.localeCompare\(b\.id\),/,
     );
     expect(body).toMatch(
       /if \(cmp\.outcome === 'capture_error' \|\| cmp\.outcome === 'missing_surface'\) \{\s*\n?\s*continue;\s*\n?\s*\}\s*\n?\s*\/\/ Walking runs oldest-first → later writes overwrite, so the\s*\n?\s*\/\/ final state is the most-recent value per surface\.\s*\n?\s*existing\.surfaces\[cmp\.surfaceId\] = \{\s*\n?\s*value: cmp\.recapturedValue,\s*\n?\s*capturedAtMs: run\.completedAtMs \?\? run\.createdAtMs,\s*\n?\s*\};/,

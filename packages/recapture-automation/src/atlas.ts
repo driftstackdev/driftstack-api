@@ -183,8 +183,14 @@ export function buildAtlas(opts: BuildAtlasOpts): Atlas {
 
   // Snapshots: most-recent canonical value per (archetype, version, surface).
   const snapshots: Record<string, ArchetypeVersionSnapshot> = {};
+  // Oldest-first so later writes overwrite (most-recent value wins). The
+  // `id` tiebreaker keeps the walk order — and thus the canonical snapshot
+  // value — deterministic when two runs of the same (archetype, version)
+  // share an exact `completedAtMs`; without it a stable sort would leak
+  // input order, violating the "same runs in any order → same Atlas"
+  // contract documented on buildAtlas.
   const completedSorted = [...completed].sort(
-    (a, b) => (a.completedAtMs ?? 0) - (b.completedAtMs ?? 0),
+    (a, b) => (a.completedAtMs ?? 0) - (b.completedAtMs ?? 0) || a.id.localeCompare(b.id),
   );
   for (const run of completedSorted) {
     const key = snapshotKey(run);
