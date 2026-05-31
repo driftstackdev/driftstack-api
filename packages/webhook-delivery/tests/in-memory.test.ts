@@ -249,13 +249,13 @@ describe('processTick — failure + retry curve', () => {
     expect(updated?.nextAttemptAtMs).toBe(nowMs() + BACKOFF_MS_BY_ATTEMPT[1]);
   });
 
-  it('fifth failure → record promoted to DLQ', async () => {
+  it('sixth failure → record promoted to DLQ', async () => {
     const { fn } = captureFetch(() => ({ status: 500 }));
     const { handles, advance } = build(fn);
 
     const record = await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
-    // Five failed attempts. After the 5th, the record hits maxAttempts
-    // (default 5) and lands in DLQ.
+    // Six failed attempts (initial + 5 retries). After the 6th, the record
+    // hits maxAttempts (default 6) and lands in DLQ.
     for (let i = 1; i <= DEFAULT_MAX_ATTEMPTS; i += 1) {
       await handles.processTick();
       // Advance past the scheduled backoff so the next tick picks it up.
