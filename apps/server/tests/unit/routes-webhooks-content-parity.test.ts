@@ -59,6 +59,18 @@ describe('W439.A apps/server/src/routes/webhooks.ts content parity', () => {
     );
   });
 
+  it('SSRF guard: create + update reject a webhook URL aimed at a private/reserved target', () => {
+    expect(body).toMatch(
+      /import \{ unsafeWebhookTargetReason \} from '\.\.\/lib\/webhook-target-guard\.js';/,
+    );
+    // create path
+    expect(body).toMatch(/const unsafe = unsafeWebhookTargetReason\(body\.url\);/);
+    expect(body).toMatch(/if \(unsafe !== null\) throw new BadRequestError\(unsafe\);/);
+    // update path (url is optional on PATCH)
+    expect(body).toMatch(/if \(parsed\.data\.url !== undefined\) \{/);
+    expect(body).toMatch(/const unsafe = unsafeWebhookTargetReason\(parsed\.data\.url\);/);
+  });
+
   it('V-326e5 effectiveAccountIdForWrite framing pinned: admin-only gate for webhook write operations on team owners; throws ForbiddenError "Webhook writes on a team owner require admin role on that team."', () => {
     expect(body).toMatch(
       /\*\s*V-326e5 — admin-only gate for webhook write operations on team\s*\n?\s*\*\s*owners\. Returns the effective accountId \(string\) when team write\s*\n?\s*\*\s*should proceed, or undefined when self-scoped\. Throws ForbiddenError\s*\n?\s*\*\s*on member-role team requests\./,

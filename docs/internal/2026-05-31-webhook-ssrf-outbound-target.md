@@ -48,27 +48,32 @@ closes the `https → 30x → internal` bypass. Pinned in all three content-pari
 Safe: a well-behaved webhook receiver returns 2xx directly; pre-launch there are no
 customer endpoints relying on redirect-following.
 
+## FIXED — wave (create/update-time literal-IP block)
+
+The direct case (`https://10.0.0.5`, `https://localhost`, `https://[::1]`,
+`https://169.254.169.254`, IPv4-mapped `::ffff:…`) is now **rejected at create + PATCH**
+via `apps/server/src/lib/webhook-target-guard.ts::unsafeWebhookTargetReason`, wired
+into `routes/webhooks.ts` (400 `BadRequestError`). Built on Node's `net.BlockList`
+(vetted range math). Two non-obvious traps were caught empirically + pinned in the
+exhaustive unit test (`webhook-target-guard.test.ts`, incl. public-IP boundary cases
+so a typo'd CIDR can't false-positive): `new URL('https://[::1]/').hostname` keeps the
+brackets (strip before `isIP`), and `::ffff:0.0.0.0/96` in a BlockList matches EVERY
+IPv4 (so `::ffff:` mapped is rejected outright instead). Integration test asserts the
+metadata/private/loopback/localhost/IPv6-loopback cases → 400; content-parity pins the
+guard wiring. Zero legit false-positives (no real webhook targets an internal IP; DNS
+hostnames pass through to the connection-time layer below).
+
 ## REMAINING (surfaced — needs careful, well-tested impl)
 
-The direct case (`https://10.0.0.5`, `https://localhost`, `https://[::1]` set
-straight at create) is still allowed. Recommended layers:
-
-1. **Create/update-time block (easy, zero legit false-positives):** reject when the
-   URL host is `localhost`/`*.localhost` or a **literal IP** in a private/reserved
-   range (IPv4: `127/8`, `10/8`, `172.16/12`, `192.168/16`, `169.254/16`, `0/8`;
-   IPv6: `::1`, `fc00::/7` ULA, `fe80::/10` link-local, `::ffff:<private-v4>`). No
-   legit webhook targets these. Use `net.isIP` + explicit, well-tested range
-   predicates — get the boundaries exactly right (a bug here either misses a range or
-   rejects a legitimate public IP → customer-facing breakage), which is why it's
-   surfaced rather than shipped blind in a deep session.
-2. **Connection-time resolution + pinning (DNS-rebind-complete):** a create-time
+1. **Connection-time resolution + pinning (DNS-rebind-complete):** a create-time
    hostname check is insufficient — a hostname can resolve to a public IP at create
    and a private IP at delivery (DNS rebinding). Resolve at delivery, reject private
    targets, and connect to the _resolved_ IP (pin it) so the check and the connection
    agree. Easiest via undici with a custom `lookup`/connector, or a vetted
    SSRF-safe-fetch dependency.
-3. Reconcile the semi-blind oracle: the delivery-attempts log exposes per-attempt
-   status/timing for a customer-controlled target — acceptable once (1)+(2) restrict
+2. Reconcile the semi-blind oracle: the delivery-attempts log exposes per-attempt
+   status/timing for a customer-controlled target — acceptable once the redirect +
+   literal-IP + connection-time-pinning layers restrict
    the target set to public hosts.
 
 Recorded in memory `project_webhook_ssrf_outbound_target`.

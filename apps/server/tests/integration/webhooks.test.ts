@@ -74,6 +74,25 @@ describe('POST /v1/webhooks', () => {
     expect(body.type).toBe(PROBLEM_TYPES.ValidationFailed);
   });
 
+  it('400 (SSRF guard) when URL targets a private / loopback / metadata address', async () => {
+    fx = await buildTestApp();
+    for (const url of [
+      'https://169.254.169.254/h', // cloud metadata
+      'https://10.0.0.5/h', // RFC1918 private
+      'https://127.0.0.1/h', // loopback
+      'https://localhost/h',
+      'https://[::1]/h', // IPv6 loopback
+    ]) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/webhooks',
+        headers: auth(fx),
+        payload: { url, events: ['session.completed'] },
+      });
+      expect(res.statusCode, url).toBe(400);
+    }
+  });
+
   it('400 when events is empty', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

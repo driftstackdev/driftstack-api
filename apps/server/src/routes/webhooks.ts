@@ -15,6 +15,7 @@ import type {
 } from '../services/webhooks.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
+import { unsafeWebhookTargetReason } from '../lib/webhook-target-guard.js';
 
 /**
  * V-326e5 — admin-only gate for webhook write operations on team
@@ -117,6 +118,10 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const body = CreateWebhookRequestSchema.parse(request.body ?? {});
+      // SSRF guard — reject a webhook URL pointed at a private/loopback/
+      // reserved address or localhost (the delivery worker runs on our infra).
+      const unsafe = unsafeWebhookTargetReason(body.url);
+      if (unsafe !== null) throw new BadRequestError(unsafe);
       const eff = effectiveAccountIdForWrite(request, ctx);
       const created = await service.create(
         ctx,
@@ -197,6 +202,11 @@ export function registerWebhookRoutes(app: FastifyInstance, opts: WebhookRoutesO
       const parsed = UpdateWebhookRequestSchema.safeParse(request.body);
       if (!parsed.success)
         throw new BadRequestError(parsed.error.issues[0]?.message ?? 'Invalid body.');
+      // SSRF guard on a changed URL (partial update; url is optional).
+      if (parsed.data.url !== undefined) {
+        const unsafe = unsafeWebhookTargetReason(parsed.data.url);
+        if (unsafe !== null) throw new BadRequestError(unsafe);
+      }
       const eff = effectiveAccountIdForWrite(request, ctx);
       const row = await service.update(
         ctx,

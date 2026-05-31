@@ -59,16 +59,17 @@ verified-clean, and the prioritized open queue. Companion:
    (the flag masked the gap). **Fix is outward-facing** (complete the allow-list →
    disable the flag → restart → verify). Shipped a safe non-breaking boot-time warn
    guard (`lib/cors-posture.ts`) this wave so it can't silently recur.
-3. **[MEDIUM — redirect bypass FIXED 2026-05-31; rest SURFACED] Webhook delivery
+3. **[MEDIUM — two layers FIXED 2026-05-31; DNS-rebind SURFACED] Webhook delivery
    SSRF** — `2026-05-31-webhook-ssrf-outbound-target.md`. The server POSTs to a
-   customer-controlled webhook URL; create-time validation only enforces `https://`
-   (allows `https://localhost`/`https://10.x`/`https://[::1]`) and delivery followed
-   redirects, so `https://attacker → 30x → http://169.254.169.254` bypassed it.
-   **FIXED:** `redirect: 'error'` on all 3 delivery fetch sites (in-memory + durable
-   - worker), pinned. **REMAINING:** create-time literal-private-IP block (easy,
-     zero false-positives) + connection-time DNS-rebind pinning (harder — needs careful
-     impl). MEDIUM (blind/semi-blind: delivery log is a status/timing oracle, no body
-     exfil).
+   customer-controlled webhook URL. **FIXED:** (1) `redirect: 'error'` on all 3
+   delivery fetch sites (no `30x → internal` bypass); (2) create + PATCH literal-IP
+   block (`lib/webhook-target-guard.ts`, Node `net.BlockList` → `localhost` /
+   private / loopback / link-local / reserved / `::ffff:` mapped → 400), exhaustive
+   unit test (public-IP boundaries = no false-positive) + integration + content-parity
+   pin. **REMAINING:** connection-time DNS-rebind resolve+pin in the delivery fetch
+   (a create-time hostname check can't stop rebind) — undici custom connector /
+   ssrf-safe-fetch. MEDIUM (blind/semi-blind: delivery log is a status/timing oracle,
+   no body exfil).
 4. **[MEDIUM — app-log + Sentry FIXED 2026-05-31; nginx + design SURFACED] SSE
    `?ds_token=` / OAuth `?code=` in logs** — `2026-05-31-sse-token-in-logs.md`.
    The SSE auth bearer rides in the URL query (EventSource can't set headers); it
