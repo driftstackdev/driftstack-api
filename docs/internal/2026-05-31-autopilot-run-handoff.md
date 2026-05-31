@@ -121,7 +121,11 @@ cleanup, unsubscribe, `heartbeat.unref()` — no subscriber leak); pagination
 (NOWPayments) IPN → order state machine (`2026-05-31-crypto-ipn-state-machine-clean.md`
 — conservative status map: only `finished`→paid, `partially_paid`→non-granting
 `partial`; idempotent paid-grant on transition only; `isTerminalForward` blocks
-out-of-order downgrades — no underpayment/double-grant/revive).
+out-of-order downgrades — no underpayment/double-grant/revive). Stripe subscription →
+tier lifecycle (`2026-05-31-stripe-subscription-lifecycle-clean.md` — tier set only on
+active/trialing so `past_due` keeps access through dunning; `customer.subscription.deleted`
+→ downgrade to free; unknown price never grants; re-delivery idempotent; deleted-driven
+downgrade is correct, status-based would risk false-downgrade).
 
 ## Founder-gated — surface only, do NOT auto-do
 
