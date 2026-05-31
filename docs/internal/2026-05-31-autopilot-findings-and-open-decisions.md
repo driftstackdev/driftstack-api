@@ -27,8 +27,9 @@ re-derived). Companion to `2026-05-30-launch-readiness-verification.md`.
 - **OpenAPI 404-doc accuracy.** The customer-facing `{id}` routes now document the
   `404`/`409` their handlers actually return — profiles, webhooks (×6), sessions
   (×5), snapshots (×4, + restore's 409), agent-session message, web-session
-  revoke. Each verified to genuinely throw before documenting. (`dd38814e`,
-  `caa0b931`, `3e52e2d4`, `9503cbbf`)
+  revoke, and the internal admin routes that 404. Each verified to genuinely
+  throw before documenting. (`dd38814e`, `caa0b931`, `3e52e2d4`, `9503cbbf`,
+  `94291438`)
 - **gui-client SSE cleanup.** The notification `subscribeNotifications` close
   handle now removes the per-kind EventSource listeners too (was relying on GC of
   the closed source) — complete teardown per its documented contract. (`81f9da4d`)
@@ -118,9 +119,24 @@ or a non-trivial feature/migration that the agent should not make unilaterally.
    clone/launch). The endpoints exist + are now OpenAPI-documented; this is an
    SDK-surface coverage decision + multi-SDK feature work.
 
-7. **Low-value doc stragglers** (skip unless completeness is wanted): the
-   `/v1/sessions/{id}/proxy` egress routes (founder-managed egress surface) and the
-   internal `/v1/admin/*` `{id}` routes still lack explicit `404` docs.
+7. **OpenAPI has ZERO examples (launch-DX).** Verified: 0 examples in `openapi.ts`
+   AND in the live 369 KB `/openapi.json` (Scalar does not auto-generate them). So
+   the interactive API explorer at `api.driftstack.dev/docs` shows bare
+   field-name/type schemas with no concrete request/response examples — a real
+   developer-onboarding gap for a launching API. Adding them is safe + additive
+   (use the OpenAPI MediaType `example` at the route `content` level — do NOT
+   mutate the api-types zod schemas), but the values are a presentation judgment
+   and some touch gated decisions (a profile/session example must pick an
+   archetype → the pending iphone16pro-vs-iphone17 call; an api-key example picks
+   scopes). **Decide: do you want examples added, and which archetype/style?** I
+   can roll them out across the key customer endpoints once the archetype + style
+   are confirmed; non-archetype endpoints (api-keys, webhooks, sessions-by-id) are
+   safe to do immediately on your go-ahead.
+
+8. **Remaining doc stragglers** (intentionally left): `/v1/sessions/{id}/proxy`
+   egress routes (founder-managed egress surface). The internal `/v1/admin/*`
+   `404`s were completed (`94291438`); the validation-schedules `trigger` route
+   verifiably does not 404 (fires a recapture for any archetype).
 
 ---
 
