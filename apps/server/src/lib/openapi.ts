@@ -4339,7 +4339,28 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Created endpoint; plaintext signing secret returned ONCE.',
-        content: { 'application/json': { schema: CreateWebhookResponseSchema } },
+        content: {
+          'application/json': {
+            schema: CreateWebhookResponseSchema,
+            example: {
+              id: 'whk_2b1c3d4e-5f60-7a8b-9c0d-1e2f3a4b5c6d',
+              url: 'https://example.com/driftstack/webhooks',
+              secret_prefix: 'whsec_v1_2b1c',
+              prev_secret_prefix: null,
+              rotation_grace_expires_at: null,
+              events: ['session.completed', 'session.failed'],
+              description: 'Production webhook endpoint',
+              active: true,
+              consecutive_failures: 0,
+              last_success_at: null,
+              last_failure_at: null,
+              disabled_at: null,
+              delivery_counts: { delivered: 0, failed: 0, dlq: 0 },
+              created_at: '2026-05-31T12:00:00Z',
+              secret: 'whsec_v1_exampleexampleexampleexampleexample',
+            },
+          },
+        },
       },
       ...errors4xx,
     },
