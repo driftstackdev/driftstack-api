@@ -251,6 +251,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/sessions',
+    operationId: 'createSession',
     summary: 'Create a session',
     tags: ['sessions'],
     security: auth,
@@ -273,6 +274,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/sessions',
+    operationId: 'listSessions',
     summary: 'List sessions for the calling account',
     tags: ['sessions'],
     security: auth,
@@ -289,6 +291,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/sessions/{id}/navigate',
+    operationId: 'navigateSession',
     summary: 'Navigate to a URL within a session',
     tags: ['sessions'],
     security: auth,
@@ -318,6 +321,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/sessions/{id}/interact',
+    operationId: 'interactSession',
     summary: 'Send an interaction (tap / type / scroll / press) to the session',
     tags: ['sessions'],
     security: auth,
@@ -347,6 +351,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/sessions/{id}/wait',
+    operationId: 'waitSession',
     summary: 'Wait for a session-side condition (selector, url, time)',
     tags: ['sessions'],
     security: auth,
@@ -382,6 +387,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/sessions/{id}',
+    operationId: 'getSession',
     summary: 'Get a session by id (includes harness-reported egress_capabilities)',
     tags: ['sessions'],
     security: auth,
@@ -402,6 +408,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/sessions/{id}/state',
+    operationId: 'getSessionState',
     summary: 'Snapshot current session state (URL, title, cookies, localStorage)',
     tags: ['sessions'],
     security: auth,
@@ -433,6 +440,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/sessions/{id}/capture',
+    operationId: 'captureSession',
     summary: 'Capture a screenshot, DOM snapshot, or PDF of the session',
     tags: ['sessions'],
     security: auth,
@@ -474,6 +482,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/sessions/{id}',
+    operationId: 'destroySession',
     summary: 'Destroy a session',
     tags: ['sessions'],
     security: auth,
