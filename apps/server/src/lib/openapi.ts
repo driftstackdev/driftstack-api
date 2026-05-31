@@ -481,7 +481,22 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       201: {
         description: 'Key created. The plaintext is in the response — store it now.',
-        content: { 'application/json': { schema: CreateApiKeyResponseSchema } },
+        content: {
+          'application/json': {
+            schema: CreateApiKeyResponseSchema,
+            example: {
+              id: 'key_3f8a1b2c-4d5e-6f70-8a9b-0c1d2e3f4a5b',
+              name: 'ci-pipeline',
+              key_prefix: 'ds_live_3f8a',
+              scopes: ['read', 'write'],
+              last_used_at: null,
+              revoked_at: null,
+              expires_at: null,
+              created_at: '2026-05-31T12:00:00Z',
+              plaintext: 'ds_live_exampleexampleexampleexampleexample',
+            },
+          },
+        },
       },
       ...errors4xx,
     },
