@@ -128,14 +128,19 @@ or a non-trivial feature/migration that the agent should not make unilaterally.
    mutate the api-types zod schemas), but the values are a presentation judgment
    and some touch gated decisions (a profile/session example must pick an
    archetype → the pending iphone16pro-vs-iphone17 call; an api-key example picks
-   scopes). **STARTED** — request examples added to the two value-safe create
-   endpoints (api-keys + webhooks) per the standing "highest-value SAFE slice"
-   directive; the mechanism is verified (MediaType `example`, type-safe, no parity
-   break). **Still your call:** the example STYLE (one example vs multiple,
-   request-only vs +response), whether to keep going, and the archetype-touching
-   request examples (profile/session) which remain held for the
-   iphone16pro-vs-iphone17 launch call. Say the word and I'll extend across the
-   remaining non-archetype endpoints + add response examples.
+   scopes). **DONE (value-safe scope) — ~29 examples across all core flows, 11
+   commits.** Every non-archetype flow now has copy-ready request+response examples
+   in the Scalar explorer: auth (signup/login/verify/magic-link/password-reset),
+   api-keys (create/list/rotate), webhooks (create/get/update/rotate-secret),
+   agent-chat message, profile transfer, snapshots capture/restore, and the full
+   browser-automation loop (navigate/interact/wait/capture request→response). All
+   verified against the schemas; one-time secrets are clearly-fake low-entropy
+   placeholders; MediaType `example` on route content only (api-types zod schemas
+   untouched), type-safe + no parity break. **Still your call (held):** the
+   archetype-bearing examples (profile/session/snapshot create requests +
+   responses, which must pick an archetype → the iphone16pro-vs-iphone17 launch
+   decision) and the MFA-branching login response. Say the word on the archetype
+   and I'll add those too.
 
 8. **Remaining doc stragglers** (intentionally left): `/v1/sessions/{id}/proxy`
    egress routes (founder-managed egress surface). The internal `/v1/admin/*`
