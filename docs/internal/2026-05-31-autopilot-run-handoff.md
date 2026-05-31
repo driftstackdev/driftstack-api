@@ -51,6 +51,14 @@ verified-clean, and the prioritized open queue. Companion:
   `aed6a0db` snapshot↔live-spec structural drift guard · `d845d47e` models.py
   codegen resync · `f5343158` suspend-reclaim integration wiring + full-chain test ·
   `02830641`/`b5fa7a98`/`79a5f0ab`/`a99866c6` internal docs.
+- profile-transfer: added the missing source-ownership IDOR guard — caller transfers a
+  profile owned by a DIFFERENT account → 404 + profile NOT moved (single-app/shared-repo
+  so it exercises the `findById` accountId scope, not just row-absence). Transfer's other
+  tests were all recipient-side; clone had the equivalent, transfer did not. Fresh audit
+  of profiles export/import/transfer otherwise SOUND (export metadata-only/no browser-state
+  leak; import importer-scoped + fresh id + per-cycle anti-churn cap; transfer
+  source-scoped + recipient-verified + quota-bounded; unilateral push deliberate). See
+  `project_profiles_portability_audit_clean`.
 - status-subscribe: behavioral single-use guard for the confirm token (subscribe→
   confirm→re-confirm = 404, unsubscribe token NOT rotated, no second welcome). The
   existing "404 on unknown / used token" test only exercised an UNKNOWN token; the

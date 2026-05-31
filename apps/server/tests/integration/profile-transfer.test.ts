@@ -184,4 +184,37 @@ describe('POST /v1/profiles/:id/transfer', () => {
     expect(res.statusCode).toBe(404);
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.NotFound);
   });
+
+  it('404 when transferring a profile owned by a DIFFERENT account (source-ownership scope)', async () => {
+    // Seed a profile under a foreign account in the SHARED repo, then have the
+    // caller attempt to transfer it to a VALID recipient (so the route reaches
+    // the source-ownership check rather than 404-ing on an unknown recipient).
+    // transferProfile's findById is scoped to the caller's account, so it 404s
+    // (never confirming the profile exists in another account's namespace) and
+    // the foreign profile is NOT moved. Guards the source-ownership invariant
+    // against the accountId scope being dropped — clone has the equivalent test,
+    // transfer did not (its other tests are all recipient-side).
+    fx = await buildTestApp();
+    seedRecipient(fx, { id: RECIPIENT_ID });
+    const VICTIM_ID = '00000000-0000-4000-8000-0000000000c3';
+    const victimProfile = await fx.profilesRepo.insert({
+      accountId: VICTIM_ID,
+      name: 'victim-profile',
+      archetype: 'iphone16pro',
+      description: null,
+    });
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/prof_${victimProfile.id}/transfer`,
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'content-type': 'application/json' },
+      payload: { recipient_account_id: `acc_${RECIPIENT_ID}` },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.NotFound);
+
+    // The foreign profile was NOT moved — still owned by the victim account.
+    const still = await fx.profilesRepo.findById({ id: victimProfile.id, accountId: VICTIM_ID });
+    expect(still).not.toBeNull();
+  });
 });
