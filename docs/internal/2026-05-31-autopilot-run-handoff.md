@@ -103,8 +103,13 @@ verified-clean, and the prioritized open queue. Companion:
 7. **[LOW] Auth-flow consume race** — `2026-05-31-auth-flow-token-audit.md`.
    `consumeAuthToken` returns void → concurrent same-token submit lets both
    callers act (benign-to-minor). Needs a loser-behaviour decision.
-8. **[LOW] BYOK cache dedicated test** — guards `938ebf3a`; needs `buildTestApp`
-   to expose `byokKeyCache` + a byok-stored-then-budget-exhaust scenario.
+8. **[LOW — DONE 2026-05-31] BYOK cache clear-on-close guard** — guards `938ebf3a`.
+   Added `byok-clear-on-close-guard.test.ts` (source-pin drift-guard for the message
+   route's `if (result.session.status === 'closed') byokKeyCache?.delete(...)` clear +
+   its rationale comment) — the fix was previously unguarded (only the cache CLASS was
+   unit-tested). A full behavioral test still needs `buildTestApp` to expose
+   `byokKeyCache` + drive a budget-exhausted turn; the source-pin is the lightweight
+   regression guard.
 9. **[LOW — FORWARD, not live] recipe-library credential leak at Phase-3 wiring** —
    `2026-05-31-recipe-library-credential-leak-forward.md`. `packages/recipe-library`
    is unwired scaffolding (mock runner). `RecipeStep` type-steps inline plaintext
