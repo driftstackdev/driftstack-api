@@ -252,7 +252,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions',
     summary: 'Create a session',
-    tags: ['Sessions'],
+    tags: ['sessions'],
     security: auth,
     request: {
       body: {
@@ -274,7 +274,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/sessions',
     summary: 'List sessions for the calling account',
-    tags: ['Sessions'],
+    tags: ['sessions'],
     security: auth,
     request: { query: PaginationQuerySchema },
     responses: {
@@ -290,7 +290,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/navigate',
     summary: 'Navigate to a URL within a session',
-    tags: ['Sessions'],
+    tags: ['sessions'],
     security: auth,
     request: {
       params: z.object({ id: z.string().describe('Prefixed session id (ses_<uuid>)') }),
@@ -319,7 +319,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/interact',
     summary: 'Send an interaction (tap / type / scroll / press) to the session',
-    tags: ['Sessions'],
+    tags: ['sessions'],
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
@@ -348,7 +348,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/wait',
     summary: 'Wait for a session-side condition (selector, url, time)',
-    tags: ['Sessions'],
+    tags: ['sessions'],
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
@@ -383,7 +383,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/sessions/{id}',
     summary: 'Get a session by id (includes harness-reported egress_capabilities)',
-    tags: ['Sessions'],
+    tags: ['sessions'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
     responses: {
@@ -403,7 +403,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/sessions/{id}/state',
     summary: 'Snapshot current session state (URL, title, cookies, localStorage)',
-    tags: ['Sessions'],
+    tags: ['sessions'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
     responses: {
@@ -434,7 +434,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/capture',
     summary: 'Capture a screenshot, DOM snapshot, or PDF of the session',
-    tags: ['Sessions'],
+    tags: ['sessions'],
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
@@ -475,7 +475,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'delete',
     path: '/v1/sessions/{id}',
     summary: 'Destroy a session',
-    tags: ['Sessions'],
+    tags: ['sessions'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
     responses: {
@@ -493,7 +493,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/api-keys',
     summary: 'Create an API key (returns plaintext once, never retrievable later)',
-    tags: ['API keys'],
+    tags: ['api-keys'],
     security: auth,
     request: {
       body: {
@@ -533,7 +533,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/api-keys',
     summary: 'List API keys for the calling account',
-    tags: ['API keys'],
+    tags: ['api-keys'],
     security: auth,
     responses: {
       200: {
@@ -566,7 +566,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'delete',
     path: '/v1/api-keys/{id}',
     summary: 'Revoke an API key',
-    tags: ['API keys'],
+    tags: ['api-keys'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
     responses: {
@@ -583,7 +583,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/api-keys/{id}/rotate',
     summary: 'Rotate an API key (V-296). 24h grace; new plaintext shown once',
-    tags: ['API keys'],
+    tags: ['api-keys'],
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
@@ -631,7 +631,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/usage',
     summary: 'Current-period usage totals + tier quotas',
-    tags: ['Usage'],
+    tags: ['usage'],
     security: auth,
     responses: {
       200: {
@@ -657,7 +657,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/usage/series',
     summary: 'Daily-bucketed usage time series for the calling account',
-    tags: ['Usage'],
+    tags: ['usage'],
     security: auth,
     request: {
       query: z.object({
@@ -718,7 +718,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/team/invites',
     summary: 'Invite an email to join the calling owner’s team',
-    tags: ['Team'],
+    tags: ['team'],
     security: auth,
     request: {
       body: {
@@ -747,7 +747,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/team/invites',
     summary: 'List pending invites for the calling owner',
-    tags: ['Team'],
+    tags: ['team'],
     security: auth,
     responses: {
       200: {
@@ -762,7 +762,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/team/invites/accept',
     summary: 'Accept a pending team invite',
-    tags: ['Team'],
+    tags: ['team'],
     security: auth,
     request: {
       body: {
@@ -794,7 +794,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/team/members',
     summary: 'List confirmed team members for the calling owner',
-    tags: ['Team'],
+    tags: ['team'],
     security: auth,
     responses: {
       200: {
@@ -809,7 +809,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/team/owners',
     summary: 'List owner accounts the caller is a member of (V-326c)',
-    tags: ['Team'],
+    tags: ['team'],
     security: auth,
     responses: {
       200: {
@@ -824,7 +824,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'delete',
     path: '/v1/team/members/{id}',
     summary: 'Remove a team member',
-    tags: ['Team'],
+    tags: ['team'],
     security: auth,
     request: { params: z.object({ id: z.string() }) },
     responses: {
@@ -842,7 +842,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/health',
     summary: 'Liveness probe',
-    tags: ['Meta'],
+    tags: ['meta'],
     responses: {
       200: {
         description: 'Server is up.',
