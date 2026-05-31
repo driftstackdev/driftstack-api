@@ -15,7 +15,7 @@
   "servers": [
     {
       "url": "https://api.driftstack.dev",
-      "description": "Production (placeholder)"
+      "description": "Production"
     }
   ],
   "components": {
@@ -368,6 +368,502 @@
           "updated_at",
           "last_state_at",
           "destroyed_at"
+        ]
+      },
+      "AgentSession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "driftstack_session_id": {
+            "type": ["string", "null"]
+          },
+          "status": {
+            "type": "string"
+          },
+          "closed_reason": {
+            "type": ["string", "null"]
+          },
+          "token_budget_total": {
+            "type": "integer"
+          },
+          "token_budget_remaining": {
+            "type": "integer"
+          },
+          "transcript_length": {
+            "type": "integer"
+          },
+          "closed_at": {
+            "type": ["string", "null"]
+          },
+          "created_by_user_id": {
+            "type": ["string", "null"]
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["manual", "ai", "pair"]
+          },
+          "model": {
+            "type": "string",
+            "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+          },
+          "pair_mode_state": {
+            "type": ["object", "null"],
+            "properties": {
+              "kind": {
+                "type": "string"
+              }
+            },
+            "required": ["kind"]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "livekit": {
+            "type": "object",
+            "properties": {
+              "ws_url": {
+                "type": "string",
+                "format": "uri"
+              },
+              "room": {
+                "type": "string"
+              },
+              "token": {
+                "type": "string"
+              },
+              "participant_identity": {
+                "type": "string"
+              },
+              "expires_at": {
+                "type": "string"
+              }
+            },
+            "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "driftstack_session_id",
+          "status",
+          "closed_reason",
+          "token_budget_total",
+          "token_budget_remaining",
+          "transcript_length",
+          "closed_at",
+          "created_by_user_id",
+          "mode",
+          "model",
+          "pair_mode_state",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "AgentIntent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["navigate"]
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": ["kind", "url"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["interact"]
+              },
+              "action": {
+                "type": "string",
+                "enum": ["tap", "type", "scroll", "swipe"]
+              },
+              "selector": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              }
+            },
+            "required": ["kind", "action"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["wait"]
+              },
+              "condition": {
+                "type": "string",
+                "enum": ["idle", "selector_visible"]
+              },
+              "selector": {
+                "type": "string"
+              },
+              "timeoutMs": {
+                "type": "integer"
+              }
+            },
+            "required": ["kind", "condition"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["capture"]
+              },
+              "capture": {
+                "type": "string",
+                "enum": ["screenshot", "dom_snapshot", "pdf"]
+              }
+            },
+            "required": ["kind", "capture"]
+          }
+        ]
+      },
+      "IntentResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["success"]
+              },
+              "intent": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["navigate"]
+                      },
+                      "url": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "url"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["interact"]
+                      },
+                      "action": {
+                        "type": "string",
+                        "enum": ["tap", "type", "scroll", "swipe"]
+                      },
+                      "selector": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "action"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["wait"]
+                      },
+                      "condition": {
+                        "type": "string",
+                        "enum": ["idle", "selector_visible"]
+                      },
+                      "selector": {
+                        "type": "string"
+                      },
+                      "timeoutMs": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["kind", "condition"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["capture"]
+                      },
+                      "capture": {
+                        "type": "string",
+                        "enum": ["screenshot", "dom_snapshot", "pdf"]
+                      }
+                    },
+                    "required": ["kind", "capture"]
+                  }
+                ]
+              },
+              "summary": {
+                "type": "string"
+              },
+              "captureId": {
+                "type": "string"
+              }
+            },
+            "required": ["kind", "intent", "summary"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["failure"]
+              },
+              "intent": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["navigate"]
+                      },
+                      "url": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "url"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["interact"]
+                      },
+                      "action": {
+                        "type": "string",
+                        "enum": ["tap", "type", "scroll", "swipe"]
+                      },
+                      "selector": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "action"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["wait"]
+                      },
+                      "condition": {
+                        "type": "string",
+                        "enum": ["idle", "selector_visible"]
+                      },
+                      "selector": {
+                        "type": "string"
+                      },
+                      "timeoutMs": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["kind", "condition"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["capture"]
+                      },
+                      "capture": {
+                        "type": "string",
+                        "enum": ["screenshot", "dom_snapshot", "pdf"]
+                      }
+                    },
+                    "required": ["kind", "capture"]
+                  }
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": ["kind", "intent", "reason"]
+          }
+        ]
+      },
+      "Recipe": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "agent_session_id": {
+            "type": ["string", "null"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "intent_count": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "agent_session_id",
+          "label",
+          "description",
+          "intent_count",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "RecipeDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "agent_session_id": {
+            "type": ["string", "null"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "intent_count": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "intent_log": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["navigate"]
+                    },
+                    "url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind", "url"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["interact"]
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": ["tap", "type", "scroll", "swipe"]
+                    },
+                    "selector": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind", "action"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["wait"]
+                    },
+                    "condition": {
+                      "type": "string",
+                      "enum": ["idle", "selector_visible"]
+                    },
+                    "selector": {
+                      "type": "string"
+                    },
+                    "timeoutMs": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": ["kind", "condition"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["capture"]
+                    },
+                    "capture": {
+                      "type": "string",
+                      "enum": ["screenshot", "dom_snapshot", "pdf"]
+                    }
+                  },
+                  "required": ["kind", "capture"]
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "account_id",
+          "agent_session_id",
+          "label",
+          "description",
+          "intent_count",
+          "created_at",
+          "updated_at",
+          "intent_log"
         ]
       },
       "SessionState": {
@@ -2171,8 +2667,9 @@
   "paths": {
     "/v1/sessions": {
       "post": {
+        "operationId": "createSession",
         "summary": "Create a session",
-        "tags": ["Sessions"],
+        "tags": ["sessions"],
         "security": [
           {
             "BearerAuth": []
@@ -2371,8 +2868,9 @@
         }
       },
       "get": {
+        "operationId": "listSessions",
         "summary": "List sessions for the calling account",
-        "tags": ["Sessions"],
+        "tags": ["sessions"],
         "security": [
           {
             "BearerAuth": []
@@ -2574,8 +3072,9 @@
     },
     "/v1/sessions/{id}/navigate": {
       "post": {
+        "operationId": "navigateSession",
         "summary": "Navigate to a URL within a session",
-        "tags": ["Sessions"],
+        "tags": ["sessions"],
         "security": [
           {
             "BearerAuth": []
@@ -2615,6 +3114,9 @@
                   }
                 },
                 "required": ["url"]
+              },
+              "example": {
+                "url": "https://example.com/pricing"
               }
             }
           }
@@ -2725,8 +3227,9 @@
     },
     "/v1/sessions/{id}/interact": {
       "post": {
+        "operationId": "interactSession",
         "summary": "Send an interaction (tap / type / scroll / press) to the session",
-        "tags": ["Sessions"],
+        "tags": ["sessions"],
         "security": [
           {
             "BearerAuth": []
@@ -2833,6 +3336,12 @@
                   }
                 },
                 "required": ["action"]
+              },
+              "example": {
+                "action": {
+                  "kind": "tap",
+                  "selector": "#add-to-cart"
+                }
               }
             }
           }
@@ -2934,8 +3443,9 @@
     },
     "/v1/sessions/{id}/wait": {
       "post": {
+        "operationId": "waitSession",
         "summary": "Wait for a session-side condition (selector, url, time)",
-        "tags": ["Sessions"],
+        "tags": ["sessions"],
         "security": [
           {
             "BearerAuth": []
@@ -3025,6 +3535,12 @@
                   }
                 },
                 "required": ["condition"]
+              },
+              "example": {
+                "condition": {
+                  "kind": "selector",
+                  "selector": "#order-confirmation"
+                }
               }
             }
           }
@@ -3046,6 +3562,10 @@
                     }
                   },
                   "required": ["satisfied", "duration_ms"]
+                },
+                "example": {
+                  "satisfied": true,
+                  "duration_ms": 1240
                 }
               }
             }
@@ -3080,6 +3600,16 @@
               }
             }
           },
+          "404": {
+            "description": "Session not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -3095,8 +3625,9 @@
     },
     "/v1/sessions/{id}": {
       "get": {
+        "operationId": "getSession",
         "summary": "Get a session by id (includes harness-reported egress_capabilities)",
-        "tags": ["Sessions"],
+        "tags": ["sessions"],
         "security": [
           {
             "BearerAuth": []
@@ -3255,6 +3786,16 @@
               }
             }
           },
+          "404": {
+            "description": "Session not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -3268,8 +3809,9 @@
         }
       },
       "delete": {
+        "operationId": "destroySession",
         "summary": "Destroy a session",
-        "tags": ["Sessions"],
+        "tags": ["sessions"],
         "security": [
           {
             "BearerAuth": []
@@ -3319,6 +3861,16 @@
               }
             }
           },
+          "404": {
+            "description": "Session not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -3334,8 +3886,9 @@
     },
     "/v1/sessions/{id}/state": {
       "get": {
+        "operationId": "getSessionState",
         "summary": "Snapshot current session state (URL, title, cookies, localStorage)",
-        "tags": ["Sessions"],
+        "tags": ["sessions"],
         "security": [
           {
             "BearerAuth": []
@@ -3386,6 +3939,22 @@
                     }
                   },
                   "required": ["url", "title", "cookies", "local_storage", "captured_at"]
+                },
+                "example": {
+                  "url": "https://example.com/pricing",
+                  "title": "Pricing — Example",
+                  "cookies": [
+                    {
+                      "name": "session",
+                      "value": "abc123",
+                      "domain": "example.com",
+                      "path": "/"
+                    }
+                  ],
+                  "local_storage": {
+                    "theme": "dark"
+                  },
+                  "captured_at": "2026-05-31T12:00:05Z"
                 }
               }
             }
@@ -3420,6 +3989,16 @@
               }
             }
           },
+          "404": {
+            "description": "Session not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -3435,8 +4014,9 @@
     },
     "/v1/sessions/{id}/capture": {
       "post": {
+        "operationId": "captureSession",
         "summary": "Capture a screenshot, DOM snapshot, or PDF of the session",
-        "tags": ["Sessions"],
+        "tags": ["sessions"],
         "security": [
           {
             "BearerAuth": []
@@ -3468,6 +4048,10 @@
                   }
                 },
                 "required": ["kind"]
+              },
+              "example": {
+                "kind": "screenshot",
+                "full_page": true
               }
             }
           }
@@ -3501,6 +4085,13 @@
                     }
                   },
                   "required": ["kind", "data", "encoding", "byte_size", "duration_ms"]
+                },
+                "example": {
+                  "kind": "screenshot",
+                  "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+                  "encoding": "base64",
+                  "byte_size": 68,
+                  "duration_ms": 320
                 }
               }
             }
@@ -3535,6 +4126,16 @@
               }
             }
           },
+          "404": {
+            "description": "Session not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -3550,8 +4151,9 @@
     },
     "/v1/api-keys": {
       "post": {
+        "operationId": "createApiKey",
         "summary": "Create an API key (returns plaintext once, never retrievable later)",
-        "tags": ["API keys"],
+        "tags": ["api-keys"],
         "security": [
           {
             "BearerAuth": []
@@ -3603,6 +4205,10 @@
                   }
                 },
                 "required": ["name", "scopes"]
+              },
+              "example": {
+                "name": "ci-pipeline",
+                "scopes": ["read", "write"]
               }
             }
           }
@@ -3688,6 +4294,17 @@
                     "created_at",
                     "plaintext"
                   ]
+                },
+                "example": {
+                  "id": "key_3f8a1b2c-4d5e-6f70-8a9b-0c1d2e3f4a5b",
+                  "name": "ci-pipeline",
+                  "key_prefix": "ds_live_3f8a",
+                  "scopes": ["read", "write"],
+                  "last_used_at": null,
+                  "revoked_at": null,
+                  "expires_at": null,
+                  "created_at": "2026-05-31T12:00:00Z",
+                  "plaintext": "ds_live_exampleexampleexampleexampleexample"
                 }
               }
             }
@@ -3735,8 +4352,9 @@
         }
       },
       "get": {
+        "operationId": "listApiKeys",
         "summary": "List API keys for the calling account",
-        "tags": ["API keys"],
+        "tags": ["api-keys"],
         "security": [
           {
             "BearerAuth": []
@@ -3827,6 +4445,20 @@
                     }
                   },
                   "required": ["data"]
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": "key_3f8a1b2c-4d5e-6f70-8a9b-0c1d2e3f4a5b",
+                      "name": "ci-pipeline",
+                      "key_prefix": "ds_live_3f8a",
+                      "scopes": ["read", "write"],
+                      "last_used_at": "2026-05-31T09:30:00Z",
+                      "revoked_at": null,
+                      "expires_at": null,
+                      "created_at": "2026-05-20T08:00:00Z"
+                    }
+                  ]
                 }
               }
             }
@@ -3876,8 +4508,9 @@
     },
     "/v1/api-keys/{id}": {
       "delete": {
+        "operationId": "revokeApiKey",
         "summary": "Revoke an API key",
-        "tags": ["API keys"],
+        "tags": ["api-keys"],
         "security": [
           {
             "BearerAuth": []
@@ -3952,8 +4585,9 @@
     },
     "/v1/api-keys/{id}/rotate": {
       "post": {
+        "operationId": "rotateApiKey",
         "summary": "Rotate an API key (V-296). 24h grace; new plaintext shown once",
-        "tags": ["API keys"],
+        "tags": ["api-keys"],
         "security": [
           {
             "BearerAuth": []
@@ -3985,6 +4619,19 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RotateApiKeyResponse"
+                },
+                "example": {
+                  "id": "key_5f6a7b8c-9d0e-1f20-3a4b-5c6d7e8f9a0b",
+                  "name": "ci-pipeline",
+                  "key_prefix": "ds_live_5f6a",
+                  "scopes": ["read", "write"],
+                  "last_used_at": null,
+                  "revoked_at": null,
+                  "expires_at": null,
+                  "created_at": "2026-05-31T12:00:00Z",
+                  "plaintext": "ds_live_exampleexampleexampleexamplerotate",
+                  "rotated_from": "key_3f8a1b2c-4d5e-6f70-8a9b-0c1d2e3f4a5b",
+                  "grace_period_ends_at": "2026-06-01T12:00:00Z"
                 }
               }
             }
@@ -4045,7 +4692,7 @@
     "/v1/usage": {
       "get": {
         "summary": "Current-period usage totals + tier quotas",
-        "tags": ["Usage"],
+        "tags": ["usage"],
         "security": [
           {
             "BearerAuth": []
@@ -4192,7 +4839,7 @@
     "/v1/usage/series": {
       "get": {
         "summary": "Daily-bucketed usage time series for the calling account",
-        "tags": ["Usage"],
+        "tags": ["usage"],
         "security": [
           {
             "BearerAuth": []
@@ -4295,7 +4942,7 @@
     "/v1/team/invites": {
       "post": {
         "summary": "Invite an email to join the calling owner’s team",
-        "tags": ["Team"],
+        "tags": ["team"],
         "security": [
           {
             "BearerAuth": []
@@ -4371,7 +5018,7 @@
       },
       "get": {
         "summary": "List pending invites for the calling owner",
-        "tags": ["Team"],
+        "tags": ["team"],
         "security": [
           {
             "BearerAuth": []
@@ -4443,7 +5090,7 @@
     "/v1/team/invites/accept": {
       "post": {
         "summary": "Accept a pending team invite",
-        "tags": ["Team"],
+        "tags": ["team"],
         "security": [
           {
             "BearerAuth": []
@@ -4541,7 +5188,7 @@
     "/v1/team/members": {
       "get": {
         "summary": "List confirmed team members for the calling owner",
-        "tags": ["Team"],
+        "tags": ["team"],
         "security": [
           {
             "BearerAuth": []
@@ -4613,7 +5260,7 @@
     "/v1/team/owners": {
       "get": {
         "summary": "List owner accounts the caller is a member of (V-326c)",
-        "tags": ["Team"],
+        "tags": ["team"],
         "security": [
           {
             "BearerAuth": []
@@ -4685,7 +5332,7 @@
     "/v1/team/members/{id}": {
       "delete": {
         "summary": "Remove a team member",
-        "tags": ["Team"],
+        "tags": ["team"],
         "security": [
           {
             "BearerAuth": []
@@ -4761,7 +5408,7 @@
     "/health": {
       "get": {
         "summary": "Liveness probe",
-        "tags": ["Meta"],
+        "tags": ["meta"],
         "responses": {
           "200": {
             "description": "Server is up.",
@@ -5561,7 +6208,7 @@
           {
             "schema": {
               "type": "string",
-              "enum": ["global", "sessions:create"]
+              "enum": ["global", "sessions:create", "agent_sessions:message"]
             },
             "required": true,
             "name": "bucket_key",
@@ -6290,8 +6937,9 @@
     },
     "/v1/webhook-deliveries/{deliveryId}/replay": {
       "post": {
+        "operationId": "replayWebhookDelivery",
         "summary": "Replay a webhook delivery (V-307; customer self-service)",
-        "tags": ["Webhooks"],
+        "tags": ["webhooks"],
         "security": [
           {
             "BearerAuth": []
@@ -7001,6 +7649,16 @@
           },
           "403": {
             "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No validation schedule exists for that archetype.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8680,7 +9338,7 @@
                         "properties": {
                           "bucket_key": {
                             "type": "string",
-                            "enum": ["global", "sessions:create"]
+                            "enum": ["global", "sessions:create", "agent_sessions:message"]
                           },
                           "capacity": {
                             "type": "integer",
@@ -10227,6 +10885,16 @@
               }
             }
           },
+          "404": {
+            "description": "Account not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -10318,6 +10986,16 @@
           },
           "403": {
             "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account not found.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -12087,6 +12765,11 @@
                   }
                 },
                 "required": ["email", "password"]
+              },
+              "example": {
+                "email": "you@example.com",
+                "password": "use-a-long-unique-passphrase",
+                "name": "Acme Inc"
               }
             }
           }
@@ -12110,6 +12793,9 @@
                     }
                   },
                   "required": ["verification_email_expires_at"]
+                },
+                "example": {
+                  "verification_email_expires_at": "2026-06-01T12:00:00Z"
                 }
               }
             }
@@ -12186,6 +12872,9 @@
                   }
                 },
                 "required": ["token"]
+              },
+              "example": {
+                "token": "7c3f1a9e0b2d4c6f8a1b3d5e7f9c0a2b4d6e8f1a3c5e7d9f"
               }
             }
           }
@@ -12217,6 +12906,13 @@
                     }
                   },
                   "required": ["session"]
+                },
+                "example": {
+                  "session": {
+                    "token": "example-web-session-token-shown-once",
+                    "expires_at": "2026-06-30T12:00:00Z",
+                    "account_id": "acc_9c8b7a6d-5e4f-3210-abcd-ef0123456789"
+                  }
                 }
               }
             }
@@ -12288,6 +12984,10 @@
                   }
                 },
                 "required": ["email", "password"]
+              },
+              "example": {
+                "email": "you@example.com",
+                "password": "use-a-long-unique-passphrase"
               }
             }
           }
@@ -13709,6 +14409,14 @@
                   "token_budget": {
                     "type": "integer",
                     "exclusiveMinimum": 0
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["manual", "ai", "pair"]
+                  },
+                  "model": {
+                    "type": "string",
+                    "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
                   }
                 }
               }
@@ -13722,7 +14430,100 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {}
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "driftstack_session_id": {
+                      "type": ["string", "null"]
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "closed_reason": {
+                      "type": ["string", "null"]
+                    },
+                    "token_budget_total": {
+                      "type": "integer"
+                    },
+                    "token_budget_remaining": {
+                      "type": "integer"
+                    },
+                    "transcript_length": {
+                      "type": "integer"
+                    },
+                    "closed_at": {
+                      "type": ["string", "null"]
+                    },
+                    "created_by_user_id": {
+                      "type": ["string", "null"]
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": ["manual", "ai", "pair"]
+                    },
+                    "model": {
+                      "type": "string",
+                      "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                    },
+                    "pair_mode_state": {
+                      "type": ["object", "null"],
+                      "properties": {
+                        "kind": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "livekit": {
+                      "type": "object",
+                      "properties": {
+                        "ws_url": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "room": {
+                          "type": "string"
+                        },
+                        "token": {
+                          "type": "string"
+                        },
+                        "participant_identity": {
+                          "type": "string"
+                        },
+                        "expires_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "account_id",
+                    "driftstack_session_id",
+                    "status",
+                    "closed_reason",
+                    "token_budget_total",
+                    "token_budget_remaining",
+                    "transcript_length",
+                    "closed_at",
+                    "created_by_user_id",
+                    "mode",
+                    "model",
+                    "pair_mode_state",
+                    "created_at",
+                    "updated_at"
+                  ]
                 }
               }
             }
@@ -13799,7 +14600,106 @@
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "properties": {}
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "account_id": {
+                            "type": "string"
+                          },
+                          "driftstack_session_id": {
+                            "type": ["string", "null"]
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "closed_reason": {
+                            "type": ["string", "null"]
+                          },
+                          "token_budget_total": {
+                            "type": "integer"
+                          },
+                          "token_budget_remaining": {
+                            "type": "integer"
+                          },
+                          "transcript_length": {
+                            "type": "integer"
+                          },
+                          "closed_at": {
+                            "type": ["string", "null"]
+                          },
+                          "created_by_user_id": {
+                            "type": ["string", "null"]
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": ["manual", "ai", "pair"]
+                          },
+                          "model": {
+                            "type": "string",
+                            "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                          },
+                          "pair_mode_state": {
+                            "type": ["object", "null"],
+                            "properties": {
+                              "kind": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind"]
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "type": "string"
+                          },
+                          "livekit": {
+                            "type": "object",
+                            "properties": {
+                              "ws_url": {
+                                "type": "string",
+                                "format": "uri"
+                              },
+                              "room": {
+                                "type": "string"
+                              },
+                              "token": {
+                                "type": "string"
+                              },
+                              "participant_identity": {
+                                "type": "string"
+                              },
+                              "expires_at": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "ws_url",
+                              "room",
+                              "token",
+                              "participant_identity",
+                              "expires_at"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "account_id",
+                          "driftstack_session_id",
+                          "status",
+                          "closed_reason",
+                          "token_budget_total",
+                          "token_budget_remaining",
+                          "transcript_length",
+                          "closed_at",
+                          "created_by_user_id",
+                          "mode",
+                          "model",
+                          "pair_mode_state",
+                          "created_at",
+                          "updated_at"
+                        ]
                       }
                     }
                   },
@@ -13872,12 +14772,105 @@
         ],
         "responses": {
           "200": {
-            "description": "Agent session envelope.",
+            "description": "Agent session resource.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {}
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "driftstack_session_id": {
+                      "type": ["string", "null"]
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "closed_reason": {
+                      "type": ["string", "null"]
+                    },
+                    "token_budget_total": {
+                      "type": "integer"
+                    },
+                    "token_budget_remaining": {
+                      "type": "integer"
+                    },
+                    "transcript_length": {
+                      "type": "integer"
+                    },
+                    "closed_at": {
+                      "type": ["string", "null"]
+                    },
+                    "created_by_user_id": {
+                      "type": ["string", "null"]
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": ["manual", "ai", "pair"]
+                    },
+                    "model": {
+                      "type": "string",
+                      "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                    },
+                    "pair_mode_state": {
+                      "type": ["object", "null"],
+                      "properties": {
+                        "kind": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "livekit": {
+                      "type": "object",
+                      "properties": {
+                        "ws_url": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "room": {
+                          "type": "string"
+                        },
+                        "token": {
+                          "type": "string"
+                        },
+                        "participant_identity": {
+                          "type": "string"
+                        },
+                        "expires_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "account_id",
+                    "driftstack_session_id",
+                    "status",
+                    "closed_reason",
+                    "token_budget_total",
+                    "token_budget_remaining",
+                    "transcript_length",
+                    "closed_at",
+                    "created_by_user_id",
+                    "mode",
+                    "model",
+                    "pair_mode_state",
+                    "created_at",
+                    "updated_at"
+                  ]
                 }
               }
             }
@@ -14135,6 +15128,9 @@
                   }
                 },
                 "required": ["user_message"]
+              },
+              "example": {
+                "user_message": "Go to the pricing page and take a screenshot."
               }
             }
           }
@@ -14155,20 +15151,357 @@
                         },
                         "session": {
                           "type": "object",
-                          "properties": {}
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "account_id": {
+                              "type": "string"
+                            },
+                            "driftstack_session_id": {
+                              "type": ["string", "null"]
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "closed_reason": {
+                              "type": ["string", "null"]
+                            },
+                            "token_budget_total": {
+                              "type": "integer"
+                            },
+                            "token_budget_remaining": {
+                              "type": "integer"
+                            },
+                            "transcript_length": {
+                              "type": "integer"
+                            },
+                            "closed_at": {
+                              "type": ["string", "null"]
+                            },
+                            "created_by_user_id": {
+                              "type": ["string", "null"]
+                            },
+                            "mode": {
+                              "type": "string",
+                              "enum": ["manual", "ai", "pair"]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                            },
+                            "pair_mode_state": {
+                              "type": ["object", "null"],
+                              "properties": {
+                                "kind": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind"]
+                            },
+                            "created_at": {
+                              "type": "string"
+                            },
+                            "updated_at": {
+                              "type": "string"
+                            },
+                            "livekit": {
+                              "type": "object",
+                              "properties": {
+                                "ws_url": {
+                                  "type": "string",
+                                  "format": "uri"
+                                },
+                                "room": {
+                                  "type": "string"
+                                },
+                                "token": {
+                                  "type": "string"
+                                },
+                                "participant_identity": {
+                                  "type": "string"
+                                },
+                                "expires_at": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "ws_url",
+                                "room",
+                                "token",
+                                "participant_identity",
+                                "expires_at"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "account_id",
+                            "driftstack_session_id",
+                            "status",
+                            "closed_reason",
+                            "token_budget_total",
+                            "token_budget_remaining",
+                            "transcript_length",
+                            "closed_at",
+                            "created_by_user_id",
+                            "mode",
+                            "model",
+                            "pair_mode_state",
+                            "created_at",
+                            "updated_at"
+                          ]
                         },
                         "intents": {
                           "type": "array",
                           "items": {
-                            "type": "object",
-                            "properties": {}
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["navigate"]
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["kind", "url"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["interact"]
+                                  },
+                                  "action": {
+                                    "type": "string",
+                                    "enum": ["tap", "type", "scroll", "swipe"]
+                                  },
+                                  "selector": {
+                                    "type": "string"
+                                  },
+                                  "value": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["kind", "action"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["wait"]
+                                  },
+                                  "condition": {
+                                    "type": "string",
+                                    "enum": ["idle", "selector_visible"]
+                                  },
+                                  "selector": {
+                                    "type": "string"
+                                  },
+                                  "timeoutMs": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "required": ["kind", "condition"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["capture"]
+                                  },
+                                  "capture": {
+                                    "type": "string",
+                                    "enum": ["screenshot", "dom_snapshot", "pdf"]
+                                  }
+                                },
+                                "required": ["kind", "capture"]
+                              }
+                            ]
                           }
                         },
                         "results": {
                           "type": "array",
                           "items": {
-                            "type": "object",
-                            "properties": {}
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["success"]
+                                  },
+                                  "intent": {
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["navigate"]
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["kind", "url"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["interact"]
+                                          },
+                                          "action": {
+                                            "type": "string",
+                                            "enum": ["tap", "type", "scroll", "swipe"]
+                                          },
+                                          "selector": {
+                                            "type": "string"
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["kind", "action"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["wait"]
+                                          },
+                                          "condition": {
+                                            "type": "string",
+                                            "enum": ["idle", "selector_visible"]
+                                          },
+                                          "selector": {
+                                            "type": "string"
+                                          },
+                                          "timeoutMs": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": ["kind", "condition"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["capture"]
+                                          },
+                                          "capture": {
+                                            "type": "string",
+                                            "enum": ["screenshot", "dom_snapshot", "pdf"]
+                                          }
+                                        },
+                                        "required": ["kind", "capture"]
+                                      }
+                                    ]
+                                  },
+                                  "summary": {
+                                    "type": "string"
+                                  },
+                                  "captureId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["kind", "intent", "summary"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["failure"]
+                                  },
+                                  "intent": {
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["navigate"]
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["kind", "url"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["interact"]
+                                          },
+                                          "action": {
+                                            "type": "string",
+                                            "enum": ["tap", "type", "scroll", "swipe"]
+                                          },
+                                          "selector": {
+                                            "type": "string"
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["kind", "action"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["wait"]
+                                          },
+                                          "condition": {
+                                            "type": "string",
+                                            "enum": ["idle", "selector_visible"]
+                                          },
+                                          "selector": {
+                                            "type": "string"
+                                          },
+                                          "timeoutMs": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": ["kind", "condition"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["capture"]
+                                          },
+                                          "capture": {
+                                            "type": "string",
+                                            "enum": ["screenshot", "dom_snapshot", "pdf"]
+                                          }
+                                        },
+                                        "required": ["kind", "capture"]
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["kind", "intent", "reason"]
+                              }
+                            ]
                           }
                         },
                         "ok": {
@@ -14186,7 +15519,106 @@
                         },
                         "session": {
                           "type": "object",
-                          "properties": {}
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "account_id": {
+                              "type": "string"
+                            },
+                            "driftstack_session_id": {
+                              "type": ["string", "null"]
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "closed_reason": {
+                              "type": ["string", "null"]
+                            },
+                            "token_budget_total": {
+                              "type": "integer"
+                            },
+                            "token_budget_remaining": {
+                              "type": "integer"
+                            },
+                            "transcript_length": {
+                              "type": "integer"
+                            },
+                            "closed_at": {
+                              "type": ["string", "null"]
+                            },
+                            "created_by_user_id": {
+                              "type": ["string", "null"]
+                            },
+                            "mode": {
+                              "type": "string",
+                              "enum": ["manual", "ai", "pair"]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                            },
+                            "pair_mode_state": {
+                              "type": ["object", "null"],
+                              "properties": {
+                                "kind": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind"]
+                            },
+                            "created_at": {
+                              "type": "string"
+                            },
+                            "updated_at": {
+                              "type": "string"
+                            },
+                            "livekit": {
+                              "type": "object",
+                              "properties": {
+                                "ws_url": {
+                                  "type": "string",
+                                  "format": "uri"
+                                },
+                                "room": {
+                                  "type": "string"
+                                },
+                                "token": {
+                                  "type": "string"
+                                },
+                                "participant_identity": {
+                                  "type": "string"
+                                },
+                                "expires_at": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "ws_url",
+                                "room",
+                                "token",
+                                "participant_identity",
+                                "expires_at"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "account_id",
+                            "driftstack_session_id",
+                            "status",
+                            "closed_reason",
+                            "token_budget_total",
+                            "token_budget_remaining",
+                            "transcript_length",
+                            "closed_at",
+                            "created_by_user_id",
+                            "mode",
+                            "model",
+                            "pair_mode_state",
+                            "created_at",
+                            "updated_at"
+                          ]
                         },
                         "clarifying_question": {
                           "type": "string"
@@ -14203,7 +15635,106 @@
                         },
                         "session": {
                           "type": "object",
-                          "properties": {}
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "account_id": {
+                              "type": "string"
+                            },
+                            "driftstack_session_id": {
+                              "type": ["string", "null"]
+                            },
+                            "status": {
+                              "type": "string"
+                            },
+                            "closed_reason": {
+                              "type": ["string", "null"]
+                            },
+                            "token_budget_total": {
+                              "type": "integer"
+                            },
+                            "token_budget_remaining": {
+                              "type": "integer"
+                            },
+                            "transcript_length": {
+                              "type": "integer"
+                            },
+                            "closed_at": {
+                              "type": ["string", "null"]
+                            },
+                            "created_by_user_id": {
+                              "type": ["string", "null"]
+                            },
+                            "mode": {
+                              "type": "string",
+                              "enum": ["manual", "ai", "pair"]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                            },
+                            "pair_mode_state": {
+                              "type": ["object", "null"],
+                              "properties": {
+                                "kind": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind"]
+                            },
+                            "created_at": {
+                              "type": "string"
+                            },
+                            "updated_at": {
+                              "type": "string"
+                            },
+                            "livekit": {
+                              "type": "object",
+                              "properties": {
+                                "ws_url": {
+                                  "type": "string",
+                                  "format": "uri"
+                                },
+                                "room": {
+                                  "type": "string"
+                                },
+                                "token": {
+                                  "type": "string"
+                                },
+                                "participant_identity": {
+                                  "type": "string"
+                                },
+                                "expires_at": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "ws_url",
+                                "room",
+                                "token",
+                                "participant_identity",
+                                "expires_at"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "account_id",
+                            "driftstack_session_id",
+                            "status",
+                            "closed_reason",
+                            "token_budget_total",
+                            "token_budget_remaining",
+                            "transcript_length",
+                            "closed_at",
+                            "created_by_user_id",
+                            "mode",
+                            "model",
+                            "pair_mode_state",
+                            "created_at",
+                            "updated_at"
+                          ]
                         },
                         "refuse_reason": {
                           "type": "string"
@@ -14238,6 +15769,16 @@
           },
           "403": {
             "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent session not found (or owned by another account).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -14899,7 +16440,42 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {}
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "agent_session_id": {
+                      "type": ["string", "null"]
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": ["string", "null"]
+                    },
+                    "intent_count": {
+                      "type": "integer"
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "account_id",
+                    "agent_session_id",
+                    "label",
+                    "description",
+                    "intent_count",
+                    "created_at",
+                    "updated_at"
+                  ]
                 }
               }
             }
@@ -15001,7 +16577,57 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {}
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "account_id": {
+                            "type": "string"
+                          },
+                          "agent_session_id": {
+                            "type": ["string", "null"]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": ["string", "null"]
+                          },
+                          "intent_count": {
+                            "type": "integer"
+                          },
+                          "created_at": {
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "account_id",
+                          "agent_session_id",
+                          "label",
+                          "description",
+                          "intent_count",
+                          "created_at",
+                          "updated_at"
+                        ]
+                      }
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["data", "has_more", "next_cursor"]
                 }
               }
             }
@@ -15085,7 +16711,117 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {}
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "agent_session_id": {
+                      "type": ["string", "null"]
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": ["string", "null"]
+                    },
+                    "intent_count": {
+                      "type": "integer"
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "intent_log": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["navigate"]
+                              },
+                              "url": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind", "url"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["interact"]
+                              },
+                              "action": {
+                                "type": "string",
+                                "enum": ["tap", "type", "scroll", "swipe"]
+                              },
+                              "selector": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": ["kind", "action"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["wait"]
+                              },
+                              "condition": {
+                                "type": "string",
+                                "enum": ["idle", "selector_visible"]
+                              },
+                              "selector": {
+                                "type": "string"
+                              },
+                              "timeoutMs": {
+                                "type": "integer"
+                              }
+                            },
+                            "required": ["kind", "condition"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["capture"]
+                              },
+                              "capture": {
+                                "type": "string",
+                                "enum": ["screenshot", "dom_snapshot", "pdf"]
+                              }
+                            },
+                            "required": ["kind", "capture"]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "account_id",
+                    "agent_session_id",
+                    "label",
+                    "description",
+                    "intent_count",
+                    "created_at",
+                    "updated_at",
+                    "intent_log"
+                  ]
                 }
               }
             }
@@ -15750,10 +17486,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100,
-              "description": "Order id (ord_<36-char-uuid>; capped at 100 chars)."
+              "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars)."
             },
             "required": true,
-            "description": "Order id (ord_<36-char-uuid>; capped at 100 chars).",
+            "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).",
             "name": "order_id",
             "in": "path"
           }
@@ -15909,10 +17645,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100,
-              "description": "Order id (ord_<36-char-uuid>; capped at 100 chars)."
+              "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars)."
             },
             "required": true,
-            "description": "Order id (ord_<36-char-uuid>; capped at 100 chars).",
+            "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).",
             "name": "order_id",
             "in": "path"
           }
@@ -16086,10 +17822,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100,
-              "description": "Order id (ord_<36-char-uuid>; capped at 100 chars)."
+              "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars)."
             },
             "required": true,
-            "description": "Order id (ord_<36-char-uuid>; capped at 100 chars).",
+            "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).",
             "name": "order_id",
             "in": "path"
           }
@@ -16214,10 +17950,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100,
-              "description": "Order id (ord_<36-char-uuid>; capped at 100 chars)."
+              "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars)."
             },
             "required": true,
-            "description": "Order id (ord_<36-char-uuid>; capped at 100 chars).",
+            "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).",
             "name": "order_id",
             "in": "path"
           }
@@ -16302,10 +18038,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100,
-              "description": "Order id (ord_<36-char-uuid>; capped at 100 chars)."
+              "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars)."
             },
             "required": true,
-            "description": "Order id (ord_<36-char-uuid>; capped at 100 chars).",
+            "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).",
             "name": "order_id",
             "in": "path"
           }
@@ -16390,10 +18126,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100,
-              "description": "Order id (ord_<36-char-uuid>; capped at 100 chars)."
+              "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars)."
             },
             "required": true,
-            "description": "Order id (ord_<36-char-uuid>; capped at 100 chars).",
+            "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).",
             "name": "order_id",
             "in": "path"
           }
@@ -16810,10 +18546,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100,
-              "description": "Order id (ord_<36-char-uuid>; capped at 100 chars)."
+              "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars)."
             },
             "required": true,
-            "description": "Order id (ord_<36-char-uuid>; capped at 100 chars).",
+            "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).",
             "name": "order_id",
             "in": "path"
           }
@@ -16979,10 +18715,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100,
-              "description": "Order id (ord_<36-char-uuid>; capped at 100 chars)."
+              "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars)."
             },
             "required": true,
-            "description": "Order id (ord_<36-char-uuid>; capped at 100 chars).",
+            "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).",
             "name": "order_id",
             "in": "path"
           }
@@ -17096,10 +18832,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100,
-              "description": "Order id (ord_<36-char-uuid>; capped at 100 chars)."
+              "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars)."
             },
             "required": true,
-            "description": "Order id (ord_<36-char-uuid>; capped at 100 chars).",
+            "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).",
             "name": "order_id",
             "in": "path"
           }
@@ -17498,10 +19234,10 @@
           {
             "schema": {
               "type": "string",
-              "description": "Defaults to 30; max 90."
+              "description": "Defaults to 7; max 90."
             },
             "required": false,
-            "description": "Defaults to 30; max 90.",
+            "description": "Defaults to 7; max 90.",
             "name": "days",
             "in": "query"
           }
@@ -17885,10 +19621,10 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 100,
-              "description": "Order id (ord_<36-char-uuid>; capped at 100 chars)."
+              "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars)."
             },
             "required": true,
-            "description": "Order id (ord_<36-char-uuid>; capped at 100 chars).",
+            "description": "Order id (ord_<12-hex-chars>, e.g. ord_a1b2c3d4e5f6; capped at 100 chars).",
             "name": "order_id",
             "in": "path"
           }
@@ -18075,6 +19811,9 @@
                   }
                 },
                 "required": ["email"]
+              },
+              "example": {
+                "email": "you@example.com"
               }
             }
           }
@@ -18167,6 +19906,9 @@
                   }
                 },
                 "required": ["token"]
+              },
+              "example": {
+                "token": "7c3f1a9e0b2d4c6f8a1b3d5e7f9c0a2b4d6e8f1a3c5e7d9f"
               }
             }
           }
@@ -18263,6 +20005,9 @@
                   }
                 },
                 "required": ["email"]
+              },
+              "example": {
+                "email": "you@example.com"
               }
             }
           }
@@ -18361,6 +20106,10 @@
                   }
                 },
                 "required": ["token", "new_password"]
+              },
+              "example": {
+                "token": "7c3f1a9e0b2d4c6f8a1b3d5e7f9c0a2b4d6e8f1a3c5e7d9f",
+                "new_password": "use-a-long-unique-passphrase"
               }
             }
           }
@@ -19024,6 +20773,16 @@
               }
             }
           },
+          "404": {
+            "description": "Sign-in session not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -19671,6 +21430,7 @@
     },
     "/v1/webhooks": {
       "post": {
+        "operationId": "createWebhook",
         "summary": "Create a webhook endpoint",
         "tags": ["webhooks"],
         "security": [
@@ -19712,6 +21472,10 @@
                   }
                 },
                 "required": ["url", "events"]
+              },
+              "example": {
+                "url": "https://example.com/driftstack/webhooks",
+                "events": ["session.completed", "session.failed"]
               }
             }
           }
@@ -19830,6 +21594,27 @@
                     "created_at",
                     "secret"
                   ]
+                },
+                "example": {
+                  "id": "whk_2b1c3d4e-5f60-7a8b-9c0d-1e2f3a4b5c6d",
+                  "url": "https://example.com/driftstack/webhooks",
+                  "secret_prefix": "whsec_v1_2b1c",
+                  "prev_secret_prefix": null,
+                  "rotation_grace_expires_at": null,
+                  "events": ["session.completed", "session.failed"],
+                  "description": "Production webhook endpoint",
+                  "active": true,
+                  "consecutive_failures": 0,
+                  "last_success_at": null,
+                  "last_failure_at": null,
+                  "disabled_at": null,
+                  "delivery_counts": {
+                    "delivered": 0,
+                    "failed": 0,
+                    "dlq": 0
+                  },
+                  "created_at": "2026-05-31T12:00:00Z",
+                  "secret": "whsec_v1_exampleexampleexampleexampleexample"
                 }
               }
             }
@@ -19877,6 +21662,7 @@
         }
       },
       "get": {
+        "operationId": "listWebhooks",
         "summary": "List webhook endpoints for the calling account",
         "tags": ["webhooks"],
         "security": [
@@ -20051,6 +21837,7 @@
     },
     "/v1/webhooks/{id}": {
       "get": {
+        "operationId": "getWebhook",
         "summary": "Get a single webhook endpoint",
         "tags": ["webhooks"],
         "security": [
@@ -20177,6 +21964,26 @@
                     "delivery_counts",
                     "created_at"
                   ]
+                },
+                "example": {
+                  "id": "whk_2b1c3d4e-5f60-7a8b-9c0d-1e2f3a4b5c6d",
+                  "url": "https://example.com/driftstack/webhooks",
+                  "secret_prefix": "whsec_v1_2b1c",
+                  "prev_secret_prefix": null,
+                  "rotation_grace_expires_at": null,
+                  "events": ["session.completed", "session.failed"],
+                  "description": "Production webhook endpoint",
+                  "active": true,
+                  "consecutive_failures": 0,
+                  "last_success_at": "2026-05-31T09:30:00Z",
+                  "last_failure_at": null,
+                  "disabled_at": null,
+                  "delivery_counts": {
+                    "delivered": 1284,
+                    "failed": 3,
+                    "dlq": 0
+                  },
+                  "created_at": "2026-05-20T08:00:00Z"
                 }
               }
             }
@@ -20211,6 +22018,16 @@
               }
             }
           },
+          "404": {
+            "description": "Webhook endpoint not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -20224,6 +22041,7 @@
         }
       },
       "patch": {
+        "operationId": "updateWebhook",
         "summary": "Partial update of a webhook endpoint (url / events / description / active)",
         "tags": ["webhooks"],
         "security": [
@@ -20277,6 +22095,9 @@
                     "type": "boolean"
                   }
                 }
+              },
+              "example": {
+                "url": "https://example.com/driftstack/webhooks/v2"
               }
             }
           }
@@ -20424,6 +22245,16 @@
               }
             }
           },
+          "404": {
+            "description": "Webhook endpoint not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -20437,6 +22268,7 @@
         }
       },
       "delete": {
+        "operationId": "deleteWebhook",
         "summary": "Disable (soft-delete) a webhook endpoint. Idempotent.",
         "tags": ["webhooks"],
         "security": [
@@ -20488,6 +22320,16 @@
               }
             }
           },
+          "404": {
+            "description": "Webhook endpoint not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -20503,6 +22345,7 @@
     },
     "/v1/webhooks/{id}/deliveries": {
       "get": {
+        "operationId": "listWebhookDeliveries",
         "summary": "List delivery attempts for a webhook endpoint",
         "tags": ["webhooks"],
         "security": [
@@ -20677,6 +22520,16 @@
               }
             }
           },
+          "404": {
+            "description": "Webhook endpoint not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -20692,6 +22545,7 @@
     },
     "/v1/webhooks/{id}/test": {
       "post": {
+        "operationId": "testWebhook",
         "summary": "Enqueue a synthetic test.ping delivery (bypass subscription)",
         "tags": ["webhooks"],
         "security": [
@@ -20763,6 +22617,16 @@
               }
             }
           },
+          "404": {
+            "description": "Webhook endpoint not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -20778,6 +22642,7 @@
     },
     "/v1/webhooks/{id}/rotate-secret": {
       "post": {
+        "operationId": "rotateWebhookSecret",
         "summary": "Rotate the signing secret with a 24h grace (worker dual-signs during grace)",
         "tags": ["webhooks"],
         "security": [
@@ -20826,6 +22691,13 @@
                     "prev_secret_prefix",
                     "grace_expires_at"
                   ]
+                },
+                "example": {
+                  "id": "whk_2b1c3d4e-5f60-7a8b-9c0d-1e2f3a4b5c6d",
+                  "secret": "whsec_v1_exampleexampleexampleexamplerotate",
+                  "secret_prefix": "whsec_v1_9f8e",
+                  "prev_secret_prefix": "whsec_v1_2b1c",
+                  "grace_expires_at": "2026-06-01T12:00:00Z"
                 }
               }
             }
@@ -20860,6 +22732,16 @@
               }
             }
           },
+          "404": {
+            "description": "Webhook endpoint not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Endpoint is disabled; cannot rotate.",
             "content": {
@@ -20885,6 +22767,7 @@
     },
     "/v1/profiles": {
       "post": {
+        "operationId": "createProfile",
         "summary": "Create a profile",
         "tags": ["profiles"],
         "security": [
@@ -20999,6 +22882,16 @@
               }
             }
           },
+          "409": {
+            "description": "A profile with this name already exists in the account.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -21012,6 +22905,7 @@
         }
       },
       "get": {
+        "operationId": "listProfiles",
         "summary": "List profiles for the calling account",
         "tags": ["profiles"],
         "security": [
@@ -21152,6 +23046,7 @@
     },
     "/v1/profiles/{id}": {
       "get": {
+        "operationId": "getProfile",
         "summary": "Get a single profile",
         "tags": ["profiles"],
         "security": [
@@ -21249,6 +23144,16 @@
               }
             }
           },
+          "404": {
+            "description": "Profile not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -21262,6 +23167,7 @@
         }
       },
       "patch": {
+        "operationId": "updateProfile",
         "summary": "Partial update of a profile (name / description)",
         "tags": ["profiles"],
         "security": [
@@ -21380,6 +23286,26 @@
               }
             }
           },
+          "404": {
+            "description": "Profile not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The requested name is already taken by another profile in the account.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -21393,6 +23319,7 @@
         }
       },
       "delete": {
+        "operationId": "deleteProfile",
         "summary": "Delete a profile (storage state wiped; idempotent)",
         "tags": ["profiles"],
         "security": [
@@ -21459,6 +23386,7 @@
     },
     "/v1/profiles/{id}/launch": {
       "post": {
+        "operationId": "launchProfile",
         "summary": "Launch a session from a saved profile (one-shot profile verb)",
         "tags": ["profiles"],
         "security": [
@@ -21653,6 +23581,7 @@
     },
     "/v1/profiles/{id}/clone": {
       "post": {
+        "operationId": "cloneProfile",
         "summary": "Duplicate an existing profile metadata row with an auto-derived \"(copy)\" name",
         "tags": ["profiles"],
         "security": [
@@ -21757,6 +23686,461 @@
               }
             }
           },
+          "404": {
+            "description": "Source profile not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The explicit clone name is already taken in the account.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{id}/export": {
+      "get": {
+        "operationId": "exportProfile",
+        "summary": "Export a profile as a versioned JSON envelope (metadata-only)",
+        "tags": ["profiles"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Versioned export envelope (re-import via POST /v1/profiles/import).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [1]
+                    },
+                    "exported_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                    },
+                    "source_profile_id": {
+                      "type": "string",
+                      "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                    },
+                    "source_account_id": {
+                      "type": "string"
+                    },
+                    "profile": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "archetype": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": ["string", "null"]
+                        }
+                      },
+                      "required": ["name", "archetype", "description"]
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "exported_at",
+                    "source_profile_id",
+                    "source_account_id",
+                    "profile"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Profile not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/import": {
+      "post": {
+        "operationId": "importProfile",
+        "summary": "Import a profile from a v1 export envelope (mints a fresh profile)",
+        "tags": ["profiles"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "envelope": {
+                    "type": "object",
+                    "properties": {
+                      "version": {
+                        "type": "number",
+                        "enum": [1]
+                      },
+                      "exported_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                      },
+                      "source_profile_id": {
+                        "type": "string",
+                        "pattern": "^prof_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                      },
+                      "source_account_id": {
+                        "type": "string"
+                      },
+                      "profile": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "archetype": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": ["string", "null"]
+                          }
+                        },
+                        "required": ["name", "archetype", "description"]
+                      }
+                    },
+                    "required": [
+                      "version",
+                      "exported_at",
+                      "source_profile_id",
+                      "source_account_id",
+                      "profile"
+                    ]
+                  },
+                  "name_override": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "pattern": "^[a-zA-Z0-9][a-zA-Z0-9 _.-]{0,118}[a-zA-Z0-9]$|^[a-zA-Z0-9]$"
+                  }
+                },
+                "required": ["envelope"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Imported profile (a fresh id is minted in the caller account).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "archetype": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": ["string", "null"]
+                    },
+                    "last_used_at": {
+                      "type": ["string", "null"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "archetype",
+                    "description",
+                    "last_used_at",
+                    "created_at",
+                    "updated_at"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A profile with the imported name already exists; pass name_override to rename.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profiles/{id}/transfer": {
+      "post": {
+        "operationId": "transferProfile",
+        "summary": "Transfer profile ownership to another Driftstack account by id",
+        "tags": ["profiles"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "recipient_account_id": {
+                    "type": "string",
+                    "description": "Recipient account id (acc_<uuid>)."
+                  }
+                },
+                "required": ["recipient_account_id"]
+              },
+              "example": {
+                "recipient_account_id": "acc_9c8b7a6d-5e4f-3210-abcd-ef0123456789"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile transferred; a fresh profile is minted in the recipient account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "new_profile": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "archetype": {
+                          "type": "string"
+                        },
+                        "description": {
+                          "type": ["string", "null"]
+                        },
+                        "last_used_at": {
+                          "type": ["string", "null"]
+                        },
+                        "created_at": {
+                          "type": "string"
+                        },
+                        "updated_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "archetype",
+                        "description",
+                        "last_used_at",
+                        "created_at",
+                        "updated_at"
+                      ]
+                    },
+                    "recipient_account_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["new_profile", "recipient_account_id"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Profile not found, or recipient account does not exist.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -21772,6 +24156,7 @@
     },
     "/v1/profiles/{id}/snapshots": {
       "post": {
+        "operationId": "captureSnapshot",
         "summary": "Capture an immutable point-in-time snapshot of the profile",
         "tags": ["profiles", "snapshots"],
         "security": [
@@ -21806,6 +24191,10 @@
                   }
                 },
                 "required": ["label"]
+              },
+              "example": {
+                "label": "before-viewport-tweak",
+                "description": "Snapshot taken before changing the device profile."
               }
             }
           }
@@ -21887,6 +24276,16 @@
               }
             }
           },
+          "404": {
+            "description": "Profile not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -21900,6 +24299,7 @@
         }
       },
       "get": {
+        "operationId": "listProfileSnapshots",
         "summary": "List a profile's snapshots, newest-first",
         "tags": ["profiles", "snapshots"],
         "security": [
@@ -22045,6 +24445,7 @@
     },
     "/v1/profile-snapshots": {
       "get": {
+        "operationId": "listSnapshots",
         "summary": "List every snapshot owned by the calling account (cross-profile)",
         "tags": ["snapshots"],
         "security": [
@@ -22182,6 +24583,7 @@
     },
     "/v1/profile-snapshots/{id}": {
       "get": {
+        "operationId": "getSnapshot",
         "summary": "Single snapshot by id",
         "tags": ["snapshots"],
         "security": [
@@ -22276,6 +24678,16 @@
               }
             }
           },
+          "404": {
+            "description": "Snapshot not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -22289,6 +24701,7 @@
         }
       },
       "delete": {
+        "operationId": "deleteSnapshot",
         "summary": "Hard-delete a snapshot",
         "tags": ["snapshots"],
         "security": [
@@ -22340,6 +24753,16 @@
               }
             }
           },
+          "404": {
+            "description": "Snapshot not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "content": {
@@ -22355,6 +24778,7 @@
     },
     "/v1/profile-snapshots/{id}/restore": {
       "post": {
+        "operationId": "restoreSnapshot",
         "summary": "Create a new profile from a snapshot (tier-cap + name-conflict checked)",
         "tags": ["snapshots", "profiles"],
         "security": [
@@ -22383,6 +24807,9 @@
                   }
                 },
                 "required": ["name"]
+              },
+              "example": {
+                "name": "mobile-shopper-restored"
               }
             }
           }
@@ -22452,6 +24879,26 @@
           },
           "403": {
             "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Snapshot not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A profile with the requested name already exists in the account.",
             "content": {
               "application/problem+json": {
                 "schema": {
