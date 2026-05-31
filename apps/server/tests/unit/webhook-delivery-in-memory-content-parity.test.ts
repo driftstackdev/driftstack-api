@@ -170,9 +170,16 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
     expect(body).toMatch(
       /const batchSize = opts\.batchSize \?\? 25;\s*\n?\s*const leaseDurationMs = opts\.leaseDurationMs \?\? 30_000;/,
     );
-    expect(body).toMatch(
-      /\.filter\(\(e\) => e\.record\.status === 'pending'\)\s*\n?\s*\.filter\(\(e\) => e\.record\.nextAttemptAtMs !== null && e\.record\.nextAttemptAtMs <= now\)\s*\n?\s*\.filter\(\(e\) => e\.leasedUntilMs === null \|\| e\.leasedUntilMs <= now\)/,
-    );
+    // V-173.R — the due set is now (due-pending OR stuck-in_flight-with-expired-lease)
+    // so a crashed worker's in_flight row is reclaimed. Discrete pins.
+    expect(body).toMatch(/const pendingDue =/);
+    expect(body).toMatch(/e\.record\.status === 'pending' &&/);
+    expect(body).toMatch(/e\.record\.nextAttemptAtMs !== null/);
+    expect(body).toMatch(/e\.record\.nextAttemptAtMs <= now/);
+    expect(body).toMatch(/const stuckInFlight =/);
+    expect(body).toMatch(/e\.record\.status === 'in_flight' &&/);
+    expect(body).toMatch(/e\.leasedUntilMs !== null/);
+    expect(body).toMatch(/return pendingDue \|\| stuckInFlight;/);
     expect(body).toMatch(
       /entry\.leasedUntilMs = now \+ leaseDurationMs;\s*\n?\s*entry\.record = \{ \.\.\.entry\.record, status: 'in_flight' \};/,
     );

@@ -15,6 +15,12 @@ import type {
 import type { Database } from './client.js';
 import { accounts, webhookDeliveries, webhookEndpoints } from './schema.js';
 
+// V-173.R — an in_flight row whose `updated_at` is older than this has no
+// live worker on it (the claimer crashed/deployed mid-delivery); the claim
+// reclaims it. 5 min ≫ the 10s per-attempt delivery timeout, so a slow (not
+// crashed) delivery is never reclaimed out from under an active worker.
+const RECLAIM_STALE_IN_FLIGHT_MS = 5 * 60 * 1000;
+
 export class DrizzleWebhooksRepo implements WebhooksRepo {
   constructor(private readonly database: Database) {}
 
@@ -325,10 +331,21 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     // → RETURNING. ISO-string the timestamp because postgres-js's
     // tagged-template binder rejects raw Date in this position.
     const nowIso = opts.now.toISOString();
+    // V-173.R — also reclaim STALE in_flight rows. A worker that crashed /
+    // was deployed mid-batch leaves rows stuck `in_flight` forever (they're
+    // never re-selected → the webhook is silently lost, skipping all
+    // retries). The claim sets `updated_at = NOW()`, so an in_flight row
+    // whose `updated_at` is older than RECLAIM_STALE_IN_FLIGHT_MS has no live
+    // worker on it — re-claim it. Threshold ≫ the per-attempt delivery
+    // timeout so a merely-slow (not crashed) delivery isn't double-sent;
+    // a re-delivery is acceptable anyway (webhooks are at-least-once,
+    // event-id-dedupable). No new column needed — `updated_at` is the anchor.
+    const staleBeforeIso = new Date(opts.now.getTime() - RECLAIM_STALE_IN_FLIGHT_MS).toISOString();
     const rows = await this.database.client<Record<string, unknown>[]>`
       WITH claimed AS (
         SELECT id FROM webhook_deliveries
-        WHERE status = 'pending' AND next_attempt_at <= ${nowIso}::timestamptz
+        WHERE (status = 'pending' AND next_attempt_at <= ${nowIso}::timestamptz)
+           OR (status = 'in_flight' AND updated_at <= ${staleBeforeIso}::timestamptz)
         ORDER BY next_attempt_at ASC
         LIMIT ${opts.batchSize}
         FOR UPDATE SKIP LOCKED

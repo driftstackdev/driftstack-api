@@ -19,6 +19,9 @@ verified-clean, and the prioritized open queue. Companion:
 - `c26e3835` recapture atlas: deterministic snapshot on equal `completedAtMs`.
 - cost-alert dispatcher: state cycle-scoped — no spurious `resolved` at billing-cycle
   rollover (`2026-05-31-cost-alert-cycle-rollover.md`). LOW (deploy-masked).
+- webhook delivery: reclaim orphaned `in_flight` rows (worker-crash/deploy mid-batch
+  no longer silently loses a webhook) — migration-free via `updated_at`; durable claim
+  - in-memory `processTick` + real-PG drizzle test. See surfaced #6.
 
 ## Shipped — infra / tests / docs (non-runtime)
 
@@ -89,12 +92,14 @@ verified-clean, and the prioritized open queue. Companion:
      codes / token entropy were already SOLID. **REMAINING (optional):** a dedicated
      tighter rate-limit gate for `/mfa/challenge` (meaningful once trustProxy is fixed →
      per-IP) + per-account lockout (founder policy).
-6. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
-   `2026-05-31-webhook-orphaned-inflight-reclaim-gap.md`. A worker crash / deploy
-   mid-batch leaves deliveries stuck `in_flight` forever → silently lost.
-   **Fully designed:** add a `claimed_at` column (migration), reclaim on
-   `claimed_at` staleness (threshold ≫ 10s timeout), leave `updated_at`/DLQ-keyset
-   untouched, real-PG test. **Highest-value next item.**
+6. **[MEDIUM — FIXED 2026-05-31, migration-free] Webhook orphaned-`in_flight`
+   reclaim** — `2026-05-31-webhook-orphaned-inflight-reclaim-gap.md`. A worker crash /
+   deploy mid-batch left deliveries stuck `in_flight` forever → silently lost.
+   **FIXED:** the durable claim already sets `updated_at = NOW()`, so the claim SELECT
+   now also reclaims `status='in_flight' AND updated_at <= now - 5min` (≫ the 10s
+   timeout) — **no `claimed_at` column / migration needed** (that was the only reason
+   this had been deferred). In-memory `processTick` reclaims a stuck in_flight row
+   whose lease expired (parity). Real-PG drizzle test (CI-only) + content-parity pins.
 7. **[LOW] Auth-flow consume race** — `2026-05-31-auth-flow-token-audit.md`.
    `consumeAuthToken` returns void → concurrent same-token submit lets both
    callers act (benign-to-minor). Needs a loser-behaviour decision.

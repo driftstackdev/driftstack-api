@@ -1,12 +1,30 @@
 # 2026-05-31 — Webhook delivery: orphaned `in_flight` rows are never reclaimed (Agent 2 audit)
 
-**Status: SURFACED, not fixed.** Real medium-severity reliability gap found during
-an autopilot fresh-audit of the webhook-delivery worker. The fix touches the
-delivery hot path with a subtle stale-threshold consideration, so it warrants a
-careful, tested change (ideally a focused session) rather than a deep-session
-hot-path edit.
+**Status: FIXED 2026-05-31 — migration-free (no `claimed_at` column needed).** Real
+medium-severity reliability gap found during an autopilot fresh-audit of the
+webhook-delivery worker. Re-examination found the durable claim already sets
+`updated_at = NOW()` on `pending → in_flight`, so `updated_at` IS the staleness
+anchor — the reclaim needed no schema change (the migration was the only reason it
+had been deferred to a focused pass).
 
-## The gap
+## The fix (shipped)
+
+- **Durable** (`db/webhooks-repo.ts::claim`): the claim SELECT now also matches
+  `status = 'in_flight' AND updated_at <= now - RECLAIM_STALE_IN_FLIGHT_MS` (5 min,
+  ≫ the 10s per-attempt timeout). Stuck in_flight rows are re-claimed (re-flipped to
+  in_flight + `updated_at = NOW()`) and re-delivered. `FOR UPDATE SKIP LOCKED` keeps
+  concurrent reclaimers off the same row. A merely-slow (not crashed) delivery can't
+  be reclaimed (threshold ≫ timeout); a re-delivery is acceptable anyway — webhooks
+  are at-least-once + event-id-dedupable.
+- **In-memory** (`packages/webhook-delivery/src/in-memory.ts::processTick`): the due
+  set is now `(pending & due & lease-ok) OR (in_flight & lease-expired)` — parity +
+  defensive. (The processTick comment already promised "reclaimed by the next tick";
+  this makes it true.)
+- Tests: a real-PG drizzle test (`db-durable-webhook-claim-reclaim-drizzle`,
+  CI-only) asserts a stale in_flight + a due pending are claimed while a FRESH
+  in_flight is left alone; content-parity pins on both claim paths.
+
+## The gap (historical)
 
 Both outbound-webhook delivery implementations claim a due delivery by flipping
 its status `pending → in_flight`, then deliver, then record the outcome

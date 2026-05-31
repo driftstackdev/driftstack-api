@@ -128,8 +128,18 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
       /\/\/ Atomic claim: SELECT \.\.\. FOR UPDATE SKIP LOCKED → UPDATE status = in_flight\s*\n?\s*\/\/ → RETURNING\. ISO-string the timestamp because postgres-js's\s*\n?\s*\/\/ tagged-template binder rejects raw Date in this position\./,
     );
     expect(body).toMatch(/const nowIso = opts\.now\.toISOString\(\);/);
+    expect(body).toMatch(/WITH claimed AS \(/);
+    expect(body).toMatch(/SELECT id FROM webhook_deliveries/);
+    // V-173.R — claim covers due-pending AND stale-in_flight reclaim (discrete
+    // pins; the WHERE grew past the safe \s*\n? chain length).
+    expect(body).toMatch(/\(status = 'pending' AND next_attempt_at <= \$\{nowIso\}::timestamptz\)/);
     expect(body).toMatch(
-      /WITH claimed AS \(\s*\n?\s*SELECT id FROM webhook_deliveries\s*\n?\s*WHERE status = 'pending' AND next_attempt_at <= \$\{nowIso\}::timestamptz\s*\n?\s*ORDER BY next_attempt_at ASC\s*\n?\s*LIMIT \$\{opts\.batchSize\}\s*\n?\s*FOR UPDATE SKIP LOCKED\s*\n?\s*\)/,
+      /\(status = 'in_flight' AND updated_at <= \$\{staleBeforeIso\}::timestamptz\)/,
+    );
+    expect(body).toMatch(/FOR UPDATE SKIP LOCKED/);
+    expect(body).toMatch(/const RECLAIM_STALE_IN_FLIGHT_MS = 5 \* 60 \* 1000;/);
+    expect(body).toMatch(
+      /const staleBeforeIso = new Date\(opts\.now\.getTime\(\) - RECLAIM_STALE_IN_FLIGHT_MS\)\.toISOString\(\);/,
     );
     expect(body).toMatch(
       /UPDATE webhook_deliveries\s*\n?\s*SET status = 'in_flight', updated_at = NOW\(\)\s*\n?\s*WHERE id IN \(SELECT id FROM claimed\)\s*\n?\s*RETURNING \*/,

@@ -340,9 +340,20 @@ class DeliveryWorker {
     const now = this.now();
 
     const due = Array.from(this.store.queue.values())
-      .filter((e) => e.record.status === 'pending')
-      .filter((e) => e.record.nextAttemptAtMs !== null && e.record.nextAttemptAtMs <= now)
-      .filter((e) => e.leasedUntilMs === null || e.leasedUntilMs <= now)
+      .filter((e) => {
+        const pendingDue =
+          e.record.status === 'pending' &&
+          e.record.nextAttemptAtMs !== null &&
+          e.record.nextAttemptAtMs <= now &&
+          (e.leasedUntilMs === null || e.leasedUntilMs <= now);
+        // V-173.R — reclaim a STUCK in_flight row whose lease has expired: the
+        // worker that claimed it died/hung mid-delivery, so the delivery would
+        // otherwise be lost (status stays in_flight, never re-pulled). The lease
+        // (leaseDurationMs ≫ the per-attempt timeout) is the staleness signal.
+        const stuckInFlight =
+          e.record.status === 'in_flight' && e.leasedUntilMs !== null && e.leasedUntilMs <= now;
+        return pendingDue || stuckInFlight;
+      })
       .slice(0, batchSize);
 
     for (const entry of due) {
