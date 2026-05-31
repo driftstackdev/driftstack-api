@@ -409,20 +409,51 @@ export function registerAgentSessionsRoutes(
           return reply.code(201).send(publicAgentSession(existing, livekit));
         }
       }
-      const created = await sessions.create({
-        accountId: ctx.account.id,
-        tokenBudgetTotal: parsed.data.token_budget ?? DEFAULT_TOKEN_BUDGET,
-        ...(parsed.data.driftstack_session_id !== undefined
-          ? { driftstackSessionId: parsed.data.driftstack_session_id }
-          : {}),
-        ...(idempotencyKey !== null ? { idempotencyKey } : {}),
-        // Arc 2 sub-slice 8.5 (v2-#8) — forward mode when supplied;
-        // otherwise repo applies the default ('ai').
-        ...(parsed.data.mode !== undefined ? { mode: parsed.data.mode } : {}),
-        // 6.c / #15 — forward the picked model when supplied; otherwise
-        // repo applies the default ('claude-opus-4-7').
-        ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
-      });
+      let created: AgentSessionRecord;
+      try {
+        created = await sessions.create({
+          accountId: ctx.account.id,
+          tokenBudgetTotal: parsed.data.token_budget ?? DEFAULT_TOKEN_BUDGET,
+          ...(parsed.data.driftstack_session_id !== undefined
+            ? { driftstackSessionId: parsed.data.driftstack_session_id }
+            : {}),
+          ...(idempotencyKey !== null ? { idempotencyKey } : {}),
+          // Arc 2 sub-slice 8.5 (v2-#8) — forward mode when supplied;
+          // otherwise repo applies the default ('ai').
+          ...(parsed.data.mode !== undefined ? { mode: parsed.data.mode } : {}),
+          // 6.c / #15 — forward the picked model when supplied; otherwise
+          // repo applies the default ('claude-opus-4-7').
+          ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
+        });
+      } catch (err) {
+        // v2-#19 — concurrent same-key idempotency race: the
+        // findByIdempotencyKey pre-check above can't see a row a sibling
+        // in-flight POST hasn't committed yet, so both reach create(); the
+        // partial unique index (agent_sessions_idempotency_key_unique) lets
+        // exactly one win and raises 23505 on the loser. Replay the winner's
+        // 201 instead of surfacing a 500 — matches the Stripe idempotency
+        // contract + the pre-check replay path above. Any other error
+        // re-throws untouched.
+        if (
+          idempotencyKey !== null &&
+          typeof (err as { code?: unknown }).code === 'string' &&
+          (err as { code: string }).code === '23505'
+        ) {
+          const winner = await sessions.findByIdempotencyKey(ctx.account.id, idempotencyKey);
+          if (winner !== null) {
+            if (byokService !== undefined && byokKeyCache !== undefined) {
+              const stored = await byokService.getPlaintext({
+                accountId: ctx.account.id,
+                now: new Date(),
+              });
+              if (stored !== null) byokKeyCache.set(winner.id, stored);
+            }
+            const livekit = await maybeMintLivekit(winner.id, ctx.account.id);
+            return reply.code(201).send(publicAgentSession(winner, livekit));
+          }
+        }
+        throw err;
+      }
       // Q.1.c — decrypt the customer's stored BYOK key ONCE at
       // session-create and stash plaintext in the per-session cache.
       // Bounds AES-GCM unwrap to one operation per session.
