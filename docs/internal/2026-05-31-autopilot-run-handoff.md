@@ -226,7 +226,7 @@ email-subscription (`project_status_subscribers_audit_clean`) — 256-bit `gener
 tokens stored as sha256 hash, double-opt-in gates the notify list, confirm token SINGLE-USE
 (`markConfirmed` nulls the hash — verified + now guarded), per-subscriber unsubscribe token,
 GDPR 90d email purge (one LOW-MED surface, #10). OAuth client sign-in/link flow
-(`project_oauth_client_flow_audit_clean`, V-667.C Google+GitHub) — `/start` redirect*to
+(`project_oauth_client_flow_audit_clean`, V-667.C Google+GitHub) — `/start` `redirect_to`
 origin-validated + PKCE S256 + HMAC state + HTTP-only signed cookie; `/callback` verifies
 state (CSRF) + PKCE + email_verified; **collision→merge-verification blocks account
 takeover** (an OAuth email matching an existing account issues a proof-of-control token to
@@ -252,19 +252,21 @@ compute-on-demand admin read (no persistence — cost_snapshots is V-541.C), fai
 `[tier] ?? api_starter ?? {0,0}`, `getOverview` sorts desc, `getConfig` read-only.
 `routes/admin-cost.ts` verified SOUND: all three routes
 (`/overview`, `/config`, `/:accountId`) gated `requireScope('driftstack_internal_admin')`
-(operator-only); `:accountId` strips the `acc*`prefix to a bare uuid. No code change
-needed — the routes were already clean. (An earlier draft of the prior commit wrongly
-claimed a dead-import removal here; there was no such import —`grep -c`= 0 — so nothing
-was changed.)
+(operator-only); the `:accountId` param strips the `acc` prefix to a bare uuid. No code
+change needed — the routes were already clean. (An earlier draft of the prior commit
+wrongly claimed a dead-import removal here; there was no such import, so nothing was
+changed.)
 **COST LAYER FULLY AUDITED** (usage → aggregator → estimator → monitoring → admin route);
-vein exhausted, pick a non-cost subsystem next. NB:`usage-quota.ts`/`cost-rates.ts`/
+vein exhausted, pick a non-cost subsystem next. NB: the `usage-quota.ts` / `cost-rates.ts` /
 `microsToUsdString`/`RATES_MICROS` do not exist (the estimator is cents + injected rates).
 Team-RBAC multi-tenant authz (`project_team_rbac_audit_clean`, V-298/V-326) — invite
 token 256-bit hashed + 7d + **email-bound accept** (accepting account's email must match
 the invitee → no token-forward-to-wrong-account), owner-scoped removal (no cross-account
-delete); members act on the owner via `X-Driftstack-Account`and the`role === 'admin'`write-gate is **consistent across all 7 honoring routes** (members read, admins write —
+delete); members act on the owner via the `X-Driftstack-Account` header and the admin-role
+write-gate is **consistent across all 7 honoring routes** (members read, admins write —
 verified profile-snapshots capture/restore/delete all admin-gated, no privilege gap);
-membership changes invalidate the member's auth cache. Well-tested (no gap):`team-rbac-auth-path.test.ts` asserts member→403 on writes + reads-as-member.
+membership changes invalidate the member's auth cache. Well-tested (no gap):
+`team-rbac-auth-path.test.ts` asserts member→403 on writes + reads-as-member.
 
 ## Founder-gated — surface only, do NOT auto-do
 
