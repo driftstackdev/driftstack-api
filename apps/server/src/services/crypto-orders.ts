@@ -357,13 +357,34 @@ export class CryptoOrdersService {
       // Cached row was somehow evicted from the repo; treat as fresh.
       this.idempotencyKeys.delete(scopeKey);
     }
-    const order = await this.create({
+    // Single-flight: a concurrent request whose create() for this scope key
+    // is still in flight awaits that same create + replays its order, rather
+    // than racing into a second create (the persistent cache below is only
+    // set AFTER create() resolves, so the window between the cache check above
+    // and that set is otherwise unguarded for concurrent callers).
+    const inflight = this.idempotencyInflight.get(scopeKey);
+    if (inflight !== undefined) {
+      const order = await inflight.promise;
+      this.idempotentReplays += 1;
+      const mismatch = inflight.fingerprint !== fingerprint;
+      if (mismatch) this.idempotentBodyMismatches += 1;
+      return { order, replayed: true, bodyFingerprintMismatch: mismatch };
+    }
+
+    const createPromise = this.create({
       order_id: args.order_id,
       account_id: args.account_id,
       product: args.product,
       price_cents: args.price_cents,
       price_currency: args.price_currency,
     });
+    this.idempotencyInflight.set(scopeKey, { promise: createPromise, fingerprint });
+    let order: CryptoOrder;
+    try {
+      order = await createPromise;
+    } finally {
+      this.idempotencyInflight.delete(scopeKey);
+    }
     this.idempotencyKeys.set(scopeKey, {
       order_id: order.order_id,
       recorded_at: now,
@@ -376,6 +397,21 @@ export class CryptoOrdersService {
   private readonly idempotencyKeys = new Map<
     string,
     { order_id: string; recorded_at: number; fingerprint: string }
+  >();
+  /**
+   * Single-flight guard for CONCURRENT same-key creates. `createIdempotent`'s
+   * cache check + set straddle an `await this.create()`, so two simultaneous
+   * requests with the same scope key (the double-click case) would both miss
+   * the cache and both create an order — defeating the documented "duplicate
+   * POSTs with the same key replay the original order" contract. Concurrent
+   * callers await the first request's in-flight create and replay its order
+   * instead. Entries are short-lived (deleted in a `finally`), so they need no
+   * TTL prune. NB: in-memory ⇒ single-process only; cross-instance dedup is
+   * the DB-backed follow-up gated on real merchant traffic (see file header).
+   */
+  private readonly idempotencyInflight = new Map<
+    string,
+    { promise: Promise<CryptoOrder>; fingerprint: string }
   >();
   private static readonly IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
   /** V-666.AP — count of replay hits since process start. */

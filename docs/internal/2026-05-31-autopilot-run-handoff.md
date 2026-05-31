@@ -33,6 +33,17 @@ verified-clean, and the prioritized open queue. Companion:
   same-tier update does not). LOW (≤30s, self-healing, rate-limit-only — no auth/
   privilege impact); shipped as it mirrors an established pattern and is contained.
   See `project_auth_cache_tier_invalidation`.
+- crypto-orders `createIdempotent`: closed a TOCTOU concurrent-race — the in-memory
+  cache check + set straddle `await this.create()`, so two simultaneous same-key
+  POSTs (double-click) both missed the cache and both created an order (violating the
+  documented "duplicate POSTs replay the original" contract). Fix = a single-flight
+  `idempotencyInflight` map (concurrent callers await the first in-flight create +
+  replay it); +concurrent test (the existing tests only covered sequential replay).
+  Idempotency-Key parser + per-account scoping verified sound; agent-sessions race
+  was already RESOLVED (4f0002a5). LOW (crypto pre-launch/low-traffic; recoverable
+  double-order not double-charge). The in-memory dedup's cross-INSTANCE/restart gap is
+  the founder-deferred DB-backed follow-up (V-666.C "real merchant traffic"), surfaced
+  not auto-done. See `project_crypto_idempotency_concurrent_race`.
 
 ## Shipped — infra / tests / docs (non-runtime)
 

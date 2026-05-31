@@ -2165,6 +2165,30 @@ describe('V-666.AO createIdempotent', () => {
     expect(second.order.created_at).toBe(first.order.created_at);
   });
 
+  it('coalesces CONCURRENT same-key creates into a single order (single-flight)', async () => {
+    // The double-click case: two simultaneous POSTs with the same key must
+    // create exactly ONE order, not race into two. Both calls run up to their
+    // first await before either resolves; the second must observe the first's
+    // in-flight create and replay it (without the single-flight guard both
+    // would miss the cache and both create — firstWrites would be 2).
+    const { svc } = makeSvc();
+    const args = {
+      idempotency_key: 'k-concurrent',
+      account_id: 'acc',
+      product: 'team_growth',
+      price_cents: 4900,
+      price_currency: 'USD',
+    };
+    const [r1, r2] = await Promise.all([
+      svc.createIdempotent({ ...args, order_id: 'ord_a' }),
+      svc.createIdempotent({ ...args, order_id: 'ord_b' }),
+    ]);
+    // Exactly one fresh write; the other replayed; both reference one order.
+    expect([r1.replayed, r2.replayed].sort()).toEqual([false, true]);
+    expect(r1.order.order_id).toBe(r2.order.order_id);
+    expect(svc.getIdempotencyMetrics().firstWrites).toBe(1);
+  });
+
   it('scopes keys per account — same key from a different account mints a new order', async () => {
     const { svc } = makeSvc();
     const r1 = await svc.createIdempotent({
