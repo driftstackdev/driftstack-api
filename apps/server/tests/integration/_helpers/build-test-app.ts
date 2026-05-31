@@ -1094,6 +1094,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       },
     },
     accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
+    authCache, // invalidate the cached AccountContext on a Stripe-driven tier change (rate-limit tier freshness)
   );
   const stripeWebhookSigningSecret = 'whsec_test_fixture_secret';
 

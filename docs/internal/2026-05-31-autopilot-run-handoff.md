@@ -22,6 +22,17 @@ verified-clean, and the prioritized open queue. Companion:
 - webhook delivery: reclaim orphaned `in_flight` rows (worker-crash/deploy mid-batch
   no longer silently loses a webhook) — migration-free via `updated_at`; durable claim
   - in-memory `processTick` + real-PG drizzle test. See surfaced #6.
+- Stripe-driven tier change now invalidates the auth cache (`StripeWebhooksService`
+  gained an optional `authCache` dep + `invalidateAuthCache`, called after
+  `setAccountTier` on a real change in the updated+deleted handlers). The admin
+  `changeTier` path already invalidated; the primary (Stripe) channel did not, so the
+  cached `AccountContext` tier — and its derived rate-limit capacity — lagged the 30s
+  `CACHE_TTL_SEC` after upgrade/downgrade/cancel. Guarded on `previousTier !== tier`
+  (same condition as the audit emit) to avoid evicting on no-op payment-method-swap
+  updates. +3 integration assertions (created-upgrade/deleted-downgrade invalidate;
+  same-tier update does not). LOW (≤30s, self-healing, rate-limit-only — no auth/
+  privilege impact); shipped as it mirrors an established pattern and is contained.
+  See `project_auth_cache_tier_invalidation`.
 
 ## Shipped — infra / tests / docs (non-runtime)
 
@@ -146,7 +157,16 @@ trustProxy work.) Transactional-email SEND + bounce surface
 early-return WITHOUT sending when no account (magic-link also skips non-active), so no
 relay/bomb to arbitrary addresses; anti-enumeration + per-IP rate-limited; and there
 is NO inbound Postmark bounce webhook (suppression is Postmark-side → no fake-bounce
-DoS surface).
+DoS surface). Status-site PUBLIC incident read (`project_status_incident_public_read_clean`)
+— no-auth `GET /v1/status/incidents(+/:id)`: list route FORCES `scope:'public'` into the
+parsed query (a client `?scope=all` can't escalate) + 30d default `since`; detail passes
+`publicOnly:true` → repo adds `eq(public,true)` → non-public OR missing id both 404
+(same-shape anti-enumeration, documented inline); the `publicIncident()`/
+`publicIncidentUpdate()` mappers are explicit allow-lists that OMIT `createdByAdminId`/
+`createdByAdminKeyId`/`autoProbeTarget` (last = internal infra monitoring target). The
+_selection_ invariants were tested but _field-exclusion_ was unguarded → added a behavioral
+guard (`ea8775f1`: exact public key-set + explicit `not.toHaveProperty` for the 3 sensitive
+cols, both casings) in `tests/integration/admin-incidents.test.ts`.
 
 ## Founder-gated — surface only, do NOT auto-do
 
@@ -155,10 +175,11 @@ DoS surface).
 - **iphone16pro → iphone17 archetype cutover** — canvas-close-gated (Agent-1);
   surface, don't flip.
 
-## Prod state (Rule-L, wave 9)
+## Prod state (Rule-L, latest wave)
 
-Deployed SHA = HEAD, service active, 0 restarts, ~0 real errors/2h, self-re-arming
-scheduled jobs alive. Healthy.
+Deployed SHA = HEAD (`ea8775f1` after the status-incident field-exclusion guard;
+prior `/version` showed `0adedd6` healthy), service active, 0 restarts, ~0 real
+errors/2h, self-re-arming scheduled jobs alive. Healthy.
 
 ## Recommended order when the loop is paused
 

@@ -11,7 +11,7 @@
 // verification + idempotency + dispatch happy/sad paths; this file
 // focuses on what gets WRITTEN as a result.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { signStripePayload } from '../../src/lib/stripe-signing.js';
 
@@ -315,5 +315,71 @@ describe('V-226 — subscription tier changes emit account audit entries', () =>
 
     const log = await listTierChanges(fx);
     expect(log.data.length).toBe(0);
+  });
+});
+
+// Auth-cache invalidation on a Stripe-driven tier change. The cached
+// AccountContext carries the account's tier (and its derived rate-limit
+// capacity); without an explicit invalidate the new tier would lag the
+// 30s cache TTL after an upgrade/downgrade/cancel. Mirrors
+// AdminAccountsService.changeTier (the admin path already invalidates).
+// The guard matches the audit emit: real tier changes only.
+describe('Stripe tier change invalidates the cached AccountContext', () => {
+  let fx: TestAppFixture;
+
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('invalidates the auth cache when subscription.created upgrades the tier', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const spy = vi.spyOn(fx.authCache, 'invalidateAccount');
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_cache_upgrade',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: 'sub_cache_a',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+      }),
+    );
+    expect(spy).toHaveBeenCalledWith(fx.accountId);
+  });
+
+  it('invalidates the auth cache when subscription.deleted downgrades to free', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const spy = vi.spyOn(fx.authCache, 'invalidateAccount');
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_cache_downgrade',
+        type: 'customer.subscription.deleted',
+        stripeSubscriptionId: 'sub_cache_b',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'canceled',
+        canceledAtSec: nowSec(),
+      }),
+    );
+    expect(spy).toHaveBeenCalledWith(fx.accountId);
+  });
+
+  it('does NOT invalidate when subscription.updated keeps the same tier (no needless eviction)', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const spy = vi.spyOn(fx.authCache, 'invalidateAccount');
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_cache_noop',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: 'sub_cache_c',
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+      }),
+    );
+    expect(spy).not.toHaveBeenCalled();
   });
 });

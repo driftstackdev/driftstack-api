@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto';
 import type { AccountTier } from '@driftstack/api-types';
 import type { Logger } from '../lib/logger.js';
 import type { AccountLifecycleService } from './account-lifecycle.js';
+import type { AuthCache } from './auth-cache.js';
 
 /**
  * Minimal parsed-Stripe-event shape. We don't depend on the `stripe`
@@ -141,7 +142,33 @@ export class StripeWebhooksService {
      * outputs). Best-effort; failures never block the Stripe handler.
      */
     private readonly accountLifecycle: AccountLifecycleService | null = null,
+    /**
+     * Auth-cache handle so a Stripe-driven tier change invalidates the
+     * account's cached AccountContext immediately (mirrors
+     * AdminAccountsService.changeTier). Without it the cached tier — and
+     * its derived rate-limit capacity — would lag the CACHE_TTL_SEC (30s)
+     * window after a subscription upgrade/downgrade/cancel. Optional +
+     * best-effort: a cache failure never blocks the Stripe handler.
+     */
+    private readonly authCache: AuthCache | null = null,
   ) {}
+
+  /**
+   * Invalidate the account's auth-cache entry so a tier change takes effect
+   * on the very next authenticated request rather than lagging the 30s cache
+   * TTL. Best-effort — mirrors AdminAccountsService.invalidateCache: the tier
+   * mutation is already committed and a stale entry TTLs out within
+   * CACHE_TTL_SEC as the fallback, so a cache error must never fail the
+   * Stripe handler.
+   */
+  private async invalidateAuthCache(accountId: string): Promise<void> {
+    if (this.authCache === null) return;
+    try {
+      await this.authCache.invalidateAccount(accountId);
+    } catch {
+      // Swallow — see method doc.
+    }
+  }
 
   /**
    * Process a verified Stripe event. Idempotent — repeated calls with
@@ -317,6 +344,11 @@ export class StripeWebhooksService {
     // gets the tier; Stripe handles the dunning).
     if (tier !== undefined && (status === 'active' || status === 'trialing')) {
       const { previousTier } = await this.repo.setAccountTier({ accountId, tier, at });
+      // Invalidate the cached AccountContext only on a real tier change
+      // (same condition as the audit emit below) so a no-op subscription
+      // update — e.g. a payment-method swap that re-sets the same tier —
+      // doesn't needlessly evict the cache.
+      if (previousTier !== tier) await this.invalidateAuthCache(accountId);
       // V-202b — lifecycle dispatcher fans this out into audit emit +
       // tier-changed email at one call site. Short-circuits internally
       // when previousTier === newTier (no-op transition).
@@ -367,6 +399,9 @@ export class StripeWebhooksService {
       tier: downgradeTier,
       at,
     });
+    // Invalidate on a real downgrade only (account wasn't already at the
+    // downgrade tier) — same condition as the tier_changed emit below.
+    if (previousTier !== downgradeTier) await this.invalidateAuthCache(accountId);
     if (this.accountLifecycle !== null) {
       await this.accountLifecycle.emit(accountId, {
         kind: 'subscription.tier_changed',

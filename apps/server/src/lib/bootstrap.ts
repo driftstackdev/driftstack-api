@@ -886,6 +886,7 @@ export async function createProductionDeps(
       priceToTier,
     },
     accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
+    authCache, // invalidate the cached AccountContext on a Stripe-driven tier change (rate-limit tier freshness)
   );
 
   // V-081: Profiles service.
