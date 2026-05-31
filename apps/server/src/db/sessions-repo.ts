@@ -79,6 +79,16 @@ export class DrizzleSessionRepo implements SessionRepo {
     return row?.count ?? 0;
   }
 
+  async listActiveByAccount(accountId: string): Promise<SessionRecord[]> {
+    const rows = await this.database.db
+      .select()
+      .from(sessions)
+      .where(
+        and(eq(sessions.accountId, accountId), inArray(sessions.status, ACTIVE_SESSION_STATUSES)),
+      );
+    return rows.map(toSessionRecord);
+  }
+
   async listSessions(
     accountId: string,
     opts: { limit: number; cursor?: string },

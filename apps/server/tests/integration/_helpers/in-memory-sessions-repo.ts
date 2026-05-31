@@ -87,6 +87,15 @@ export class InMemorySessionsRepo implements SessionRepo {
     return Promise.resolve(count);
   }
 
+  listActiveByAccount(accountId: string): Promise<SessionRecord[]> {
+    const active = Array.from(this.sessions.values()).filter(
+      (s) =>
+        s.accountId === accountId &&
+        (s.status === 'creating' || s.status === 'ready' || s.status === 'busy'),
+    );
+    return Promise.resolve(active);
+  }
+
   listSessions(
     accountId: string,
     opts: { limit: number; cursor?: string },

@@ -47,10 +47,16 @@ export interface AccountsAdminRepo {
   countByStatus(status: 'active' | 'suspended' | 'deleted'): Promise<number>;
 }
 
+/** Minimal sessions-service surface the suspend-reclaim path depends on. */
+export interface SuspendSessionReclaimer {
+  destroyAllForAccount(accountId: string): Promise<number>;
+}
+
 export class AccountsAdminService {
   constructor(
     private readonly repo: AccountsAdminRepo,
     private readonly authCache: AuthCache | null = null,
+    private readonly sessions: SuspendSessionReclaimer | null = null,
   ) {}
 
   async getAccount(ctx: AccountContext, accountId: string): Promise<AccountRow> {
@@ -90,6 +96,18 @@ export class AccountsAdminService {
     const updated = await this.repo.setStatus(accountId, 'suspended', new Date());
     if (!updated) throw new NotFoundError(`Account "${accountId}" not found.`);
     await this.invalidateCache(accountId);
+    // Reclaim the account's still-running browser sessions so they stop
+    // consuming the driver while suspended. Auth already blocks every new
+    // request from a suspended account (auth.ts) — this frees the in-flight
+    // compute. Best-effort: the suspend mutation is already committed, and
+    // the duration sweep mops up any straggler if reclaim fails.
+    if (this.sessions) {
+      try {
+        await this.sessions.destroyAllForAccount(accountId);
+      } catch {
+        // Never fail the suspend on a reclaim error.
+      }
+    }
     return updated;
   }
 

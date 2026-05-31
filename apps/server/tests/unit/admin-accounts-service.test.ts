@@ -232,4 +232,27 @@ describe('V-553.B-15 AccountsAdminService.suspend / unsuspend', () => {
       svc.unsuspend(ctxWith(['driftstack_internal_admin']), 'acc_missing'),
     ).rejects.toThrow(/not found/);
   });
+
+  it('suspend reclaims the account running sessions via the injected reclaimer', async () => {
+    const { repo } = makeRepo([baseAccount()]);
+    const calls: string[] = [];
+    const svc = new AccountsAdminService(repo, null, {
+      destroyAllForAccount: (id: string) => {
+        calls.push(id);
+        return Promise.resolve(2);
+      },
+    });
+    await svc.suspend(ctxWith(['driftstack_internal_admin']), 'acc_1');
+    expect(calls).toEqual(['acc_1']);
+  });
+
+  it('suspend succeeds even when the session reclaim throws (best-effort)', async () => {
+    const { repo } = makeRepo([baseAccount()]);
+    const svc = new AccountsAdminService(repo, null, {
+      destroyAllForAccount: () => Promise.reject(new Error('reclaim boom')),
+    });
+    await expect(
+      svc.suspend(ctxWith(['driftstack_internal_admin']), 'acc_1'),
+    ).resolves.toBeDefined();
+  });
 });

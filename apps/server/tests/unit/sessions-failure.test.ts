@@ -111,6 +111,9 @@ class StubRepo implements SessionRepo {
   countActiveSessions(_accountId: string): Promise<number> {
     return Promise.resolve(0);
   }
+  listActiveByAccount(): Promise<SessionRecord[]> {
+    return Promise.resolve([]);
+  }
   listSessions(): Promise<{ items: SessionRecord[]; nextCursor: string | null }> {
     return Promise.resolve({ items: [], nextCursor: null });
   }

@@ -145,6 +145,12 @@ export interface SessionRepo {
     extra?: { lastStateAt?: Date; destroyedAt?: Date },
   ): Promise<void>;
   countActiveSessions(accountId: string): Promise<number>;
+  /**
+   * Every still-active session (status creating | ready | busy) for an
+   * account. Drives the suspend-reclaim path (destroyAllForAccount);
+   * system-scoped, no AccountContext.
+   */
+  listActiveByAccount(accountId: string): Promise<SessionRecord[]>;
   listSessions(
     accountId: string,
     opts: { limit: number; cursor?: string },
@@ -635,6 +641,67 @@ export class SessionsService {
       }
     }
     return { destroyed: true };
+  }
+
+  /**
+   * System-actor reclaim of every still-active session for an account,
+   * used when the account is suspended so its browser sessions stop
+   * consuming the driver instead of lingering until their duration cap.
+   * Mirrors `autoDestroyExpired`'s per-session mechanics (driver destroy →
+   * mark destroyed → record event → best-effort session.completed webhook
+   * + system audit) with an 'account suspended' reason. No AccountContext:
+   * the admin suspend path already authorized. Best-effort PER SESSION —
+   * one driver/db failure never blocks reclaiming the rest; the duration
+   * sweep mops up any straggler. Returns the count transitioned to destroyed.
+   */
+  async destroyAllForAccount(accountId: string): Promise<number> {
+    const active = await this.deps.repo.listActiveByAccount(accountId);
+    const reason = 'account suspended';
+    let destroyed = 0;
+    for (const session of active) {
+      try {
+        const destroyedAt = new Date();
+        await this.deps.driver.destroy(session.driverSessionId);
+        await this.deps.repo.updateSessionStatus(session.id, 'destroyed', { destroyedAt });
+        await this.deps.repo.recordEvent({
+          sessionId: session.id,
+          type: 'destroyed',
+          payload: { auto_destroyed: true, reason },
+          durationMs: null,
+        });
+        destroyed += 1;
+        const durationMs = destroyedAt.getTime() - session.createdAt.getTime();
+        if (this.deps.webhooks) {
+          try {
+            await this.deps.webhooks.enqueueEvent(accountId, 'session.completed', {
+              session_id: `ses_${session.id}`,
+              duration_ms: durationMs,
+              auto_destroyed: true,
+              reason,
+            });
+          } catch {
+            /* webhook enqueue is best-effort */
+          }
+        }
+        if (this.deps.accountAudit) {
+          try {
+            await this.deps.accountAudit.record({
+              accountId,
+              actorType: 'system',
+              action: 'session.destroyed',
+              targetResourceId: `ses_${session.id}`,
+              payload: { duration_ms: durationMs, auto_destroyed: true, reason },
+            });
+          } catch {
+            /* swallow */
+          }
+        }
+      } catch {
+        // Best-effort per session — keep reclaiming the rest; the duration
+        // sweep cleans up any straggler.
+      }
+    }
+    return destroyed;
   }
 
   async list(

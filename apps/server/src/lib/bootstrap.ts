@@ -482,7 +482,11 @@ export async function createProductionDeps(
 
   // Admin services.
   const adminAuditService = new AdminAuditService(adminAuditRepo, metricsRegistry);
-  const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);
+  const accountsAdminService = new AccountsAdminService(
+    accountsAdminRepo,
+    authCache,
+    sessionsService,
+  );
   const rateLimitOverridesService = new RateLimitOverridesService(
     rateLimitOverridesRepo,
     authCache,

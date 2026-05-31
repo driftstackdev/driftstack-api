@@ -85,10 +85,13 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     );
   });
 
-  it('AccountsAdminService: constructor takes repo + optional authCache', () => {
+  it('AccountsAdminService: constructor takes repo + optional authCache + optional sessions reclaimer', () => {
     expect(body).toMatch(/export class AccountsAdminService \{/);
     expect(body).toMatch(
-      /constructor\(\s*\n?\s*private readonly repo: AccountsAdminRepo,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*\) \{\}/,
+      /constructor\(\s*\n?\s*private readonly repo: AccountsAdminRepo,\s*\n?\s*private readonly authCache: AuthCache \| null = null,\s*\n?\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*\n?\s*\) \{\}/,
+    );
+    expect(body).toMatch(
+      /export interface SuspendSessionReclaimer \{\s*\n?\s*destroyAllForAccount\(accountId: string\): Promise<number>;\s*\n?\s*\}/,
     );
   });
 
