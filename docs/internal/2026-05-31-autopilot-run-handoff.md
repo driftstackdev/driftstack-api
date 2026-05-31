@@ -267,6 +267,13 @@ write-gate is **consistent across all 7 honoring routes** (members read, admins 
 verified profile-snapshots capture/restore/delete all admin-gated, no privilege gap);
 membership changes invalidate the member's auth cache. Well-tested (no gap):
 `team-rbac-auth-path.test.ts` asserts member→403 on writes + reads-as-member.
+Bundled-LLM access (`project_bundled_llm_audit_clean`, V-487) — the shared
+Driftstack-Anthropic-key gate. Whole-token per-tier caps (`TIER_TOKEN_CAPS`: free 0 →
+bundled off for free, enterprise null → unlimited); `checkAccess` is fail-safe
+(`disabled` / `over-budget` / `ok` + remaining); `recordConsumption` clamps
+`Math.max(0, Math.floor())` on both token counts. The post-hoc soft-cap (one call can
+overshoot by a bounded single-request amount, then locked until the next cycle) is the
+documented V-487 design, not a bug. BYOK bypasses this path entirely.
 
 ## Founder-gated — surface only, do NOT auto-do
 
