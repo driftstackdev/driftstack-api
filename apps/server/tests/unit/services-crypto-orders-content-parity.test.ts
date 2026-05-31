@@ -27,9 +27,10 @@
 //   • V-666.K expireOrder + sweepExpiredOrders: pending older than
 //     olderThanMs → failed; capped at limit (default 500).
 //   • V-666.I crypto.order.paid + V-666.AN crypto.order.failed:
-//     wire-ready decoupled emitter (prod webhook_event_type enum
-//     migration is task #72 HOLD); failed reason 3-source (ipn /
-//     expired / swept).
+//     thin-seam emitter, prod wiring LIVE (migration 0064 added both
+//     to the webhook_event_type enum; bootstrap wires the
+//     WebhooksService sink); failed reason 3-source (ipn / expired /
+//     swept).
 //   • applyIpnStatus: forward-only state machine via
 //     isTerminalForward; payment_id recorded even on no-op.
 
@@ -230,10 +231,8 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
     );
   });
 
-  it("CryptoOrderWebhookEmitter: decoupled emitter accepts 'crypto.order.paid'|'crypto.order.failed' literals (prod enum migration task #72 HOLD)", () => {
-    expect(body).toMatch(
-      /Production wiring is deferred — the\s*\n?\s*\*\s*`webhook_event_type` Postgres enum does NOT yet carry\s*\n?\s*\*\s*`crypto\.order\.paid`\./,
-    );
+  it("CryptoOrderWebhookEmitter: thin-seam emitter accepts 'crypto.order.paid'|'crypto.order.failed' literals; prod wiring LIVE (migration 0064 added the enum values; bootstrap wires the WebhooksService sink)", () => {
+    expect(body).toMatch(/Production wiring is LIVE: migration 0064 \(2026-05-22\) added/);
     expect(body).toMatch(/export interface CryptoOrderWebhookEmitter \{/);
     expect(body).toMatch(/eventType: 'crypto\.order\.paid' \| 'crypto\.order\.failed',/);
   });

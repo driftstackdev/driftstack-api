@@ -217,13 +217,12 @@ export interface CryptoOrdersServiceOpts {
    * order transitions to the paid state. Best-effort: emission
    * failures don't roll back the state transition.
    *
-   * Production wiring is deferred — the
-   * `webhook_event_type` Postgres enum does NOT yet carry
-   * `crypto.order.paid`. Adding it requires a forward migration; until
-   * that lands the bootstrap MUST NOT pass a `WebhooksService`-backed
-   * emitter here (the INSERT into webhook_deliveries would 22P02
-   * invalid input value for enum). Unit tests pass a local mock
-   * emitter that doesn't go through the DB.
+   * Production wiring is LIVE: migration 0064 (2026-05-22) added
+   * `crypto.order.paid` + `crypto.order.failed` to the
+   * `webhook_event_type` Postgres enum, so the bootstrap passes a
+   * `WebhooksService`-backed emitter here — a subscribed customer gets
+   * a real delivery on the paid transition. Unit tests pass a local
+   * mock emitter that doesn't go through the DB.
    */
   webhooks?: CryptoOrderWebhookEmitter;
   /**
@@ -243,11 +242,11 @@ export interface CryptoOrdersServiceOpts {
 }
 
 /**
- * V-666.I — local emitter contract. Decoupled from {@link WebhooksService}
- * on purpose: this interface accepts the literal `'crypto.order.paid'`
- * even though the WebhookEventType union does not yet include it. The
- * separation lets the V-666.I emission path land + be tested ahead of
- * the DB migration that adds the enum value.
+ * V-666.I — local emitter contract: a thin seam over {@link
+ * WebhooksService}, whose `WebhookEventType` union + the
+ * `webhook_event_type` pgEnum now both carry these literals (migration
+ * 0064). Keeping a local interface lets unit tests inject a mock
+ * emitter without standing up the DB-backed delivery pipeline.
  */
 export interface CryptoOrderWebhookEmitter {
   enqueueEvent: (
@@ -255,9 +254,9 @@ export interface CryptoOrderWebhookEmitter {
     // V-666.AN — adds 'crypto.order.failed' alongside 'crypto.order.paid'.
     // Fires on the pending/confirming/partial → failed terminal
     // transition (whether via IPN, expireOrder, or sweepExpiredOrders).
-    // Same decoupled posture: the emitter accepts the literal event
-    // type even though the `webhook_event_type` enum doesn't yet
-    // carry it; prod wire-up (task #72) adds the enum value.
+    // Both literals are live in the `webhook_event_type` pgEnum
+    // (migration 0064) + the WebhookEventType union; the bootstrap
+    // wires the WebhooksService as the emitter sink.
     eventType: 'crypto.order.paid' | 'crypto.order.failed',
     data: Record<string, unknown>,
   ) => Promise<number>;
