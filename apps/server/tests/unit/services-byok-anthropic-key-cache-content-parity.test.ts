@@ -30,16 +30,21 @@ describe('services/byok-anthropic-key-cache content parity', () => {
     );
   });
 
-  it("3-event lifecycle framing pinned: 'SET on POST /v1/agent-sessions when the customer has a stored BYOK key (after BYOKAnthropicService.getPlaintext returns non-null). GET on every POST /v1/agent-sessions/:id/message that doesn't carry an x-byok-anthropic-api-key header (header overrides per Q.1.c verdict option 2). DELETE on session close (DELETE /v1/agent-sessions/:id and on budget-exhausted close from the runtime).' — pinned so the SET/GET/DELETE 3-event mapping + header-overrides-cache precedence + Q.1.c-option-2 verdict + DELETE-on-budget-exhausted contract all stay documented", () => {
+  it("3-event lifecycle framing pinned: SET on agent-session create with a stored BYOK key, GET on each /message without an x-byok header (header overrides per Q.1.c option 2), DELETE on session close — BOTH clear paths now at the route layer (customer DELETE + the /message handler when a turn closes the session, e.g. runtime budget-exhausted close). 2026-05-31: corrected from the inaccurate 'from the runtime' wording — the runtime has no handle on the route-owned cache, so the budget-exhausted clear happens in the message route via post-turn status 'closed'", () => {
     expect(body).toMatch(
       /\/\/ {3}- SET on POST \/v1\/agent-sessions when the customer has a stored\s*\n?\s*\/\/ {5}BYOK key \(after BYOKAnthropicService\.getPlaintext returns\s*\n?\s*\/\/ {5}non-null\)\./,
     );
     expect(body).toMatch(
       /\/\/ {3}- GET on every POST \/v1\/agent-sessions\/:id\/message that doesn't\s*\n?\s*\/\/ {5}carry an x-byok-anthropic-api-key header \(header overrides per\s*\n?\s*\/\/ {5}Q\.1\.c verdict option 2\)\./,
     );
+    // Discrete pins (no long backtracking chain) for the corrected,
+    // route-layer-accurate DELETE lifecycle bullet.
     expect(body).toMatch(
-      /\/\/ {3}- DELETE on session close \(DELETE \/v1\/agent-sessions\/:id and on\s*\n?\s*\/\/ {5}budget-exhausted close from the runtime\)\./,
+      /\/\/ {3}- DELETE on session close — both at the route layer, since this cache/,
     );
+    expect(body).toMatch(/the customer\s*\n?\s*\/\/ {5}DELETE \/v1\/agent-sessions\/:id handler/);
+    expect(body).toMatch(/POST \/:id\/message/);
+    expect(body).toMatch(/post-turn status 'closed'/);
   });
 
   it("Memory-shape framing pinned: 'in-process Map keyed by agent_session_id. Plaintext strings are held in JS heap; not persisted; not serialized to logs. On process restart the cache is empty; existing customer sessions fall through to the header-only path (still works because the route resolution chain is header > cache > fallback).' — pinned so the JS-heap + no-persist + no-log + empty-on-restart + header>cache>fallback resolution-chain contract all stay documented (drift to logging plaintext would leak customer Anthropic keys)", () => {

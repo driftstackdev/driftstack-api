@@ -1260,6 +1260,15 @@ export function registerAgentSessionsRoutes(
           `Agent session is ${result.session.status} (${result.reason}). Start a new agent session.`,
         );
       }
+      // Q.1.c — if this turn closed the session (e.g. the runtime's
+      // budget-exhausted close via closeWithReason), drop the cached BYOK
+      // plaintext now. The runtime layer has no handle on this route-owned
+      // cache, so without this the decrypted key would linger in process
+      // memory until restart (the customer DELETE route is the only other
+      // clear path). delete() is idempotent.
+      if (result.session.status === 'closed') {
+        byokKeyCache?.delete(req.params.id);
+      }
       // Arc 2 sub-slice 8.6 (v2-#8) — manual-mode pass-through. No
       // decompose/executor ran; transcript carries one extra operator
       // entry. SDK consumers branch on kind:'logged-manual' to render

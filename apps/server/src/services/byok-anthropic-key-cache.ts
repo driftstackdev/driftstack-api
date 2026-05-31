@@ -14,8 +14,11 @@
 //   - GET on every POST /v1/agent-sessions/:id/message that doesn't
 //     carry an x-byok-anthropic-api-key header (header overrides per
 //     Q.1.c verdict option 2).
-//   - DELETE on session close (DELETE /v1/agent-sessions/:id and on
-//     budget-exhausted close from the runtime).
+//   - DELETE on session close — both at the route layer, since this cache
+//     is route-owned and the runtime has no handle on it: the customer
+//     DELETE /v1/agent-sessions/:id handler, and the POST /:id/message
+//     handler when a turn closed the session (post-turn status 'closed',
+//     e.g. the runtime's budget-exhausted close via closeWithReason).
 //
 // Memory shape: in-process Map keyed by agent_session_id. Plaintext
 // strings are held in JS heap; not persisted; not serialized to logs.
