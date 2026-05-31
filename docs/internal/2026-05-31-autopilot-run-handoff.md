@@ -151,6 +151,20 @@ verified-clean, and the prioritized open queue. Companion:
     compliance + List-Unsubscribe-One-Click implications → **founder/legal decision,
     don't auto-flip**. Rest of the subsystem is CLEAN (see Verified-clean + the shipped
     single-use guard above).
+11. **[LOW — SURFACED 2026-05-31; defense-in-depth, founder call] GitHub OAuth
+    `/user.email` trusted without explicit `verified` cross-check** —
+    `project_oauth_client_flow_audit_clean`. `lib/oauth-client-exchange.ts:215` uses
+    the GitHub `/user.email` field when non-empty and hardcodes `emailVerified: true`
+    (line 265), skipping the `/user/emails` `verified === true` check that the
+    email-private fallback DOES perform (line 240). Relies on GitHub's invariant that
+    a _public profile email must be verified_. NOT a confirmed vuln (and the
+    collision→merge-verification gate independently blocks takeover of existing
+    accounts — only residual is create-new email squatting). The robust fix (always
+    derive the email from the `/user/emails` primary+verified entry) adds a
+    fail-open-vs-closed tradeoff on `/user/emails` fetch errors + an extra API call
+    per login, guarding a case GitHub's invariant already prevents → founder/UX call,
+    not a blind auto-ship to the auth path. The rest of the OAuth client flow is SOUND
+    (see Verified-clean).
 
 ## Verified clean — do NOT re-audit (re-sweep = churn)
 
@@ -188,7 +202,16 @@ parsed query (a client `?scope=all` can't escalate) + 30d default `since`; detai
 `createdByAdminKeyId`/`autoProbeTarget` (last = internal infra monitoring target). The
 _selection_ invariants were tested but _field-exclusion_ was unguarded → added a behavioral
 guard (`ea8775f1`: exact public key-set + explicit `not.toHaveProperty` for the 3 sensitive
-cols, both casings) in `tests/integration/admin-incidents.test.ts`.
+cols, both casings) in `tests/integration/admin-incidents.test.ts`. Public status-page
+email-subscription (`project_status_subscribers_audit_clean`) — 256-bit `generateAuthToken`
+tokens stored as sha256 hash, double-opt-in gates the notify list, confirm token SINGLE-USE
+(`markConfirmed` nulls the hash — verified + now guarded), per-subscriber unsubscribe token,
+GDPR 90d email purge (one LOW-MED surface, #10). OAuth client sign-in/link flow
+(`project_oauth_client_flow_audit_clean`, V-667.C Google+GitHub) — `/start` redirect_to
+origin-validated + PKCE S256 + HMAC state + HTTP-only signed cookie; `/callback` verifies
+state (CSRF) + PKCE + email_verified; **collision→merge-verification blocks account
+takeover** (an OAuth email matching an existing account issues a proof-of-control token to
+that account's inbox, never auto-links); revoked-link no auto-signin (one LOW surface, #11).
 
 ## Founder-gated — surface only, do NOT auto-do
 
