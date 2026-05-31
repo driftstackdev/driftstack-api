@@ -511,7 +511,25 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'List of keys (plaintext never included).',
-        content: { 'application/json': { schema: PaginatedApiKeysSchema } },
+        content: {
+          'application/json': {
+            schema: PaginatedApiKeysSchema,
+            example: {
+              data: [
+                {
+                  id: 'key_3f8a1b2c-4d5e-6f70-8a9b-0c1d2e3f4a5b',
+                  name: 'ci-pipeline',
+                  key_prefix: 'ds_live_3f8a',
+                  scopes: ['read', 'write'],
+                  last_used_at: '2026-05-31T09:30:00Z',
+                  revoked_at: null,
+                  expires_at: null,
+                  created_at: '2026-05-20T08:00:00Z',
+                },
+              ],
+            },
+          },
+        },
       },
       ...errors4xx,
     },
@@ -4334,7 +4352,27 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Endpoint.',
-        content: { 'application/json': { schema: WebhookEndpointSchema } },
+        content: {
+          'application/json': {
+            schema: WebhookEndpointSchema,
+            example: {
+              id: 'whk_2b1c3d4e-5f60-7a8b-9c0d-1e2f3a4b5c6d',
+              url: 'https://example.com/driftstack/webhooks',
+              secret_prefix: 'whsec_v1_2b1c',
+              prev_secret_prefix: null,
+              rotation_grace_expires_at: null,
+              events: ['session.completed', 'session.failed'],
+              description: 'Production webhook endpoint',
+              active: true,
+              consecutive_failures: 0,
+              last_success_at: '2026-05-31T09:30:00Z',
+              last_failure_at: null,
+              disabled_at: null,
+              delivery_counts: { delivered: 1284, failed: 3, dlq: 0 },
+              created_at: '2026-05-20T08:00:00Z',
+            },
+          },
+        },
       },
       404: {
         description: 'Webhook endpoint not found (or owned by another account).',
