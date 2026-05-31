@@ -27,27 +27,35 @@ verified-clean, and the prioritized open queue. Companion:
 
 ## Surfaced — real findings, fixes need a focused (non-deep-session) pass
 
-0. **[MEDIUM — RESOLVED 2026-05-31, shipped 33f1e907 + earlier login fix]
-   Open-redirect via `?next=` in dashboard auth pages** —
-   `2026-05-31-open-redirect-next-param.md`. All three pages (`login.astro`,
-   `signup.astro`, `verify-email.astro`) now route `?next=` through the
-   URL-parser same-origin sanitizer `src/lib/safe-next.ts` (`safeNextPath`,
-   unit-tested incl. the `//`-pathname bypass), applied as an inline copy
-   (`is:inline` can't import) pinned in 8 content-parity files. Build-verified
-   (all 4 sanitizer sites in dist HTML) + full gate + CI deploy green. ONLY
-   leftover: the API `/start` `redirect_to` server-side `dashboardOrigin`
-   restriction — pure defense-in-depth (client now always sends same-origin), a
-   server-side slice that can ride a future server wave, NOT a live hole.
-1. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
+0. **[MEDIUM — FULLY RESOLVED 2026-05-31] Open-redirect class** —
+   `2026-05-31-open-redirect-next-param.md`. All FOUR dashboard nav sites
+   (`login` / `signup` / `verify-email` / the OAuth-client `callback` page) sanitize
+   through `src/lib/safe-next.ts` (`safeNextPath`), AND the API `/start` rejects
+   off-origin `redirect_to` at the source (shipped 08d6108f / 33f1e907 / 2c352c09).
+   Pinned across 9 content/integration tests; build- + CI-deploy-verified. **No
+   remaining items.**
+1. **[HIGH — SURFACED 2026-05-31] `req.ip` is `127.0.0.1` in prod (trustProxy gap)** —
+   `2026-05-31-trustproxy-gap-ip-rate-limit-and-audit.md`. Prod is
+   CF→nginx(localhost)→Fastify but Fastify never sets `trustProxy`, so `req.ip` =
+   `127.0.0.1` for every real request. ⇒ (a) the IP brute-force gate keys ALL
+   traffic on `prefix:127.0.0.1` = one global bucket (no per-attacker isolation +
+   latent 429 outage at launch scale), and (b) `auth.ts` records `127.0.0.1` as the
+   session audit IP (9+ sites). nginx already sets `X-Real-IP`/`XFF` correctly; the
+   gap is the missing Fastify `trustProxy`. **SURFACE-only** (global `req.ip` change
+   touches the LOCKED XFF-leftmost stance + audit semantics + needs the real prod XFF
+   chain verified to pick `trustProxy` safely; `config.host`=`0.0.0.0`). Fix options
+   in the doc. **Likely the highest-impact open finding** — promote for a focused
+   pass. Rate-limit core is otherwise sound (atomic Redis Lua, correct refill).
+2. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
    `2026-05-31-webhook-orphaned-inflight-reclaim-gap.md`. A worker crash / deploy
    mid-batch leaves deliveries stuck `in_flight` forever → silently lost.
    **Fully designed:** add a `claimed_at` column (migration), reclaim on
    `claimed_at` staleness (threshold ≫ 10s timeout), leave `updated_at`/DLQ-keyset
    untouched, real-PG test. **Highest-value next item.**
-2. **[LOW] Auth-flow consume race** — `2026-05-31-auth-flow-token-audit.md`.
+3. **[LOW] Auth-flow consume race** — `2026-05-31-auth-flow-token-audit.md`.
    `consumeAuthToken` returns void → concurrent same-token submit lets both
    callers act (benign-to-minor). Needs a loser-behaviour decision.
-3. **[LOW] BYOK cache dedicated test** — guards `938ebf3a`; needs `buildTestApp`
+4. **[LOW] BYOK cache dedicated test** — guards `938ebf3a`; needs `buildTestApp`
    to expose `byokKeyCache` + a byok-stored-then-budget-exhaust scenario.
 
 ## Verified clean — do NOT re-audit (re-sweep = churn)
