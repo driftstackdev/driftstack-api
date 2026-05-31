@@ -27,13 +27,17 @@ verified-clean, and the prioritized open queue. Companion:
 
 ## Surfaced — real findings, fixes need a focused (non-deep-session) pass
 
-0. **[MEDIUM, LIVE — new #1] Open-redirect via `?next=` in dashboard sign-in** —
-   `2026-05-31-open-redirect-next-param.md`. `login.astro` navigates a raw
-   `?next=` (`window.location.href = next`, line 240) → `/login?next=https://evil.com`
-   bounces a signed-in user off-site (phishing); `signup.astro` has the same
-   pattern. Fix = a URL-parser same-origin sanitizer (NOT regex) at every raw
-   `next`/`return_to` nav + jsdom bypass tests + parity-pin updates. The only LIVE
-   customer-facing vuln from the run — promote above the webhook item.
+0. **[MEDIUM — RESOLVED 2026-05-31, shipped 33f1e907 + earlier login fix]
+   Open-redirect via `?next=` in dashboard auth pages** —
+   `2026-05-31-open-redirect-next-param.md`. All three pages (`login.astro`,
+   `signup.astro`, `verify-email.astro`) now route `?next=` through the
+   URL-parser same-origin sanitizer `src/lib/safe-next.ts` (`safeNextPath`,
+   unit-tested incl. the `//`-pathname bypass), applied as an inline copy
+   (`is:inline` can't import) pinned in 8 content-parity files. Build-verified
+   (all 4 sanitizer sites in dist HTML) + full gate + CI deploy green. ONLY
+   leftover: the API `/start` `redirect_to` server-side `dashboardOrigin`
+   restriction — pure defense-in-depth (client now always sends same-origin), a
+   server-side slice that can ride a future server wave, NOT a live hole.
 1. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
    `2026-05-31-webhook-orphaned-inflight-reclaim-gap.md`. A worker crash / deploy
    mid-batch leaves deliveries stuck `in_flight` forever → silently lost.
@@ -67,8 +71,9 @@ scheduled jobs alive. Healthy.
 
 ## Recommended order when the loop is paused
 
-1. **Open-redirect `?next=` fix** (#0 above) — LIVE customer-facing vuln; small but
-   bypass-sensitive (URL-parser sanitizer + tests). Do first.
+1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
+   Optional tail: API `/start` `redirect_to` dashboardOrigin restriction
+   (defense-in-depth, can ride a server wave).
 2. Webhook reclaim — fully spec'd, just needs focused implementation.
 3. A founder call on strict-FK and/or the archetype cutover.
 4. BYOK cache test + auth-flow consume hardening (low priority).
