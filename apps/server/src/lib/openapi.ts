@@ -345,6 +345,10 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Wait resolved (satisfied or timed out).',
         content: { 'application/json': { schema: WaitResponseSchema } },
       },
+      404: {
+        description: 'Session not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -361,6 +365,10 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Session record.',
         content: { 'application/json': { schema: SessionSchema } },
       },
+      404: {
+        description: 'Session not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -376,6 +384,10 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Session state.',
         content: { 'application/json': { schema: SessionStateSchema } },
+      },
+      404: {
+        description: 'Session not found (or owned by another account).',
+        content: problemContent,
       },
       ...errors4xx,
     },
@@ -396,6 +408,10 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Capture produced.',
         content: { 'application/json': { schema: CaptureResponseSchema } },
       },
+      404: {
+        description: 'Session not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -409,6 +425,10 @@ function buildRegistry(): OpenAPIRegistry {
     request: { params: z.object({ id: z.string() }) },
     responses: {
       204: { description: 'Session destroyed.' },
+      404: {
+        description: 'Session not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4590,6 +4610,10 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Snapshot captured.',
         content: { 'application/json': { schema: SnapshotResponseOpenApi } },
       },
+      404: {
+        description: 'Profile not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4638,6 +4662,10 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Snapshot.',
         content: { 'application/json': { schema: SnapshotResponseOpenApi } },
       },
+      404: {
+        description: 'Snapshot not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4656,6 +4684,14 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'New profile created from snapshot.',
         content: { 'application/json': { schema: ProfileResponseOpenApi } },
       },
+      404: {
+        description: 'Snapshot not found (or owned by another account).',
+        content: problemContent,
+      },
+      409: {
+        description: 'A profile with the requested name already exists in the account.',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4668,6 +4704,10 @@ function buildRegistry(): OpenAPIRegistry {
     request: { params: z.object({ id: z.string() }) },
     responses: {
       204: { description: 'Snapshot deleted.' },
+      404: {
+        description: 'Snapshot not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
