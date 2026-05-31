@@ -492,6 +492,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/api-keys',
+    operationId: 'createApiKey',
     summary: 'Create an API key (returns plaintext once, never retrievable later)',
     tags: ['api-keys'],
     security: auth,
@@ -532,6 +533,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/api-keys',
+    operationId: 'listApiKeys',
     summary: 'List API keys for the calling account',
     tags: ['api-keys'],
     security: auth,
@@ -565,6 +567,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/api-keys/{id}',
+    operationId: 'revokeApiKey',
     summary: 'Revoke an API key',
     tags: ['api-keys'],
     security: auth,
@@ -582,6 +585,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/api-keys/{id}/rotate',
+    operationId: 'rotateApiKey',
     summary: 'Rotate an API key (V-296). 24h grace; new plaintext shown once',
     tags: ['api-keys'],
     security: auth,
@@ -1071,6 +1075,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/webhook-deliveries/{deliveryId}/replay',
+    operationId: 'replayWebhookDelivery',
     summary: 'Replay a webhook delivery (V-307; customer self-service)',
     tags: ['webhooks'],
     security: auth,
@@ -4360,6 +4365,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/webhooks',
+    operationId: 'createWebhook',
     summary: 'Create a webhook endpoint',
     tags: ['webhooks'],
     security: auth,
@@ -4408,6 +4414,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/webhooks',
+    operationId: 'listWebhooks',
     summary: 'List webhook endpoints for the calling account',
     tags: ['webhooks'],
     security: auth,
@@ -4422,6 +4429,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/webhooks/{id}',
+    operationId: 'getWebhook',
     summary: 'Get a single webhook endpoint',
     tags: ['webhooks'],
     security: auth,
@@ -4461,6 +4469,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'patch',
     path: '/v1/webhooks/{id}',
+    operationId: 'updateWebhook',
     summary: 'Partial update of a webhook endpoint (url / events / description / active)',
     tags: ['webhooks'],
     security: auth,
@@ -4490,6 +4499,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/webhooks/{id}',
+    operationId: 'deleteWebhook',
     summary: 'Disable (soft-delete) a webhook endpoint. Idempotent.',
     tags: ['webhooks'],
     security: auth,
@@ -4506,6 +4516,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/webhooks/{id}/deliveries',
+    operationId: 'listWebhookDeliveries',
     summary: 'List delivery attempts for a webhook endpoint',
     tags: ['webhooks'],
     security: auth,
@@ -4530,6 +4541,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/webhooks/{id}/test',
+    operationId: 'testWebhook',
     summary: 'Enqueue a synthetic test.ping delivery (bypass subscription)',
     tags: ['webhooks'],
     security: auth,
@@ -4564,6 +4576,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/webhooks/{id}/rotate-secret',
+    operationId: 'rotateWebhookSecret',
     summary: 'Rotate the signing secret with a 24h grace (worker dual-signs during grace)',
     tags: ['webhooks'],
     security: auth,
