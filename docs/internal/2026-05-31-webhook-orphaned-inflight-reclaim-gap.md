@@ -52,21 +52,39 @@ that long). Too-aggressive → duplicate deliveries (webhooks are signed +
 at-least-once, so a dup is tolerable but undesirable; loss is worse, hence the
 reclaim, but keep the threshold conservative).
 
-Prerequisites / notes:
+## Design refinement (2026-05-31, deeper read) — the clock needs a NEW column
 
-- The reclaim clock is `updated_at`. The `webhooks-repo` claim sets
-  `updated_at = NOW()` on the `in_flight` flip; the **durable path's
-  `.set({ status: 'in_flight' })` may NOT bump `updated_at`** (depends on a
-  Drizzle `$onUpdate` on the column) — verify/ensure it does, else the
-  threshold has no reliable clock.
-- Add an index on `(status, updated_at)` (the existing
-  `webhook_deliveries_worker_idx` is `(status, next_attempt_at)`) if the reclaim
-  predicate isn't index-covered.
-- Test: a real-PG (`*-drizzle`) test seeding an `in_flight` row with an old
-  `updated_at` and asserting the next claim reclaims + redelivers it; plus one
-  asserting a _fresh_ `in_flight` row is NOT reclaimed (no double-delivery).
-- Decide one path: there are two delivery impls; the reclaim belongs in whichever
-  is the active prod path (and ideally both, or consolidate).
+Initial design assumed an `updated_at < now - <STALE>` threshold. **That does not
+work for the durable path** (`durable-webhook-delivery.ts`):
 
-Not auto-fixed: hot-path + duplicate-delivery subtlety + needs a real-PG
-crash-recovery test. Captured in memory as `project_webhook_orphaned_inflight_reclaim_gap`.
+- `webhook_deliveries.updated_at` is `.default(now())` with **no `$onUpdate`**,
+  and **none** of the durable path's status transitions set it (claim→`in_flight`
+  :367, →`delivered` :498, →`dlq` :521, retry→`pending` :540 all omit
+  `updatedAt`). So `updated_at ≡ created_at` always there — it does NOT mark when
+  a row went `in_flight`. A threshold on it would reclaim by _creation_ age
+  (wrong: an old row claimed seconds ago would be reclaimed → double-delivery).
+- And `updated_at` is **load-bearing for the DLQ list keyset pagination**
+  (`durable-webhook-delivery.ts:231` orders by `(updated_at desc, id desc)` —
+  the recently-fixed cursor, see project_webhook_durable_cursor_keyset_fix).
+  Making `updated_at` start advancing on transitions would silently **reorder
+  that list** and shift cursors. So do NOT repurpose `updated_at` as the claim clock.
+  (The `webhooks-repo.ts` path DOES set `updated_at = NOW()` on its claim, but it
+  doesn't have the same DLQ-keyset coupling; the two paths differ here.)
+
+**Revised fix:** add a dedicated nullable `claimed_at timestamptz` column
+(migration), set it on the `pending → in_flight` flip, and reclaim on
+`status='in_flight' AND claimed_at < now - INTERVAL '<STALE>'` (STALE still ≫ the
+10s per-attempt timeout, e.g. 5–10 min). Index `(status, claimed_at)`. Leave
+`updated_at`/DLQ-keyset untouched. This is migration-involving → confirmed a
+focused (non-deep-autopilot-session) task.
+
+Other notes:
+
+- Test: real-PG (`*-drizzle`) — seed an `in_flight` row with old `claimed_at` →
+  next claim reclaims + redelivers; a _fresh_ `in_flight` row is NOT reclaimed.
+- Two delivery impls (`durable-webhook-delivery.ts` + `webhooks-repo.ts`/
+  `webhook-worker.ts`); fix whichever is the active prod path (ideally both, or
+  consolidate). Both lack reclaim today.
+
+Not auto-fixed: migration + hot-path + duplicate-delivery subtlety + CI-only
+real-PG test. Captured in memory as `project_webhook_orphaned_inflight_reclaim_gap`.
