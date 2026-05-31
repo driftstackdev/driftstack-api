@@ -294,7 +294,14 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: z.string().describe('Prefixed session id (ses_<uuid>)') }),
-      body: { content: { 'application/json': { schema: NavigateRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: NavigateRequestSchema,
+            example: { url: 'https://example.com/pricing' },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -316,7 +323,14 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
-      body: { content: { 'application/json': { schema: InteractRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: InteractRequestSchema,
+            example: { action: { kind: 'tap', selector: '#add-to-cart' } },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -338,7 +352,14 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
-      body: { content: { 'application/json': { schema: WaitRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: WaitRequestSchema,
+            example: { condition: { kind: 'selector', selector: '#order-confirmation' } },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -401,7 +422,14 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
-      body: { content: { 'application/json': { schema: CaptureRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: CaptureRequestSchema,
+            example: { kind: 'screenshot', full_page: true },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -2425,7 +2453,14 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Consume the email-verification token; issues a web session',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: VerifyEmailRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: VerifyEmailRequestSchema,
+            example: { token: '7c3f1a9e0b2d4c6f8a1b3d5e7f9c0a2b4d6e8f1a3c5e7d9f' },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -3784,7 +3819,14 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Exchange a magic-link token for a fresh web session',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: MagicLinkConsumeRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: MagicLinkConsumeRequestSchema,
+            example: { token: '7c3f1a9e0b2d4c6f8a1b3d5e7f9c0a2b4d6e8f1a3c5e7d9f' },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -3824,7 +3866,17 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Consume a password-reset token + set a new password; issues a fresh session',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: PasswordResetConfirmRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: PasswordResetConfirmRequestSchema,
+            example: {
+              token: '7c3f1a9e0b2d4c6f8a1b3d5e7f9c0a2b4d6e8f1a3c5e7d9f',
+              new_password: 'use-a-long-unique-passphrase',
+            },
+          },
+        },
+      },
     },
     responses: {
       200: {
