@@ -116,8 +116,12 @@ scheduler/atlas/matrix (`dedupKey` correctly NUL-joins), `suspend`/data-lifecycl
 cascades, Stripe tier-update — plus the prior-session sweeps (IDOR/auth/
 payment-sig/input-validation/error-handler, money-path, all 3 SDKs). 2026-05-31
 correctness audits: SSE event-bus + all 3 consumer routes (proper close+error
-cleanup, unsubscribe, `heartbeat.unref()` — no subscriber leak) and pagination
-`limit` caps (all `min(1).max(100)`, admin crypto-orders `max(500)`).
+cleanup, unsubscribe, `heartbeat.unref()` — no subscriber leak); pagination
+`limit` caps (all `min(1).max(100)`, admin crypto-orders `max(500)`); and the crypto
+(NOWPayments) IPN → order state machine (`2026-05-31-crypto-ipn-state-machine-clean.md`
+— conservative status map: only `finished`→paid, `partially_paid`→non-granting
+`partial`; idempotent paid-grant on transition only; `isTerminalForward` blocks
+out-of-order downgrades — no underpayment/double-grant/revive).
 
 ## Founder-gated — surface only, do NOT auto-do
 
