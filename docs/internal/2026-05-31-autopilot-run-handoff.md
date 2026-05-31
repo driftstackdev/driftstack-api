@@ -27,6 +27,13 @@ verified-clean, and the prioritized open queue. Companion:
 
 ## Surfaced — real findings, fixes need a focused (non-deep-session) pass
 
+0. **[MEDIUM, LIVE — new #1] Open-redirect via `?next=` in dashboard sign-in** —
+   `2026-05-31-open-redirect-next-param.md`. `login.astro` navigates a raw
+   `?next=` (`window.location.href = next`, line 240) → `/login?next=https://evil.com`
+   bounces a signed-in user off-site (phishing); `signup.astro` has the same
+   pattern. Fix = a URL-parser same-origin sanitizer (NOT regex) at every raw
+   `next`/`return_to` nav + jsdom bypass tests + parity-pin updates. The only LIVE
+   customer-facing vuln from the run — promote above the webhook item.
 1. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
    `2026-05-31-webhook-orphaned-inflight-reclaim-gap.md`. A worker crash / deploy
    mid-batch leaves deliveries stuck `in_flight` forever → silently lost.
@@ -60,9 +67,11 @@ scheduled jobs alive. Healthy.
 
 ## Recommended order when the loop is paused
 
-1. Webhook reclaim (#1 above) — fully spec'd, just needs focused implementation.
-2. A founder call on strict-FK and/or the archetype cutover.
-3. BYOK cache test + auth-flow consume hardening (low priority).
+1. **Open-redirect `?next=` fix** (#0 above) — LIVE customer-facing vuln; small but
+   bypass-sensitive (URL-parser sanitizer + tests). Do first.
+2. Webhook reclaim — fully spec'd, just needs focused implementation.
+3. A founder call on strict-FK and/or the archetype cutover.
+4. BYOK cache test + auth-flow consume hardening (low priority).
 
 > Autopilot note: by ~wave 8–9 the high-value, safe, un-mined Agent-2 audit
 > surface was exhausted; value-per-wave declined and a deep-session misread
