@@ -319,6 +319,14 @@ describe('DELETE /v1/profiles/:id', () => {
     });
     expect(del.statusCode).toBe(204);
 
+    // Idempotent: a second DELETE of the now-gone profile still 204s.
+    const redel = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/profiles/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(redel.statusCode).toBe(204);
+
     const get = await fx.app.inject({
       method: 'GET',
       url: `/v1/profiles/${id}`,
@@ -327,14 +335,14 @@ describe('DELETE /v1/profiles/:id', () => {
     expect(get.statusCode).toBe(404);
   });
 
-  it('404 on unknown id', async () => {
+  it('204 (idempotent) on unknown id', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'DELETE',
       url: '/v1/profiles/prof_00000000-0000-4000-8000-000000000099',
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).toBe(204);
   });
 });
 

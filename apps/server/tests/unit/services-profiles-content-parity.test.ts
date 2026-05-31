@@ -96,10 +96,8 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     );
   });
 
-  it('delete: NotFoundError when repo.delete returns false; emits profile.deleted audit with name metadata', () => {
-    expect(body).toMatch(
-      /const ok = await this\.repo\.delete\(args\);\s*\n?\s*if \(!ok\) throw new NotFoundError\('Profile not found\.'\);/,
-    );
+  it('delete: idempotent no-op (if !ok, return — not throw) when repo.delete returns false; emits profile.deleted audit with name metadata only on a real delete', () => {
+    expect(body).toMatch(/const ok = await this\.repo\.delete\(args\);[\s\S]*?if \(!ok\) return;/);
     expect(body).toMatch(
       /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.deleted', `profile_\$\{args\.id\}`, \{\s*\n?\s*name: before\?\.name \?\? null,\s*\n?\s*\}\);/,
     );

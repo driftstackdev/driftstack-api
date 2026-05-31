@@ -146,11 +146,11 @@ describe('W782 docs /guides/profile-management content parity', () => {
     );
   });
 
-  it("CRITICAL delete-blocks-if-bound + 409-Conflict-when-force-false framing pinned. The 'If a session is currently bound to the profile, the deletion blocks until the session ends (or returns 409 Conflict if you set force=false, the default)' wording matches W763 /api/profiles DELETE contract.", () => {
+  it('CRITICAL profile-delete idempotent framing pinned. The retracted W763 force=false/409 contract (the route never implemented it — 2026-05-31 founder decision) is replaced by the immediate-idempotent-204 wording the code actually delivers.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /If a session is currently bound to the profile, the deletion blocks until the session ends \(or returns `409 Conflict` if you set `force=false`, the default\)\./,
+      /Deletion is immediate and idempotent — there's no `force` flag, and re-deleting an already-removed profile still returns `204`\./,
     );
   });
 

@@ -6,7 +6,7 @@
 //   - get(): NotFound on missing
 //   - update(): name-conflict against a DIFFERENT id, NotFound,
 //     happy path
-//   - delete(): NotFound, happy path + audit
+//   - delete(): idempotent no-op on missing, happy path + audit
 //   - clone(): NotFound source, tier cap, name override conflict,
 //     auto-derives "(copy)" / "(copy 2)" when source name + first copy
 //     are taken
@@ -256,12 +256,12 @@ describe('V-553.B-21 ProfilesService.update', () => {
 });
 
 describe('V-553.B-21 ProfilesService.delete', () => {
-  it('throws NotFound when row is missing', async () => {
+  it('is an idempotent no-op when the row is missing (resolves, no audit)', async () => {
     const { repo } = makeRepo();
-    const svc = new ProfilesService(repo);
-    await expect(svc.delete({ id: 'p_missing', accountId: 'acc_1' })).rejects.toThrow(
-      NotFoundError,
-    );
+    const { audit, calls } = makeAudit();
+    const svc = new ProfilesService(repo, audit);
+    await expect(svc.delete({ id: 'p_missing', accountId: 'acc_1' })).resolves.toBeUndefined();
+    expect(calls).toHaveLength(0);
   });
 
   it('removes the row and emits profile.deleted audit', async () => {

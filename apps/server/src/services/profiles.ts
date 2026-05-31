@@ -235,7 +235,11 @@ export class ProfilesService {
   async delete(args: { id: string; accountId: string }): Promise<void> {
     const before = await this.repo.findById(args);
     const ok = await this.repo.delete(args);
-    if (!ok) throw new NotFoundError('Profile not found.');
+    // Idempotent: a re-delete (or an id that was never this account's) is a
+    // no-op that still resolves to 204 — matches REST norms, the documented
+    // contract, and the sibling destroy endpoints, and never leaks whether
+    // the id exists for another account. No row removed → no audit event.
+    if (!ok) return;
     await this.emitAuditBestEffort(args.accountId, 'profile.deleted', `profile_${args.id}`, {
       name: before?.name ?? null,
     });

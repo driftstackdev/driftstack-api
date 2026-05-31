@@ -301,8 +301,9 @@ Hard-deletes the profile metadata + cascades the underlying state.
 `session.created` events bound to the deleted profile fail loudly
 on next use (no orphan-state retention).
 
-Returns `204 No Content`. Idempotent on already-deleted profiles
-(404 — the row is gone, not soft-deleted).
+Returns `204 No Content`, and is idempotent — re-deleting an
+already-deleted profile (or an id that was never yours) also returns
+`204` (the metadata is hard-deleted, not soft-deleted).
 
 ## Auth + scoping
 

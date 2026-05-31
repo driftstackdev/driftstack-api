@@ -134,7 +134,7 @@ Profile-bound sessions inherit the profile's storage state on launch and write n
 await client.profiles.delete('prof_01HV...');
 ```
 
-If a session is currently bound to the profile, the deletion blocks until the session ends (or returns `409 Conflict` if you set `force=false`, the default).
+Deletion is immediate and idempotent — there's no `force` flag, and re-deleting an already-removed profile still returns `204`.
 
 ## Clone a profile
 

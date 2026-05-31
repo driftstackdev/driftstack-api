@@ -201,11 +201,11 @@ describe('W763 docs /api/profiles content parity', () => {
     expect(p).toMatch(/`session\.created` events bound to the deleted profile fail loudly/);
   });
 
-  it("CRITICAL DELETE idempotent-404 framing pinned. The 'Idempotent on already-deleted profiles (404 — the row is gone, not soft-deleted)' wording explains the hard-delete-without-soft-delete model.", () => {
+  it('CRITICAL DELETE idempotent-204 framing pinned. The delete is genuinely idempotent — a re-delete returns 204, not 404 (2026-05-31 founder decision); the wording still explains the hard-delete-without-soft-delete model.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Returns `204 No Content`\. Idempotent on already-deleted profiles\s*\n?\(404 — the row is gone, not soft-deleted\)\./,
+      /Returns `204 No Content`, and is idempotent — re-deleting an\s*\n?already-deleted profile \(or an id that was never yours\) also returns\s*\n?`204` \(the metadata is hard-deleted, not soft-deleted\)\./,
     );
   });
 
