@@ -17,6 +17,33 @@ export interface ProfilesListPage {
   next_cursor: string | null;
 }
 
+/**
+ * V-480 — versioned, metadata-only export envelope. Per-profile browser
+ * state lives driver-side and is out of scope for the v1 envelope; the
+ * `version` literal lets a future v2 stay back-compat. `source_*` fields
+ * are informational — import always mints a fresh id, into any account.
+ */
+export interface ProfileExportEnvelope {
+  version: 1;
+  exported_at: string;
+  source_profile_id: string;
+  source_account_id: string;
+  profile: { name: string; archetype: string; description: string | null };
+}
+
+/** Body for `import()` — a v1 export envelope + optional rename. */
+export interface ImportProfileRequest {
+  envelope: ProfileExportEnvelope;
+  /** Rename on import without editing the file; uses `envelope.profile.name` when omitted. */
+  name_override?: string;
+}
+
+/** Response from `transfer()` — the recipient's freshly-minted profile. */
+export interface TransferProfileResponse {
+  new_profile: Profile;
+  recipient_account_id: string;
+}
+
 export class ProfilesResource {
   constructor(private readonly http: HttpClient) {}
 
@@ -103,6 +130,45 @@ export class ProfilesResource {
     return this.http.request<Profile>({
       method: 'POST',
       path: `/v1/profiles/${encodeURIComponent(id)}/clone`,
+      body,
+    });
+  }
+
+  /**
+   * V-480 — export this profile as a versioned, metadata-only JSON
+   * envelope. Feed the result to `import()` (in any account) to mint a
+   * fresh profile from it.
+   */
+  export(id: string): Promise<ProfileExportEnvelope> {
+    return this.http.request<ProfileExportEnvelope>({
+      method: 'GET',
+      path: `/v1/profiles/${encodeURIComponent(id)}/export`,
+    });
+  }
+
+  /**
+   * V-480 — import a profile from a v1 export envelope, minting a fresh
+   * profile in the calling account. Tier-cap + name-conflict semantics
+   * match `create`. Importing an envelope from a different account is
+   * permitted (file-based transfer between teammates).
+   */
+  import(body: ImportProfileRequest): Promise<Profile> {
+    return this.http.request<Profile>({
+      method: 'POST',
+      path: '/v1/profiles/import',
+      body,
+    });
+  }
+
+  /**
+   * V-666 — transfer ownership of a profile to another Driftstack
+   * account by its `acc_<uuid>` id (shared out-of-band; no email path).
+   * Mints a copy in the recipient's account; returns it + the recipient id.
+   */
+  transfer(id: string, body: { recipient_account_id: string }): Promise<TransferProfileResponse> {
+    return this.http.request<TransferProfileResponse>({
+      method: 'POST',
+      path: `/v1/profiles/${encodeURIComponent(id)}/transfer`,
       body,
     });
   }

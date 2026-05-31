@@ -87,6 +87,28 @@ class ProfilesResource:
             json_body=coerce_body(body or {}),
         )
 
+    def export(self, profile_id: str) -> dict[str, Any]:
+        """V-480 — export this profile as a versioned, metadata-only JSON
+        envelope. Feed the result to :meth:`import_` (in any account) to mint a
+        fresh profile from it."""
+        return self._http.request("GET", f"/v1/profiles/{quote(profile_id, safe='')}/export")
+
+    def import_(self, body: dict[str, Any]) -> dict[str, Any]:
+        """V-480 — import a profile from a v1 export envelope
+        (``{"envelope": ..., "name_override"?: ...}``), minting a fresh profile
+        in the calling account. ``import`` is a Python keyword, hence ``import_``."""
+        return self._http.request("POST", "/v1/profiles/import", json_body=coerce_body(body))
+
+    def transfer(self, profile_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """V-666 — transfer a profile to another account by ``recipient_account_id``
+        (``acc_<uuid>``). Mints a copy in the recipient's account; returns
+        ``{"new_profile": ..., "recipient_account_id": ...}``."""
+        return self._http.request(
+            "POST",
+            f"/v1/profiles/{quote(profile_id, safe='')}/transfer",
+            json_body=coerce_body(body),
+        )
+
 
 class AsyncProfilesResource:
     """Async profiles resource."""
@@ -136,4 +158,20 @@ class AsyncProfilesResource:
             "POST",
             f"/v1/profiles/{quote(profile_id, safe='')}/clone",
             json_body=coerce_body(body or {}),
+        )
+
+    async def export(self, profile_id: str) -> dict[str, Any]:
+        """Async mirror — V-480 metadata-only export envelope."""
+        return await self._http.request("GET", f"/v1/profiles/{quote(profile_id, safe='')}/export")
+
+    async def import_(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Async mirror — V-480 import from a v1 export envelope."""
+        return await self._http.request("POST", "/v1/profiles/import", json_body=coerce_body(body))
+
+    async def transfer(self, profile_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Async mirror — V-666 transfer to another account by recipient_account_id."""
+        return await self._http.request(
+            "POST",
+            f"/v1/profiles/{quote(profile_id, safe='')}/transfer",
+            json_body=coerce_body(body),
         )

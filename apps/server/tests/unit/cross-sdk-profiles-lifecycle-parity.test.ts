@@ -168,7 +168,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     void py;
   });
 
-  it("CRITICAL method-verb mix on profiles pinned — 3× POST (create + clone + launch) + 2× GET (list + get) + 1× PATCH (update) + 1× DELETE (delete). The 7-method count (excluding iterate which delegates to list) is what the dashboard's CRUD + antidetect-launch flow depends on. (2026-05-20 fa8cb83a — added profiles.launch one-shot helper.)", () => {
+  it("CRITICAL method-verb mix on profiles pinned — 5× POST (create + clone + launch + import + transfer) + 3× GET (list + get + export) + 1× PATCH (update) + 1× DELETE (delete). The 10-method count (excluding iterate which delegates to list) is what the dashboard's CRUD + antidetect-launch + V-480 portability + V-666 transfer flows depend on. (2026-05-20 fa8cb83a — launch; 2026-05-31 — export/import/transfer portability.)", () => {
     const ts = read(TS_PROFILES);
 
     // sdk-typescript: count method strings.
@@ -177,8 +177,8 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const tsPatch = (ts.match(/method: 'PATCH'/g) ?? []).length;
     const tsDelete = (ts.match(/method: 'DELETE'/g) ?? []).length;
 
-    expect(tsPost, 'sdk-typescript POST count').toBe(3);
-    expect(tsGet, 'sdk-typescript GET count').toBe(2);
+    expect(tsPost, 'sdk-typescript POST count').toBe(5);
+    expect(tsGet, 'sdk-typescript GET count').toBe(3);
     expect(tsPatch, 'sdk-typescript PATCH count').toBe(1);
     expect(tsDelete, 'sdk-typescript DELETE count').toBe(1);
 
@@ -188,8 +188,8 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const goPatch = (go.match(/method: "PATCH"/g) ?? []).length;
     const goDelete = (go.match(/method: "DELETE"/g) ?? []).length;
 
-    expect(goPost, 'sdk-go POST count').toBe(3);
-    expect(goGet, 'sdk-go GET count').toBe(2);
+    expect(goPost, 'sdk-go POST count').toBe(5);
+    expect(goGet, 'sdk-go GET count').toBe(3);
     expect(goPatch, 'sdk-go PATCH count').toBe(1);
     expect(goDelete, 'sdk-go DELETE count').toBe(1);
   });
@@ -209,14 +209,14 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     expect(py).toMatch(/quote\(profile_id, safe=''\)/);
   });
 
-  it('CRITICAL sdk-python async-mirror parity — sync + async resources expose the same 7 verbs. Drift to dropping an async variant would silently break asyncio callers.', () => {
+  it('CRITICAL sdk-python async-mirror parity — sync + async resources expose the same 10 verbs. Drift to dropping an async variant would silently break asyncio callers.', () => {
     const py = read(PY_PROFILES);
 
     // Both ProfilesResource and AsyncProfilesResource classes defined.
     expect(py).toMatch(/class ProfilesResource:/);
     expect(py).toMatch(/class AsyncProfilesResource:/);
 
-    // Async mirrors of 7 sync verbs.
+    // Async mirrors of the sync verbs.
     expect(py).toMatch(/async def create\(self/);
     expect(py).toMatch(/async def list\(self/);
     // iterate is a non-async function returning an AsyncIterator — checked via def + AsyncIterator.
@@ -225,6 +225,9 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     expect(py).toMatch(/async def update\(self/);
     expect(py).toMatch(/async def delete\(self/);
     expect(py).toMatch(/async def clone\(self/);
+    expect(py).toMatch(/async def export\(self/);
+    expect(py).toMatch(/async def import_\(self/);
+    expect(py).toMatch(/async def transfer\(self/);
   });
 
   it('Cross-SDK V-081 5-invariant cluster — V-081 anchor + V-313 anchor + 7-verb surface + 3 wire-paths + Tier-limit framing. Drift on any would fragment the cross-language profiles contract.', () => {

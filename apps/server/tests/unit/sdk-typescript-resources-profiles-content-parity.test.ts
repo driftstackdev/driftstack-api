@@ -124,18 +124,18 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     );
   });
 
-  it('encodeURIComponent invariant — :id escaped EXACTLY 5 times (get + update + delete + launch + clone). 2026-05-20 — launch added for the antidetect-browser one-shot Profile→Session verb.', () => {
+  it('encodeURIComponent invariant — :id escaped EXACTLY 7 times (get + update + delete + launch + clone + export + transfer). import() takes no :id (POST /v1/profiles/import). 2026-05-31 — export/transfer added for V-480/V-666 portability.', () => {
     const matches = body.match(/encodeURIComponent\(id\)/g) ?? [];
-    expect(matches.length, 'expected encodeURIComponent(id) 5 times').toBe(5);
+    expect(matches.length, 'expected encodeURIComponent(id) 7 times').toBe(7);
   });
 
-  it('8-verb inventory + verb-mix invariants — exactly 8 method declarations (create + list + iterate + get + update + launch + delete + clone). Verb mix: 3 POSTs (create + launch + clone) + 2 GETs (list + get) + 1 PATCH (update) + 1 DELETE (delete) = 7 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH.', () => {
+  it('11-verb inventory + verb-mix invariants — exactly 11 method declarations (create + list + iterate + get + update + launch + delete + clone + export + import + transfer). Verb mix: 5 POSTs (create + launch + clone + import + transfer) + 3 GETs (list + get + export) + 1 PATCH (update) + 1 DELETE (delete) = 10 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH.', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 8 verb declarations').toBe(8);
+    expect(methods.length, 'expected 11 verb declarations').toBe(11);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
-    expect(posts, 'expected 3 POSTs (create + launch + clone)').toBe(3);
+    expect(posts, 'expected 5 POSTs (create + launch + clone + import + transfer)').toBe(5);
     const gets = (body.match(/method: 'GET'/g) ?? []).length;
-    expect(gets, 'expected 2 GETs (list + get)').toBe(2);
+    expect(gets, 'expected 3 GETs (list + get + export)').toBe(3);
     const patches = (body.match(/method: 'PATCH'/g) ?? []).length;
     expect(patches, 'expected 1 PATCH (update)').toBe(1);
     const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;
@@ -149,13 +149,14 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     expect(body).toMatch(/path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}\/clone`/);
   });
 
-  it('Tier-cap framing thread — appears in EXACTLY 2 JSDoc blocks (create JSDoc "Tier-limit" + clone JSDoc "Tier-cap"). The connection between create and clone is what tells customers "clone counts against your tier cap" — drift to dropping the cross-reference would silently let customers think they can bypass the cap via clone.', () => {
+  it('Tier-cap framing thread — appears in EXACTLY 3 JSDoc blocks (create JSDoc "Tier-limit" + clone JSDoc "Tier-cap" + import JSDoc "Tier-cap"). The thread tells customers every profile-minting verb (create / clone / import) counts against the tier cap — drift to dropping a cross-reference would silently let customers think they can bypass the cap.', () => {
     const tierMatches = body.match(/[Tt]ier-(cap|limit)/g) ?? [];
     expect(
       tierMatches.length,
-      'expected 2 "Tier-cap" / "Tier-limit" mentions (create + clone)',
-    ).toBe(2);
+      'expected 3 "Tier-cap" / "Tier-limit" mentions (create + clone + import)',
+    ).toBe(3);
     expect(body).toMatch(/Tier-limit enforced server-side; throws TierLimitError on cap/);
     expect(body).toMatch(/Tier-cap \+\s*\n?\s*\*\s*name-conflict checked the same as create/);
+    expect(body).toMatch(/Tier-cap \+ name-conflict semantics/);
   });
 });

@@ -177,3 +177,87 @@ func (r *ProfilesResource) Clone(
 	}
 	return &out, nil
 }
+
+// ProfileExportPayload is the metadata-only body inside an export envelope.
+type ProfileExportPayload struct {
+	Name        string  `json:"name"`
+	Archetype   string  `json:"archetype"`
+	Description *string `json:"description"`
+}
+
+// ProfileExportEnvelope — V-480 versioned, metadata-only export. Per-profile
+// browser state lives driver-side and is out of scope for the v1 envelope; the
+// Version field lets a future v2 stay back-compat. The Source* fields are
+// informational — Import always mints a fresh id, into any account.
+type ProfileExportEnvelope struct {
+	Version         int                  `json:"version"`
+	ExportedAt      string               `json:"exported_at"`
+	SourceProfileID string               `json:"source_profile_id"`
+	SourceAccountID string               `json:"source_account_id"`
+	Profile         ProfileExportPayload `json:"profile"`
+}
+
+// Export returns this profile as a versioned, metadata-only JSON envelope.
+// Feed the result to Import (in any account) to mint a fresh profile from it.
+func (r *ProfilesResource) Export(ctx context.Context, profileID string) (*ProfileExportEnvelope, error) {
+	var out ProfileExportEnvelope
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/profiles/" + url.PathEscape(profileID) + "/export",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ImportProfileRequest — a v1 export envelope plus an optional rename.
+type ImportProfileRequest struct {
+	Envelope ProfileExportEnvelope `json:"envelope"`
+	// NameOverride renames on import without editing the file; omit to use
+	// the envelope's profile name.
+	NameOverride string `json:"name_override,omitempty"`
+}
+
+// Import mints a fresh profile in the calling account from a v1 export
+// envelope. Tier-cap + name-conflict semantics match Create; importing an
+// envelope from a different account is permitted (file-based transfer).
+func (r *ProfilesResource) Import(ctx context.Context, body *ImportProfileRequest) (*Profile, error) {
+	var out Profile
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/profiles/import",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// TransferProfileRequest — the recipient account's acc_<uuid> id.
+type TransferProfileRequest struct {
+	RecipientAccountID string `json:"recipient_account_id"`
+}
+
+// TransferProfileResponse — the recipient's freshly-minted profile.
+type TransferProfileResponse struct {
+	NewProfile         Profile `json:"new_profile"`
+	RecipientAccountID string  `json:"recipient_account_id"`
+}
+
+// Transfer hands ownership of a profile to another Driftstack account by its
+// acc_<uuid> id (shared out-of-band; no email path). Mints a copy in the
+// recipient's account; returns it plus the recipient id.
+func (r *ProfilesResource) Transfer(ctx context.Context, profileID string, body *TransferProfileRequest) (*TransferProfileResponse, error) {
+	var out TransferProfileResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/profiles/" + url.PathEscape(profileID) + "/transfer",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

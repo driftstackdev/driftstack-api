@@ -20,7 +20,8 @@ const TS = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/profiles.ts
 const PY = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/profiles.py');
 const GO = resolve(REPO_ROOT, 'packages/sdk-go/profiles.go');
 
-// 7 shared method names across all 3 SDKs.
+// 10 shared method names across all 3 SDKs ([TS, Python, Go] names;
+// Python uses import_ since `import` is a keyword).
 const REQUIRED_METHODS: Array<[string, string, string]> = [
   ['create', 'create', 'Create'],
   ['list', 'list', 'List'],
@@ -29,6 +30,9 @@ const REQUIRED_METHODS: Array<[string, string, string]> = [
   ['delete', 'delete', 'Delete'],
   ['clone', 'clone', 'Clone'],
   ['iterate', 'iterate', 'Iterate'],
+  ['export', 'export', 'Export'],
+  ['import', 'import_', 'Import'],
+  ['transfer', 'transfer', 'Transfer'],
 ];
 
 describe('W824 cross-SDK ProfilesResource methods parity', () => {
@@ -38,9 +42,9 @@ describe('W824 cross-SDK ProfilesResource methods parity', () => {
     expect(existsSync(GO)).toBe(true);
   });
 
-  // ─── 7-required-method set ────────────────────────────────────
+  // ─── 10-required-method set ───────────────────────────────────
 
-  it('CRITICAL all 7 ProfilesResource methods exist in all 3 SDKs — create + list + get + update + delete + clone + iterate. Drift would break customer profile-management code (V-073 + V-313 clone + W801 cross-SDK profile-management example).', () => {
+  it('CRITICAL all 10 ProfilesResource methods exist in all 3 SDKs — create + list + get + update + delete + clone + iterate + export + import + transfer. Drift would break customer profile-management code (V-073 + V-313 clone + V-480 export/import + V-666 transfer + W801 cross-SDK profile-management example).', () => {
     const ts = read(TS);
     const py = read(PY);
     const go = read(GO);
