@@ -305,6 +305,58 @@ describe('GET /v1/status/incidents/:id (V-545.A — public detail w/ timeline)',
     expect(body.updates.some((u) => u.message === 'scope expanded to dashboard')).toBe(true);
   });
 
+  it('public detail omits internal-only fields (no admin-ids / auto-probe-target leak)', async () => {
+    // publicIncident() is an explicit allow-list mapper; this guards against a
+    // future refactor (e.g. a `...row` spread) silently leaking the internal
+    // auto-probe target or the creating-admin ids onto the unauthenticated
+    // status page. Sibling to the cache-control assertions above — a field
+    // leak on this no-auth surface must break loudly, not just a header change.
+    fx = await buildTestApp();
+    const createRes = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/incidents',
+      headers: { ...headers, ...auth(fx) },
+      payload: { title: 'leak-guard', description: 'x', severity: 'minor' },
+    });
+    const incidentId = createRes.json<CreateResponse>().incident.id;
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/status/incidents/${incidentId}`,
+    });
+    expect(res.statusCode).toBe(200);
+    const { incident } = res.json<{ incident: Record<string, unknown> }>();
+
+    // Exact public contract — any extra key (a leaked internal field) fails.
+    expect(Object.keys(incident).sort()).toEqual(
+      [
+        'affected_components',
+        'created_at',
+        'description',
+        'id',
+        'public',
+        'resolved_at',
+        'severity',
+        'started_at',
+        'status',
+        'title',
+        'updated_at',
+      ].sort(),
+    );
+    // Explicit intent: the sensitive internal columns must never surface, in
+    // either casing (camelCase row field or snake_case response form).
+    for (const key of [
+      'autoProbeTarget',
+      'auto_probe_target',
+      'createdByAdminId',
+      'created_by_admin_id',
+      'createdByAdminKeyId',
+      'created_by_admin_key_id',
+    ]) {
+      expect(incident).not.toHaveProperty(key);
+    }
+  });
+
   it('returns 404 for a private incident (no enumeration of admin-only data)', async () => {
     fx = await buildTestApp();
     const createRes = await fx.app.inject({
