@@ -4625,6 +4625,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/profiles',
+    operationId: 'createProfile',
     summary: 'Create a profile',
     tags: ['profiles'],
     security: auth,
@@ -4646,6 +4647,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/profiles',
+    operationId: 'listProfiles',
     summary: 'List profiles for the calling account',
     tags: ['profiles'],
     security: auth,
@@ -4661,6 +4663,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/profiles/{id}',
+    operationId: 'getProfile',
     summary: 'Get a single profile',
     tags: ['profiles'],
     security: auth,
@@ -4692,6 +4695,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/profiles/{id}/launch',
+    operationId: 'launchProfile',
     summary: 'Launch a session from a saved profile (one-shot profile verb)',
     tags: ['profiles'],
     security: auth,
@@ -4714,6 +4718,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'patch',
     path: '/v1/profiles/{id}',
+    operationId: 'updateProfile',
     summary: 'Partial update of a profile (name / description)',
     tags: ['profiles'],
     security: auth,
@@ -4740,6 +4745,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/profiles/{id}',
+    operationId: 'deleteProfile',
     summary: 'Delete a profile (storage state wiped; idempotent)',
     tags: ['profiles'],
     security: auth,
@@ -4766,6 +4772,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/profiles/{id}/clone',
+    operationId: 'cloneProfile',
     summary: 'Duplicate an existing profile metadata row with an auto-derived "(copy)" name',
     tags: ['profiles'],
     security: auth,
@@ -4794,6 +4801,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/profiles/{id}/export',
+    operationId: 'exportProfile',
     summary: 'Export a profile as a versioned JSON envelope (metadata-only)',
     tags: ['profiles'],
     security: auth,
@@ -4813,6 +4821,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/profiles/import',
+    operationId: 'importProfile',
     summary: 'Import a profile from a v1 export envelope (mints a fresh profile)',
     tags: ['profiles'],
     security: auth,
@@ -4844,6 +4853,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/profiles/{id}/transfer',
+    operationId: 'transferProfile',
     summary: 'Transfer profile ownership to another Driftstack account by id',
     tags: ['profiles'],
     security: auth,
@@ -4897,6 +4907,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/profiles/{id}/snapshots',
+    operationId: 'captureSnapshot',
     summary: 'Capture an immutable point-in-time snapshot of the profile',
     tags: ['profiles', 'snapshots'],
     security: auth,
@@ -4929,6 +4940,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/profiles/{id}/snapshots',
+    operationId: 'listProfileSnapshots',
     summary: "List a profile's snapshots, newest-first",
     tags: ['profiles', 'snapshots'],
     security: auth,
@@ -4947,6 +4959,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/profile-snapshots',
+    operationId: 'listSnapshots',
     summary: 'List every snapshot owned by the calling account (cross-profile)',
     tags: ['snapshots'],
     security: auth,
@@ -4962,6 +4975,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/profile-snapshots/{id}',
+    operationId: 'getSnapshot',
     summary: 'Single snapshot by id',
     tags: ['snapshots'],
     security: auth,
@@ -4981,6 +4995,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/profile-snapshots/{id}/restore',
+    operationId: 'restoreSnapshot',
     summary: 'Create a new profile from a snapshot (tier-cap + name-conflict checked)',
     tags: ['snapshots', 'profiles'],
     security: auth,
@@ -5014,6 +5029,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/profile-snapshots/{id}',
+    operationId: 'deleteSnapshot',
     summary: 'Hard-delete a snapshot',
     tags: ['snapshots'],
     security: auth,
