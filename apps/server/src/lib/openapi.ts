@@ -2828,6 +2828,10 @@ function buildRegistry(): OpenAPIRegistry {
         },
       },
       ...errors4xx,
+      404: {
+        description: 'Agent session not found (or owned by another account).',
+        content: problemContent,
+      },
       409: {
         description: 'Agent session is closed or paused; start a new session.',
         content: problemContent,
@@ -3880,6 +3884,10 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       204: { description: 'Session revoked.' },
+      404: {
+        description: 'Sign-in session not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
