@@ -24,7 +24,9 @@
 //   • errorRate >= erroringThreshold → LOW.
 //   • matchRate < driftingThreshold → LOW.
 //   • completed + healthy → MEDIUM 'smoke-check pass'.
-//   • Fallback failed/cancelled → HIGH retry.
+//   • Failed/cancelled (status !== completed) → HIGH retry, checked
+//     BEFORE the health classification (2026-05-31 ordering fix so a
+//     low-match failed run isn't mis-scheduled LOW "drift").
 //   • Stable sort by priorityRank (high:0, medium:1, low:2, skip:3).
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -55,7 +57,7 @@ describe('W460.B packages/recapture-automation/src/scheduler.ts content parity',
 
   it("4 decision rules pinned (HIGH never-captured-against-target 'Always include'; MEDIUM captured-against-prior + completed; LOW drift > stable threshold OR error rate above error threshold; SKIP queued/in_progress same target 'no point queueing a duplicate')", () => {
     expect(body).toMatch(
-      /\/\/\s+- HIGH priority: archetype hasn't been captured against the\s*\n?\s*\/\/\s+incoming iOS version at all\. Always include\./,
+      /\/\/\s+- HIGH priority: archetype hasn't been captured against the\s*\n?\s*\/\/\s+incoming iOS version at all, OR its most-recent run against that\s*\n?\s*\/\/\s+version is terminal failed\/cancelled \(retry\)\. Always include\./,
     );
     expect(body).toMatch(
       /\/\/\s+- MEDIUM priority: archetype was captured against the prior\s*\n?\s*\/\/\s+version \(i\.e\. is the "production" archetype for this lane\)\s*\n?\s*\/\/\s+AND the most-recent run was completed \(status === 'completed'\)\./,
@@ -113,19 +115,25 @@ describe('W460.B packages/recapture-automation/src/scheduler.ts content parity',
     );
   });
 
-  it("Health-based branches: errorRate >= erroringThreshold → LOW `prior run error rate ${(errorRate * 100).toFixed(0)}%; re-confirm`; matchRate < driftingThreshold → LOW `prior run match rate ${(matchRate * 100).toFixed(0)}%; drift suspected`; healthy completed → MEDIUM 'prior run healthy; smoke-check pass'; fallback failed/cancelled → HIGH `prior run terminal=${latest.status}; retry`", () => {
+  it("Branches in CORRECTED order (2026-05-31 fix): failed/cancelled (status !== 'completed') → HIGH `prior run terminal=${latest.status}; retry` is checked BEFORE the health classification (else a low-match failed run trips matchRate<threshold and is mis-scheduled LOW); then errorRate >= erroringThreshold → LOW 're-confirm'; matchRate < driftingThreshold → LOW 'drift suspected'; healthy completed → MEDIUM 'smoke-check pass' (now an unconditional push — the old `if (latest.status === 'completed')` guard is gone)", () => {
+    // Failed/cancelled → HIGH retry, gated on status !== 'completed', placed
+    // BEFORE the health checks (discrete pins; no long backtracking chain).
+    expect(body).toMatch(/if \(latest\.status !== 'completed'\) \{/);
+    expect(body).toMatch(/reason: `prior run terminal=\$\{latest\.status\}; retry`,/);
+    // Health classification (completed runs only).
+    expect(body).toMatch(/if \(errorRate >= erroringThreshold\) \{/);
     expect(body).toMatch(
-      /if \(errorRate >= erroringThreshold\) \{\s*\n?\s*entries\.push\(\{\s*\n?\s*archetypeId: history\.archetypeId,\s*\n?\s*priority: 'low',\s*\n?\s*reason: `prior run error rate \$\{\(errorRate \* 100\)\.toFixed\(0\)\}%; re-confirm`,/,
+      /reason: `prior run error rate \$\{\(errorRate \* 100\)\.toFixed\(0\)\}%; re-confirm`,/,
     );
+    expect(body).toMatch(/if \(matchRate < driftingThreshold\) \{/);
     expect(body).toMatch(
-      /if \(matchRate < driftingThreshold\) \{\s*\n?\s*entries\.push\(\{\s*\n?\s*archetypeId: history\.archetypeId,\s*\n?\s*priority: 'low',\s*\n?\s*reason: `prior run match rate \$\{\(matchRate \* 100\)\.toFixed\(0\)\}%; drift suspected`,/,
+      /reason: `prior run match rate \$\{\(matchRate \* 100\)\.toFixed\(0\)\}%; drift suspected`,/,
     );
-    expect(body).toMatch(
-      /if \(latest\.status === 'completed'\) \{\s*\n?\s*entries\.push\(\{\s*\n?\s*archetypeId: history\.archetypeId,\s*\n?\s*priority: 'medium',\s*\n?\s*reason: 'prior run healthy; smoke-check pass',\s*\n?\s*triggerOpts,\s*\n?\s*\}\);/,
-    );
-    expect(body).toMatch(
-      /\/\/ Fallback: latest is failed\/cancelled against the target;\s*\n?\s*\/\/ schedule HIGH to retry\.\s*\n?\s*entries\.push\(\{\s*\n?\s*archetypeId: history\.archetypeId,\s*\n?\s*priority: 'high',\s*\n?\s*reason: `prior run terminal=\$\{latest\.status\}; retry`,/,
-    );
+    // Healthy completed → MEDIUM, now an unconditional push.
+    expect(body).toMatch(/reason: 'prior run healthy; smoke-check pass',/);
+    // Regression lock: the MEDIUM push must NOT be guarded by a status check
+    // (the failed/cancelled split now happens above, not after the health checks).
+    expect(body).not.toMatch(/if \(latest\.status === 'completed'\) \{/);
   });
 
   it("Health calc: total = matchCount + diffCount + errorCount; matchRate + errorRate guarded by total === 0; Stable sort by priorityRank (high:0, medium:1, low:2, skip:3) 'Preserves input ordering within a priority tier'", () => {

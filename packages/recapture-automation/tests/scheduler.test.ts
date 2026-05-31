@@ -147,6 +147,56 @@ describe('V-533.C scheduleRecaptureBatch — basic priority assignment', () => {
     expect(result.entries[0]?.priority).toBe('high');
     expect(result.entries[0]?.reason).toContain('retry');
   });
+
+  // Regression (2026-05-31): a failed/cancelled run with FEW/ZERO matches
+  // must still be HIGH retry. Pre-fix the `matchRate < driftingThreshold`
+  // branch ran before the status check, so a typical failed run (low match
+  // count → matchRate 0) was mis-scheduled LOW "drift suspected" instead of
+  // retried; only a failed run with matchRate >= threshold (the test above)
+  // reached the HIGH path.
+  it('failed prior run on target with ZERO counts → HIGH (retry), not LOW drift', () => {
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.4',
+      archetypeHistory: [
+        {
+          archetypeId: 'arch1',
+          latestRun: makeRun({
+            archetypeId: 'arch1',
+            targetIos: '18.8',
+            status: 'failed',
+            matchCount: 0,
+            diffCount: 0,
+            errorCount: 0,
+          }),
+        },
+      ],
+    });
+    expect(result.entries[0]?.priority).toBe('high');
+    expect(result.entries[0]?.reason).toContain('retry');
+  });
+
+  it('cancelled prior run on target with low matches → HIGH (retry), not LOW drift', () => {
+    const result = scheduleRecaptureBatch({
+      transition: TRANSITION,
+      targetSafariVersion: '26.4',
+      archetypeHistory: [
+        {
+          archetypeId: 'arch1',
+          latestRun: makeRun({
+            archetypeId: 'arch1',
+            targetIos: '18.8',
+            status: 'cancelled',
+            matchCount: 3,
+            diffCount: 7,
+            errorCount: 0,
+          }),
+        },
+      ],
+    });
+    expect(result.entries[0]?.priority).toBe('high');
+    expect(result.entries[0]?.reason).toContain('retry');
+  });
 });
 
 describe('V-533.C scheduleRecaptureBatch — skip behaviour', () => {

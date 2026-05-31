@@ -14,7 +14,8 @@
 // Decision rules:
 //
 //   - HIGH priority: archetype hasn't been captured against the
-//     incoming iOS version at all. Always include.
+//     incoming iOS version at all, OR its most-recent run against that
+//     version is terminal failed/cancelled (retry). Always include.
 //   - MEDIUM priority: archetype was captured against the prior
 //     version (i.e. is the "production" archetype for this lane)
 //     AND the most-recent run was completed (status === 'completed').
@@ -131,8 +132,28 @@ export function scheduleRecaptureBatch(
     }
 
     // From here, latest.targetVersion.iosVersion === target.iosVersion,
-    // i.e. the archetype was already captured against this version.
-    // Classify by health of that prior run.
+    // i.e. the archetype was already captured against this version, and
+    // the run is terminal (queued / in_progress were SKIP'd above).
+
+    // Failed / cancelled against the target → HIGH retry. This MUST run
+    // BEFORE the health classification below: a non-completed run's
+    // match/error counts are partial (it didn't finish), so a typical
+    // failed run with few/zero matches would otherwise trip the
+    // `matchRate < driftingThreshold` branch and be mis-scheduled as LOW
+    // "drift suspected" instead of retried. (Pre-fix the HIGH-retry path
+    // was only reachable by a failed run that happened to have
+    // matchRate >= threshold — see the regression test.)
+    if (latest.status !== 'completed') {
+      entries.push({
+        archetypeId: history.archetypeId,
+        priority: 'high',
+        reason: `prior run terminal=${latest.status}; retry`,
+        triggerOpts,
+      });
+      continue;
+    }
+
+    // Completed run against the target version — classify by health.
     const total = latest.matchCount + latest.diffCount + latest.errorCount;
     const matchRate = total === 0 ? 0 : latest.matchCount / total;
     const errorRate = total === 0 ? 0 : latest.errorCount / total;
@@ -159,22 +180,10 @@ export function scheduleRecaptureBatch(
 
     // Healthy completed run against the target version — MEDIUM:
     // re-capture is desired only as a smoke check, not required.
-    if (latest.status === 'completed') {
-      entries.push({
-        archetypeId: history.archetypeId,
-        priority: 'medium',
-        reason: 'prior run healthy; smoke-check pass',
-        triggerOpts,
-      });
-      continue;
-    }
-
-    // Fallback: latest is failed/cancelled against the target;
-    // schedule HIGH to retry.
     entries.push({
       archetypeId: history.archetypeId,
-      priority: 'high',
-      reason: `prior run terminal=${latest.status}; retry`,
+      priority: 'medium',
+      reason: 'prior run healthy; smoke-check pass',
       triggerOpts,
     });
   }
