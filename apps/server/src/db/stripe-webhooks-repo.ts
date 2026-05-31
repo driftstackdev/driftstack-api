@@ -117,17 +117,28 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
     tier: AccountTier;
     at: Date;
   }): Promise<{ previousTier: AccountTier | null }> {
-    const before = await this.database.db
-      .select({ tier: accounts.tier })
-      .from(accounts)
-      .where(eq(accounts.id, args.accountId))
-      .limit(1);
-    const previousTier = before[0]?.tier ?? null;
-    await this.database.db
-      .update(accounts)
-      .set({ tier: args.tier, updatedAt: args.at })
-      .where(eq(accounts.id, args.accountId));
-    return { previousTier };
+    // Atomic read-then-write under a row lock so the returned previousTier
+    // reflects the value as of THIS update even under concurrent same-event
+    // Stripe deliveries. Without FOR UPDATE both deliveries could read the
+    // same old tier and each emit a duplicate tier-changed email/audit; the
+    // lock serializes them, so the loser reads previousTier === args.tier and
+    // the lifecycle no-op guard (fromTier === toTier) suppresses the dup.
+    // Claim-first was rejected — it can lose an event if the process dies
+    // after claiming but before dispatch.
+    return this.database.db.transaction(async (tx) => {
+      const before = await tx
+        .select({ tier: accounts.tier })
+        .from(accounts)
+        .where(eq(accounts.id, args.accountId))
+        .for('update')
+        .limit(1);
+      const previousTier = before[0]?.tier ?? null;
+      await tx
+        .update(accounts)
+        .set({ tier: args.tier, updatedAt: args.at })
+        .where(eq(accounts.id, args.accountId));
+      return { previousTier };
+    });
   }
 }
 

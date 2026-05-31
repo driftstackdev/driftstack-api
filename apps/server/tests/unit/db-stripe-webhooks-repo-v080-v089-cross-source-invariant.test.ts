@@ -168,9 +168,11 @@ describe('W1003 db/stripe-webhooks-repo V-080 + V-089 cross-source invariant', (
 
   // ─── setAccountTier previousTier capture ─────────────────────
 
-  it('CRITICAL setAccountTier reads previousTier from SELECT before UPDATE + returns { previousTier }. The before-then-update sequence gives services material for audit logging tier transitions.', () => {
+  it('CRITICAL setAccountTier reads previousTier from SELECT before UPDATE + returns { previousTier }, now ATOMIC under a FOR UPDATE row lock (transaction) so concurrent same-event deliveries do not double-emit. The before-then-update sequence gives services material for audit logging tier transitions.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/stripe-webhooks-repo.ts'));
-    expect(p).toMatch(/const before = await this\.database\.db/);
+    expect(p).toMatch(/return this\.database\.db\.transaction\(async \(tx\) => \{/);
+    expect(p).toMatch(/const before = await tx/);
+    expect(p).toMatch(/\.for\('update'\)/);
     expect(p).toMatch(/\.select\(\{ tier: accounts\.tier \}\)/);
     expect(p).toMatch(/const previousTier = before\[0\]\?\.tier \?\? null;/);
     expect(p).toMatch(/\.update\(accounts\)/);

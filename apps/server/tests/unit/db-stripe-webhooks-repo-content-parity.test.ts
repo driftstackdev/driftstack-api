@@ -81,10 +81,16 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
     );
   });
 
-  it('setAccountTier: read previousTier BEFORE update (select tier + limit 1); update accounts set tier + updatedAt; returns {previousTier: before[0]?.tier ?? null} — enables V-202b audit before/after recording', () => {
-    expect(body).toMatch(
-      /const before = await this\.database\.db\s*\n?\s*\.select\(\{ tier: accounts\.tier \}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.id, args\.accountId\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*const previousTier = before\[0\]\?\.tier \?\? null;\s*\n?\s*await this\.database\.db\s*\n?\s*\.update\(accounts\)\s*\n?\s*\.set\(\{ tier: args\.tier, updatedAt: args\.at \}\)\s*\n?\s*\.where\(eq\(accounts\.id, args\.accountId\)\);\s*\n?\s*return \{ previousTier \};/,
-    );
+  it('setAccountTier: ATOMIC read-then-write under a FOR UPDATE row lock (transaction); reads previousTier before update; returns {previousTier} — concurrency-safe so concurrent same-event deliveries do not double-emit (discrete pins; no long backtracking chain)', () => {
+    // Atomicity: the read+write run inside a transaction with a row lock so
+    // the previousTier is correct under concurrent Stripe redelivery.
+    expect(body).toMatch(/return this\.database\.db\.transaction\(async \(tx\) => \{/);
+    expect(body).toMatch(/const before = await tx/);
+    expect(body).toMatch(/\.select\(\{ tier: accounts\.tier \}\)/);
+    expect(body).toMatch(/\.for\('update'\)/);
+    expect(body).toMatch(/const previousTier = before\[0\]\?\.tier \?\? null;/);
+    expect(body).toMatch(/\.set\(\{ tier: args\.tier, updatedAt: args\.at \}\)/);
+    expect(body).toMatch(/return \{ previousTier \};/);
   });
 
   it("sql import unused-warn suppression rationale: 'Reference sql to keep the import live for any future raw-SQL needs.' + `void sql;`", () => {
