@@ -238,9 +238,13 @@ recipient-quota-bounded (added the missing source-ownership IDOR guard, `1f13234
 Usage-metering + cost-aggregation (`project_usage_cost_aggregation_audit_clean`) — `usage.ts`
 is a READ-ONLY summary; per ADR-004 ALL TIER_QUOTAS are `null` (unmetered — paid tiers
 concurrent-only; trial_pack credit retired) and usage_records writers aren't wired in prod,
-so there's NO quota enforcement/race to fix (don't "fix" the deliberate nulls);
-`cost-aggregator.ts` uses integer micros (1 USD = 1e6) with divide-once 2dp rounding at the
-presentation boundary (no float drift). NB: `usage-quota.ts`/`cost-rates.ts` do not exist.
+so there's NO quota enforcement/race to fix (don't "fix" the deliberate nulls).
+`cost-aggregator.ts` (V-541.H `UsageAggregatorFromUsageRepo`) is the usage→cost-estimator
+INPUTS bridge — fills `sessionMinutes` from real usage and returns zero placeholders for the
+not-yet-built meters (storage/egress/email/llm tokens), with a safe `billingCycleWindow`
+parse (null on malformed). The actual micros↔USD money math lives in
+`cost-estimator.ts`/`cost-monitoring.ts` (NOT audited this wave — a future target). NB:
+`usage-quota.ts`/`cost-rates.ts` do not exist.
 Team-RBAC multi-tenant authz (`project_team_rbac_audit_clean`, V-298/V-326) — invite
 token 256-bit hashed + 7d + **email-bound accept** (accepting account's email must match
 the invitee → no token-forward-to-wrong-account), owner-scoped removal (no cross-account
