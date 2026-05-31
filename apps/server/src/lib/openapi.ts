@@ -4179,6 +4179,10 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Endpoint.',
         content: { 'application/json': { schema: WebhookEndpointSchema } },
       },
+      404: {
+        description: 'Webhook endpoint not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4197,6 +4201,10 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Updated endpoint.',
         content: { 'application/json': { schema: WebhookEndpointSchema } },
       },
+      404: {
+        description: 'Webhook endpoint not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4209,6 +4217,10 @@ function buildRegistry(): OpenAPIRegistry {
     request: { params: z.object({ id: z.string() }) },
     responses: {
       204: { description: 'Endpoint disabled.' },
+      404: {
+        description: 'Webhook endpoint not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4226,6 +4238,10 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Paginated delivery list with optional ?status= filter.',
         content: { 'application/json': { schema: PaginatedDeliveriesOpenApi } },
+      },
+      404: {
+        description: 'Webhook endpoint not found (or owned by another account).',
+        content: problemContent,
       },
       ...errors4xx,
     },
@@ -4252,6 +4268,10 @@ function buildRegistry(): OpenAPIRegistry {
           },
         },
       },
+      404: {
+        description: 'Webhook endpoint not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4273,6 +4293,10 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Fresh plaintext shown ONCE; prev secret stays valid for 24h.',
         content: { 'application/json': { schema: RotateSecretResponseOpenApi } },
+      },
+      404: {
+        description: 'Webhook endpoint not found (or owned by another account).',
+        content: problemContent,
       },
       409: {
         description: 'Endpoint is disabled; cannot rotate.',
