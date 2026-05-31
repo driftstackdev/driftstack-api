@@ -2394,7 +2394,18 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Sign up a new account; emits a verification email',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: SignupRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: SignupRequestSchema,
+            example: {
+              email: 'you@example.com',
+              password: 'use-a-long-unique-passphrase',
+              name: 'Acme Inc',
+            },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -2431,7 +2442,14 @@ function buildRegistry(): OpenAPIRegistry {
       'Authenticate with email + password; issues a session OR returns an MFA challenge token',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: LoginRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: LoginRequestSchema,
+            example: { email: 'you@example.com', password: 'use-a-long-unique-passphrase' },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -2814,6 +2832,7 @@ function buildRegistry(): OpenAPIRegistry {
         content: {
           'application/json': {
             schema: z.object({ user_message: z.string().min(1).max(8000) }),
+            example: { user_message: 'Go to the pricing page and take a screenshot.' },
           },
         },
       },
@@ -4251,7 +4270,14 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
-      body: { content: { 'application/json': { schema: UpdateWebhookRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: UpdateWebhookRequestSchema,
+            example: { url: 'https://example.com/driftstack/webhooks/v2' },
+          },
+        },
+      },
     },
     responses: {
       200: {
