@@ -125,6 +125,16 @@ function makeAudit(): {
 const SOLO: AccountTier = 'solo_manual';
 const TEAM: AccountTier = 'team_manual';
 
+// A Postgres unique-violation (23505) on the profiles_account_name_unique
+// index — what a concurrent same-name insert raises on the race loser after
+// both requests pass the findByAccountAndName pre-check.
+function nameRace23505(): Error {
+  return Object.assign(
+    new Error('duplicate key value violates unique constraint "profiles_account_name_unique"'),
+    { code: '23505', constraint_name: 'profiles_account_name_unique' },
+  );
+}
+
 describe('V-553.B-21 ProfilesService.create', () => {
   it('throws TierLimitError when at the tier cap', async () => {
     const { repo } = makeRepo([], { countOverride: 1_000_000 });
@@ -146,15 +156,7 @@ describe('V-553.B-21 ProfilesService.create', () => {
     // The findByAccountAndName pre-check misses (empty store), but a sibling
     // request committed first → insert hits profiles_account_name_unique.
     const { repo } = makeRepo();
-    repo.insert = () =>
-      Promise.reject(
-        Object.assign(
-          new Error(
-            'duplicate key value violates unique constraint "profiles_account_name_unique"',
-          ),
-          { code: '23505', constraint_name: 'profiles_account_name_unique' },
-        ),
-      );
+    repo.insert = () => Promise.reject(nameRace23505());
     const svc = new ProfilesService(repo);
     await expect(svc.create({ accountId: 'acc_1', tier: SOLO, name: 'racy' })).rejects.toThrow(
       ConflictError,
@@ -290,6 +292,26 @@ describe('V-553.B-21 ProfilesService.clone', () => {
     expect(row.name).toBe('src (copy 2)');
     expect(row.archetype).toBe('mobile_ios');
   });
+
+  it('translates a concurrent explicit-name 23505 (race loser) into ConflictError', async () => {
+    // findByAccountAndName('fresh') misses, but a sibling took it before the
+    // insert commits → profiles_account_name_unique fires.
+    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_1', name: 'src' })]);
+    repo.insert = () => Promise.reject(nameRace23505());
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.clone({ id: 'p1', accountId: 'acc_1', tier: TEAM, name: 'fresh' }),
+    ).rejects.toThrow(ConflictError);
+  });
+
+  it('re-throws a non-constraint clone insert error (the catch is precise)', async () => {
+    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_1', name: 'src' })]);
+    repo.insert = () => Promise.reject(new Error('db exploded'));
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.clone({ id: 'p1', accountId: 'acc_1', tier: TEAM, name: 'fresh' }),
+    ).rejects.toThrow('db exploded');
+  });
 });
 
 describe('V-553.B-21 ProfilesService.exportProfile', () => {
@@ -358,5 +380,43 @@ describe('V-553.B-21 ProfilesService.importProfile', () => {
     expect(calls[0]?.payload?.source_profile_id).toBe('p_src');
     expect(calls[0]?.payload?.source_account_id).toBe('acc_src');
     expect(calls[0]?.payload?.renamed).toBe(true);
+  });
+
+  it('translates a concurrent import-name 23505 (race loser) into ConflictError', async () => {
+    const { repo } = makeRepo();
+    repo.insert = () => Promise.reject(nameRace23505());
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.importProfile({
+        accountId: 'acc_1',
+        tier: TEAM,
+        sourceProfileId: 'p_src',
+        sourceAccountId: 'acc_src',
+        payload: { name: 'fresh', archetype: 'default', description: null },
+      }),
+    ).rejects.toThrow(ConflictError);
+  });
+});
+
+describe('V-553.B-21 ProfilesService.transferProfile', () => {
+  it('translates a concurrent 23505 (race loser) into ConflictError and preserves the source', async () => {
+    // findById finds the source; findByAccountAndName on the recipient misses
+    // so no pre-check rename; the insert then races the recipient's name.
+    const { repo, state } = makeRepo([
+      makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' }),
+    ]);
+    repo.insert = () => Promise.reject(nameRace23505());
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.transferProfile({
+        sourceProfileId: 'p1',
+        sourceAccountId: 'acc_src',
+        recipientAccountId: 'acc_dst',
+        recipientTier: TEAM,
+      }),
+    ).rejects.toThrow(ConflictError);
+    // The source delete runs only after a successful insert — a race failure
+    // must leave the source profile intact.
+    expect(state.rows.find((r) => r.id === 'p1')).toBeDefined();
   });
 });

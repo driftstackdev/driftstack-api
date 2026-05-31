@@ -21,6 +21,7 @@
 import type { AccountTier } from '@driftstack/api-types';
 import { ConflictError, NotFoundError, TierLimitError } from '../lib/errors.js';
 import { profileLimitFor } from './sessions.js';
+import { isProfileNameRaceViolation } from './profiles.js';
 import type { ProfileRecord, ProfilesRepo } from './profiles.js';
 import type { AccountAuditService } from './account-audit.js';
 
@@ -177,12 +178,27 @@ export class ProfileSnapshotsService {
       });
     }
 
-    const restored = await this.profilesRepo.insert({
-      accountId: args.accountId,
-      name: args.name,
-      archetype: snapshot.parentArchetype,
-      description: snapshot.description,
-    });
+    let restored: ProfileRecord;
+    try {
+      restored = await this.profilesRepo.insert({
+        accountId: args.accountId,
+        name: args.name,
+        archetype: snapshot.parentArchetype,
+        description: snapshot.description,
+      });
+    } catch (err) {
+      // Concurrent same-name race: another create/restore took args.name
+      // between the pre-check above and this insert. Translate the
+      // profiles_account_name_unique 23505 to the same 409 the pre-check
+      // throws, not an uncaught 500.
+      if (isProfileNameRaceViolation(err)) {
+        throw new ConflictError(`Profile name "${args.name}" already exists in this account.`, {
+          resource: 'profile',
+          field: 'name',
+        });
+      }
+      throw err;
+    }
     await this.emitAuditBestEffort(args.accountId, 'profile.created', `profile_${restored.id}`, {
       name: restored.name,
       archetype: restored.archetype,

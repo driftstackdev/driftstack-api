@@ -82,6 +82,14 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
     expect(body).toMatch(/archetype: args\.archetype \?\? DEFAULT_ARCHETYPE,/);
   });
 
+  it('concurrent same-name insert race: isProfileNameRaceViolation detector (23505 + profiles_account_name_unique) guards the insert paths → 409 not 500', () => {
+    expect(body).toMatch(/export function isProfileNameRaceViolation\(err: unknown\): boolean \{/);
+    expect(body).toMatch(/=== '23505'/);
+    expect(body).toMatch(/=== 'profiles_account_name_unique'/);
+    // the create/clone/import/transfer inserts catch + translate it
+    expect(body).toMatch(/if \(isProfileNameRaceViolation\(err\)\) \{/);
+  });
+
   it('update: rename conflict check excludes self by id (conflict.id !== args.id allowed)', () => {
     expect(body).toMatch(
       /if \(conflict !== null && conflict\.id !== args\.id\) \{\s*\n?\s*throw new ConflictError\(/,

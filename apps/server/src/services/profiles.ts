@@ -67,6 +67,27 @@ export interface ProfilesRepo {
 
 const DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID;
 
+/**
+ * Detect the Postgres unique-violation (23505) raised on the
+ * `profiles_account_name_unique` index. Every profile-insert path
+ * (create / clone / import / transfer / snapshot-restore) does a
+ * findByAccountAndName pre-check, then a raw insert; two concurrent
+ * same-name requests can both pass the pre-check before either commits,
+ * so the loser's insert trips this constraint. Call sites catch it and
+ * translate to the same ConflictError the pre-check throws — a clean 409
+ * instead of an uncaught 500. The data is already correct (the index
+ * prevents the duplicate); this only fixes the status code the race
+ * loser sees. Precise on the constraint name so an unrelated 23505 (or
+ * any other error) still surfaces.
+ */
+export function isProfileNameRaceViolation(err: unknown): boolean {
+  return (
+    typeof (err as { code?: unknown }).code === 'string' &&
+    (err as { code: string }).code === '23505' &&
+    (err as { constraint_name?: unknown }).constraint_name === 'profiles_account_name_unique'
+  );
+}
+
 export interface CreateProfileArgs {
   accountId: string;
   tier: AccountTier;
@@ -146,16 +167,9 @@ export class ProfilesService {
         description: args.description ?? null,
       });
     } catch (err) {
-      // Concurrent same-name create race: two requests both pass the
-      // findByAccountAndName pre-check above before either commits, then both
-      // insert; the profiles_account_name_unique index lets one win and raises
-      // 23505 on the loser. Translate to the same ConflictError the pre-check
-      // throws — a clean 409, not an uncaught 500. Any other error re-throws.
-      if (
-        typeof (err as { code?: unknown }).code === 'string' &&
-        (err as { code: string }).code === '23505' &&
-        (err as { constraint_name?: unknown }).constraint_name === 'profiles_account_name_unique'
-      ) {
+      // Concurrent same-name create race (the double-click case): the loser's
+      // insert trips profiles_account_name_unique → 409, not an uncaught 500.
+      if (isProfileNameRaceViolation(err)) {
         throw new ConflictError(`Profile name "${args.name}" already exists in this account.`, {
           resource: 'profile',
           field: 'name',
@@ -265,12 +279,25 @@ export class ProfilesService {
       cloneName = await this.deriveNonConflictingCopyName(args.accountId, source.name);
     }
 
-    const row = await this.repo.insert({
-      accountId: args.accountId,
-      name: cloneName,
-      archetype: source.archetype,
-      description: source.description,
-    });
+    let row: ProfileRecord;
+    try {
+      row = await this.repo.insert({
+        accountId: args.accountId,
+        name: cloneName,
+        archetype: source.archetype,
+        description: source.description,
+      });
+    } catch (err) {
+      // Concurrent same-name race on an explicit clone name (the auto-derived
+      // path can't collide — deriveNonConflictingCopyName already probed).
+      if (isProfileNameRaceViolation(err)) {
+        throw new ConflictError(`Profile name "${cloneName}" already exists in this account.`, {
+          resource: 'profile',
+          field: 'name',
+        });
+      }
+      throw err;
+    }
     await this.emitAuditBestEffort(args.accountId, 'profile.created', `profile_${row.id}`, {
       name: row.name,
       archetype: row.archetype,
@@ -369,12 +396,25 @@ export class ProfilesService {
       );
     }
 
-    const row = await this.repo.insert({
-      accountId: args.accountId,
-      name: targetName,
-      archetype: args.payload.archetype,
-      description: args.payload.description,
-    });
+    let row: ProfileRecord;
+    try {
+      row = await this.repo.insert({
+        accountId: args.accountId,
+        name: targetName,
+        archetype: args.payload.archetype,
+        description: args.payload.description,
+      });
+    } catch (err) {
+      // Concurrent same-name import race — same 409 (with the name_override
+      // hint) the pre-check returns, not an uncaught 500.
+      if (isProfileNameRaceViolation(err)) {
+        throw new ConflictError(
+          `Profile name "${targetName}" already exists in this account. Pass name_override to rename on import.`,
+          { resource: 'profile', field: 'name' },
+        );
+      }
+      throw err;
+    }
     await this.emitAuditBestEffort(args.accountId, 'profile.imported', `profile_${row.id}`, {
       name: row.name,
       archetype: row.archetype,
@@ -473,12 +513,27 @@ export class ProfilesService {
       targetName = source.name + ' (transferred)';
     }
 
-    const newProfile = await this.repo.insert({
-      accountId: args.recipientAccountId,
-      name: targetName,
-      archetype: source.archetype,
-      description: source.description,
-    });
+    let newProfile: ProfileRecord;
+    try {
+      newProfile = await this.repo.insert({
+        accountId: args.recipientAccountId,
+        name: targetName,
+        archetype: source.archetype,
+        description: source.description,
+      });
+    } catch (err) {
+      // Concurrent race: the recipient acquired `targetName` between the
+      // pre-check rename above and this insert. Fail with a clean 409 — we
+      // throw before the source delete, so the source profile is preserved
+      // (the transfer simply didn't happen) rather than surfacing a 500.
+      if (isProfileNameRaceViolation(err)) {
+        throw new ConflictError(`Recipient account already has a profile named "${targetName}".`, {
+          resource: 'profile',
+          field: 'name',
+        });
+      }
+      throw err;
+    }
 
     await this.repo.delete({ id: args.sourceProfileId, accountId: args.sourceAccountId });
 

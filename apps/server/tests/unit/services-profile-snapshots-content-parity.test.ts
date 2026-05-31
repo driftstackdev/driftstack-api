@@ -121,12 +121,19 @@ describe('W401.C apps/server/src/services/profile-snapshots.ts content parity', 
   });
 
   it('restore: insert profile with snapshot.parentArchetype + emit profile.created audit with restored_from_snapshot=psnap_<id> link', () => {
+    // The insert is wrapped in a try/catch (concurrent same-name race →
+    // ConflictError, not 500), so the assignment is `restored = await ...`
+    // inside the try, not a `const` declaration.
     expect(body).toMatch(
-      /const restored = await this\.profilesRepo\.insert\(\{\s*\n?\s*accountId: args\.accountId,\s*\n?\s*name: args\.name,\s*\n?\s*archetype: snapshot\.parentArchetype,\s*\n?\s*description: snapshot\.description,\s*\n?\s*\}\);/,
+      /restored = await this\.profilesRepo\.insert\(\{\s*\n?\s*accountId: args\.accountId,\s*\n?\s*name: args\.name,\s*\n?\s*archetype: snapshot\.parentArchetype,\s*\n?\s*description: snapshot\.description,\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.created', `profile_\$\{restored\.id\}`, \{\s*\n?\s*name: restored\.name,\s*\n?\s*archetype: restored\.archetype,\s*\n?\s*restored_from_snapshot: `psnap_\$\{snapshot\.id\}`,\s*\n?\s*\}\);/,
     );
+  });
+
+  it('restore: concurrent same-name 23505 race translated to ConflictError (not a 500)', () => {
+    expect(body).toMatch(/if \(isProfileNameRaceViolation\(err\)\) \{/);
   });
 
   it('delete: NotFoundError when no row deleted (account-scoped 404)', () => {

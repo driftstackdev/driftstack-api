@@ -281,6 +281,45 @@ describe('V-553.B-19 ProfileSnapshotsService.restore', () => {
     expect(state.profiles).toHaveLength(1);
     expect(calls.map((c) => c.action)).toEqual(['profile.created']);
   });
+
+  it('translates a concurrent same-name 23505 (race loser) into ConflictError, not a 500', async () => {
+    // findByAccountAndName('fresh') misses the pre-check, but a sibling
+    // create/restore took it before this insert commits → the
+    // profiles_account_name_unique index fires on the loser.
+    const { snapshotsRepo, profilesRepo } = makeRepos({ snapshots: [makeSnapshot()] });
+    profilesRepo.insert = () =>
+      Promise.reject(
+        Object.assign(
+          new Error(
+            'duplicate key value violates unique constraint "profiles_account_name_unique"',
+          ),
+          { code: '23505', constraint_name: 'profiles_account_name_unique' },
+        ),
+      );
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(
+      svc.restore({
+        accountId: 'acc_1',
+        snapshotId: 'psnap_1',
+        tier: 'team_manual',
+        name: 'fresh',
+      }),
+    ).rejects.toThrow(ConflictError);
+  });
+
+  it('re-throws a non-constraint restore insert error (the catch is precise)', async () => {
+    const { snapshotsRepo, profilesRepo } = makeRepos({ snapshots: [makeSnapshot()] });
+    profilesRepo.insert = () => Promise.reject(new Error('db exploded'));
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(
+      svc.restore({
+        accountId: 'acc_1',
+        snapshotId: 'psnap_1',
+        tier: 'team_manual',
+        name: 'fresh',
+      }),
+    ).rejects.toThrow('db exploded');
+  });
 });
 
 describe('V-553.B-19 ProfileSnapshotsService.delete', () => {
