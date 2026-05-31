@@ -142,6 +142,34 @@ describe('V-553.B-21 ProfilesService.create', () => {
     );
   });
 
+  it('translates a concurrent same-name 23505 (race loser) into ConflictError, not a 500', async () => {
+    // The findByAccountAndName pre-check misses (empty store), but a sibling
+    // request committed first → insert hits profiles_account_name_unique.
+    const { repo } = makeRepo();
+    repo.insert = () =>
+      Promise.reject(
+        Object.assign(
+          new Error(
+            'duplicate key value violates unique constraint "profiles_account_name_unique"',
+          ),
+          { code: '23505', constraint_name: 'profiles_account_name_unique' },
+        ),
+      );
+    const svc = new ProfilesService(repo);
+    await expect(svc.create({ accountId: 'acc_1', tier: SOLO, name: 'racy' })).rejects.toThrow(
+      ConflictError,
+    );
+  });
+
+  it('re-throws a non-constraint insert error (the race catch is precise, not a catch-all)', async () => {
+    const { repo } = makeRepo();
+    repo.insert = () => Promise.reject(new Error('db exploded'));
+    const svc = new ProfilesService(repo);
+    await expect(svc.create({ accountId: 'acc_1', tier: SOLO, name: 'boom' })).rejects.toThrow(
+      'db exploded',
+    );
+  });
+
   it('inserts a row and emits profile.created audit on happy path', async () => {
     const { repo, state } = makeRepo();
     const { audit, calls } = makeAudit();

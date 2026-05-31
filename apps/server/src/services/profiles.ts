@@ -137,12 +137,32 @@ export class ProfilesService {
       });
     }
 
-    const row = await this.repo.insert({
-      accountId: args.accountId,
-      name: args.name,
-      archetype: args.archetype ?? DEFAULT_ARCHETYPE,
-      description: args.description ?? null,
-    });
+    let row: Awaited<ReturnType<typeof this.repo.insert>>;
+    try {
+      row = await this.repo.insert({
+        accountId: args.accountId,
+        name: args.name,
+        archetype: args.archetype ?? DEFAULT_ARCHETYPE,
+        description: args.description ?? null,
+      });
+    } catch (err) {
+      // Concurrent same-name create race: two requests both pass the
+      // findByAccountAndName pre-check above before either commits, then both
+      // insert; the profiles_account_name_unique index lets one win and raises
+      // 23505 on the loser. Translate to the same ConflictError the pre-check
+      // throws — a clean 409, not an uncaught 500. Any other error re-throws.
+      if (
+        typeof (err as { code?: unknown }).code === 'string' &&
+        (err as { code: string }).code === '23505' &&
+        (err as { constraint_name?: unknown }).constraint_name === 'profiles_account_name_unique'
+      ) {
+        throw new ConflictError(`Profile name "${args.name}" already exists in this account.`, {
+          resource: 'profile',
+          field: 'name',
+        });
+      }
+      throw err;
+    }
     await this.emitAuditBestEffort(args.accountId, 'profile.created', `profile_${row.id}`, {
       name: row.name,
       archetype: row.archetype,
