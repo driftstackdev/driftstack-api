@@ -212,6 +212,14 @@ origin-validated + PKCE S256 + HMAC state + HTTP-only signed cookie; `/callback`
 state (CSRF) + PKCE + email_verified; **collision→merge-verification blocks account
 takeover** (an OAuth email matching an existing account issues a proof-of-control token to
 that account's inbox, never auto-links); revoked-link no auto-signin (one LOW surface, #11).
+Team-RBAC multi-tenant authz (`project_team_rbac_audit_clean`, V-298/V-326) — invite
+token 256-bit hashed + 7d + **email-bound accept** (accepting account's email must match
+the invitee → no token-forward-to-wrong-account), owner-scoped removal (no cross-account
+delete); members act on the owner via `X-Driftstack-Account` and the `role === 'admin'`
+write-gate is **consistent across all 7 honoring routes** (members read, admins write —
+verified profile-snapshots capture/restore/delete all admin-gated, no privilege gap);
+membership changes invalidate the member's auth cache. Well-tested (no gap):
+`team-rbac-auth-path.test.ts` asserts member→403 on writes + reads-as-member.
 
 ## Founder-gated — surface only, do NOT auto-do
 
