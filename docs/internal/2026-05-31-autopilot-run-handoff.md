@@ -125,7 +125,13 @@ out-of-order downgrades — no underpayment/double-grant/revive). Stripe subscri
 tier lifecycle (`2026-05-31-stripe-subscription-lifecycle-clean.md` — tier set only on
 active/trialing so `past_due` keeps access through dunning; `customer.subscription.deleted`
 → downgrade to free; unknown price never grants; re-delivery idempotent; deleted-driven
-downgrade is correct, status-based would risk false-downgrade).
+downgrade is correct, status-based would risk false-downgrade). Rate-limit OVERRIDE
+subsystem (`project_rate_limit_overrides_clean`) — admin SET
+(`POST /v1/admin/accounts/:id/quota-override`, `requireScope('driftstack_internal_admin')`)
+is bounded (capacity 1..1M, refill 0.01..100k, duration 1s..30d → no 0/negative
+div-by-zero); customers are GET-only (`/v1/account/rate-limits` view, no self-raise);
+expiry lazily falls through to tier default. (Distinct from the rate-limit core /
+trustProxy work.)
 
 ## Founder-gated — surface only, do NOT auto-do
 
