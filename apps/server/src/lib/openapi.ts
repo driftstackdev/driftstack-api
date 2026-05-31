@@ -441,7 +441,14 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['API keys'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: CreateApiKeyRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: CreateApiKeyRequestSchema,
+            example: { name: 'ci-pipeline', scopes: ['read', 'write'] },
+          },
+        },
+      },
     },
     responses: {
       201: {
@@ -4183,7 +4190,17 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['webhooks'],
     security: auth,
     request: {
-      body: { content: { 'application/json': { schema: CreateWebhookRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: CreateWebhookRequestSchema,
+            example: {
+              url: 'https://example.com/driftstack/webhooks',
+              events: ['session.completed', 'session.failed'],
+            },
+          },
+        },
+      },
     },
     responses: {
       200: {
