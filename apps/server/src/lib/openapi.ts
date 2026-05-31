@@ -3760,7 +3760,14 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Request a magic-link email; always 200 to avoid account enumeration',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: MagicLinkRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: MagicLinkRequestSchema,
+            example: { email: 'you@example.com' },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -3793,7 +3800,14 @@ function buildRegistry(): OpenAPIRegistry {
     summary: 'Request a password-reset email; always 200 to avoid account enumeration',
     tags: ['auth'],
     request: {
-      body: { content: { 'application/json': { schema: PasswordResetRequestSchema } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: PasswordResetRequestSchema,
+            example: { email: 'you@example.com' },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -4620,7 +4634,14 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
-      body: { content: { 'application/json': { schema: TransferProfileRequestOpenApi } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: TransferProfileRequestOpenApi,
+            example: { recipient_account_id: 'acc_9c8b7a6d-5e4f-3210-abcd-ef0123456789' },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -4666,7 +4687,17 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
-      body: { content: { 'application/json': { schema: CaptureSnapshotRequestOpenApi } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: CaptureSnapshotRequestOpenApi,
+            example: {
+              label: 'before-viewport-tweak',
+              description: 'Snapshot taken before changing the device profile.',
+            },
+          },
+        },
+      },
     },
     responses: {
       200: {
@@ -4740,7 +4771,14 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     request: {
       params: z.object({ id: z.string() }),
-      body: { content: { 'application/json': { schema: RestoreSnapshotRequestOpenApi } } },
+      body: {
+        content: {
+          'application/json': {
+            schema: RestoreSnapshotRequestOpenApi,
+            example: { name: 'mobile-shopper-restored' },
+          },
+        },
+      },
     },
     responses: {
       200: {
