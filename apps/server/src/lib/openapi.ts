@@ -364,7 +364,12 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Wait resolved (satisfied or timed out).',
-        content: { 'application/json': { schema: WaitResponseSchema } },
+        content: {
+          'application/json': {
+            schema: WaitResponseSchema,
+            example: { satisfied: true, duration_ms: 1240 },
+          },
+        },
       },
       404: {
         description: 'Session not found (or owned by another account).',
@@ -404,7 +409,18 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Session state.',
-        content: { 'application/json': { schema: SessionStateSchema } },
+        content: {
+          'application/json': {
+            schema: SessionStateSchema,
+            example: {
+              url: 'https://example.com/pricing',
+              title: 'Pricing — Example',
+              cookies: [{ name: 'session', value: 'abc123', domain: 'example.com', path: '/' }],
+              local_storage: { theme: 'dark' },
+              captured_at: '2026-05-31T12:00:05Z',
+            },
+          },
+        },
       },
       404: {
         description: 'Session not found (or owned by another account).',
@@ -434,7 +450,18 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Capture produced.',
-        content: { 'application/json': { schema: CaptureResponseSchema } },
+        content: {
+          'application/json': {
+            schema: CaptureResponseSchema,
+            example: {
+              kind: 'screenshot',
+              data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+              encoding: 'base64',
+              byte_size: 68,
+              duration_ms: 320,
+            },
+          },
+        },
       },
       404: {
         description: 'Session not found (or owned by another account).',
