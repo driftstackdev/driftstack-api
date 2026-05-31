@@ -5,6 +5,47 @@ autopilot run, and the open items that are **gated on a founder decision** (so
 the scattered commit history + the agent's working memory don't have to be
 re-derived). Companion to `2026-05-30-launch-readiness-verification.md`.
 
+## Update 2026-05-31 PM — founder decisions executed
+
+Founder re-engaged and ruled on the gated profile-DELETE items + the
+archetype examples. Shipped (3 commits, full pre-push gate green —
+21,769 tests):
+
+- **Decision 1 (force/409) → RETRACT** (`1cd681b5`). Deleted the guide's
+  `force=false → 409` paragraph + repointed its parity pin; the route never
+  implemented it and prod runs the mock driver, so the contract can't be
+  honored yet. Re-add when profile↔session binding is queryable.
+- **Decision 2 (idempotency) → MAKE IDEMPOTENT** (`1cd681b5`, same commit).
+  `DELETE /v1/profiles/:id` now returns `204` on an already-deleted/unknown
+  id (was `404`), matching the OpenAPI summary, api/profiles.md, all 3 SDKs
+  (cross-sdk pin), and the sibling destroy verbs. Audit emit skipped on no-op.
+- **Decision 7 (archetype examples) → HELD.** No archetype-bearing examples
+  added; the 29 value-safe examples stand. Cutover stays deferred (code +
+  guide parity still pin `iphone16pro_ios18_7_safari26_4`).
+- **Plus, found + fixed a drift while shipping the above:** the in-flight
+  profiles `operationId`s landed (`400ae39d`), and that surfaced that the
+  whole recent `openapi.ts` arc (38 operationIds, ~29 examples, the
+  export/import/transfer paths) had **never been dumped into the committed
+  `packages/sdk-python/openapi.json` snapshot** — it was at 0 operationIds /
+  151 paths vs the live 38 / 154. No test or CI step regenerates-and-diffs
+  it, so the drift was silent. Resynced in `4bddde5a` (generated artifact,
+  0 path removals, BearerAuth + pinned version 0.0.1 untouched).
+  - **Pending codegen disclosure:** the resync brought 5 schemas the stale
+    snapshot lacked (`AgentSession`, `AgentIntent`, `IntentResult`, `Recipe`,
+    `RecipeDetail`) into `openapi.json`. `models.py` is regenerated from it by
+    `datamodel-codegen` (not in this env), so it now lags the spec by those 5
+    classes — a **pending `scripts/generate.sh` run**, joining the already-known
+    webhook-crypto `Literal` regen residual. Runtime SDK unaffected (Python CI
+    job green; `models.py` untouched + still parity-pinned).
+  - **Guard is a cadence call (your decision), not an obvious fix:** a strict
+    "live spec == committed snapshot" CI check would have caught this, BUT it
+    forces a snapshot regen on _every_ `openapi.ts` change — which widens the
+    `openapi.json`→`models.py` codegen lag more often. Better may be to regen
+    the snapshot **and** run `datamodel-codegen` together at SDK-release
+    checkpoints. Pick the cadence; I'll wire whichever guard fits it.
+
+Items 3–6 + 8 below remain open / your call.
+
 ## Shipped this session (11 commits, each full-gate-green + CI-confirmed)
 
 - **Profiles name-uniqueness race class — CLOSED.** Every path that inserts/renames
