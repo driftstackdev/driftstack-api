@@ -103,10 +103,21 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
     );
   });
 
-  it('scrubSentryEvent: walks event.request / extra / contexts / breadcrumbs', () => {
+  it('scrubSentryEvent: sanitizes request URL/query_string then walks event.request / extra / contexts / breadcrumbs', () => {
     expect(body).toMatch(
-      /function scrubSentryEvent\(event: Sentry\.ErrorEvent\): Sentry\.ErrorEvent \{\s*\n?\s*scrubInPlace\(event\.request\);\s*\n?\s*scrubInPlace\(event\.extra\);\s*\n?\s*scrubInPlace\(event\.contexts\);\s*\n?\s*scrubInPlace\(event\.breadcrumbs\);\s*\n?\s*return event;\s*\n?\s*\}/,
+      /function scrubSentryEvent\(event: Sentry\.ErrorEvent\): Sentry\.ErrorEvent \{/,
     );
+    // V-494 follow-up — url/query_string token scrub (discrete pins; the body
+    // grew so the old single-chain regex no longer matches).
+    expect(body).toMatch(/event\.request\.url = redactUrlQueryTokens\(event\.request\.url\);/);
+    expect(body).toMatch(
+      /event\.request\.query_string = redactQueryString\(event\.request\.query_string\);/,
+    );
+    expect(body).toMatch(/scrubInPlace\(event\.request\);/);
+    expect(body).toMatch(/scrubInPlace\(event\.extra\);/);
+    expect(body).toMatch(/scrubInPlace\(event\.contexts\);/);
+    expect(body).toMatch(/scrubInPlace\(event\.breadcrumbs\);/);
+    expect(body).toMatch(/redactUrlQueryTokens\(request\.url\)/);
   });
 
   it('__test_scrubInPlace export: surfaced for unit-test redaction matrix (not public surface)', () => {
@@ -160,7 +171,7 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
 
   it('wireSentryErrorHandler: onError hook with request_id / method / url / route extras', () => {
     expect(body).toMatch(
-      /export function wireSentryErrorHandler\(app: FastifyInstance, sentry: SentryClient\): void \{\s*\n?\s*app\.addHook\('onError', \(request, _reply, error, done\) => \{\s*\n?\s*sentry\.captureException\(error, \{\s*\n?\s*request_id: request\.id,\s*\n?\s*method: request\.method,\s*\n?\s*url: request\.url,\s*\n?\s*route: request\.routeOptions\?\.url,\s*\n?\s*\}\);/,
+      /export function wireSentryErrorHandler\(app: FastifyInstance, sentry: SentryClient\): void \{\s*\n?\s*app\.addHook\('onError', \(request, _reply, error, done\) => \{\s*\n?\s*sentry\.captureException\(error, \{\s*\n?\s*request_id: request\.id,\s*\n?\s*method: request\.method,\s*\n?\s*url: redactUrlQueryTokens\(request\.url\),\s*\n?\s*route: request\.routeOptions\?\.url,\s*\n?\s*\}\);/,
     );
   });
 

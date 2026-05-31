@@ -253,7 +253,7 @@ describe('W969 V-494 sentry scrub mirror cross-source invariant', () => {
     expect(p).toMatch(/app\.addHook\('onError', \(request, _reply, error, done\) => \{/);
     expect(p).toMatch(/request_id: request\.id,/);
     expect(p).toMatch(/method: request\.method,/);
-    expect(p).toMatch(/url: request\.url,/);
+    expect(p).toMatch(/url: redactUrlQueryTokens\(request\.url\),/);
     expect(p).toMatch(/route: request\.routeOptions\?\.url,/);
   });
 

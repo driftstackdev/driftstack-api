@@ -9,7 +9,11 @@
 // pinning the redaction matrix.
 
 import { describe, expect, it } from 'vitest';
-import { __test_scrubInPlace as scrubInPlace } from '../../src/lib/sentry.js';
+import type { ErrorEvent as SentryErrorEvent } from '@sentry/node';
+import {
+  __test_scrubInPlace as scrubInPlace,
+  __test_scrubSentryEvent as scrubSentryEvent,
+} from '../../src/lib/sentry.js';
 
 describe('V-494 — Sentry scrub: top-level keys', () => {
   it('redacts password field', () => {
@@ -149,5 +153,28 @@ describe('V-494 — Sentry scrub: nested structures', () => {
     expect(() => scrubInPlace(undefined)).not.toThrow();
     expect(() => scrubInPlace(42)).not.toThrow();
     expect(() => scrubInPlace('hello')).not.toThrow();
+  });
+});
+
+describe('V-494 follow-up — Sentry scrub: credential params in request URL', () => {
+  it('strips the SSE ds_token from event.request.url + query_string', () => {
+    const event = {
+      request: {
+        url: '/v1/agent-sessions/abc/events?ds_token=sk-live-SECRET',
+        query_string: 'ds_token=sk-live-SECRET',
+      },
+    } as unknown as SentryErrorEvent;
+    scrubSentryEvent(event);
+    expect(String(event.request?.url)).not.toContain('sk-live-SECRET');
+    expect((event.request?.query_string ?? '') as string).not.toContain('sk-live-SECRET');
+    expect(String(event.request?.url)).toContain('/v1/agent-sessions/abc/events');
+  });
+
+  it('leaves a token-free request URL intact', () => {
+    const event = {
+      request: { url: '/v1/sessions?limit=20' },
+    } as unknown as SentryErrorEvent;
+    scrubSentryEvent(event);
+    expect(String(event.request?.url)).toBe('/v1/sessions?limit=20');
   });
 });

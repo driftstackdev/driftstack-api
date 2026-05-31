@@ -20,6 +20,7 @@ import * as Sentry from '@sentry/node';
 import type { FastifyInstance } from 'fastify';
 import type { SentryConfig } from './config.js';
 import type { Logger } from './logger.js';
+import { redactUrlQueryTokens, redactQueryString } from './redact-url.js';
 
 // V-494 — sensitive-key denylist for Sentry event scrubbing. Keep in
 // sync with `lib/logger.ts::redact.paths`. Match is case-insensitive
@@ -96,6 +97,19 @@ function scrubInPlace(value: unknown, depth = 0): void {
 }
 
 function scrubSentryEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
+  // V-494 follow-up — strip credential-bearing query params (the SSE
+  // `?ds_token=`, the OAuth `?code=`, …) from the request URL string.
+  // scrubInPlace only redacts VALUES by sensitive KEY name; a token
+  // embedded inside the url/query_string STRING isn't caught by that, so
+  // sanitize those two fields explicitly. See lib/redact-url.ts.
+  if (event.request) {
+    if (typeof event.request.url === 'string') {
+      event.request.url = redactUrlQueryTokens(event.request.url);
+    }
+    if (typeof event.request.query_string === 'string') {
+      event.request.query_string = redactQueryString(event.request.query_string);
+    }
+  }
   scrubInPlace(event.request);
   scrubInPlace(event.extra);
   scrubInPlace(event.contexts);
@@ -112,6 +126,7 @@ function scrubSentryBreadcrumb(crumb: Sentry.Breadcrumb): Sentry.Breadcrumb {
 // tests/unit/sentry-scrub.test.ts can pin the redaction matrix.
 // Not part of the public sentry-helper surface.
 export { scrubInPlace as __test_scrubInPlace };
+export { scrubSentryEvent as __test_scrubSentryEvent };
 
 export interface SentryBreadcrumb {
   /** Logical category, e.g. `'http.request'`, `'auth'`, `'billing'`. */
@@ -241,7 +256,7 @@ export function wireSentryErrorHandler(app: FastifyInstance, sentry: SentryClien
     sentry.captureException(error, {
       request_id: request.id,
       method: request.method,
-      url: request.url,
+      url: redactUrlQueryTokens(request.url),
       route: request.routeOptions?.url,
     });
     done();
@@ -268,12 +283,12 @@ export function wireSentryRequestBreadcrumbs(app: FastifyInstance, sentry: Sentr
     (request as unknown as Record<symbol, number>)[startedAtKey] = performance.now();
     sentry.addBreadcrumb({
       category: 'http.request',
-      message: `${request.method} ${request.url}`,
+      message: `${request.method} ${redactUrlQueryTokens(request.url)}`,
       level: 'info',
       data: {
         request_id: request.id,
         method: request.method,
-        url: request.url,
+        url: redactUrlQueryTokens(request.url),
       },
     });
     done();
@@ -287,12 +302,12 @@ export function wireSentryRequestBreadcrumbs(app: FastifyInstance, sentry: Sentr
         : undefined;
     sentry.addBreadcrumb({
       category: 'http.response',
-      message: `${reply.statusCode} ${request.method} ${request.url}`,
+      message: `${reply.statusCode} ${request.method} ${redactUrlQueryTokens(request.url)}`,
       level: reply.statusCode >= 500 ? 'error' : reply.statusCode >= 400 ? 'warning' : 'info',
       data: {
         request_id: request.id,
         method: request.method,
-        url: request.url,
+        url: redactUrlQueryTokens(request.url),
         status_code: reply.statusCode,
         ...(durationMs !== undefined ? { duration_ms: durationMs } : {}),
       },

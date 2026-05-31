@@ -1,5 +1,6 @@
 import pino, { type Logger as PinoLogger } from 'pino';
 import type { Config } from './config.js';
+import { redactUrlQueryTokens } from './redact-url.js';
 
 // We re-export pino's Logger as our `Logger` type. Fastify's FastifyBaseLogger
 // is structurally a subset of pino's Logger, so passing a pino instance to
@@ -72,6 +73,32 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         'client_secret',
       ],
       censor: '[redacted]',
+    },
+    // V-494 follow-up — Fastify's built-in request log records `req.url`,
+    // which for the SSE/EventSource path includes the bearer token as
+    // `?ds_token=` (and the OAuth callback's single-use `?code=`). Header +
+    // cookie redaction above doesn't reach values embedded in the URL
+    // string, so sanitize the logged URL here. Mirrors Fastify 5's default
+    // req serializer shape (method/url/host/remoteAddress/remotePort);
+    // verified that Fastify uses the loggerInstance's `req` serializer for
+    // its auto request logging. The Sentry side is handled in
+    // lib/sentry.ts (event.request.url / query_string).
+    serializers: {
+      req(req: {
+        method?: string;
+        url?: string;
+        host?: string;
+        ip?: string;
+        socket?: { remotePort?: number };
+      }) {
+        return {
+          method: req.method,
+          url: typeof req.url === 'string' ? redactUrlQueryTokens(req.url) : req.url,
+          host: req.host,
+          remoteAddress: req.ip,
+          remotePort: req.socket?.remotePort,
+        };
+      },
     },
     formatters: {
       level: (label) => ({ level: label }),

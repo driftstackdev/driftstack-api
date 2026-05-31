@@ -67,16 +67,25 @@ verified-clean, and the prioritized open queue. Companion:
      zero false-positives) + connection-time DNS-rebind pinning (harder — needs careful
      impl). MEDIUM (blind/semi-blind: delivery log is a status/timing oracle, no body
      exfil).
-4. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
+4. **[MEDIUM — app-log + Sentry FIXED 2026-05-31; nginx + design SURFACED] SSE
+   `?ds_token=` / OAuth `?code=` in logs** — `2026-05-31-sse-token-in-logs.md`.
+   The SSE auth bearer rides in the URL query (EventSource can't set headers); it
+   leaked plaintext into the Fastify request log (`req.url`), Sentry (auto
+   `event.request.url` + 5 explicit `request.url` passes), and the nginx access log.
+   **FIXED:** `lib/redact-url.ts` wired into a pino `req` serializer (verified Fastify
+   5 honors the loggerInstance serializer) + `scrubSentryEvent` + all sentry
+   `request.url` passes. **REMAINING:** nginx `log_format` (infra) + the proper design
+   — a short-lived single-use SSE ticket instead of the real bearer in the URL.
+5. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
    `2026-05-31-webhook-orphaned-inflight-reclaim-gap.md`. A worker crash / deploy
    mid-batch leaves deliveries stuck `in_flight` forever → silently lost.
    **Fully designed:** add a `claimed_at` column (migration), reclaim on
    `claimed_at` staleness (threshold ≫ 10s timeout), leave `updated_at`/DLQ-keyset
    untouched, real-PG test. **Highest-value next item.**
-5. **[LOW] Auth-flow consume race** — `2026-05-31-auth-flow-token-audit.md`.
+6. **[LOW] Auth-flow consume race** — `2026-05-31-auth-flow-token-audit.md`.
    `consumeAuthToken` returns void → concurrent same-token submit lets both
    callers act (benign-to-minor). Needs a loser-behaviour decision.
-6. **[LOW] BYOK cache dedicated test** — guards `938ebf3a`; needs `buildTestApp`
+7. **[LOW] BYOK cache dedicated test** — guards `938ebf3a`; needs `buildTestApp`
    to expose `byokKeyCache` + a byok-stored-then-budget-exhaust scenario.
 
 ## Verified clean — do NOT re-audit (re-sweep = churn)
