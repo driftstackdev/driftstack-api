@@ -46,16 +46,27 @@ verified-clean, and the prioritized open queue. Companion:
    chain verified to pick `trustProxy` safely; `config.host`=`0.0.0.0`). Fix options
    in the doc. **Likely the highest-impact open finding** — promote for a focused
    pass. Rate-limit core is otherwise sound (atomic Redis Lua, correct refill).
-2. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
+2. **[MEDIUM, latent-CRITICAL — SURFACED 2026-05-31] `PERMISSIVE_CORS=true` live in
+   prod** — `2026-05-31-permissive-cors-in-prod.md`. Prod `.env` left the dev/webview
+   escape hatch `PERMISSIVE_CORS=true` on, so `@fastify/cors` echoes ANY Origin with
+   `Access-Control-Allow-Credentials: true` (curl-confirmed against
+   `https://attacker.test`). MEDIUM today (API auth is bearer, not cookie → no authed
+   cross-origin data theft); becomes CRITICAL if a data route ever accepts the
+   session cookie. A blind `PERMISSIVE_CORS=false` flip BREAKS prod: `status.` +
+   `admin.driftstack.dev` browser-call the API but are missing from the allow-list
+   (the flag masked the gap). **Fix is outward-facing** (complete the allow-list →
+   disable the flag → restart → verify). Shipped a safe non-breaking boot-time warn
+   guard (`lib/cors-posture.ts`) this wave so it can't silently recur.
+3. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
    `2026-05-31-webhook-orphaned-inflight-reclaim-gap.md`. A worker crash / deploy
    mid-batch leaves deliveries stuck `in_flight` forever → silently lost.
    **Fully designed:** add a `claimed_at` column (migration), reclaim on
    `claimed_at` staleness (threshold ≫ 10s timeout), leave `updated_at`/DLQ-keyset
    untouched, real-PG test. **Highest-value next item.**
-3. **[LOW] Auth-flow consume race** — `2026-05-31-auth-flow-token-audit.md`.
+4. **[LOW] Auth-flow consume race** — `2026-05-31-auth-flow-token-audit.md`.
    `consumeAuthToken` returns void → concurrent same-token submit lets both
    callers act (benign-to-minor). Needs a loser-behaviour decision.
-4. **[LOW] BYOK cache dedicated test** — guards `938ebf3a`; needs `buildTestApp`
+5. **[LOW] BYOK cache dedicated test** — guards `938ebf3a`; needs `buildTestApp`
    to expose `byokKeyCache` + a byok-stored-then-budget-exhaust scenario.
 
 ## Verified clean — do NOT re-audit (re-sweep = churn)

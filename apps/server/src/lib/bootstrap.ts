@@ -145,6 +145,7 @@ import { initSentry, type SentryClient } from './sentry.js';
 import type { AppDeps, ReadinessCheck } from './app.js';
 import type { Config } from './config.js';
 import type { Logger } from './logger.js';
+import { corsPostureWarning } from './cors-posture.js';
 
 export interface BootstrapResult {
   deps: AppDeps;
@@ -1118,6 +1119,16 @@ export async function createProductionDeps(
     readinessChecks.push(r2ReadinessCheck(r2));
   }
 
+  // CORS posture guard — surface PERMISSIVE_CORS=true-in-production loudly
+  // at boot (it echoes any Origin with credentials:true; the allow-list is
+  // the prod boundary). Non-fatal: warn rather than refuse-boot so a
+  // misconfig doesn't take prod down, but it can't pass unnoticed.
+  const permissiveCors = (process.env.PERMISSIVE_CORS ?? '').toLowerCase() === 'true';
+  const corsWarning = corsPostureWarning(permissiveCors, config.nodeEnv);
+  if (corsWarning !== null) {
+    logger.error({ component: 'cors' }, corsWarning);
+  }
+
   const deps: AppDeps = {
     logger,
     authRepo,
@@ -1375,7 +1386,7 @@ export async function createProductionDeps(
     // the request Origin so the response satisfies the credentials-
     // mode spec without us guessing every variant. Stays opt-in
     // because it widens the CSRF surface.
-    permissiveCors: (process.env.PERMISSIVE_CORS ?? '').toLowerCase() === 'true',
+    permissiveCors,
     corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS ?? '')
       .split(',')
       .map((s) => s.trim())
