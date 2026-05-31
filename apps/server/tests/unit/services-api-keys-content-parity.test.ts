@@ -16,10 +16,10 @@
 //     'test' env, else 'live'.
 //   • V-216 audit: api_key.minted / api_key.revoked / api_key.rotated
 //     try/catch swallow.
-//   • V-296 rotate: NotFoundError + BadRequestError-on-revoked; mints
-//     fresh key (same scopes + accountId); old key's expires_at set
-//     to LATER of (existing, now+grace) — never extends life; cache
-//     invalidateKey on old key.
+//   • V-296 rotate: NotFoundError + BadRequestError-on-revoked +
+//     BadRequestError-on-expired; mints fresh key (same scopes +
+//     accountId); old key's expires_at set to the EARLIER of (existing,
+//     now+grace) — never extends life; cache invalidateKey on old key.
 //   • revoke: idempotent on already-revoked; cache.invalidateKey +
 //     webhooks api_key.revoked enqueue.
 
@@ -128,12 +128,17 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toMatch(/return this\.repo\.listAllApiKeys\(opts\);/);
   });
 
-  it('V-296 rotate: NotFoundError on missing + BadRequestError on revoked + mint fresh + setExpiresAt to LATER of (existing, now+grace) — never extends life', () => {
+  it('V-296 rotate: NotFoundError on missing + BadRequestError on revoked/expired + mint fresh + setExpiresAt to EARLIER of (existing, now+grace) — never extends life', () => {
     expect(body).toMatch(
       /if \(!oldKey\) throw new NotFoundError\(`API key "\$\{keyId\}" not found\.`\);/,
     );
     expect(body).toMatch(
       /if \(oldKey\.revokedAt !== null\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*'Cannot rotate a revoked key\. Mint a fresh one via POST \/v1\/api-keys\.',\s*\n?\s*\);/,
+    );
+    // A born-dead key would result from rotating an already-expired one
+    // (the new key inherits expires_at), so rotate rejects it like revoked.
+    expect(body).toMatch(
+      /if \(oldKey\.expiresAt !== null && oldKey\.expiresAt\.getTime\(\) <= Date\.now\(\)\) \{\s*\n?\s*throw new BadRequestError\(\s*\n?\s*'Cannot rotate an expired key\. Mint a fresh one via POST \/v1\/api-keys\.',\s*\n?\s*\);/,
     );
     expect(body).toMatch(/const gracePeriodMs = opts\.gracePeriodMs \?\? 24 \* 60 \* 60 \* 1000;/);
     expect(body).toMatch(/const candidate = new Date\(Date\.now\(\) \+ gracePeriodMs\);/);

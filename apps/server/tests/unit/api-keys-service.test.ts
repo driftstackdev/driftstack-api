@@ -313,6 +313,14 @@ describe('V-553.B-20 ApiKeysService.rotate', () => {
     await expect(svc.rotate(ctxWith(['account_owner']), 'k_old')).rejects.toThrow(/revoked/);
   });
 
+  it('throws BadRequest when rotating an expired key (would otherwise mint a born-dead key)', async () => {
+    const { repo } = makeRepo([
+      makeKey({ id: 'k_old', accountId: 'acc_1', expiresAt: new Date('2020-01-01Z') }),
+    ]);
+    const svc = new ApiKeysService(repo);
+    await expect(svc.rotate(ctxWith(['account_owner']), 'k_old')).rejects.toThrow(/expired/);
+  });
+
   it('mints a new row, sets old key expiry, audits both ids', async () => {
     const { repo, state } = makeRepo([makeKey({ id: 'k_old', accountId: 'acc_1' })]);
     const { audit, calls } = makeAudit();

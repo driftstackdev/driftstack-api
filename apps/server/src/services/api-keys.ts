@@ -251,8 +251,10 @@ export class ApiKeysService {
    *
    * Idempotency: rotating an already-rotated key (one whose expires_at
    * is already set near the grace boundary) just mints another new key.
-   * The old key's expires_at is the LATEST of (existing, now+grace) so
-   * we never accidentally extend the old key's life.
+   * The old key's expires_at is capped at the EARLIER of (existing,
+   * now+grace) so rotation never extends the old key's life — a long-
+   * lived key is shortened to the grace window, and a sooner-expiring
+   * one keeps its earlier deadline.
    */
   async rotate(
     ctx: AccountContext,
@@ -281,6 +283,15 @@ export class ApiKeysService {
     if (oldKey.revokedAt !== null) {
       throw new BadRequestError(
         'Cannot rotate a revoked key. Mint a fresh one via POST /v1/api-keys.',
+      );
+    }
+    // The new key inherits the old key's expires_at (see below). Rotating
+    // an already-expired key would therefore mint a new key that is born
+    // dead — auth rejects it immediately. Reject the rotation instead, the
+    // same way a revoked key is handled, so the caller mints a fresh one.
+    if (oldKey.expiresAt !== null && oldKey.expiresAt.getTime() <= Date.now()) {
+      throw new BadRequestError(
+        'Cannot rotate an expired key. Mint a fresh one via POST /v1/api-keys.',
       );
     }
 
