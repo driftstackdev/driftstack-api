@@ -242,9 +242,14 @@ so there's NO quota enforcement/race to fix (don't "fix" the deliberate nulls).
 `cost-aggregator.ts` (V-541.H `UsageAggregatorFromUsageRepo`) is the usage→cost-estimator
 INPUTS bridge — fills `sessionMinutes` from real usage and returns zero placeholders for the
 not-yet-built meters (storage/egress/email/llm tokens), with a safe `billingCycleWindow`
-parse (null on malformed). The actual micros↔USD money math lives in
-`cost-estimator.ts`/`cost-monitoring.ts` (NOT audited this wave — a future target). NB:
-`usage-quota.ts`/`cost-rates.ts` do not exist.
+parse (null on malformed). `cost-estimator.ts` (V-658) is the pure cost math — verified
+SOUND: integer CENTS with caller-injected `CostRates` (admin UI is the rate
+source-of-truth, NOT hardcoded), all inputs clamped non-negative (NaN/Infinity/negative →
+0, no negative-cost exploit), round-half-up per line, hard-then-soft `classifyThreshold`,
+per-tier EUR `DEFAULT_TIER_THRESHOLDS`. STILL un-audited: `services/cost-monitoring.ts`
+(the persistence/alert orchestration that consumes the estimator) — a future target. NB:
+`usage-quota.ts`/`cost-rates.ts`/`microsToUsdString`/`RATES_MICROS` do not exist (the
+estimator is cents + injected rates).
 Team-RBAC multi-tenant authz (`project_team_rbac_audit_clean`, V-298/V-326) — invite
 token 256-bit hashed + 7d + **email-bound accept** (accepting account's email must match
 the invitee → no token-forward-to-wrong-account), owner-scoped removal (no cross-account
