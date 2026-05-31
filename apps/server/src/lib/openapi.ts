@@ -5055,7 +5055,7 @@ export function generateOpenApiSpec(): OpenAPIObject {
       license: { name: 'MIT' },
       contact: { name: 'Driftstack', url: 'https://github.com/driftstackdev/driftstack-api' },
     },
-    servers: [{ url: 'https://api.driftstack.dev', description: 'Production (placeholder)' }],
+    servers: [{ url: 'https://api.driftstack.dev', description: 'Production' }],
   });
   return cached;
 }
