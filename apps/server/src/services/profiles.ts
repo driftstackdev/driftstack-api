@@ -214,7 +214,22 @@ export class ProfilesService {
     // The repo throws NotFoundError-equivalent if the row doesn't exist.
     const before = await this.repo.findById({ id: args.id, accountId: args.accountId });
     if (before === null) throw new NotFoundError('Profile not found.');
-    return this.repo.update(args);
+    try {
+      return await this.repo.update(args);
+    } catch (err) {
+      // Concurrent rename race: the pre-check above saw args.updates.name free
+      // (or self), but a sibling rename took it before this update commits →
+      // profiles_account_name_unique. Only a name change can trip the index,
+      // so translate to the same 409 the pre-check throws just for renames;
+      // anything else (incl. a 23505 on a description-only update) re-throws.
+      if (args.updates.name !== undefined && isProfileNameRaceViolation(err)) {
+        throw new ConflictError(
+          `Profile name "${args.updates.name}" already exists in this account.`,
+          { resource: 'profile', field: 'name' },
+        );
+      }
+      throw err;
+    }
   }
 
   async delete(args: { id: string; accountId: string }): Promise<void> {

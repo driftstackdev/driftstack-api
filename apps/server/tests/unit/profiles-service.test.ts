@@ -231,6 +231,28 @@ describe('V-553.B-21 ProfilesService.update', () => {
       svc.update({ id: 'p_missing', accountId: 'acc_1', updates: { description: 'x' } }),
     ).rejects.toThrow(NotFoundError);
   });
+
+  it('translates a concurrent rename 23505 (race loser) into ConflictError', async () => {
+    // findByAccountAndName('fresh') misses the pre-check, but a sibling rename
+    // took it before this update commits → profiles_account_name_unique.
+    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_1', name: 'keep' })]);
+    repo.update = () => Promise.reject(nameRace23505());
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.update({ id: 'p1', accountId: 'acc_1', updates: { name: 'fresh' } }),
+    ).rejects.toThrow(ConflictError);
+  });
+
+  it('does NOT translate a 23505 on a description-only update (no rename → raw error surfaces)', async () => {
+    // A description-only update can't trip the name index; the name guard keeps
+    // the catch from masking an unrelated 23505 as a name conflict.
+    const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_1', name: 'keep' })]);
+    repo.update = () => Promise.reject(nameRace23505());
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.update({ id: 'p1', accountId: 'acc_1', updates: { description: 'x' } }),
+    ).rejects.toMatchObject({ code: '23505' });
+  });
 });
 
 describe('V-553.B-21 ProfilesService.delete', () => {
