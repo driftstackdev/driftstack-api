@@ -246,10 +246,17 @@ parse (null on malformed). `cost-estimator.ts` (V-658) is the pure cost math —
 SOUND: integer CENTS with caller-injected `CostRates` (admin UI is the rate
 source-of-truth, NOT hardcoded), all inputs clamped non-negative (NaN/Infinity/negative →
 0, no negative-cost exploit), round-half-up per line, hard-then-soft `classifyThreshold`,
-per-tier EUR `DEFAULT_TIER_THRESHOLDS`. STILL un-audited: `services/cost-monitoring.ts`
-(the persistence/alert orchestration that consumes the estimator) — a future target. NB:
-`usage-quota.ts`/`cost-rates.ts`/`microsToUsdString`/`RATES_MICROS` do not exist (the
-estimator is cents + injected rates).
+per-tier EUR `DEFAULT_TIER_THRESHOLDS`. `cost-monitoring.ts` (V-541.B) verified SOUND:
+compute-on-demand admin read (no persistence — cost_snapshots is V-541.C), fail-closed
+(`getAccountSummary` → null when usage OR tier is null), threshold fallback
+`[tier] ?? api_starter ?? {0,0}`, `getOverview` sorts desc, `getConfig` read-only.
+`routes/admin-cost.ts` verified SOUND: all three routes
+(`/overview`, `/config`, `/:accountId`) gated `requireScope('driftstack_internal_admin')`
+(operator-only) — removed a dead `readEffectiveAccountHeader` import (pre-existing;
+lint-staged changed-files-only missed it; tsc-build + admin-cost 12 tests confirm safe).
+**COST LAYER FULLY AUDITED** (usage → aggregator → estimator → monitoring → admin route);
+vein exhausted, pick a non-cost subsystem next. NB: `usage-quota.ts`/`cost-rates.ts`/
+`microsToUsdString`/`RATES_MICROS` do not exist (the estimator is cents + injected rates).
 Team-RBAC multi-tenant authz (`project_team_rbac_audit_clean`, V-298/V-326) — invite
 token 256-bit hashed + 7d + **email-bound accept** (accepting account's email must match
 the invitee → no token-forward-to-wrong-account), owner-scoped removal (no cross-account
