@@ -57,16 +57,26 @@ verified-clean, and the prioritized open queue. Companion:
    (the flag masked the gap). **Fix is outward-facing** (complete the allow-list →
    disable the flag → restart → verify). Shipped a safe non-breaking boot-time warn
    guard (`lib/cors-posture.ts`) this wave so it can't silently recur.
-3. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
+3. **[MEDIUM — redirect bypass FIXED 2026-05-31; rest SURFACED] Webhook delivery
+   SSRF** — `2026-05-31-webhook-ssrf-outbound-target.md`. The server POSTs to a
+   customer-controlled webhook URL; create-time validation only enforces `https://`
+   (allows `https://localhost`/`https://10.x`/`https://[::1]`) and delivery followed
+   redirects, so `https://attacker → 30x → http://169.254.169.254` bypassed it.
+   **FIXED:** `redirect: 'error'` on all 3 delivery fetch sites (in-memory + durable
+   - worker), pinned. **REMAINING:** create-time literal-private-IP block (easy,
+     zero false-positives) + connection-time DNS-rebind pinning (harder — needs careful
+     impl). MEDIUM (blind/semi-blind: delivery log is a status/timing oracle, no body
+     exfil).
+4. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
    `2026-05-31-webhook-orphaned-inflight-reclaim-gap.md`. A worker crash / deploy
    mid-batch leaves deliveries stuck `in_flight` forever → silently lost.
    **Fully designed:** add a `claimed_at` column (migration), reclaim on
    `claimed_at` staleness (threshold ≫ 10s timeout), leave `updated_at`/DLQ-keyset
    untouched, real-PG test. **Highest-value next item.**
-4. **[LOW] Auth-flow consume race** — `2026-05-31-auth-flow-token-audit.md`.
+5. **[LOW] Auth-flow consume race** — `2026-05-31-auth-flow-token-audit.md`.
    `consumeAuthToken` returns void → concurrent same-token submit lets both
    callers act (benign-to-minor). Needs a loser-behaviour decision.
-5. **[LOW] BYOK cache dedicated test** — guards `938ebf3a`; needs `buildTestApp`
+6. **[LOW] BYOK cache dedicated test** — guards `938ebf3a`; needs `buildTestApp`
    to expose `byokKeyCache` + a byok-stored-then-budget-exhaust scenario.
 
 ## Verified clean — do NOT re-audit (re-sweep = churn)

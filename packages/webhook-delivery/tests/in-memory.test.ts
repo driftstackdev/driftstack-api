@@ -283,6 +283,23 @@ describe('processTick — failure + retry curve', () => {
     expect(updated?.attempts[0]?.errorMessage).toBe('ECONNREFUSED');
     expect(updated?.attempts[0]?.responseStatus).toBeNull();
   });
+
+  it("SSRF hardening: delivery fetch sets redirect:'error' (does NOT follow 3xx)", async () => {
+    // A customer-controlled endpoint that 3xx-redirects must not be
+    // followed (e.g. https://attacker → 30x → http://169.254.169.254).
+    // Pin that the outbound fetch is invoked with redirect:'error'.
+    let capturedRedirect: RequestInit['redirect'] | 'unset' = 'unset';
+    const fn: typeof fetch = (_input, init) => {
+      capturedRedirect = init?.redirect ?? 'unset';
+      return Promise.resolve(new Response('', { status: 200 }));
+    };
+    const { handles } = build(fn);
+
+    await handles.deliveries.enqueue({ endpoint: ENDPOINT, payload: PAYLOAD });
+    await handles.processTick();
+
+    expect(capturedRedirect).toBe('error');
+  });
 });
 
 describe('processTick — leasing + due-time gating', () => {

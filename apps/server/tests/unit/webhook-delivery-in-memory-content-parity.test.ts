@@ -219,6 +219,9 @@ describe('W454.B packages/webhook-delivery/src/in-memory.ts content parity', () 
       /headers: \{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*'x-driftstack-event-id': payload\.eventId,\s*\n?\s*'x-driftstack-event-type': payload\.eventType,\s*\n?\s*'x-driftstack-signature': signature,\s*\n?\s*\},/,
     );
     expect(body).toMatch(/finally \{\s*\n?\s*clearTimeout\(timer\);\s*\n?\s*\}/);
+    // SSRF hardening — the outbound fetch must NOT follow redirects (a 3xx to
+    // an internal target would bypass the create-time https-only check).
+    expect(body).toMatch(/redirect: 'error',/);
   });
 
   it('signPayload returns the canonical t=<emittedAtSec>,v1=<hex> header (HMAC-SHA256 over `<emittedAtSec>.<body>`), matching the SDK verifier', () => {

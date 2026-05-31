@@ -190,6 +190,9 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     );
     expect(body).toMatch(/const fetchFn = deps\.fetch \?\? globalThis\.fetch\.bind\(globalThis\);/);
     expect(body).toMatch(/const now = deps\.now \?\? \(\(\) => Date\.now\(\)\);/);
+    // SSRF hardening — the outbound delivery fetch must NOT follow redirects
+    // (a 3xx to an internal target would bypass the create-time https-only check).
+    expect(body).toMatch(/redirect: 'error',/);
   });
 
   it('imports: drizzle-orm helpers (and/asc/desc/eq/inArray/lt/or/sql) + signWebhookPayload + webhook-delivery package types + Database + schema', () => {

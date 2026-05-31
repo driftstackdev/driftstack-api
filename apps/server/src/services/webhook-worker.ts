@@ -169,6 +169,12 @@ export class WebhookDeliveryWorker {
         },
         body,
         signal: controller.signal,
+        // SSRF hardening — do NOT follow redirects to a customer-controlled
+        // endpoint (create-time validation only enforces https://; a 3xx to
+        // an internal target like http://169.254.169.254 would bypass it).
+        // A 30x surfaces as a failed delivery. See
+        // docs/internal/2026-05-31-webhook-ssrf-outbound-target.md.
+        redirect: 'error',
       });
     } catch (err) {
       networkError = err instanceof Error ? err : new Error(String(err));

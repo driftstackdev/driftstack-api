@@ -174,6 +174,10 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     );
   });
 
+  it("SSRF hardening: the outbound delivery fetch sets redirect:'error' (no 3xx-follow to an internal target)", () => {
+    expect(body).toMatch(/redirect: 'error',/);
+  });
+
   it('defaultSleep: setTimeout-resolves-Promise helper', () => {
     expect(body).toMatch(
       /function defaultSleep\(ms: number\): Promise<void> \{\s*\n?\s*return new Promise\(\(resolve\) => setTimeout\(resolve, ms\)\);\s*\n?\s*\}/,
