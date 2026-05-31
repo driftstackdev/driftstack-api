@@ -162,6 +162,27 @@ const apiBaseUrl = resolveApiBaseUrl();
     (function () {
       const root = document.querySelector('[data-page="login"]');
       if (!root) return;
+
+      // Open-redirect guard for ?next=. Reduces any next to a SAME-ORIGIN
+      // relative path (else '/'), so /login?next=https://evil.com can't bounce
+      // a signed-in user off-site. Inline copy of src/lib/safe-next.ts (the
+      // unit-tested canonical version — safe-next.test.ts covers the bypasses,
+      // incl. the //-pathname one); kept inline because a <script is:inline
+      // define:vars> block can't import. Uses the URL parser, not a regex.
+      function safeNextPath(next, origin) {
+        if (typeof next !== 'string' || next.length === 0) return '/';
+        let u;
+        try {
+          u = new URL(next, origin);
+        } catch (e) {
+          return '/';
+        }
+        if (u.origin !== origin) return '/';
+        const p = u.pathname + u.search + u.hash;
+        if (p.indexOf('/') !== 0 || p.indexOf('//') === 0 || p.indexOf('/\\') === 0) return '/';
+        return p;
+      }
+
       const form = root.querySelector('[data-form="login"]');
       const banner = root.querySelector('[data-banner]');
       const signupLink = root.querySelector('[data-signup-link]');
@@ -170,8 +191,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       // returning user who clicks "Create one" doesn't lose their deep-
       // link target.
       const params = new URLSearchParams(window.location.search);
-      const next = params.get('next');
-      if (next && signupLink) {
+      // Sanitized once here; every downstream use (signup-link forward, the
+      // post-login window.location.href, and the OAuth redirect_to) consumes
+      // this same-origin-only value. Gate the signup-link on the RAW presence
+      // (preserve "only forward when a next was supplied") but forward the
+      // sanitized value.
+      const rawNext = params.get('next');
+      const next = safeNextPath(rawNext, window.location.origin);
+      if (rawNext && signupLink) {
         signupLink.setAttribute('href', '/signup?next=' + encodeURIComponent(next));
       }
 

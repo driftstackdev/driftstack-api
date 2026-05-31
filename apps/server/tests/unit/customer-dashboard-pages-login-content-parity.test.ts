@@ -45,12 +45,19 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
     );
   });
 
-  it("V-269 next= preservation on /signup fallback link: 'preserve ?next= when bouncing the user to /signup so a returning user who clicks Create one doesn't lose their deep-link target.' — pinned so the cross-flow continuity stays explicit + the framing comment doesn't get reduced to a generic 'preserve next='", () => {
+  it("V-269 next= preservation on /signup fallback link + open-redirect guard: 'preserve ?next= when bouncing the user to /signup…' + ?next= is run through a same-origin safeNextPath() sanitizer before ANY use (signup-link forward + the post-login window.location.href + the OAuth redirect_to) — pinned so the open-redirect fix can't silently regress (login.astro:240/266 navigate the result)", () => {
     expect(body).toMatch(
       /\/\/ V-269 — preserve \?next= when bouncing the user to \/signup so a\s*\n?\s*\/\/ returning user who clicks "Create one" doesn't lose their deep-\s*\n?\s*\/\/ link target\./,
     );
+    // Open-redirect guard (inline copy of src/lib/safe-next.ts, unit-tested in
+    // safe-next.test.ts). Without it, /login?next=https://evil.com bounces a
+    // signed-in user off-site. Pin: the fn exists, the same-origin check is
+    // present, and ?next= is sanitized via it before use.
+    expect(body).toMatch(/function safeNextPath\(next, origin\) \{/);
+    expect(body).toMatch(/if \(u\.origin !== origin\) return '\/';/);
+    expect(body).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\);/);
     expect(body).toMatch(
-      /if \(next && signupLink\) \{\s*\n?\s*signupLink\.setAttribute\('href', '\/signup\?next=' \+ encodeURIComponent\(next\)\);\s*\n?\s*\}/,
+      /if \(rawNext && signupLink\) \{\s*\n?\s*signupLink\.setAttribute\('href', '\/signup\?next=' \+ encodeURIComponent\(next\)\);\s*\n?\s*\}/,
     );
   });
 

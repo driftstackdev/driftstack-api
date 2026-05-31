@@ -1,11 +1,16 @@
 # 2026-05-31 — Open-redirect via `?next=` in the customer-dashboard sign-in (Agent 2)
 
-**Status: SURFACED, not fixed. HIGH priority** (live, confirmed; promote above the
-webhook-reclaim item). Real MEDIUM-severity open-redirect (phishing aid) in the
-customer dashboard. Not fixed inline because a correct fix must be URL-parser-based
-(regex sanitizers are bypass-prone), spans ≥2 pages with content-parity pins, and
-has no behaviour tests — a subtly-wrong sanitizer would be false assurance, so it
-warrants a careful focused pass.
+**Status: login.astro FIXED; signup.astro + the broader class REMAIN.** Real
+MEDIUM open-redirect (phishing aid) in the customer dashboard. The hard part — a
+robust, behaviourally-tested same-origin sanitizer — is done and shipped:
+`apps/customer-dashboard/src/lib/safe-next.ts` (`safeNextPath`, URL-parser-based)
+
+- `tests/unit/safe-next.test.ts` (bypass coverage, incl. the non-obvious
+  `//`-pathname case the tests caught vs a naive `startsWith('/')`). login.astro now
+  sanitizes `?next=` through it (inline copy — the `<script is:inline define:vars>`
+  block can't import — pinned to the lib in the login content-parity test). The
+  remainder (signup + the API `/start` defense-in-depth) is the focused follow-up
+  below.
 
 ## Confirmed vuln
 
