@@ -77,11 +77,16 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
     );
   });
 
-  it("V-267 next= round-trip framing pinned: 'honor ?next= round-trip from /cli/authorize and any other deep-link entry. Falls back to /welcome for the first-time onboarding flow.' + window.location.href = next ? next : '/welcome' — pinned so the deep-link continuation works through the entire signup→verify→welcome chain (drift to forcing /welcome would orphan deep-linked customers)", () => {
+  it("V-267 next= round-trip framing pinned: 'honor ?next= round-trip from /cli/authorize and any other deep-link entry. Falls back to /welcome for the first-time onboarding flow.' + window.location.href = rawNext ? next : '/welcome' (the sanitized same-origin value via safeNextPath, gated on raw presence) — pinned so the deep-link continuation works through the entire signup→verify→welcome chain without an open-redirect (drift to forcing /welcome would orphan deep-linked customers; drift to navigating the raw value would reopen the redirect)", () => {
     expect(body).toMatch(
       /\/\/ V-267 — honor \?next= round-trip from \/cli\/authorize and\s*\n?\s*\/\/ any other deep-link entry\. Falls back to \/welcome for the\s*\n?\s*\/\/ first-time onboarding flow\./,
     );
-    expect(body).toMatch(/window\.location\.href = next \? next : '\/welcome';/);
+    // Open-redirect guard: ?next= is run through the inline safeNextPath()
+    // (same-origin sanitizer, unit-tested in safe-next.test.ts) before nav,
+    // gated on the RAW presence to keep the /welcome onboarding fallback.
+    expect(body).toMatch(/function safeNextPath\(next, origin\) \{/);
+    expect(body).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\);/);
+    expect(body).toMatch(/window\.location\.href = rawNext \? next : '\/welcome';/);
   });
 
   it("#187 resend framing pinned: 'self-service resend of the signup-verification email. The signup flow stashes the user's email in sessionStorage under ds_signup_email; if it's absent we prompt for it before posting. Server is shape-stable, so the success message is identical regardless of whether the email matched.' — pinned so the anti-enumeration framing (shape-stable response) survives + the sessionStorage-or-prompt fallback for customers who lost their session", () => {

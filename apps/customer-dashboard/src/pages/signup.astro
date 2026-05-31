@@ -158,6 +158,26 @@ const apiBaseUrl = resolveApiBaseUrl();
     (function () {
       const root = document.querySelector('[data-page="signup"]');
       if (!root) return;
+
+      // Open-redirect guard for ?next= — inline copy of src/lib/safe-next.ts
+      // (unit-tested in safe-next.test.ts; kept inline because <script
+      // is:inline define:vars> can't import). Reduces ?next= to a same-origin
+      // relative path, else '/'. Used for the login-link forward, the
+      // verify-email forward, and the OAuth redirect_to below.
+      function safeNextPath(next, origin) {
+        if (typeof next !== 'string' || next.length === 0) return '/';
+        let u;
+        try {
+          u = new URL(next, origin);
+        } catch (e) {
+          return '/';
+        }
+        if (u.origin !== origin) return '/';
+        const p = u.pathname + u.search + u.hash;
+        if (p.indexOf('/') !== 0 || p.indexOf('//') === 0 || p.indexOf('/\\') === 0) return '/';
+        return p;
+      }
+
       const form = root.querySelector('[data-form="signup"]');
       const banner = root.querySelector('[data-banner]');
       const loginLink = root.querySelector('[data-login-link]');
@@ -166,7 +186,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       const params = new URLSearchParams(window.location.search);
       const nextRaw = params.get('next');
       if (nextRaw && loginLink) {
-        loginLink.setAttribute('href', '/login?next=' + encodeURIComponent(nextRaw));
+        loginLink.setAttribute(
+          'href',
+          '/login?next=' + encodeURIComponent(safeNextPath(nextRaw, window.location.origin)),
+        );
       }
 
       function showBanner(text) {
@@ -263,8 +286,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             // brought the user to signup (e.g. GUI activation at
             // /cli/authorize) can resume after verify-email completes.
             const params = new URLSearchParams(window.location.search);
-            const next = params.get('next');
-            const verifyUrl = next
+            const rawNext = params.get('next');
+            const next = safeNextPath(rawNext, window.location.origin);
+            const verifyUrl = rawNext
               ? '/verify-email?next=' + encodeURIComponent(next)
               : '/verify-email';
             window.location.href = verifyUrl;
@@ -286,8 +310,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           // Preserve ?next= through the OAuth round-trip so deep links
           // resume after the IDP redirect.
           const params = new URLSearchParams(window.location.search);
-          const next = params.get('next');
-          const redirectTo = next ? next : '/';
+          // Origin-prefix the sanitized next so redirect_to is a full
+          // same-origin URL — matches login.astro and satisfies the API's
+          // /start z.string().url() (a bare relative path would 400).
+          const redirectTo =
+            window.location.origin + safeNextPath(params.get('next'), window.location.origin);
           fetch(apiBaseUrl + '/v1/auth/oauth-client/start', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },

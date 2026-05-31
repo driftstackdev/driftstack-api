@@ -86,11 +86,14 @@ describe('W350.B /signup page parity', () => {
     expect(body).toContain("'/verify-email'");
   });
 
-  it('round-trips ?next= through to /verify-email + /login (deep-link preservation)', () => {
+  it('round-trips ?next= through to /verify-email + /login (deep-link preservation), open-redirect guarded', () => {
     // The signup page reads ?next= from the URL twice: once to
     // rewrite the /login fallback link, once to append onto the
-    // /verify-email redirect. Pin both.
-    expect(body).toMatch(/loginLink\.setAttribute\('href',\s*'\/login\?next='/);
+    // /verify-email redirect. Both are now sanitized through the inline
+    // safeNextPath() (same-origin) — pin the sanitized forms.
+    expect(body).toMatch(
+      /'\/login\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
+    );
     expect(body).toMatch(/'\/verify-email\?next='/);
   });
 

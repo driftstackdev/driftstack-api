@@ -82,6 +82,26 @@ const apiBaseUrl = resolveApiBaseUrl();
     (function () {
       const root = document.querySelector('[data-page="verify-email"]');
       if (!root) return;
+
+      // Open-redirect guard for ?next= — inline copy of src/lib/safe-next.ts
+      // (unit-tested in safe-next.test.ts; kept inline because <script
+      // is:inline define:vars> can't import). Reduces ?next= to a same-origin
+      // relative path, else '/', so /verify-email?next=https://evil.com can't
+      // bounce a just-verified user off-site.
+      function safeNextPath(next, origin) {
+        if (typeof next !== 'string' || next.length === 0) return '/';
+        let u;
+        try {
+          u = new URL(next, origin);
+        } catch (e) {
+          return '/';
+        }
+        if (u.origin !== origin) return '/';
+        const p = u.pathname + u.search + u.hash;
+        if (p.indexOf('/') !== 0 || p.indexOf('//') === 0 || p.indexOf('/\\') === 0) return '/';
+        return p;
+      }
+
       const form = root.querySelector('[data-form="verify"]');
       const banner = root.querySelector('[data-banner]');
       const emailEl = root.querySelector('[data-field="email"]');
@@ -154,8 +174,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             // any other deep-link entry. Falls back to /welcome for the
             // first-time onboarding flow.
             const params = new URLSearchParams(window.location.search);
-            const next = params.get('next');
-            window.location.href = next ? next : '/welcome';
+            const rawNext = params.get('next');
+            const next = safeNextPath(rawNext, window.location.origin);
+            // Gate on the RAW presence to preserve the /welcome onboarding
+            // fallback; navigate the sanitized same-origin value.
+            window.location.href = rawNext ? next : '/welcome';
           })
           .catch((err) => {
             showBanner(err && err.message ? err.message : 'Verification failed.');

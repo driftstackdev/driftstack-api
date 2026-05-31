@@ -65,19 +65,25 @@ describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity',
     );
   });
 
-  it("V-267 next= preservation through signup → verify-email redirect: params.get('next') + verifyUrl = next ? '/verify-email?next=' + encodeURIComponent(next) : '/verify-email' — pinned so deep-links from /cli/authorize (and other entry points) preserve their continuation target across the 5-step onboarding flow (drift to dropping ?next= would orphan the customer at /verify-email with no path back to their intended destination)", () => {
+  it("V-267 next= preservation through signup → verify-email redirect: params.get('next') → safeNextPath → verifyUrl = rawNext ? '/verify-email?next=' + encodeURIComponent(next) : '/verify-email' — pinned so deep-links from /cli/authorize (and other entry points) preserve their (sanitized, same-origin) continuation target across the 5-step onboarding flow (drift to dropping ?next= would orphan the customer at /verify-email with no path back to their intended destination)", () => {
     expect(body).toMatch(
       /\/\/ V-267 — pass through the \?next= deep link so flows that\s*\n?\s*\/\/ brought the user to signup \(e\.g\. GUI activation at\s*\n?\s*\/\/ \/cli\/authorize\) can resume after verify-email completes\./,
     );
+    // Open-redirect guard: ?next= is sanitized via the inline safeNextPath()
+    // (same-origin, unit-tested in safe-next.test.ts) before being forwarded;
+    // gated on the RAW presence so /verify-email (no next) stays the default.
+    expect(body).toMatch(/function safeNextPath\(next, origin\) \{/);
+    expect(body).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\);/);
     expect(body).toMatch(
-      /const verifyUrl = next\s*\n?\s*\? '\/verify-email\?next=' \+ encodeURIComponent\(next\)\s*\n?\s*: '\/verify-email';/,
+      /const verifyUrl = rawNext\s*\n?\s*\? '\/verify-email\?next=' \+ encodeURIComponent\(next\)\s*\n?\s*: '\/verify-email';/,
     );
   });
 
-  it("V-269 next= preservation on /login fallback link: nextRaw → loginLink href becomes '/login?next=' + encodeURIComponent(nextRaw) — pinned so customers who click 'Already have an account? Sign in' from a deep-linked signup still hit their intended destination after sign-in (drift would lose the next= and send them to the dashboard root instead)", () => {
+  it("V-269 next= preservation on /login fallback link: nextRaw → loginLink href becomes '/login?next=' + encodeURIComponent(safeNextPath(nextRaw, …)) — pinned so customers who click 'Already have an account? Sign in' from a deep-linked signup still hit their intended (same-origin) destination after sign-in (drift would lose the next= or reopen the open-redirect)", () => {
     expect(body).toMatch(/\/\/ V-269 — preserve \?next= when bouncing the user to \/login\./);
+    expect(body).toMatch(/if \(nextRaw && loginLink\) \{/);
     expect(body).toMatch(
-      /if \(nextRaw && loginLink\) \{\s*\n?\s*loginLink\.setAttribute\('href', '\/login\?next=' \+ encodeURIComponent\(nextRaw\)\);\s*\n?\s*\}/,
+      /'\/login\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
     );
   });
 

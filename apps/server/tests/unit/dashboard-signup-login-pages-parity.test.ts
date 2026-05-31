@@ -58,22 +58,25 @@ describe('W737 dashboard signup + login pages V-079 parity', () => {
     );
   });
 
-  it("CRITICAL signup V-267 ?next= deep-link round-trip pinned. The `verifyUrl = next ? '/verify-email?next=...' : '/verify-email'` redirect threads the deep-link through verify-email. Matches W735 verify-email ?next= consumption.", () => {
+  it("CRITICAL signup V-267 ?next= deep-link round-trip pinned. The `verifyUrl = rawNext ? '/verify-email?next=' + encodeURIComponent(next) : '/verify-email'` redirect threads the deep-link through verify-email (next = sanitized via safeNextPath). Matches W735 verify-email ?next= consumption.", () => {
     const s = read(SIGNUP);
 
     expect(s).toMatch(
       /V-267 — pass through the \?next= deep link so flows that\s*\n\s+\/\/ brought the user to signup \(e\.g\. GUI activation at\s*\n\s+\/\/ \/cli\/authorize\) can resume after verify-email completes/,
     );
     expect(s).toMatch(
-      /const verifyUrl = next\s*\n\s+\? '\/verify-email\?next=' \+ encodeURIComponent\(next\)\s*\n\s+: '\/verify-email'/,
+      /const verifyUrl = rawNext\s*\n\s+\? '\/verify-email\?next=' \+ encodeURIComponent\(next\)\s*\n\s+: '\/verify-email'/,
     );
+    // Open-redirect guard — ?next= sanitized via inline safeNextPath() before forward.
+    expect(s).toMatch(/function safeNextPath\(next, origin\) \{/);
+    expect(s).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\)/);
   });
 
-  it('CRITICAL signup V-269 login-link ?next= preservation pinned. The "preserve ?next= when bouncing to /login" pattern keeps GUI-activation round-trips alive when a user clicks "Sign in" instead of completing signup.', () => {
+  it('CRITICAL signup V-269 login-link ?next= preservation pinned. The "preserve ?next= when bouncing to /login" pattern keeps GUI-activation round-trips alive when a user clicks "Sign in" instead of completing signup — now sanitized through safeNextPath() to close the open-redirect.', () => {
     const s = read(SIGNUP);
     expect(s).toMatch(/V-269 — preserve \?next= when bouncing the user to \/login/);
     expect(s).toMatch(
-      /loginLink\.setAttribute\('href', '\/login\?next=' \+ encodeURIComponent\(nextRaw\)\)/,
+      /'\/login\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
     );
   });
 

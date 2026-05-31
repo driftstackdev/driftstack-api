@@ -54,9 +54,15 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toMatch(/credentials: 'include'/);
   });
 
-  it('V-267 ?next= round-trip on success (falls back to /welcome)', () => {
+  it('V-267 ?next= round-trip on success (falls back to /welcome), open-redirect guarded', () => {
     expect(body).toMatch(/V-267 — honor \?next= round-trip from \/cli\/authorize/);
-    expect(body).toMatch(/window\.location\.href = next \? next : '\/welcome'/);
+    // Open-redirect guard (inline copy of src/lib/safe-next.ts, unit-tested in
+    // safe-next.test.ts): ?next= is sanitized to a same-origin path before the
+    // nav, gated on the RAW presence to keep the /welcome onboarding fallback.
+    expect(body).toMatch(/function safeNextPath\(next, origin\) \{/);
+    expect(body).toMatch(/if \(u\.origin !== origin\) return '\/';/);
+    expect(body).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\);/);
+    expect(body).toMatch(/window\.location\.href = rawNext \? next : '\/welcome'/);
   });
 
   it('token-stash cleanup on success (ds_signup_email + ds_debug_verify_token removed)', () => {

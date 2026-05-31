@@ -85,9 +85,11 @@ describe('W735 customer-dashboard verify-email.astro page parity', () => {
     expect(p).toMatch(/any other deep-link entry\. Falls back to \/welcome for the/);
     expect(p).toMatch(/first-time onboarding flow/);
 
-    // Implementation.
-    expect(p).toMatch(/const next = params\.get\('next'\)/);
-    expect(p).toMatch(/window\.location\.href = next \? next : '\/welcome'/);
+    // Implementation (open-redirect guarded — ?next= sanitized via the inline
+    // safeNextPath() before nav; gated on the RAW presence for the fallback).
+    expect(p).toMatch(/const rawNext = params\.get\('next'\)/);
+    expect(p).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\)/);
+    expect(p).toMatch(/window\.location\.href = rawNext \? next : '\/welcome'/);
   });
 
   it('CRITICAL #187 resend-verification self-service pinned. POST /v1/auth/resend-verification with email body. Drift to dropping would force customers to restart signup.', () => {

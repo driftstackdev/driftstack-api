@@ -52,17 +52,20 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(body).toMatch(/12\+ characters\. Use a passphrase/);
   });
 
-  it('V-267 ?next= preserved on verify-email redirect (deep-link resume)', () => {
+  it('V-267 ?next= preserved on verify-email redirect (deep-link resume), open-redirect guarded', () => {
     expect(body).toMatch(
-      /const verifyUrl = next\s*\n?\s*\?\s*'\/verify-email\?next=' \+ encodeURIComponent\(next\)\s*\n?\s*:\s*'\/verify-email';/,
+      /const verifyUrl = rawNext\s*\n?\s*\?\s*'\/verify-email\?next=' \+ encodeURIComponent\(next\)\s*\n?\s*:\s*'\/verify-email';/,
     );
     expect(body).toMatch(/V-267 — pass through the \?next= deep link/);
+    // ?next= sanitized via the inline safeNextPath() (same-origin) before forward.
+    expect(body).toMatch(/function safeNextPath\(next, origin\) \{/);
+    expect(body).toMatch(/const next = safeNextPath\(rawNext, window\.location\.origin\);/);
   });
 
-  it('V-269 ?next= preserved on "Sign in" cross-link', () => {
+  it('V-269 ?next= preserved on "Sign in" cross-link, sanitized through safeNextPath()', () => {
     expect(body).toMatch(/V-269 — preserve \?next= when bouncing the user to \/login/);
     expect(body).toMatch(
-      /loginLink\.setAttribute\('href', '\/login\?next=' \+ encodeURIComponent\(nextRaw\)\)/,
+      /'\/login\?next=' \+ encodeURIComponent\(safeNextPath\(nextRaw, window\.location\.origin\)\)/,
     );
   });
 
