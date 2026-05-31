@@ -98,6 +98,37 @@ describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('returns 400 when redirect_to is off the dashboard origin (open-redirect guard)', async () => {
+    // A forged /start with an off-origin redirect_to must be rejected at the
+    // source — otherwise the callback echoes it back and the SPA bounces a
+    // just-signed-in user off-site. dashboardOrigin is https://app.driftstack.test.
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/oauth-client/start',
+      headers,
+      payload: { provider: 'google', redirect_to: 'https://evil.example/phish' },
+    });
+    expect(res.statusCode).toBe(400);
+    // No authorize_url is minted for an off-origin target.
+    expect(res.json<{ authorize_url?: string }>().authorize_url).toBeUndefined();
+  });
+
+  it('accepts a same-origin redirect_to with a deep path (legit deep-link round-trip)', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/oauth-client/start',
+      headers,
+      payload: {
+        provider: 'google',
+        redirect_to: 'https://app.driftstack.test/cli/authorize?session=abc',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect((res.json<{ authorize_url: string }>().authorize_url ?? '').length).toBeGreaterThan(20);
+  });
+
   it('returns 400 when the configured server lacks creds for the requested provider', async () => {
     // Only github configured — asking for google → 400.
     fx = await buildTestApp({

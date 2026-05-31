@@ -64,11 +64,18 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
     );
   });
 
-  it("3-outcome branching pinned: signed-in-existing-link OR created-new-account → window.location.href = body.redirect_to || '/' + collision-pending-verification → render check-inbox card with provider+window + existing-link-revoked → showBanner('This identity-provider link was previously revoked. Sign in with your password, or click the IDP button on the login page to re-link.') — pinned so the 3-outcome routing + revoked-recovery-guidance contract all stay documented", () => {
+  it("3-outcome branching pinned: signed-in-existing-link OR created-new-account → window.location.href = safeNextPath(body.redirect_to, origin) (open-redirect guarded; empty/off-origin → '/') + collision-pending-verification → render check-inbox card with provider+window + existing-link-revoked → showBanner('This identity-provider link was previously revoked. Sign in with your password, or click the IDP button on the login page to re-link.') — pinned so the 3-outcome routing + revoked-recovery-guidance contract all stay documented", () => {
     expect(body).toMatch(
       /if \(body\.outcome === 'signed-in-existing-link' \|\| body\.outcome === 'created-new-account'\) \{/,
     );
-    expect(body).toMatch(/window\.location\.href = body\.redirect_to \|\| '\/';/);
+    // Open-redirect guard: the server-returned redirect_to is sanitized through
+    // the inline safeNextPath() (same-origin, unit-tested in safe-next.test.ts)
+    // before navigating — never the raw value. Mirrors login/signup/verify-email.
+    expect(body).toMatch(/function safeNextPath\(next, origin\) \{/);
+    expect(body).toMatch(/if \(u\.origin !== origin\) return '\/';/);
+    expect(body).toMatch(
+      /window\.location\.href = safeNextPath\(body\.redirect_to, window\.location\.origin\);/,
+    );
     expect(body).toMatch(/if \(body\.outcome === 'collision-pending-verification'\) \{/);
     expect(body).toMatch(/if \(body\.outcome === 'existing-link-revoked'\) \{/);
     expect(body).toMatch(

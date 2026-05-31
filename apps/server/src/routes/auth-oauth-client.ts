@@ -127,6 +127,16 @@ export function registerOAuthClientRoutes(
     const parsed = StartBodySchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
     const provider = parsed.data.provider;
+    // Open-redirect defense at the source: redirect_to MUST be on the dashboard
+    // origin. z.string().url() above guarantees it parses; this rejects
+    // off-origin targets so a forged /start can't mint an authorize URL that
+    // bounces a just-signed-in user off-site (the callback echoes redirect_to
+    // back in its JSON and the SPA navigates it). The dashboard client always
+    // sends a same-origin value, so a mismatch is misconfiguration or abuse.
+    // Belt-and-suspenders with the SPA-side safeNextPath sanitizer.
+    if (new URL(parsed.data.redirect_to).origin !== new URL(deps.dashboardOrigin).origin) {
+      throw new BadRequestError('redirect_to must be on the dashboard origin.');
+    }
     const creds = deps.providers[provider];
     if (!creds) {
       throw new BadRequestError(`Provider "${provider}" is not configured on this server.`);

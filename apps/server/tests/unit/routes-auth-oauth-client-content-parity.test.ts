@@ -58,6 +58,12 @@ describe('routes/auth-oauth-client content parity', () => {
     );
   });
 
+  it('/start redirect_to open-redirect guard pinned: redirect_to must be on the dashboard origin (new URL(redirect_to).origin === new URL(dashboardOrigin).origin else BadRequestError). Drift to dropping this would let a forged /start mint an authorize URL whose redirect_to bounces a just-signed-in user off-site — the callback echoes redirect_to back and the SPA navigates it. Source-level defense paired with the SPA-side safeNextPath sanitizer.', () => {
+    expect(body).toMatch(
+      /if \(new URL\(parsed\.data\.redirect_to\)\.origin !== new URL\(deps\.dashboardOrigin\)\.origin\) \{\s*\n?\s*throw new BadRequestError\('redirect_to must be on the dashboard origin\.'\);\s*\n?\s*\}/,
+    );
+  });
+
   it("callbackUrlFor symmetry framing pinned: 'Derive the IDP-facing callback URL for a given provider. Both buildAuthorizeUrl (sent to IDP at authorize time) and exchangeCodeForTokens (sent to IDP at token-exchange time) MUST pass the same value — IDPs reject the token exchange if the redirect_uri differs from what they saw at authorize.' + `${base}/${provider}/callback` — pinned so the same-value-at-authorize-and-exchange contract stays documented (drift would break the IDP redirect_uri-match check + 100% of token exchanges)", () => {
     expect(body).toMatch(
       /\* Derive the IDP-facing callback URL for a given provider\. Both\s*\n?\s*\* `buildAuthorizeUrl` \(sent to IDP at authorize time\) and\s*\n?\s*\* `exchangeCodeForTokens` \(sent to IDP at token-exchange time\) MUST\s*\n?\s*\* pass the same value — IDPs reject the token exchange if the\s*\n?\s*\* `redirect_uri` differs from what they saw at authorize\./,

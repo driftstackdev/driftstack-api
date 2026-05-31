@@ -1,17 +1,42 @@
 # 2026-05-31 — Open-redirect via `?next=` in the customer-dashboard sign-in (Agent 2)
 
-**Status: login + signup + verify-email all FIXED; only the API `/start`
-defense-in-depth REMAINS.** Real MEDIUM open-redirect (phishing aid) in the
-customer dashboard. The hard part — a robust, behaviourally-tested same-origin
-sanitizer — is done and shipped:
+**Status: CLASS FULLY CLOSED.** All four dashboard nav sites
+(login + signup + verify-email + the OAuth-client callback page) sanitize the
+user-/server-supplied redirect through `safeNextPath`, AND the API `/start`
+endpoint now rejects off-origin `redirect_to` at the source. Real MEDIUM
+open-redirect (phishing aid) in the customer dashboard. The hard part — a robust,
+behaviourally-tested same-origin sanitizer — is shipped:
 `apps/customer-dashboard/src/lib/safe-next.ts` (`safeNextPath`, URL-parser-based)
 
 - `tests/unit/safe-next.test.ts` (bypass coverage, incl. the non-obvious
-  `//`-pathname case the tests caught vs a naive `startsWith('/')`). All three
-  dashboard auth pages now sanitize `?next=` through it (inline copy — the
-  `<script is:inline define:vars>` block can't import — pinned to the lib in each
-  page's content-parity test). The only remaining item is the API `/start`
-  `redirect_to` defense-in-depth (below).
+  `//`-pathname case the tests caught vs a naive `startsWith('/')`). Every
+  dashboard page that navigates a `next`/`redirect_to` value now sanitizes through
+  it (inline copy — the `<script is:inline define:vars>` block can't import —
+  pinned to the lib in each page's content-parity test).
+
+## FIXED — wave 15 (oauth-client callback page + API `/start` source-level guard)
+
+A **4th nav site was missed in the original audit**:
+`apps/customer-dashboard/src/pages/auth/oauth-client/callback.astro:105` did
+`window.location.href = body.redirect_to || '/'` — navigating the **raw**
+server-returned `redirect_to`. `/start` accepts any `z.string().url()` and
+round-trips that value through the (HMAC-signed) OAuth state into the callback
+JSON, so a forged `/start` call (the route is unauthenticated, IP-gated only) could
+mint an authorize URL whose post-sign-in landing bounces a user off-site. Closed on
+both layers:
+
+- **client** — callback.astro now navigates `safeNextPath(body.redirect_to,
+window.location.origin)` (inline copy; pinned in
+  `customer-dashboard-pages-callback-content-parity`).
+- **server (source-level)** — `/start` now rejects off-origin targets:
+  `if (new URL(parsed.data.redirect_to).origin !== new URL(deps.dashboardOrigin).origin)
+throw new BadRequestError(...)`. The schema stays `z.string().url()` (OpenAPI +
+  api-types unchanged); the check is a runtime guard in the handler. Pinned in
+  `routes-auth-oauth-client-content-parity` + a new off-origin-rejection +
+  same-origin-deep-path integration case in `auth-oauth-client.test.ts`.
+
+Build-verified (callback page prerenders; sanitizer + sanitized nav both in the
+rendered dist HTML). **No remaining items in this class.**
 
 ## FIXED — wave 14 (signup.astro + verify-email.astro)
 
@@ -32,12 +57,11 @@ safeNextPath(params.get('next'), origin)` — origin-prefixed (matches login.ast
   satisfies the API `/start` `z.string().url()`) AND sanitized (defense-in-depth;
   the bare-relative form would 400 the API).
 
-### Remaining (single item)
+### Remaining
 
-API `/start` `redirect_to: z.string().url()` — restrict server-side to
-`dashboardOrigin` so a forged client can't pass an off-origin `redirect_to`. This
-is the last defense-in-depth layer; the client now always sends a same-origin
-value, so it's belt-and-suspenders, not an open hole.
+**None — class fully closed (wave 15).** The API `/start` `redirect_to`
+source-level restriction (previously listed here as the last item) shipped this
+wave alongside the callback-page fix.
 
 ## Confirmed vuln
 

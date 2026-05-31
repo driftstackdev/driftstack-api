@@ -55,6 +55,28 @@ const apiBaseUrl = resolveApiBaseUrl();
     (function () {
       const root = document.querySelector('[data-page="oauth-callback"]');
       if (!root) return;
+
+      // Open-redirect guard for the server-returned redirect_to — inline copy
+      // of src/lib/safe-next.ts (unit-tested in safe-next.test.ts; kept inline
+      // because <script is:inline define:vars> can't import). The callback JSON
+      // echoes back the redirect_to that was round-tripped through the signed
+      // OAuth state; reduce it to a same-origin relative path before navigating
+      // so a forged /start (off-origin redirect_to) can't bounce a just-signed-in
+      // user off-site. Mirrors login/signup/verify-email.
+      function safeNextPath(next, origin) {
+        if (typeof next !== 'string' || next.length === 0) return '/';
+        let u;
+        try {
+          u = new URL(next, origin);
+        } catch (e) {
+          return '/';
+        }
+        if (u.origin !== origin) return '/';
+        const p = u.pathname + u.search + u.hash;
+        if (p.indexOf('/') !== 0 || p.indexOf('//') === 0 || p.indexOf('/\\') === 0) return '/';
+        return p;
+      }
+
       const banner = root.querySelector('[data-banner]');
       const intro = root.querySelector('[data-field="intro"]');
       const successMerge = root.querySelector('[data-success-merge]');
@@ -102,7 +124,9 @@ const apiBaseUrl = resolveApiBaseUrl();
                 // dashboard will redirect back to /login.
               }
             }
-            window.location.href = body.redirect_to || '/';
+            // Sanitize the server-returned redirect_to to a same-origin path
+            // (empty/missing → '/'); never navigate a raw off-origin value.
+            window.location.href = safeNextPath(body.redirect_to, window.location.origin);
             return;
           }
           if (body.outcome === 'collision-pending-verification') {
