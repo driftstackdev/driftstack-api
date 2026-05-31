@@ -17,6 +17,8 @@ verified-clean, and the prioritized open queue. Companion:
 - `7fa9a860` recapture scheduler: failed/cancelled runs → HIGH retry before the
   health classification (were mis-scheduled LOW).
 - `c26e3835` recapture atlas: deterministic snapshot on equal `completedAtMs`.
+- cost-alert dispatcher: state cycle-scoped — no spurious `resolved` at billing-cycle
+  rollover (`2026-05-31-cost-alert-cycle-rollover.md`). LOW (deploy-masked).
 
 ## Shipped — infra / tests / docs (non-runtime)
 
@@ -93,7 +95,10 @@ verified-clean, and the prioritized open queue. Companion:
 BYOK crypto + route, auth-flow tokens, webhook delivery worker, recapture
 scheduler/atlas/matrix (`dedupKey` correctly NUL-joins), `suspend`/data-lifecycle
 cascades, Stripe tier-update — plus the prior-session sweeps (IDOR/auth/
-payment-sig/input-validation/error-handler, money-path, all 3 SDKs).
+payment-sig/input-validation/error-handler, money-path, all 3 SDKs). 2026-05-31
+correctness audits: SSE event-bus + all 3 consumer routes (proper close+error
+cleanup, unsubscribe, `heartbeat.unref()` — no subscriber leak) and pagination
+`limit` caps (all `min(1).max(100)`, admin crypto-orders `max(500)`).
 
 ## Founder-gated — surface only, do NOT auto-do
 

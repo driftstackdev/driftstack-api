@@ -180,3 +180,30 @@ describe('V-541.C dispatcher — payload shape', () => {
     ).rejects.toThrow('postmark down');
   });
 });
+
+describe('V-541.C dispatcher — billing-cycle rollover (threshold state is per-cycle)', () => {
+  it('does NOT fire a spurious resolved when a new cycle starts under-soft after the prior cycle ended over-hard', async () => {
+    const rows = new Map<string, UsageInputs>([['a', { ...EMPTY, sessionMinutes: 1_000 }]]); // over-hard
+    const { dispatcher, capturedAlerts } = makeFixture(rows);
+    // Cycle 2026-05: account is over-hard → one critical alert.
+    const r1 = await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(r1.alertsFired).toBe(1);
+    expect(capturedAlerts[0]?.severity).toBe('critical');
+    // New billing cycle 2026-06: spend resets (under-soft). The prior cycle's
+    // 'over-hard' state must NOT carry over and fire a spurious 'resolved'.
+    rows.set('a', { ...EMPTY, sessionMinutes: 10 }); // under-soft
+    const r2 = await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-06' });
+    expect(r2.alertsFired).toBe(0);
+    expect(capturedAlerts).toHaveLength(1); // still just the cycle-1 critical
+  });
+
+  it('still fires a genuine WITHIN-cycle resolved when spend drops in the same cycle', async () => {
+    const rows = new Map<string, UsageInputs>([['a', { ...EMPTY, sessionMinutes: 1_000 }]]); // over-hard
+    const { dispatcher, capturedAlerts } = makeFixture(rows);
+    await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' }); // critical
+    rows.set('a', { ...EMPTY, sessionMinutes: 10 }); // under-soft, SAME cycle
+    const r2 = await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(r2.alertsFired).toBe(1);
+    expect(capturedAlerts[1]?.severity).toBe('resolved');
+  });
+});

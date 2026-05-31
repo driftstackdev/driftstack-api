@@ -46,6 +46,12 @@ export interface CostAlertDispatcherOpts {
 
 export class CostAlertDispatcher {
   private readonly lastState = new Map<string, ThresholdState>();
+  // The billing cycle the remembered states belong to. Threshold state is
+  // per-cycle (a new cycle resets spend), so state must NOT carry across a
+  // cycle rollover — otherwise an account that ended the prior cycle over a
+  // threshold fires a spurious 'resolved' transition on the new cycle's
+  // first run. Cleared in evaluate() when the cycle changes.
+  private lastCycle: string | null = null;
 
   constructor(private readonly opts: CostAlertDispatcherOpts) {}
 
@@ -61,6 +67,16 @@ export class CostAlertDispatcher {
     accountIds: readonly string[];
     billingCycle: string;
   }): Promise<DispatchResult> {
+    // A new billing cycle resets spend → prior-cycle threshold state is
+    // irrelevant (and would fire a spurious transition). Drop it so the new
+    // cycle starts fresh: prior=null → only a genuine over-threshold first
+    // reading alerts (classifyTransition's first-run branch). Also bounds the
+    // in-memory map to one cycle's accounts.
+    if (this.lastCycle !== args.billingCycle) {
+      this.lastState.clear();
+      this.lastCycle = args.billingCycle;
+    }
+
     const summaries = await this.opts.service.getOverview({
       accountIds: args.accountIds,
       billingCycle: args.billingCycle,
@@ -97,6 +113,7 @@ export class CostAlertDispatcher {
    */
   reset(): void {
     this.lastState.clear();
+    this.lastCycle = null;
   }
 }
 

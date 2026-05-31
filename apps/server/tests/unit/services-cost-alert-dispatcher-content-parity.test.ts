@@ -91,6 +91,13 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
     expect(body).toMatch(/private readonly lastState = new Map<string, ThresholdState>\(\);/);
   });
 
+  it('cycle-scoped state: lastCycle field + evaluate drops remembered state when billingCycle changes (no spurious rollover transition)', () => {
+    expect(body).toMatch(/private lastCycle: string \| null = null;/);
+    expect(body).toMatch(
+      /if \(this\.lastCycle !== args\.billingCycle\) \{\s*\n?\s*this\.lastState\.clear\(\);\s*\n?\s*this\.lastCycle = args\.billingCycle;\s*\n?\s*\}/,
+    );
+  });
+
   it('evaluate: getOverview accounts + cycle; prior === current → skip (no transition)', () => {
     expect(body).toMatch(
       /Evaluate the given account ids for the given billing cycle\.\s*\n?\s*\*\s*Fires an alert for any account whose threshold state transitioned/,
@@ -124,7 +131,9 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
     expect(body).toMatch(
       /Test seam: reset the remembered prior-state map\. Production\s*\n?\s*\*\s*doesn't reset \(deploys do that implicitly\)\./,
     );
-    expect(body).toMatch(/reset\(\): void \{\s*\n?\s*this\.lastState\.clear\(\);\s*\n?\s*\}/);
+    expect(body).toMatch(
+      /reset\(\): void \{\s*\n?\s*this\.lastState\.clear\(\);\s*\n?\s*this\.lastCycle = null;\s*\n?\s*\}/,
+    );
   });
 
   it('classifyTransition: prior=null first-ever rules — over-hard→critical, between→warn, under-soft→null', () => {
