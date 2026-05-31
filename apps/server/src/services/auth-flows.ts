@@ -428,18 +428,36 @@ export class AuthFlowsService {
     }
 
     const passwordHash = await hashPassword(args.password);
-    const account = await this.repo.createAccount({
-      email,
-      name: args.name ?? null,
-      passwordHash,
-      initialTier: this.config.initialTier ?? 'free',
-      ...(args.bundledLlmConsent !== undefined
-        ? { bundledLlmConsent: args.bundledLlmConsent }
-        : {}),
-      ...(args.bundledLlmMonthlyCapUsdCents !== undefined
-        ? { bundledLlmMonthlyCapUsdCents: args.bundledLlmMonthlyCapUsdCents }
-        : {}),
-    });
+    let account: Awaited<ReturnType<typeof this.repo.createAccount>>;
+    try {
+      account = await this.repo.createAccount({
+        email,
+        name: args.name ?? null,
+        passwordHash,
+        initialTier: this.config.initialTier ?? 'free',
+        ...(args.bundledLlmConsent !== undefined
+          ? { bundledLlmConsent: args.bundledLlmConsent }
+          : {}),
+        ...(args.bundledLlmMonthlyCapUsdCents !== undefined
+          ? { bundledLlmMonthlyCapUsdCents: args.bundledLlmMonthlyCapUsdCents }
+          : {}),
+      });
+    } catch (err) {
+      // Concurrent same-email signup race (e.g. a double-clicked submit):
+      // both calls pass the findAccountByEmail pre-check above before either
+      // commits, then both insert; the accounts_email_unique index lets one
+      // win and raises 23505 on the loser. Translate to the same
+      // email_already_registered (409) the pre-check throws — not an
+      // uncaught 500. Any other error re-throws untouched.
+      if (
+        typeof (err as { code?: unknown }).code === 'string' &&
+        (err as { code: string }).code === '23505' &&
+        (err as { constraint_name?: unknown }).constraint_name === 'accounts_email_unique'
+      ) {
+        throw new AuthFlowError('email_already_registered');
+      }
+      throw err;
+    }
 
     const plaintext = generateAuthToken();
     const expiresAt = new Date(Date.now() + AUTH_TOKEN_TTL_MS.signupVerification);

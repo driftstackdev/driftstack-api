@@ -183,3 +183,44 @@ describe('AuthFlowsService → Postmark integration (V-085)', () => {
     expect(result.debugToken).toBeDefined();
   });
 });
+
+describe('AuthFlowsService signup — concurrent same-email race', () => {
+  function make23505(): Error {
+    return Object.assign(
+      new Error('duplicate key value violates unique constraint "accounts_email_unique"'),
+      { code: '23505', constraint_name: 'accounts_email_unique' },
+    );
+  }
+
+  it('translates a same-email 23505 (race loser) into email_already_registered, not a 500', async () => {
+    const repo = new InMemoryAuthFlowsRepo();
+    // The findAccountByEmail pre-check misses (empty store), but a sibling
+    // request committed first → createAccount hits accounts_email_unique.
+    repo.createAccount = () => Promise.reject(make23505());
+    const { client } = makeStubPostmark();
+    const service = makeService(repo, client);
+
+    await expect(
+      service.signup({
+        email: 'race@driftstack.local',
+        password: 'correct horse battery staple',
+        requestedFromIp: '127.0.0.1',
+      }),
+    ).rejects.toMatchObject({ code: 'email_already_registered' });
+  });
+
+  it('re-throws a non-email-constraint error (the catch is precise, not a catch-all)', async () => {
+    const repo = new InMemoryAuthFlowsRepo();
+    repo.createAccount = () => Promise.reject(new Error('db exploded'));
+    const { client } = makeStubPostmark();
+    const service = makeService(repo, client);
+
+    await expect(
+      service.signup({
+        email: 'other@driftstack.local',
+        password: 'correct horse battery staple',
+        requestedFromIp: '127.0.0.1',
+      }),
+    ).rejects.toThrow('db exploded');
+  });
+});
