@@ -735,7 +735,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   const adminAuditService = new AdminAuditService(adminAuditRepo, metricsRegistry);
 
   const accountsAdminRepo = new InMemoryAccountsAdminRepo(authRepo);
-  const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);
+  // accountsAdminService is constructed further down (after sessionsService)
+  // so suspend() can reclaim running sessions via the SuspendSessionReclaimer —
+  // mirrors the bootstrap wiring order.
   // V-295c3 — public-status email subscribers.
   const statusSubscribersRepo = new InMemoryStatusSubscribersRepo();
   const statusSubscribersService = new StatusSubscribersService(statusSubscribersRepo, noopEmail, {
@@ -900,6 +902,13 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountAudit: accountAuditService,
     accountLifecycle: accountLifecycleService,
   });
+  // Wired with the sessions reclaimer (constructed after sessionsService, like
+  // bootstrap) so the suspend() path tears down the account's running sessions.
+  const accountsAdminService = new AccountsAdminService(
+    accountsAdminRepo,
+    authCache,
+    sessionsService,
+  );
   // Legal-acceptance plumbing — uses an in-memory catalog with a fixed
   // canned document set (one per documentKey) so tests don't depend on
   // file-system reads.

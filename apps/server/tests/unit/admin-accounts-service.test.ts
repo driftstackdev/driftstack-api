@@ -17,6 +17,9 @@ import {
 } from '../../src/services/admin-accounts.js';
 import type { AccountContext, AccountRow } from '../../src/services/auth.js';
 import type { AuthCache } from '../../src/services/auth-cache.js';
+import { SessionsService } from '../../src/services/sessions.js';
+import { InMemorySessionsRepo } from '../integration/_helpers/in-memory-sessions-repo.js';
+import type { Driver } from '../../src/drivers/types.js';
 
 function ctxWith(scopes: ApiKeyScope[]): AccountContext {
   return {
@@ -254,5 +257,27 @@ describe('V-553.B-15 AccountsAdminService.suspend / unsuspend', () => {
     await expect(
       svc.suspend(ctxWith(['driftstack_internal_admin']), 'acc_1'),
     ).resolves.toBeDefined();
+  });
+
+  it('suspend drives a REAL SessionsService.destroyAllForAccount end-to-end (full chain → repo + driver)', async () => {
+    const { repo } = makeRepo([baseAccount()]);
+    const sessionsRepo = new InMemorySessionsRepo();
+    const destroyed: string[] = [];
+    const driver = {
+      destroy: (id: string) => {
+        destroyed.push(id);
+        return Promise.resolve();
+      },
+    } as unknown as Driver;
+    const sessionsService = new SessionsService({ repo: sessionsRepo, driver });
+    sessionsRepo.seedSession({
+      accountId: 'acc_1',
+      status: 'ready',
+      createdAt: new Date('2026-05-31Z'),
+      driverSessionId: 'drv-1',
+    });
+    const svc = new AccountsAdminService(repo, null, sessionsService);
+    await svc.suspend(ctxWith(['driftstack_internal_admin']), 'acc_1');
+    expect(destroyed).toEqual(['drv-1']);
   });
 });
