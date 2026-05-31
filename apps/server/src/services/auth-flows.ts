@@ -24,7 +24,9 @@ import {
   type MfaChallengeStore,
   generateChallengeToken,
   redisKey as mfaChallengeKey,
+  attemptsKey as mfaChallengeAttemptsKey,
   MFA_CHALLENGE_TTL_SECONDS,
+  MAX_MFA_CHALLENGE_ATTEMPTS,
 } from './mfa-challenge-store.js';
 import {
   AUTH_TOKEN_TTL_MS,
@@ -656,8 +658,23 @@ export class AuthFlowsService {
     const input = args.code ?? args.recoveryCode!;
     const result = await this.mfa.verifyCode({ accountId: payload.account_id, input });
     if (result === null) {
-      // Failed verify — leave the token alive so customer can retype.
-      // Route layer enforces a rate limit; service stays simple.
+      // V-353d.A — bound brute-force on the 6-digit/recovery code. The
+      // token is left alive so the customer can retype, BUT only up to
+      // MAX_MFA_CHALLENGE_ATTEMPTS wrong codes; past that we invalidate the
+      // token so the attacker must re-/login (password + rate-limit) for a
+      // fresh challenge. Atomic counter (Redis INCR) so concurrent guesses
+      // can't undercount. Not a per-account lockout — no legit-user DoS.
+      const attempts = await this.mfaChallenges.incrAttempts(
+        mfaChallengeAttemptsKey(args.challengeToken),
+        MFA_CHALLENGE_TTL_SECONDS,
+      );
+      if (attempts >= MAX_MFA_CHALLENGE_ATTEMPTS) {
+        await this.mfaChallenges.consume(mfaChallengeKey(args.challengeToken));
+        throw new AuthFlowError(
+          'invalid_auth_token',
+          'Too many incorrect codes for this sign-in. Sign in again to retry.',
+        );
+      }
       throw new AuthFlowError(
         'invalid_auth_token',
         'Code is invalid. Try again or use a recovery code.',

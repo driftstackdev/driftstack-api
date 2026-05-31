@@ -246,9 +246,15 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     expect(body).toMatch(/import type \{ AuthCache \} from '\.\/auth-cache\.js';/);
     expect(body).toMatch(/import type \{ AccountAuditService \} from '\.\/account-audit\.js';/);
     expect(body).toMatch(/import type \{ MfaService \} from '\.\/mfa\.js';/);
-    expect(body).toMatch(
-      /import \{\s*\n?\s*type MfaChallengePayload,\s*\n?\s*type MfaChallengeStore,\s*\n?\s*generateChallengeToken,\s*\n?\s*redisKey as mfaChallengeKey,\s*\n?\s*MFA_CHALLENGE_TTL_SECONDS,\s*\n?\s*\} from '\.\/mfa-challenge-store\.js';/,
-    );
+    // Discrete pins (the import grew past the safe \s*\n? chain length).
+    expect(body).toMatch(/type MfaChallengePayload,/);
+    expect(body).toMatch(/type MfaChallengeStore,/);
+    expect(body).toMatch(/generateChallengeToken,/);
+    expect(body).toMatch(/redisKey as mfaChallengeKey,/);
+    expect(body).toMatch(/attemptsKey as mfaChallengeAttemptsKey,/);
+    expect(body).toMatch(/MFA_CHALLENGE_TTL_SECONDS,/);
+    expect(body).toMatch(/MAX_MFA_CHALLENGE_ATTEMPTS,/);
+    expect(body).toMatch(/\} from '\.\/mfa-challenge-store\.js';/);
     expect(body).toMatch(
       /import \{\s*\n?\s*AUTH_TOKEN_TTL_MS,\s*\n?\s*generateAuthToken,\s*\n?\s*hashPassword,\s*\n?\s*tokenHash,\s*\n?\s*verifyPassword,\s*\n?\s*\} from '\.\.\/lib\/auth-tokens\.js';/,
     );

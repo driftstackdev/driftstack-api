@@ -1,9 +1,24 @@
 # 2026-05-31 — MFA challenge has no per-attempt cap / lockout (Agent 2)
 
-**Status: SURFACED, not fixed — needs a stateful attempt-counter + a lockout-policy
-decision (founder/security).** Found by a fresh audit of the MFA/TOTP verification
-path (not in any audited-clean memory). The TOTP/recovery primitives are sound; the
-gap is brute-force bounding on the login-time MFA challenge.
+**Status: per-challenge attempt cap FIXED 2026-05-31; per-account lockout SURFACED
+(founder policy).** Found by a fresh audit of the MFA/TOTP verification path. The
+TOTP/recovery primitives are sound; the gap was brute-force bounding on the
+login-time MFA challenge — now bounded per challenge token.
+
+## FIXED — per-challenge attempt cap (option 1)
+
+`auth-flows.ts::completeMfaChallenge` now bounds wrong codes per challenge token:
+`MfaChallengeStore` gained `incrAttempts(key, ttl)` (Redis atomic `INCR` + first-call
+`EXPIRE`; in-memory counter). On a failed code it increments an attempts counter
+(separate `attemptsKey` namespace) and, at `MAX_MFA_CHALLENGE_ATTEMPTS = 5`, consumes
+the challenge token — forcing a fresh `/login` (password + rate-limit) for a new
+challenge. This raises the brute-force cost from "~all-the-codes-the-rate-limit-allows
+per token" to "5 guesses per password-authenticated challenge." It is **not** a
+per-account lockout, so there's no legit-user-lockout DoS — a user who mistypes 5×
+just signs in again. Tests: `incrAttempts` unit (count/independence/TTL-reset) +
+integration (`auth-mfa-challenge`) asserting that after 5 wrong codes even the
+_correct_ code fails (token invalidated). Content-parity pins the store + auth-flows
+wiring. The atomic INCR means concurrent guesses can't undercount.
 
 ## What's solid (do NOT re-audit)
 
@@ -61,7 +76,9 @@ and a distributed attacker parallelizes across IPs.
    `AUTH_IP_LIMITS.mfaChallenge` (tighter than login) instead of sharing `loginGate`.
    Cheap, but only meaningful once trustProxy is fixed (per-IP).
 
-Recommended: ship (1) + (3) for the immediate bound; consider (2) per founder policy.
+Update: (1) is SHIPPED (above). Remaining optional hardening: (3) a dedicated tighter
+gate (cheap; meaningful once trustProxy is fixed → per-IP) and (2) per-account lockout
+per founder policy. The immediate brute-force bound is in place via (1).
 The attempt counter is a stateful security change (atomic increment + TTL +
 reset-on-success) + a threshold policy, so it's surfaced rather than auto-shipped in
 an autopilot wave.

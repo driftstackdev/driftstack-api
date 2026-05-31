@@ -79,16 +79,16 @@ verified-clean, and the prioritized open queue. Companion:
    5 honors the loggerInstance serializer) + `scrubSentryEvent` + all sentry
    `request.url` passes. **REMAINING:** nginx `log_format` (infra) + the proper design
    — a short-lived single-use SSE ticket instead of the real bearer in the URL.
-5. **[MEDIUM — SURFACED 2026-05-31] MFA challenge not attempt-bounded** —
-   `2026-05-31-mfa-challenge-not-attempt-bounded.md`. The login MFA challenge
-   (`completeMfaChallenge`) leaves the challenge token alive on a wrong code with NO
-   per-challenge attempt cap and NO per-account lockout (`maxAttempts` lives only in a
-   comment). Sole brute-force defense is the IP `loginGate` (currently _global_ via the
-   trustProxy bug). A password-holding attacker can grind the 1M TOTP space. The TOTP
-   primitives, recovery codes (scrypt + single-use), and token entropy are all SOLID —
-   only the attempt-bound is missing. Fix (founder/security policy): per-challenge
-   INCR counter + invalidate after N / dedicated tighter gate / optional per-account
-   lockout. SURFACE — stateful security change + threshold policy.
+5. **[MEDIUM — per-challenge cap FIXED 2026-05-31; per-account lockout SURFACED] MFA
+   challenge brute-force bound** — `2026-05-31-mfa-challenge-not-attempt-bounded.md`.
+   **FIXED:** `completeMfaChallenge` now bounds wrong codes per challenge token —
+   `MfaChallengeStore.incrAttempts` (Redis atomic `INCR`+`EXPIRE` / in-memory counter)
+   - at `MAX_MFA_CHALLENGE_ATTEMPTS = 5` the token is consumed → forces a fresh
+     `/login`. Not a per-account lockout (no legit-user DoS). Unit + integration tests
+     (after 5 wrong, even the correct code fails) + content-parity pins. TOTP / recovery
+     codes / token entropy were already SOLID. **REMAINING (optional):** a dedicated
+     tighter rate-limit gate for `/mfa/challenge` (meaningful once trustProxy is fixed →
+     per-IP) + per-account lockout (founder policy).
 6. **[MEDIUM] Webhook orphaned-`in_flight` reclaim** —
    `2026-05-31-webhook-orphaned-inflight-reclaim-gap.md`. A worker crash / deploy
    mid-batch leaves deliveries stuck `in_flight` forever → silently lost.

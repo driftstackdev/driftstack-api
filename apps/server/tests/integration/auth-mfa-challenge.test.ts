@@ -194,6 +194,43 @@ describe('POST /v1/auth/mfa/challenge (V-353d)', () => {
     expect(me.statusCode).toBe(200);
   });
 
+  it('V-353d.A caps wrong codes per challenge: 5 wrong invalidate the token (correct code then fails)', async () => {
+    fx = await buildTestApp();
+    const { secretBytes } = await setupEnrolledAccount(
+      fx,
+      'mfa-bruteforce@driftstack.local',
+      'correct horse battery staple',
+    );
+    const login = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: {
+        email: 'mfa-bruteforce@driftstack.local',
+        password: 'correct horse battery staple',
+      },
+    });
+    const challengeToken = login.json<MfaRequiredResponse>().challenge_token;
+    // MAX_MFA_CHALLENGE_ATTEMPTS = 5 wrong guesses; the 5th invalidates the
+    // token so the attacker must re-/login for a fresh challenge.
+    for (let i = 0; i < 5; i += 1) {
+      const r = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/mfa/challenge',
+        payload: { challenge_token: challengeToken, code: '000000' },
+      });
+      expect(r.statusCode).not.toBe(200);
+    }
+    // The CORRECT code now fails too — the cap consumed the token (this is
+    // the strongest signal that the token was invalidated, not just rejected).
+    const correct = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
+    const after = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/mfa/challenge',
+      payload: { challenge_token: challengeToken, code: correct },
+    });
+    expect(after.statusCode).not.toBe(200);
+  });
+
   it('200 exchanges challenge_token + recovery code, marks code consumed', async () => {
     fx = await buildTestApp();
     const { recoveryCodes, firstSessionToken } = await setupEnrolledAccount(

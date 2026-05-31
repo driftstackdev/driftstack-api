@@ -42,6 +42,13 @@ export interface MfaChallengeStore {
   /** Read without consuming. Used by IP-mismatch refusal so the legit
    *  customer can still retry. */
   peek(key: string): Promise<string | null>;
+  /** V-353d.A — atomically increment the per-challenge failed-attempt
+   *  counter under `key` and return the new count. Sets `ttlSeconds` on
+   *  first increment so the counter expires with the challenge. Used to
+   *  cap brute-force on the 6-digit code (the challenge token itself is
+   *  left alive on a wrong code; this bounds how many wrong codes one
+   *  token accepts before it's invalidated). */
+  incrAttempts(key: string, ttlSeconds: number): Promise<number>;
 }
 
 export class RedisMfaChallengeStore implements MfaChallengeStore {
@@ -66,10 +73,19 @@ export class RedisMfaChallengeStore implements MfaChallengeStore {
   async peek(key: string): Promise<string | null> {
     return this.redis.get(key);
   }
+
+  async incrAttempts(key: string, ttlSeconds: number): Promise<number> {
+    // INCR is atomic; concurrent failed attempts can't undercount. Set the
+    // TTL on the first increment so the counter expires with the challenge.
+    const n = await this.redis.incr(key);
+    if (n === 1) await this.redis.expire(key, ttlSeconds);
+    return n;
+  }
 }
 
 export class InMemoryMfaChallengeStore implements MfaChallengeStore {
   private readonly entries = new Map<string, { value: string; expiresAt: number }>();
+  private readonly attempts = new Map<string, { count: number; expiresAt: number }>();
 
   // eslint-disable-next-line @typescript-eslint/require-await
   async consume(key: string): Promise<string | null> {
@@ -95,6 +111,18 @@ export class InMemoryMfaChallengeStore implements MfaChallengeStore {
     }
     return entry.value;
   }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async incrAttempts(key: string, ttlSeconds: number): Promise<number> {
+    const now = Date.now();
+    const existing = this.attempts.get(key);
+    if (!existing || existing.expiresAt <= now) {
+      this.attempts.set(key, { count: 1, expiresAt: now + ttlSeconds * 1000 });
+      return 1;
+    }
+    existing.count += 1;
+    return existing.count;
+  }
 }
 
 /** V-353d — generate a fresh challenge token. Caller stores under
@@ -109,4 +137,15 @@ export function redisKey(token: string): string {
   return `${REDIS_KEY_PREFIX}${token}`;
 }
 
+/** V-353d.A — key for the per-challenge failed-attempt counter, distinct
+ *  from the payload key so the counter and payload don't collide. */
+export function attemptsKey(token: string): string {
+  return `${REDIS_KEY_PREFIX}attempts:${token}`;
+}
+
 export const MFA_CHALLENGE_TTL_SECONDS = TTL_SECONDS;
+
+/** V-353d.A — max wrong 6-digit/recovery codes accepted per challenge
+ *  token before it's invalidated (forcing a fresh /login). Bounds
+ *  brute-force on the second factor without a per-account lockout. */
+export const MAX_MFA_CHALLENGE_ATTEMPTS = 5;

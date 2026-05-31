@@ -131,6 +131,20 @@ describe('W397.B apps/server/src/services/mfa-challenge-store.ts content parity'
     );
   });
 
+  it('V-353d.A incrAttempts brute-force cap: interface + atomic Redis INCR + in-memory counter + attemptsKey + MAX const', () => {
+    expect(body).toMatch(/incrAttempts\(key: string, ttlSeconds: number\): Promise<number>;/);
+    // Redis: atomic INCR, set TTL on first.
+    expect(body).toMatch(/const n = await this\.redis\.incr\(key\);/);
+    expect(body).toMatch(/if \(n === 1\) await this\.redis\.expire\(key, ttlSeconds\);/);
+    // In-memory: separate attempts map.
+    expect(body).toMatch(
+      /private readonly attempts = new Map<string, \{ count: number; expiresAt: number \}>\(\);/,
+    );
+    // Distinct key namespace + the cap constant.
+    expect(body).toMatch(/export function attemptsKey\(token: string\): string \{/);
+    expect(body).toMatch(/export const MAX_MFA_CHALLENGE_ATTEMPTS = 5;/);
+  });
+
   it('generateChallengeToken: randomBytes(32).toString("base64url") — 43 url-safe chars, no scrypt', () => {
     expect(body).toMatch(
       /V-353d — generate a fresh challenge token\. Caller stores under\s*\n?\s*\*\s*`mfa-challenge:<token>` \(per `redisKey`\)\./,
