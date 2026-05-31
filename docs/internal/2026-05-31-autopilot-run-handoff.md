@@ -231,6 +231,16 @@ origin-validated + PKCE S256 + HMAC state + HTTP-only signed cookie; `/callback`
 state (CSRF) + PKCE + email_verified; **collision→merge-verification blocks account
 takeover** (an OAuth email matching an existing account issues a proof-of-control token to
 that account's inbox, never auto-links); revoked-link no auto-signin (one LOW surface, #11).
+Profiles export/import/transfer portability (`project_profiles_portability_audit_clean`,
+V-480/V-666) — export metadata-only (no browser-state leak); import importer-scoped + fresh
+id + per-cycle anti-churn cap; transfer source-ownership-scoped + recipient-verified +
+recipient-quota-bounded (added the missing source-ownership IDOR guard, `1f13234b`).
+Usage-metering + cost-aggregation (`project_usage_cost_aggregation_audit_clean`) — `usage.ts`
+is a READ-ONLY summary; per ADR-004 ALL TIER_QUOTAS are `null` (unmetered — paid tiers
+concurrent-only; trial_pack credit retired) and usage_records writers aren't wired in prod,
+so there's NO quota enforcement/race to fix (don't "fix" the deliberate nulls);
+`cost-aggregator.ts` uses integer micros (1 USD = 1e6) with divide-once 2dp rounding at the
+presentation boundary (no float drift). NB: `usage-quota.ts`/`cost-rates.ts` do not exist.
 Team-RBAC multi-tenant authz (`project_team_rbac_audit_clean`, V-298/V-326) — invite
 token 256-bit hashed + 7d + **email-bound accept** (accepting account's email must match
 the invitee → no token-forward-to-wrong-account), owner-scoped removal (no cross-account
