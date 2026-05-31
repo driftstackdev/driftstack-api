@@ -4300,6 +4300,10 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Created profile.',
         content: { 'application/json': { schema: ProfileSchema } },
       },
+      409: {
+        description: 'A profile with this name already exists in the account.',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4329,6 +4333,10 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Profile.',
         content: { 'application/json': { schema: ProfileSchema } },
+      },
+      404: {
+        description: 'Profile not found (or owned by another account).',
+        content: problemContent,
       },
       ...errors4xx,
     },
@@ -4382,6 +4390,14 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Updated profile.',
         content: { 'application/json': { schema: ProfileSchema } },
       },
+      404: {
+        description: 'Profile not found (or owned by another account).',
+        content: problemContent,
+      },
+      409: {
+        description: 'The requested name is already taken by another profile in the account.',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4426,6 +4442,14 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Cloned profile.',
         content: { 'application/json': { schema: ProfileResponseOpenApi } },
       },
+      404: {
+        description: 'Source profile not found (or owned by another account).',
+        content: problemContent,
+      },
+      409: {
+        description: 'The explicit clone name is already taken in the account.',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4443,6 +4467,10 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Versioned export envelope (re-import via POST /v1/profiles/import).',
         content: { 'application/json': { schema: ProfileExportEnvelopeSchema } },
       },
+      404: {
+        description: 'Profile not found (or owned by another account).',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -4459,6 +4487,11 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Imported profile (a fresh id is minted in the caller account).',
         content: { 'application/json': { schema: ProfileResponseOpenApi } },
+      },
+      409: {
+        description:
+          'A profile with the imported name already exists; pass name_override to rename.',
+        content: problemContent,
       },
       ...errors4xx,
     },
