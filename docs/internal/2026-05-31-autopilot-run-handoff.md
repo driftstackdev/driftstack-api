@@ -99,6 +99,14 @@ verified-clean, and the prioritized open queue. Companion:
    callers act (benign-to-minor). Needs a loser-behaviour decision.
 8. **[LOW] BYOK cache dedicated test** — guards `938ebf3a`; needs `buildTestApp`
    to expose `byokKeyCache` + a byok-stored-then-budget-exhaust scenario.
+9. **[LOW — FORWARD, not live] recipe-library credential leak at Phase-3 wiring** —
+   `2026-05-31-recipe-library-credential-leak-forward.md`. `packages/recipe-library`
+   is unwired scaffolding (mock runner). `RecipeStep` type-steps inline plaintext
+   (`buildLoginRecipe` password) and `RecipeStepResult` embeds the full step, so a
+   real runner that logs/persists results (Phase 3) would leak creds — same class as
+   the SSE-token log fix. At wiring: redact type-step `text` in results (reuse the
+   V-494 / `lib/redact-url.ts` posture) + prefer runtime vault-injection. Builders +
+   mock otherwise clean.
 
 ## Verified clean — do NOT re-audit (re-sweep = churn)
 
@@ -134,4 +142,17 @@ scheduled jobs alive. Healthy.
 > Autopilot note: by ~wave 8–9 the high-value, safe, un-mined Agent-2 audit
 > surface was exhausted; value-per-wave declined and a deep-session misread
 > occurred (recovered). Converting this queue into shipped work is best done in a
-> fresh, focused session rather than continued audit-cadence waves.
+> fresh, focused session rather than continued audit-cadence waves. By ~wave 15 the
+> remaining un-audited packages are unwired Phase-3 scaffolding (recipe-library /
+> behavioural-simulation); live findings are mostly surfaced above awaiting
+> founder/focused action.
+
+> Continuity-hygiene TODO (deliberate pass, not a deep-autopilot edit): the
+> auto-memory index `MEMORY.md` is ~31KB, over the ~24KB load cap, so it loads only
+> partially at session start (recent entries at the tail may not surface). This
+> handoff doc is the reliable working index meanwhile. A focused pass should
+> consolidate the ~18 clearly-RESOLVED project one-liners into a single digest
+> pointer (their detail lives in topic files + this doc's Shipped/Verified-clean
+> sections), preserving every `feedback_*` rule + OPEN/SURFACED + active-arc entry.
+> Not done in-wave: `MEMORY.md` isn't version-controlled, so a botched rewrite is
+> irreversible — it deserves explicit care.
