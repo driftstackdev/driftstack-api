@@ -2471,7 +2471,12 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Verification email sent; account is unverified until /v1/auth/verify-email.',
-        content: { 'application/json': { schema: SignupResponseSchema } },
+        content: {
+          'application/json': {
+            schema: SignupResponseSchema,
+            example: { verification_email_expires_at: '2026-06-01T12:00:00Z' },
+          },
+        },
       },
       ...errors4xx,
       409: {
@@ -2498,7 +2503,18 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Email verified; web session issued.',
-        content: { 'application/json': { schema: VerifyEmailResponseSchema } },
+        content: {
+          'application/json': {
+            schema: VerifyEmailResponseSchema,
+            example: {
+              session: {
+                token: 'example-web-session-token-shown-once',
+                expires_at: '2026-06-30T12:00:00Z',
+                account_id: 'acc_9c8b7a6d-5e4f-3210-abcd-ef0123456789',
+              },
+            },
+          },
+        },
       },
       ...errors4xx,
     },
