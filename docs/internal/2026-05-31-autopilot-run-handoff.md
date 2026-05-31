@@ -136,7 +136,12 @@ subsystem (`project_rate_limit_overrides_clean`) — admin SET
 is bounded (capacity 1..1M, refill 0.01..100k, duration 1s..30d → no 0/negative
 div-by-zero); customers are GET-only (`/v1/account/rate-limits` view, no self-raise);
 expiry lazily falls through to tier default. (Distinct from the rate-limit core /
-trustProxy work.)
+trustProxy work.) Transactional-email SEND + bounce surface
+(`project_email_send_bounce_clean`) — reset/magic-link/resend `findAccountByEmail` +
+early-return WITHOUT sending when no account (magic-link also skips non-active), so no
+relay/bomb to arbitrary addresses; anti-enumeration + per-IP rate-limited; and there
+is NO inbound Postmark bounce webhook (suppression is Postmark-side → no fake-bounce
+DoS surface).
 
 ## Founder-gated — surface only, do NOT auto-do
 
