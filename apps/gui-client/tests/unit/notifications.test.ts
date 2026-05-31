@@ -37,6 +37,11 @@ class FakeEventSource {
   }
 
   // Test seams ───────────────────────────────────────────────────
+  totalListeners(): number {
+    let n = 0;
+    for (const set of this.listeners.values()) n += set.size;
+    return n;
+  }
   fireOpen(): void {
     this.readyState = FakeEventSource.OPEN;
     this.listeners.get('open')?.forEach((h) => h(new Event('open')));
@@ -127,6 +132,40 @@ describe('subscribeNotifications', () => {
       expect(arg.severity).toBe('warn');
       expect(arg.totalCents).toBe(12_500);
     }
+  });
+
+  it('the close handle removes ALL listeners (open/error + every per-kind), not just open/error', () => {
+    const received: NotificationEvent[] = [];
+    const close = subscribeNotifications({
+      url: 'https://api.example/notifications',
+      onEvent: (e) => received.push(e),
+      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+    });
+    const es = FakeEventSource.instances[0];
+    if (!es) throw new Error('expected instance');
+    // open + error + one listener per kind
+    expect(es.totalListeners()).toBe(2 + NOTIFICATION_EVENT_KINDS.length);
+
+    close();
+    // complete teardown — no listener left behind on the closed source
+    // (don't rely on GC of the EventSource to drop the per-kind handlers)
+    expect(es.totalListeners()).toBe(0);
+    expect(es.readyState).toBe(FakeEventSource.CLOSED);
+
+    // a late frame for any kind is now inert
+    es.fireKind('cost.threshold_alert', {
+      kind: 'cost.threshold_alert',
+      accountId: 'acc_a',
+      severity: 'warn',
+      billingCycle: '2026-05',
+      previousState: 'under-soft',
+      currentState: 'between-soft-and-hard',
+      totalCents: 12_500,
+      thresholdSoftCents: 10_000,
+      thresholdHardCents: 25_000,
+      at: '2026-05-20T22:00:00.000Z',
+    });
+    expect(received).toHaveLength(0);
   });
 
   it('routes all 4 v0 kinds independently — each addEventListener fires only its own discriminator', () => {

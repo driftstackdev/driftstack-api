@@ -124,9 +124,14 @@ export function subscribeNotifications(opts: SubscribeOpts): () => void {
 
   // Wire one listener per kind so the EventSource native event-name
   // routing fires the right handler. We re-dispatch through a single
-  // typed callback so the consumer only writes one onEvent.
+  // typed callback so the consumer only writes one onEvent. Keep a
+  // reference to each handler so cleanup can remove it symmetrically
+  // with the open/error handlers above, rather than relying on GC of
+  // the closed EventSource — this keeps the returned handle a complete
+  // teardown per its contract.
+  const kindHandlers: Array<[string, (raw: Event) => void]> = [];
   for (const kind of NOTIFICATION_EVENT_KINDS) {
-    es.addEventListener(kind, (raw) => {
+    const handler = (raw: Event): void => {
       const evt = raw as MessageEvent<string>;
       try {
         const parsed = JSON.parse(evt.data) as NotificationEvent;
@@ -136,12 +141,17 @@ export function subscribeNotifications(opts: SubscribeOpts): () => void {
       } catch (err) {
         opts.onError?.(err);
       }
-    });
+    };
+    kindHandlers.push([kind, handler]);
+    es.addEventListener(kind, handler);
   }
 
   return () => {
     es.removeEventListener('open', handleOpen);
     es.removeEventListener('error', handleError);
+    for (const [kind, handler] of kindHandlers) {
+      es.removeEventListener(kind, handler);
+    }
     es.close();
     opts.onState?.('closed');
   };
