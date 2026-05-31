@@ -1086,6 +1086,10 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       204: { description: 'Schedule removed.' },
+      404: {
+        description: 'No validation schedule exists for that archetype.',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -1970,6 +1974,10 @@ function buildRegistry(): OpenAPIRegistry {
         description: 'Note recorded.',
         content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
       },
+      404: {
+        description: 'Account not found.',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -1993,6 +2001,10 @@ function buildRegistry(): OpenAPIRegistry {
         description:
           'Refund recorded for audit. Money movement happens via Stripe dashboard manually per V-280 launch-day runbook.',
         content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
+      },
+      404: {
+        description: 'Account not found.',
+        content: problemContent,
       },
       ...errors4xx,
     },
