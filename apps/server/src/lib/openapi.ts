@@ -1072,7 +1072,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/webhook-deliveries/{deliveryId}/replay',
     summary: 'Replay a webhook delivery (V-307; customer self-service)',
-    tags: ['Webhooks'],
+    tags: ['webhooks'],
     security: auth,
     request: {
       params: z.object({ deliveryId: z.string().describe('Prefixed delivery id (wdl_<uuid>)') }),
