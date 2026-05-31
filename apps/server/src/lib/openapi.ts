@@ -605,6 +605,19 @@ function buildRegistry(): OpenAPIRegistry {
               rotated_from: z.string(),
               grace_period_ends_at: z.string(),
             }).openapi('RotateApiKeyResponse'),
+            example: {
+              id: 'key_5f6a7b8c-9d0e-1f20-3a4b-5c6d7e8f9a0b',
+              name: 'ci-pipeline',
+              key_prefix: 'ds_live_5f6a',
+              scopes: ['read', 'write'],
+              last_used_at: null,
+              revoked_at: null,
+              expires_at: null,
+              created_at: '2026-05-31T12:00:00Z',
+              plaintext: 'ds_live_exampleexampleexampleexamplerotate',
+              rotated_from: 'key_3f8a1b2c-4d5e-6f70-8a9b-0c1d2e3f4a5b',
+              grace_period_ends_at: '2026-06-01T12:00:00Z',
+            },
           },
         },
       },
@@ -4558,7 +4571,18 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description: 'Fresh plaintext shown ONCE; prev secret stays valid for 24h.',
-        content: { 'application/json': { schema: RotateSecretResponseOpenApi } },
+        content: {
+          'application/json': {
+            schema: RotateSecretResponseOpenApi,
+            example: {
+              id: 'whk_2b1c3d4e-5f60-7a8b-9c0d-1e2f3a4b5c6d',
+              secret: 'whsec_v1_exampleexampleexampleexamplerotate',
+              secret_prefix: 'whsec_v1_9f8e',
+              prev_secret_prefix: 'whsec_v1_2b1c',
+              grace_expires_at: '2026-06-01T12:00:00Z',
+            },
+          },
+        },
       },
       404: {
         description: 'Webhook endpoint not found (or owned by another account).',
