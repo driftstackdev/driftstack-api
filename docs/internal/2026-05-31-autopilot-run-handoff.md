@@ -715,6 +715,17 @@ nonce-cache TTL ordering, correct). Three consecutive probes landing on already-
 code is the honest saturation signal: the safe non-gated fresh-audit surface within Agent-2
 scope is mechanically mined out (consistent with `project_lib_small_file_sweep_complete`).
 
+2026-06-01 wave — with the repo audit surface mined out, took the long-deferred safe,
+non-gated, in-scope hardening: consolidated the over-cap auto-memory index `MEMORY.md`
+(~46KB → ~23.9KB, 48% smaller) so it fully loads again at session start. Every memory
+preserved (157 entries; pointer set diffed identical against a backup before trusting it —
+zero lost/dup, all link targets resolve). Trimmed over-long index hooks (detail stays in each
+topic file); added `feedback_memory_index_terse_at_cap` (hooks <~150 chars; on add, trim a
+RESOLVED line, since the file sits near the cap). This directly cuts the re-investigation
+churn that a partially-loaded index causes. See the Continuity-hygiene TODO below (now DONE).
+The MEMORY.md change itself isn't version-controlled; this note + that TODO are the durable
+record.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
@@ -732,12 +743,15 @@ scope is mechanically mined out (consistent with `project_lib_small_file_sweep_c
 > behavioural-simulation); live findings are mostly surfaced above awaiting
 > founder/focused action.
 
-> Continuity-hygiene TODO (deliberate pass, not a deep-autopilot edit): the
-> auto-memory index `MEMORY.md` is ~31KB, over the ~24KB load cap, so it loads only
-> partially at session start (recent entries at the tail may not surface). This
-> handoff doc is the reliable working index meanwhile. A focused pass should
-> consolidate the ~18 clearly-RESOLVED project one-liners into a single digest
-> pointer (their detail lives in topic files + this doc's Shipped/Verified-clean
-> sections), preserving every `feedback_*` rule + OPEN/SURFACED + active-arc entry.
-> Not done in-wave: `MEMORY.md` isn't version-controlled, so a botched rewrite is
-> irreversible — it deserves explicit care.
+> Continuity-hygiene TODO — **DONE 2026-06-01.** The auto-memory index `MEMORY.md`
+> had grown to ~46KB (≈2× the ~24.4KB load cap), so it loaded only partially at
+> session start — the tail (most-recent audit/RESOLVED entries) silently dropped,
+> risking re-investigation of closed veins. Consolidated this wave back to ~23.9KB
+> (48% smaller), **all 156 entries + a new discipline memory preserved** (157 total,
+> every `[Title](file.md)` pointer kept verbatim — verified by diffing the grep'd
+> pointer set against a backup: zero lost, zero dup, all targets resolve). Method
+> was per-line hook-trimming (detail already lives in each topic file), not the
+> digest-merge originally sketched — keeping every entry individually addressable is
+> safer. New rule recorded as `feedback_memory_index_terse_at_cap`: hooks <~150
+> chars, and on adding an entry also trim a now-RESOLVED line (the file sits near the
+> cap). Backup was removed only after the pointer-set diff proved identical.
