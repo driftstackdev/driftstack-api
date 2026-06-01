@@ -1148,6 +1148,20 @@ into a LIVE delivery path that can't be validated offline → real live-regressi
 CORS allow-list (#4) is env-driven (`CORS_ALLOWED_ORIGINS`) + a prod flag-flip → outward-facing, not a
 code slice; trustProxy/strict-FK/unsub-HMAC remain genuinely founder-gated.
 
+2026-06-01 wave — fresh-audit of a security dimension NEVER swept before: the raw-SQL / SQL-injection
+surface (distinct from the slow-query-log CWE-532 audit, which was secret-in-logs, not injection).
+CLEAN — no bug. Monorepo-wide there are ZERO `sql.raw(` and ZERO `sql.identifier(` (the two Drizzle
+escape hatches that bypass parameter binding); the only `.unsafe(` is a COMMENT in
+`lib/slow-query-log.ts` (the drizzle-postgres parameterized exec path). All 13 `sql\`...\`` template
+usages were read and confirmed to interpolate ONLY parameterized VALUES (server-derived ISO
+timestamps, internal config numbers like batchSize/workerId, auth-context account ids) or Drizzle
+column objects (`usageRecords.recordedAt`) — never user-controlled SQL STRUCTURE; ORDER BY / LIMIT /
+status literals are static or value-bound; and Drizzle binds `sql\`\`` `${}`interpolations as $1/$2
+params, so even value interpolation is injection-safe. Shipped a drift-guard (commit 5e46ba84,`no-raw-sql-injection-surface.test.ts`): a cross-monorepo sweep asserts `sql.raw(`/`sql.identifier(`never appear in non-test source (empty allowlist) + a non-vacuous check; mutation-verified (a probe
+file with`sql.raw(`trips it, removed → green). Test-only, no source change. Memory:`project_raw_sql_injection_surface_clean`. (Adds a new clean dimension alongside IDOR/auth-coverage/
+input-validation/error-handler/ReDoS — the security surface remains well-verified; this one is now
+also CI-enforced against regression.)
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
