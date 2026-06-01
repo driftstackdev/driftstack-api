@@ -1213,6 +1213,20 @@ value-to-risk — surfaced not done. Memory folded into project_idor_ownership_r
 source zero. (5th consecutive fresh-dimension clean+guard/test wave: OAuth-rl → SQLi → mass-assignment →
 insecure-randomness → SSE-scoping.)
 
+2026-06-01 wave — SHIPPED a real fix (first non-test-only ship in several waves): security headers on the
+status site. The 2026-05-20 CSP-header audit closed the gap on dashboard/admin and confirmed marketing/docs
+had headers — but OMITTED status-site (same Astro/Pages stack; separate Pages projects don't cross-inherit
+\_headers), so status.driftstack.dev (public incident page + email-subscribe form) shipped with ZERO security
+headers. Added `apps/status-site/public/_headers` (commit 871beb2c) mirroring the dashboard posture:
+X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin +
+Permissions-Policy + immutable /\_astro/_ caching; no Cache-Control on /_ (incident HTML stays fresh); CSP
+deferred (Astro is:inline, same as dashboard). Cloudflare Pages copies public/\_headers verbatim to dist on
+build (dist gitignored). Same-commit parity: the cross-app drift-guard
+(docs-public-headers-robots-and-cross-app-svg-parity) had EXPLICITLY asserted status-site has NO \_headers
+(documenting the gap) — flipped to present + added content pins for the 4-header set. Memory:
+project_status_site_cloudflare_setup. Embeddable-status-widget exception (relax X-Frame-Options to
+SAMEORIGIN / CSP frame-ancestors) left as a founder call. tsc + eslint + prettier clean.
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
