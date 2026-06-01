@@ -629,6 +629,20 @@ mechanically demonstrated. The real next step is a FRESH SESSION for the founder
 (trustProxy `req.ip` is the top open finding) or the MEMORY.md consolidation — neither
 auto-doable in this long autopilot context.
 
+2026-06-01 wave — CORRECTION to the "all tiers exhausted" claim above: lib/middleware/db-repo/
+packages were swept, but `routes/` and `services/` were only ever audited PIECEMEAL (when a
+subsystem audit crossed them), never a systematic cov=0 sweep. So `routes/` is genuinely fresh
+audit surface. Audited `routes/account-web-sessions.ts` (V-355 customer web-session list/revoke
+
+- the `auth-flows.ts` revoke impl) — SOUND, real auth value: the `publicSession` list mapper
+  leaks NO session secret (no token/tokenHash/IP; UA bucketed), `revokeWebSessionForAccount` does
+  a `findWebSessionByIdForAccount(id, accountId)` ownership check so a cross-account revoke →
+  404 (IDOR-safe, tested), is idempotent, AND **invalidates the auth cache on revoke** (logout
+  actually logs out — the critical property), with `account.logout` audit; bulk-revoke requires
+  explicit `?keep=current` + a web-session caller. No bug, no test-gap. See
+  `project_routes_tier_audit_progress` (roster of cov=0 routes for next waves — security-weighted:
+  `account-*` customer-facing > `admin-*` internal-admin-gated). No code change this wave.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
