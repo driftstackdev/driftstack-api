@@ -681,6 +681,20 @@ customer-facing attack surface across lib + middleware + db-repo + routes is now
 swept; remaining genuine work is founder-gated (trustProxy/strict-FK/archetype) or the MEMORY.md
 consolidation.
 
+2026-06-01 wave — ran a second cross-cutting routes check: do all customer write routes carry a
+`requireScope` write-gate? Re-confirmed, NO new finding. The routes that are `requireAuth`-only
+all map to ALREADY-DOCUMENTED cases in `project_read_write_scope_not_enforced` (RESOLVED
+2026-05-26): `session-proxy`/`saved-proxies` are 503 activation-gate stubs (scope deferred to
+the wiring slice); `billing-crypto*` are the V-666 crypto routes explicitly in that memory's
+"~70 per-route judgment" remainder (stub-posture + account-scoped → IDOR-safe; crypto-quote is
+a read-like pricing lookup); `agent-sessions`/`sessions` DO gate broad `write`/`write:sessions`
+(my grep window missed the multi-line preHandler — false positives). That memory explicitly
+warns blanket write-scope application is UNSAFE (breaks login; read-like POSTs) and needs
+per-route founder judgment + a read-only-key-403 test per family — so this stays SURFACED, not
+auto-fixed. Net: the write-scope invariant is re-verified and all gaps are cross-referenced to
+the existing record. No code change. (Both customer-facing route AUTHZ invariants — admin-scope
+last wave, write-scope this wave — now verified clean against the documented carve-outs.)
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
