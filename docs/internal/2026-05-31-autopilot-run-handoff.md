@@ -466,6 +466,20 @@ note the substantive remainder is founder-gated (trustProxy, strict-FK, archetyp
 fresh-session-suited (the MEMORY.md consolidation, now ~44KB — accumulating each
 audit-record wave; a focused dedicated pass is overdue).
 
+2026-06-01 wave — surveyed the `apps/server/src/middleware/` request-path tier (mechanical
+coverage check, no re-audit): all 5 files have substantive prior audits — `error-handler.ts`
+(CWE-209 info-leak CLEAN + behaviorally guarded b7cae869), `ip-rate-limit.ts` (the trustProxy
+`req.ip` HIGH finding + rate-limit-store audit), `rate-limit.ts` + `auth.ts` (the auth/RBAC/
+scope thread), `request-id.ts` (16-line UUID gen, trivial). So the `middleware/` tier joins
+the small-`lib/` tier as mechanically exhausted. **Honest wind-down condition reached** (two
+consecutive request-path security tiers survey to all-covered) — NOT a fatigue call, no code
+change this wave (surveying-an-already-covered-tier = confirm-and-record, not churn). The
+remaining genuinely-substantive work is founder-gated (trustProxy `req.ip`, strict-FK,
+iphone17 cutover) or the overdue MEMORY.md consolidation (deliberate fresh-session task,
+~44KB). Next waves should NOT re-survey lib/middleware; a fresh broader-subsystem read or a
+fresh session for the gated/consolidation work is the right next step. See
+`project_lib_small_file_sweep_complete` (now covers both tiers).
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
