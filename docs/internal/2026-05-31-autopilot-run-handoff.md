@@ -336,6 +336,20 @@ wave was correctly rejected by the parity + invariant tests and reverted (net re
 zero). Lesson reinforced: read the companion parity/invariant tests (they encode intent)
 before treating a comment as a bug.
 
+2026-06-01 wave — fresh audit of the internal fleet-auth boundary
+(`lib/internal-fleet-auth.ts`, the shared-secret Bearer gate for the internal
+`/v1/internal/atlas-priority/*` routes). Verifier is SOUND: fail-closed when the token
+env var is unset (activation-gate), non-Bearer scheme → 401, length-check before
+`timingSafeEqual`, constant-time compare. Found + filled a real behavioral test-gap (no
+source change): the integration suite's "wrong bearer" fixture is a different LENGTH than
+the token, so it only exercises the length pre-check, never the constant-time content
+compare — a broken compare would pass every existing test while accepting any equal-length
+token. Added `tests/unit/internal-fleet-auth.test.ts` (same-length-wrong-token branch +
+fail-closed-when-disabled + non-Bearer + accept). See
+`project_internal_fleet_auth_audit_clean`. (Two consecutive disciplined fresh audits —
+nowpayments-signing + internal-fleet-auth — both shared-secret verify boundaries, both
+sound; the test-arbitrated method is holding.)
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
