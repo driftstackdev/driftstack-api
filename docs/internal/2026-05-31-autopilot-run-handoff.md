@@ -300,6 +300,15 @@ founder-gated (strict-FK, archetype cutover) or best done in a fresh focused ses
 hallucinated file reads (recovered, origin truthful) — the correct next step is a
 FRESH SESSION, not another in-context audit slice.
 
+Latest wind-down wave (mechanical-only, hallucination-resistant): ran a referential
+-integrity check over the auto-memory `[[wikilink]]` graph (pure filename set-arithmetic,
+no code interpretation). Found 2 dangling links of 98 distinct targets across 150 memory
+files; fixed the 1 unambiguous wrong-prefix link (`project_canvas_cold_miss_afp_acceptable`
+→ `feedback_canvas_cold_miss_afp_acceptable`, target verified to exist). The 1 remaining
+dangling ref (`[[feedback_population_not_point_match]]` in `project_storage_quota_mechanism`)
+is a legitimate not-yet-written forward-marker (Agent-1 fingerprint domain) per the
+memory-system rules — left intentionally. (Memory store is outside the repo, so no commit.)
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
