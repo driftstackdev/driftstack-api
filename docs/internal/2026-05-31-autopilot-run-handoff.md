@@ -518,6 +518,20 @@ already-consumed→null(single-use). No bug, no test-gap. See
 `project_oauth_links_repo_audit_clean`. db-tier next: `audit-archive-repo` (6 writes,
 audit-log retention/integrity) is now the top remaining triage target.
 
+2026-06-01 wave — audited `db/audit-archive-repo.ts` + `services/audit-archive.ts` (the #1
+triage target, 6 writes; archives 4 audit-shaped tables to R2 then deletes from Postgres).
+SOUND: the integrity-critical archive-before-delete ordering is correct — `r2.putObject` is
+awaited FIRST, then `insertRun` (ledger), then `deleteRowsById`, then `markDeletedFromPostgres`
+only when `deleted === archivable.length`; so a failed R2 upload throws and skips the
+delete (rows stay in Postgres, no compliance-data loss), and a partial delete leaves the
+ledger flag false (re-runnable). The `processed_stripe_events` `event_id↔id` projection
+round-trips consistently between SELECT and DELETE (no over-delete). Filled a real test-gap
+(no source change): the existing tests covered happy-path + empty-window but not the
+upload-failure path — added a negative test (throwing R2.putObject → archiveTable rejects,
+NO ledger insert, NO delete). See `project_audit_archive_repo_audit_clean`. db-tier next:
+`validation-schedules-repo` / `byok-anthropic-repo` (3 writes each) are the top remaining
+triage targets.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
