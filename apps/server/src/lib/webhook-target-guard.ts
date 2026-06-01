@@ -43,6 +43,13 @@ BLOCK.addSubnet('fe80::', 10, 'ipv6'); // link-local
 BLOCK.addSubnet('ff00::', 8, 'ipv6'); // multicast
 
 const PRIVATE_TARGET = 'Webhook URL must not target a private, loopback, or reserved address.';
+// Length cap — every other customer-write string field is `.max()`-bounded, but
+// the create/update webhook `url` is only `z.string().url()` (no length bound),
+// so a pathologically long URL could be stored (bounded only by bodyLimit). Cap
+// at the de-facto web URL limit (2048): URLs beyond it fail to traverse common
+// proxies/CDNs anyway, so this rejects nothing that would actually deliver.
+const MAX_WEBHOOK_URL_LENGTH = 2048;
+const URL_TOO_LONG = `Webhook URL must be at most ${MAX_WEBHOOK_URL_LENGTH.toString()} characters.`;
 const NUMERIC_ENCODING =
   'Webhook URL host must be a domain name or a standard dotted-quad / bracketed-IPv6 literal — numeric, hex, or octal IP encodings are not allowed.';
 
@@ -59,10 +66,16 @@ const NUMERIC_IP_ENCODING = /^(0x[0-9a-f]+|\d+)(\.(0x[0-9a-f]+|\d+))*$/i;
 
 /**
  * Returns a rejection reason when `url` is an unsafe webhook target
- * (non-https, localhost, or a literal private/reserved IP), else null.
- * DNS hostnames are allowed here (rebind is the connection-time layer).
+ * (over-length, non-https, localhost, a numeric IP encoding, or a literal
+ * private/reserved IP), else null. DNS hostnames are allowed here (rebind is
+ * the connection-time layer).
  */
 export function unsafeWebhookTargetReason(url: string): string | null {
+  // Fail fast on length before parsing — a multi-KB string shouldn't be parsed
+  // or stored; the create/update `url` field has no schema-level `.max()`.
+  if (url.length > MAX_WEBHOOK_URL_LENGTH) {
+    return URL_TOO_LONG;
+  }
   let parsed: URL;
   try {
     parsed = new URL(url);

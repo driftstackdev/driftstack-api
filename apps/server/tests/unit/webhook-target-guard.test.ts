@@ -68,6 +68,12 @@ describe('unsafeWebhookTargetReason — rejects internal/reserved targets', () =
     expect(reason('https://localhost./h')).toMatch(/localhost/);
     expect(reason('https://127.0.0.1./h')).toBeTruthy();
   });
+
+  it('rejects an over-long URL (>2048 chars) — the field has no schema-level .max()', () => {
+    const longUrl = `https://hooks.example.com/${'a'.repeat(2100)}`;
+    expect(longUrl.length).toBeGreaterThan(2048);
+    expect(reason(longUrl)).toMatch(/2048 characters/);
+  });
 });
 
 describe('unsafeWebhookTargetReason — allows legit public targets (NO false positives)', () => {
@@ -92,6 +98,12 @@ describe('unsafeWebhookTargetReason — allows legit public targets (NO false po
     expect(reason('https://[2606:4700::1111]/h')).toBeNull();
     expect(reason('https://hooks.example.com/driftstack')).toBeNull();
     expect(reason('https://app.customer.io/webhooks/abc?x=1')).toBeNull();
+  });
+
+  it('allows a long-but-under-cap URL (e.g. a long signed callback path ≤2048) — no false rejection', () => {
+    const longButOk = `https://hooks.example.com/webhooks?sig=${'a'.repeat(1900)}`;
+    expect(longButOk.length).toBeLessThanOrEqual(2048);
+    expect(reason(longButOk)).toBeNull();
   });
 
   it('does NOT over-reject hostnames with a numeric label or a trailing FQDN dot', () => {
