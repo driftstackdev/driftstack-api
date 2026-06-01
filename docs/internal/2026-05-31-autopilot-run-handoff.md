@@ -410,8 +410,20 @@ OFFICIAL test vector — so NO code change / NO added coverage. See
 security-helper sweep** (8 files line-verified clean this run: nowpayments-signing,
 internal-fleet-auth, the AES-256-GCM crypto-at-rest family [livekit/gui-control-key/BYOK/MFA],
 csv, receipt-pdf, oauth-pkce; two real test-gaps closed along the way). Remaining un-audited
-small lib files are non-security (otel, slow-query-log, memory/redis-rate-limit-store,
-effective-account-header).
+small lib files are non-security (otel, slow-query-log, effective-account-header).
+
+2026-06-01 wave — audited the rate-limit STORE layer (`lib/redis-rate-limit-store.ts` prod
+atomic-EVAL-Lua + `lib/memory-rate-limit-store.ts` test-only); the middleware/core was
+already verified in `project_trustproxy_ip_resolution_gap`, this line-verifies the
+token-bucket math. SOUND: clock-skew `max(0)` guard, capacity-cap, persist-refilled-on-deny,
+the prod Redis Lua div-by-zero-guards (`math.max(refill,0.0001)`) both the TTL and retry
+math, `TTL = ceil(capacity/refill)+60s`. Behaviorally tested (`rate-limit.test.ts`:
+refill-over-time, deny+retry, capacity-clamp) + parity-pinned both stores + integration 429. NOTED (LOW, NOT fixed — would be churn on a non-prod path): the test-only in-memory
+store lacks the div-by-zero guard the prod Lua has (`refillPerSecond=0` → Infinity
+`retryAfterMs`), masked by the one test that hits it; harmless since it's test-only, valid
+inputs bound refill≥0.01, and prod Redis guards it — recorded in
+`project_rate_limit_store_audit_clean` so a future wave neither re-discovers it as "new"
+nor promotes the in-memory store to prod. No code change.
 
 ## Recommended order when the loop is paused
 
