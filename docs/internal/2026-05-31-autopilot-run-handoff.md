@@ -655,6 +655,18 @@ into `project_routes_tier_audit_progress`. routes-tier next: the `admin-*` cov=0
 gating + acc\_-prefix handling; `account-rate-limits` (customer-facing, 47L) is the other
 account-\* target.
 
+2026-06-01 wave — audited `routes/account-rate-limits.ts` (V-219 customer
+`GET /v1/account/rate-limits`). SOUND: GET-ONLY (no POST/PATCH/DELETE → a customer cannot
+self-raise their limits; overrides are admin-only); SELF-SCOPED — derived entirely from `ctx`
+(tier defaults + `ctx.rateLimitOverrides`), no id param → no IDOR; active-override gated on
+`expiresAt > now` (expired → tier-default fallback); the bucket set is the 3 customer keys and
+correctly EXCLUDES the internal-only `agent_sessions:input_event` (W869). Tested
+(`account-rate-limits.test.ts`: buckets length-3, tier-default path, active-override flips
+`source` to `override`). No bug, no test-gap; folded into the routes-tier progress memory.
+**All customer-facing `account-*` cov=0 routes are now audited clean** (web-sessions, cost,
+rate-limits). routes-tier remaining: only `admin-*` (internal-admin-gated) + `_webhook-raw-body`
+(infra plugin) — confirm the admin gate + acc\_-prefix handling, lower IDOR risk.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
