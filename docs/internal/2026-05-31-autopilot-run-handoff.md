@@ -667,6 +667,20 @@ correctly EXCLUDES the internal-only `agent_sessions:input_event` (W869). Tested
 rate-limits). routes-tier remaining: only `admin-*` (internal-admin-gated) + `_webhook-raw-body`
 (infra plugin) — confirm the admin gate + acc\_-prefix handling, lower IDOR risk.
 
+2026-06-01 wave — instead of per-route admin audits, ran a CROSS-CUTTING scope-gating check
+across the whole `routes/` tier (one grep of every `requireScope('…')` literal — higher yield
+than individual bodies). CLEAN: (1) NO bare `requireScope('admin')` anywhere → V-174-safe; (2)
+every cov=0 admin route gates `driftstack_internal_admin` (the correct operator scope); (3) the
+full scope distribution is sane and every literal is a canonical `ApiKeyScopeSchema` member; (4)
+`admin:billing` (billing.ts checkout/portal) is correctly NOT in `ELEVATED_SCOPES` — it's a
+customer self-billing-management scope (account-owner-grantable by design), not a staff/
+cross-account scope, so the e51ad504 de-escalation guard rightly restricts only `admin` +
+`driftstack_internal_admin`. So the admin-route AUTHZ surface is verified sound in one pass; the
+remaining per-route body audits are low-yield. See `project_routes_tier_audit_progress`. The
+customer-facing attack surface across lib + middleware + db-repo + routes is now comprehensively
+swept; remaining genuine work is founder-gated (trustProxy/strict-FK/archetype) or the MEMORY.md
+consolidation.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
