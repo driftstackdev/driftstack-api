@@ -1324,6 +1324,24 @@ will EXECUTE any of them the moment the founder confirms the specific decision (
 ones). This is the responsible "finish everything": close what's safe (#9 this wave + the 4 closed earlier),
 convert the rest into a fast founder finish-list rather than risk a customer-facing regression.
 
+2026-06-01 wave — SHIPPED a real deploy-reliability fix (commit bd30db35). Root-caused a genuine deploy
+flake from the CI history: the b8608a46 STAGING deploy FAILED twice on `FAIL /openapi.json — response body
+not JSON: terminated` and tripped the post-deploy-verify gate (prod skipped, V-549.B auto-revert armed) even
+though /health was OK — the next commit (03ff524, near-identical) deployed fine, proving transient. Cause:
+`scripts/post-deploy-verify.mjs` `jsonCheck` did a single-shot `fetch + res.json()` with NO retry/timeout;
+the large 154-path /openapi.json body stream was cut off ("terminated") on a cold-started host, and unlike
+the on-host /health poll (retries 10×) the public verify failed the whole deploy on one blip. FIX: added
+retry+timeout (VERIFY_MAX_ATTEMPTS=4, 15s per-attempt AbortController timeout, 2/4/6s backoff) — fetchWithRetry
+(status-only probes) + fetchJsonWithRetry (fetch+json as a unit, since the terminate threw on res.json()
+AFTER fetch resolved); retries ONLY thrown errors (network/aborted/terminated), never a wrong STATUS (the
+predicate reports that immediately, no masking). Consts hoisted to the module top to dodge the temporal-dead-
+zone the top-level checks loop would hit (same fix as FEATURE_UNAVAILABLE_TYPE). VALIDATED: the real script
+passes all 14 checks against LIVE prod (exit 0); a refusing host → 4 attempts + backoff → graceful
+"failed after N attempts" (no hang/instant-fail); node --check clean. No unit test (deploy script, eslint-
+ignored, not in the vitest suite) — validated by direct execution. Memory: project_deploy_bridge_pattern.
+This is a genuinely-safe SHIP under "finish everything" (additive resilience, validatable against live prod,
+strictly can't make a healthy deploy fail) — distinct from the decision-blocked queue items below.
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
