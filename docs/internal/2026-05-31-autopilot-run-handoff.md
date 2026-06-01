@@ -859,6 +859,32 @@ stub; user-originated value). This confirms the deep-wind-down posture: agent la
 incident fan-out all audited; remaining findings are forward-notes on unwired scaffolding or
 founder-gated items.
 
+2026-06-01 wave — NEW cross-cutting dimension swept (rate-limit COVERAGE — never done before;
+distinct from the auth-presence/admin-scope/write-scope invariants). Model: per-route opt-in
+(`app.decorate('rateLimit', ...)` account-keyed + `ipRateLimit` IP-keyed for unauth; NO global
+hook), so a route omitting it is genuinely unprotected. Swept all 145 route registrations. ONE
+real LIVE finding (surfaced, new memory `[[project_oauth_provider_ratelimit_gap]]`): the
+OAuth-PROVIDER public dance — `GET /v1/oauth/authorize`, `POST /v1/oauth/{token,introspect,revoke}`
+(V-667, Driftstack issues tokens to 3rd-party apps; `registerOAuthRoutes` wired UNCONDITIONALLY
+at app.ts:1050 → live) — has ZERO rate-limiting (not even an `ipRateLimit` import). `/token` is a
+`client_secret`+auth-code brute-force surface (RFC 6749 §10.10); `/introspect` is an
+unauthenticated token-validity oracle (RFC 7662). It's the ONLY unauth family in the API without
+a limiter. LOW-MED severity (high-entropy secrets → guessing infeasible; the cost is missing
+brute-force friction + open oracle + DoS). SURFACED not auto-fixed — rate-limit VALUES on a live
+credential endpoint are a founder-tuned security policy (AUTH_IP_LIMITS entries are deliberately
+chosen) AND keying is a design call (`/token`,`/introspect`,`/revoke` are CLIENT-SERVER-called →
+naive IP-keying could throttle a future high-volume client; `/authorize` is user-browser, IP-safe).
+READY-TO-APPROVE fix: ipRateLimit gates + a generous `AUTH_IP_LIMITS.oauthProvider` (~60/min/IP,
+matching statusIncidentsList), per-client_id keying as a future enhancement. METHOD CATCH: the
+first grep was case-SENSITIVE and missed `ipRateLimit(` (capital R) — `auth.ts`/`oauth-client`/
+`status-subscribe` looked uncovered but are gated; re-ran case-insensitive. Rate-limit coverage
+OTHERWISE COMPLETE (don't re-sweep): every other customer + public family gated; the other zero-rl
+flags are correct carve-outs (`webhooks-stripe/nowpayments` = signature-gated provider callbacks,
+must NOT limit; `fleet-events` = 503 stubs; public incident list/detail gated in
+`admin-incidents.ts:312/348`; `metrics`/`openapi.json` infra-protected/static; `admin-cost`
+internal-staff). Broke the doc-note streak's monotony with a genuine NEW live finding (not a
+refinement). No code change (policy/keying = founder call).
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
