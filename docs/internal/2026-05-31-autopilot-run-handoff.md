@@ -532,6 +532,18 @@ NO ledger insert, NO delete). See `project_audit_archive_repo_audit_clean`. db-t
 `validation-schedules-repo` / `byok-anthropic-repo` (3 writes each) are the top remaining
 triage targets.
 
+2026-06-01 wave — audited `db/byok-anthropic-repo.ts` (3 writes, customer Anthropic-key
+ciphertext storage). SOUND — completes the BYOK security chain at the storage layer (the
+crypto lib + route + cache were audited earlier; this is at-rest persistence). Ciphertext-only
+at rest (no plaintext column; `findByAccount` projects ciphertext+metadata, the decrypt path
+needs the blob), every method account-scoped, `clear` genuinely NULLs the encrypted blob
+(not a soft flag — a customer clearing their key actually erases the secret at rest, tested
+via `clearKey`), `upsert` resets the rotation-reminder dedupe on re-key, `touchLastUsed`
+bumps `lastUsedAt` only (not `updatedAt`). Behaviorally covered by `byok-anthropic-service.test.ts`
+(clearKey→hasKey=false+getPlaintext-null, roundtrip, no-op-on-no-key). No bug, no test-gap.
+See `project_byok_anthropic_repo_audit_clean`. db-tier next: `validation-schedules-repo`
+(3 writes) is the top remaining target.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
