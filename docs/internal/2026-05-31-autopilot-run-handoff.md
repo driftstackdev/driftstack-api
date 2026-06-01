@@ -398,6 +398,21 @@ change and NO added coverage (the injection branch is fully pinned; more would b
 duplicate). See `project_receipt_pdf_audit_clean`. The two export-artifact injection
 surfaces (CSV CWE-1236 + PDF §7.3.4.2) are now both audited clean.
 
+2026-06-01 wave — audited `lib/oauth-pkce.ts` (V-488, RFC 7636) at the PRIMITIVE level (the
+OAuth-client flow audit earlier treated these as black-box building blocks). TEXTBOOK-CLEAN:
+`computeS256Challenge` = `base64url(sha256(verifier))` with RFC §4.1 alphabet validation;
+`verifyS256Challenge` shape-validates + length-checks before a constant-time `timingSafeEqual`.
+Verified MECHANICALLY (not just doc-claimed) that there's no PKCE-downgrade surface:
+`verifyPlainChallenge` is never called outside its own file AND `services/oauth.ts:317`
+rejects `code_challenge_method !== 'S256'`. Exhaustively tested incl the RFC 7636 §A.2
+OFFICIAL test vector — so NO code change / NO added coverage. See
+`project_oauth_pkce_primitive_audit_clean`. **This completes the small `lib/`
+security-helper sweep** (8 files line-verified clean this run: nowpayments-signing,
+internal-fleet-auth, the AES-256-GCM crypto-at-rest family [livekit/gui-control-key/BYOK/MFA],
+csv, receipt-pdf, oauth-pkce; two real test-gaps closed along the way). Remaining un-audited
+small lib files are non-security (otel, slow-query-log, memory/redis-rate-limit-store,
+effective-account-header).
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
