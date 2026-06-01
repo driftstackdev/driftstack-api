@@ -558,6 +558,19 @@ line — MEMORY.md is now 47KB (~2× the 24KB load cap); the consolidation is ov
 deliberately throttling per-wave index growth.** db-tier next: the remaining 2-write repos,
 preferring security/cross-account (`profile-snapshots`, `email-preferences`).
 
+2026-06-01 wave — audited `db/profile-snapshots-repo.ts` (account-owned snapshots; distinct
+from the RESOLVED route-requireScope scope-gap memory — this is the repo's query scoping).
+SOUND: `findById`/`delete` both `WHERE and(eq(id), eq(accountId))` = IDOR-safe account-scoped
+(cross-account id → null/false); `list` is account-scoped with a compound **id-keyset** cursor
+(`createdAt<c OR (createdAt=c AND id<c.id)`, desc/desc — the id-keyset the timestamp-only-cursor
+bug-class requires, present not timestamp-only) + limit cap 100. Verified-safe subtlety: the
+cursor-row lookup fetches by `eq(id, cursor)` without an accountId filter, but only reads
+`(createdAt,id)` to build the comparator — the main query still gates `eq(accountId)`, so a
+forged cross-account cursor only shifts this account's window (no leak). Behaviorally pinned by
+`profile-snapshots.test.ts:326` "cross-account access returns 404" + pagination/delete tests.
+No bug, no test-gap. Folded into `project_db_repo_tier_audit_progress` (no new MEMORY.md index
+line, per the 47KB throttle). db-tier next: `email-preferences-repo` (2 writes).
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
