@@ -29,11 +29,16 @@
 //   • initTelemetry: opt-out close+reset; opt-in idempotent;
 //     Sentry.init with release `driftstack-gui@${APP_VERSION}` +
 //     tracesSampleRate 0 + sendDefaultPii false + integration-
-//     filter excluding BrowserTracing/Replay/BrowserProfiling.
+//     filter (keepSentryIntegration / DROPPED_SENTRY_INTEGRATIONS)
+//     excluding BrowserTracing/Replay/BrowserProfiling/Breadcrumbs
+//     (Breadcrumbs drop = the crash-only privacy contract — no
+//     incidental console/DOM/fetch URL capture).
 //   • SENSITIVE_KEY_PATTERNS 6 regexes (api_key + password +
-//     secret + token + bearer + authorization).
-//   • scrubEvent: Authorization-style header scrub + extra/contexts
-//     spread scrub via scrubObject.
+//     secret + token + bearer + authorization); SENSITIVE_QUERY_PARAMS
+//     incl. ds_token (the API key in the notification stream URL).
+//   • scrubEvent: Authorization-style header scrub + request.url +
+//     breadcrumb query-param scrub (scrubUrl) + extra/contexts spread
+//     scrub via scrubObject.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -108,15 +113,28 @@ describe('W469.C apps/gui-client/src/lib/telemetry.ts content parity', () => {
     );
   });
 
-  it("initTelemetry: !telemetryEnabled branch closes existing client 'Customer just opted out — close the client to flush + stop.'; idempotent if initialized + telemetry enabled; Sentry.init with release `driftstack-gui@${APP_VERSION}` + tracesSampleRate 0 + sendDefaultPii: false + integration-filter dropping BrowserTracing/Replay/BrowserProfilingIntegration", () => {
+  it("initTelemetry: !telemetryEnabled branch closes existing client 'Customer just opted out — close the client to flush + stop.'; idempotent if initialized + telemetry enabled; Sentry.init with release `driftstack-gui@${APP_VERSION}` + tracesSampleRate 0 + sendDefaultPii: false + integration-filter (keepSentryIntegration) dropping BrowserTracing/Replay/BrowserProfilingIntegration/Breadcrumbs", () => {
     expect(body).toMatch(
       /if \(!telemetryEnabled\(cfg\)\) \{\s*\n?\s*if \(initialized\) \{\s*\n?\s*\/\/ Customer just opted out — close the client to flush \+ stop\.\s*\n?\s*void Sentry\.close\(\);\s*\n?\s*initialized = false;\s*\n?\s*\}\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*if \(initialized\) return; \/\/ already running/,
     );
     expect(body).toMatch(
       /Sentry\.init\(\{\s*\n?\s*dsn: SENTRY_DSN,\s*\n?\s*release: `driftstack-gui@\$\{APP_VERSION\}`,/,
     );
+    // Crash-only integration filter via keepSentryIntegration. Breadcrumbs
+    // MUST stay in the dropped set — it auto-captures console/DOM/fetch/xhr
+    // URLs (incl. the `?ds_token=<apiKey>` stream), which the privacy
+    // contract forbids. Re-adding it (or dropping it from the list) is a
+    // regression this guard catches.
     expect(body).toMatch(
-      /integrations: \(defaults\) =>\s*\n?\s*defaults\.filter\(\s*\n?\s*\(integration\) =>\s*\n?\s*\/\/ Keep error-capture core; drop anything user-tracking-shaped\.\s*\n?\s*!\['BrowserTracing', 'Replay', 'BrowserProfilingIntegration'\]\.includes\(integration\.name\),\s*\n?\s*\),/,
+      /integrations: \(defaults\) => defaults\.filter\(\(i\) => keepSentryIntegration\(i\.name\)\),/,
+    );
+    expect(body).toMatch(/export const DROPPED_SENTRY_INTEGRATIONS: readonly string\[\] = \[/);
+    expect(body).toMatch(/'BrowserTracing',/);
+    expect(body).toMatch(/'Replay',/);
+    expect(body).toMatch(/'BrowserProfilingIntegration',/);
+    expect(body).toMatch(/'Breadcrumbs',/);
+    expect(body).toMatch(
+      /export function keepSentryIntegration\(name: string\): boolean \{\s*\n?\s*return !DROPPED_SENTRY_INTEGRATIONS\.includes\(name\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(/tracesSampleRate: 0,/);
     expect(body).toMatch(/sendDefaultPii: false,\s*\n?\s*beforeSend: scrubEvent,/);
@@ -135,6 +153,24 @@ describe('W469.C apps/gui-client/src/lib/telemetry.ts content parity', () => {
     expect(body).toMatch(
       /function scrubObject\(obj: Record<string, unknown>\): Record<string, unknown> \{\s*\n?\s*const out: Record<string, unknown> = \{\};\s*\n?\s*for \(const \[k, v\] of Object\.entries\(obj\)\) \{\s*\n?\s*if \(SENSITIVE_KEY_PATTERNS\.some\(\(p\) => p\.test\(k\)\)\) \{\s*\n?\s*out\[k\] = '\[scrubbed\]';\s*\n?\s*\} else \{\s*\n?\s*out\[k\] = v;\s*\n?\s*\}\s*\n?\s*\}\s*\n?\s*return out;\s*\n?\s*\}/,
     );
+  });
+
+  it("URL + breadcrumb PII hardening: scrubEvent strips credential-shaped query params from request.url (the `?ds_token=<apiKey>` notification-stream vector) + scrubs breadcrumb data; SENSITIVE_QUERY_PARAMS includes 'ds_token'; scrubUrl uses new URL + searchParams.set('[scrubbed]') with try/catch passthrough", () => {
+    // request.url query scrub.
+    expect(body).toMatch(
+      /if \(typeof event\.request\?\.url === 'string'\) \{\s*\n?\s*event\.request\.url = scrubUrl\(event\.request\.url\);\s*\n?\s*\}/,
+    );
+    // breadcrumb data scrub (field names + nested url query).
+    expect(body).toMatch(/if \(event\.breadcrumbs\) \{/);
+    expect(body).toMatch(/const data = scrubObject\(b\.data\);/);
+    expect(body).toMatch(/if \(typeof data\.url === 'string'\) data\.url = scrubUrl\(data\.url\);/);
+    // SENSITIVE_QUERY_PARAMS set — ds_token (the customer API key in the
+    // notification stream URL) MUST be present.
+    expect(body).toMatch(/const SENSITIVE_QUERY_PARAMS = new Set\(\[/);
+    expect(body).toMatch(/'ds_token',/);
+    // scrubUrl: parse → scrub matching params → toString, passthrough on throw.
+    expect(body).toMatch(/function scrubUrl\(url: string\): string \{/);
+    expect(body).toMatch(/u\.searchParams\.set\(key, '\[scrubbed\]'\);/);
   });
 
   it('file exists at canonical path', () => {

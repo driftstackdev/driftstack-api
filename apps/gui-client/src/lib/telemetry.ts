@@ -33,11 +33,9 @@ import type { ErrorEvent, EventHint } from '@sentry/browser';
  * (Driftstack's Sentry project), not WHO is sending them — Sentry's
  * server-side enforcement on accepted events handles abuse.
  */
-// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Vite injects ImportMetaEnv at build; runtime types unavoidable here
 const SENTRY_DSN: string = (import.meta.env.VITE_SENTRY_DSN as string | undefined) ?? '';
 
 /** App version surfaced in Sentry release tagging. */
-// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access -- Vite injects ImportMetaEnv at build; runtime types unavoidable here
 const APP_VERSION: string = (import.meta.env.VITE_APP_VERSION as string | undefined) ?? '0.0.1';
 
 export interface TelemetryConfig {
@@ -98,15 +96,14 @@ export function initTelemetry(cfg: TelemetryConfig): void {
     dsn: SENTRY_DSN,
     release: `driftstack-gui@${APP_VERSION}`,
     // Crash-only: errors + unhandled rejections. NO performance
-    // tracing, NO session replay, NO breadcrumbs from user actions.
-    // Default integrations (GlobalHandlers, Breadcrumbs, etc.) cover
-    // the crash surface; we explicitly disable everything else.
-    integrations: (defaults) =>
-      defaults.filter(
-        (integration) =>
-          // Keep error-capture core; drop anything user-tracking-shaped.
-          !['BrowserTracing', 'Replay', 'BrowserProfilingIntegration'].includes(integration.name),
-      ),
+    // tracing, NO session replay, NO profiling, and — per the privacy
+    // contract above — NO breadcrumbs. Sentry's default `Breadcrumbs`
+    // integration auto-captures console / DOM / fetch / xhr / history,
+    // any of which can incidentally carry a URL query token (e.g. the
+    // notification stream's `?ds_token=<apiKey>`) or other PII, so we
+    // drop it too and keep only the error-capture core (GlobalHandlers,
+    // LinkedErrors, Dedupe, …). See DROPPED_SENTRY_INTEGRATIONS.
+    integrations: (defaults) => defaults.filter((i) => keepSentryIntegration(i.name)),
     // No transaction sampling — crash-only, no perf data.
     tracesSampleRate: 0,
     // PII scrubber: defense-in-depth even though we never intentionally
@@ -123,8 +120,10 @@ export function initTelemetry(cfg: TelemetryConfig): void {
  * Strip credential-shaped fields before sending. Recurses one level
  * into the request data; deeper nesting falls to Sentry's own size
  * limits. Returns the scrubbed event or null to drop entirely.
+ *
+ * Exported for unit testing — `Sentry.init` wires it as `beforeSend`.
  */
-function scrubEvent(event: ErrorEvent, _hint: EventHint): ErrorEvent | null {
+export function scrubEvent(event: ErrorEvent, _hint: EventHint): ErrorEvent | null {
   // Scrub Authorization-style headers.
   if (event.request?.headers) {
     const h = event.request.headers as Record<string, string>;
@@ -138,7 +137,12 @@ function scrubEvent(event: ErrorEvent, _hint: EventHint): ErrorEvent | null {
       }
     }
   }
-  // Scrub common credential field names from extra/contexts/breadcrumb data.
+  // Scrub credential-shaped query params from any captured request URL
+  // (e.g. the notification stream's `?ds_token=<apiKey>`).
+  if (typeof event.request?.url === 'string') {
+    event.request.url = scrubUrl(event.request.url);
+  }
+  // Scrub common credential field names from extra/contexts data.
   if (event.extra) event.extra = scrubObject(event.extra);
   if (event.contexts) {
     for (const k of Object.keys(event.contexts)) {
@@ -147,6 +151,18 @@ function scrubEvent(event: ErrorEvent, _hint: EventHint): ErrorEvent | null {
         event.contexts[k] = scrubObject(ctx);
       }
     }
+  }
+  // Defense-in-depth: the Breadcrumbs integration is dropped (see
+  // DROPPED_SENTRY_INTEGRATIONS), but a manually-recorded or
+  // future-integration breadcrumb could still attach a URL / data
+  // object — scrub credential-shaped query params + field names.
+  if (event.breadcrumbs) {
+    event.breadcrumbs = event.breadcrumbs.map((b) => {
+      if (!b.data || typeof b.data !== 'object') return b;
+      const data = scrubObject(b.data);
+      if (typeof data.url === 'string') data.url = scrubUrl(data.url);
+      return { ...b, data };
+    });
   }
   return event;
 }
@@ -170,4 +186,60 @@ function scrubObject(obj: Record<string, unknown>): Record<string, unknown> {
     }
   }
   return out;
+}
+
+/** Credential-shaped query-param names whose VALUES must never leave the host. */
+const SENSITIVE_QUERY_PARAMS = new Set([
+  'ds_token',
+  'token',
+  'access_token',
+  'refresh_token',
+  'api_key',
+  'apikey',
+  'password',
+  'secret',
+]);
+
+/**
+ * Strip credential-shaped query-param VALUES from a URL string. Returns
+ * the input unchanged if it doesn't parse as a URL (best-effort). Keeps
+ * non-sensitive params intact so the URL stays diagnostically useful.
+ */
+function scrubUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    let changed = false;
+    for (const key of [...u.searchParams.keys()]) {
+      if (
+        SENSITIVE_QUERY_PARAMS.has(key.toLowerCase()) ||
+        SENSITIVE_KEY_PATTERNS.some((p) => p.test(key))
+      ) {
+        u.searchParams.set(key, '[scrubbed]');
+        changed = true;
+      }
+    }
+    return changed ? u.toString() : url;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Sentry default integrations we explicitly DROP for the crash-only
+ * privacy posture: performance tracing, session replay, profiling, and
+ * `Breadcrumbs` (which auto-captures console / DOM / fetch / xhr /
+ * history — an incidental URL/PII vector the privacy contract above
+ * forbids). Everything else (GlobalHandlers, LinkedErrors, Dedupe, …)
+ * is the error-capture core we keep.
+ */
+export const DROPPED_SENTRY_INTEGRATIONS: readonly string[] = [
+  'BrowserTracing',
+  'Replay',
+  'BrowserProfilingIntegration',
+  'Breadcrumbs',
+];
+
+/** True if a Sentry default integration should be KEPT (crash-only filter). */
+export function keepSentryIntegration(name: string): boolean {
+  return !DROPPED_SENTRY_INTEGRATIONS.includes(name);
 }

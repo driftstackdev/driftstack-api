@@ -6,7 +6,14 @@
 // here is the load-bearing predicate.
 
 import { describe, expect, it } from 'vitest';
-import { isCloudBaseUrl, telemetryEnabled } from '../../src/lib/telemetry.js';
+import type { ErrorEvent, EventHint } from '@sentry/browser';
+import {
+  isCloudBaseUrl,
+  telemetryEnabled,
+  keepSentryIntegration,
+  DROPPED_SENTRY_INTEGRATIONS,
+  scrubEvent,
+} from '../../src/lib/telemetry.js';
 
 describe('isCloudBaseUrl', () => {
   it('matches the canonical driftstack.dev hostname', () => {
@@ -67,5 +74,101 @@ describe('telemetryEnabled', () => {
     // No assertions here — DSN is empty in tests. Documenting the
     // intended matrix as a comment-as-contract.
     expect(true).toBe(true);
+  });
+});
+
+describe('keepSentryIntegration — crash-only integration filter', () => {
+  it('DROPS the Breadcrumbs integration (privacy contract: no console/DOM/fetch/xhr breadcrumb capture)', () => {
+    // The load-bearing assertion: Breadcrumbs auto-captures URLs (incl.
+    // the `?ds_token=<apiKey>` notification stream) + console/DOM data,
+    // which the crash-only privacy contract forbids.
+    expect(keepSentryIntegration('Breadcrumbs')).toBe(false);
+  });
+
+  it('DROPS performance tracing / session replay / profiling', () => {
+    expect(keepSentryIntegration('BrowserTracing')).toBe(false);
+    expect(keepSentryIntegration('Replay')).toBe(false);
+    expect(keepSentryIntegration('BrowserProfilingIntegration')).toBe(false);
+  });
+
+  it('KEEPS the error-capture core', () => {
+    expect(keepSentryIntegration('GlobalHandlers')).toBe(true);
+    expect(keepSentryIntegration('LinkedErrors')).toBe(true);
+    expect(keepSentryIntegration('Dedupe')).toBe(true);
+  });
+
+  it('DROPPED_SENTRY_INTEGRATIONS pins the exact crash-only drop-set (incl. Breadcrumbs)', () => {
+    expect([...DROPPED_SENTRY_INTEGRATIONS]).toEqual([
+      'BrowserTracing',
+      'Replay',
+      'BrowserProfilingIntegration',
+      'Breadcrumbs',
+    ]);
+  });
+});
+
+describe('scrubEvent — beforeSend PII scrubber', () => {
+  const hint = {} as EventHint;
+
+  it('scrubs Authorization / Cookie headers, preserves the rest', () => {
+    const ev = {
+      request: {
+        headers: { Authorization: 'Bearer ds_live_secret', Cookie: 'sid=abc', 'X-Other': 'ok' },
+      },
+    } as unknown as ErrorEvent;
+    const h = scrubEvent(ev, hint)!.request!.headers as Record<string, string>;
+    expect(h.Authorization).toBe('[scrubbed]');
+    expect(h.Cookie).toBe('[scrubbed]');
+    expect(h['X-Other']).toBe('ok');
+  });
+
+  it('strips credential-shaped query params from request.url (the ?ds_token=<apiKey> vector)', () => {
+    const ev = {
+      request: {
+        url: 'https://api.driftstack.dev/v1/account/me/notifications?ds_token=ds_live_SECRET&foo=bar',
+      },
+    } as unknown as ErrorEvent;
+    const url = scrubEvent(ev, hint)!.request!.url!;
+    expect(url).not.toContain('ds_live_SECRET');
+    expect(url).toContain('ds_token=%5Bscrubbed%5D'); // URL-encoded "[scrubbed]"
+    expect(url).toContain('foo=bar'); // non-sensitive param preserved
+  });
+
+  it('scrubs credential-shaped breadcrumb data (field names + nested url query)', () => {
+    const ev = {
+      breadcrumbs: [
+        {
+          category: 'fetch',
+          data: {
+            url: 'https://api.driftstack.dev/x?token=SECRET',
+            api_key: 'ds_live_X',
+            status: 200,
+          },
+        },
+      ],
+    } as unknown as ErrorEvent;
+    const data = scrubEvent(ev, hint)!.breadcrumbs![0]!.data as Record<string, unknown>;
+    expect(data.api_key).toBe('[scrubbed]');
+    expect(String(data.url)).not.toContain('SECRET');
+    expect(data.status).toBe(200); // non-sensitive field preserved
+  });
+
+  it('scrubs extra + contexts credential fields, preserves benign ones', () => {
+    const ev = {
+      extra: { api_key: 'X', note: 'fine' },
+      contexts: { app: { secret: 'Y', name: 'gui' } },
+    } as unknown as ErrorEvent;
+    const out = scrubEvent(ev, hint)!;
+    const extra = out.extra as Record<string, unknown>;
+    const app = out.contexts!.app as Record<string, unknown>;
+    expect(extra.api_key).toBe('[scrubbed]');
+    expect(extra.note).toBe('fine');
+    expect(app.secret).toBe('[scrubbed]');
+    expect(app.name).toBe('gui');
+  });
+
+  it('returns the event (never drops) when nothing sensitive is present', () => {
+    const ev = { message: 'boom' } as unknown as ErrorEvent;
+    expect(scrubEvent(ev, hint)).not.toBeNull();
   });
 });
