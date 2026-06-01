@@ -1197,6 +1197,22 @@ clean+guard wave: OAuth-rl close → SQLi → mass-assignment → insecure-rando
 CODE-FIX surface stays exhausted; these waves verify a distinct dimension clean + add a CI regression
 guard, per the directive's keep-doing-fresh-audit-waves wind-down posture.)
 
+2026-06-01 wave — fresh-audit of SSE per-account/session event SCOPING (cross-tenant-leak class; distinct
+from the prior SSE leak/cleanup-mechanics audit). CLEAN by construction: NotificationEventBus keyed by
+accountId + route subscribes with ctx.account.id (own authenticated account, no tamperable param, no
+X-Driftstack-Account on this route); AgentSessionEventBus keyed by sessionId but the transcript SSE route
+gates session.accountId === ctx.account.id → 404 BEFORE writeHead/subscribe (so a guessed sessionId never
+opens a stream); IncidentEventBus→status-stream is public (broadcast correct). No bug. Filled a real
+test-gap (commit 5d007f51): the transcript SSE route had ZERO behavioral coverage — added GET /:id/transcript
+non-owned-id → 404 with the gate's "AgentSession ... not found" body and NOT an opened event-stream (the
+body assertion is non-vacuous vs a route-not-found 404; pins gate-before-stream ordering). The true
+cross-account branch (foreign EXISTING session vs unknown-id null branch) isn't behaviorally tested for any
+agent-session by-id route (single-account suite + agentSessionsRepo not exposed on the fixture); verified by
+code-read (same gate idiom across all 6 by-id routes), a foreign-session seed = shared-infra surgery, low
+value-to-risk — surfaced not done. Memory folded into project_idor_ownership_review_clean. Test-only, net
+source zero. (5th consecutive fresh-dimension clean+guard/test wave: OAuth-rl → SQLi → mass-assignment →
+insecure-randomness → SSE-scoping.)
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
