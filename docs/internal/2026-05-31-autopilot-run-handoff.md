@@ -1103,6 +1103,26 @@ comprehensively swept — the control plane (every service/route tier + the bug-
 customer SDKs. Future waves should expect clean confirmations on fresh reads; the real remaining
 work is the founder-action queue below (all surfaced/gated, none auto-doable).
 
+2026-06-01 wave — audited the DETERMINISTIC decomposer's AUP filter (`agent-decomposer-deterministic.ts`)
+and SHIPPED a safety drift-guard. The deterministic decomposer is a CUSTOMER-REACHABLE prod path —
+`selectAgentDecomposer` (bootstrap) wires it when no Anthropic-key path is configured
+(self-hosted / no-key) or via `DRIFTSTACK_AGENT_DECOMPOSER_FORCE=deterministic`. Verified its AUP
+pre-filter has the SAME 5 patterns (CSAM / non-consensual-deepfake / swatting / captcha-bypass /
+brute-force) as the Claude one — `AUP_REFUSAL_PATTERNS` is duplicated verbatim in both (no shared
+const), currently byte-identical. The two were pinned only INDEPENDENTLY (Claude: length-5 + the
+"identical corpus" comment; deterministic: a content regex) — nothing asserted they MATCH, so a
+new abuse pattern added to one path but not the other would silently weaken AUP enforcement on
+deterministic-path deployments. SHIPPED (test-only, no source change):
+`agent-decomposer-aup-corpus-cross-source-invariant.test.ts` — extracts the full
+`AUP_REFUSAL_PATTERNS` block from both files and asserts byte-identity (+ a sanity check that each
+has the 5 regex entries; caught + fixed my own off-by-one — the `{pattern: RegExp}` type annotation
+also contains `pattern:`, so I count `pattern: /` not `pattern:`). 2/2 green, tsc + eslint clean.
+Same drift class as the budget-string invariant. NON-bug noted: the deterministic decomposer checks
+budget BEFORE AUP (Claude checks AUP first) — cosmetic only (an AUP task is refused either way:
+budget-refuse if exhausted, AUP-refuse otherwise; never executed). The deterministic path's
+regex-only AUP (no model second-filter) is inherent to the non-LLM path, acceptable for the
+fallback. Completes the decomposer audit (Claude + runtime + executor + deterministic).
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
