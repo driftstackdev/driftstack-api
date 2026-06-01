@@ -586,6 +586,20 @@ DECLINED — consistent with the standing judgment that it's a deliberate fresh-
 `health-probes`, `atlas-priority-events`, `account-lifecycle`) — the high-yield db vein is
 largely mined; weigh against the founder-gated / consolidation work.
 
+2026-06-01 wave — audited `db/account-lifecycle-repo.ts` (once-per-account lifecycle emails;
+repo-level CAS, distinct from the earlier service-dispatcher memory). SOUND:
+`markFirstFailureEmailSent`/`markFirstSuccessEmailSent` are an ATOMIC single-UPDATE
+check-and-set — `UPDATE accounts SET <col>=at WHERE id=? AND <col> IS NULL RETURNING id`,
+returning `rowcount>0` as the win-signal, so of two concurrent callers exactly one flips the
+column and gets `true` (sends the email) while the other gets `false` (suppressed) —
+race-safe, no read-then-write TOCTOU, no duplicate first-failure/success email.
+`findForLifecycle` is account-scoped + curated. Behaviorally pinned by `account-lifecycle.test.ts`
+(sends+marks on first call / skips when flag already set) with a faithful in-memory fake.
+No bug, no test-gap; folded into the db-tier progress memory. With this, the
+correctness/security-relevant db repos are all audited clean; only thin lower-relevance
+2-write repos remain (`recipes`, `health-probes`, `atlas-priority-events`) — diminishing
+yield, weigh against the founder-gated work and the overdue MEMORY.md consolidation.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
