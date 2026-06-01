@@ -616,6 +616,19 @@ surface across lib + middleware + db tiers is now exhausted; remaining genuine w
 founder-gated (trustProxy `req.ip`, strict-FK, archetype) or the MEMORY.md consolidation
 (47KB) — both fresh-session-suited.
 
+2026-06-01 wave — surveyed the LAST code tier (`packages/`): no wired-and-un-audited target.
+`webhook-delivery` is heavily covered (every src file has prior memory coverage);
+`recipe-library` + `behavioural-simulation` are grep-confirmed UNWIRED Phase-3 scaffolding
+(nothing in `apps/server/src` imports them — per the standing memories, auditing unwired code
+for runtime bugs is low-value, correctly skipped). With this, ALL FOUR code tiers (lib,
+middleware, db-repo, packages) are mechanically confirmed exhausted of safe, non-gated,
+un-audited surface. Also re-ran the memory `[[wikilink]]` integrity check (165 files): clean
+— only the 1 known-intentional Agent-1 forward-marker dangles. **No code/test change this
+wave** (manufacturing one would be churn, rule 5); this is the genuine wind-down condition,
+mechanically demonstrated. The real next step is a FRESH SESSION for the founder-gated items
+(trustProxy `req.ip` is the top open finding) or the MEMORY.md consolidation — neither
+auto-doable in this long autopilot context.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
