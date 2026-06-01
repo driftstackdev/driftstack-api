@@ -146,6 +146,37 @@ describe('SessionDurationSweeperService — free-tier auto-destroy safety', () =
     expect(destroyed).toHaveLength(0);
   });
 
+  it('TOCTOU: a candidate manually destroyed AFTER the list query is not double-processed (fresh-read guard)', async () => {
+    // The sweeper lists candidates then destroys them serially (each awaiting
+    // driver.destroy), so a customer can manually destroy a session in that
+    // window. autoDestroyExpired must re-read current status rather than trust
+    // the stale listed record — otherwise it redundantly driver.destroys,
+    // overwrites destroyedAt, and re-fires the session.completed webhook +
+    // destroyed event.
+    const repo = new InMemorySessionsRepo();
+    const { driver, destroyed } = stubDriver();
+    const sessions = new SessionsService({ repo, driver });
+    repo.setAccountTier('acc-free', 'free');
+    const listed = repo.seedSession({
+      accountId: 'acc-free',
+      status: 'ready',
+      createdAt: new Date(NOW.getTime() - 21 * MIN),
+      driverSessionId: 'drv-toctou',
+    });
+    // Customer destroys it between the sweeper's list query and this call.
+    await repo.updateSessionStatus(listed.id, 'destroyed', { destroyedAt: NOW });
+
+    // Sweeper invokes autoDestroyExpired with the STALE 'ready' record.
+    const result = await sessions.autoDestroyExpired(
+      { ...listed, status: 'ready' },
+      { maxMinutes: 20 },
+    );
+
+    expect(result.destroyed).toBe(false);
+    expect(destroyed).toHaveLength(0); // no redundant driver.destroy
+    expect(repo.getSession(listed.id)?.status).toBe('destroyed');
+  });
+
   it('mixed batch: destroys only the expired FREE session out of a free-expired / free-recent / paid-expired / destroyed set', async () => {
     const { repo, sweeper, destroyed } = build();
     repo.setAccountTier('acc-free', 'free');

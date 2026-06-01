@@ -613,7 +613,17 @@ export class SessionsService {
     session: SessionRecord,
     opts: { maxMinutes: number },
   ): Promise<{ destroyed: boolean }> {
-    if (session.status === 'destroyed' || session.status === 'errored') {
+    // Re-read current status before acting. The duration sweeper lists
+    // candidates then destroys them SERIALLY (each awaiting driver.destroy),
+    // so a candidate can be manually destroyed by the customer SECONDS
+    // after the list query. Guarding only on the stale passed-in status
+    // would double-process it: a redundant driver.destroy, an overwritten
+    // destroyedAt, and a DUPLICATE session.completed webhook + destroyed
+    // event. A fresh read collapses that window to the read→destroy gap.
+    // Scoped read by the session's own accountId (NOT findSessionUnscoped —
+    // that's the admin-force-actions-only finder; this is the session owner).
+    const current = await this.deps.repo.findSession(session.id, session.accountId);
+    if (current === null || current.status === 'destroyed' || current.status === 'errored') {
       return { destroyed: false };
     }
     const reason = 'auto-destroyed: free-tier session duration cap';
