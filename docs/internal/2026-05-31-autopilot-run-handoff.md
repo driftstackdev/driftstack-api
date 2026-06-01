@@ -1241,6 +1241,23 @@ fails it). Memory folded into project_idor_ownership_review_clean. Test-only, ne
 consecutive fresh-dimension clean wave: OAuth-rl → SQLi → mass-assignment → insecure-randomness →
 SSE-scoping → status-site-headers[shipped fix] → CWE-113.)
 
+2026-06-01 wave — Rule-M-v2 track PIVOT off the security-dimension run (6 consecutive); did a non-security
+operational/customer-facing verification + the last security-adjacent dimension, BOTH clean → NO code/test
+artifact this wave (manufacturing one would be churn per rule 5; the continuity record IS the slice).
+(1) Operational: all customer surfaces resolve 200 (driftstack.dev / app / docs / status / api openapi.json),
+all 7 legal slugs (aup/dpa/privacy/refunds/sub-processors/terms/vulnerability-disclosure) resolve 200 and
+each is existence-guarded by its own legal-\*-content-parity test (deletion → CI fail) — so the
+compliance-doc roster is fully covered; status-site headers re-confirmed LIVE. (2) Insecure-deserialization:
+swept all 14 JSON.parse sites — every UNTRUSTED external/client parse is try/catch-guarded with a handled
+fallback (oauth-client-state cookie, fleet-node claims, nowpayments IPN, agent-decomposer LLM, inbound
+webhook bodies, 3 IdP responses, Stripe response, auth-cache); the only unguarded parses are TRUSTED
+server-written store entries (cli-authorize / auth-flows-MFA / config / migrate) → recoverable 500 not a
+vuln, guarding them = defensive churn (not done). No bug. Memory folded into
+project_idor_ownership_review_clean. HONEST STATUS: the safe non-gated audit surface (security dimensions +
+operational + compliance roster) is now comprehensively swept AND regression-guarded; genuine remaining
+high-value work is the founder-action queue below. Future waves: continue fresh-audit cadence but expect
+clean confirmations; do NOT manufacture low-value guards on already-clean trusted paths.
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
