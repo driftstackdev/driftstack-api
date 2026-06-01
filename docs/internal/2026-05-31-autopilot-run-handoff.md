@@ -494,6 +494,18 @@ still burned), so it's not a real vuln. No code change. See
 a fresh, un-mined audit tier for subsequent waves: billing-repo, oauth-links-repo,
 crypto-orders-repo, audit-archive-repo, etc. — pick security/money-relevant ones.)
 
+2026-06-01 wave — audited `db/billing-repo.ts` (cov=0): thin, read-mostly, CLEAN —
+`getAccount`/`findCurrentSubscription` return a curated no-secret snapshot
+(id/email/name/tier/stripeCustomerId), `setStripeCustomerId` is account-scoped, and
+`findCurrentSubscription` is intentionally NOT status-filtered (documented inline for the
+dashboard "last sub canceled on X"). The actual tier money-mutation (`setAccountTier`) is
+NOT here — it's `stripe-webhooks-repo` (separately audited). Low-yield target, no bug. To
+make the db-tier audits hit high-yield files, triaged the remaining cov=0 repos by
+write-method count (proxy for audit-yield): TOP next = `audit-archive-repo` (6 writes,
+audit-log retention/integrity) + `oauth-links-repo` (5, account-link/takeover-adjacent);
+skip the thin 1-write read repos. Roster + triage in `project_db_repo_tier_audit_progress`.
+No code change.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
