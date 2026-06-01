@@ -323,6 +323,19 @@ Note: `MEMORY.md` is now ~39KB (well over the ~24KB load cap) — the deliberate
 consolidation pass (preserving every `feedback_*` rule) remains the recommended
 non-autopilot follow-up.
 
+2026-06-01 wave — real fresh audit, concluded clean (no code change): the NowPayments
+IPN HMAC-SHA512 signature verifier (`lib/nowpayments-signing.ts`, the forged-IPN→
+fraudulent-paid money-security boundary). SOUND + well-tested — canonicalized sorted-key
+body + raw fallback, empty-input reject, length-check-before-`timingSafeEqual`,
+constant-time compare; it IS wired (`routes/webhooks-nowpayments.ts:81`; the file header's
+"501 stub / not wired" line is stale). TRAP recorded in
+`project_nowpayments_signing_audit_clean`: the header "raw bytes / no re-stringify" comment
+is NOT a code/doc contradiction — it documents the raw-body fallback and is deliberately
+pinned cross-file to the `stripe-signing` W962 raw-body invariant; a reword attempt this
+wave was correctly rejected by the parity + invariant tests and reverted (net repo change
+zero). Lesson reinforced: read the companion parity/invariant tests (they encode intent)
+before treating a comment as a bug.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
