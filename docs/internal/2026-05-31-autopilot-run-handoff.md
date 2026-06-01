@@ -846,6 +846,19 @@ findings being refinements/reinforcements of already-surfaced founder items, not
 work. Genuinely-shippable safe non-gated slices are scarce; honest fresh-audit + precise
 founder-surfacing is the remaining value.
 
+2026-06-01 wave — completed the agent-primitive trilogy audit: `services/agent-executor.ts` (the
+last un-read one) is an UNWIRED `StubAgentExecutor` (synthetic success per intent; real
+SessionsService dispatch is the unbuilt AI-B2.b follow-up) — nothing live to audit. Surfaced a
+forward note (folded into `[[project_recipe_library_credential_leak_forward]]`, same class): the
+transcript serializer echoes `intent.value` (agent-executor.ts:104) — benign today (the value is
+decomposer-derived from the customer task, already in the transcript via the user turn, so NO new
+leak), but if AI-B2.b adds credential/vault-injection into `type` intents, that echo would persist
+the injected secret into the transcript + decomposer history + chat UI → redact `type`-intent
+values in executor summaries AT the AI-B2.b wiring slice (reuse V-494). No code change (unwired
+stub; user-originated value). This confirms the deep-wind-down posture: agent layer, scheduler,
+incident fan-out all audited; remaining findings are forward-notes on unwired scaffolding or
+founder-gated items.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
