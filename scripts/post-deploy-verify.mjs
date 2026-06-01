@@ -35,6 +35,15 @@ const jsonOut = args.json === 'true';
 // (1b2001c8) tripped this twice before being root-caused.
 const FEATURE_UNAVAILABLE_TYPE = 'https://errors.driftstack.dev/feature-unavailable';
 
+// Deploy-verify transient-retry tuning. Hoisted here (not beside the
+// fetch helpers further down) for the SAME temporal-dead-zone reason as
+// FEATURE_UNAVAILABLE_TYPE above: the top-level `for (const fn of
+// checks)` loop fires the fetch helpers before their definition site is
+// reached at module eval, so these consts must be initialized first.
+const VERIFY_MAX_ATTEMPTS = 4;
+const VERIFY_TIMEOUT_MS = 15_000;
+const VERIFY_BACKOFF_MS = 2_000;
+
 // Each check returns { ok, name, detail }; the verifier collects all
 // results and exits non-zero only at the end so a single failure
 // doesn't mask a second one.
@@ -199,7 +208,7 @@ async function checkStatusIncidentDetailRoute() {
   const url = `${baseUrl}/v1/status/incidents/inc_00000000-0000-0000-0000-000000000000`;
   let res;
   try {
-    res = await fetch(url);
+    res = await fetchWithRetry(url);
   } catch (err) {
     return { ok: false, name: '/v1/status/incidents/:id', detail: `fetch failed: ${err.message}` };
   }
@@ -242,7 +251,7 @@ async function checkAgentSessionsModeRoute() {
   const url = `${baseUrl}/v1/agent-sessions/ses_00000000-0000-0000-0000-000000000000/mode`;
   let res;
   try {
-    res = await fetch(url, {
+    res = await fetchWithRetry(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ mode: 'manual' }),
@@ -274,7 +283,7 @@ async function checkAgentSessionsInputEventRoute() {
   const url = `${baseUrl}/v1/agent-sessions/ses_00000000-0000-0000-0000-000000000000/input-event`;
   let res;
   try {
-    res = await fetch(url, {
+    res = await fetchWithRetry(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ event: { type: 'ping', timestamp: 0 } }),
@@ -308,7 +317,7 @@ async function checkAccountOauthLinksRoute() {
   const url = `${baseUrl}/v1/account/me/oauth-links`;
   let res;
   try {
-    res = await fetch(url);
+    res = await fetchWithRetry(url);
   } catch (err) {
     return {
       ok: false,
@@ -338,7 +347,7 @@ async function checkAdminCostConfigRoute() {
   const url = `${baseUrl}/v1/admin/cost/config`;
   let res;
   try {
-    res = await fetch(url);
+    res = await fetchWithRetry(url);
   } catch (err) {
     return { ok: false, name: '/v1/admin/cost/config', detail: `fetch failed: ${err.message}` };
   }
@@ -427,7 +436,7 @@ async function checkByokAnthropicGateStub() {
   const url = `${baseUrl}/v1/account/me/byok-anthropic-key`;
   let res;
   try {
-    res = await fetch(url, {
+    res = await fetchWithRetry(url, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ api_key: 'sk-ant-noop-test' }),
@@ -463,7 +472,7 @@ async function checkFleetEventsGateStub() {
   const url = `${baseUrl}/v1/fleet/events`;
   let res;
   try {
-    res = await fetch(url, { method: 'GET' });
+    res = await fetchWithRetry(url, { method: 'GET' });
   } catch (err) {
     return { ok: false, name: 'V-820 fleet-events gate', detail: `fetch failed: ${err.message}` };
   }
@@ -509,7 +518,7 @@ async function featureGateStub(method, path, name, body) {
   const url = `${baseUrl}${path}`;
   let res;
   try {
-    res = await fetch(url, {
+    res = await fetchWithRetry(url, {
       method,
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -567,7 +576,7 @@ async function checkUnknownPath404() {
   const url = `${baseUrl}/this-path-should-never-exist-${Date.now()}`;
   let res;
   try {
-    res = await fetch(url);
+    res = await fetchWithRetry(url);
   } catch (err) {
     return { ok: false, name: 'unknown-path 404', detail: `fetch failed: ${err.message}` };
   }
@@ -579,25 +588,88 @@ async function checkUnknownPath404() {
 
 async function jsonCheck(path, predicate, displayName) {
   const url = `${baseUrl}${path}`;
-  let res;
+  let got;
   try {
-    res = await fetch(url);
+    got = await fetchJsonWithRetry(url);
   } catch (err) {
-    return { ok: false, name: displayName ?? path, detail: `fetch failed: ${err.message}` };
-  }
-  let body;
-  try {
-    body = await res.json();
-  } catch (err) {
+    // After VERIFY_MAX_ATTEMPTS the fetch + body-read still threw — a
+    // network reject or a "terminated" body stream (the large
+    // /openapi.json can be cut off on a cold-started host). This is the
+    // exhausted-retry case, not a one-shot blip.
     return {
       ok: false,
       name: displayName ?? path,
-      detail: `response body not JSON: ${err.message}`,
+      detail: `request failed after ${VERIFY_MAX_ATTEMPTS.toString()} attempts: ${err.message}`,
     };
   }
-  const err = predicate(body, res.status);
+  const err = predicate(got.body, got.status);
   if (err) return { ok: false, name: displayName ?? path, detail: err };
   return { ok: true, name: displayName ?? path };
+}
+
+// ── transient-resilient fetch (deploy-verify hardening, 2026-06-01) ──
+// A single transient blip — a network reject, or a "terminated" body
+// stream (the large /openapi.json is occasionally cut off on a
+// cold-started host) — must NOT fail an otherwise-healthy deploy: that
+// would trip the V-549.B auto-revert on a good SHA. The on-host /health
+// poll in deploy-bridge.sh already retries 10×; this mirrors that for
+// the public verify. We retry only on THROWN errors (network / aborted
+// / terminated body) with a per-attempt timeout + linear backoff. A
+// definitive wrong STATUS is NOT retried — that's a real check failure
+// the predicate reports immediately on the final body.
+// (VERIFY_* constants are hoisted to the top of the module — the
+// top-level `for (const fn of checks)` loop fires these helpers before
+// this declaration site is reached at module-eval time, so leaving the
+// consts here would hit the temporal dead zone. Same fix as
+// FEATURE_UNAVAILABLE_TYPE — see its declaration comment.)
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Returns the Response; retries the fetch on a thrown network/abort
+// error. Used by the status-only route-existence probes.
+async function fetchWithRetry(url, opts = {}) {
+  let lastErr;
+  for (let attempt = 1; attempt <= VERIFY_MAX_ATTEMPTS; attempt += 1) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => {
+      ac.abort();
+    }, VERIFY_TIMEOUT_MS);
+    try {
+      return await fetch(url, { ...opts, signal: ac.signal });
+    } catch (err) {
+      lastErr = err;
+      if (attempt < VERIFY_MAX_ATTEMPTS) await sleep(VERIFY_BACKOFF_MS * attempt);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
+}
+
+// Returns { status, body }; retries fetch+json as a UNIT — the observed
+// flake was res.json() throwing "terminated" AFTER fetch resolved, so
+// the body read must be inside the retry.
+async function fetchJsonWithRetry(url, opts = {}) {
+  let lastErr;
+  for (let attempt = 1; attempt <= VERIFY_MAX_ATTEMPTS; attempt += 1) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => {
+      ac.abort();
+    }, VERIFY_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { ...opts, signal: ac.signal });
+      const body = await response.json();
+      return { status: response.status, body };
+    } catch (err) {
+      lastErr = err;
+      if (attempt < VERIFY_MAX_ATTEMPTS) await sleep(VERIFY_BACKOFF_MS * attempt);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
 }
 
 function parseArgs(argv) {
