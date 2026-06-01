@@ -480,6 +480,20 @@ iphone17 cutover) or the overdue MEMORY.md consolidation (deliberate fresh-sessi
 fresh session for the gated/consolidation work is the right next step. See
 `project_lib_small_file_sweep_complete` (now covers both tiers).
 
+2026-06-01 wave — moved to a NEW tier (the `db/*-repo.ts` layer) rather than re-mining
+lib/middleware. Audited `db/mfa-repo.ts` + the recovery-code consume path in `services/mfa.ts`
+(genuinely un-audited; distinct from the MFA challenge-cap + TOTP-encryption memories).
+SOUND: recovery codes are scrypt-HASHED at rest (repo never sees plaintext), reads are
+account-scoped, and `markRecoveryCodeUsed` carries a DB-level `isNull(usedAt)` single-use
+guard; the consume path verifies via constant-time scrypt. Single-use is behaviorally tested
+(`mfa-service.test.ts:248`). NOTED benign (NOT fixed): the service doesn't check the
+mark's affected-rowcount, so two concurrent redeems of one code could both return
+`'recovery'` — but MFA is a step-up auth gate (same account-owner, no double-spend, code
+still burned), so it's not a real vuln. No code change. See
+`project_mfa_repo_recovery_codes_audit_clean`. (The `db/` repo layer has many cov=0 files —
+a fresh, un-mined audit tier for subsequent waves: billing-repo, oauth-links-repo,
+crypto-orders-repo, audit-archive-repo, etc. — pick security/money-relevant ones.)
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
