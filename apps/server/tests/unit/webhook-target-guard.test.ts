@@ -51,6 +51,23 @@ describe('unsafeWebhookTargetReason — rejects internal/reserved targets', () =
     expect(reason('https://[::ffff:10.0.0.5]/h')).toBeTruthy();
     expect(reason('https://[::ffff:192.168.0.1]/h')).toBeTruthy();
   });
+
+  it('rejects numeric / hex / octal IP encodings that bypass isIP (SSRF-smuggling for 127.0.0.1)', () => {
+    for (const h of [
+      'https://2130706433/h', // decimal 127.0.0.1
+      'https://0x7f000001/h', // hex 127.0.0.1
+      'https://0x7f.0.0.1/h', // hex-leading dotted
+      'https://0177.0.0.1/h', // octal 127.0.0.1
+      'https://127.1/h', // inet_aton short-form 127.0.0.1
+    ]) {
+      expect(reason(h), h).toBeTruthy();
+    }
+  });
+
+  it('rejects trailing-FQDN-dot localhost / literal-IP that would otherwise slip past the host checks', () => {
+    expect(reason('https://localhost./h')).toMatch(/localhost/);
+    expect(reason('https://127.0.0.1./h')).toBeTruthy();
+  });
 });
 
 describe('unsafeWebhookTargetReason — allows legit public targets (NO false positives)', () => {
@@ -75,6 +92,14 @@ describe('unsafeWebhookTargetReason — allows legit public targets (NO false po
     expect(reason('https://[2606:4700::1111]/h')).toBeNull();
     expect(reason('https://hooks.example.com/driftstack')).toBeNull();
     expect(reason('https://app.customer.io/webhooks/abc?x=1')).toBeNull();
+  });
+
+  it('does NOT over-reject hostnames with a numeric label or a trailing FQDN dot', () => {
+    // The numeric-encoding guard requires EVERY label to be numeric/hex; a
+    // real hostname always carries an alphabetic label/TLD, so these pass.
+    expect(reason('https://1.example.com/h')).toBeNull();
+    expect(reason('https://api.123.example.io/h')).toBeNull();
+    expect(reason('https://hooks.example.com./h')).toBeNull(); // trailing FQDN dot
   });
 
   it('returns a reason (not throw) for a malformed URL', () => {

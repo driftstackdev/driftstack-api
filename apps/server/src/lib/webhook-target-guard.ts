@@ -6,8 +6,10 @@
 // the (blind) delivery log. The create-time schema already enforces
 // `https://`; this is the second layer — reject literal internal-IP targets.
 //
-// Layer scope: this blocks LITERAL private/reserved IPs + localhost at
-// create/update time. It does NOT defend DNS rebinding (a hostname that
+// Layer scope: this blocks LITERAL private/reserved IPs + localhost + the
+// non-standard numeric IP encodings that slip past `isIP` (decimal / hex /
+// octal / inet_aton short-form, e.g. `2130706433`, `0x7f000001`, `127.1`) at
+// create/update time. It does NOT defend DNS rebinding (a HOSTNAME that
 // resolves public at create and private at delivery) — that needs
 // connection-time resolution + IP pinning in the delivery path, tracked in
 // docs/internal/2026-05-31-webhook-ssrf-outbound-target.md.
@@ -41,6 +43,19 @@ BLOCK.addSubnet('fe80::', 10, 'ipv6'); // link-local
 BLOCK.addSubnet('ff00::', 8, 'ipv6'); // multicast
 
 const PRIVATE_TARGET = 'Webhook URL must not target a private, loopback, or reserved address.';
+const NUMERIC_ENCODING =
+  'Webhook URL host must be a domain name or a standard dotted-quad / bracketed-IPv6 literal — numeric, hex, or octal IP encodings are not allowed.';
+
+// Non-standard numeric IP encodings the OS resolver / HTTP client still decodes
+// to an address: decimal `2130706433`, hex `0x7f000001`, octal `0177.0.0.1`,
+// inet_aton short-form `127.1`. These are NOT valid dotted-quad literals
+// (`isIP` returns 0 → they read as DNS names), so without this check they slip
+// past the BlockList yet resolve to e.g. 127.0.0.1 — a classic SSRF-smuggling
+// bypass. Matches a host whose every dot-separated label is a decimal/hex/octal
+// number; only applied when `isIP` already said "not a standard literal", so it
+// never touches real dotted-quads (handled by the BlockList) or real hostnames
+// (which always carry an alphabetic label / TLD).
+const NUMERIC_IP_ENCODING = /^(0x[0-9a-f]+|\d+)(\.(0x[0-9a-f]+|\d+))*$/i;
 
 /**
  * Returns a rejection reason when `url` is an unsafe webhook target
@@ -60,6 +75,9 @@ export function unsafeWebhookTargetReason(url: string): string | null {
   // URL keeps `[...]` around IPv6 literals; strip before isIP/BlockList.
   let host = parsed.hostname.toLowerCase();
   if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  // Strip a trailing FQDN-root dot so `localhost.` / `127.0.0.1.` (which
+  // resolve identically) can't slip past the localhost / literal-IP checks.
+  if (host.endsWith('.')) host = host.slice(0, -1);
 
   if (host === 'localhost' || host.endsWith('.localhost')) {
     return 'Webhook URL must not target localhost.';
@@ -71,6 +89,9 @@ export function unsafeWebhookTargetReason(url: string): string | null {
   }
 
   const family = isIP(host); // 0 = DNS name, 4, or 6
+  // Numeric/hex/octal IP encodings (decimal/short-form/0x.../0NNN) read as DNS
+  // names to isIP but decode to an address downstream — reject outright.
+  if (family === 0 && NUMERIC_IP_ENCODING.test(host)) return NUMERIC_ENCODING;
   if (family === 4 && BLOCK.check(host, 'ipv4')) return PRIVATE_TARGET;
   if (family === 6 && BLOCK.check(host, 'ipv6')) return PRIVATE_TARGET;
   return null;
