@@ -1153,18 +1153,18 @@ a process CRASH between `driver.createSession` and `insertSession` still orphans
 dedup existing pending rows first. (`project_session_concurrency_limit_toctou_race`) 9. Global **`unhandledRejection` handler** — defense-in-depth; ops call (log-and-continue vs
 graceful-shutdown vs current fail-fast). Moot today (no path produces one). 10. **SSE single-use ticket** (replace `?ds_token=` in URL) + **nginx access-log redaction** — the
 two remaining layers of the SSE/OAuth-token-in-logs work. (`project_sse_token_in_logs`) 11. **MFA per-account lockout** — founder policy (legit-user-DoS tradeoff). (`project_mfa_challenge_not_attempt_bounded`) 12. **AI-B2.b executor-summary redaction** — at-wiring (when the real executor lands; unwired stub
-today). (`project_recipe_library_credential_leak_forward`) 13. **`debitTokens` atomic decrement** — `DrizzleAgentSessionsRepo.debitTokens` is a read-modify-write
-(get→JS-floor→separate UPDATE); concurrent same-session debits lose an update → session under-debited
-→ budget over-served (uncapped bundled-LLM spend). False "serializes at the row level" comment FIXED
-171b296c; SQL fix (`SET remaining = GREATEST(0, remaining - $tokens)`) DEFERRED — no real-PG test
-exercises this Drizzle path to validate it. Low reachability (turns normally sequential). **Sibling
-in the SAME file: `appendTranscript` is the same read-modify-write race but worse — concurrent
-same-session appends lose a transcript ENTRY (chat message / agent response → data loss); false
-"serialized at the row lock" comment FIXED 5b23d544, atomic fix (`transcript = transcript || $entry`
-or a FOR-UPDATE tx) DEFERRED same-reason.** Fix template for BOTH = `stripe-webhooks-repo
-.setAccountTier` (already correct: `db.transaction()` + `SELECT … FOR UPDATE` + UPDATE). The real
-enabler for shipping either fix is a real-PG integration test for agent-sessions-repo (none exists).
-(`project_session_concurrency_limit_toctou_race`)
+today). (`project_recipe_library_credential_leak_forward`) 13. ~~**`debitTokens` + `appendTranscript` atomic decrement**~~ — ✅ **CLOSED e9c78962
+(2026-06-01)**. Both `DrizzleAgentSessionsRepo` methods were bare read-modify-writes (get→JS→separate
+UPDATE) → concurrent same-session calls lost an update (debit: under-billing / uncapped bundled-LLM
+spend; append: dropped transcript entry = data loss). FIXED by wrapping each in a `db.transaction()`
+that SELECTs the row `FOR UPDATE` first (exact `setAccountTier` pattern) → the row lock serialises
+concurrent debits/appends, no update lost. New real-PG regression test
+`db-agent-sessions-concurrency-drizzle.test.ts` (CI postgres:17, `max:5` pool) proves concurrent
+debit(30)+debit(40)→30 and append(A)+append(B)→length 2; pre-fix yielded 60/70 + length 1. Comments
+
+- content-parity pins updated to the atomic FOR-UPDATE description (+ regression guard). CI run
+  26758892696 = SUCCESS (integration + E2E-vs-real-PG green; only the non-gating advisory perf job
+  red). (`project_session_concurrency_limit_toctou_race`)
 
 **FOUNDER-GATED (breaking / canvas / explicit decision)**
 
