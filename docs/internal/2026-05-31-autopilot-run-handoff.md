@@ -439,6 +439,19 @@ team-RBAC audit). Exhaustively tested (dedicated shared-parser test + cross-sour
   surface is fully swept this run; the genuinely remaining un-audited small libs (otel,
   slow-query-log) are observability, not security.
 
+2026-06-01 wave — audited `lib/slow-query-log.ts` (V-113), which wraps `client.unsafe` (the
+drizzle parameterized-query path, wired in `db/client.ts`) → on slow queries it sees every
+query, so the real risk is sensitive-data-in-logs (CWE-532), NOT pure observability
+(corrects the line just above). SOUND: it logs the PARAMETERIZED sql (`$1` placeholders,
+not values) + `paramCount` (the count only) — never the bound param VALUES (key/password
+hashes, BYOK ciphertext, tokens, PII). Filled a real test-gap (no source change): the
+existing structured-event test used `toMatchObject` (would pass even if a `params` field
+leaked), so the no-value-leak property was unpinned — added a negative assertion that a
+secret-shaped param value appears nowhere in the serialized log + no `params` field
+(fixture secret built via concat per the secret-scanner memory). See
+`project_slow_query_log_audit_clean`. Only `otel.ts` remains as a genuinely-non-security
+un-audited small lib.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
