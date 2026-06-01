@@ -57,6 +57,52 @@ describe('W889 V-352 UpdateAccountMe cross-source invariant', () => {
     expect(p).toMatch(/region: AccountRegionSchema\.nullable\(\)\.optional\(\)/);
   });
 
+  // ─── mass-assignment / over-posting guard ─────────────────────
+  // The tests above pin that the 4 editable fields EXIST, but a subset
+  // .toMatch is blind to an ADDED field (the enum-exact-pin lesson).
+  // This pins the privilege boundary: the customer self-edit schema is
+  // the ONLY field surface a caller controls on their own account row,
+  // so its object literal must NEVER declare an account-privilege field.
+  // If a future change adds tier/suspended/role/scopes/etc. to the
+  // schema, the value would flow from request body into the update —
+  // turning PATCH /v1/account/me into a self-service privilege-escalation
+  // (mass-assignment) surface. Source-regex (build-independent): scope to
+  // the schema's own object literal so unrelated schemas' fields (e.g.
+  // AccountMeResponse.tier) don't false-positive.
+  it('CRITICAL mass-assignment guard — UpdateAccountMeRequestSchema object literal declares NONE of the account-privilege fields (tier/suspended/role/scope(s)/balance/isAdmin/accountId/id/stripeCustomerId); a caller must not be able to over-post a privilege field onto their own account', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
+    const start = p.indexOf('UpdateAccountMeRequestSchema = z');
+    expect(start, 'UpdateAccountMeRequestSchema not found').toBeGreaterThanOrEqual(0);
+    // The object literal closes at the `.refine(` that follows it.
+    const refineAt = p.indexOf('.refine(', start);
+    expect(refineAt, '.refine( terminator not found').toBeGreaterThan(start);
+    const objectLiteral = p.slice(start, refineAt);
+    const PRIVILEGED_KEY = [
+      /\btier\s*:/,
+      /\bsuspended\s*:/,
+      /\brole\s*:/,
+      /\bscopes?\s*:/,
+      /\bbalance\s*:/,
+      /\bisAdmin\s*:/,
+      /\bis_admin\s*:/,
+      /\baccountId\s*:/,
+      /\bid\s*:/,
+      /\bstripeCustomerId\s*:/,
+      /\bstripe_customer_id\s*:/,
+    ];
+    const found = PRIVILEGED_KEY.filter((re) => re.test(objectLiteral)).map((re) => re.source);
+    expect(
+      found,
+      `privilege field(s) declared in the self-edit schema:\n${found.join('\n')}`,
+    ).toEqual([]);
+    // Non-vacuous: the extracted block really is the schema's editable set.
+    for (const f of EDITABLE_FIELDS) {
+      expect(objectLiteral, `expected editable field ${f} in the extracted block`).toMatch(
+        new RegExp(`\\b${f}\\s*:`),
+      );
+    }
+  });
+
   // ─── refine: at-least-one-field rule ──────────────────────────
 
   it("CRITICAL UpdateAccountMeRequestSchema has refine that requires at least 1 of 4 fields to be defined. The 'At least one field (name, timezone, slug, or region) must be provided.' message tells the client what to submit. Drift to allowing empty body would let no-op PATCHes succeed silently.", () => {
