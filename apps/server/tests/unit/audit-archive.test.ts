@@ -232,6 +232,47 @@ describe('AuditArchiveService.archiveTable — empty window', () => {
   });
 });
 
+describe('AuditArchiveService.archiveTable — R2 upload failure is data-loss-safe', () => {
+  it('does NOT insert a ledger run or DELETE from postgres when the R2 upload fails', async () => {
+    // Integrity-critical: the archive-before-delete ordering means a failed
+    // R2 upload must abort BEFORE any Postgres delete — otherwise audit rows
+    // would be removed with no archived copy (permanent compliance-data loss,
+    // the failure semantics documented in audit-archive.ts header). The upload
+    // is awaited before insertRun/deleteRowsById, so a throw skips both. A
+    // refactor that swallowed the upload error or reordered the delete would
+    // slip past the happy-path tests — pin it here.
+    const ledgerRows: LedgerInsert[] = [];
+    const deletes: DeleteCall[] = [];
+    const throwingR2: R2 = {
+      bucket: 'test-bucket',
+      headObject: () => Promise.resolve({ exists: false }),
+      putObject: () => Promise.reject(new Error('R2 unavailable')),
+      presignPut: () => Promise.resolve('https://presigned.test/put'),
+      presignGet: () => Promise.resolve('https://presigned.test/get'),
+    };
+    const svc = new AuditArchiveService({
+      r2: throwingR2,
+      ledger: fakeLedger(ledgerRows),
+      rows: fakeRows({
+        rowsByTable: {
+          admin_audit_log: [
+            adminAuditRow('row_001', '2026-01-01T00:00:00.000Z'),
+            adminAuditRow('row_002', '2026-01-02T00:00:00.000Z'),
+          ],
+        },
+        deletes,
+      }),
+      now: () => FIXED_NOW,
+    });
+
+    await expect(svc.archiveTable('admin_audit_log')).rejects.toThrow('R2 unavailable');
+    // No ledger run recorded, and crucially NO delete attempted → the audit
+    // rows remain safely in Postgres for the next run.
+    expect(ledgerRows).toHaveLength(0);
+    expect(deletes).toHaveLength(0);
+  });
+});
+
 describe('AuditArchiveService.archiveAll — orchestrates four tables', () => {
   it('runs all four AUDIT_TABLES in sequence', async () => {
     const uploads: UploadedObject[] = [];
