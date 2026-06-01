@@ -643,6 +643,18 @@ audit surface. Audited `routes/account-web-sessions.ts` (V-355 customer web-sess
   `project_routes_tier_audit_progress` (roster of cov=0 routes for next waves — security-weighted:
   `account-*` customer-facing > `admin-*` internal-admin-gated). No code change this wave.
 
+2026-06-01 wave — audited `routes/account-cost.ts` (V-541.D customer `GET /v1/account/cost`).
+SOUND: strictly SELF-SCOPED — `accountId: ctx.account.id` from the auth context, never a
+URL/query param (the only input is `billing_cycle`, regex-validated), so no IDOR; the customer
+response OMITS the operator-tuned threshold caps the admin surface includes (info-minimization);
+fresh account → synthetic €0 breakdown (not 404). Reuses the verified cost-estimator. Tested
+(`account-cost.test.ts`: 401-no-auth, zero-synthesis, current-month default, 400-malformed-cycle,
+and explicitly "does NOT include operator-tuned threshold values"). No bug, no test-gap; folded
+into `project_routes_tier_audit_progress`. routes-tier next: the `admin-*` cov=0 routes
+(`admin-api-keys`, `admin-sessions`, `admin-webhooks`, etc.) — confirm `driftstack_internal_admin`
+gating + acc\_-prefix handling; `account-rate-limits` (customer-facing, 47L) is the other
+account-\* target.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
