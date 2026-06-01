@@ -19,7 +19,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/agent-sessions.ts');
 
-describe('Q.1.c BYOK plaintext-clear-on-close (agent-session message route) drift guard', () => {
+describe('Q.1.c BYOK plaintext-clear-on-close (both route close paths) drift guard', () => {
   const body = readFileSync(ROUTE, 'utf8');
 
   it('the route file exists at the canonical path', () => {
@@ -37,5 +37,23 @@ describe('Q.1.c BYOK plaintext-clear-on-close (agent-session message route) drif
     expect(body).toMatch(
       /the decrypted key would linger in process\s*\n?\s*\/\/\s*memory until restart/,
     );
+  });
+
+  // Symmetric guard for the SECOND clear path. The cache class doc names
+  // two route-layer clear sites (message-route budget-exhausted close +
+  // the customer DELETE /v1/agent-sessions/:id handler), but the block
+  // above only pins the message-route one — the shared
+  // `byokKeyCache?.delete(req.params.id);` `toMatch` passes on EITHER
+  // occurrence, so removing the DELETE-handler eviction would slip
+  // through. These pins make the customer-close clear path independently
+  // regression-protected too.
+  it('clears the cached BYOK plaintext on the customer DELETE close path (second clear site)', () => {
+    // The customer-close handler closes then evicts.
+    expect(body).toMatch(/await sessions\.closeWithReason\(req\.params\.id, 'customer-closed'\);/);
+    expect(body).toMatch(/clear the cached plaintext on customer close/);
+    // BOTH route-layer clear sites must be present (message-route close +
+    // customer DELETE) — a count pin so neither can be dropped silently.
+    const clearSites = body.match(/byokKeyCache\?\.delete\(req\.params\.id\);/g) ?? [];
+    expect(clearSites.length).toBeGreaterThanOrEqual(2);
   });
 });

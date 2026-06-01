@@ -726,6 +726,28 @@ churn that a partially-loaded index causes. See the Continuity-hygiene TODO belo
 The MEMORY.md change itself isn't version-controlled; this note + that TODO are the durable
 record.
 
+2026-06-01 wave — fresh audit of the BYOK Anthropic plaintext-cache lifecycle (the 938ebf3a
+clear-on-close area). Traced EVERY agent-session close path to answer "can a close leave the
+decrypted key lingering in the route-owned in-memory cache?": (a) runtime budget-exhausted
+`closeWithReason` (`agent-runtime.ts:296`) runs inside the /message turn, so the message
+route's `if (result.session.status === 'closed') byokKeyCache?.delete(...)` evicts it; (b)
+customer `DELETE /v1/agent-sessions/:id` evicts after `closeWithReason(...,'customer-closed')`;
+(c) the pair-mode heartbeat sweep does NOT close sessions (fires a state transition, skips
+already-closed) and the duration sweeper acts on browser `sessions`, not `agent_sessions` — so
+there is NO out-of-band agent-session closer that bypasses the cache. The route comment ("the
+customer DELETE route is the only other clear path") is ACCURATE; clear-on-close coverage is
+COMPLETE — no bug. The cache has no TTL (plaintext held for session lifetime by design), which
+is why the two explicit evictions matter. SHIPPED (test-only, no source change): extended
+`byok-clear-on-close-guard.test.ts` — it previously source-pinned only the message-route clear
+(the shared `byokKeyCache?.delete(req.params.id)` `toMatch` passes on EITHER of the two
+occurrences, so the customer-DELETE eviction was effectively unguarded). Added a symmetric pin
+for the customer-close path (`'customer-closed'` + its rationale comment + a count pin
+requiring BOTH clear sites ≥2). The "dedicated behavioral cache-assert test" residual stays
+intentionally-deferred (the guard-test author's documented call): a behavioral test would need
+`build-test-app` to construct+wire+expose an `InMemoryByokKeyCache` — shared test-infra surgery
+to re-verify an already-fixed + now-doubly-source-pinned property — low value-to-risk; don't
+build it. tsc strict-clean; 4/4 guard tests green.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
