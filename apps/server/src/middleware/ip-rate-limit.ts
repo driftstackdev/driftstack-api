@@ -150,4 +150,18 @@ export const AUTH_IP_LIMITS = {
   // hits (bypassing CDN) still gets gated.
   statusIncidentsList: { capacity: 60, refillPerSecond: 60 / 60 },
   statusIncidentDetail: { capacity: 60, refillPerSecond: 60 / 60 },
+  // 2026-06-01 — OAuth-PROVIDER public dance (V-667; Driftstack issuing
+  // tokens to 3rd-party apps). authorize/token/introspect/revoke are
+  // unauthenticated by protocol (PKCE + client_secret + code IS the
+  // auth), so /token is a code+secret brute-force surface (RFC 6749
+  // §10.10) and /introspect an unauthenticated token-validity oracle
+  // (RFC 7662) — they were the only live unauth API family with no
+  // limiter. 60/min/IP gives meaningful brute-force friction + oracle
+  // throttling while staying generous for a legitimate client server
+  // (token/introspect/revoke are CLIENT-SERVER-called → one source IP
+  // per client; per-client_id keying is the future enhancement for a
+  // high-volume client). The provider is dormant until V-667.C wires a
+  // Drizzle OAuthStore; this gate ships WITH the routes so the
+  // protection is present the moment the store is wired.
+  oauthProvider: { capacity: 60, refillPerSecond: 60 / 60 },
 } as const;

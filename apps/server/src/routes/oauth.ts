@@ -23,6 +23,8 @@ import { ApiKeyScopeSchema } from '@driftstack/api-types';
 import { OAuthError, type OAuthService } from '../services/oauth.js';
 import { BadRequestError, NotFoundError, UnauthorizedError } from '../lib/errors.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
+import { ipRateLimit, AUTH_IP_LIMITS } from '../middleware/ip-rate-limit.js';
+import type { RateLimitStore } from '../services/rate-limit.js';
 
 const RegisterClientBody = z.object({
   label: z.string().min(1).max(120),
@@ -73,6 +75,11 @@ const RevokeBody = z.object({
 
 export interface RegisterOAuthRoutesDeps {
   service: OAuthService;
+  /** IP-rate-limit store for the unauthenticated public dance gates
+   *  (authorize/token/introspect/revoke). Required so the brute-force /
+   *  oracle protection can never be silently omitted when the provider
+   *  is wired; the full app always has a `rateLimitStore`. */
+  rateLimitStore: RateLimitStore;
   /** Arc 7 obs.7 — optional metrics registry. When wired, the
    *  /v1/oauth/token endpoint increments
    *  `driftstack_oauth_token_total{outcome}` per exchange. Outcome
@@ -90,6 +97,37 @@ function classifyOAuthTokenError(err: unknown): string {
 
 export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRoutesDeps): void {
   const metrics = deps.metrics;
+
+  // 2026-06-01 — IP gates on the UNAUTHENTICATED public dance (V-667).
+  // authorize/token/introspect/revoke carry no bearer/scope auth (PKCE
+  // + client_secret + code IS the auth), so /token is a code+secret
+  // brute-force surface and /introspect an unauth token-validity oracle
+  // — the only live unauth API family that lacked a limiter. Gate each
+  // per-route (separate buckets) at AUTH_IP_LIMITS.oauthProvider
+  // (60/min/IP) — generous for a legit client server, real friction for
+  // an attacker. /authorize/complete is omitted (already requireAuth-
+  // gated). Per-client_id keying is the future high-volume enhancement.
+  const authorizeGate = ipRateLimit(deps.rateLimitStore, {
+    bucketPrefix: 'oauth_provider_authorize',
+    capacity: AUTH_IP_LIMITS.oauthProvider.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.oauthProvider.refillPerSecond,
+  });
+  const tokenGate = ipRateLimit(deps.rateLimitStore, {
+    bucketPrefix: 'oauth_provider_token',
+    capacity: AUTH_IP_LIMITS.oauthProvider.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.oauthProvider.refillPerSecond,
+  });
+  const introspectGate = ipRateLimit(deps.rateLimitStore, {
+    bucketPrefix: 'oauth_provider_introspect',
+    capacity: AUTH_IP_LIMITS.oauthProvider.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.oauthProvider.refillPerSecond,
+  });
+  const revokeGate = ipRateLimit(deps.rateLimitStore, {
+    bucketPrefix: 'oauth_provider_revoke',
+    capacity: AUTH_IP_LIMITS.oauthProvider.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.oauthProvider.refillPerSecond,
+  });
+
   // ─── Admin surface ─────────────────────────────────────────────
   app.post(
     '/v1/admin/oauth/clients',
@@ -174,28 +212,32 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
   );
 
   // ─── Public OAuth dance ───────────────────────────────────────
-  app.get('/v1/oauth/authorize', async (req: FastifyRequest, reply) => {
-    const query = parseOrThrow(AuthorizeQuery, req.query);
-    const scope = query.scope
-      ? query.scope
-          .split(/\s+/)
-          .filter(Boolean)
-          .map((s) => ApiKeyScopeSchema.parse(s))
-      : [];
-    try {
-      const result = await deps.service.authorize({
-        client_id: query.client_id,
-        redirect_uri: query.redirect_uri,
-        state: query.state,
-        code_challenge: query.code_challenge,
-        code_challenge_method: query.code_challenge_method,
-        scope,
-      });
-      return reply.send(result);
-    } catch (err) {
-      throw oauthErrorToHttp(err);
-    }
-  });
+  app.get(
+    '/v1/oauth/authorize',
+    { preHandler: [authorizeGate] },
+    async (req: FastifyRequest, reply) => {
+      const query = parseOrThrow(AuthorizeQuery, req.query);
+      const scope = query.scope
+        ? query.scope
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((s) => ApiKeyScopeSchema.parse(s))
+        : [];
+      try {
+        const result = await deps.service.authorize({
+          client_id: query.client_id,
+          redirect_uri: query.redirect_uri,
+          state: query.state,
+          code_challenge: query.code_challenge,
+          code_challenge_method: query.code_challenge_method,
+          scope,
+        });
+        return reply.send(result);
+      } catch (err) {
+        throw oauthErrorToHttp(err);
+      }
+    },
+  );
 
   app.post(
     '/v1/oauth/authorize/complete',
@@ -211,7 +253,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
     },
   );
 
-  app.post('/v1/oauth/token', async (req: FastifyRequest, reply) => {
+  app.post('/v1/oauth/token', { preHandler: [tokenGate] }, async (req: FastifyRequest, reply) => {
     const body = parseOrThrow(ExchangeCodeBody, req.body);
     try {
       const result = await deps.service.exchangeCode({
@@ -237,24 +279,28 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: RegisterOAuthRou
     }
   });
 
-  app.post('/v1/oauth/introspect', async (req: FastifyRequest, reply) => {
-    const body = parseOrThrow(IntrospectBody, req.body);
-    const token = await deps.service.introspect(body.token);
-    if (token === null) {
-      return reply.send({ active: false });
-    }
-    return reply.send({
-      active: true,
-      client_id: token.client_id,
-      account_id: token.account_id,
-      scope: token.scope,
-      exp: Math.floor(token.expires_at / 1000),
-    });
-  });
+  app.post(
+    '/v1/oauth/introspect',
+    { preHandler: [introspectGate] },
+    async (req: FastifyRequest, reply) => {
+      const body = parseOrThrow(IntrospectBody, req.body);
+      const token = await deps.service.introspect(body.token);
+      if (token === null) {
+        return reply.send({ active: false });
+      }
+      return reply.send({
+        active: true,
+        client_id: token.client_id,
+        account_id: token.account_id,
+        scope: token.scope,
+        exp: Math.floor(token.expires_at / 1000),
+      });
+    },
+  );
 
   // V-667.C — RFC 7009. Always 200, regardless of whether the token
   // existed. Spec requirement: prevents probe-style enumeration.
-  app.post('/v1/oauth/revoke', async (req: FastifyRequest, reply) => {
+  app.post('/v1/oauth/revoke', { preHandler: [revokeGate] }, async (req: FastifyRequest, reply) => {
     const body = parseOrThrow(RevokeBody, req.body);
     await deps.service.revokeToken(body.token);
     return reply.code(200).send({});

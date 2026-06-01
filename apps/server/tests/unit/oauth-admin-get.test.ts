@@ -10,13 +10,14 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { InMemoryOAuthStore, OAuthService } from '../../src/services/oauth.js';
 import { registerOAuthRoutes } from '../../src/routes/oauth.js';
 import { registerErrorHandler } from '../../src/middleware/error-handler.js';
+import { MemoryRateLimitStore } from '../../src/lib/memory-rate-limit-store.js';
 
 async function buildHarness(svc: OAuthService): Promise<FastifyInstance> {
   const app: FastifyInstance = Fastify({ logger: false });
   registerErrorHandler(app);
   app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
   app.decorate('requireAuth', () => Promise.resolve());
-  registerOAuthRoutes(app, { service: svc });
+  registerOAuthRoutes(app, { service: svc, rateLimitStore: new MemoryRateLimitStore() });
   await app.ready();
   return app;
 }

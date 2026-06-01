@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { registerOAuthRoutes } from '../../src/routes/oauth.js';
 import { MetricsRegistry, METRIC_NAMES } from '../../src/services/metrics-registry.js';
 import { OAuthError, type OAuthService } from '../../src/services/oauth.js';
+import { MemoryRateLimitStore } from '../../src/lib/memory-rate-limit-store.js';
 
 function makeRegistry(): MetricsRegistry {
   const m = new MetricsRegistry();
@@ -49,6 +50,7 @@ async function buildApp(args: BuildArgs) {
   app.decorate('requireAuth', async () => {});
   registerOAuthRoutes(app, {
     service: buildService(args.exchangeBehaviour),
+    rateLimitStore: new MemoryRateLimitStore(),
     ...(args.metrics !== undefined ? { metrics: args.metrics } : {}),
   });
   await app.ready();

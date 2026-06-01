@@ -144,6 +144,12 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
     );
   });
 
+  it('2026-06-01 oauthProvider entry: V-667 OAuth-provider public dance (authorize/token/introspect/revoke unauth); 60/min/IP — brute-force friction on /token + oracle throttling on /introspect, generous for a client server; dormant until V-667.C wires a store', () => {
+    expect(body).toMatch(/oauthProvider: \{ capacity: 60, refillPerSecond: 60 \/ 60 \},/);
+    expect(body).toMatch(/OAuth-PROVIDER public dance \(V-667; Driftstack issuing/);
+    expect(body).toMatch(/an unauthenticated token-validity oracle/);
+  });
+
   it('imports: RateLimitedError + RateLimitStore type', () => {
     expect(body).toMatch(/import \{ RateLimitedError \} from '\.\.\/lib\/errors\.js';/);
     expect(body).toMatch(/import type \{ RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/);

@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 import { InMemoryOAuthStore, OAuthError, OAuthService } from '../../src/services/oauth.js';
 import { registerOAuthRoutes } from '../../src/routes/oauth.js';
 import { registerErrorHandler } from '../../src/middleware/error-handler.js';
+import { MemoryRateLimitStore } from '../../src/lib/memory-rate-limit-store.js';
 
 function s256(verifier: string): string {
   return createHash('sha256').update(verifier).digest('base64url');
@@ -25,7 +26,7 @@ async function buildHarness(svc: OAuthService): Promise<FastifyInstance> {
   registerErrorHandler(app);
   app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
   app.decorate('requireAuth', () => Promise.resolve());
-  registerOAuthRoutes(app, { service: svc });
+  registerOAuthRoutes(app, { service: svc, rateLimitStore: new MemoryRateLimitStore() });
   await app.ready();
   return app;
 }

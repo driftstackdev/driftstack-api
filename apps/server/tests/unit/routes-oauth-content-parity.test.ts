@@ -172,6 +172,35 @@ describe('W438.B apps/server/src/routes/oauth.ts content parity', () => {
     );
   });
 
+  it('2026-06-01 — IP rate-limit gates on the 4 UNAUTH public-dance routes (authorize/token/introspect/revoke) at AUTH_IP_LIMITS.oauthProvider; /authorize/complete omitted (requireAuth-gated). Pins the imports + per-route buckets + each route carrying its preHandler so a drift that drops the brute-force/oracle protection fails CI', () => {
+    // Imports for the gate wiring.
+    expect(body).toMatch(
+      /import \{ ipRateLimit, AUTH_IP_LIMITS \} from '\.\.\/middleware\/ip-rate-limit\.js';/,
+    );
+    expect(body).toMatch(/import type \{ RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/);
+    // Required (never-silently-omitted) dep.
+    expect(body).toMatch(/rateLimitStore: RateLimitStore;/);
+    // Four per-route buckets (separate prefixes → per-route isolation).
+    expect(body).toMatch(/bucketPrefix: 'oauth_provider_authorize',/);
+    expect(body).toMatch(/bucketPrefix: 'oauth_provider_token',/);
+    expect(body).toMatch(/bucketPrefix: 'oauth_provider_introspect',/);
+    expect(body).toMatch(/bucketPrefix: 'oauth_provider_revoke',/);
+    // Each public route carries its gate preHandler (whitespace-flexible
+    // for prettier's multi-line wrap of the >100-char signatures).
+    expect(body).toMatch(
+      /app\.get\(\s*\n?\s*'\/v1\/oauth\/authorize',\s*\n?\s*\{ preHandler: \[authorizeGate\] \}/,
+    );
+    expect(body).toMatch(
+      /app\.post\(\s*\n?\s*'\/v1\/oauth\/token',\s*\n?\s*\{ preHandler: \[tokenGate\] \}/,
+    );
+    expect(body).toMatch(
+      /app\.post\(\s*\n?\s*'\/v1\/oauth\/introspect',\s*\n?\s*\{ preHandler: \[introspectGate\] \}/,
+    );
+    expect(body).toMatch(
+      /app\.post\(\s*\n?\s*'\/v1\/oauth\/revoke',\s*\n?\s*\{ preHandler: \[revokeGate\] \}/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
