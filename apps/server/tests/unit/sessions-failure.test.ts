@@ -61,8 +61,12 @@ function buildCtx(): AccountContext {
 class StubRepo implements SessionRepo {
   private readonly sessions = new Map<string, SessionRecord>();
   readonly events: SessionEventInput[] = [];
+  /** Opt-in (default null): when set, insertSession rejects with it.
+   *  Used to exercise the create() driver-session orphan rollback. */
+  throwOnInsert: Error | null = null;
 
   insertSession(input: NewSessionInput): Promise<SessionRecord> {
+    if (this.throwOnInsert !== null) return Promise.reject(this.throwOnInsert);
     const id = `sess-${this.sessions.size.toString().padStart(4, '0')}`;
     const now = new Date();
     const row: SessionRecord = {
@@ -150,6 +154,9 @@ class StubRepo implements SessionRepo {
 class ThrowingDriver implements Driver {
   private nextId = 0;
   private throwOnNext: { name: string; message: string } | null = null;
+  /** Records every driver session id passed to destroy() — lets the
+   *  create-rollback test assert the orphaned driver session was reaped. */
+  readonly destroyedIds: string[] = [];
 
   primeNextThrow(args: { name: string; message: string }): void {
     this.throwOnNext = args;
@@ -221,7 +228,8 @@ class ThrowingDriver implements Driver {
       durationMs: 1,
     });
   }
-  destroy(): Promise<void> {
+  destroy(driverSessionId: string): Promise<void> {
+    this.destroyedIds.push(driverSessionId);
     return Promise.resolve();
   }
 }
@@ -338,6 +346,37 @@ describe('SessionsService — V-090 driver-failure capture', () => {
       expect(webhookOp).toBe(expectedOp);
       expect(repo.read(session.id)?.status).toBe('errored');
     }
+  });
+
+  it('create: a DB insertSession failure rolls back the live driver session (no orphan)', async () => {
+    // The orphan: driver.createSession already spun up a real browser
+    // session, but the DB insert failed — countActiveSessions + the
+    // duration-sweep auto-destroy are both DB-row-based, so without the
+    // rollback the driver session would leak with no reaper.
+    const { service, driver, repo } = buildService();
+    const ctx = buildCtx();
+    const insertErr = new Error('DB insertSession failed');
+    repo.throwOnInsert = insertErr;
+
+    let caught: unknown;
+    try {
+      await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    } catch (e) {
+      caught = e;
+    }
+    // The ORIGINAL insert error propagates (the best-effort rollback
+    // destroy must never mask it).
+    expect(caught).toBe(insertErr);
+    // The driver session minted by createSession (mock-1) was torn down.
+    expect(driver.destroyedIds).toEqual(['mock-1']);
+  });
+
+  it('create: a SUCCESSFUL insert does NOT roll back the driver session', async () => {
+    const { service, driver } = buildService();
+    const ctx = buildCtx();
+    await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    // No rollback on the happy path — the session is live + tracked.
+    expect(driver.destroyedIds).toEqual([]);
   });
 
   it('successful ops do NOT emit session.failed', async () => {

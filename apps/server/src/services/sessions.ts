@@ -303,17 +303,30 @@ export class SessionsService {
       ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
     });
 
-    const record = await this.deps.repo.insertSession({
-      accountId,
-      // apiKey stays the member's — that's the actor; the owner's
-      // audit log shows which member's key created the session.
-      apiKeyId: ctx.apiKey.id,
-      driverSessionId: driverResult.driverSessionId,
-      archetype,
-      purpose,
-      label: body.label ?? null,
-      metadata: body.metadata ?? null,
-    });
+    let record: SessionRecord;
+    try {
+      record = await this.deps.repo.insertSession({
+        accountId,
+        // apiKey stays the member's — that's the actor; the owner's
+        // audit log shows which member's key created the session.
+        apiKeyId: ctx.apiKey.id,
+        driverSessionId: driverResult.driverSessionId,
+        archetype,
+        purpose,
+        label: body.label ?? null,
+        metadata: body.metadata ?? null,
+      });
+    } catch (err) {
+      // Orphan guard: the driver session is already live, but the DB
+      // insert failed — so nothing tracks it. countActiveSessions and the
+      // duration-sweep auto-destroy are both DB-row-based, and the Driver
+      // contract has no idle self-expiry, so without this the real browser
+      // session would leak indefinitely (cost-to-serve, with no reaper).
+      // Best-effort tear it down, then re-throw the ORIGINAL error — a
+      // failure of the rollback destroy must not mask the insert error.
+      await this.deps.driver.destroy(driverResult.driverSessionId).catch(() => {});
+      throw err;
+    }
 
     await this.deps.repo.updateSessionStatus(record.id, 'ready');
     await this.deps.repo.recordEvent({

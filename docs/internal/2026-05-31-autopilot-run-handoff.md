@@ -918,6 +918,26 @@ float-rounding bug" hunt vein is CLOSED platform-wide; don't re-hunt it. No code
 remains deep — safe non-gated CODE work is exhausted; fresh audits confirm clean; real OPEN items
 are all in the founder queue below.
 
+2026-06-01 wave — FIXED a real bug (first shippable code in several waves): orphaned driver
+session on create. `SessionsService.create` did `driver.createSession` (spins up a real browser)
+→ `repo.insertSession` with NO rollback. If the DB insert threw, the driver session was already
+live but had NO DB row — and since `countActiveSessions` + the duration-sweep auto-destroy are
+both DB-row-based, AND the `Driver` interface has no idle self-expiry, the real browser session
+would leak indefinitely (cost-to-serve, no reaper). FIX: wrapped `insertSession` in try/catch;
+on failure, best-effort `driver.destroy(driverResult.driverSessionId)` then re-throw the ORIGINAL
+error (rollback failure must not mask it). Purely additive error-path — happy path byte-identical;
+not founder-gated (defensive cleanup, no policy/migration/locked-stance). Tests:
+`sessions-failure.test.ts` +2 (insert-fail → driver rolled back + original error propagates;
+successful insert → no rollback). 6/6 in that suite + 40/40 across 5 sessions-touching unit files
+(incl. content-parity); tsc + eslint clean. SURFACED residual (out of scope for a safe slice): a
+process CRASH between `createSession` and `insertSession` (not an exception) still orphans the
+driver session — the complete fix is a periodic driver↔DB reconciliation sweep (find driver
+sessions with no DB row, or DB rows whose driver session is gone, and reconcile). That's a
+larger background-job design (founder/focused), analogous to the webhook orphaned-in_flight
+reclaim. Note: `destroy()` has the REVERSE case (driver destroyed, then DB-status-update fails →
+phantom-active DB row) but that self-heals — the row is sweeper-reapable + destroy is idempotent
+on retry — so it's bounded, not surfaced.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
