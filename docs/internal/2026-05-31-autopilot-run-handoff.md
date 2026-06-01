@@ -309,6 +309,20 @@ dangling ref (`[[feedback_population_not_point_match]]` in `project_storage_quot
 is a legitimate not-yet-written forward-marker (Agent-1 fingerprint domain) per the
 memory-system rules — left intentionally. (Memory store is outside the repo, so no commit.)
 
+Follow-on wind-down wave (also mechanical-only): ran the complementary `MEMORY.md`
+index-to-files consistency check (set arithmetic, both directions). Found 1 broken index
+link — the index listed `feedback_disk_zero_blocks_bash_scratch` but the topic file was
+missing on disk (the fact survived verbatim in the index one-liner). Recreated the file
+from that index description as a proper `feedback` topic file (no information invented; the
+disk-zero Bash rule is a still-valid operational rule). Re-verified: 0 broken index links
+afterward. The 9 files that appear index-orphaned are intentional — they are the Agent-1
+WebKit topic files grouped under the single `[Agent-1 domain — …]` index line
+(MEMORY.md:96), indexed via that grouped pointer, not individually. (Memory store is
+outside the repo — no commit; this handoff note is the repo-side record.)
+Note: `MEMORY.md` is now ~39KB (well over the ~24KB load cap) — the deliberate
+consolidation pass (preserving every `feedback_*` rule) remains the recommended
+non-autopilot follow-up.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
