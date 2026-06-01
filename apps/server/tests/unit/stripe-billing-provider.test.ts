@@ -9,12 +9,16 @@ import { createTestLogger } from '../../src/lib/logger.js';
 
 function makeClient(fetchImpl: typeof fetch): {
   client: StripeApiClient;
-  calls: Array<{ url: string; body: string }>;
+  calls: Array<{ url: string; body: string; headers: Record<string, string> }>;
 } {
-  const calls: Array<{ url: string; body: string }> = [];
+  const calls: Array<{ url: string; body: string; headers: Record<string, string> }> = [];
   const wrappedFetch: typeof fetch = (input, init) => {
     const url = typeof input === 'string' ? input : (input as Request).url;
-    calls.push({ url, body: (init?.body as string) ?? '' });
+    calls.push({
+      url,
+      body: (init?.body as string) ?? '',
+      headers: (init?.headers as Record<string, string>) ?? {},
+    });
     return fetchImpl(input, init);
   };
   const client = new StripeApiClient({
@@ -49,6 +53,9 @@ describe('StripeBillingProvider.ensureCustomer', () => {
     expect(calls[0]!.body).toContain('metadata%5Bdriftstack_account_id%5D=acc-uuid');
     expect(calls[0]!.body).toContain('email=a%40b.com');
     expect(calls[0]!.body).toContain('name=Acme');
+    // Per-account Idempotency-Key → a retry/parallel call returns the same
+    // Stripe Customer instead of minting a duplicate/orphan.
+    expect(calls[0]!.headers['Idempotency-Key']).toBe('stripe-customer-create:acc-uuid');
   });
 });
 

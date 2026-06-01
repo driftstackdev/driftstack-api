@@ -100,11 +100,21 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
     );
   });
 
-  it('createCustomer: email required + optional name + metadata flattened to metadata[k] form fields', () => {
-    expect(body).toMatch(
-      /async createCustomer\(args: \{\s*\n?\s*email: string;\s*\n?\s*name\?: string \| null;\s*\n?\s*metadata\?: Record<string, string>;\s*\n?\s*\}\): Promise<\{ id: string; email: string \}>/,
-    );
+  it('createCustomer: email required + optional name + metadata flattened to metadata[k] form fields + optional idempotencyKey forwarded to post()', () => {
+    // Discrete pins (no long \s*\n? chain — the JSDoc on idempotencyKey would
+    // break a single mega-regex; see feedback_no_long_chain_parity_regex).
+    expect(body).toMatch(/async createCustomer\(args: \{/);
+    expect(body).toMatch(/email: string;/);
+    expect(body).toMatch(/name\?: string \| null;/);
+    expect(body).toMatch(/metadata\?: Record<string, string>;/);
+    expect(body).toMatch(/idempotencyKey\?: string;/);
+    expect(body).toMatch(/\}\): Promise<\{ id: string; email: string \}>/);
     expect(body).toMatch(/body\[`metadata\[\$\{k\}\]`\] = v;/);
+    // The optional Idempotency-Key is forwarded to post() (3rd arg) — the
+    // safe-retry / no-duplicate-customer seam.
+    expect(body).toMatch(
+      /this\.post<\{ id: string; email: string \}>\(\s*\n?\s*'\/v1\/customers',\s*\n?\s*body,\s*\n?\s*args\.idempotencyKey,\s*\n?\s*\)/,
+    );
   });
 
   it('createSubscriptionCheckoutSession: mode=subscription + ADR-002 automatic_tax[enabled]=true + client_reference_id', () => {
@@ -151,6 +161,10 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
     expect(body).toMatch(/const timer = setTimeout\(\(\) => ac\.abort\(\), timeoutMs\);/);
     expect(body).toMatch(/'Stripe-Version': this\.config\.apiVersion \?\? DEFAULT_API_VERSION,/);
     expect(body).toMatch(/'Content-Type': 'application\/x-www-form-urlencoded',/);
+    // Optional Idempotency-Key header — only sent when the caller supplies a key.
+    expect(body).toMatch(
+      /\.\.\.\(idempotencyKey !== undefined \? \{ 'Idempotency-Key': idempotencyKey \} : \{\}\),/,
+    );
   });
 
   it('post() error paths: malformed_response on JSON parse fail + StripeApiError on !res.ok', () => {

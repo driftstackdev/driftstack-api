@@ -10,6 +10,13 @@
 // This avoids a Stripe lookup-per-checkout and avoids the failure mode
 // where two parallel ensureCustomer calls would race to create two
 // customers.
+//
+// The FIRST-call window the persisted-id skip does NOT cover — two parallel
+// ensureCustomer calls, or a retry after the Stripe create succeeded but the
+// stripe_customer_id DB-write failed — is closed by a Stripe Idempotency-Key
+// keyed by the account id (`stripe-customer-create:<accountId>`): Stripe
+// returns the SAME Customer for a repeated key (~24h), so a race/retry can
+// never mint a duplicate (orphaned) Stripe customer.
 
 import type { BillingProvider } from './billing.js';
 import type { StripeApiClient } from '../lib/stripe-api.js';
@@ -26,6 +33,9 @@ export class StripeBillingProvider implements BillingProvider {
       email: args.email,
       name: args.name,
       metadata: { driftstack_account_id: args.accountId },
+      // Idempotent per account: a retry or parallel call returns the same
+      // Stripe Customer instead of minting a duplicate/orphan (see header).
+      idempotencyKey: `stripe-customer-create:${args.accountId}`,
     });
     return result.id;
   }

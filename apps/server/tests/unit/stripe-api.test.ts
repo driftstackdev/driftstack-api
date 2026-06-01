@@ -82,6 +82,31 @@ describe('StripeApiClient.createCustomer', () => {
     await client.createCustomer({ email: 'plain@driftstack.local' });
     expect(calls[0]!.init.body).toBe('email=plain%40driftstack.local');
   });
+
+  it('forwards an Idempotency-Key header when idempotencyKey is provided (safe-retry / no-duplicate seam)', async () => {
+    const { fetchImpl, calls } = makeStubFetch([
+      { status: 200, body: { id: 'cus_idem', email: 'i@driftstack.local' } },
+    ]);
+    const client = makeClient(fetchImpl);
+    await client.createCustomer({
+      email: 'i@driftstack.local',
+      idempotencyKey: 'stripe-customer-create:acc-xyz',
+    });
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(headers['Idempotency-Key']).toBe('stripe-customer-create:acc-xyz');
+    // The key is a HEADER, never leaked into the form body.
+    expect(calls[0]!.init.body).toBe('email=i%40driftstack.local');
+  });
+
+  it('omits the Idempotency-Key header when idempotencyKey is not provided', async () => {
+    const { fetchImpl, calls } = makeStubFetch([
+      { status: 200, body: { id: 'cus_no_idem', email: 'n@driftstack.local' } },
+    ]);
+    const client = makeClient(fetchImpl);
+    await client.createCustomer({ email: 'n@driftstack.local' });
+    const headers = calls[0]!.init.headers as Record<string, string>;
+    expect(headers['Idempotency-Key']).toBeUndefined();
+  });
 });
 
 describe('StripeApiClient.createSubscriptionCheckoutSession', () => {

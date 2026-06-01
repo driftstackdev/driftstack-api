@@ -56,16 +56,28 @@ describe('W410.B apps/server/src/services/stripe-billing-provider.ts content par
     );
   });
 
+  it('Idempotency-Key rationale pinned: the first-call window the persisted-id skip does NOT cover is closed by a per-account Stripe Idempotency-Key', () => {
+    expect(body).toMatch(/closed by a Stripe Idempotency-Key/);
+    expect(body).toMatch(/keyed by the account id \(`stripe-customer-create:<accountId>`\)/);
+    expect(body).toMatch(/never mint a duplicate \(orphaned\) Stripe customer\./);
+  });
+
   it('class StripeBillingProvider implements BillingProvider; client injected', () => {
     expect(body).toMatch(
       /export class StripeBillingProvider implements BillingProvider \{\s*\n?\s*constructor\(private readonly client: StripeApiClient\) \{\}/,
     );
   });
 
-  it('ensureCustomer: email + name + metadata{driftstack_account_id}; returns result.id', () => {
-    expect(body).toMatch(
-      /async ensureCustomer\(args: \{\s*\n?\s*accountId: string;\s*\n?\s*email: string;\s*\n?\s*name: string \| null;\s*\n?\s*\}\): Promise<string> \{\s*\n?\s*const result = await this\.client\.createCustomer\(\{\s*\n?\s*email: args\.email,\s*\n?\s*name: args\.name,\s*\n?\s*metadata: \{ driftstack_account_id: args\.accountId \},\s*\n?\s*\}\);\s*\n?\s*return result\.id;/,
-    );
+  it('ensureCustomer: email + name + metadata{driftstack_account_id} + per-account idempotencyKey; returns result.id', () => {
+    // Discrete pins — the added idempotencyKey + its comment broke the single
+    // mega-regex (see feedback_no_long_chain_parity_regex).
+    expect(body).toMatch(/async ensureCustomer\(args: \{/);
+    expect(body).toMatch(/const result = await this\.client\.createCustomer\(\{/);
+    expect(body).toMatch(/email: args\.email,/);
+    expect(body).toMatch(/name: args\.name,/);
+    expect(body).toMatch(/metadata: \{ driftstack_account_id: args\.accountId \},/);
+    expect(body).toMatch(/idempotencyKey: `stripe-customer-create:\$\{args\.accountId\}`,/);
+    expect(body).toMatch(/return result\.id;/);
   });
 
   it('createSubscriptionCheckout: clientReferenceId=accountId + metadata{driftstack_account_id}; returns { url, sessionId }', () => {

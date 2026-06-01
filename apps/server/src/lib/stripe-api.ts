@@ -78,6 +78,14 @@ export class StripeApiClient {
     email: string;
     name?: string | null;
     metadata?: Record<string, string>;
+    /**
+     * Optional Stripe Idempotency-Key. When set, Stripe returns the SAME
+     * Customer for a repeated key (retained ~24h) instead of creating a new
+     * one — so a retry (e.g. after the create succeeded but a downstream
+     * DB-write failed) or two parallel calls can never mint a duplicate.
+     * Callers key it by the logical operation (e.g. the account id).
+     */
+    idempotencyKey?: string;
   }): Promise<{ id: string; email: string }> {
     const body: Record<string, string> = { email: args.email };
     if (args.name !== undefined && args.name !== null) body.name = args.name;
@@ -86,7 +94,11 @@ export class StripeApiClient {
         body[`metadata[${k}]`] = v;
       }
     }
-    const result = await this.post<{ id: string; email: string }>('/v1/customers', body);
+    const result = await this.post<{ id: string; email: string }>(
+      '/v1/customers',
+      body,
+      args.idempotencyKey,
+    );
     return result;
   }
 
@@ -174,7 +186,11 @@ export class StripeApiClient {
 
   // ── Internal request plumbing ─────────────────────────────────────────
 
-  private async post<T>(path: string, body: Record<string, string>): Promise<T> {
+  private async post<T>(
+    path: string,
+    body: Record<string, string>,
+    idempotencyKey?: string,
+  ): Promise<T> {
     const url = `${this.config.baseUrl ?? DEFAULT_BASE_URL}${path}`;
     const formBody = new URLSearchParams(body).toString();
     const auth = `Basic ${Buffer.from(`${this.config.secretKey}:`).toString('base64')}`;
@@ -191,6 +207,9 @@ export class StripeApiClient {
           Authorization: auth,
           'Stripe-Version': this.config.apiVersion ?? DEFAULT_API_VERSION,
           'Content-Type': 'application/x-www-form-urlencoded',
+          // Stripe dedupes POSTs carrying the same Idempotency-Key (~24h),
+          // returning the original result — the safe-retry / no-duplicate seam.
+          ...(idempotencyKey !== undefined ? { 'Idempotency-Key': idempotencyKey } : {}),
         },
         body: formBody,
         signal: ac.signal,
