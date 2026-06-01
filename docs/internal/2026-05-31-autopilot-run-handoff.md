@@ -1068,6 +1068,25 @@ primitive (SET-NX-EX acquire returning the winner's clientId on contention + Lua
 is textbook-correct. No code change. NOTE: pair-mode is v2-#8 but wired (activation-gated: real
 handlers when `pairModeLock` is present, else 503 stubs).
 
+2026-06-01 wave — audited the pair-mode STATE MACHINE (`agent-pair-mode-state.ts`
+`applyPairModeTransition`), completing the pair-mode subsystem audit (lock ✓ last wave). CLEAN,
+no bug, don't re-audit. It's a pure reducer over 6 states (ai-driving / takeover-queued /
+takeover-pending / human-driving / handback-queued / handback-pending) × 10 transitions:
+exhaustive + type-safe (every `case` path returns a `PairModeState` or throws
+`PairModeStateInvalidTransitionError`→409; no unhandled pair → undefined-state); all valid
+transitions hit the correct target; the 8.11/8.12 queued states correctly promote on
+`decompose-settled` / roll back on decline; `heartbeat-timeout`→ai-driving from any non-ai state;
+`decompose-settled` is idempotent no-op where no queue. KEY CROSS-REFERENCE (reinforces last
+wave's lock audit): a takeover-STEAL is rejected at the STATE level too — `human-driving` /
+`takeover-pending` + `takeover-request` → throws — so the 30s-lock-expiry edge I analyzed last
+wave is DOUBLY-mitigated (lock + state machine are defense-in-depth; a second client can't steal
+even if the lock lapsed). Only acknowledged limitation (cosmetic, documented): `handback-pending`
+
+- `handback-cancel` loses the driver `clientId` (→`'unknown'`) because handback-pending doesn't
+  carry it — but the lock-release + audit use the REQUEST's `client_id`, not the state's, so it's
+  informational only. No code change. The entire control-plane audit surface is now swept; remaining
+  real work is the founder-action queue below.
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
