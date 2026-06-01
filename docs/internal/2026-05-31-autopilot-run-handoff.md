@@ -1170,7 +1170,14 @@ dashboardOrigin restriction, defense-in-depth.)_
 > fresh, focused session rather than continued audit-cadence waves. By ~wave 15 the
 > remaining un-audited packages are unwired Phase-3 scaffolding (recipe-library /
 > behavioural-simulation); live findings are mostly surfaced above awaiting
-> founder/focused action.
+> founder/focused action. ~Wave 17 fresh-read the small control-plane **service
+> tier** (sla-reporting, the 3 SSE event-buses, legal-catalog, status-snapshot):
+> all clean + already-guarded — SLA % math is div-by-zero-safe (total===0→100 with
+> totalProbes:0 surfaced so the UI can qualify "no data"); the keyed event-buses
+> correctly evict empty Sets (no Map leak) and that eviction + the handler-error
+> swallow are _textually_ drift-guarded by the content-parity tests, so a
+> behavioral no-leak pin would be duplicate coverage (deliberately not added).
+> Don't re-pick these one-by-one.
 
 > Continuity-hygiene TODO — **DONE 2026-06-01.** The auto-memory index `MEMORY.md`
 > had grown to ~46KB (≈2× the ~24.4KB load cap), so it loaded only partially at
