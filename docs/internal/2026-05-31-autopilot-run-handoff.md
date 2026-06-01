@@ -826,6 +826,26 @@ first), so it's the same founder-gated migration class as agent_sessions strict-
 /v1/sessions concurrency TOCTOU — surface, don't auto-migrate. No code change this wave (forcing
 a reclaim guard would duplicate the existing double-pin; the dedup fix is founder-gated).
 
+2026-06-01 wave — Rule-M pivot again (off scheduler/agent): holistic read of the
+incident-notification fan-out (`services/incident-notifications.ts`, customer-facing email
+write-path). Audited SOUND — per-recipient try/catch isolates one bad send; `listConfirmed()`
+returns only confirmed + non-unsubscribed (never emails the opted-out); the 'updated'-kind
+throttle is a soft per-window gate (admin-driven, negligible TOCTOU); 7 test files incl. an
+integration test. No bug. The token-rotation-per-send is the ALREADY-SURFACED CAN-SPAM/GDPR item
+(`[[project_status_subscribers_audit_clean]]`). The read SHARPENED it: that memory's stated
+mitigation ("recipients can still unsubscribe via the LATEST email") assumes the latest email
+was delivered — but `rotateUnsubscribeToken` (line 99) persists BEFORE the send and the catch
+(118) does NOT roll it back, so a TRANSIENT send failure strands that subscriber with every
+prior link invalidated AND no working new link until the next SUCCESSFUL notification (long
+window for an infrequent status page). Strengthens the HMAC-stable-token fix (removes rotation →
+a failed send strands nobody); rotation can't move after the send (the body carries the link),
+so only the token-scheme redesign fixes it — still founder/legal, NOT auto-fixable. Recorded in
+the surfaced item's memory body (no MEMORY.md index growth, at-cap). No code change. NOTE: this is
+deep wind-down — the recent waves (scheduler, incident fan-out) are audited-clean with the
+findings being refinements/reinforcements of already-surfaced founder items, not new safe code
+work. Genuinely-shippable safe non-gated slices are scarce; honest fresh-audit + precise
+founder-surfacing is the remaining value.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
