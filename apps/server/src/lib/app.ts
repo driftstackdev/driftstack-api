@@ -715,32 +715,30 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   registerErrorHandler(app);
 
-  // V-666.BS — stamp Cache-Control: no-store, private on every
-  // /v1/account/* response. These routes return caller-private
-  // data (profile, audit log, costs, MFA enrollment, sessions,
-  // rate-limit usage). Even though every request is auth-gated,
-  // the explicit header is defense-in-depth: it prevents shared /
-  // proxy caches from holding onto private payloads, and forbids
-  // browser back/forward cache from serving stale state after a
-  // logout. Mirrors the V-666.BE pattern on /v1/admin/crypto-orders.
-  //
-  // V-666.BT — same rationale broadened to every /v1/admin/* route.
-  // Admin views are live operational state (account lookups, audit
-  // log, webhook deliveries, sweep counts, idempotency metrics);
-  // none of it should ever be cached. The crypto-orders route used
-  // to register its own hook; folded in here so every admin
-  // endpoint inherits the header uniformly.
-  // V-666.BW — broadened again to cover /v1/billing/*. Billing
-  // state, crypto checkouts, and crypto-order envelopes are all
-  // caller-private dynamic state. Some routes already set the
-  // header explicitly; the broader hook makes it the default so
-  // a future endpoint can't accidentally omit it.
+  // V-666.BS/BT/BW (broadened to ALL of /v1) — default Cache-Control:
+  // no-store, private on every caller-private /v1 response. The header
+  // started life on /v1/account/* (profile, audit log, costs, MFA, sessions,
+  // rate-limit usage), then /v1/admin/* + /v1/billing/* — but that left other
+  // equally caller-private families uncovered (/v1/sessions, /v1/profiles,
+  // /v1/profile-snapshots, /v1/agent-sessions, /v1/api-keys, /v1/webhooks,
+  // /v1/webhook-deliveries, /v1/team, /v1/usage, /v1/oauth, /v1/legal/required,
+  // ...) whose GET payloads are caller-private and must not sit in a shared /
+  // proxy / browser cache. So it's now the default for ALL of /v1, with two
+  // deliberate carve-outs:
+  //   1. /v1/status* — the PUBLIC status page (status / incidents / sla /
+  //      stream): public + cacheable; those routes set their own
+  //      `public, max-age=30`. Excluded by prefix.
+  //   2. Never OVERRIDE a Cache-Control a route set itself. Preserves the
+  //      public incident reads' `public, max-age=30` AND — critically — the SSE
+  //      streams' `no-cache, no-transform` (no-transform stops proxies buffering
+  //      the event stream; clobbering it to no-store would risk breaking SSE
+  //      delivery — a latent bug the old unconditional /v1/account/* stamp had
+  //      for the notifications stream).
   app.addHook('onSend', (req, reply, _payload, done) => {
     if (
-      req.url.startsWith('/v1/account/') ||
-      req.url.startsWith('/v1/admin/') ||
-      req.url.startsWith('/v1/billing/') ||
-      req.url === '/v1/billing'
+      req.url.startsWith('/v1/') &&
+      !req.url.startsWith('/v1/status') &&
+      reply.getHeader('cache-control') === undefined
     ) {
       void reply.header('cache-control', 'no-store, private');
     }

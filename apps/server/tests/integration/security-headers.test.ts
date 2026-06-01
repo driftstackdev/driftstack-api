@@ -82,4 +82,18 @@ describe('V-664 security headers — error responses also carry headers', () => 
     expect(res.statusCode).toBe(401);
     expect(res.headers['cache-control']).toBe('no-store, private');
   });
+
+  it('broadened — no-store, private now also covers a previously-uncovered caller-private route (401 from /v1/profiles)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({ method: 'GET', url: '/v1/profiles' });
+    expect(res.statusCode).toBe(401);
+    expect(res.headers['cache-control']).toBe('no-store, private');
+  });
+
+  it('the PUBLIC status read is NOT no-store — /v1/status is excluded and keeps its own public caching', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({ method: 'GET', url: '/v1/status' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('public, max-age=30');
+  });
 });

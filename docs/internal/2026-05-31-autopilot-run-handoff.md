@@ -1002,6 +1002,29 @@ embeds an ops decision (log-and-continue risks an undefined-state process per No
 log-and-graceful-shutdown vs the current fail-fast crash+auto-restart) → SURFACE, don't
 unilaterally change process crash behavior. No code change.
 
+2026-06-01 wave — FIXED a real security gap via a fresh class sweep (Cache-Control: no-store on
+sensitive responses). The V-666.BS/BT/BW `onSend` hook stamped `no-store, private` on ONLY
+`/v1/account|admin|billing`, but its own comment claimed comprehensive intent ("a future endpoint
+can't accidentally omit it"). It MISSED other caller-private families — `/v1/sessions`,
+`/v1/profiles`, `/v1/profile-snapshots`, `/v1/agent-sessions`, `/v1/api-keys`, `/v1/webhooks`,
+`/v1/webhook-deliveries`, `/v1/team`, `/v1/usage`, `/v1/oauth`, `/v1/legal/required` — whose GET
+payloads are caller-private and cacheable (cross-user leak via a shared/proxy/browser cache;
+Cloudflare's auth-aware default mitigates but isn't a guarantee). FIX: broadened the hook to ALL
+`/v1` with two carve-outs — (1) exclude `/v1/status*` (the public status/incidents/sla/stream
+family, which sets its own `public, max-age=30`), (2) a DON'T-OVERRIDE guard
+(`reply.getHeader('cache-control') === undefined`) so a route's own header survives. The
+don't-override guard was REQUIRED (not just nice): a naive broadening would clobber the SSE
+streams' `no-cache, no-transform` → `no-store` (dropping `no-transform`, which stops proxies
+buffering the event stream — risking SSE delivery); it also FIXES a latent pre-existing clobber
+where the old unconditional `/v1/account/*` stamp was overwriting the notifications SSE stream's
+header. Verified: 12/12 security-headers (incl. new: `/v1/profiles` 401 → no-store; `/v1/status`
+→ public,max-age=30 preserved), `/v1/account/me` still no-store (account-me 46/46), 13/13
+lib-app-content-parity, tsc + eslint clean. SAME-COMMIT parity update: lib-app-content-parity
+pinned the exact old hook source (comment + a single ~10-group `\s*\n?\s*` mega-regex) → rewrote
+to DISCRETE pins (per the no-long-chain lesson) for the new hook + comment. Not founder-gated
+(defensive header completing the hook's stated intent; no policy/migration/locked-stance change).
+No-store coverage now complete across caller-private /v1.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).

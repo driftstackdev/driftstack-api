@@ -12,8 +12,8 @@
 //     localhost regex; credentials true; explicit methods +
 //     allowedHeaders + exposedHeaders incl. W199 RateLimit set;
 //     preflight maxAge 600.
-//   • V-666.BS/BT/BW no-store onSend hook covers /v1/account/* +
-//     /v1/admin/* + /v1/billing/* + /v1/billing exact.
+//   • no-store onSend hook defaults Cache-Control no-store,private on
+//     ALL of /v1 except /v1/status* + routes that set their own header.
 //   • Public probes: /health (+/healthz), /version (V-195 +
 //     V-337), /ready (Promise.all + per-check timeout 1500ms).
 //   • Auth-flow / MFA / CLI-authorize / Stripe / NowPayments /
@@ -128,17 +128,19 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/registerErrorHandler\(app\);/);
   });
 
-  it('V-666.BS/BT/BW no-store onSend hook: stamps Cache-Control no-store,private on /v1/account/* + /v1/admin/* + /v1/billing/* + /v1/billing exact; rationale block pinned', () => {
+  it('no-store onSend hook: defaults Cache-Control no-store,private on ALL of /v1 EXCEPT /v1/status* and EXCEPT routes that set their own Cache-Control (preserves public status caching + SSE no-cache/no-transform). Discrete pins (the prior single mega-regex was a long \\s*\\n? chain).', () => {
+    // Rationale block pinned (the broadening + the two carve-outs).
     expect(body).toMatch(
-      /\/\/ V-666\.BS — stamp Cache-Control: no-store, private on every\s*\n?\s*\/\/ \/v1\/account\/\* response/,
+      /default Cache-Control:\s*\n?\s*\/\/ no-store, private on every caller-private \/v1 response/,
     );
-    expect(body).toMatch(
-      /\/\/ V-666\.BT — same rationale broadened to every \/v1\/admin\/\* route\./,
-    );
-    expect(body).toMatch(/\/\/ V-666\.BW — broadened again to cover \/v1\/billing\/\*\./);
-    expect(body).toMatch(
-      /app\.addHook\('onSend', \(req, reply, _payload, done\) => \{\s*\n?\s*if \(\s*\n?\s*req\.url\.startsWith\('\/v1\/account\/'\) \|\|\s*\n?\s*req\.url\.startsWith\('\/v1\/admin\/'\) \|\|\s*\n?\s*req\.url\.startsWith\('\/v1\/billing\/'\) \|\|\s*\n?\s*req\.url === '\/v1\/billing'\s*\n?\s*\) \{\s*\n?\s*void reply\.header\('cache-control', 'no-store, private'\);\s*\n?\s*\}\s*\n?\s*done\(\);\s*\n?\s*\}\);/,
-    );
+    expect(body).toMatch(/now the default for ALL of \/v1/);
+    expect(body).toMatch(/no-transform stops proxies buffering/);
+    // The hook condition — discrete pins, not one backtracking chain.
+    expect(body).toMatch(/app\.addHook\('onSend', \(req, reply, _payload, done\) => \{/);
+    expect(body).toMatch(/req\.url\.startsWith\('\/v1\/'\)/);
+    expect(body).toMatch(/!req\.url\.startsWith\('\/v1\/status'\)/);
+    expect(body).toMatch(/reply\.getHeader\('cache-control'\) === undefined/);
+    expect(body).toMatch(/void reply\.header\('cache-control', 'no-store, private'\);/);
   });
 
   it('Conditional service gates pinned: incidentsService + statusSubscribersService + incidentEventBus+slaReportingService + teamMembersService + authFlowsService + cliAuthorizeService + stripe (service+secret) + NowPayments (secret>0) + cryptoOrdersService + oauthStore + costMonitoringService + profilesService (+profileSnapshotsService) + billingService + force-action triple (sessionRepo+apiKeysRepo+driver)', () => {
