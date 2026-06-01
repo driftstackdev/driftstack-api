@@ -164,13 +164,22 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
     );
   });
 
-  it('CRITICAL customer-dashboard + admin-panel ship their own _headers (2026-05-20 security-headers add — X-Frame-Options + X-Content-Type-Options + Referrer-Policy + Permissions-Policy); status-site still inherits from the marketing/docs deployment-config pattern; none of the three currently ship robots.txt overrides.', () => {
+  it('CRITICAL customer-dashboard + admin-panel + status-site each ship their own public/_headers with the security-header set (X-Frame-Options + X-Content-Type-Options + Referrer-Policy + Permissions-Policy). status-site was added 2026-06-01 (the 2026-05-20 audit covered the other four but omitted it; separate Cloudflare Pages projects do NOT cross-inherit _headers, so it shipped with none). None of the three ship a robots.txt override.', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/public/_headers'))).toBe(true);
     expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/public/_headers'))).toBe(true);
-    expect(existsSync(resolve(REPO_ROOT, 'apps/status-site/public/_headers'))).toBe(false);
+    expect(existsSync(resolve(REPO_ROOT, 'apps/status-site/public/_headers'))).toBe(true);
     expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/public/robots.txt'))).toBe(false);
     expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/public/robots.txt'))).toBe(false);
     expect(existsSync(resolve(REPO_ROOT, 'apps/status-site/public/robots.txt'))).toBe(false);
+  });
+
+  it('CRITICAL status-site/public/_headers ships the 4-header security set on /* (X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin + Permissions-Policy) plus immutable /_astro/* caching — matches the other Pages apps so the public status surface is no longer header-less. Drift to dropping any weakens the framing/MIME/referrer defenses on status.driftstack.dev.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/status-site/public/_headers'));
+    expect(p).toMatch(/X-Frame-Options: DENY/);
+    expect(p).toMatch(/X-Content-Type-Options: nosniff/);
+    expect(p).toMatch(/Referrer-Policy: strict-origin-when-cross-origin/);
+    expect(p).toMatch(/Permissions-Policy: accelerometer=\(\), camera=\(\), geolocation=\(\),/);
+    expect(p).toMatch(/\/_astro\/\*\s*\n\s+Cache-Control: public, max-age=31536000, immutable/);
   });
 
   it('CRITICAL marketing-site /_headers + /robots.txt sibling pinned. The marketing-site has matching files (covered by W-NNN marketing-site-public-headers/robots parity tests); both apps share the V-221 Cloudflare-Pages config pattern.', () => {

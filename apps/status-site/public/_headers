@@ -1,0 +1,54 @@
+# Cloudflare Pages security + cache headers for the public status site
+# (status.driftstack.dev).
+#
+# Audit context: docs/internal/2026-05-20-csp-header-audit.md closed the
+# security-header gap on customer-dashboard / admin-panel and confirmed
+# marketing-site / docs already had headers — but it did NOT cover the
+# status site, which shipped with NO security headers. This file closes
+# that omission so the status surface matches the other four Astro Pages
+# apps (all use X-Frame-Options: DENY + nosniff + Referrer-Policy).
+#
+# Cloudflare Pages copies public/_headers verbatim into the deploy and
+# applies these per-path; first match wins, so specific patterns precede
+# the /* catch-all. Format reference:
+#   https://developers.cloudflare.com/pages/configuration/headers/
+
+# ── Hashed Astro bundles + CSS ───────────────────────────────────────
+# Astro emits hashed filenames under /_astro/* — content-stable for the
+# lifetime of a deploy, so cache them forever.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# ── Static media ─────────────────────────────────────────────────────
+/*.svg
+  Cache-Control: public, max-age=31536000, immutable
+/*.png
+  Cache-Control: public, max-age=31536000, immutable
+/*.ico
+  Cache-Control: public, max-age=31536000, immutable
+/*.woff2
+  Cache-Control: public, max-age=31536000, immutable
+
+# ── Security headers — applies to every path ─────────────────────────
+# Mirrors the customer-dashboard posture (the strictest sibling). The
+# status page is public + read-only with one interactive element (the
+# incident-email subscribe form), so the threat is clickjacking that
+# subscribe/unsubscribe control + MIME-sniffing of the served assets.
+#   X-Frame-Options DENY: the page must not be embeddable in an iframe,
+#     defeating clickjack overlays. (If embeddable status widgets are
+#     ever wanted, relax to SAMEORIGIN or a CSP frame-ancestors allow-
+#     list — a deliberate founder decision, not a default.)
+#   X-Content-Type-Options nosniff: browsers must honour the declared
+#     content-type (the SVG marks could otherwise be re-interpreted).
+#   Referrer-Policy strict-origin-when-cross-origin: don't leak the full
+#     status URL to outbound destinations.
+#   Permissions-Policy: deny browser device/payment APIs the status page
+#     never uses (defense-in-depth, matches dashboard/admin).
+# No Cache-Control on /* (HTML stays default-fresh so incident updates
+# propagate fast); CSP is deliberately deferred, same as the dashboard
+# (Astro is:inline blocks need enumeration first — see the audit doc).
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
