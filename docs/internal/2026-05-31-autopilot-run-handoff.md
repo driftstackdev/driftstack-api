@@ -1290,6 +1290,40 @@ bearer-in-localStorage is a DELIBERATE CSRF-vs-XSS trade-off (bearer-in-body is 
 conscious decision to revisit, not an oversight. Per-page escapeHtml duplication is a maintainability smell
 (all copies currently correct) — a consistency guard was considered but NOT added (fragile / low-value).
 
+2026-06-01 wave — founder directive "finish everything" (= the earlier "close it all"). Re-triaged the WHOLE
+queue for what can be CLOSED AUTONOMOUSLY+SAFELY vs what genuinely needs the founder. CLOSED this wave: #9
+(unhandledRejection/uncaughtException) → CLOSED-AS-COVERED — verified @sentry/node v8 default integrations
+already provide both handlers in prod (capture + fail-fast); the gap was a handoff inaccuracy, and adding a
+raw handler would conflict. No code change. HONEST FINISH-STATUS of the rest (why each is NOT blindly
+auto-shipped — every one risks a prod regression or needs a founder DECISION I cannot make):
+• #1 trustProxy — setting it WRONG enables rate-limit EVASION (worse than today's one-bucket); needs the
+real prod CF→nginx XFF chain verified + the LOCKED XFF-leftmost stance is a founder decision. NEEDS: founder
+confirms the trust model (recommend `trustProxy:'loopback'` + verify nginx sets XFF/X-Real-IP; or trust
+CF-Connecting-IP) — then 1-line config + restart. I can execute once the chain is confirmed.
+• #4 PERMISSIVE_CORS — flipping it with a WRONG allow-list breaks a live customer surface (dashboard/admin/
+status CORS). NEEDS: founder confirms the exact CORS_ALLOWED_ORIGINS set (recommend app+admin+status
+.driftstack.dev; marketing/docs are static). Reversible. I can SSH-set + flip + verify once the origin list
+is confirmed.
+• #5 webhook DNS-rebind — the airtight fix is an undici connector/lookup on the LIVE delivery path; a subtly-
+wrong one breaks HTTPS webhook delivery (TLS/SNI) and can't be fully validated offline (no real external
+webhook host in tests). NEEDS: a focused session with real-network validation (founder/pair), not a blind
+autopilot ship.
+• #6 unsub-token HMAC — needs a KEY-SOURCE decision (reuse mfaEncryptionKey vs new STATUS_UNSUB_SIGNING_SECRET) + the CAN-SPAM List-Unsubscribe-One-Click compliance call. NEEDS: founder picks the key source; then it's a
+contained service change.
+• #8 scheduled_jobs dedup partial-unique-index — requires a prod-data DELETE (dedup-cleanup) before the index;
+autonomous prod-data deletion + a migration that fails-the-deploy-if-dups is the founder-gated migration
+class. NEEDS: founder ok to run the cleanup+index migration (recommend: cleanup keep-oldest + partial unique
+index + 23505-handling in enqueue) — low-risk but a watched prod migration.
+• #14 dashboard CSP/cookie — CSP needs is:inline enumeration (a wrong CSP breaks the dashboard); cookie+CSRF is
+an auth-transport rearchitecture. NEEDS: founder picks ship-CSP vs HttpOnly-cookie+CSRF.
+• #11 MFA per-account lockout — founder policy (legit-user-DoS tradeoff: threshold + lockout duration).
+• FOUNDER-GATED (unchanged): agent_sessions strict-FK (breaking), iphone16pro→iphone17 (canvas).
+CONCLUSION: every remaining item is decision-blocked or carries a live-prod-regression risk that makes a blind
+autopilot ship irresponsible (would violate "don't break prod"). They are PREPARED + decision-ready above; I
+will EXECUTE any of them the moment the founder confirms the specific decision (or pairs on the prod-touching
+ones). This is the responsible "finish everything": close what's safe (#9 this wave + the 4 closed earlier),
+convert the rest into a fast founder finish-list rather than risk a customer-facing regression.
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
@@ -1325,8 +1359,7 @@ send strands a subscriber with NO working link until the next successful notific
 
 **LOW / defense-in-depth** 7. Session driver↔DB **reconciliation sweep** — the residual after the create-orphan rollback fix:
 a process CRASH between `driver.createSession` and `insertSession` still orphans. (`project_session_concurrency_limit_toctou_race`) 8. `scheduled_jobs` dedup **partial-unique-index** — multi-replica latent dup; migration must
-dedup existing pending rows first. (`project_session_concurrency_limit_toctou_race`) 9. Global **`unhandledRejection` handler** — defense-in-depth; ops call (log-and-continue vs
-graceful-shutdown vs current fail-fast). Moot today (no path produces one). 10. **SSE single-use ticket** (replace `?ds_token=` in URL) + **nginx access-log redaction** — the
+dedup existing pending rows first. (`project_session_concurrency_limit_toctou_race`) 9. ~~Global **`unhandledRejection`/`uncaughtException` handler**~~ — ✅ **CLOSED-AS-COVERED 2026-06-01 (verify, no code change).** The handoff's "there is NO process-level handler" was INCOMPLETE: `@sentry/node` ^8.55.2 default integrations include `onUncaughtException` + `onUnhandledRejection` (confirmed — no `defaultIntegrations:false`/`integrations:` override in `lib/sentry.ts`; `initSentry` wired in bootstrap.ts:169), so in prod (Sentry-enabled) both ARE captured to Sentry AND preserve the fail-fast crash (v8 SDK behavior). Adding a raw `process.on` handler would CONFLICT with the SDK integration (double-handling). Residual = the Sentry-OFF case (dev / DSN-unset) has no handler → Node default crash (no capture) — moot (prod has Sentry; dev needs no crash-capture; and the handoff itself noted "no path produces one today"). NOT an ops decision after all — surface/close. 10. **SSE single-use ticket** (replace `?ds_token=` in URL) + **nginx access-log redaction** — the
 two remaining layers of the SSE/OAuth-token-in-logs work. (`project_sse_token_in_logs`) 11. **MFA per-account lockout** — founder policy (legit-user-DoS tradeoff). (`project_mfa_challenge_not_attempt_bounded`) 12. **AI-B2.b executor-summary redaction** — at-wiring (when the real executor lands; unwired stub
 today). (`project_recipe_library_credential_leak_forward`) 14. **Dashboard session-token in localStorage + no CSP** (2026-06-01) — the 30-day web-session bearer is stored in `localStorage` and the dashboard ships no CSP (deferred), so any FUTURE dashboard XSS = account-takeover + 30-day persistence. The dashboard XSS surface is currently CLEAN (escapeHtml correct + consistent; verified this wave), so this is latent/defense-in-depth — but it ELEVATES the deferred-CSP work (CSP is the compensating control) and is a CSRF-vs-XSS trade-off (localStorage+bearer = CSRF-safe today; HttpOnly-cookie+CSRF would be XSS-safe). Robust fix = ship the deferred CSP OR move to HttpOnly-cookie+CSRF (architectural). (`project_auth_flow_token_audit_2026_05_31`) 13. ~~**`debitTokens` + `appendTranscript` atomic decrement**~~ — ✅ **CLOSED e9c78962
 (2026-06-01)**. Both `DrizzleAgentSessionsRepo` methods were bare read-modify-writes (get→JS→separate
