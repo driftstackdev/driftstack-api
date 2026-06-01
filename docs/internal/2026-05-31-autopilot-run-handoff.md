@@ -1342,6 +1342,8 @@ ignored, not in the vitest suite) — validated by direct execution. Memory: pro
 This is a genuinely-safe SHIP under "finish everything" (additive resilience, validatable against live prod,
 strictly can't make a healthy deploy fail) — distinct from the decision-blocked queue items below.
 
+2026-06-01 wave — (a) confirmed the prior post-deploy-verify retry fix (bd30db35) landed on origin (a transient "stuck push" scare was a false alarm — my own ps-grep matched its command strings; the background push completed exit 0). (b) Fresh cross-SDK audit: error-RESPONSE-PARSING + edge-case handling (204/empty body, non-JSON success, non-JSON/empty/non-Problem error body, network/timeout) is CLEAN + consistent across all 3 SDKs (TS http.ts / Python http.py::\_decode_or_raise / Go client.go+error_mapping.go) — a successful 204 DELETE never parse-crashes; a malformed error body never crashes the SDK. No bug, no code change (per-SDK tests + content-parity already cover it). Memory: project_sdk_retry_5xx_cross_sdk_design.
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
