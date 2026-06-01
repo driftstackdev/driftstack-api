@@ -1162,6 +1162,24 @@ file with`sql.raw(`trips it, removed → green). Test-only, no source change. Me
 input-validation/error-handler/ReDoS — the security surface remains well-verified; this one is now
 also CI-enforced against regression.)
 
+2026-06-01 wave — fresh-audit of another never-swept dimension: mass-assignment / over-posting /
+field-level write-authz (distinct from the IDOR audit — that proved you can't write ANOTHER account's
+row; this asks whether a caller can write a PRIVILEGED FIELD of their OWN row, e.g. set their own
+tier/suspended/role). CLEAN — no bug. ZERO `{ ...body }`/`{ ...parsed }` spread into any
+`.set()`/`.values()` monorepo-wide (every write maps explicit columns); the only customer self-edit
+surface PATCH /v1/account/me (`UpdateAccountMeRequestSchema`) whitelists name/timezone/slug/region —
+no privilege field — and `updateAccountBasics` maps a typed patch field-by-field (a second whitelist);
+account-tier mutation is admin-only or Stripe-driven; team role is invite-time (owner/admin-gated, no
+role-UPDATE endpoint); api-key scopes de-escalate. Shipped a build-independent source-regex drift-guard
+(commit cfc80d5b, in `update-account-me-cross-source-invariant.test.ts`): the self-edit schema's object
+literal (scoped `= z` → `.refine(`) must declare NONE of tier/suspended/role/scope(s)/balance/isAdmin/
+accountId/id/stripeCustomerId — closing the "subset-`.toMatch` blind to an ADDED privileged field" gap.
+Mutation-verified (adding `tier:` to the schema fails only this guard; removed → green). NOTE: an
+initial behavioral `.parse()`-strips-privileged-fields version was DISCARDED because the test imports
+the BUILT `@driftstack/api-types` (dist), so a source edit wasn't reflected locally (build-dependent =
+false confidence); the source-regex form is build-independent and matches this file's convention —
+reusable lesson. Memory folded into `project_idor_ownership_review_clean`. Test-only, net source zero.
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
