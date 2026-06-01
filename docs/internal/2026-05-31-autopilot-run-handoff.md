@@ -1275,6 +1275,21 @@ NO code/test artifact (no bug; backoff already-guarded; auto-disable sound). Web
 prod-served OpenAPI spec verified valid (3.1.0, 154 paths). Wind-down is genuine + deep — fresh reads now
 land clean AND already-covered. Real remaining work = the founder queue below.
 
+2026-06-01 wave — fresh audit of the CUSTOMER-DASHBOARD client-side XSS + bearer-token-storage surface
+(never examined; the prior session-delivery audit covered the SERVER side only). XSS SURFACE CLEAN — every
+`.innerHTML=` sink escapes via a correct `escapeHtml` (all 5 chars, text+attribute safe), text-only uses
+`textContent` (showBanner), the one custom-scheme href is hard-coded `driftstack://`+encoded+escaped,
+customer URLs (webhook) are escaped or set via `.value` (property, not HTML sink). No stored XSS found.
+LATENT finding SURFACED (founder trade-off, NOT an acute bug, NO safe auto-fix): the dashboard stores the
+30-day web-session BEARER in localStorage + has NO CSP (deferred) → the blast radius of ANY future dashboard
+XSS = account-takeover + 30-day persistence. This ELEVATES the priority of the already-deferred dashboard
+CSP (it's the compensating control for the localStorage token) — see new queue item below. Robust fix is
+architectural (HttpOnly cookie + CSRF, OR ship the deferred CSP) → founder/focused. Memory folded into
+project_auth_flow_token_audit_2026_05_31. No code artifact (XSS clean; mitigations founder-gated). NOTE: the
+bearer-in-localStorage is a DELIBERATE CSRF-vs-XSS trade-off (bearer-in-body is CSRF-safe), so it's a
+conscious decision to revisit, not an oversight. Per-page escapeHtml duplication is a maintainability smell
+(all copies currently correct) — a consistency guard was considered but NOT added (fragile / low-value).
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
@@ -1313,7 +1328,7 @@ a process CRASH between `driver.createSession` and `insertSession` still orphans
 dedup existing pending rows first. (`project_session_concurrency_limit_toctou_race`) 9. Global **`unhandledRejection` handler** — defense-in-depth; ops call (log-and-continue vs
 graceful-shutdown vs current fail-fast). Moot today (no path produces one). 10. **SSE single-use ticket** (replace `?ds_token=` in URL) + **nginx access-log redaction** — the
 two remaining layers of the SSE/OAuth-token-in-logs work. (`project_sse_token_in_logs`) 11. **MFA per-account lockout** — founder policy (legit-user-DoS tradeoff). (`project_mfa_challenge_not_attempt_bounded`) 12. **AI-B2.b executor-summary redaction** — at-wiring (when the real executor lands; unwired stub
-today). (`project_recipe_library_credential_leak_forward`) 13. ~~**`debitTokens` + `appendTranscript` atomic decrement**~~ — ✅ **CLOSED e9c78962
+today). (`project_recipe_library_credential_leak_forward`) 14. **Dashboard session-token in localStorage + no CSP** (2026-06-01) — the 30-day web-session bearer is stored in `localStorage` and the dashboard ships no CSP (deferred), so any FUTURE dashboard XSS = account-takeover + 30-day persistence. The dashboard XSS surface is currently CLEAN (escapeHtml correct + consistent; verified this wave), so this is latent/defense-in-depth — but it ELEVATES the deferred-CSP work (CSP is the compensating control) and is a CSRF-vs-XSS trade-off (localStorage+bearer = CSRF-safe today; HttpOnly-cookie+CSRF would be XSS-safe). Robust fix = ship the deferred CSP OR move to HttpOnly-cookie+CSRF (architectural). (`project_auth_flow_token_audit_2026_05_31`) 13. ~~**`debitTokens` + `appendTranscript` atomic decrement**~~ — ✅ **CLOSED e9c78962
 (2026-06-01)**. Both `DrizzleAgentSessionsRepo` methods were bare read-modify-writes (get→JS→separate
 UPDATE) → concurrent same-session calls lost an update (debit: under-billing / uncapped bundled-LLM
 spend; append: dropped transcript entry = data loss). FIXED by wrapping each in a `db.transaction()`
