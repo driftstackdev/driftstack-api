@@ -885,6 +885,22 @@ must NOT limit; `fleet-events` = 503 stubs; public incident list/detail gated in
 internal-staff). Broke the doc-note streak's monotony with a genuine NEW live finding (not a
 refinement). No code change (policy/keying = founder call).
 
+2026-06-01 wave — Rule-M pivot to the health/incidents subsystem: read the health-probe →
+auto-incident threshold logic (`services/health-probe.ts` evaluateThresholds). AUDITED SOUND,
+no bug — both auto-create AND auto-resolve guard insufficient-data (`recent.length >=
+threshold`, so a fresh target with <3 probes can't trigger a premature incident; no off-by-one);
+create/resolve are mutually exclusive (create returns early, gated `!open` vs `open`); the
+3-consecutive-probe hysteresis prevents flap-spam; per-target errors are isolated (a probe/DB
+failure logs+continues, never crashes the poller loop); prune is idempotent/hourly. Heavily
+tested already (V-295 series: health-probe-service + integration + a dedicated
+health-probe-thresholds cross-source-invariant + content-parity + 2 repo tests) — don't
+re-audit. The only theoretical edge is the `findOpenAutoIncident`→`create` TOCTOU, but that's
+the already-surfaced dedup class AND the health poller is single-instance by nature (you run ONE
+health poller, not N), so it's lower-risk than even the scheduled_jobs/session-concurrency
+instances — not worth a 4th surface. No code change. Deep wind-down continues: every fresh
+target is well-covered-clean or founder-gated; the genuine finds now are occasional (OAuth
+rate-limit last wave) amid mostly clean confirmations.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
