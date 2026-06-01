@@ -25,6 +25,8 @@ import { FleetView } from './views/FleetView';
 import { SessionsHistoryView } from './views/SessionsHistoryView';
 import { SessionsView } from './views/SessionsView';
 import { SettingsView } from './views/SettingsView';
+import { UpdateBanner } from './components/UpdateBanner';
+import { checkForUpdate, type AvailableUpdate } from './lib/updater';
 
 type View =
   | { kind: 'sessions' }
@@ -102,6 +104,17 @@ function Shell(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey);
   }, [kbSettings.apiKey, kbSettings.baseUrl, kbSettings.telemetryOptIn, kbUpdate]);
 
+  // V-243 — check for a signed app update once on startup. Best-effort:
+  // checkForUpdate() never throws (offline / no endpoint / dev context
+  // all resolve to null), so it can't block the shell; the banner below
+  // lets the customer install when they choose. MUST be above the early
+  // returns (hooks-order rule, like the keydown effect above).
+  const [update, setUpdate] = useState<AvailableUpdate | null>(null);
+  const [updateDismissed, setUpdateDismissed] = useState(false);
+  useEffect(() => {
+    void checkForUpdate().then(setUpdate);
+  }, []);
+
   // While settings load, render nothing rather than flashing the wizard.
   if (loading) {
     return (
@@ -137,6 +150,9 @@ function Shell(): JSX.Element {
           </>
         }
       />
+      {update && !updateDismissed ? (
+        <UpdateBanner update={update} onDismiss={() => setUpdateDismissed(true)} />
+      ) : null}
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           current={view.kind as SidebarViewKind}

@@ -24,6 +24,10 @@ tauri-plugin-fs = "2.0"
 # generated via `npx tauri signer generate` (founder action; see
 # docs/founder-actions/v243-tauri-updater-keys.md).
 tauri-plugin-updater = "2.0"
+# V-243 — process plugin: provides relaunch() so the in-app updater can
+# restart into the freshly-installed bundle (downloadAndInstall does NOT
+# auto-relaunch on macOS/Linux in Tauri v2).
+tauri-plugin-process = "2.0"
 # V-328 — custom URL scheme deep-link plugin. Registers
 # `driftstack://` so the OS hands off URLs of that scheme to this
 # binary. Replaces the V-268 polling loop in browser-sign-in.ts:

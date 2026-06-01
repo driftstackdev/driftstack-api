@@ -42,9 +42,13 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         // V-243 / D-2026-05-06-03 — auto-update via Tauri Updater.
         // Configuration (endpoint + pubkey) lives in tauri.conf.json
-        // under `plugins.updater`; the customer's GUI checks the
-        // endpoint on startup + offers a signed update download.
+        // under `plugins.updater`; the GUI checks the endpoint on
+        // startup (src/lib/updater.ts) + offers a signed update.
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // V-243 — process plugin powers relaunch() after an update
+        // install (Tauri v2 downloadAndInstall does not auto-restart on
+        // macOS/Linux; the in-app flow calls relaunch()).
+        .plugin(tauri_plugin_process::init())
         // V-328 — register the `driftstack://` URL scheme so browser
         // redirects from the customer dashboard's auth-callback page
         // hand off to this app immediately. The TypeScript side

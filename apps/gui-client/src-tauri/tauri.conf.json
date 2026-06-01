@@ -53,7 +53,6 @@
       "endpoints": [
         "https://github.com/driftstackdev/driftstack-api/releases/latest/download/gui-latest.json"
       ],
-      "dialog": true,
       "pubkey": "$TAURI_UPDATER_PUBKEY"
     },
     "deep-link": {

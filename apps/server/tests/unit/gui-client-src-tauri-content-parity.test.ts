@@ -50,6 +50,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
       /V-243 \/ D-2026-05-06-03 — Tauri Updater for cross-platform auto-update\./,
     );
     expect(body).toMatch(/^tauri-plugin-updater = "2\.0"$/m);
+    expect(body).toMatch(/^tauri-plugin-process = "2\.0"$/m);
     expect(body).toMatch(/V-328 — custom URL scheme deep-link plugin\./);
     expect(body).toMatch(/`driftstack:\/\/`/);
     expect(body).toMatch(/^tauri-plugin-deep-link = "2\.0"$/m);
@@ -111,6 +112,8 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/\.plugin\(tauri_plugin_fs::init\(\)\)/);
     expect(body).toMatch(/V-243 \/ D-2026-05-06-03 — auto-update via Tauri Updater\./);
     expect(body).toMatch(/\.plugin\(tauri_plugin_updater::Builder::new\(\)\.build\(\)\)/);
+    // V-243 — process plugin (relaunch() after an update install).
+    expect(body).toMatch(/\.plugin\(tauri_plugin_process::init\(\)\)/);
     expect(body).toMatch(/V-328 — register the `driftstack:\/\/` URL scheme/);
     expect(body).toMatch(/\.plugin\(tauri_plugin_deep_link::init\(\)\)/);
     expect(body).toMatch(/\.invoke_handler\(tauri::generate_handler!\[/);
@@ -169,6 +172,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/"fs:allow-exists"/);
     expect(body).toMatch(/"fs:allow-read-dir"/);
     expect(body).toMatch(/"updater:default"/);
+    expect(body).toMatch(/"process:default"/);
     expect(body).toMatch(/"identifier": "shell:allow-open"/);
     expect(body).toMatch(/"url": "http:\/\/localhost:5173\/cli\/authorize\*\*"/);
     expect(body).toMatch(/"url": "https:\/\/app\.driftstack\.dev\/cli\/authorize\*\*"/);
@@ -214,7 +218,10 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(
       /"https:\/\/github\.com\/driftstackdev\/driftstack-api\/releases\/latest\/download\/gui-latest\.json"/,
     );
-    expect(body).toMatch(/"dialog": true/);
+    // 2026-06-01 — `dialog` removed: it was a Tauri-v1 updater key that did
+    // nothing in v2 (v2's updater is programmatic; the in-app flow lives in
+    // src/lib/updater.ts + UpdateBanner.tsx).
+    expect(body).not.toMatch(/"dialog"/);
     expect(body).toMatch(/"pubkey": "\$TAURI_UPDATER_PUBKEY"/);
     expect(body).toMatch(/"deep-link": \{/);
     expect(body).toMatch(/"mobile": \[\]/);

@@ -60,12 +60,13 @@ describe('W535.C apps/gui-client/package.json content parity', () => {
     expect(pkg.scripts['tauri:build']).toBe('tauri build');
   });
 
-  it('Tauri 5-plugin + SDK runtime-dep framing pinned: @driftstack/sdk + @sentry/browser + @tauri-apps/api + 5 Tauri plugins (@tauri-apps/plugin-deep-link + plugin-fs + plugin-shell + plugin-store + plugin-updater) + react + react-dom — pinned so the SDK-via-monorepo-link + browser-Sentry telemetry + 5-Tauri-plugin (deep-link for protocol handlers + fs for self-hosted storage + shell for OS-level processes + store for persistent settings + updater for in-app upgrade) commitment survives (drift to dropping plugin-updater would break in-app upgrade flow; drift to dropping plugin-deep-link would break the dashboard→app deep-link protocol)', () => {
+  it('Tauri 6-plugin + SDK runtime-dep framing pinned: @driftstack/sdk + @sentry/browser + @tauri-apps/api + 6 Tauri plugins (@tauri-apps/plugin-deep-link + plugin-fs + plugin-process + plugin-shell + plugin-store + plugin-updater) + react + react-dom — pinned so the SDK-via-monorepo-link + browser-Sentry telemetry + 6-Tauri-plugin (deep-link for protocol handlers + fs for self-hosted storage + process for relaunch-after-update + shell for OS-level processes + store for persistent settings + updater for in-app upgrade) commitment survives (drift to dropping plugin-updater or plugin-process would break the in-app auto-update flow; drift to dropping plugin-deep-link would break the dashboard→app deep-link protocol)', () => {
     expect(pkg.dependencies).toHaveProperty('@driftstack/sdk');
     expect(pkg.dependencies).toHaveProperty('@sentry/browser');
     expect(pkg.dependencies).toHaveProperty('@tauri-apps/api');
     expect(pkg.dependencies).toHaveProperty('@tauri-apps/plugin-deep-link');
     expect(pkg.dependencies).toHaveProperty('@tauri-apps/plugin-fs');
+    expect(pkg.dependencies).toHaveProperty('@tauri-apps/plugin-process');
     expect(pkg.dependencies).toHaveProperty('@tauri-apps/plugin-shell');
     expect(pkg.dependencies).toHaveProperty('@tauri-apps/plugin-store');
     expect(pkg.dependencies).toHaveProperty('@tauri-apps/plugin-updater');
