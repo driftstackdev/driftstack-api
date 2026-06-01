@@ -44,6 +44,18 @@ describe('V-553.B-33 escapeCsvCell', () => {
     expect(escapeCsvCell('=HYPERLINK("http://x","a")')).toBe('"\'=HYPERLINK(""http://x"",""a"")"');
   });
 
+  it('neutralises the leading-TAB / leading-CR evasion (Excel strips them before the trigger)', () => {
+    // The guard regex includes \t and \r, not just the printable = + - @ —
+    // a spreadsheet strips a leading TAB/CR and then evaluates the formula
+    // underneath, so those must be neutralised too. Pins the two trigger
+    // chars the printable-only cases above don't reach; a refactor dropping
+    // \t\r from the character class would otherwise slip past the suite.
+    // Leading TAB: apostrophe-prefixed; no quote-trigger char, so unquoted.
+    expect(escapeCsvCell('\t=cmd')).toBe("'\t=cmd");
+    // Leading CR: apostrophe-prefixed AND quote-wrapped (\r is a quote trigger).
+    expect(escapeCsvCell('\r=cmd')).toBe('"\'\r=cmd"');
+  });
+
   it('does NOT prefix negative numbers (guard is string-only)', () => {
     expect(escapeCsvCell(-3.5)).toBe('-3.5');
     expect(escapeCsvCell(-42)).toBe('-42');
