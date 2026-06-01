@@ -1087,6 +1087,22 @@ even if the lock lapsed). Only acknowledged limitation (cosmetic, documented): `
   informational only. No code change. The entire control-plane audit surface is now swept; remaining
   real work is the founder-action queue below.
 
+2026-06-01 wave — pivoted off the control plane to the CUSTOMER-FACING SDKs: audited the cursor-
+pagination iterators (a classic infinite-loop / off-by-one / non-advancing-cursor bug class) across
+all three SDKs. ALL CORRECT, no bug, don't re-audit. TS (`sdk-typescript/src/pagination.ts`
+`iteratePaginated`) + Python (`sdk-python/src/driftstack/pagination.py`, sync + async) use a shared
+helper: terminate on `next_cursor == null/None`, advance `cursor = next_cursor`. Go has PER-RESOURCE
+hand-rolled loops (audit_log / crypto_orders / profile_snapshots / profiles / recipes) — more code
+but each is correct AND slightly MORE defensive: terminates on `NextCursor == nil` OR
+`*NextCursor == ""` (TS/Python only check null), and crypto_orders defensively copies the caller's
+opts before mutating Cursor between pages. All three rely on the server's id-keyset advance
+guarantee (audited-sound — the timestamp-only-cursor class is RESOLVED to id-based compound keyset,
+so `next_cursor` strictly advances until exhausted → null), so trusting the server (no client-side
+non-advance guard) is correct. No code change. META-STATUS: the safe non-gated audit surface is now
+comprehensively swept — the control plane (every service/route tier + the bug-class sweeps) AND the
+customer SDKs. Future waves should expect clean confirmations on fresh reads; the real remaining
+work is the founder-action queue below (all surfaced/gated, none auto-doable).
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
