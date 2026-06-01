@@ -286,9 +286,19 @@ resolution chain is the remaining un-audited piece.
 
 ## Prod state (Rule-L, latest wave)
 
-Deployed SHA = HEAD (`ea8775f1` after the status-incident field-exclusion guard;
-prior `/version` showed `0adedd6` healthy), service active, 0 restarts, ~0 real
-errors/2h, self-re-arming scheduled jobs alive. Healthy.
+Deployed SHA = HEAD `81d75a0e`, `/health` ok, `/version` git_sha matches HEAD.
+Mechanically verified this wave (NOT from recall): a full local `npm test` run is
+GREEN — 2242 files / 21,838 tests passing, 0 failures. The GitHub CI job has shown
+a stuck `in_progress` runner intermittently all session (Deploy still succeeds and
+prod tracks HEAD); the local full-suite run is the authoritative health signal.
+
+WIND-DOWN (confirmed, not provisional): the safe, non-gated, un-mined Agent-2 audit
+surface is exhausted (see the note below — written pre-degradation, corroborated by
+three subsequent error-recovery-only waves). Remaining open work is either
+founder-gated (strict-FK, archetype cutover) or best done in a fresh focused session
+(the queue below). Continued audit-cadence waves in a long context produced
+hallucinated file reads (recovered, origin truthful) — the correct next step is a
+FRESH SESSION, not another in-context audit slice.
 
 ## Recommended order when the loop is paused
 
