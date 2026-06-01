@@ -38,6 +38,16 @@ const ANTHROPIC_VERSION_HEADER = '2023-06-01';
 const MAX_OUTPUT_TOKENS = 2048;
 const MAX_RETRIES_5XX = 1;
 const DEFAULT_RETRY_BACKOFF_MS = 1000;
+// Per-request timeout for the Anthropic call. Without it a hung upstream
+// (connection open, no response — a real LLM-API degradation mode) would hang
+// the customer's chat turn indefinitely: a hang is neither a 5xx nor a thrown
+// network error, so the retry below never fires. On timeout the AbortController
+// aborts the fetch (caught as a network error → one retry → then a
+// transient-classified throw that keeps the session active). 30s is generous
+// for a 2048-max-token planning call yet bounded. Matches the AbortController
+// timeout every other outbound caller already uses (stripe-api, nowpayments,
+// webhook-delivery, health-probe, incident-broadcast).
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
 // v2-#4 Q.1.e / 6.c (#15) — per-call USD cents (recorded in
 // usage_records.metadata.cost_usd_cents) are computed from the per-model
@@ -119,15 +129,19 @@ export interface ClaudeAgentDecomposerDeps {
   fetch?: typeof globalThis.fetch;
   /** Retry backoff in ms (test override). Defaults to 1000. */
   retryBackoffMs?: number;
+  /** Per-request Anthropic timeout in ms (test override). Defaults to 30000. */
+  requestTimeoutMs?: number;
 }
 
 export class ClaudeAgentDecomposer implements AgentDecomposer {
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly retryBackoffMs: number;
+  private readonly requestTimeoutMs: number;
 
   constructor(deps: ClaudeAgentDecomposerDeps = {}) {
     this.fetchImpl = deps.fetch ?? globalThis.fetch.bind(globalThis);
     this.retryBackoffMs = deps.retryBackoffMs ?? DEFAULT_RETRY_BACKOFF_MS;
+    this.requestTimeoutMs = deps.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   async decompose(args: DecomposeArgs): Promise<DecomposeResult> {
@@ -198,6 +212,11 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
     // Single retry on 5xx; let 4xx + post-retry 5xx escape as exceptions.
     while (true) {
       let res: Response;
+      // Per-attempt timeout: a hung upstream aborts here rather than hanging
+      // the turn forever. The abort surfaces as a network error in the catch
+      // below (retried once, then thrown → transient-classified refuse).
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), this.requestTimeoutMs);
       try {
         res = await this.fetchImpl(ANTHROPIC_API_URL, {
           method: 'POST',
@@ -207,6 +226,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
             'anthropic-version': ANTHROPIC_VERSION_HEADER,
           },
           body,
+          signal: ac.signal,
         });
       } catch (networkErr) {
         if (attempt < MAX_RETRIES_5XX) {
@@ -215,6 +235,8 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
           continue;
         }
         throw networkErr;
+      } finally {
+        clearTimeout(timer);
       }
 
       if (res.ok) {

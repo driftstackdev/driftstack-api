@@ -259,6 +259,33 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       await expect(dec.decompose(defaultArgs())).rejects.toThrow(/ECONNRESET/);
       expect(calls).toHaveLength(2);
     });
+
+    it('hung request → per-request timeout aborts it → retries then throws (no indefinite hang)', async () => {
+      // A fetch that never resolves on its own but rejects when the request's
+      // AbortSignal fires — models a hung upstream (open connection, no
+      // response) that the per-request timeout must abort. Without the timeout
+      // the decompose() would hang forever (a hang is not a 5xx or a thrown
+      // network error, so the retry never fires).
+      const seenSignals: boolean[] = [];
+      const hangingFetch = ((_url: string | URL, init?: RequestInit) => {
+        seenSignals.push(init?.signal instanceof AbortSignal);
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(Object.assign(new Error('The operation was aborted'), { name: 'AbortError' }));
+          });
+        });
+      }) as unknown as typeof globalThis.fetch;
+
+      const dec = new ClaudeAgentDecomposer({
+        fetch: hangingFetch,
+        retryBackoffMs: 0,
+        requestTimeoutMs: 5,
+      });
+      await expect(dec.decompose(defaultArgs())).rejects.toThrow(/abort/i);
+      // The timeout was wired on EVERY attempt (initial + the one retry).
+      expect(seenSignals.length).toBe(2);
+      expect(seenSignals.every(Boolean)).toBe(true);
+    });
   });
 
   describe('malformed responses', () => {

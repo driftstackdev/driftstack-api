@@ -960,6 +960,26 @@ Idempotency-Key support today → the fix is a small plumb-through (client + pro
 auto-fixed: it's the payment provider (founder-sensitive, test→live cutover pending) + LOW severity;
 worth doing BEFORE the live cutover. Orphan bug-class is now mapped end-to-end. No code change.
 
+2026-06-01 wave — FIXED a real reliability bug via a fresh bug-class sweep (outbound-HTTP timeout
+coverage). Every outbound caller sets an AbortController timeout (stripe-api 10s, nowpayments 10s,
+health-probe 5s, webhook-delivery 10s, incident-broadcast 5s) EXCEPT `agent-decomposer-claude.ts`
+(the customer-chat LLM path): its Anthropic fetch had NO `signal`/timeout. A hung upstream
+(connection open, no response — a real LLM-API degradation mode) would hang the chat turn
+indefinitely — and a hang is neither a 5xx nor a thrown network error, so the existing retry never
+fired. FIX: per-attempt `AbortController` + `setTimeout(abort, requestTimeoutMs)` + `signal` +
+`clearTimeout` in finally, matching the canonical stripe-api pattern; new configurable
+`requestTimeoutMs` (default 30s — generous for a 2048-token planning call, bounded). On timeout the
+abort is caught as a network error → one retry → then a transient-classified throw (synthesized
+refuse, session stays active — correct contract). Additive (happy path unchanged); not founder-gated
+(reliability fix, established pattern, internal timeout value). Tests: `agent-decomposer-claude.test.ts`
++1 behavioral (hung fetch that rejects on abort → 2 attempts each with a wired AbortSignal → throws);
+27/27 that suite + 38/38 with the error-classification cross-source; tsc + eslint clean. SAME-COMMIT
+parity update REQUIRED: `services-agent-decomposer-claude-content-parity` pinned the fetch body —
+updated to include `signal: ac.signal` + new pins for the AbortController/timeout wiring (drift-guards
+the fix). BONUS: that pinned assertion was a single 8-group `\s*\n?\s*` chain that backtracked ~16.85s
+(the pathology `feedback_no_long_chain_parity_regex` warns about) — converted it to discrete pins,
+dropping the test from 16.85s → 0.27s. Outbound-timeout coverage now complete across all callers.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).

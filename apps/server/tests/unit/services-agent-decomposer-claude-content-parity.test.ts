@@ -139,9 +139,19 @@ describe('services/agent-decomposer-claude content parity', () => {
     );
   });
 
-  it('Anthropic call 3-header pinned: content-type + x-api-key + anthropic-version. + POST method + body forwarding. Drift to a different header set would diverge from the Anthropic Messages API contract', () => {
-    expect(body).toMatch(
-      /res = await this\.fetchImpl\(ANTHROPIC_API_URL, \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{\s*\n?\s*'content-type': 'application\/json',\s*\n?\s*'x-api-key': apiKey,\s*\n?\s*'anthropic-version': ANTHROPIC_VERSION_HEADER,\s*\n?\s*\},\s*\n?\s*body,\s*\n?\s*\}\);/,
-    );
+  it('Anthropic call pinned (discrete pins — the prior single long-chain regex backtracked ~17s): POST to ANTHROPIC_API_URL + 3 headers + body + the per-request-timeout AbortSignal. Drift to a different header set diverges from the Anthropic Messages API contract; dropping the signal/AbortController removes the timeout so a hung upstream would hang the chat turn indefinitely.', () => {
+    // Discrete pins per the no-long-chain-parity-regex lesson (>5 chained
+    // \s*\n?\s* groups → catastrophic backtracking).
+    expect(body).toMatch(/res = await this\.fetchImpl\(ANTHROPIC_API_URL, \{/);
+    expect(body).toMatch(/method: 'POST',/);
+    expect(body).toMatch(/'content-type': 'application\/json',/);
+    expect(body).toMatch(/'x-api-key': apiKey,/);
+    expect(body).toMatch(/'anthropic-version': ANTHROPIC_VERSION_HEADER,/);
+    // Body forwarded + the per-request-timeout AbortSignal wired (one short group).
+    expect(body).toMatch(/body,\s*\n?\s*signal: ac\.signal,/);
+    // The timeout machinery itself — AbortController + abort + teardown.
+    expect(body).toMatch(/const ac = new AbortController\(\);/);
+    expect(body).toMatch(/setTimeout\(\(\) => ac\.abort\(\), this\.requestTimeoutMs\)/);
+    expect(body).toMatch(/clearTimeout\(timer\);/);
   });
 });
