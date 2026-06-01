@@ -1180,6 +1180,23 @@ the BUILT `@driftstack/api-types` (dist), so a source edit wasn't reflected loca
 false confidence); the source-regex form is build-independent and matches this file's convention —
 reusable lesson. Memory folded into `project_idor_ownership_review_clean`. Test-only, net source zero.
 
+2026-06-01 wave — fresh-audit of another never-swept dimension: insecure randomness (Math.random for
+security values). CLEAN — no bug. All security-sensitive randomness (tokens/keys/codes/csrf/nonces)
+uses a CSPRNG (~80 randomBytes/randomUUID/getRandomValues sites). Math.random appears in EXACTLY 3
+apps/server/src runtime files, all non-security: webhook-worker (retry jitter — harmless),
+livekit-token (CSPRNG-fallback for the JWT jti only when Web Crypto absent — dead code in Node 22; and
+the jti is a non-secret replay marker, token security is the HMAC-SHA256 signature), playwright driver
+(internal driver-session handle — API auth boundary is the account-scoped ses\_ DB id via requireOwned,
+never the client-supplied driver id; timestamp-salted; mock driver in prod). Shipped a file-allowlisted
+drift-guard (commit 0b3d36aa, `no-insecure-randomness-for-secrets.test.ts`): any Math.random in another
+apps/server/src file fails CI → security review. Mutation-verified (probe in a non-allowlisted file
+trips it; removed → green). gui-client/dashboard Math.random ids are CLIENT-side local correlation ids
+(outside the API trust boundary; server auth = bearer token), not re-audited. Memory folded into
+`project_idor_ownership_review_clean`. Test-only, net source zero. (4th consecutive fresh-dimension
+clean+guard wave: OAuth-rl close → SQLi → mass-assignment → insecure-randomness. The safe non-gated
+CODE-FIX surface stays exhausted; these waves verify a distinct dimension clean + add a CI regression
+guard, per the directive's keep-doing-fresh-audit-waves wind-down posture.)
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
