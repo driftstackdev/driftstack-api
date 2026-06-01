@@ -387,6 +387,17 @@ triggers (`= + - @`); added assertions for the leading-`\t` and leading-`\r` eva
 branches (empirically confirmed the outputs first). See
 `project_csv_export_injection_audit_clean`.
 
+2026-06-01 wave — audited `lib/receipt-pdf.ts` (V-666.U), the hand-rolled PDF-1.4 generator
+for the customer crypto-order receipt download. SOUND: `escapePdfString` escapes the PDF
+§7.3.4.2 breakout set with backslash FIRST then `( ) \r \n`, applied to every receipt line
+before the `(...) Tj` literal, so user-controlled fields can't inject PDF string syntax;
+`/Length` is computed over the escaped stream bytes and the xref offsets are byte-consistent
+(binary encoding throughout). Already exhaustively tested — the injection assertion pins
+`( ) \` with correct ordering plus structural-integrity + content-embedding — so NO code
+change and NO added coverage (the injection branch is fully pinned; more would be
+duplicate). See `project_receipt_pdf_audit_clean`. The two export-artifact injection
+surfaces (CSV CWE-1236 + PDF §7.3.4.2) are now both audited clean.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
