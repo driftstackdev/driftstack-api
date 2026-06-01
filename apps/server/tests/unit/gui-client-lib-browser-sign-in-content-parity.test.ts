@@ -37,6 +37,12 @@
 //     pollOnce: 400-499 stop+detail, 'expired' status →
 //     'Authorization expired.' message, 'bound' + api_key +
 //     account_id → setState success + await onSuccess.
+//   • settledRef stopped-flow guard: useRef(false), set true in
+//     stop(), reset false in run(), checked (early-return) right
+//     after the exchange fetch — a late in-flight poll can't
+//     overwrite a settled state (the deep-link fast-path consumes
+//     the one-shot code, so an in-flight 2s-poll lands on 'expired';
+//     and a late 'bound' must not sign in after cancel).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -146,6 +152,13 @@ describe('W474.C apps/gui-client/src/lib/browser-sign-in.ts content parity', () 
     expect(body).toMatch(
       /pollHandleRef\.current = window\.setInterval\(\(\) => \{\s*\n?\s*void pollOnce\(trimmedUrl, initiate\.code, stateToken\);\s*\n?\s*\}, opts\.__pollIntervalMs \?\? POLL_INTERVAL_MS\);\s*\n?\s*timeoutHandleRef\.current = window\.setTimeout\(\(\) => \{\s*\n?\s*stop\(\);\s*\n?\s*setState\(\{\s*\n?\s*kind: 'error',\s*\n?\s*message: 'Authorization expired\. Click "Sign in with browser" to try again\.',\s*\n?\s*\}\);\s*\n?\s*\}, opts\.__pollTimeoutMs \?\? POLL_TIMEOUT_MS\);/,
     );
+  });
+
+  it("settledRef stopped-flow guard: const settledRef = useRef(false) + settledRef.current = true in stop() + settledRef.current = false reset in run() + `if (settledRef.current) return;` early-return after the exchange fetch — pinned so a late in-flight poll can't overwrite a settled state (one-shot-consumed code → 'expired' after deep-link success; 'bound' after cancel)", () => {
+    expect(body).toMatch(/const settledRef = useRef\(false\);/);
+    expect(body).toMatch(/settledRef\.current = true;/);
+    expect(body).toMatch(/settledRef\.current = false;/);
+    expect(body).toMatch(/if \(settledRef\.current\) return;/);
   });
 
   it('file exists at canonical path', () => {

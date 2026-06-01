@@ -81,6 +81,14 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
   // listener; we call it on stop() and on unmount to keep the
   // deep-link channel from stacking up when the customer retries.
   const deepLinkUnlistenRef = useRef<(() => void) | null>(null);
+  // Once the flow reaches a terminal state (success / error / cancel /
+  // unmount / timeout) stop() flips this. Any exchange response still
+  // in-flight then becomes a no-op — so a late 2s-poll can't overwrite a
+  // success with a spurious "Authorization expired" error (the deep-link
+  // fast-path consumes the one-shot code, so an in-flight poll that lands
+  // after it sees the code already gone), and a late "bound" can't sign
+  // the customer in after they cancelled.
+  const settledRef = useRef(false);
 
   const stop = (): void => {
     if (pollHandleRef.current !== null) {
@@ -99,6 +107,7 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
       }
       deepLinkUnlistenRef.current = null;
     }
+    settledRef.current = true;
   };
 
   // Cleanup on unmount.
@@ -116,6 +125,7 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
   };
 
   async function run(): Promise<void> {
+    settledRef.current = false; // re-arm for a fresh attempt
     setState({ kind: 'opening' });
     const trimmedUrl = opts.baseUrl.trim().replace(/\/+$/, '');
     const stateToken = generateBrowserSignInState();
@@ -204,6 +214,10 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ code, state: stateToken }),
       });
+      // The flow may have terminated (success / cancel / unmount /
+      // timeout) while this exchange was in-flight — drop the late
+      // response so it can't overwrite the settled state.
+      if (settledRef.current) return;
       if (!res.ok) {
         if (res.status >= 400 && res.status < 500) {
           stop();

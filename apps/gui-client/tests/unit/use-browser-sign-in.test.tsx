@@ -389,4 +389,60 @@ describe('useBrowserSignIn — cleanup paths', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(fetchSpy.mock.calls.length).toBe(fetchCallsBeforeUnmount);
   });
+
+  it('a "bound" exchange resolving AFTER cancel() does not sign in (stopped-flow guard)', async () => {
+    // Regression: the deep-link fast-path consumes the one-shot code, so
+    // a 2s-interval poll that lands afterwards used to be able to mutate
+    // a settled state (here: sign the customer in after they cancelled).
+    // The settledRef guard makes any in-flight exchange a no-op once the
+    // flow has stopped.
+    const onSuccess = vi.fn(() => Promise.resolve());
+    let resolveExchange: ((r: FetchResponseShape) => void) | undefined;
+    const pendingExchange = new Promise<FetchResponseShape>((res) => {
+      resolveExchange = res;
+    });
+
+    fetchSpy.mockImplementation((url: RequestInfo | URL) => {
+      const u = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+      if (u.includes('/initiate')) return Promise.resolve(makeResponse(initiateBody) as Response);
+      // Every exchange poll hangs until we resolve it post-cancel.
+      return pendingExchange;
+    });
+
+    const { result } = renderHook(() =>
+      // Long backstop so the default 100ms timeout can't fire mid-test.
+      useBrowserSignIn({ ...defaultOpts(onSuccess), __pollTimeoutMs: 5000 }),
+    );
+
+    act(() => {
+      result.current.start();
+    });
+
+    // Wait until at least one exchange poll is in-flight (initiate + ≥1 exchange).
+    await waitFor(() => {
+      expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    // Cancel while that exchange fetch is still pending.
+    act(() => {
+      result.current.cancel();
+    });
+    expect(result.current.state.kind).toBe('idle');
+
+    // The in-flight exchange now resolves to a successful "bound".
+    await act(async () => {
+      resolveExchange!(
+        makeResponse({
+          status: 'bound',
+          api_key: 'ds_test_pjv4anxbxksg7xie5c5oxspiqdtyuvcu',
+          account_id: 'acc_4b51130b-4621-4d14-affe-89470fe6a297',
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    // Stopped-flow guard: the late response must NOT sign in or flip state.
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(result.current.state.kind).toBe('idle');
+  });
 });
