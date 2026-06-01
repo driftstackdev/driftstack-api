@@ -1157,7 +1157,13 @@ today). (`project_recipe_library_credential_leak_forward`) 13. **`debitTokens` a
 (get→JS-floor→separate UPDATE); concurrent same-session debits lose an update → session under-debited
 → budget over-served (uncapped bundled-LLM spend). False "serializes at the row level" comment FIXED
 171b296c; SQL fix (`SET remaining = GREATEST(0, remaining - $tokens)`) DEFERRED — no real-PG test
-exercises this Drizzle path to validate it. Low reachability (turns normally sequential).
+exercises this Drizzle path to validate it. Low reachability (turns normally sequential). **Sibling
+in the SAME file: `appendTranscript` is the same read-modify-write race but worse — concurrent
+same-session appends lose a transcript ENTRY (chat message / agent response → data loss); false
+"serialized at the row lock" comment FIXED 5b23d544, atomic fix (`transcript = transcript || $entry`
+or a FOR-UPDATE tx) DEFERRED same-reason.** Fix template for BOTH = `stripe-webhooks-repo
+.setAccountTier` (already correct: `db.transaction()` + `SELECT … FOR UPDATE` + UPDATE). The real
+enabler for shipping either fix is a real-PG integration test for agent-sessions-repo (none exists).
 (`project_session_concurrency_limit_toctou_race`)
 
 **FOUNDER-GATED (breaking / canvas / explicit decision)**
