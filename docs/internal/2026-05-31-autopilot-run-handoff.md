@@ -600,6 +600,22 @@ correctness/security-relevant db repos are all audited clean; only thin lower-re
 2-write repos remain (`recipes`, `health-probes`, `atlas-priority-events`) — diminishing
 yield, weigh against the founder-gated work and the overdue MEMORY.md consolidation.
 
+2026-06-01 wave — audited `db/recipes-repo.ts` (the last CUSTOMER-FACING account-scoped db
+repo). SOUND, and the cleanest of the tier: `getById`/`deleteById` IDOR-scoped
+`and(eq(id),eq(accountId))`; `list` account-scoped compound id-keyset cursor with the
+cursor-row resolution ITSELF account-scoped (stricter than profile-snapshots' unscoped
+lookup — explicit "forged/foreign cursor can't leak rows" guard); validation backstopped by
+a DB CHECK; no update (v1.0 write+read+delete). Behaviorally pinned (recipes-routes.test.ts:
+cross-account→404, gap-free pagination, get/delete 404, write-scope-gated). No bug, no
+test-gap; folded into `project_db_repo_tier_audit_progress`.
+**db-repo TIER SUBSTANTIVELY COMPLETE** — every customer-facing / account-scoped /
+concurrency / integrity repo audited clean (10 repos, 1 data-loss test-gap closed). The only
+2 un-audited repos (`health-probes`, `atlas-priority-events`) are 0-accountId INTERNAL infra
+(no customer/IDOR surface). Per the run's standing signal, the safe high-yield fresh-audit
+surface across lib + middleware + db tiers is now exhausted; remaining genuine work is
+founder-gated (trustProxy `req.ip`, strict-FK, archetype) or the MEMORY.md consolidation
+(47KB) — both fresh-session-suited.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
