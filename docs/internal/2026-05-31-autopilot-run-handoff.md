@@ -506,6 +506,18 @@ audit-log retention/integrity) + `oauth-links-repo` (5, account-link/takeover-ad
 skip the thin 1-write read repos. Roster + triage in `project_db_repo_tier_audit_progress`.
 No code change.
 
+2026-06-01 wave — audited `db/oauth-links-repo.ts` (the #2 triage target, account-takeover
+surface: `account_oauth_links` + `oauth_pending_links`). SOUND at the takeover-critical
+layer: `findActiveByTokenHash` filters `consumedAt IS NULL AND expiresAt > now` (a used or
+expired pending-link token can't re-link), `markConsumedAt` is a race-safe `isNull` single-use
+guard, and — verified in the schema, not assumed — `account_oauth_links` has a
+`(provider, provider_sub)` UNIQUE index (schema.ts:562) enforcing one IDP identity → one
+account (the invariant `insertLink` relies on). The in-memory test fake faithfully replicates
+the consumed+expiry filter, and `services-oauth-client-service.test.ts` pins expired→null +
+already-consumed→null(single-use). No bug, no test-gap. See
+`project_oauth_links_repo_audit_clean`. db-tier next: `audit-archive-repo` (6 writes,
+audit-log retention/integrity) is now the top remaining triage target.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
