@@ -571,6 +571,21 @@ forged cross-account cursor only shifts this account's window (no leak). Behavio
 No bug, no test-gap. Folded into `project_db_repo_tier_audit_progress` (no new MEMORY.md index
 line, per the 47KB throttle). db-tier next: `email-preferences-repo` (2 writes).
 
+2026-06-01 wave — audited `db/email-preferences-repo.ts` (customer email opt-outs). SOUND:
+all three methods account+eventType-scoped; `isOptedOut` is FAIL-SAFE (no row → `false` =
+not-opted-out = default-opted-in → email sends; a flipped default would silently suppress
+all mail); the model is opt-in = DELETE the row (revert to default), opt-out = upsert
+`optedIn:false` (idempotent onConflict on `(accountId,eventType)`). The default-opted-in
+_policy_ (which events are opt-outable) is the type/service layer, not the repo. Behaviorally
+pinned (`email-preferences.test.ts`: empty→all-optedIn default synthesis + stored-opt-out
+merge; faithful in-memory fake). No bug, no test-gap; folded into the db-tier progress memory.
+Also this wave: weighed doing the MEMORY.md consolidation (now 47KB) in-session but
+DECLINED — consistent with the standing judgment that it's a deliberate fresh-session task
+(non-version-controlled, irreversible-if-botched), and I've already stopped inflating it
+(folding into rosters). db-tier remaining: only lower-relevance 2-write repos (`recipes`,
+`health-probes`, `atlas-priority-events`, `account-lifecycle`) — the high-yield db vein is
+largely mined; weigh against the founder-gated / consolidation work.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
