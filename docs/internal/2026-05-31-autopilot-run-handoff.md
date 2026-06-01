@@ -1042,14 +1042,55 @@ flows into an object merge or a dynamic key. No code change. NOTE: the bug-class
 yielded real fixes (orphan-resource, outbound-timeout, response-caching) are mined; the remaining
 input-safety/DoS classes confirm the codebase is robust on these dimensions.
 
-## Recommended order when the loop is paused
+2026-06-01 wave — audited `cost-nightly-job` idempotency (money-adjacent: the
+`cost.recompute_nightly` job runs under the scheduler's retry-on-failure). CLEAN — the handler
+writes NO cost rows (cost is compute-on-demand); it lists accounts → `dispatcher.evaluate` (fires
+cost ALERTS) → re-arms (dedup:false, per the RESOLVED re-arm fix). The alert dispatcher is
+`lastState`-tracked, so a retry SKIPS already-fired alerts (the `alertsSkipped` count) → no
+duplicate alerts/cost on retry. Well-tested (v541e cross-source + content-parity). No bug. Also
+refreshed the stale founder-action queue below (was ~wave-8 state; now reflects all surfaced
+findings).
 
-1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
-   Optional tail: API `/start` `redirect_to` dashboardOrigin restriction
-   (defense-in-depth, can ride a server wave).
-2. Webhook reclaim — fully spec'd, just needs focused implementation.
-3. A founder call on strict-FK and/or the archetype cutover.
-4. BYOK cache test + auth-flow consume hardening (low priority).
+## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
+
+All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
+(security policy / migration / locked-stance / outward-facing / breaking). Ranked by severity ×
+readiness. Each has a detail memory + a chronological note above.
+
+**HIGH**
+
+1. **trustProxy / `req.ip` = 127.0.0.1 in prod** — CF→nginx(localhost)→Fastify, so the IP
+   brute-force gate is ONE global bucket (latent 429 outage + no per-attacker isolation) and all
+   auth-audit IPs log as 127.0.0.1. Needs the LOCKED XFF stance revisited + prod XFF header
+   verified before changing `req.ip`. (`project_trustproxy_ip_resolution_gap`)
+
+**MEDIUM — ready or near-ready** 2. **OAuth-provider rate-limit** — `/v1/oauth/{authorize,token,introspect,revoke}` are unthrottled
+(`/token` = client_secret/code brute-force surface; `/introspect` = unauth token oracle).
+Ready-to-approve: `ipRateLimit` + a generous `AUTH_IP_LIMITS.oauthProvider` (~60/min/IP).
+(`project_oauth_provider_ratelimit_gap`) 3. **Stripe `createCustomer` idempotency-key** — orphan/duplicate Stripe customer on a DB-write
+failure or a parallel checkout double-click. Add a Stripe Idempotency-Key keyed by accountId.
+Do BEFORE the test→live cutover. (`project_billing_and_apikey_surfaced_findings` #3) 4. **PERMISSIVE_CORS=true in prod** — echoes ANY Origin + credentials (boot-warn guard shipped;
+full fix = the allow-list, but it's missing status/admin origins → blind-disable breaks them).
+(`project_permissive_cors_in_prod`) 5. **Webhook DNS-rebind** — the remaining SSRF layer: connection-time resolve+pin in the delivery
+fetch (literal-IP block + redirect:error already shipped). (`project_webhook_ssrf_outbound_target`) 6. **Unsubscribe-token HMAC redesign** — rotation breaks older emails' unsub links, and a failed
+send strands a subscriber with NO working link until the next successful notification
+(CAN-SPAM/GDPR). Fix = HMAC-stable per-subscriber token. (`project_status_subscribers_audit_clean`)
+
+**LOW / defense-in-depth** 7. Session driver↔DB **reconciliation sweep** — the residual after the create-orphan rollback fix:
+a process CRASH between `driver.createSession` and `insertSession` still orphans. (`project_session_concurrency_limit_toctou_race`) 8. `scheduled_jobs` dedup **partial-unique-index** — multi-replica latent dup; migration must
+dedup existing pending rows first. (`project_session_concurrency_limit_toctou_race`) 9. Global **`unhandledRejection` handler** — defense-in-depth; ops call (log-and-continue vs
+graceful-shutdown vs current fail-fast). Moot today (no path produces one). 10. **SSE single-use ticket** (replace `?ds_token=` in URL) + **nginx access-log redaction** — the
+two remaining layers of the SSE/OAuth-token-in-logs work. (`project_sse_token_in_logs`) 11. **MFA per-account lockout** — founder policy (legit-user-DoS tradeoff). (`project_mfa_challenge_not_attempt_bounded`) 12. **AI-B2.b executor-summary redaction** — at-wiring (when the real executor lands; unwired stub
+today). (`project_recipe_library_credential_leak_forward`)
+
+**FOUNDER-GATED (breaking / canvas / explicit decision)**
+
+- **agent_sessions strict-FK** — breaking migration (deliberately-loose customer ref). (`project_data_lifecycle_findings`)
+- **iphone16pro→iphone17 archetype cutover** — canvas-close-gated. (`project_v1_launch_archetype_cutover_pending`)
+- **BYOK behavioral cache-assert test** — deferred-by-design (needs build-test-app cache wiring; already double-source-pinned). (`project_byok_anthropic_audit_2026_05_31`)
+
+_(Earlier item — open-redirect `?next=` — DONE 33f1e907. Optional tail: API `/start` `redirect_to`
+dashboardOrigin restriction, defense-in-depth.)_
 
 > Autopilot note: by ~wave 8–9 the high-value, safe, un-mined Agent-2 audit
 > surface was exhausted; value-per-wave declined and a deep-session misread
