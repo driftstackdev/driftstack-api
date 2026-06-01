@@ -376,6 +376,17 @@ no NEW drift — every path-completeness gap and shadow enum maps to the already
 intentional/founder-judgment set; the prior `bucket_key` 3-key fix is intact. No re-sweep
 warranted (would be churn). Net code change this wave: zero (both targets sound).
 
+2026-06-01 wave — audited `lib/csv.ts` (V-666.V), the RFC-4180 CSV encoder behind the
+customer audit-log export + admin crypto-orders export (both carry customer-controlled
+free text opened by an operator → CSV formula-injection / CWE-1236 is a real in-scope
+threat). SOUND: the formula-injection guard apostrophe-prefixes string cells matching
+`/^[=+\-@\t\r]/` before RFC-4180 quote-wrapping, string-only scoped (real negatives left
+intact), and notably covers the leading-TAB/CR evasion most encoders miss. Filled a real
+test-gap (no source change): the existing CWE-1236 test asserted only the four printable
+triggers (`= + - @`); added assertions for the leading-`\t` and leading-`\r` evasion
+branches (empirically confirmed the outputs first). See
+`project_csv_export_injection_audit_clean`.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
