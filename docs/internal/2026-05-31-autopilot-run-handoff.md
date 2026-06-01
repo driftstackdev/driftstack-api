@@ -544,6 +544,20 @@ bumps `lastUsedAt` only (not `updatedAt`). Behaviorally covered by `byok-anthrop
 See `project_byok_anthropic_repo_audit_clean`. db-tier next: `validation-schedules-repo`
 (3 writes) is the top remaining target.
 
+2026-06-01 wave — audited `db/validation-schedules-repo.ts` (3 writes, the V-218 internal
+archetype-validation scheduler). SOUND: `findDue` = `enabled=true AND nextRunAt<=now ORDER BY
+nextRunAt ASC LIMIT n` (correct due-filter, oldest-first); `markRun` advances
+`nextRunAt = now + cadence` from RUN-time (no drift, no immediate re-select); `upsert`
+onConflict deliberately preserves a running schedule's `nextRunAt` (documented). The
+no-claim-lock `findDue` is benign here — single internal admin-gated
+(`driftstack_internal_admin`) scheduler (driven by `validation-harness.ts:140-152`), not
+customer-facing/money. Behaviorally covered (`validation-harness-service.test.ts` processTick
+due→run→advance + admin integration test). No bug, no test-gap. **Folded the result into
+`project_db_repo_tier_audit_progress` rather than a standalone memory + new MEMORY.md index
+line — MEMORY.md is now 47KB (~2× the 24KB load cap); the consolidation is overdue and I'm
+deliberately throttling per-wave index growth.** db-tier next: the remaining 2-write repos,
+preferring security/cross-account (`profile-snapshots`, `email-preferences`).
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
