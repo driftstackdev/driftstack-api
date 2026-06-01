@@ -774,6 +774,31 @@ shared constant imported by all three — a small behaviour-neutral refactor tha
 runtime + both decomposers + their content-parity pins; left for a focused pass, the invariant
 test is the safe immediate guard. Same drift class as the enum/webhook-roster hardenings.
 
+2026-06-01 wave — fresh critical read of `services/agent-decomposer-claude.ts` (437 lines, the
+PRODUCTION LLM decomposer — AI-chat is v1.0-approved). Sound by design: AUP regexes are bounded
+(no ReDoS); the system prompt is locked + parity-pinned; `parseIntents` allow-lists only the 4
+valid verbs (so even a jailbroken plan can't emit arbitrary intents); the BYOK key rides only in
+the `x-api-key` header, never logged, and error bodies are truncated to 300 chars; cost rounds
+UP (conservative). No bug. REAL finding (closed): the decomposer throws 7 distinct parse-error
+messages that `agent-runtime.ts` `classifyDecomposerError` must map to 'fatal' (else a genuine
+malformed-response / wire-break is swallowed into a synthesized 'transient' refuse that keeps
+the session active — masking the broken integration, no 502, no Sentry). The two existing suites
+pin each SIDE independently — the decomposer test asserts its thrown messages via loose
+`toThrow(/…/)` regexes; the runtime test asserts `classifyDecomposerError` against HARD-CODED
+strings — so NOTHING drove the decomposer's ACTUAL error through the classifier. A drift that
+renames a message + updates the decomposer test regex but forgets the classifier regex leaves
+BOTH suites green while the real coupling breaks. SHIPPED (test-only, no source change):
+`agent-decomposer-error-classification-cross-source.test.ts` — drives the real
+ClaudeAgentDecomposer with each malformed-response/error shape, catches the ACTUAL thrown error,
+and asserts `classifyDecomposerError(err)` is the intended class (9 fatal: missing-text /
+non-JSON / non-object / unknown-kind / non-array-intents / missing-clarifyingQuestion /
+missing-refuseReason / 4xx / missing-key; 2 transient: persistent 5xx-after-retry, network-error
+-after-retry). 11/11 green, tsc strict-clean. Behavioral end-to-end pin (stronger than string
+matching). NOTE: this is the 3rd consecutive drift/coupling-guard slice (BYOK symmetric, budget
+string, now error-classifier) — all genuine distinct gaps, but per Rule M the NEXT wave should
+PIVOT track (the agent-layer coupling vein is now well-pinned; consider a different subsystem or
+honest deeper wind-down).
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
