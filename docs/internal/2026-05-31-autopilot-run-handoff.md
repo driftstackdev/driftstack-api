@@ -452,6 +452,20 @@ secret-shaped param value appears nowhere in the serialized log + no `params` fi
 `project_slow_query_log_audit_clean`. Only `otel.ts` remains as a genuinely-non-security
 un-audited small lib.
 
+2026-06-01 wave — checked the last small lib, `lib/otel.ts`: it's UNWIRED NO-OP scaffolding
+(`createOtelService()` always returns `NoopOtelService`; grep-confirmed nothing in
+`apps/server/src` imports it; a `TODO(post-launch)` will branch on
+`OTEL_EXPORTER_OTLP_ENDPOINT` when the founder activates wiring). No runtime behavior, no
+security surface → nothing to audit until it's wired. **The `apps/server/src/lib`
+small-file audit sweep is now COMPLETE** — 10 security-sensitive helpers fresh-read +
+line-verified this run, all clean, 3 real security test-gaps closed (fleet-auth
+equal-length-token, csv `\t`/`\r` injection-evasion, slow-query param-value-leak / CWE-532).
+Roster + don't-re-pick pointer in `project_lib_small_file_sweep_complete`. Next waves should
+NOT re-pick the small-lib vein (exhausted); options are a fresh broader-subsystem read or
+note the substantive remainder is founder-gated (trustProxy, strict-FK, archetype) /
+fresh-session-suited (the MEMORY.md consolidation, now ~44KB — accumulating each
+audit-record wave; a focused dedicated pass is overdue).
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
