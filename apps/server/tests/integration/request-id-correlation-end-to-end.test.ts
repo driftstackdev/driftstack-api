@@ -46,6 +46,34 @@ describe('request-id correlation end-to-end', () => {
     expect(id1).not.toBe(id2);
   });
 
+  it('correlation passthrough is BOUNDED (CWE-113) — a client-supplied x-request-id is reflected for tracing, but only up to 128 chars; an over-long inbound value is replaced by a fresh UUID, so a client cannot pin an unbounded value into the response header / logs', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    // (a) a normal inbound id is reflected verbatim — the proxy/CDN trace
+    // passthrough the genReqId contract is designed for.
+    const corr = 'corr-abc-123';
+    const ok = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'x-request-id': corr },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.headers['x-request-id']).toBe(corr);
+    // (b) an over-long (>128) inbound id is NOT reflected — genReqId falls
+    // back to a fresh UUID, so an unbounded client-controlled value never
+    // lands in the response header (or the correlated log field).
+    const tooLong = 'x'.repeat(200);
+    const capped = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me',
+      headers: { authorization: `Bearer ${fx.plaintext}`, 'x-request-id': tooLong },
+    });
+    expect(capped.statusCode).toBe(200);
+    const reflected = capped.headers['x-request-id'];
+    expect(typeof reflected).toBe('string');
+    expect(reflected).not.toBe(tooLong);
+    expect((reflected as string).length).toBeLessThanOrEqual(128);
+  });
+
   it('success responses also have a request-id, exposed via the response header (operators can correlate even on 2xx)', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({
