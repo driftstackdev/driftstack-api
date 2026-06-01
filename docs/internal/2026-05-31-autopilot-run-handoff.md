@@ -901,6 +901,23 @@ instances — not worth a 4th surface. No code change. Deep wind-down continues:
 target is well-covered-clean or founder-gated; the genuine finds now are occasional (OAuth
 rate-limit last wave) amid mostly clean confirmations.
 
+2026-06-01 wave — Rule-M pivot to the highest-impact un-read category (money math): read
+`services/crypto-orders.ts` (largest service, 47KB). Tested a precision/rounding-bug hypothesis
+on the order-amount path — REFUTED. The service is integer-cents only (`price_cents: number` +
+`price_currency`); there is NO fiat→crypto conversion math in it (delegated to NowPayments), and
+the admin revenue aggregation (`getStatsForAdmin`) sums integer `price_cents` SEGREGATED by
+currency (`paidRevenueCents[currency] += price_cents` — explicitly "can't sum across without a
+conversion table"). Currency-segregation is both structurally pinned (`paid_revenue_cents:
+z.record(string, int)`) and behaviorally tested (`integration/admin-crypto-orders-stats.test.ts`);
+the service is exhaustively covered (100+ referencing tests). No bug, no test-gap (a
+currency-split test would duplicate). SYNTHESIS worth recording once (closes a hunt vein):
+the platform follows a consistent INTEGER-CENTS money discipline — cost-estimator (CENTS +
+clamp-nonneg), crypto-orders (price_cents), billing — all integer cents, NO float, aggregation
+currency-segregated, fiat→crypto conversion delegated to the provider. So the "money-precision /
+float-rounding bug" hunt vein is CLOSED platform-wide; don't re-hunt it. No code change. Wind-down
+remains deep — safe non-gated CODE work is exhausted; fresh audits confirm clean; real OPEN items
+are all in the founder queue below.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
