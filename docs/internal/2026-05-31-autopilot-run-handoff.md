@@ -1025,6 +1025,23 @@ to DISCRETE pins (per the no-long-chain lesson) for the new hook + comment. Not 
 (defensive header completing the hook's stated intent; no policy/migration/locked-stance change).
 No-store coverage now complete across caller-private /v1.
 
+2026-06-01 wave — input-safety / DoS-hardening bug-class sweep (three sub-classes). ALL CLEAN —
+closes the veins, don't re-hunt. (1) PAYLOAD-SIZE DoS (bodyLimit): the Fastify instance leaves
+`bodyLimit` unset → the 1 MiB default applies to every route; only two deliberate per-route
+overrides exist — `_webhook-raw-body` (`MAX_BODY_BYTES = 1 MiB`, raw body for Stripe/NowPayments
+sig verify) and `account-me:274` (3.5 MiB, sized for a 2 MiB avatar after base64 inflation). All
+bounded; no unbounded/excessive limit. (2) TIMING-SAFE secret comparison: no non-constant-time
+compare of a secret/token/hash/signature — the audited paths (internal-fleet, nowpayments,
+oauth-pkce, mfa, api-keys, oauth-links) all use `timingSafeEqual`; the only `===` hits on
+token-named vars are `typeof x === 'string'` type-guards, not value compares. (3) PROTOTYPE
+POLLUTION / unsafe dynamic-key writes: none — `Object.assign` is only onto fresh Error objects
+with literal payloads; the only dynamic bracket-writes (`deletedByKind[kind]`, `fullTotals[t]`)
+key off FIXED internal enums (job kinds, `ALL_TYPES` usage-record types), never user input; Zod
+parsing constructs clean validated objects rather than merging request bodies, so user JSON never
+flows into an object merge or a dynamic key. No code change. NOTE: the bug-class veins that
+yielded real fixes (orphan-resource, outbound-timeout, response-caching) are mined; the remaining
+input-safety/DoS classes confirm the codebase is robust on these dimensions.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
