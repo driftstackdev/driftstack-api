@@ -267,13 +267,15 @@ write-gate is **consistent across all 7 honoring routes** (members read, admins 
 verified profile-snapshots capture/restore/delete all admin-gated, no privilege gap);
 membership changes invalidate the member's auth cache. Well-tested (no gap):
 `team-rbac-auth-path.test.ts` asserts member→403 on writes + reads-as-member.
-Bundled-LLM access (`project_bundled_llm_audit_clean`, V-487) — the shared
-Driftstack-Anthropic-key gate. Whole-token per-tier caps (`TIER_TOKEN_CAPS`: free 0 →
-bundled off for free, enterprise null → unlimited); `checkAccess` is fail-safe
-(`disabled` / `over-budget` / `ok` + remaining); `recordConsumption` clamps
-`Math.max(0, Math.floor())` on both token counts. The post-hoc soft-cap (one call can
-overshoot by a bounded single-request amount, then locked until the next cycle) is the
-documented V-487 design, not a bug. BYOK bypasses this path entirely.
+Bundled-LLM settings (`project_bundled_llm_audit_clean`, Arc 1 sub-slice 6.3) — the
+read/update layer for the optional shared Driftstack-Anthropic key. `BundledLlmSettings`
+= `{ consent, monthlyCapUsdCents }` (migration 0050); `findSettings` (null → route
+short-circuits 502 if no BYOK leg resolved), `sumMonthlySpendCents` (sums
+`usage_records.cost_usd_cents` for `agent_decomposer_bundled` since UTC month-start),
+`updateSettings` (PATCH). Q4=A LOCKED: BYOK ALWAYS wins; bundled resolves only when no
+BYOK plaintext — that chain + the per-month **cents** soft-cap enforcement live in
+`routes/agent-sessions.ts`, NOT this pure settings service. The route-side enforcement +
+resolution chain is the remaining un-audited piece.
 
 ## Founder-gated — surface only, do NOT auto-do
 
