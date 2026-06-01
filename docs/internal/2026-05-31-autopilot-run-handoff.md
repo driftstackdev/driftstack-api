@@ -938,6 +938,28 @@ reclaim. Note: `destroy()` has the REVERSE case (driver destroyed, then DB-statu
 phantom-active DB row) but that self-heals — the row is sweeper-reapable + destroy is idempotent
 on retry — so it's bounded, not surfaced.
 
+2026-06-01 wave — sibling sweep of the orphan bug-class just fixed (external/stateful resource
+created BEFORE the DB insert, no rollback → orphan). Swept every service doing an external call
+near a repo insert. RESULT: sessions.create (driver session) was the SOLE expensive instance —
+FIXED last wave. The rest are correctly ordered or benign: crypto-orders.create is DB-FIRST
+(`repo.upsert` with payment_id:null; the NowPayments call comes later → a provider failure leaves
+a trackable pending order, not an orphan); agent-sessions.create + profiles.create are DB-only;
+audit-archive's R2 putObject-before-ledger-insert is a benign cheap-orphan (a failed ledger insert
+leaves a wasted R2 object — retryable next run + lifecycle-managed, no data loss). NEW LOW-sev
+sibling SURFACED (founder-aware, NOT auto-fixed — payment provider): `billing.ts ensureCustomerId`
+→ `StripeBillingProvider.ensureCustomer` ALWAYS creates a fresh Stripe customer (documented design:
+no lookup, dedupe via the `accounts.stripe_customer_id` short-circuit). So if `setStripeCustomerId`
+(the DB write) fails after Stripe created the customer, the Stripe customer is ORPHANED (retry mints
+another); and a parallel double-click on checkout can create DUPLICATE customers (the DB short-circuit
+doesn't cover the concurrent window). LOW severity — orphaned Stripe customers are inert/free clutter
+(no cost/data-loss/security), and Stripe is pre-launch TEST-mode (~0 real customers). Clean fix =
+a Stripe **Idempotency-Key** on `client.createCustomer` keyed by `accountId` (makes create truly
+idempotent → kills both the duplicate-on-parallel and the orphan-on-retry, with NO extra lookup, so
+it's compatible with the documented design intent). The Stripe client (`lib/stripe-api.ts`) has NO
+Idempotency-Key support today → the fix is a small plumb-through (client + provider). SURFACED not
+auto-fixed: it's the payment provider (founder-sensitive, test→live cutover pending) + LOW severity;
+worth doing BEFORE the live cutover. Orphan bug-class is now mapped end-to-end. No code change.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
