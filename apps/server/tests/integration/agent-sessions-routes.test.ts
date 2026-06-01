@@ -379,6 +379,24 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(404);
   });
 
+  it('SSE transcript stream: GET /:id/transcript on a non-owned/never-existed id → 404 from the ownership gate BEFORE the event-stream opens (cross-tenant-leak guard — a regression that subscribed/streamed before checking session.accountId === ctx.account.id would leak another tenant’s transcript)', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions/agt_inmem_99999999/transcript',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    // The gate (`session === null || session.accountId !== ctx.account.id`)
+    // throws NotFoundError BEFORE reply.raw.writeHead, so this is a normal
+    // problem+json 404 — not an opened text/event-stream.
+    expect(res.statusCode).toBe(404);
+    expect(res.headers['content-type'] ?? '').not.toContain('text/event-stream');
+    // Body carries the gate's own "AgentSession ... not found" message — this
+    // distinguishes a GATE rejection (route registered, ownership enforced)
+    // from a route-not-found 404 (which would prove nothing about the gate).
+    expect(JSON.stringify(res.json())).toContain('AgentSession');
+  });
+
   it('v2-#19 idempotency: POST /v1/agent-sessions with `Idempotency-Key` header replays the same 201 on retry (Stripe-pattern). Second call MUST NOT mint a new row — same id returned, transcript_length unchanged.', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
 
