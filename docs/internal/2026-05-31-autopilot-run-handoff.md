@@ -1123,6 +1123,31 @@ budget-refuse if exhausted, AUP-refuse otherwise; never executed). The determini
 regex-only AUP (no model second-filter) is inherent to the non-LLM path, acceptable for the
 fallback. Completes the decomposer audit (Claude + runtime + executor + deterministic).
 
+2026-06-01 wave — under the founder "close it all" directive, CLOSED queue item #2 (OAuth-provider
+rate-limit) with a shippable, fully-validatable, zero-prod-risk hardening — and corrected a
+material severity error in the queue. First RESOLVED the contradiction between this handoff
+("registerOAuthRoutes wired UNCONDITIONALLY → live") and the prior-session finding (dormant): the
+registration is GATED `if (deps.oauthStore !== undefined)` (app.ts:1047), NO prod code passes
+`oauthStore`, and the only `OAuthStore` impl is `InMemoryOAuthStore` (V-667.C Drizzle store unbuilt)
+→ prod curl confirms `/v1/oauth/{authorize,token,introspect}` all **404** (a live route, `/v1/auth/login`,
+returns 400). So the provider is DORMANT; the "live brute-force/oracle" framing was wrong. Given that,
+the gate is a SHIFT-LEFT close (not a live-exposure fix): added `AUTH_IP_LIMITS.oauthProvider`
+(60/min/IP — the memo's recommended generous default: real brute-force friction on /token + oracle
+throttling on /introspect, generous enough not to throttle a single-IP client server) and per-route
+`ipRateLimit` preHandlers (separate buckets) on the 4 unauth routes; `/authorize/complete` omitted
+(already `requireAuth`). `rateLimitStore` is now a REQUIRED `RegisterOAuthRoutesDeps` field (threaded
+from app.ts; the 4 direct-call oauth tests pass a `MemoryRateLimitStore`) so the protection can't be
+silently omitted when the provider is wired. Behavioral test `oauth-provider-rate-limit.test.ts`
+(burst→429 + first-allowed + per-route bucket isolation; mutation-verified: dropping a gate fails
+both the burst-429 assertion AND the content-parity pin). Same-commit parity: routes-oauth gate pins,
+ip-rate-limit content-parity oauthProvider entry, request-id roster/divisor counts 12→13 (the full
+suite caught the divisor-count assertion — exactly the same-commit-parity rule). Full server suite
+GREEN (17,512 pass / 0 fail), tsc + eslint + prettier clean. NOTE on the other queue items considered
+and correctly NOT auto-done this wave: webhook DNS-rebind (#5) needs an undici custom connector wired
+into a LIVE delivery path that can't be validated offline → real live-regression risk, left deferred;
+CORS allow-list (#4) is env-driven (`CORS_ALLOWED_ORIGINS`) + a prod flag-flip → outward-facing, not a
+code slice; trustProxy/strict-FK/unsub-HMAC remain genuinely founder-gated.
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
@@ -1136,10 +1161,16 @@ readiness. Each has a detail memory + a chronological note above.
    auth-audit IPs log as 127.0.0.1. Needs the LOCKED XFF stance revisited + prod XFF header
    verified before changing `req.ip`. (`project_trustproxy_ip_resolution_gap`)
 
-**MEDIUM — ready or near-ready** 2. **OAuth-provider rate-limit** — `/v1/oauth/{authorize,token,introspect,revoke}` are unthrottled
-(`/token` = client_secret/code brute-force surface; `/introspect` = unauth token oracle).
-Ready-to-approve: `ipRateLimit` + a generous `AUTH_IP_LIMITS.oauthProvider` (~60/min/IP).
-(`project_oauth_provider_ratelimit_gap`) 3. ~~**Stripe `createCustomer` idempotency-key**~~ — ✅ **CLOSED 6e9fe21e (2026-06-01)**. Added an optional
+**MEDIUM — ready or near-ready** 2. ~~**OAuth-provider rate-limit**~~ — ✅ **GATE SHIPPED 1c7cda87 (2026-06-01)** + severity CORRECTED. The
+`/v1/oauth/{authorize,token,introspect,revoke}` routes now carry per-route `ipRateLimit` gates
+(`AUTH_IP_LIMITS.oauthProvider` = 60/min/IP). CORRECTION: this was NOT a "live" finding — the
+provider is DORMANT in prod (`registerOAuthRoutes` only binds when `deps.oauthStore` is supplied;
+no Drizzle store exists — V-667.C unbuilt; all 3 routes curl-confirmed **404**). So the gate is a
+SHIFT-LEFT close: protection ships with the routes, active the moment a store is wired (no
+launch-day gap). `rateLimitStore` is now a required `RegisterOAuthRoutesDeps` field.
+**Residual LAUNCH items (V-667.C, founder-gated, NOT closed by this gate):** per-`client_id`
+keying for high-volume clients, introspect-caller-auth, and RFC 9700 §4.5.3 revoke-token-on-
+code-reuse. (`project_oauth_provider_ratelimit_gap`) 3. ~~**Stripe `createCustomer` idempotency-key**~~ — ✅ **CLOSED 6e9fe21e (2026-06-01)**. Added an optional
 Idempotency-Key to `StripeApiClient.createCustomer` (conditional header via `post()`); `ensureCustomer`
 passes `stripe-customer-create:<accountId>` → Stripe returns the same Customer on retry/parallel-call,
 closing both orphan paths with no extra lookup (compatible with the no-search-by-email design). Done
