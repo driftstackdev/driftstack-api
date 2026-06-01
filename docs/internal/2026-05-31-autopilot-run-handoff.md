@@ -748,6 +748,32 @@ intentionally-deferred (the guard-test author's documented call): a behavioral t
 to re-verify an already-fixed + now-doubly-source-pinned property — low value-to-risk; don't
 build it. tsc strict-clean; 4/4 guard tests green.
 
+2026-06-01 wave — fresh critical read of `services/agent-runtime.ts` token-budget accounting
+(central, previously-unaudited business logic). Hypothesis RAISED then REFUTED: the
+budget-exhausted close trips on `postDebitSession.tokenBudgetRemaining === 0` (exact-zero), so
+a turn whose `tokensConsumed` OVERSHOOTS the remaining budget could skip the close if remaining
+went negative — but BOTH `debitTokens` impls floor at `Math.max(0, remaining - tokens)`
+(drizzle `agent-sessions-repo.ts:158`; in-memory matches) and the schema has CHECK
+`remaining <= total`, so an overshoot clamps to exactly 0 → `=== 0` DOES fire. Sound, no bug;
+`agent-runtime.test.ts` (29 its) already covers the refusal-close, the debit-to-zero close, the
+subsequent short-circuit, and transient/fatal error classification — agent-runtime token
+accounting is audited-clean, don't re-audit. REAL finding from the same read — a cross-module
+DRIFT fragility: the budget-exhausted refuse string `token budget exhausted; start a new
+session` is duplicated as FOUR bare literals (deterministic + Claude decomposers emit it;
+`agent-runtime.ts:293` matches it with exact `===`; agent-decomposer.ts JSDoc), with NO shared
+constant. A PRE-CALL budget refusal charges 0 tokens (remaining stays e.g. 1, so
+`debitZeroedBudget` is false) → the Q.3 close fires ONLY via the exact string match. If the
+Claude (production) decomposer's wording drifts out of sync with the runtime matcher, the close
+SILENTLY stops firing there (the runtime test drives the DETERMINISTIC decomposer, so it
+wouldn't catch it) and the customer is stuck retrying into refusals. The per-decomposer tests
+pin each emit in isolation; nothing pinned the cross-module equality. SHIPPED (test-only, no
+source change): `agent-budget-exhausted-refuse-string-cross-source-invariant.test.ts` —
+extracts the budget literal from all three functional sites and asserts byte-identity to a
+canonical value (4/4 green, tsc clean). SURFACED (not auto-done): the robust fix is a single
+shared constant imported by all three — a small behaviour-neutral refactor that would touch the
+runtime + both decomposers + their content-parity pins; left for a focused pass, the invariant
+test is the safe immediate guard. Same drift class as the enum/webhook-roster hardenings.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
