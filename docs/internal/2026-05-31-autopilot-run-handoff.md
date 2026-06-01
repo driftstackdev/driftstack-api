@@ -1227,6 +1227,20 @@ build (dist gitignored). Same-commit parity: the cross-app drift-guard
 project_status_site_cloudflare_setup. Embeddable-status-widget exception (relax X-Frame-Options to
 SAMEORIGIN / CSP frame-ancestors) left as a founder call. tsc + eslint + prettier clean.
 
+2026-06-01 wave — fresh-audit of response-header injection (CWE-113). CLEAN — no bug. Every
+reply.header/writeHead value across apps/server/src is static / server-computed / server-generated;
+Node's setHeader structurally rejects CRLF so response-splitting is runtime-blocked. Residual vectors
+all clean: the one client-influenced value (x-request-id) is a bounded (≤128) correlation passthrough;
+the one reply.redirect (oauth-client callback bounce) targets the FIXED dashboardOrigin with a
+URLSearchParams-encoded query (no open-redirect / Location injection); both dynamic Content-Disposition
+filenames are server-generated (audit-log ISO-date; crypto receipt `ord_<hex>` id). Filled a test-gap
+(commit c4542548): the e2e correlation test covered reflection+uniqueness but not the 128-char BOUND —
+added a behavioral guard (normal inbound x-request-id reflected; >128 → fresh UUID ≤128) so a client
+can't pin an unbounded value into the response header/logs; mutation-verified (widening the genReqId cap
+fails it). Memory folded into project_idor_ownership_review_clean. Test-only, net source zero. (6th
+consecutive fresh-dimension clean wave: OAuth-rl → SQLi → mass-assignment → insecure-randomness →
+SSE-scoping → status-site-headers[shipped fix] → CWE-113.)
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
