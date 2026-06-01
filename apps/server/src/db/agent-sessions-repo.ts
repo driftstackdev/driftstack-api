@@ -14,20 +14,19 @@
 //   - closeWithReason flips status to 'closed' + writes closed_reason
 //     atomically.
 //
-// Concurrency note: debitTokens is a READ-MODIFY-WRITE (a get() SELECT
-// then a SEPARATE UPDATE writing the JS-computed remaining), NOT a single
-// atomic statement. Two debits racing on the same session both read the
-// same `remaining`; the later UPDATE overwrites the earlier → one debit is
-// LOST → the session is UNDER-debited (budget over-served — for the
-// bundled-LLM path that is uncapped upstream Anthropic spend). The CHECK
-// `remaining <= total` + the 0-floor bound the value but do NOT prevent the
-// lost update. Reachability is low (a single agent-session's turns are
-// normally sequential). FIX = an atomic single-statement decrement
-// (`SET remaining = GREATEST(0, remaining - $tokens)`); deferred — no
-// real-PG test currently exercises this path to validate the SQL, so it is
-// surfaced for a focused session rather than shipped unvalidated. (The prior
-// "acceptable for v1.0" posture rested on a backwards failure-mode read —
-// it assumed the worst case was over-billing; it is under-billing.)
+// Concurrency note: debitTokens AND appendTranscript perform their
+// read-modify-write inside a `db.transaction()` that SELECTs the row
+// `FOR UPDATE` before mutating (mirrors stripe-webhooks-repo.setAccountTier).
+// The row lock SERIALISES concurrent same-session debits/appends — a second
+// transaction blocks on the SELECT until the first commits, then reads the
+// post-update value. So no debit is lost (no under-billing → no uncapped
+// bundled-LLM spend) and no transcript entry is dropped (no data loss).
+// Earlier these were bare read-modify-writes (a get() SELECT then a SEPARATE
+// UPDATE writing the JS-computed value) whose later UPDATE clobbered the
+// earlier; that lost-update window is closed by the FOR-UPDATE transaction.
+// debitTokens still floors remaining at 0 (the CHECK `remaining <= total`
+// guards the opposite drift). Validated against real Postgres by
+// db-agent-sessions-concurrency-drizzle.test.ts (CI; skips locally w/o DB).
 
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
@@ -134,59 +133,71 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
   }
 
   async appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord> {
-    // Read-modify-write: get() SELECT → JS array spread → a SEPARATE
-    // UPDATE writing the whole transcript. NOT atomic and NOT row-locked
-    // — concurrent same-session appends have a lost-update window (both
-    // read the same transcript; the later UPDATE clobbers the earlier →
-    // a transcript ENTRY is LOST = data loss, a worse consequence than
-    // the debitTokens under-debit in the header note). Reachability is
-    // low: a single turn's appends are sequential (awaited); the race
-    // needs two concurrent turns on the same session. FIX = an atomic
-    // jsonb append (`SET transcript = transcript || $entry::jsonb`) or a
-    // FOR-UPDATE transaction like stripe-webhooks-repo.setAccountTier;
-    // deferred for the same reason as debitTokens — no real-PG test
-    // exercises this Drizzle path, so shipping the SQL unvalidated would
-    // breach the empirical-proof bar.
-    const existing = await this.get(id);
-    if (!existing) {
-      throw new Error(`AgentSession ${id} not found`);
-    }
+    // Atomic append under a row lock (see the file header concurrency note):
+    // SELECT … FOR UPDATE inside a transaction serialises concurrent
+    // same-session appends, so two racing turns never lose an entry — the
+    // second blocks until the first commits, then appends to the up-to-date
+    // transcript. (Was a bare read-modify-write whose later UPDATE clobbered
+    // the earlier → a dropped transcript entry.)
     const now = this.clock();
-    const nextTranscript = [...existing.transcript, entry];
-    const updated = await this.database.db
-      .update(agentSessions)
-      .set({ transcript: nextTranscript, updatedAt: now })
-      .where(eq(agentSessions.id, id))
-      .returning();
-    const row = updated[0];
-    if (!row) {
-      throw new Error(`AgentSession ${id} disappeared between read and UPDATE`);
-    }
-    return rowToRecord(row);
+    return this.database.db.transaction(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(agentSessions)
+        .where(eq(agentSessions.id, id))
+        .for('update')
+        .limit(1);
+      const existing = rows[0];
+      if (!existing) {
+        throw new Error(`AgentSession ${id} not found`);
+      }
+      const currentTranscript = (existing.transcript as ReadonlyArray<TranscriptEntry>) ?? [];
+      const nextTranscript = [...currentTranscript, entry];
+      const updated = await tx
+        .update(agentSessions)
+        .set({ transcript: nextTranscript, updatedAt: now })
+        .where(eq(agentSessions.id, id))
+        .returning();
+      const row = updated[0];
+      if (!row) {
+        throw new Error(`AgentSession ${id} disappeared mid-transaction`);
+      }
+      return rowToRecord(row);
+    });
   }
 
   async debitTokens(id: string, tokens: number): Promise<AgentSessionRecord> {
-    // Read-modify-write: get() SELECT → JS-computed 0-floor → a SEPARATE
-    // UPDATE. NOT atomic — concurrent debits on the same session have a
-    // lost-update window (see the header concurrency note; FIX = an atomic
-    // `GREATEST(0, remaining - $tokens)` decrement). The CHECK constraint
-    // `remaining <= total` guards only the opposite drift.
-    const existing = await this.get(id);
-    if (!existing) {
-      throw new Error(`AgentSession ${id} not found`);
-    }
+    // Atomic debit under a row lock (see the file header concurrency note):
+    // SELECT … FOR UPDATE inside a transaction serialises concurrent
+    // same-session debits, so two racing turns never lose one — the second
+    // blocks until the first commits, then debits the up-to-date remaining.
+    // Floored at 0 (CHECK `remaining <= total` guards the opposite drift).
+    // (Was a bare read-modify-write whose later UPDATE clobbered the earlier
+    // → under-debit / budget over-served.)
     const now = this.clock();
-    const nextRemaining = Math.max(0, existing.tokenBudgetRemaining - tokens);
-    const updated = await this.database.db
-      .update(agentSessions)
-      .set({ tokenBudgetRemaining: nextRemaining, updatedAt: now })
-      .where(eq(agentSessions.id, id))
-      .returning();
-    const row = updated[0];
-    if (!row) {
-      throw new Error(`AgentSession ${id} disappeared between read and UPDATE`);
-    }
-    return rowToRecord(row);
+    return this.database.db.transaction(async (tx) => {
+      const rows = await tx
+        .select()
+        .from(agentSessions)
+        .where(eq(agentSessions.id, id))
+        .for('update')
+        .limit(1);
+      const existing = rows[0];
+      if (!existing) {
+        throw new Error(`AgentSession ${id} not found`);
+      }
+      const nextRemaining = Math.max(0, existing.tokenBudgetRemaining - tokens);
+      const updated = await tx
+        .update(agentSessions)
+        .set({ tokenBudgetRemaining: nextRemaining, updatedAt: now })
+        .where(eq(agentSessions.id, id))
+        .returning();
+      const row = updated[0];
+      if (!row) {
+        throw new Error(`AgentSession ${id} disappeared mid-transaction`);
+      }
+      return rowToRecord(row);
+    });
   }
 
   async closeWithReason(id: string, reason: string): Promise<AgentSessionRecord> {

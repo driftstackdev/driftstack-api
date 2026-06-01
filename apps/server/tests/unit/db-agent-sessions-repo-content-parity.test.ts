@@ -46,12 +46,18 @@ describe('db/agent-sessions-repo content parity', () => {
     );
   });
 
-  it('Concurrency note framing pinned (CORRECTED — was a false safety claim): debitTokens is a READ-MODIFY-WRITE (get() SELECT then a SEPARATE UPDATE), NOT a single atomic statement, so concurrent same-session debits have a LOST-UPDATE window → the session is UNDER-debited (budget over-served / uncapped bundled-LLM spend). FIX = atomic `GREATEST(0, remaining - $tokens)`, deferred (no real-PG test validates the SQL). Pinned so the accurate race description + the deferred-atomic-fix path stay documented — and so the prior false "single statement / serialize at the row level / bills for both" claim cannot silently return.', () => {
+  it('Concurrency note framing pinned (race CLOSED): debitTokens AND appendTranscript run their read-modify-write inside a db.transaction() that SELECTs the row FOR UPDATE first (mirrors setAccountTier), so the row lock SERIALISES concurrent same-session debits/appends — no debit lost (no under-billing), no transcript entry dropped (no data loss). Pinned so the atomic FOR-UPDATE approach stays documented, the false "single statement … serialize at the row level" claim cannot return, AND the now-fixed code cannot silently regress to a bare read-modify-write without this pin failing.', () => {
     expect(body).toMatch(
-      /\/\/ Concurrency note: debitTokens is a READ-MODIFY-WRITE \(a get\(\) SELECT\s*\n?\s*\/\/ then a SEPARATE UPDATE writing the JS-computed remaining\), NOT a single\s*\n?\s*\/\/ atomic statement\./,
+      /\/\/ Concurrency note: debitTokens AND appendTranscript perform their\s*\n?\s*\/\/ read-modify-write inside a `db\.transaction\(\)` that SELECTs the row\s*\n?\s*\/\/ `FOR UPDATE` before mutating/,
     );
-    expect(body).toMatch(/one debit is\s*\n?\s*\/\/ LOST → the session is UNDER-debited/);
-    expect(body).toMatch(/FIX = an atomic single-statement decrement/);
+    expect(body).toMatch(/row lock SERIALISES concurrent same-session debits\/appends/);
+    expect(body).toMatch(/no transcript entry is dropped \(no data loss\)/);
+    // The fix must actually be present in BOTH methods: a FOR-UPDATE select
+    // inside a transaction. Regressing to a bare read-modify-write fails here.
+    expect(body).toMatch(/\.for\('update'\)/);
+    expect(
+      (body.match(/this\.database\.db\.transaction\(async \(tx\) =>/g) ?? []).length,
+    ).toBeGreaterThanOrEqual(2);
     // Guard: the prior false "single statement … serialize at the row level"
     // safety claim must NOT come back.
     expect(body).not.toMatch(/each UPDATE is a single statement, so concurrent/);

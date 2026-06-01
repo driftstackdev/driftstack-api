@@ -1,0 +1,119 @@
+// Drizzle-backed integration test: DrizzleAgentSessionsRepo.debitTokens and
+// .appendTranscript are ATOMIC under concurrency, against a REAL Postgres.
+//
+// Both methods do a read-modify-write. Before the fix they were a bare get()
+// SELECT then a SEPARATE UPDATE, so two concurrent same-session calls both
+// read the same value and the later UPDATE clobbered the earlier → a lost
+// debit (under-billing / uncapped bundled-LLM spend) or a dropped transcript
+// entry (data loss). The fix wraps each in a `db.transaction()` that SELECTs
+// the row `FOR UPDATE` first: the second transaction blocks on the SELECT
+// until the first commits, then operates on the up-to-date value.
+//
+// The in-memory twin is synchronous (no await gap → no race), so it can't
+// exercise this — a real Postgres with a MULTI-connection pool is the only
+// place the row lock is actually proven. With `max: 5` the two concurrent
+// transactions get distinct connections, so the FOR-UPDATE lock (not
+// connection serialisation) is what's under test. With the fix the results
+// are deterministic; the pre-fix read-modify-write would yield 60/70 (lost
+// debit) and length 1 (dropped entry).
+//
+// Run scope:
+//   - CI: build-test job has postgres:17-alpine at localhost:5432 with the
+//     `driftstack` schema migrated; this test always runs there.
+//   - Local dev: skips if DATABASE_URL postgres is unreachable.
+
+import { randomUUID } from 'node:crypto';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DrizzleAgentSessionsRepo } from '../../src/db/agent-sessions-repo.js';
+import type * as schema from '../../src/db/schema.js';
+import type { TranscriptEntry } from '../../src/services/agent-decomposer.js';
+
+const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
+const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+
+let dbReachable = false;
+let client: ReturnType<typeof postgres> | null = null;
+// accountIds seeded — cleaned in FK order: agent_sessions → accounts.
+const seeded: string[] = [];
+
+beforeAll(async () => {
+  const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+  try {
+    await probe`SELECT 1`;
+    dbReachable = true;
+    await probe.end({ timeout: 1 });
+  } catch {
+    await probe.end({ timeout: 1 }).catch(() => {});
+    return;
+  }
+  // max: 5 so concurrent transactions get distinct connections — the
+  // FOR-UPDATE row lock, not connection serialisation, is what's exercised.
+  client = postgres(DB_URL, { max: 5 });
+  try {
+    await client`SELECT 1 FROM agent_sessions LIMIT 0`;
+  } catch {
+    dbReachable = false;
+    await client.end({ timeout: 1 }).catch(() => {});
+    client = null;
+  }
+});
+
+afterAll(async () => {
+  if (client) {
+    for (const accountId of seeded) {
+      await client`DELETE FROM agent_sessions WHERE account_id = ${accountId}`.catch(() => {});
+      await client`DELETE FROM accounts WHERE id = ${accountId}`.catch(() => {});
+    }
+    await client.end({ timeout: 5 });
+  }
+});
+
+describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
+  'agent_sessions debitTokens/appendTranscript atomicity under concurrency (Drizzle path, real Postgres)',
+  () => {
+    it('concurrent debitTokens never lose an update (FOR UPDATE row lock serialises → 100-30-40=30)', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-debit-${accountId}@test.local`})`;
+      const session = await repo.create({ accountId, tokenBudgetTotal: 100 });
+
+      // A bare read-modify-write would let both read 100 → clobber → 60 or 70
+      // (one debit LOST). The FOR-UPDATE lock serialises → 30, deterministically.
+      await Promise.all([repo.debitTokens(session.id, 30), repo.debitTokens(session.id, 40)]);
+
+      const after = await repo.get(session.id);
+      expect(after?.tokenBudgetRemaining).toBe(30);
+    });
+
+    it('concurrent appendTranscript never drop an entry (FOR UPDATE row lock serialises → length 2)', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-append-${accountId}@test.local`})`;
+      const session = await repo.create({ accountId, tokenBudgetTotal: 1000 });
+
+      const a: TranscriptEntry = { at: 't0', role: 'user', body: 'msg-A' };
+      const b: TranscriptEntry = { at: 't1', role: 'agent', body: 'msg-B' };
+      // A bare read-modify-write would lose one → length 1. The FOR-UPDATE lock
+      // serialises → both land → length 2.
+      await Promise.all([
+        repo.appendTranscript(session.id, a),
+        repo.appendTranscript(session.id, b),
+      ]);
+
+      const after = await repo.get(session.id);
+      expect(after?.transcript.length).toBe(2);
+      const bodies = (after?.transcript ?? []).map((e) => e.body).sort();
+      expect(bodies).toEqual(['msg-A', 'msg-B']);
+    });
+  },
+);
