@@ -1258,6 +1258,23 @@ operational + compliance roster) is now comprehensively swept AND regression-gua
 high-value work is the founder-action queue below. Future waves: continue fresh-audit cadence but expect
 clean confirmations; do NOT manufacture low-value guards on already-clean trusted paths.
 
+2026-06-01 wave — fresh CORRECTNESS read (not security) of webhook-delivery RELIABILITY: the retry-backoff
+SCHEDULE + the auto-disable logic (prior webhook audits were SSRF / in_flight-reclaim / retry-count, not
+these). Both CORRECT, no bug. (a) Backoff is a static table BACKOFF_MS_BY_ATTEMPT (1/5/15/30/60 min for
+retry indices 1..5; DLQ at index 6 = initial+5), strictly monotonic, comment matches values, jitter
+0–15% non-negative, nextAttemptAt always future, no overflow (static table) — and it is COMPREHENSIVELY
+guarded already (services-webhook-worker-content-parity pins the exact table + the doc-comment + jitter +
+nextAttemptAt; webhook-worker-cross-source-invariant pins the 5-step schedule) → adding anything = duplicate
+coverage, deliberately NOT done. (b) Auto-disable: consecutiveFailures resets to 0 on 2xx (recordDelivered),
+increments atomically (`sql ${col}+1`) on retry+DLQ, disable check `consecutiveFailures+1 >= 50` on the DLQ
+terminal path → a never-succeeding endpoint reliably disables within ~9 fully-failed deliveries. The check
+is DLQ-path-only (not the retry path) — verified BENIGN by-design: the count may reach ~55 before disabling
+(immaterial lag at a 50 threshold; the endpoint still disables on the next DLQ) — NOT a bug, don't re-flag.
+NO code/test artifact (no bug; backoff already-guarded; auto-disable sound). Webhook unwired packages
+(webrtc-streaming) skipped; recapture-automation is capture-domain-adjacent + scheduler-already-audited;
+prod-served OpenAPI spec verified valid (3.1.0, 154 paths). Wind-down is genuine + deep — fresh reads now
+land clean AND already-covered. Real remaining work = the founder queue below.
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
