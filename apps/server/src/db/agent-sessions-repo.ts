@@ -14,11 +14,20 @@
 //   - closeWithReason flips status to 'closed' + writes closed_reason
 //     atomically.
 //
-// Concurrency note: each UPDATE is a single statement, so concurrent
-// debits from two requests on the same session serialize at the row
-// level. The token-budget invariant is preserved by the DB; the worst
-// case is one debit "wins" and bills the customer for the work both
-// requests would have done — acceptable for v1.0.
+// Concurrency note: debitTokens is a READ-MODIFY-WRITE (a get() SELECT
+// then a SEPARATE UPDATE writing the JS-computed remaining), NOT a single
+// atomic statement. Two debits racing on the same session both read the
+// same `remaining`; the later UPDATE overwrites the earlier → one debit is
+// LOST → the session is UNDER-debited (budget over-served — for the
+// bundled-LLM path that is uncapped upstream Anthropic spend). The CHECK
+// `remaining <= total` + the 0-floor bound the value but do NOT prevent the
+// lost update. Reachability is low (a single agent-session's turns are
+// normally sequential). FIX = an atomic single-statement decrement
+// (`SET remaining = GREATEST(0, remaining - $tokens)`); deferred — no
+// real-PG test currently exercises this path to validate the SQL, so it is
+// surfaced for a focused session rather than shipped unvalidated. (The prior
+// "acceptable for v1.0" posture rested on a backwards failure-mode read —
+// it assumed the worst case was over-billing; it is under-billing.)
 
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
@@ -147,9 +156,11 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
   }
 
   async debitTokens(id: string, tokens: number): Promise<AgentSessionRecord> {
-    // Read-modify-write — single UPDATE reads remaining, floors at 0,
-    // writes back. The CHECK constraint `remaining <= total` is the
-    // DB-side guard against drift.
+    // Read-modify-write: get() SELECT → JS-computed 0-floor → a SEPARATE
+    // UPDATE. NOT atomic — concurrent debits on the same session have a
+    // lost-update window (see the header concurrency note; FIX = an atomic
+    // `GREATEST(0, remaining - $tokens)` decrement). The CHECK constraint
+    // `remaining <= total` guards only the opposite drift.
     const existing = await this.get(id);
     if (!existing) {
       throw new Error(`AgentSession ${id} not found`);

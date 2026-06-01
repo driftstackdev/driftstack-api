@@ -46,10 +46,15 @@ describe('db/agent-sessions-repo content parity', () => {
     );
   });
 
-  it('Concurrency note framing pinned: \'each UPDATE is a single statement, so concurrent debits from two requests on the same session serialize at the row level. The token-budget invariant is preserved by the DB; the worst case is one debit "wins" and bills the customer for the work both requests would have done — acceptable for v1.0.\' — pinned so the row-level serialization + token-budget-DB-preserved + worst-case-one-wins + v1.0-acceptable contract all stay documented', () => {
+  it('Concurrency note framing pinned (CORRECTED — was a false safety claim): debitTokens is a READ-MODIFY-WRITE (get() SELECT then a SEPARATE UPDATE), NOT a single atomic statement, so concurrent same-session debits have a LOST-UPDATE window → the session is UNDER-debited (budget over-served / uncapped bundled-LLM spend). FIX = atomic `GREATEST(0, remaining - $tokens)`, deferred (no real-PG test validates the SQL). Pinned so the accurate race description + the deferred-atomic-fix path stay documented — and so the prior false "single statement / serialize at the row level / bills for both" claim cannot silently return.', () => {
     expect(body).toMatch(
-      /\/\/ Concurrency note: each UPDATE is a single statement, so concurrent\s*\n?\s*\/\/ debits from two requests on the same session serialize at the row\s*\n?\s*\/\/ level\. The token-budget invariant is preserved by the DB; the worst\s*\n?\s*\/\/ case is one debit "wins" and bills the customer for the work both\s*\n?\s*\/\/ requests would have done — acceptable for v1.0\./,
+      /\/\/ Concurrency note: debitTokens is a READ-MODIFY-WRITE \(a get\(\) SELECT\s*\n?\s*\/\/ then a SEPARATE UPDATE writing the JS-computed remaining\), NOT a single\s*\n?\s*\/\/ atomic statement\./,
     );
+    expect(body).toMatch(/one debit is\s*\n?\s*\/\/ LOST → the session is UNDER-debited/);
+    expect(body).toMatch(/FIX = an atomic single-statement decrement/);
+    // Guard: the prior false "single statement … serialize at the row level"
+    // safety claim must NOT come back.
+    expect(body).not.toMatch(/each UPDATE is a single statement, so concurrent/);
   });
 
   it("rowToRecord field-mapper framing pinned: 'v2-#9 + v2-#19 hardening columns — present on every row even when migration 0047 left them NULL on legacy rows.' + 'Arc 2 sub-slice 8.2 (v2-#8) — pair-mode + GUI-key columns from migration 0052. Existing rows pick up mode=\"ai\" from the CHECK default; null for pair_mode_state + gui_control_key_expires_at.' + mode: (row.mode as 'manual' | 'ai' | 'pair') ?? 'ai' fallback — pinned so the v2-#9/19 + Arc 2 sub-slice 8.2 + migration 0052 + 3-mode enum + 'ai' fallback contract all stay documented", () => {
