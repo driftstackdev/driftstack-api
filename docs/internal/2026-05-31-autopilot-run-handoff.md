@@ -1051,6 +1051,23 @@ duplicate alerts/cost on retry. Well-tested (v541e cross-source + content-parity
 refreshed the stale founder-action queue below (was ~wave-8 state; now reflects all surfaced
 findings).
 
+2026-06-01 wave — audited the pair-mode takeover LOCK (`agent-pair-mode-lock.ts` — WIRED:
+`RedisPairModeTakeoverLock` in bootstrap, used by POST `/takeover` + `/handback` + the
+input-event takeover trigger). Locking is a classic bug source; formed three hypotheses, ALL
+REFUTED — CLEAN, don't re-audit. (1) naive-DEL release that frees someone else's lock → NO, it's
+a Lua CAS-DEL (`if GET==clientId then DEL else 0`, the canonical Redlock recipe). (2) a 24h lock
+→ 24h takeover-lockout → NO, that 24h is the LiveKit TOKEN TTL in `maybeMintLivekit` (I conflated
+them); the lock uses the 30s default. (3) one-shot 30s lock not renewed → two-humans-driving race
+after 30s → NO: the lock is acquired only on the `ai-driving → human` transition and is
+APPROPRIATELY SCOPED to that sub-second contention — once human-driving, subsequent input-events
+forward to the harness (no re-acquire) and the STATE machine gates the session, so the lock needn't
+be renewed; when state returns to ai-driving (handback CAS-releases it; heartbeat-timeout
+auto-handback fires only after >30s stale, by which point the 30s lock has already expired) a
+fresh takeover acquires cleanly. So no lingering-lock lockout and no takeover-steal. The lock
+primitive (SET-NX-EX acquire returning the winner's clientId on contention + Lua CAS-DEL release)
+is textbook-correct. No code change. NOTE: pair-mode is v2-#8 but wired (activation-gated: real
+handlers when `pairModeLock` is present, else 503 stubs).
+
 ## Recommended order when the loop is paused (founder-action queue, refreshed 2026-06-01)
 
 All items below are SURFACED findings from the autopilot audit run — deliberately NOT auto-fixed
