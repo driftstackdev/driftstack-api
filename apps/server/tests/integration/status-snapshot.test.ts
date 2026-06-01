@@ -103,6 +103,26 @@ describe('StatusSnapshotService', () => {
     expect(body.data).toHaveLength(1);
     expect(body.data[0]!.title).toBe('public incident');
     expect(body.data[0]!.public).toBe(true);
+
+    // The public R2 snapshot is a public egress (the status-site CF Pages
+    // frontend reads it during API outages), so publicIncident MUST omit
+    // the internal incident columns — same exclusion contract the
+    // admin-incidents API mapper got a behavioral guard for (ea8775f1).
+    // The incident above was seeded WITH createdByAdminId/KeyId populated;
+    // assert neither casing (row camelCase nor wire snake_case), plus
+    // autoProbeTarget, ever reaches the serialized snapshot — so a future
+    // spread/renamed-field leak fails here, not silently on the status page.
+    const incident0 = body.data[0]!;
+    for (const internalField of [
+      'createdByAdminId',
+      'created_by_admin_id',
+      'createdByAdminKeyId',
+      'created_by_admin_key_id',
+      'autoProbeTarget',
+      'auto_probe_target',
+    ]) {
+      expect(incident0).not.toHaveProperty(internalField);
+    }
   });
 
   it('overwrites the same key on every snapshot', async () => {
