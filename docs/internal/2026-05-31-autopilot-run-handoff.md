@@ -350,6 +350,20 @@ fail-closed-when-disabled + non-Bearer + accept). See
 nowpayments-signing + internal-fleet-auth — both shared-secret verify boundaries, both
 sound; the test-arbitrated method is holding.)
 
+2026-06-01 wave — fresh audit of LiveKit per-Mac secret encryption
+(`lib/livekit-secret-encryption.ts`, LK.2 AES-256-GCM at-rest envelope; decrypted only at
+LiveKit-JWT-mint, plaintext never leaves the process). TEXTBOOK-CLEAN: fresh 12-byte IV per
+encrypt (no reuse), auth-tag set+verified on decrypt (throws on tamper/wrong-key), 32-byte
+key-length validation, empty-plaintext + truncated-blob guards — the same envelope as the
+already-verified BYOK Anthropic encryption (shared `MFA_ENCRYPTION_KEY`, single trust
+boundary by design). Exhaustively tested already (7 unit cases incl IV-uniqueness +
+wrong-key-auth-tag-throw); NO code change and NO added coverage (an explicit bit-flip-tamper
+test would duplicate the auth-tag path — saturation rule). See
+`project_livekit_secret_encryption_audit_clean`. Three consecutive clean security-boundary
+audits now (nowpayments-signing, internal-fleet-auth, livekit-secret-encryption); the small
+crypto/auth-helper surface is nearly swept (sibling `gui-control-key-encryption.ts` is the
+same envelope, un-audited).
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
