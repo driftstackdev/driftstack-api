@@ -14,6 +14,7 @@
 // If METRICS_SCRAPE_TOKEN is unset, the route returns 503 — surfaces a
 // missing-config bug early rather than silently exposing internals.
 
+import { timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { MetricsRegistry } from '../services/metrics-registry.js';
 
@@ -30,7 +31,13 @@ export function registerMetricsRoutes(app: FastifyInstance, deps: MetricsRoutesD
     }
     const authz = req.headers.authorization;
     const expected = `Bearer ${deps.scrapeToken}`;
-    if (authz !== expected) {
+    // Constant-time compare so the scrape token can't be recovered via
+    // response-timing (matches lib/internal-fleet-auth + the timing-safe
+    // cross-source invariant). timingSafeEqual throws on a length
+    // mismatch, so length-guard first → uniform "unauthorized" outcome.
+    const authzBuf = Buffer.from(typeof authz === 'string' ? authz : '', 'utf8');
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    if (authzBuf.length !== expectedBuf.length || !timingSafeEqual(authzBuf, expectedBuf)) {
       reply.code(401);
       return { error: 'unauthorized' };
     }

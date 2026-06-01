@@ -53,13 +53,18 @@ describe('routes/metrics content parity', () => {
     expect(body).toMatch(/readonly scrapeToken: string \| null;/);
   });
 
-  it('503 fail-closed branch pinned: scrapeToken null OR empty-string → 503 metrics scrape token not configured. + 401 wrong-bearer branch: authz mismatch → 401 unauthorized. Drift to dropping the empty-string branch would let a literally-empty token pass; drift to comparing tokens with !== (non-constant-time) on user-controlled input is acceptable here because the 503 fast-fail rejects before any comparison runs for the unset case', () => {
+  it('503 fail-closed branch pinned: scrapeToken null OR empty-string → 503 metrics scrape token not configured. + 401 wrong-bearer branch via CONSTANT-TIME compare (timingSafeEqual + length-guard, matching lib/internal-fleet-auth + the timing-safe cross-source invariant) → 401 unauthorized. Drift to dropping the empty-string branch would let a literally-empty token pass; drift back to a plain !== / === compare would reintroduce a token-recovery timing side-channel on the scrape bearer', () => {
     expect(body).toMatch(
       /if \(deps\.scrapeToken === null \|\| deps\.scrapeToken\.length === 0\) \{\s*\n?\s*reply\.code\(503\);\s*\n?\s*return \{ error: 'metrics scrape token not configured' \};/,
     );
+    expect(body).toMatch(/import \{ timingSafeEqual \} from 'node:crypto';/);
+    expect(body).toMatch(/const authz = req\.headers\.authorization;/);
+    expect(body).toMatch(/const expected = `Bearer \$\{deps\.scrapeToken\}`;/);
     expect(body).toMatch(
-      /const authz = req\.headers\.authorization;\s*\n?\s*const expected = `Bearer \$\{deps\.scrapeToken\}`;\s*\n?\s*if \(authz !== expected\) \{\s*\n?\s*reply\.code\(401\);\s*\n?\s*return \{ error: 'unauthorized' \};/,
+      /if \(authzBuf\.length !== expectedBuf\.length \|\| !timingSafeEqual\(authzBuf, expectedBuf\)\) \{\s*\n?\s*reply\.code\(401\);\s*\n?\s*return \{ error: 'unauthorized' \};/,
     );
+    // Regression guard: the plain non-constant-time compare must not return.
+    expect(body).not.toMatch(/if \(authz !== expected\)/);
   });
 
   it("exposition-format content-type pinned: 'text/plain; version=0.0.4; charset=utf-8'. Drift to dropping the `version=0.0.4` parameter would make some scrapers reject the response (Prometheus checks the version parameter for protocol-version negotiation)", () => {

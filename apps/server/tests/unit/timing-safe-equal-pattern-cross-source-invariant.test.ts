@@ -19,6 +19,10 @@ const FILES = [
   { file: 'apps/server/src/lib/nowpayments-signing.ts', purpose: 'NowPayments IPN HMAC-SHA512' },
   { file: 'apps/server/src/lib/api-keys.ts', purpose: 'API key hash compare' },
   { file: 'apps/server/src/lib/oauth-pkce.ts', purpose: 'PKCE S256 challenge compare' },
+  {
+    file: 'apps/server/src/routes/metrics.ts',
+    purpose: 'Prometheus /metrics scrape-token bearer',
+  },
 ];
 
 function read(p: string): string {
