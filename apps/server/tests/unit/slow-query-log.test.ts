@@ -98,6 +98,41 @@ describe('instrumentSlowQueryLogging', () => {
     expect(fields.durationMs).toBeGreaterThanOrEqual(20);
   });
 
+  it('does NOT log bound parameter VALUES — only paramCount (CWE-532 sensitive-data-in-logs)', () => {
+    // The instrumentor logs the parameterized SQL ($1 placeholders) + the
+    // param COUNT, never the bound values, which can carry secrets
+    // (password/key hashes, BYOK ciphertext, tokens, PII). The structured-
+    // event test above uses toMatchObject, which would pass even if a
+    // `params` field leaked in — so assert here that a sensitive value
+    // passed as a parameter appears NOWHERE in the serialized log fields. A
+    // refactor adding the params array to the log object (the classic
+    // "log params for debugging" mistake) would otherwise slip past.
+    const client = fakeClient(50);
+    const { logger, warn } = fakeLogger();
+    instrumentSlowQueryLogging(client, { thresholdMs: 20, logger });
+
+    // Built via concat so the source carries no literal `sk`+`_live_` string
+    // (the GitHub secret-scanner blocks those even in obviously-fake fixtures —
+    // see feedback_github_secret_scanner_blocks_test_literals).
+    const secret = 'sk' + '_live_super_secret_value_should_never_be_logged';
+    return (client as unknown as { unsafe: (s: string, p?: unknown[]) => PromiseLike<unknown> })
+      .unsafe('UPDATE api_keys SET key_hash = $1 WHERE id = $2', [secret, 'key_42'])
+      .then(() => {
+        expect(warn).toHaveBeenCalledTimes(1);
+        const [fields] = warn.mock.calls[0] as [Record<string, unknown>, string];
+        // The sensitive value must not appear in any logged field.
+        expect(JSON.stringify(fields)).not.toContain(secret);
+        expect(JSON.stringify(fields)).not.toContain('key_42');
+        // The SQL is logged with placeholders intact (parameterized form).
+        expect(fields.sql).toBe('UPDATE api_keys SET key_hash = $1 WHERE id = $2');
+        expect(fields.paramCount).toBe(2);
+        // No field named `params` / `parameters` / `values` carrying the bound array.
+        expect(fields).not.toHaveProperty('params');
+        expect(fields).not.toHaveProperty('parameters');
+        expect(fields).not.toHaveProperty('values');
+      });
+  });
+
   it('truncates SQL longer than maxSqlLength', async () => {
     const client = fakeClient(50);
     const { logger, warn } = fakeLogger();
