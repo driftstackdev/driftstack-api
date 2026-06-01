@@ -134,9 +134,19 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
   }
 
   async appendTranscript(id: string, entry: TranscriptEntry): Promise<AgentSessionRecord> {
-    // Read-modify-write — single UPDATE statement reads the current
-    // transcript, appends, writes back. Concurrent appends on the
-    // same session are serialized at the row lock.
+    // Read-modify-write: get() SELECT → JS array spread → a SEPARATE
+    // UPDATE writing the whole transcript. NOT atomic and NOT row-locked
+    // — concurrent same-session appends have a lost-update window (both
+    // read the same transcript; the later UPDATE clobbers the earlier →
+    // a transcript ENTRY is LOST = data loss, a worse consequence than
+    // the debitTokens under-debit in the header note). Reachability is
+    // low: a single turn's appends are sequential (awaited); the race
+    // needs two concurrent turns on the same session. FIX = an atomic
+    // jsonb append (`SET transcript = transcript || $entry::jsonb`) or a
+    // FOR-UPDATE transaction like stripe-webhooks-repo.setAccountTier;
+    // deferred for the same reason as debitTokens — no real-PG test
+    // exercises this Drizzle path, so shipping the SQL unvalidated would
+    // breach the empirical-proof bar.
     const existing = await this.get(id);
     if (!existing) {
       throw new Error(`AgentSession ${id} not found`);
