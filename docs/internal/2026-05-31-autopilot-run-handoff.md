@@ -799,6 +799,33 @@ string, now error-classifier) — all genuine distinct gaps, but per Rule M the 
 PIVOT track (the agent-layer coupling vein is now well-pinned; consider a different subsystem or
 honest deeper wind-down).
 
+2026-06-01 wave — Rule-M track pivot OFF the agent layer: holistic fresh read of the job-scheduler
+core (`services/scheduled-jobs.ts` + `db/scheduled-jobs-repo.ts`, V-202d — drives every sweeper:
+auth-token GC, session-duration, cost-recompute-nightly, webhook-rotation). Hunted the
+orphaned-lock bug class (same one that bit the webhook in_flight reclaim): does a crashed worker
+that claimed a job — `claimDue` sets `locked_by`/`locked_at` and the row `FOR UPDATE` lock releases
+at COMMIT, so "locked" is an application lease via columns — strand the job forever? REFUTED:
+`claimDue` reclaims via `AND (locked_by IS NULL OR locked_at < ${now − 5min})` (a 5-min
+zombie-lock lease), and it's DOUBLE-pinned (v202d-cross-source-invariant.test.ts:97-99 CRITICAL +
+db-scheduled-jobs-repo-content-parity.test.ts:79 full-SQL). All three marks
+(complete/retry/failed) clear the lock columns; retry uses exponential backoff
+`base·2^(attempts−1)`; the exhaustion boundary `attempts >= maxAttempts` is correct
+(claimDue increments attempts at claim, so maxAttempts runs total); the dedup NULL-accountId bug is
+fixed + its prod incident documented; unregistered job_type → markFailed (doesn't wedge the tick);
+slow-handler lease-expiry → at-least-once re-run, benign for these idempotent sweeps. **Sound,
+well-tested — no bug, don't re-audit.** SURFACED (founder migration call, NOT auto-done): the
+`dedupOnAccountAndType` path is a check-then-insert with NO transaction and NO unique-index
+backstop — `scheduled_jobs_account_type_pending_idx` is a plain (non-unique) perf index — so two
+concurrent `dedup:true` enqueues for the same `(account_id, job_type)` can both pass the existence
+check and both insert → two pending rows. LOW severity today (single-replica; the self-re-arm path
+deliberately uses `dedup:false`; `dedup:true` is mostly single-threaded bootstrap seeding) but a
+latent MULTI-REPLICA bug. Clean fix = a PARTIAL unique index `(account_id, job_type) WHERE
+completed_at IS NULL AND failed_at IS NULL` + 23505 handling in enqueue → but that's a migration
+that canNOT be applied cleanly over any existing duplicate-pending rows (needs a dedup-cleanup
+first), so it's the same founder-gated migration class as agent_sessions strict-FK and the
+/v1/sessions concurrency TOCTOU — surface, don't auto-migrate. No code change this wave (forcing
+a reclaim guard would duplicate the existing double-pin; the dedup fix is founder-gated).
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
