@@ -425,6 +425,20 @@ inputs bound refill≥0.01, and prod Redis guards it — recorded in
 `project_rate_limit_store_audit_clean` so a future wave neither re-discovers it as "new"
 nor promotes the in-memory store to prod. No code change.
 
+2026-06-01 wave — audited `lib/effective-account-header.ts` (V-326c), the shared parser for
+the `X-Driftstack-Account` team-RBAC header (7 routes; the input boundary feeding the
+privilege-gated `resolveEffectiveAccount`). SOUND: empty / whitespace-only / duplicate→
+first-wins all normalise to `undefined`, which is the security-critical property (stops a
+stray empty header passing `""` into the resolver); `acc_<uuid>` FORMAT validation is
+correctly delegated to `resolveEffectiveAccount` (throws ForbiddenError, verified in the
+team-RBAC audit). Exhaustively tested (dedicated shared-parser test + cross-source-invariant
+
+- 7 route parity), so no code change. This corrects a prior handoff line that mislabeled
+  this file "non-security" — it's the team-RBAC privilege-boundary parser. See
+  `project_effective_account_header_audit_clean`. With this, the security-sensitive `lib/`
+  surface is fully swept this run; the genuinely remaining un-audited small libs (otel,
+  slow-query-log) are observability, not security.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
