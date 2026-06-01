@@ -827,6 +827,14 @@ export class AuthFlowsService {
     await this.repo.setPassword(account.id, newHash);
 
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
+    // Security: a password reset is a compromise-recovery action, so revoke
+    // EVERY OTHER web session (an attacker-held session must not survive the
+    // reset) while keeping the just-issued one. Reuses the V-355 helper, which
+    // also invalidates the auth cache + audits the revocation. Without this a
+    // stolen/lingering session stayed valid after the victim reset — defeating
+    // the reset's purpose (OWASP session-management: invalidate sessions on
+    // credential change).
+    await this.revokeAllWebSessionsExceptCurrent(account.id, session.row.id, now);
     await this.emitAuditBestEffort(account.id, 'account.password_changed', {
       via: 'password_reset',
       issued_from_ip: args.issuedFromIp,

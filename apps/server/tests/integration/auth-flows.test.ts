@@ -412,6 +412,63 @@ describe('POST /v1/auth/password-reset', () => {
     // demonstrates ownership. Login still requires a verified email
     // though, so this round-trip uses the issued session token instead.)
   });
+
+  it('confirm REVOKES every other web session (compromise-recovery) and keeps the just-issued one', async () => {
+    fx = await buildTestApp();
+    // A verified account with TWO live web sessions (the "attacker-held" + the user's).
+    const signup = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/signup',
+      payload: { email: 'reset-revoke@driftstack.local', password: 'correct horse battery staple' },
+    });
+    const verifyToken = signup.json<SignupResponse>().debug_token!;
+    const verify = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/verify-email',
+      payload: { token: verifyToken },
+    });
+    const sessionA = verify.json<SessionEnvelope>().session.token;
+    const login = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { email: 'reset-revoke@driftstack.local', password: 'correct horse battery staple' },
+    });
+    const sessionB = login.json<SessionEnvelope>().session.token;
+
+    // Reset the password.
+    const reqReset = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/password-reset/request',
+      payload: { email: 'reset-revoke@driftstack.local' },
+    });
+    const resetToken = reqReset.json<{ debug_token: string }>().debug_token;
+    const confirm = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/password-reset/confirm',
+      payload: { token: resetToken, new_password: 'an entirely different passphrase!!' },
+    });
+    expect(confirm.statusCode).toBe(200);
+    const sessionC = confirm.json<SessionEnvelope>().session.token;
+
+    // Both PRE-reset sessions are now revoked (probe via /refresh, which only
+    // succeeds for a live session). Before the fix these stayed valid →
+    // a stolen session survived the victim's reset.
+    for (const stale of [sessionA, sessionB]) {
+      const probe = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/auth/refresh',
+        payload: { token: stale },
+      });
+      expect(probe.statusCode, 'pre-reset session must be revoked').not.toBe(200);
+    }
+    // ...while the session issued BY the reset stays valid.
+    const fresh = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      payload: { token: sessionC },
+    });
+    expect(fresh.statusCode).toBe(200);
+  });
 });
 
 describe('POST /v1/auth/refresh + /v1/auth/logout', () => {
