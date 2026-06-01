@@ -1139,9 +1139,11 @@ readiness. Each has a detail memory + a chronological note above.
 **MEDIUM — ready or near-ready** 2. **OAuth-provider rate-limit** — `/v1/oauth/{authorize,token,introspect,revoke}` are unthrottled
 (`/token` = client_secret/code brute-force surface; `/introspect` = unauth token oracle).
 Ready-to-approve: `ipRateLimit` + a generous `AUTH_IP_LIMITS.oauthProvider` (~60/min/IP).
-(`project_oauth_provider_ratelimit_gap`) 3. **Stripe `createCustomer` idempotency-key** — orphan/duplicate Stripe customer on a DB-write
-failure or a parallel checkout double-click. Add a Stripe Idempotency-Key keyed by accountId.
-Do BEFORE the test→live cutover. (`project_billing_and_apikey_surfaced_findings` #3) 4. **PERMISSIVE_CORS=true in prod** — echoes ANY Origin + credentials (boot-warn guard shipped;
+(`project_oauth_provider_ratelimit_gap`) 3. ~~**Stripe `createCustomer` idempotency-key**~~ — ✅ **CLOSED 6e9fe21e (2026-06-01)**. Added an optional
+Idempotency-Key to `StripeApiClient.createCustomer` (conditional header via `post()`); `ensureCustomer`
+passes `stripe-customer-create:<accountId>` → Stripe returns the same Customer on retry/parallel-call,
+closing both orphan paths with no extra lookup (compatible with the no-search-by-email design). Done
+before the test→live cutover as recommended. (`project_billing_and_apikey_surfaced_findings` #3) 4. **PERMISSIVE_CORS=true in prod** — echoes ANY Origin + credentials (boot-warn guard shipped;
 full fix = the allow-list, but it's missing status/admin origins → blind-disable breaks them).
 (`project_permissive_cors_in_prod`) 5. **Webhook DNS-rebind** — the remaining SSRF layer: connection-time resolve+pin in the delivery
 fetch (literal-IP block + redirect:error already shipped). (`project_webhook_ssrf_outbound_target`) 6. **Unsubscribe-token HMAC redesign** — rotation breaks older emails' unsub links, and a failed
