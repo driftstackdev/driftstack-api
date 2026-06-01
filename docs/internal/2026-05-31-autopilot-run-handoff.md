@@ -695,6 +695,26 @@ auto-fixed. Net: the write-scope invariant is re-verified and all gaps are cross
 the existing record. No code change. (Both customer-facing route AUTHZ invariants — admin-scope
 last wave, write-scope this wave — now verified clean against the documented carve-outs.)
 
+2026-06-01 wave — third (and most severe) cross-cutting routes invariant: does every live
+non-public `/v1/` route actually carry `requireAuth`? Re-verified, NO bypass. Grepped every
+route registration for a missing auth/scope/fleet gate; ~8 clusters flagged, ALL verified
+false-positives against the real file: `account-byok-anthropic`/`agent-sessions`/`billing`/
+`recipes`/`saved-proxies`/`session-proxy` are activation-gate `stub` registrations
+(`app.post(path, stub)`, stub throws `FeatureUnavailableError` 503 unconditionally — the
+ENABLED handlers are the other registration in each file, which carry full auth);
+`fleet-events.ts:45` is a `(): never =>` 503-stub; `internal-atlas-priority.ts:158` uses
+`preHandler: [requireInternalAuth]` (internal-fleet shared-secret bearer, a local alias the
+grep didn't recognise). The grep window also misses multi-line preHandler arrays (same class
+as the write-scope false positives). Net: every live non-public route is authenticated — the
+three AUTHZ invariants (auth-presence, admin-scope, write-scope) now comprehensively cover the
+route-tier boundary, all clean. No code change; recorded so a fresh context doesn't re-run the
+grep. Also probed `cli-authorize` + `fleet-node-auth`/`fleet-nonce-cache` as candidate fresh
+services-tier targets — both turned out fully test-saturated (40+ refs / dedicated
+unit+integration+content-parity) and mature (fleet replay-defence: Ed25519 verify -> expiry ->
+nonce-cache TTL ordering, correct). Three consecutive probes landing on already-covered mature
+code is the honest saturation signal: the safe non-gated fresh-audit surface within Agent-2
+scope is mechanically mined out (consistent with `project_lib_small_file_sweep_complete`).
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
