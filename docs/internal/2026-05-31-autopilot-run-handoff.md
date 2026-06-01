@@ -980,6 +980,28 @@ the fix). BONUS: that pinned assertion was a single 8-group `\s*\n?\s*` chain th
 (the pathology `feedback_no_long_chain_parity_regex` warns about) — converted it to discrete pins,
 dropping the test from 16.85s → 0.27s. Outbound-timeout coverage now complete across all callers.
 
+2026-06-01 wave — fresh async-safety / concurrency bug-class sweep (two sub-classes). BOTH CLEAN
+— closes the vein, don't re-hunt. (1) UNBOUNDED `Promise.all` over DB/external ops (pool/memory
+exhaustion): every `Promise.all(...map)` site is bounded — fixed tuples (auth-cache, auth,
+webhooks), small fixed lists (mfa recovery-codes, incident-broadcast channels, health-probe
+targets), or page/batch-limited query results (scheduled-jobs `claimDue({batchSize:25})`,
+webhook-worker claimed batches, durable-webhook-delivery `page = rows.slice(0, limit)`). No
+unbounded fan-out. (2) FIRE-AND-FORGET / missing-await (unhandled-rejection or lost write): the
+bootstrap pollers all wrap the tick in `void (async () => { try { await … } catch {
+logger.error('interval continues') } })()` (guarded, no unhandled rejection); the
+`void this.email.send…` calls (auth-flows signup/verify/reset/welcome, oauth-client merge) are
+SAFE by design — `email.ts:3-4` documents "All sends are fire-and-forget: errors logged at
+warn-level but never thrown", so EmailService never rejects → the `void` cannot produce an
+unhandled rejection. No async-safety bug. TWO minor observations (NOT bugs, surfaced for
+awareness): (a) `durable-webhook-delivery` list does a BOUNDED N+1 (`loadAttempts` per page row)
+— a perf smell on a low-traffic admin endpoint, optimizable to one batched query, not a bug;
+(b) there is NO process-level `unhandledRejection`/`uncaughtException` handler (only SIGTERM/SIGINT
+in index.ts) — currently moot (no path produces an unhandled rejection: email is non-rejecting,
+pollers are guarded, Fastify catches route errors), but a defense-in-depth gap. Adding a handler
+embeds an ops decision (log-and-continue risks an undefined-state process per Node guidance vs
+log-and-graceful-shutdown vs the current fail-fast crash+auto-restart) → SURFACE, don't
+unilaterally change process crash behavior. No code change.
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
