@@ -364,6 +364,18 @@ audits now (nowpayments-signing, internal-fleet-auth, livekit-secret-encryption)
 crypto/auth-helper surface is nearly swept (sibling `gui-control-key-encryption.ts` is the
 same envelope, un-audited).
 
+2026-06-01 wave — audited `gui-control-key-encryption.ts` (the last un-audited member of
+the crypto-at-rest helper family): CLEAN, same AES-256-GCM envelope as livekit/BYOK (fresh
+IV per encrypt, auth-tag verify-on-decrypt, key-length + empty + blob-length guards), plus a
+branded-taint plaintext type and a `gck_`+base32 generator. Folded the result into
+`project_livekit_secret_encryption_audit_clean` rather than a near-duplicate memory. The
+crypto-at-rest helper family (BYOK / livekit / gui-control-key / MFA TOTP) is now FULLY
+swept — all identical envelope, all clean. Also re-ran the 2026-05-30 OpenAPI
+`.describe()`/shadow-enum/path-completeness drift recipe (memory: the unpinned doc surface):
+no NEW drift — every path-completeness gap and shadow enum maps to the already-documented
+intentional/founder-judgment set; the prior `bucket_key` 3-key fix is intact. No re-sweep
+warranted (would be churn). Net code change this wave: zero (both targets sound).
+
 ## Recommended order when the loop is paused
 
 1. ~~Open-redirect `?next=` fix~~ — **DONE** (33f1e907, all 3 auth pages; see #0).
