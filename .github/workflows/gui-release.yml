@@ -3,7 +3,7 @@
 # Triggered on tags matching `gui-v*` (e.g. `gui-v0.1.0`). Builds three
 # platform binaries in parallel, signs each with the Tauri Updater
 # private key, uploads to a GitHub Release, and writes the
-# `gui-latest.json` manifest the in-app updater consumes.
+# `latest.json` manifest the in-app updater consumes.
 #
 # Required GitHub repository secrets:
 #   * TAURI_UPDATER_PUBKEY — public key embedded in tauri.conf.json
@@ -124,7 +124,7 @@ jobs:
             - Linux: download the `.AppImage` (portable) or `.deb` (Debian/Ubuntu).
 
             **Auto-update**
-            Subsequent versions auto-update via the Tauri Updater (public-key signed). The manifest at `gui-latest.json` is consumed by every running install.
+            Subsequent versions auto-update via the Tauri Updater (public-key signed). The manifest at `latest.json` is consumed by every running install.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

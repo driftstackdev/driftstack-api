@@ -36,7 +36,7 @@ function read(p: string): string {
 describe('W542.C /.github/workflows/gui-release.yml content parity', () => {
   const body = read(LIB);
 
-  it("V-243 / D-2026-05-06-03 anchor + tag-triggered + pre-launch-no-OS-signing framing pinned: '# V-243 / D-2026-05-06-03 — GUI client cross-platform release workflow.' + 'Triggered on tags matching `gui-v*` (e.g. `gui-v0.1.0`). Builds three platform binaries in parallel, signs each with the Tauri Updater private key, uploads to a GitHub Release, and writes the `gui-latest.json` manifest the in-app updater consumes.' + '# Pre-launch posture: NO OS-level binary signing. Customers see \"unknown publisher\" / Gatekeeper warnings on first install (normal for indie apps). Subsequent updates are signed via the Tauri Updater public-key. Per-platform code signing certs are deferred (see D-2026-05-06-03 follow-up D-* entries when reached).' — pinned so the V-243 + D-2026-05-06-03 + tag-pattern-gui-v* + 3-platform-parallel + Tauri-Updater-key-signed + gui-latest.json-manifest + pre-launch-NO-OS-signing + Gatekeeper-warning-normal-for-indie + deferred-per-platform-cert commitment survives", () => {
+  it("V-243 / D-2026-05-06-03 anchor + tag-triggered + pre-launch-no-OS-signing framing pinned: '# V-243 / D-2026-05-06-03 — GUI client cross-platform release workflow.' + 'Triggered on tags matching `gui-v*` (e.g. `gui-v0.1.0`). Builds three platform binaries in parallel, signs each with the Tauri Updater private key, uploads to a GitHub Release, and writes the `latest.json` manifest the in-app updater consumes.' + '# Pre-launch posture: NO OS-level binary signing. Customers see \"unknown publisher\" / Gatekeeper warnings on first install (normal for indie apps). Subsequent updates are signed via the Tauri Updater public-key. Per-platform code signing certs are deferred (see D-2026-05-06-03 follow-up D-* entries when reached).' — pinned so the V-243 + D-2026-05-06-03 + tag-pattern-gui-v* + 3-platform-parallel + Tauri-Updater-key-signed + latest.json-manifest + pre-launch-NO-OS-signing + Gatekeeper-warning-normal-for-indie + deferred-per-platform-cert commitment survives", () => {
     expect(body).toMatch(
       /# V-243 \/ D-2026-05-06-03 — GUI client cross-platform release workflow\./,
     );
@@ -45,7 +45,7 @@ describe('W542.C /.github/workflows/gui-release.yml content parity', () => {
     );
     expect(body).toMatch(/# platform binaries in parallel, signs each with the Tauri Updater/);
     expect(body).toMatch(/# private key, uploads to a GitHub Release, and writes the/);
-    expect(body).toMatch(/# `gui-latest\.json` manifest the in-app updater consumes\./);
+    expect(body).toMatch(/# `latest\.json` manifest the in-app updater consumes\./);
     expect(body).toMatch(/# Pre-launch posture: NO OS-level binary signing\. Customers see/);
     expect(body).toMatch(/# "unknown publisher" \/ Gatekeeper warnings on first install \(normal/);
     expect(body).toMatch(

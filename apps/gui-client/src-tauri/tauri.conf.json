@@ -51,7 +51,7 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://github.com/driftstackdev/driftstack-api/releases/latest/download/gui-latest.json"
+        "https://github.com/driftstackdev/driftstack-api/releases/latest/download/latest.json"
       ],
       "pubkey": "$TAURI_UPDATER_PUBKEY"
     },

@@ -216,7 +216,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/"updater": \{/);
     expect(body).toMatch(/"active": true/);
     expect(body).toMatch(
-      /"https:\/\/github\.com\/driftstackdev\/driftstack-api\/releases\/latest\/download\/gui-latest\.json"/,
+      /"https:\/\/github\.com\/driftstackdev\/driftstack-api\/releases\/latest\/download\/latest\.json"/,
     );
     // 2026-06-01 — `dialog` removed: it was a Tauri-v1 updater key that did
     // nothing in v2 (v2's updater is programmatic; the in-app flow lives in

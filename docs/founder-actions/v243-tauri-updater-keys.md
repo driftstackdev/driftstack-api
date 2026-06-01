@@ -70,7 +70,7 @@ captures the value in any shell history.
    GitHub Release. Verify:
    - Release exists at `github.com/driftstackdev/driftstack-api/releases/tag/gui-v0.1.0`.
    - Three platform binaries attached: `.dmg` (macOS), `.exe` (Windows), `.AppImage` + `.deb` (Linux).
-   - `gui-latest.json` manifest attached.
+   - `latest.json` manifest attached.
 3. Test auto-update by installing v0.1.0, then tagging `gui-v0.1.1`,
    then waiting for the in-app prompt or restarting.
 

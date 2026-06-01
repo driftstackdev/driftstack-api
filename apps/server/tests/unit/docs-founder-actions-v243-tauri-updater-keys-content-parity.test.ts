@@ -98,7 +98,7 @@ describe('W544.A /docs/founder-actions/v243-tauri-updater-keys.md content parity
     expect(body).toMatch(/The web UI never\s*\n?captures the value in any shell history\./);
   });
 
-  it("First-release verification + 3-platform-binary checklist framing pinned: '1. Trigger the first release: `git tag gui-v0.1.0 && git push --tags`.' + 'Verify:' + 'Release exists at `github.com/driftstackdev/driftstack-api/releases/tag/gui-v0.1.0`.' + 'Three platform binaries attached: `.dmg` (macOS), `.exe` (Windows), `.AppImage` + `.deb` (Linux).' + '`gui-latest.json` manifest attached.' + 'Test auto-update by installing v0.1.0, then tagging `gui-v0.1.1`, then waiting for the in-app prompt or restarting.' — pinned so the gui-v0.1.0-first-tag + 3-platform-binary-checklist (.dmg + .exe + .AppImage + .deb) + gui-latest.json-manifest + v0.1.0→v0.1.1 auto-update-test commitment survives", () => {
+  it("First-release verification + 3-platform-binary checklist framing pinned: '1. Trigger the first release: `git tag gui-v0.1.0 && git push --tags`.' + 'Verify:' + 'Release exists at `github.com/driftstackdev/driftstack-api/releases/tag/gui-v0.1.0`.' + 'Three platform binaries attached: `.dmg` (macOS), `.exe` (Windows), `.AppImage` + `.deb` (Linux).' + '`latest.json` manifest attached.' + 'Test auto-update by installing v0.1.0, then tagging `gui-v0.1.1`, then waiting for the in-app prompt or restarting.' — pinned so the gui-v0.1.0-first-tag + 3-platform-binary-checklist (.dmg + .exe + .AppImage + .deb) + latest.json-manifest + v0.1.0→v0.1.1 auto-update-test commitment survives", () => {
     expect(body).toMatch(
       /1\.\s+Trigger the first release: `git tag gui-v0\.1\.0 && git push --tags`\./,
     );
@@ -108,7 +108,7 @@ describe('W544.A /docs/founder-actions/v243-tauri-updater-keys.md content parity
     expect(body).toMatch(
       /-\s+Three platform binaries attached: `\.dmg` \(macOS\), `\.exe` \(Windows\), `\.AppImage` \+ `\.deb` \(Linux\)\./,
     );
-    expect(body).toMatch(/-\s+`gui-latest\.json` manifest attached\./);
+    expect(body).toMatch(/-\s+`latest\.json` manifest attached\./);
     expect(body).toMatch(
       /3\.\s+Test auto-update by installing v0\.1\.0, then tagging `gui-v0\.1\.1`,/,
     );

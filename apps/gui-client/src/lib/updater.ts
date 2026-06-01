@@ -2,7 +2,7 @@
 //
 // The plugin (`tauri-plugin-updater`) is registered in src-tauri/lib.rs
 // and configured in tauri.conf.json (endpoint = the GitHub-Releases
-// `gui-latest.json` manifest; pubkey verifies each bundle's minisign
+// `latest.json` manifest; pubkey verifies each bundle's minisign
 // signature). But Tauri v2's updater is PROGRAMMATIC — unlike v1 there
 // is no built-in "check on startup + dialog" (the stale `dialog:true`
 // config key did nothing in v2). This module is the missing half: it
