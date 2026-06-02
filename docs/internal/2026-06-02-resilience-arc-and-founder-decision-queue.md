@@ -145,6 +145,27 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
     session case has been), or (b) prioritise the atomic guard — **recommended for the PROFILE case**
     given the persistent free-tier monetization leak. Low severity, deliberate-concurrency-abuse only;
     not a security hole (no data exposure / priv-esc).
+15. **MFA recovery-code regeneration is NOT step-up gated — defeats the disable step-up gate**
+    (found 2026-06-02; **MEDIUM-HIGH**). `DELETE /v1/account/mfa` + `POST /v1/account/mfa/disable` are
+    `requireMfaFresh()`-gated (V-353a Q3: account-delete + MFA-disable are "the two step-up-gated ops").
+    But `POST /v1/account/mfa/recovery-codes/regenerate` (account-mfa.ts:128) is just
+    `[requireAuth, requireScope('account_owner'), rateLimit]` — **no `requireMfaFresh()`** — and it MINTS
+    10 fresh recovery codes (returned in the response), which ARE a valid second factor: `stepUpReauth`
+    (auth-flows.ts:893) accepts `via:'recovery'` and calls `markWebSessionMfaSatisfied`. **Confirmed
+    bypass chain:** a STOLEN SESSION (past first factor, no TOTP device) → POST regenerate (ungated) →
+    10 recovery codes → POST `/v1/auth/mfa/step-up` with a recovery code → session marked mfa-fresh →
+    DELETE `/v1/account/mfa` (gate now satisfied) → MFA disabled / account takeover. So the V-353e
+    step-up protection on disable — whose whole purpose is to contain a stolen session — is fully
+    defeated by the ungated regen endpoint. **Founder decision (security vs recovery-UX; touches the
+    V-353a "two ops" verdict, so not an autopilot edit):** (a) add `app.requireMfaFresh()` to the regen
+    route (one line; makes regen consistent with disable; closes the chain) — but this removes the
+    self-service "lost TOTP device but still logged in → mint new codes" recovery path, which must then
+    route to support / identity-verification; OR (b) accept it as the intended self-service recovery
+    path + the stolen-session risk. **Recommended: (a)** — an endpoint that mints a step-up-satisfying
+    factor without itself requiring step-up is a strictly weaker posture than the disable gate it
+    undermines; the "lost device AND codes but still logged in" recovery is better served by a support
+    identity-check than by a control-bypassing self-service endpoint. (Requires session theft first, but
+    nullifies a control built specifically for that threat → MEDIUM-HIGH, not low.)
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
