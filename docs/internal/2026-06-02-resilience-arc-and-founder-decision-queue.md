@@ -79,6 +79,13 @@ item 10 below.
 - **Dormant / not Agent-2 deep-audit targets:** crypto rail (501 stubs), session-egress
   (`session-proxy`, EG-API-1.6 pending), behavioural-simulation (complete + unwired), customer
   dashboard (static SPA, client-side bearer — no SSR layer).
+- **DB schema design (fresh dimensions, 2026-06-02) — all SOUND, don't re-check:** index
+  coverage (88 indexes; composite on high-volume read paths — usage/session-events/sessions),
+  FK / referential-integrity (48 `.references()` → `accounts.id` `onDelete: cascade` for owned
+  children + `set null` for optional refs; no orphan-row risk), and timestamp column types
+  (all 127 `timestamp()` columns are `withTimezone: true` → `timestamptz`; zero naive timestamps
+  → no tz-ambiguity bug class). The only open schema item is the founder-gated `agent_sessions`
+  strict-FK (§2 item 7).
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined. Genuine
 forward progress now needs a founder decision from §2 or a new track.
