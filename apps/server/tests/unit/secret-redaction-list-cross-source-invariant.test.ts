@@ -59,4 +59,62 @@ describe('secret-redaction list cross-source invariant (Sentry + Pino logger)', 
       /'gui_control_key',\s*\n?\s*'guiControlKey',\s*\n?\s*'body\.gui_control_key',/,
     );
   });
+
+  // ─── Full programmatic lockstep (mirror-or-leak guard) ──────────────────────
+  // The spot-checks above pin specific high-risk keys; this asserts the WHOLE
+  // logger redact.paths set is mirrored in SENTRY_SENSITIVE_KEYS. The source
+  // comments instruct "Keep in sync … whenever a request/response shape gains
+  // [a sensitive field]" but only human discipline + the spot-checks enforced
+  // it — a NEW field added to logger.ts but not sentry.ts would pass silently
+  // and leak that secret to Sentry events (request.data / breadcrumbs / extra /
+  // contexts), the "asymmetric scrubbing" the comments warn about. Subset
+  // direction: every field Pino bothers to redact MUST also be scrubbed from
+  // Sentry, since the same object can reach both sinks. (Sentry is
+  // intentionally broader — bare-key match vs Pino's narrower dot-paths — so
+  // the reverse is NOT an invariant.) Line-based extraction keeps the regexes
+  // short + robust to prettier reformatting (array elements stay one-per-line).
+  function linesBetween(src: string, startRe: RegExp, endRe: RegExp): string[] {
+    const lines = src.split('\n');
+    const start = lines.findIndex((l) => startRe.test(l));
+    expect(start, `start marker ${String(startRe)} not found`).toBeGreaterThanOrEqual(0);
+    const end = lines.findIndex((l, i) => i > start && endRe.test(l));
+    expect(end, `end marker ${String(endRe)} not found`).toBeGreaterThan(start);
+    return lines.slice(start + 1, end);
+  }
+  function quotedStringsOnOwnLines(lines: readonly string[]): string[] {
+    const out: string[] = [];
+    for (const line of lines) {
+      const m = line.match(/^\s*'([^']+)',?\s*$/);
+      if (m && m[1] !== undefined) out.push(m[1]);
+    }
+    return out;
+  }
+  /** Reduce a Pino dot/bracket redact path to the bare key Sentry matches on. */
+  function bareKey(path: string): string {
+    const bracket = path.match(/\["([^"]+)"\]\s*$/);
+    if (bracket && bracket[1] !== undefined) return bracket[1].toLowerCase();
+    const lastDot = path.lastIndexOf('.');
+    return (lastDot >= 0 ? path.slice(lastDot + 1) : path).toLowerCase();
+  }
+
+  it('CRITICAL every lib/logger.ts redact.path is mirrored in SENTRY_SENSITIVE_KEYS — a field scrubbed from Pino logs MUST also be scrubbed from Sentry events (mirror-or-leak; catches a new sensitive field added to one list but not the other)', () => {
+    const loggerPaths = quotedStringsOnOwnLines(
+      linesBetween(logger, /redact:\s*\{/, /^\s*\],?\s*$/),
+    );
+    const sentryKeys = new Set(
+      quotedStringsOnOwnLines(linesBetween(sentry, /new Set<string>\(\[/, /^\s*\]\)/)).map((k) =>
+        k.toLowerCase(),
+      ),
+    );
+    // Sanity: both lists extracted non-trivially (guards against a marker
+    // rename silently reducing either set to empty — which would make the
+    // subset check vacuously pass).
+    expect(loggerPaths.length, 'logger redact.paths extraction').toBeGreaterThan(10);
+    expect(sentryKeys.size, 'SENTRY_SENSITIVE_KEYS extraction').toBeGreaterThan(10);
+    const missing = loggerPaths.map(bareKey).filter((k) => !sentryKeys.has(k));
+    expect(
+      missing,
+      `logger redact fields missing from SENTRY_SENSITIVE_KEYS (would leak to Sentry): ${missing.join(', ')}`,
+    ).toEqual([]);
+  });
 });
