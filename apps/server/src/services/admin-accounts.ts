@@ -45,6 +45,8 @@ export interface AccountsAdminRepo {
   ): Promise<AccountRow | null>;
   list(args: ListAccountsArgs): Promise<ListAccountsPage>;
   countByStatus(status: 'active' | 'suspended' | 'deleted'): Promise<number>;
+  /** Account count grouped by tier — every AccountTier present, zero-filled. Sums to the total row count (all statuses). */
+  countByTier(): Promise<Record<AccountTier, number>>;
 }
 
 /** Minimal sessions-service surface the suspend-reclaim path depends on. */
@@ -77,6 +79,11 @@ export class AccountsAdminService {
   ): Promise<number> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
     return this.repo.countByStatus(status);
+  }
+
+  async countByTier(ctx: AccountContext): Promise<Record<AccountTier, number>> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    return this.repo.countByTier();
   }
 
   async changeTier(

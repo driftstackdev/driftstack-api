@@ -8,7 +8,7 @@
 //   - all five mutators require driftstack_internal_admin
 
 import { describe, expect, it, vi } from 'vitest';
-import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
+import { AccountTierSchema, type AccountTier, type ApiKeyScope } from '@driftstack/api-types';
 import {
   AccountsAdminService,
   type AccountsAdminRepo,
@@ -86,6 +86,12 @@ function makeRepo(initial: AccountRow[] = []): {
       Promise.resolve(
         rows.filter((r) => (r as AccountRow & { status: string }).status === status).length,
       ),
+    countByTier: () => {
+      const out = {} as Record<AccountTier, number>;
+      for (const tier of AccountTierSchema.options) out[tier] = 0;
+      for (const r of rows) out[r.tier] += 1;
+      return Promise.resolve(out);
+    },
   };
   return { repo, rows };
 }
@@ -106,6 +112,7 @@ describe('V-553.B-15 AccountsAdminService — scope gates', () => {
     await expect(svc.countByStatus(unscoped, 'active')).rejects.toThrow(
       /driftstack_internal_admin/,
     );
+    await expect(svc.countByTier(unscoped)).rejects.toThrow(/driftstack_internal_admin/);
     await expect(svc.changeTier(unscoped, 'acc_1', 'team_manual')).rejects.toThrow(
       /driftstack_internal_admin/,
     );
@@ -159,6 +166,22 @@ describe('V-553.B-15 AccountsAdminService.list + countByStatus', () => {
     const svc = new AccountsAdminService(repo);
     const n = await svc.countByStatus(ctxWith(['driftstack_internal_admin']), 'active');
     expect(n).toBe(1);
+  });
+
+  it('countByTier returns a zero-filled distribution over every tier', async () => {
+    const { repo } = makeRepo([
+      baseAccount({ id: 'a1', tier: 'solo_manual' as AccountTier }),
+      baseAccount({ id: 'a2', tier: 'solo_manual' as AccountTier }),
+      baseAccount({ id: 'a3', tier: 'team_manual' as AccountTier }),
+    ]);
+    const svc = new AccountsAdminService(repo);
+    const dist = await svc.countByTier(ctxWith(['driftstack_internal_admin']));
+    expect(dist.solo_manual).toBe(2);
+    expect(dist.team_manual).toBe(1);
+    expect(dist.enterprise).toBe(0); // present even with no accounts
+    // Every canonical tier key is present and the distribution sums to the row count.
+    expect(Object.keys(dist).sort()).toEqual([...AccountTierSchema.options].sort());
+    expect(Object.values(dist).reduce((a, b) => a + b, 0)).toBe(3);
   });
 });
 

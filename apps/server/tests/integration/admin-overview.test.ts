@@ -18,7 +18,13 @@ const auth = (fixture: TestAppFixture): { authorization: string } => ({
 });
 
 interface OverviewResponse {
-  accounts: { active: number; suspended: number; deleted: number; total: number };
+  accounts: {
+    active: number;
+    suspended: number;
+    deleted: number;
+    total: number;
+    by_tier: Record<string, number>;
+  };
   webhooks: { dlq_depth: number };
 }
 
@@ -102,6 +108,43 @@ describe('GET /v1/admin/overview', () => {
     expect(body.accounts.total).toBe(
       body.accounts.active + body.accounts.suspended + body.accounts.deleted,
     );
+  });
+
+  // Tier distribution — every AccountTier key present (zero-filled),
+  // the seeded team_manual account shows up, and the distribution sums
+  // to the total row count (all statuses).
+  it('exposes by_tier distribution covering every tier and summing to total', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    await seedAdditionalAccount(fx, {
+      accountId: '00000000-0000-4000-8000-0000000000d1',
+      apiKeyId: '00000000-0000-4000-8000-0000000000d2',
+      tier: 'team_manual',
+      email: 'tier-test@driftstack.local',
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/overview',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<OverviewResponse>();
+    // Canonical AccountTier set is always present, zero-filled.
+    for (const tier of [
+      'free',
+      'solo_manual',
+      'team_manual',
+      'agency_manual',
+      'api_starter',
+      'api_builder',
+      'api_scale',
+      'enterprise',
+    ]) {
+      expect(body.accounts.by_tier[tier]).toBeGreaterThanOrEqual(0);
+    }
+    expect(body.accounts.by_tier.team_manual).toBeGreaterThanOrEqual(1);
+    expect(body.accounts.by_tier.api_builder).toBeGreaterThanOrEqual(1);
+    const tierSum = Object.values(body.accounts.by_tier).reduce((a, b) => a + b, 0);
+    expect(tierSum).toBe(body.accounts.total);
   });
 
   it('rejects without admin scope', async () => {

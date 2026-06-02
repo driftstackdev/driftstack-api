@@ -15,9 +15,9 @@
 //   • V-515 framing pinned: deleted-account count + computed total
 //     so admin panel renders "X of Y accounts active" without extra
 //     roundtrip.
-//   • Counts source: 4-way Promise.all over countByStatus(active|
-//     suspended|deleted) + webhooksAdmin.countDlq.
-//   • Reply shape: {accounts:{active,suspended,deleted,total},
+//   • Counts source: 5-way Promise.all over countByStatus(active|
+//     suspended|deleted) + countByTier + webhooksAdmin.countDlq.
+//   • Reply shape: {accounts:{active,suspended,deleted,total,by_tier},
 //     webhooks:{dlq_depth}} — total = active+suspended+deleted.
 //   • AdminOverviewRoutesOptions: accountsAdmin + webhooksAdmin.
 //   • Future-extension framing: response shape will add leads.open
@@ -82,16 +82,25 @@ describe('W413.B apps/server/src/routes/admin-overview.ts content parity', () =>
     );
   });
 
-  it('4-way Promise.all: countByStatus active/suspended/deleted + countDlq', () => {
+  it('5-way Promise.all: countByStatus active/suspended/deleted + countByTier + countDlq', () => {
+    // Individual line pins (no long \s*\n?\s* chain — avoids backtracking hazard).
     expect(body).toMatch(
-      /const \[activeAccounts, suspendedAccounts, deletedAccounts, dlqDepth\] = await Promise\.all\(\[\s*\n?\s*accountsAdmin\.countByStatus\(ctx, 'active'\),\s*\n?\s*accountsAdmin\.countByStatus\(ctx, 'suspended'\),\s*\n?\s*accountsAdmin\.countByStatus\(ctx, 'deleted'\),\s*\n?\s*webhooksAdmin\.countDlq\(ctx\),\s*\n?\s*\]\);/,
+      /const \[activeAccounts, suspendedAccounts, deletedAccounts, byTier, dlqDepth\] =/,
     );
+    expect(body).toMatch(/accountsAdmin\.countByStatus\(ctx, 'active'\),/);
+    expect(body).toMatch(/accountsAdmin\.countByStatus\(ctx, 'suspended'\),/);
+    expect(body).toMatch(/accountsAdmin\.countByStatus\(ctx, 'deleted'\),/);
+    expect(body).toMatch(/accountsAdmin\.countByTier\(ctx\),/);
+    expect(body).toMatch(/webhooksAdmin\.countDlq\(ctx\),/);
   });
 
-  it('Reply shape: accounts{active,suspended,deleted,total=active+suspended+deleted} + webhooks{dlq_depth}', () => {
-    expect(body).toMatch(
-      /return \{\s*\n?\s*accounts: \{\s*\n?\s*active: activeAccounts,\s*\n?\s*suspended: suspendedAccounts,\s*\n?\s*deleted: deletedAccounts,\s*\n?\s*total: activeAccounts \+ suspendedAccounts \+ deletedAccounts,\s*\n?\s*\},\s*\n?\s*webhooks: \{\s*\n?\s*dlq_depth: dlqDepth,\s*\n?\s*\},\s*\n?\s*\};/,
-    );
+  it('Reply shape: accounts{active,suspended,deleted,total=active+suspended+deleted,by_tier} + webhooks{dlq_depth}', () => {
+    expect(body).toMatch(/active: activeAccounts,/);
+    expect(body).toMatch(/suspended: suspendedAccounts,/);
+    expect(body).toMatch(/deleted: deletedAccounts,/);
+    expect(body).toMatch(/total: activeAccounts \+ suspendedAccounts \+ deletedAccounts,/);
+    expect(body).toMatch(/by_tier: byTier,/);
+    expect(body).toMatch(/dlq_depth: dlqDepth,/);
   });
 
   it('imports: FastifyInstance + AccountsAdminService + WebhooksAdminService types', () => {

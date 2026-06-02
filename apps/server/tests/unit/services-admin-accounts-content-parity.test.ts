@@ -10,9 +10,9 @@
 //   • Module-comment framing pinned: audit ownership stays on routes,
 //     service stays focused on the mutation.
 //   • D-020 + D-025 cache-invalidation framing pinned.
-//   • All 6 methods require driftstack_internal_admin scope.
-//   • Read methods (getAccount / list / countByStatus) don't
-//     invalidate cache.
+//   • All 7 methods require driftstack_internal_admin scope.
+//   • Read methods (getAccount / list / countByStatus / countByTier)
+//     don't invalidate cache.
 //   • Mutate methods (changeTier / suspend / unsuspend): repo update
 //     → NotFoundError when row missing → invalidateCache.
 //   • status union: 'active' | 'suspended' | 'deleted'.
@@ -70,7 +70,7 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     );
   });
 
-  it('AccountsAdminRepo: 5 methods (findById / setTier / setStatus / list / countByStatus)', () => {
+  it('AccountsAdminRepo: 6 methods (findById / setTier / setStatus / list / countByStatus / countByTier)', () => {
     expect(body).toMatch(/export interface AccountsAdminRepo \{/);
     expect(body).toMatch(/findById\(id: string\): Promise<AccountRow \| null>;/);
     expect(body).toMatch(
@@ -83,6 +83,7 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     expect(body).toMatch(
       /countByStatus\(status: 'active' \| 'suspended' \| 'deleted'\): Promise<number>;/,
     );
+    expect(body).toMatch(/countByTier\(\): Promise<Record<AccountTier, number>>;/);
   });
 
   it('AccountsAdminService: constructor takes repo + optional authCache + optional sessions reclaimer', () => {
@@ -95,10 +96,11 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     );
   });
 
-  it('All 6 methods require driftstack_internal_admin scope (throwIfMissingScope first)', () => {
-    // Count occurrences — should be 6 (one per method).
+  it('All 7 methods require driftstack_internal_admin scope (throwIfMissingScope first)', () => {
+    // Count occurrences — should be 7 (one per method: getAccount, list,
+    // countByStatus, countByTier, changeTier, suspend, unsuspend).
     const scopeChecks = body.match(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/g);
-    expect(scopeChecks?.length).toBe(6);
+    expect(scopeChecks?.length).toBe(7);
   });
 
   it('getAccount: scope check → repo.findById → NotFoundError-or-row', () => {

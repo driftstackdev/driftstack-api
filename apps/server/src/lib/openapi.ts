@@ -2010,6 +2010,10 @@ function buildRegistry(): OpenAPIRegistry {
     accounts: z.object({
       active: z.number().int().nonnegative(),
       suspended: z.number().int().nonnegative(),
+      deleted: z.number().int().nonnegative(),
+      total: z.number().int().nonnegative(),
+      // Account count per tier (every AccountTier key present, zero-filled).
+      by_tier: z.record(z.string(), z.number().int().nonnegative()),
     }),
     webhooks: z.object({
       dlq_depth: z.number().int().nonnegative(),

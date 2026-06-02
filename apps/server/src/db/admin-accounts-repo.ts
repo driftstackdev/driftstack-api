@@ -1,7 +1,7 @@
 // Drizzle-backed AccountsAdminRepo. Updates accounts.tier / accounts.status.
 
 import { type SQL, and, desc, eq, ilike, lt, or, sql } from 'drizzle-orm';
-import type { AccountTier } from '@driftstack/api-types';
+import { AccountTierSchema, type AccountTier } from '@driftstack/api-types';
 import type {
   AccountsAdminRepo,
   ListAccountsArgs,
@@ -92,6 +92,26 @@ export class DrizzleAccountsAdminRepo implements AccountsAdminRepo {
       .where(eq(accounts.status, status));
     return row?.cnt ?? 0;
   }
+
+  // One GROUP BY query rather than one count per tier — keeps the overview
+  // endpoint single-roundtrip. Zero-fill from AccountTierSchema.options so
+  // every tier is present (no hardcoded list to drift from the enum).
+  async countByTier(): Promise<Record<AccountTier, number>> {
+    const rows = await this.database.db
+      .select({ tier: accounts.tier, cnt: sql<number>`count(*)::int` })
+      .from(accounts)
+      .groupBy(accounts.tier);
+    const out = emptyTierCounts();
+    for (const row of rows) out[row.tier] = row.cnt;
+    return out;
+  }
+}
+
+/** Zero-filled count record over every AccountTier (canonical enum order). */
+function emptyTierCounts(): Record<AccountTier, number> {
+  const out = {} as Record<AccountTier, number>;
+  for (const tier of AccountTierSchema.options) out[tier] = 0;
+  return out;
 }
 
 function toRow(r: typeof accounts.$inferSelect): AccountRow {

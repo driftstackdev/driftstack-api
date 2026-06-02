@@ -3,7 +3,7 @@
 // production where auth and admin paths read/write the same `accounts`
 // row.
 
-import type { AccountTier } from '@driftstack/api-types';
+import { AccountTierSchema, type AccountTier } from '@driftstack/api-types';
 import type {
   AccountsAdminRepo,
   ListAccountsArgs,
@@ -70,5 +70,12 @@ export class InMemoryAccountsAdminRepo implements AccountsAdminRepo {
   countByStatus(status: 'active' | 'suspended' | 'deleted'): Promise<number> {
     const cnt = this.authRepo.allAccounts().filter((r) => r.status === status).length;
     return Promise.resolve(cnt);
+  }
+
+  countByTier(): Promise<Record<AccountTier, number>> {
+    const out = {} as Record<AccountTier, number>;
+    for (const tier of AccountTierSchema.options) out[tier] = 0;
+    for (const r of this.authRepo.allAccounts()) out[r.tier] += 1;
+    return Promise.resolve(out);
   }
 }

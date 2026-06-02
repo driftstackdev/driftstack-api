@@ -15,6 +15,8 @@
 //   • orderBy desc(createdAt), desc(id); limit+1 hasMore;
 //     nextCursor = last id.
 //   • countByStatus: select count(*)::int where status; row?.cnt ?? 0.
+//   • countByTier: select tier + count(*)::int groupBy tier; zero-fill
+//     from AccountTierSchema.options (every tier present).
 //   • toRow: 11-field AccountRow including V-237 timezone, V-352b
 //     avatarR2Key, V-298a slug, V-298b region.
 
@@ -44,7 +46,9 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
     expect(body).toMatch(
       /import \{ type SQL, and, desc, eq, ilike, lt, or, sql \} from 'drizzle-orm';/,
     );
-    expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
+    expect(body).toMatch(
+      /import \{ AccountTierSchema, type AccountTier \} from '@driftstack\/api-types';/,
+    );
     expect(body).toMatch(
       /import type \{\s*\n?\s*AccountsAdminRepo,\s*\n?\s*ListAccountsArgs,\s*\n?\s*ListAccountsPage,\s*\n?\s*\} from '\.\.\/services\/admin-accounts\.js';/,
     );
@@ -88,6 +92,19 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
   it('countByStatus: select count(*)::int where status eq; row?.cnt ?? 0', () => {
     expect(body).toMatch(
       /async countByStatus\(status: 'active' \| 'suspended' \| 'deleted'\): Promise<number> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\{ cnt: sql<number>`count\(\*\)::int` \}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.status, status\)\);\s*\n?\s*return row\?\.cnt \?\? 0;\s*\n?\s*\}/,
+    );
+  });
+
+  it('countByTier: select tier + count(*)::int groupBy tier; zero-fill from AccountTierSchema.options', () => {
+    expect(body).toMatch(/async countByTier\(\): Promise<Record<AccountTier, number>> \{/);
+    expect(body).toMatch(
+      /\.select\(\{ tier: accounts\.tier, cnt: sql<number>`count\(\*\)::int` \}\)/,
+    );
+    expect(body).toMatch(/\.groupBy\(accounts\.tier\);/);
+    expect(body).toMatch(/const out = emptyTierCounts\(\);/);
+    expect(body).toMatch(/for \(const row of rows\) out\[row\.tier\] = row\.cnt;/);
+    expect(body).toMatch(
+      /function emptyTierCounts\(\): Record<AccountTier, number> \{\s*\n?\s*const out = \{\} as Record<AccountTier, number>;\s*\n?\s*for \(const tier of AccountTierSchema\.options\) out\[tier\] = 0;\s*\n?\s*return out;\s*\n?\s*\}/,
     );
   });
 

@@ -36,12 +36,18 @@ export function registerAdminOverviewRoutes(
       // V-515 — also surface deleted-account count + computed total
       // so the admin panel can show "X of Y accounts active" without
       // a second roundtrip.
-      const [activeAccounts, suspendedAccounts, deletedAccounts, dlqDepth] = await Promise.all([
-        accountsAdmin.countByStatus(ctx, 'active'),
-        accountsAdmin.countByStatus(ctx, 'suspended'),
-        accountsAdmin.countByStatus(ctx, 'deleted'),
-        webhooksAdmin.countDlq(ctx),
-      ]);
+      //
+      // by_tier — account distribution across every AccountTier (one
+      // GROUP BY count, zero-filled). Lets the dashboard render the
+      // tier-mix stat without a separate roundtrip; sum equals total.
+      const [activeAccounts, suspendedAccounts, deletedAccounts, byTier, dlqDepth] =
+        await Promise.all([
+          accountsAdmin.countByStatus(ctx, 'active'),
+          accountsAdmin.countByStatus(ctx, 'suspended'),
+          accountsAdmin.countByStatus(ctx, 'deleted'),
+          accountsAdmin.countByTier(ctx),
+          webhooksAdmin.countDlq(ctx),
+        ]);
 
       return {
         accounts: {
@@ -49,6 +55,7 @@ export function registerAdminOverviewRoutes(
           suspended: suspendedAccounts,
           deleted: deletedAccounts,
           total: activeAccounts + suspendedAccounts + deletedAccounts,
+          by_tier: byTier,
         },
         webhooks: {
           dlq_depth: dlqDepth,

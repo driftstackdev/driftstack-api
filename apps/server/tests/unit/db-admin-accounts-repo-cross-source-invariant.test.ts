@@ -5,8 +5,8 @@
 //   Header — 'Drizzle-backed AccountsAdminRepo. Updates accounts.tier
 //   / accounts.status'.
 //
-//   DrizzleAccountsAdminRepo 5-method surface — findById + setTier +
-//     setStatus + list + countByStatus.
+//   DrizzleAccountsAdminRepo 6-method surface — findById + setTier +
+//     setStatus + list + countByStatus + countByTier.
 //
 //   status 3-value union — 'active' | 'suspended' | 'deleted'.
 //
@@ -23,6 +23,9 @@
 //   list orderBy desc(createdAt) + desc(id) + limit+1 hasMore probe.
 //
 //   countByStatus sql<number>`count(*)::int` for bigint→int coercion.
+//
+//   countByTier groupBy(accounts.tier) → zero-filled Record over
+//     AccountTierSchema.options (every AccountTier present).
 //
 //   toRow 11-field shape — id + email + name + tier + status +
 //     timezone + avatarR2Key + slug + region + createdAt + updatedAt
@@ -53,9 +56,9 @@ describe('W1005 db/admin-accounts-repo cross-source invariant', () => {
     expect(p).toMatch(/export class DrizzleAccountsAdminRepo implements AccountsAdminRepo \{/);
   });
 
-  // ─── 5-method surface ────────────────────────────────────────
+  // ─── 6-method surface ────────────────────────────────────────
 
-  it('CRITICAL 5-method surface — findById + setTier + setStatus + list + countByStatus. The 5-method admin contract covers id-lookup + 2 mutations + paged-list + status-count.', () => {
+  it('CRITICAL 6-method surface — findById + setTier + setStatus + list + countByStatus + countByTier. The admin contract covers id-lookup + 2 mutations + paged-list + status-count + tier-distribution.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/admin-accounts-repo.ts'));
     expect(p).toMatch(/async findById\(id: string\): Promise<AccountRow \| null> \{/);
     expect(p).toMatch(
@@ -66,6 +69,8 @@ describe('W1005 db/admin-accounts-repo cross-source invariant', () => {
     expect(p).toMatch(
       /async countByStatus\(status: 'active' \| 'suspended' \| 'deleted'\): Promise<number> \{/,
     );
+    expect(p).toMatch(/async countByTier\(\): Promise<Record<AccountTier, number>> \{/);
+    expect(p).toMatch(/\.groupBy\(accounts\.tier\);/);
   });
 
   // ─── status 3-value union ────────────────────────────────────
