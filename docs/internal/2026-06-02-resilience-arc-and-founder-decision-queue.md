@@ -350,6 +350,35 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
   - _Transaction-atomicity:_ `db.transaction()` used where multi-write atomicity matters (11 usages —
     agent-sessions RMW, webhooks, stripe-event-dispatch, incidents). The lone non-transactional multi-write
     is the OAuth create-new path (cross-repo `accounts`+`links`; self-healing, low-severity — §4 item 6).
+- **Concurrency / access-control primitives (fresh, 2026-06-02 batch 4) — all SOUND, don't re-check:**
+  - _Pair-mode takeover lock:_ `agent-pair-mode-lock.ts` Redis variant = atomic `SET key clientId NX EX 30s`
+    acquire (single winner per `pair_lock:${sessionId}`) + Lua owner-checked CAS-DEL release (canonical
+    Redlock — A can't release B's lock, no GET→DEL race) + TTL auto-expiry (no deadlock-on-crash). No
+    two-controller race.
+  - _Scheduled-job claim/lease:_ `claimDue` = `FOR UPDATE SKIP LOCKED` CTE + `UPDATE…RETURNING` (no
+    double-claim) + 5-min stale-lease reclaim (crashed worker) + bounded exponential-backoff retry →
+    `markFailed`/`failed_at` terminal at `max_attempts` (no infinite retry / stuck job).
+  - _Auth single-flight coalescer:_ `auth-coalescer.ts` collapses N concurrent same-token cache-misses to
+    one scrypt; evicts the in-flight slot on settle (fulfil AND reject → no poisoning, next caller retries
+    fresh); per-sha keyed; concurrency-dedup-only (the Redis cache memoizes). Cache fast-path short-circuits
+    before coalesce.
+  - _Transcript SSE replay:_ `Last-Event-ID` resume is strictly-`>` exclusive (`resumeFrom+1` — no dup/gap);
+    garbage header → full replay; connect-then-publish race handled (`liveSent` dedupe + `index <
+transcript.length` guard); account-scoped (cross-account → 404).
+  - _LiveKit token grants:_ `sessions-livekit-token.ts` ownership-gated (`isSessionOwned` → cross-account
+    404), `room == sessionId` (one room/session → no other-customer room), minimal grants (`roomJoin` +
+    `canPublish`/`canSubscribe`, NO `roomAdmin`/`roomCreate`), 600s TTL → no cross-account stream / grant
+    privesc.
+  - _Account email immutability:_ `UpdateAccountMeRequestSchema` whitelists only name/timezone/slug/region —
+    NO `email` (nor tier/status/role) → no email-change endpoint exists → the email-change-then-reset
+    takeover class has no surface; mass-assignment-safe.
+  - _Account slug:_ `AccountSlugSchema` 3–32 lowercase-alphanumeric+hyphen (anchored, no-ReDoS, no
+    leading/trailing/double-hyphen); the slug is a DISPLAY handle, NOT a routing/lookup key (no `/:slug`
+    route) → a reserved-word slug can't shadow a route or impersonate; uniqueness 23505→409.
+  - _API security headers (Fastify):_ `@fastify/helmet` emits nosniff / `X-Frame-Options: SAMEORIGIN` /
+    `Referrer-Policy: no-referrer` / HSTS (2yr+preload) / `CORP: cross-origin`; CSP intentionally off
+    (JSON-only). Pinned by the V-664 `security-headers.test.ts` regression suite (distinct from the
+    CF-Pages headers above).
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
