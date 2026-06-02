@@ -325,14 +325,19 @@ export class ProfilesService {
       cloneName = await this.deriveNonConflictingCopyName(args.accountId, source.name);
     }
 
-    let row: ProfileRecord;
+    // V-714 — atomic limit-check + insert (count above is the fast-fail
+    // pre-check; insertWithLimit re-checks under an account-row lock).
+    let result: Awaited<ReturnType<typeof this.repo.insertWithLimit>>;
     try {
-      row = await this.repo.insert({
-        accountId: args.accountId,
-        name: cloneName,
-        archetype: source.archetype,
-        description: source.description,
-      });
+      result = await this.repo.insertWithLimit(
+        {
+          accountId: args.accountId,
+          name: cloneName,
+          archetype: source.archetype,
+          description: source.description,
+        },
+        limit,
+      );
     } catch (err) {
       // Concurrent same-name race on an explicit clone name (the auto-derived
       // path can't collide — deriveNonConflictingCopyName already probed).
@@ -344,6 +349,13 @@ export class ProfilesService {
       }
       throw err;
     }
+    if ('limitExceeded' in result) {
+      throw new TierLimitError(
+        `Tier "${args.tier}" permits at most ${(limit ?? 0).toString()} profiles; you have ${result.current.toString()}.`,
+        { limit: limit ?? 0, current: result.current, resource: 'profile', tier: args.tier },
+      );
+    }
+    const row = result.record;
     await this.emitAuditBestEffort(args.accountId, 'profile.created', `profile_${row.id}`, {
       name: row.name,
       archetype: row.archetype,
@@ -442,14 +454,19 @@ export class ProfilesService {
       );
     }
 
-    let row: ProfileRecord;
+    // V-714 — atomic limit-check + insert (count above is the fast-fail
+    // pre-check; insertWithLimit re-checks under an account-row lock).
+    let result: Awaited<ReturnType<typeof this.repo.insertWithLimit>>;
     try {
-      row = await this.repo.insert({
-        accountId: args.accountId,
-        name: targetName,
-        archetype: args.payload.archetype,
-        description: args.payload.description,
-      });
+      result = await this.repo.insertWithLimit(
+        {
+          accountId: args.accountId,
+          name: targetName,
+          archetype: args.payload.archetype,
+          description: args.payload.description,
+        },
+        limit,
+      );
     } catch (err) {
       // Concurrent same-name import race — same 409 (with the name_override
       // hint) the pre-check returns, not an uncaught 500.
@@ -461,6 +478,13 @@ export class ProfilesService {
       }
       throw err;
     }
+    if ('limitExceeded' in result) {
+      throw new TierLimitError(
+        `Tier "${args.tier}" permits at most ${(limit ?? 0).toString()} profiles; you have ${result.current.toString()}.`,
+        { limit: limit ?? 0, current: result.current, resource: 'profile', tier: args.tier },
+      );
+    }
+    const row = result.record;
     await this.emitAuditBestEffort(args.accountId, 'profile.imported', `profile_${row.id}`, {
       name: row.name,
       archetype: row.archetype,
@@ -559,14 +583,22 @@ export class ProfilesService {
       targetName = source.name + ' (transferred)';
     }
 
-    let newProfile: ProfileRecord;
+    // V-714 — atomic limit-check + insert on the RECIPIENT account (count
+    // above is the fast-fail pre-check; insertWithLimit re-checks under the
+    // recipient's account-row lock). Both the cap refusal and the name-race
+    // 409 throw BEFORE the source delete below, so a refused transfer leaves
+    // the source profile intact (the transfer simply didn't happen).
+    let result: Awaited<ReturnType<typeof this.repo.insertWithLimit>>;
     try {
-      newProfile = await this.repo.insert({
-        accountId: args.recipientAccountId,
-        name: targetName,
-        archetype: source.archetype,
-        description: source.description,
-      });
+      result = await this.repo.insertWithLimit(
+        {
+          accountId: args.recipientAccountId,
+          name: targetName,
+          archetype: source.archetype,
+          description: source.description,
+        },
+        limit,
+      );
     } catch (err) {
       // Concurrent race: the recipient acquired `targetName` between the
       // pre-check rename above and this insert. Fail with a clean 409 — we
@@ -580,6 +612,18 @@ export class ProfilesService {
       }
       throw err;
     }
+    if ('limitExceeded' in result) {
+      throw new TierLimitError(
+        `Recipient account is at tier limit (${args.recipientTier}; ${result.current.toString()}/${(limit ?? 0).toString()}).`,
+        {
+          limit: limit ?? 0,
+          current: result.current,
+          resource: 'profile',
+          tier: args.recipientTier,
+        },
+      );
+    }
+    const newProfile = result.record;
 
     await this.repo.delete({ id: args.sourceProfileId, accountId: args.sourceAccountId });
 

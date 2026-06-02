@@ -339,7 +339,7 @@ describe('V-553.B-21 ProfilesService.clone', () => {
     // findByAccountAndName('fresh') misses, but a sibling took it before the
     // insert commits → profiles_account_name_unique fires.
     const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_1', name: 'src' })]);
-    repo.insert = () => Promise.reject(nameRace23505());
+    repo.insertWithLimit = () => Promise.reject(nameRace23505());
     const svc = new ProfilesService(repo);
     await expect(
       svc.clone({ id: 'p1', accountId: 'acc_1', tier: TEAM, name: 'fresh' }),
@@ -348,7 +348,7 @@ describe('V-553.B-21 ProfilesService.clone', () => {
 
   it('re-throws a non-constraint clone insert error (the catch is precise)', async () => {
     const { repo } = makeRepo([makeProfile({ id: 'p1', accountId: 'acc_1', name: 'src' })]);
-    repo.insert = () => Promise.reject(new Error('db exploded'));
+    repo.insertWithLimit = () => Promise.reject(new Error('db exploded'));
     const svc = new ProfilesService(repo);
     await expect(
       svc.clone({ id: 'p1', accountId: 'acc_1', tier: TEAM, name: 'fresh' }),
@@ -426,7 +426,7 @@ describe('V-553.B-21 ProfilesService.importProfile', () => {
 
   it('translates a concurrent import-name 23505 (race loser) into ConflictError', async () => {
     const { repo } = makeRepo();
-    repo.insert = () => Promise.reject(nameRace23505());
+    repo.insertWithLimit = () => Promise.reject(nameRace23505());
     const svc = new ProfilesService(repo);
     await expect(
       svc.importProfile({
@@ -447,7 +447,7 @@ describe('V-553.B-21 ProfilesService.transferProfile', () => {
     const { repo, state } = makeRepo([
       makeProfile({ id: 'p1', accountId: 'acc_src', name: 'movable' }),
     ]);
-    repo.insert = () => Promise.reject(nameRace23505());
+    repo.insertWithLimit = () => Promise.reject(nameRace23505());
     const svc = new ProfilesService(repo);
     await expect(
       svc.transferProfile({
