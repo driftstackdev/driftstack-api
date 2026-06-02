@@ -116,6 +116,18 @@ item 10 below.
   (all 127 `timestamp()` columns are `withTimezone: true` → `timestamptz`; zero naive timestamps
   → no tz-ambiguity bug class). The only open schema item is the founder-gated `agent_sessions`
   strict-FK (§2 item 7).
+- **Outbound-fetch timeouts (2026-06-02) — VERIFIED comprehensively bounded:** all outbound API
+  clients wrap fetch with the AbortController-deadline pattern (armed `setTimeout(abort)` + `signal`
+  - `clearTimeout` in `finally`). `oauth-client-exchange.ts` was the lone gap (login-path IDP calls
+    via bare `globalThis.fetch`) — FIXED `8c818719` (live + post-deploy-verified). The other 7
+    (stripe-api/nowpayments-api/agent-planning/webhooks/incident-broadcast/health-probe) were already
+    correct (2 deep-read, 5 primitive-confirmed). Don't re-sweep.
+- **Ingress request limits (2026-06-02) — SOUND, no body-DoS hole:** `bodyLimit` uses Fastify's
+  1 MiB default globally + 2 _bounded_ overrides (avatar `/v1/account/me/avatar` 3.5 MiB with
+  413-before-handler + MIME/size validation; `_webhook-raw-body` `MAX_BODY_BYTES`) — no unbounded
+  override anywhere. `genReqId` caps inbound `x-request-id` at 128 chars. The only unset ingress
+  knobs are `requestTimeout` (§2 item 4) and `trustProxy` (§2 item 5, LOCKED) — already queued;
+  `keepAliveTimeout` uses the safe Fastify 72s default. Don't re-check.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined. Genuine
 forward progress now needs a founder decision from §2 or a new track.
