@@ -1318,12 +1318,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           await runWithTimeout(c.fn(), c.timeoutMs ?? 1500);
           return { name: c.name, ok: true, latency_ms: Date.now() - start };
         } catch (err) {
-          return {
-            name: c.name,
-            ok: false,
-            latency_ms: Date.now() - start,
-            error: err instanceof Error ? err.message : 'unknown',
-          };
+          // Log the raw error server-side for ops, but do NOT echo it in the
+          // public (no-auth) /ready response: a dependency connection error
+          // can carry internal host:port / topology (CWE-200 info-disclosure).
+          // The check name + ok:false already tell an operator which
+          // dependency is down; the detail lives in the server logs.
+          const message = err instanceof Error ? err.message : 'unknown';
+          reply.log.warn(
+            { component: 'readiness', check: c.name, err: message },
+            'readiness check failed',
+          );
+          return { name: c.name, ok: false, latency_ms: Date.now() - start };
         }
       }),
     );

@@ -210,6 +210,17 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(
       /return reply\.code\(allReady \? 200 : 503\)\.send\(\{\s*\n?\s*ready: allReady,\s*\n?\s*checks: results,\s*\n?\s*\}\);/,
     );
+    // Hardening — the /ready catch logs the raw dependency error server-side
+    // (reply.log.warn) but the PUBLIC (no-auth) response is sanitized to
+    // { name, ok:false, latency_ms } only; the raw err.message is NOT echoed
+    // (a dependency connection error can carry internal host:port — CWE-200).
+    expect(body).toMatch(/reply\.log\.warn\(/);
+    expect(body).toMatch(/'readiness check failed'/);
+    expect(body).toMatch(
+      /return \{ name: c\.name, ok: false, latency_ms: Date\.now\(\) - start \};/,
+    );
+    // Regression guard: the failure-path response must NOT echo the raw error.
+    expect(body).not.toMatch(/latency_ms: Date\.now\(\) - start,\s*\n?\s*error:/);
   });
 
   it('/v1/whoami: requireAuth + rateLimit(global); returns account_id (acc_ prefix) + api_key_id (key_ prefix) + tier + scopes; unreachable account-missing branch throws', () => {
