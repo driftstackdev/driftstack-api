@@ -133,6 +133,48 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(text(window, '[data-field="dlq-depth"]')).toBe('7');
   });
 
+  it('accounts-by-tier: renders a labelled bar per tier with live counts + total from overview.by_tier', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: {
+            active: 11,
+            suspended: 2,
+            deleted: 0,
+            total: 13,
+            by_tier: {
+              free: 10,
+              solo_manual: 0,
+              team_manual: 0,
+              agency_manual: 0,
+              api_starter: 0,
+              api_builder: 3,
+              api_scale: 0,
+              enterprise: 0,
+            },
+          },
+          webhooks: { dlq_depth: 0 },
+        },
+        audit: [],
+      }),
+    });
+    win = window;
+    await flush();
+    const tiers = text(window, '[data-list="tier-distribution"]');
+    // Friendly labels for every tier are present (zero-filled tiers still render).
+    expect(tiers).toContain('Free');
+    expect(tiers).toContain('API Builder');
+    expect(tiers).toContain('Enterprise');
+    // Live counts replace the SSR mock preview.
+    expect(tiers).toContain('10');
+    expect(tiers).toContain('3');
+    // The total annotation reflects the server total.
+    expect(text(window, '[data-field="tier-total"]')).toContain('13 total');
+    // Eight tiers → eight bar rows.
+    expect(window.document.querySelectorAll('[data-list="tier-distribution"] li').length).toBe(8);
+  });
+
   it('recent-actions feed renders an admin action with actor, action, result, and target', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',

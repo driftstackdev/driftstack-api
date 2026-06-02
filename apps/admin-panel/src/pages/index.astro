@@ -15,6 +15,41 @@ const activeAccounts = MOCK_ACCOUNTS.filter((a) => a.status === 'active');
 const suspendedAccounts = MOCK_ACCOUNTS.filter((a) => a.status === 'suspended');
 const recentAudits = MOCK_AUDIT_LOG.slice(0, 5);
 
+// Accounts-by-tier distribution (server: /v1/admin/overview accounts.by_tier,
+// added 2026-06-02). Canonical AccountTier order + friendly labels — passed to
+// the inline script via define:vars so SSR mock-preview and live hydration share
+// one source (no drift). SSR paints a mock distribution; hydration replaces it.
+const TIER_ORDER = [
+  'free',
+  'solo_manual',
+  'team_manual',
+  'agency_manual',
+  'api_starter',
+  'api_builder',
+  'api_scale',
+  'enterprise',
+] as const;
+const TIER_LABELS: Record<string, string> = {
+  free: 'Free',
+  solo_manual: 'Solo · manual',
+  team_manual: 'Team · manual',
+  agency_manual: 'Agency · manual',
+  api_starter: 'API Starter',
+  api_builder: 'API Builder',
+  api_scale: 'API Scale',
+  enterprise: 'Enterprise',
+};
+const mockTierCounts: Record<string, number> = Object.fromEntries(
+  TIER_ORDER.map((t) => [t, MOCK_ACCOUNTS.filter((a) => a.tier === t).length]),
+);
+const mockTierMax = Math.max(1, ...Object.values(mockTierCounts));
+const mockTierRows = TIER_ORDER.map((t) => ({
+  id: t,
+  label: TIER_LABELS[t] ?? t,
+  n: mockTierCounts[t] ?? 0,
+  pct: Math.round(((mockTierCounts[t] ?? 0) / mockTierMax) * 100),
+}));
+
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
 ---
@@ -100,6 +135,40 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </section>
 
+    <!-- Accounts by tier -->
+    <section class="mt-6 dashboard-card">
+      <div class="flex items-center justify-between">
+        <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 3v18h18" /><rect x="7" y="11" width="3" height="6" /><rect x="12" y="7" width="3" height="10" /><rect x="17" y="13" width="3" height="4" />
+            </svg>
+          </span>
+          Accounts by tier
+        </h2>
+        <span class="font-mono text-xs text-slate-400" data-field="tier-total">— total</span>
+      </div>
+      <ul class="mt-4 space-y-2" data-list="tier-distribution">
+        {
+          mockTierRows.map((row) => (
+            <li class="flex items-center gap-3">
+              <span class="w-28 shrink-0 font-mono text-xs text-slate-500">{row.label}</span>
+              <span class="relative h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                <span
+                  class="absolute inset-y-0 left-0 rounded-full bg-oxblood-700"
+                  style={`width:${row.pct}%`}
+                />
+              </span>
+              <span class="w-10 shrink-0 text-right font-mono text-xs text-slate-900">{row.n}</span>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="mt-3 text-[11px] text-slate-400">
+        Distribution across every plan tier — sums to total accounts.
+      </p>
+    </section>
+
     {/* 2026-05-23 — icon on Recent admin activity header. */}
     <!-- Recent admin activity -->
     <section class="mt-10 dashboard-card">
@@ -179,7 +248,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     </p>
   </div>
 
-  <script is:inline define:vars={{ apiBaseUrl }}>
+  <script is:inline define:vars={{ apiBaseUrl, tierOrder: TIER_ORDER, tierLabels: TIER_LABELS }}>
     (function () {
       const root = document.querySelector('[data-page="admin-overview"]');
       if (!root) return;
@@ -222,6 +291,38 @@ const apiBaseUrl = resolveApiBaseUrl();
           headers: { authorization: 'Bearer ' + token },
           credentials: 'include',
         });
+      }
+
+      // Replace the SSR mock tier bars with the live distribution from
+      // /v1/admin/overview accounts.by_tier. Bar widths are relative to the
+      // largest tier so small tiers stay visible; the count is exact.
+      function renderTiers(byTier, total) {
+        const tierList = root.querySelector('[data-list="tier-distribution"]');
+        if (!tierList) return;
+        const rows = tierOrder.map((t) => ({
+          label: tierLabels[t] || t,
+          n: byTier && typeof byTier[t] === 'number' ? byTier[t] : 0,
+        }));
+        const max = Math.max(1, ...rows.map((r) => r.n));
+        tierList.innerHTML = rows
+          .map((r) => {
+            const pct = Math.round((r.n / max) * 100);
+            return (
+              '<li class="flex items-center gap-3">' +
+              '<span class="w-28 shrink-0 font-mono text-xs text-slate-500">' +
+              escapeHtml(r.label) +
+              '</span>' +
+              '<span class="relative h-2 flex-1 overflow-hidden rounded-full bg-slate-100">' +
+              '<span class="absolute inset-y-0 left-0 rounded-full bg-oxblood-700" style="width:' +
+              pct +
+              '%"></span></span>' +
+              '<span class="w-10 shrink-0 text-right font-mono text-xs text-slate-900">' +
+              escapeHtml(String(r.n)) +
+              '</span></li>'
+            );
+          })
+          .join('');
+        setText('tier-total', total + ' total');
       }
 
       function renderAudits(entries) {
@@ -299,6 +400,12 @@ const apiBaseUrl = resolveApiBaseUrl();
                     (body.accounts.suspended || 0) +
                     (body.accounts.deleted || 0);
               setText('total-accounts-annotation', 'of ' + total + ' total');
+              // by_tier (server 2026-06-02) — render the tier distribution,
+              // replacing the SSR mock bars. Tolerates older servers that
+              // don't yet return by_tier (the SSR preview stays).
+              if (body.accounts.by_tier) {
+                renderTiers(body.accounts.by_tier, total);
+              }
             }
             if (body && body.webhooks) {
               setText('dlq-depth', String(body.webhooks.dlq_depth));

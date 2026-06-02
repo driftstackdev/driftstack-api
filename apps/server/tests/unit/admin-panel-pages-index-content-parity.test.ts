@@ -118,10 +118,29 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toMatch(/escapeHtml\(entry\.action\)/);
   });
 
-  it("apiBaseUrl injection: resolveApiBaseUrl() call + define:vars={{ apiBaseUrl }} on the inline script tag — pinned so the API base URL is injected at SSG time (not at runtime via env-var lookup that wouldn't exist in the browser) and the inline script can prefix every authedFetch with the right host", () => {
+  it("apiBaseUrl injection: resolveApiBaseUrl() call + define:vars (apiBaseUrl + tier order/labels) on the inline script tag — pinned so the API base URL + tier metadata are injected at SSG time (not at runtime via env-var lookup that wouldn't exist in the browser) and the inline script can prefix every authedFetch with the right host", () => {
     expect(body).toMatch(/import \{ resolveApiBaseUrl \} from '\.\.\/lib\/api-base-url';/);
     expect(body).toMatch(/const apiBaseUrl = resolveApiBaseUrl\(\);/);
-    expect(body).toMatch(/<script is:inline define:vars=\{\{ apiBaseUrl \}\}>/);
+    expect(body).toMatch(
+      /<script is:inline define:vars=\{\{ apiBaseUrl, tierOrder: TIER_ORDER, tierLabels: TIER_LABELS \}\}>/,
+    );
+  });
+
+  it("accounts-by-tier section: SSR mock-preview bars (data-list='tier-distribution') + live hydration via renderTiers from overview.accounts.by_tier — pinned so the tier-distribution stat keeps a real-data wiring (drift would silently revert the dashboard to mock-only tier counts)", () => {
+    // Canonical tier order + friendly labels are the single source shared by
+    // SSR and hydration (passed via define:vars).
+    expect(body).toMatch(/const TIER_ORDER = \[/);
+    expect(body).toMatch(/'free',/);
+    expect(body).toMatch(/'enterprise',/);
+    expect(body).toMatch(/const TIER_LABELS: Record<string, string> = \{/);
+    // SSR section + per-tier bar list.
+    expect(body).toMatch(/Accounts by tier/);
+    expect(body).toMatch(/data-list="tier-distribution"/);
+    expect(body).toMatch(/data-field="tier-total"/);
+    // Live hydration reads the server field + replaces the SSR bars.
+    expect(body).toMatch(/if \(body\.accounts\.by_tier\) \{/);
+    expect(body).toMatch(/renderTiers\(body\.accounts\.by_tier, total\);/);
+    expect(body).toMatch(/function renderTiers\(byTier, total\) \{/);
   });
 
   it('file exists at canonical path', () => {
