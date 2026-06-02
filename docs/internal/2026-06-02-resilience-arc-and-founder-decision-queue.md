@@ -123,6 +123,28 @@ so runtime validation is a `gui-v*` tag push. CI/CD-config fix (no prod-runtime 
     when the token is set; fail-loud only on token-loss; same fresh-repo-CI tradeoff deploy.yml took).
     OR confirm the CF-Pages silent-skip is intentionally different.** The PROJECT_NAME check in each
     already fails-loud; only the token check silent-skips. (A deploy-pipeline-hardening batch with 11-12.)
+14. **Count-then-insert quota-bypass TOCTOU — two instances, same class** (profile-count found
+    2026-06-02). A per-tier resource limit enforced as `count(account) >= limit ? throw : insert(…)`
+    with the count and the insert as **separate awaits (no transaction / row lock)** lets N concurrent
+    creates all read the same sub-limit count, all pass, and all insert → the cap is exceeded. - **Session-create concurrency limit** (`services/sessions.ts` create) — surfaced 2026-05-30.
+    Lower impact: bounded, billed per session-minute, auto-destroyed (free 20-min cap) → the
+    over-limit is transient. - **Profile-count quota** (`services/profiles.ts` create L134 + duplicate L273 + import L366 +
+    transfer L493 + `profile-snapshots.ts` restore L157 — all 6 do `countByAccount >=
+profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More monetization-relevant
+    than the session case: profiles PERSIST** (not auto-destroyed), so a free-tier user (limit=1)
+    firing concurrent distinct-name creates keeps the extra profiles indefinitely. (`countByAccount`
+    is correctly account-scoped; the profiles **name-uniqueness** race is separately CLOSED — this is
+    the **count** race, a distinct bug. The name-race unique-index does NOT bound count: two
+    different-named concurrent creates both pass.)
+    **Why founder-gated / not auto-fixed:** the correct fix is atomicity — wrap count+insert in
+    `db.transaction()` + `SELECT … FOR UPDATE` on the account (the PROVEN pattern from the
+    debitTokens/appendTranscript fix `e9c78962`), or an `insertIfUnderLimit` in the repo. That is a
+    behavioural change to the core create path (contention/deadlock risk) across 6 call sites, and
+    needs a CI-only real-PG concurrency test (the local gate can't exercise it) — a focused change,
+    not an autopilot edit. **Decision:** (a) accept the over-limit as a cost-model trade-off (as the
+    session case has been), or (b) prioritise the atomic guard — **recommended for the PROFILE case**
+    given the persistent free-tier monetization leak. Low severity, deliberate-concurrency-abuse only;
+    not a security hole (no data exposure / priv-esc).
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
