@@ -39,6 +39,14 @@ so runtime validation is a `gui-v*` tag push. CI/CD-config fix (no prod-runtime 
 
 ## 2. FOUNDER-DECISION QUEUE (gated — Agent-2 cannot safely self-do these)
 
+> **RECOMMENDED PRIORITY (the items below are numbered by discovery, not severity — start here):**
+>
+> 1. **Item 15 — MFA recovery-code regen step-up bypass (MEDIUM-HIGH security).** A stolen session can mint fresh recovery codes (ungated) → satisfy step-up → disable MFA. One-line fix recommended (add `requireMfaFresh()` to the regen route); the only tradeoff is the "lost-device-but-logged-in" self-service recovery path.
+> 2. **Item 14 — profile-count quota TOCTOU (monetization).** Concurrent creates bypass the per-tier profile cap (persistent for free=1). Fix = the proven `FOR UPDATE` tx pattern across 6 sites + a CI-only PG test.
+> 3. **Item 2 — enable `DB_STATEMENT_TIMEOUT_MS` in prod (~30s).** Already de-risked here (all app queries bounded; migrations exempt) → low-risk ops toggle that closes the only runaway-query pool-exhaustion gap. Pure env-var + restart, no code.
+>
+> The remaining items (deploy approval-gate/CI-gating 11-12, CORS/trustProxy 5-6, agent_sessions-FK 7, iphone17 8, dep-bumps 10, CF-skip 13, etc.) are infra/policy/cosmetic — lower urgency. Full per-item detail below.
+
 1. **`DEPLOY_DOTENV_BASE64` GH Actions secret likely still holds the HEX `MFA_ENCRYPTION_KEY`.**
    Used only by the abandoned `server-deploy.yml` (the active path is `deploy.yml`, which
    leaves `.env` SSH-managed). If `server-deploy.yml` is ever run it would reintroduce the
