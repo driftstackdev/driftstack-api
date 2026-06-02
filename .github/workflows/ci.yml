@@ -14,6 +14,9 @@ jobs:
   build-test:
     name: Build, typecheck, lint, unit + integration tests
     runs-on: ubuntu-latest
+    # Bound a hung run (e.g. catastrophic regex backtracking) to minutes
+    # instead of GitHub's 6h default. Generous vs the ~15-25m normal time.
+    timeout-minutes: 60
 
     services:
       postgres:
@@ -88,6 +91,7 @@ jobs:
     name: End-to-end (Playwright against real Postgres + Redis)
     needs: build-test
     runs-on: ubuntu-latest
+    timeout-minutes: 40
 
     services:
       postgres:
@@ -151,6 +155,7 @@ jobs:
   python-sdk:
     name: Python SDK (lint + tests)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -226,6 +231,7 @@ jobs:
   go-sdk:
     name: Go SDK (vet + tests + examples build)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -266,6 +272,7 @@ jobs:
     # PERF_REGRESSION_THRESHOLD env var.
     name: Perf regression check (advisory)
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     continue-on-error: true
     needs: build-test
 

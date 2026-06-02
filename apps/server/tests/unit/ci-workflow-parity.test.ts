@@ -259,6 +259,18 @@ describe('W723 GitHub Actions ci.yml workflow parity', () => {
     expect(runners, 'ubuntu-latest job runners').toBe(5);
   });
 
+  it("CRITICAL every CI job sets timeout-minutes — bounds a hung run (e.g. catastrophic regex backtracking, cf. the documented multi-hour hang class) to minutes instead of GitHub's 6h default. build-test 60 / e2e 40 / python-sdk 25 / go-sdk 20 / bench-regression 25; values are generous vs normal runtime so runner contention never false-kills a legit run. Drift to dropping a timeout would re-expose the 6h-runaway footgun.", () => {
+    const c = read(CI);
+
+    const count = (c.match(/^\s*timeout-minutes: \d+$/gm) ?? []).length;
+    expect(count, 'one timeout-minutes per job (5 jobs)').toBe(5);
+    expect(c).toMatch(/timeout-minutes: 60/); // build-test
+    expect(c).toMatch(/timeout-minutes: 40/); // e2e
+    expect(c).toMatch(/timeout-minutes: 20/); // go-sdk
+    const twentyFives = (c.match(/timeout-minutes: 25/g) ?? []).length;
+    expect(twentyFives, 'python-sdk + bench-regression both 25').toBe(2);
+  });
+
   it('CRITICAL "Install: npm ci" (not npm install) pinned in Node jobs. The frozen-lockfile install is what guarantees CI reproducibility; drift to `npm install` would let semver-range bumps slip in.', () => {
     const c = read(CI);
 
