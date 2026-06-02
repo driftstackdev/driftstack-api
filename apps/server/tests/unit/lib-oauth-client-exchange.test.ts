@@ -1,6 +1,6 @@
 // V-667.C — unit tests for code-exchange + userinfo-fetch.
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { exchangeCodeForTokens, fetchUserInfo } from '../../src/lib/oauth-client-exchange.js';
 
 function mockFetch(
@@ -217,5 +217,53 @@ describe('fetchUserInfo — GitHub', () => {
       ]),
     });
     expect(res.kind).toBe('unverified-email');
+  });
+});
+
+describe('IDP fetch timeout (V-667.C resilience — bounds the login request path)', () => {
+  // A fetch that never settles on its own; it only rejects when the
+  // injected AbortSignal fires — mirroring a hung/slow IDP endpoint.
+  // Without the AbortController deadline this would hang forever.
+  function hangingFetch(): typeof fetch {
+    return ((_url: string, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        });
+      })) as unknown as typeof fetch;
+  }
+
+  it('exchangeCodeForTokens: a hung IDP token endpoint aborts at the deadline → network-error', async () => {
+    vi.useFakeTimers();
+    try {
+      const p = exchangeCodeForTokens({
+        ...EXCHANGE_OPTS_BASE,
+        provider: 'google',
+        fetch: hangingFetch(),
+        timeoutMs: 5_000,
+      });
+      await vi.advanceTimersByTimeAsync(5_000);
+      const res = await p;
+      expect(res.kind).toBe('network-error');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fetchUserInfo: a hung IDP userinfo endpoint aborts at the deadline → network-error', async () => {
+    vi.useFakeTimers();
+    try {
+      const p = fetchUserInfo({
+        provider: 'google',
+        accessToken: 'ya29.token',
+        fetch: hangingFetch(),
+        timeoutMs: 5_000,
+      });
+      await vi.advanceTimersByTimeAsync(5_000);
+      const res = await p;
+      expect(res.kind).toBe('network-error');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

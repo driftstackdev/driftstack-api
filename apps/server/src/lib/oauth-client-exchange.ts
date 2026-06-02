@@ -25,6 +25,8 @@ export interface ExchangeCodeOpts {
   /** PKCE code_verifier matching the challenge in the authorize URL. */
   codeVerifier: string;
   fetch?: typeof fetch;
+  /** Per-call IDP fetch deadline; defaults to DEFAULT_OAUTH_FETCH_TIMEOUT_MS. */
+  timeoutMs?: number;
 }
 
 export interface ExchangedTokens {
@@ -48,6 +50,32 @@ export type ExchangeCodeResult =
 
 const DEFAULT_FETCH: typeof fetch = globalThis.fetch;
 
+// V-667.C resilience — the IDP token/userinfo calls below run on the
+// OAuth login request path. Node's global fetch has NO default timeout,
+// so a hung/slow IDP endpoint would hang the login-callback handler
+// indefinitely, holding a Fastify worker (no Fastify requestTimeout is
+// set). Bound every IDP-bound fetch with an AbortController deadline,
+// matching the pattern in lib/stripe-api.ts + lib/nowpayments-api.ts. A
+// timeout surfaces through the existing catch as a network-error
+// (token/userinfo) or falls through the /user/emails path to
+// unverified-email — both already-handled results, no new variant.
+const DEFAULT_OAUTH_FETCH_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    return await fetchImpl(url, { ...init, signal: ac.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Exchange an authorization code for tokens against the IDP. Per-provider
  * body shape:
@@ -67,16 +95,22 @@ export async function exchangeCodeForTokens(opts: ExchangeCodeOpts): Promise<Exc
     code_verifier: opts.codeVerifier,
   });
   const fetchImpl = opts.fetch ?? DEFAULT_FETCH;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_OAUTH_FETCH_TIMEOUT_MS;
   let res: Response;
   try {
-    res = await fetchImpl(provider.tokenUrl, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        accept: 'application/json',
+    res = await fetchWithTimeout(
+      fetchImpl,
+      provider.tokenUrl,
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          accept: 'application/json',
+        },
+        body: body.toString(),
       },
-      body: body.toString(),
-    });
+      timeoutMs,
+    );
   } catch (err) {
     return {
       kind: 'network-error',
@@ -130,6 +164,8 @@ export interface FetchUserInfoOpts {
   provider: OAuthClientProvider;
   accessToken: string;
   fetch?: typeof fetch;
+  /** Per-call IDP fetch deadline; defaults to DEFAULT_OAUTH_FETCH_TIMEOUT_MS. */
+  timeoutMs?: number;
 }
 
 export type FetchUserInfoResult =
@@ -149,16 +185,22 @@ export type FetchUserInfoResult =
 export async function fetchUserInfo(opts: FetchUserInfoOpts): Promise<FetchUserInfoResult> {
   const provider = OAUTH_CLIENT_PROVIDERS[opts.provider];
   const fetchImpl = opts.fetch ?? DEFAULT_FETCH;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_OAUTH_FETCH_TIMEOUT_MS;
   let res: Response;
   try {
-    res = await fetchImpl(provider.userinfoUrl, {
-      headers: {
-        authorization: `Bearer ${opts.accessToken}`,
-        accept: 'application/json',
-        // GitHub requires a User-Agent on api.github.com requests.
-        'user-agent': 'driftstack-api',
+    res = await fetchWithTimeout(
+      fetchImpl,
+      provider.userinfoUrl,
+      {
+        headers: {
+          authorization: `Bearer ${opts.accessToken}`,
+          accept: 'application/json',
+          // GitHub requires a User-Agent on api.github.com requests.
+          'user-agent': 'driftstack-api',
+        },
       },
-    });
+      timeoutMs,
+    );
   } catch (err) {
     return {
       kind: 'network-error',
@@ -220,13 +262,18 @@ export async function fetchUserInfo(opts: FetchUserInfoOpts): Promise<FetchUserI
     // always requested in OAUTH_CLIENT_PROVIDERS so this call should
     // succeed for any logged-in customer.
     try {
-      const emailsRes = await fetchImpl('https://api.github.com/user/emails', {
-        headers: {
-          authorization: `Bearer ${opts.accessToken}`,
-          accept: 'application/json',
-          'user-agent': 'driftstack-api',
+      const emailsRes = await fetchWithTimeout(
+        fetchImpl,
+        'https://api.github.com/user/emails',
+        {
+          headers: {
+            authorization: `Bearer ${opts.accessToken}`,
+            accept: 'application/json',
+            'user-agent': 'driftstack-api',
+          },
         },
-      });
+        timeoutMs,
+      );
       if (emailsRes.ok) {
         const emailsText = await emailsRes.text();
         try {

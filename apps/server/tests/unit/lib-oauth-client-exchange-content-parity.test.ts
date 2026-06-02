@@ -108,10 +108,24 @@ describe('lib/oauth-client-exchange content parity', () => {
     );
   });
 
-  it("fetchUserInfo Bearer + user-agent framing pinned: 'authorization: Bearer ${accessToken}' + 'GitHub requires a User-Agent on api.github.com requests.' user-agent: 'driftstack-api'. Drift to dropping User-Agent would cause GitHub to reject the userinfo call with 403", () => {
-    expect(body).toMatch(
-      /res = await fetchImpl\(provider\.userinfoUrl, \{\s*\n?\s*headers: \{\s*\n?\s*authorization: `Bearer \$\{opts\.accessToken\}`,\s*\n?\s*accept: 'application\/json',\s*\n?\s*\/\/ GitHub requires a User-Agent on api\.github\.com requests\.\s*\n?\s*'user-agent': 'driftstack-api',\s*\n?\s*\},\s*\n?\s*\}\);/,
-    );
+  it("fetchUserInfo Bearer + user-agent framing pinned: 'authorization: Bearer ${accessToken}' + 'GitHub requires a User-Agent on api.github.com requests.' user-agent: 'driftstack-api'. Drift to dropping User-Agent would cause GitHub to reject the userinfo call with 403. The userinfo call is bounded by fetchWithTimeout (V-667.C resilience). Short focused pins — not one long backtracking-prone chain.", () => {
+    expect(body).toMatch(/fetchWithTimeout\(\s*\n?\s*fetchImpl,\s*\n?\s*provider\.userinfoUrl,/);
+    expect(body).toMatch(/authorization: `Bearer \$\{opts\.accessToken\}`,/);
+    expect(body).toMatch(/\/\/ GitHub requires a User-Agent on api\.github\.com requests\./);
+    expect(body).toMatch(/'user-agent': 'driftstack-api',/);
+  });
+
+  it('V-667.C IDP-fetch TIMEOUT hardening pinned: every IDP-bound fetch (token + userinfo + /user/emails) is wrapped by fetchWithTimeout (AbortController + setTimeout(abort) + clearTimeout finally), bounding the login-path request so a hung IDP cannot hang the Fastify worker (no Fastify requestTimeout is set). Drift to a bare unbounded fetchImpl(provider.*) call would reintroduce the hang.', () => {
+    expect(body).toMatch(/const DEFAULT_OAUTH_FETCH_TIMEOUT_MS = 10_000;/);
+    expect(body).toMatch(/async function fetchWithTimeout\(/);
+    expect(body).toMatch(/const ac = new AbortController\(\);/);
+    expect(body).toMatch(/const timer = setTimeout\(\(\) => ac\.abort\(\), timeoutMs\);/);
+    expect(body).toMatch(/return await fetchImpl\(url, \{ \.\.\.init, signal: ac\.signal \}\);/);
+    expect(body).toMatch(/clearTimeout\(timer\);/);
+    expect(body).toMatch(/fetchWithTimeout\(\s*\n?\s*fetchImpl,\s*\n?\s*provider\.tokenUrl,/);
+    expect(body).toMatch(/timeoutMs\?: number;/);
+    // No bare unbounded IDP fetch remains — all routed through the helper.
+    expect(body).not.toMatch(/await fetchImpl\(provider\./);
   });
 
   it('Google parse pinned: { sub, email, email_verified, name, picture } + Google sub/email-missing → idp-error + emailVerified-false → unverified-email + Verdict-3-avatar from picture. Drift to dropping email_verified check would let unverified Google emails reach the Verdict-1 collision flow', () => {
@@ -139,8 +153,10 @@ describe('lib/oauth-client-exchange content parity', () => {
     expect(body).toMatch(
       /const githubId = typeof id === 'number' \? String\(id\) : typeof id === 'string' \? id : '';/,
     );
-    // /user/emails fallback inline.
-    expect(body).toMatch(/await fetchImpl\('https:\/\/api\.github\.com\/user\/emails'/);
+    // /user/emails fallback inline (bounded by fetchWithTimeout).
+    expect(body).toMatch(
+      /await fetchWithTimeout\(\s*\n?\s*fetchImpl,\s*\n?\s*'https:\/\/api\.github\.com\/user\/emails',/,
+    );
     expect(body).toMatch(
       /const primary = emailsParsed\.find\(\s*\n?\s*\(e\) => e\.primary === true && e\.verified === true && typeof e\.email === 'string',\s*\n?\s*\);/,
     );
