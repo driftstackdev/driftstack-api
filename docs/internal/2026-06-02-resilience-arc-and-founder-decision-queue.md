@@ -22,6 +22,13 @@ statement_timeout + 30s connect default), Redis (maxRetries 3 + auto-reconnect +
 boot fail-fast), R2 (connect 3s / request 15s + readiness 2s). Graceful shutdown
 bounded; readiness `/ready` returns 503-on-dep-fail (sound).
 
+**Also shipped (`c907bcba`):** `npm audit` patched two high-severity CVEs in the
+Fastify-server runtime dep tree — `fast-uri 3.1.0→3.1.2` (path-traversal +
+host-confusion) and `fast-xml-builder 1.1.5→1.2.0` (attribute/comment bypass,
+@aws-sdk/R2). Lockfile-only, scoped to the server dep tree (no Astro-app
+resolution change), gate-green. The remaining (breaking) audit advisories are
+item 10 below.
+
 ## 2. FOUNDER-DECISION QUEUE (gated — Agent-2 cannot safely self-do these)
 
 1. **`DEPLOY_DOTENV_BASE64` GH Actions secret likely still holds the HEX `MFA_ENCRYPTION_KEY`.**
@@ -49,6 +56,16 @@ bounded; readiness `/ready` returns 503-on-dep-fail (sound).
 9. **(LOW) webhook backoff 3-copy consolidation** — `BACKOFF_MS_BY_ATTEMPT` is defined 3×
    (byte-identical values; only a dead/unreachable fallback diverges). Pure-DRY cleanup; not
    a bug — left to avoid churn on the audited webhook subsystem.
+10. **Breaking dependency-vuln bumps (`npm audit fix --force`)** — three advisories need
+    breaking bumps that a root-lockfile edit can't safely gate-validate, so they're a separate
+    founder-reviewed change: `drizzle-orm@0.45.2` (SQLi via `sql.identifier` — **NOT exploitable
+    here**: the codebase has zero `sql.identifier`/`sql.raw` usage, drift-guarded → low urgency
+    despite the HIGH rating); `undici` (HTTP-client: decompression-DoS / WebSocket-overflow /
+    request-smuggling / CRLF); `@astrojs/cloudflare` image-transform SSRF (Astro adapter). The
+    two non-breaking server-runtime highs were already fixed (§1 `c907bcba`). Dev/build-tooling
+    advisories (Astro `check`/`language-server`, incl. the full-tree "2 critical") never ship to
+    prod; customer-shipped Astro deps (`astro`/`devalue`, in-range) are left to dependabot / their
+    own astro-build-validated path rather than a root-lockfile edit the server gate can't validate.
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
