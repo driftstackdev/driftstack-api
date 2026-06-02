@@ -10,9 +10,9 @@
 //   • Module-comment framing pinned: audit ownership stays on routes,
 //     service stays focused on the mutation.
 //   • D-020 + D-025 cache-invalidation framing pinned.
-//   • All 7 methods require driftstack_internal_admin scope.
-//   • Read methods (getAccount / list / countByStatus / countByTier)
-//     don't invalidate cache.
+//   • All 8 methods require driftstack_internal_admin scope.
+//   • Read methods (getAccount / list / countByStatus / countByTier /
+//     signupCounts) don't invalidate cache.
 //   • Mutate methods (changeTier / suspend / unsuspend): repo update
 //     → NotFoundError when row missing → invalidateCache.
 //   • status union: 'active' | 'suspended' | 'deleted'.
@@ -70,7 +70,7 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     );
   });
 
-  it('AccountsAdminRepo: 6 methods (findById / setTier / setStatus / list / countByStatus / countByTier)', () => {
+  it('AccountsAdminRepo: 7 methods (findById / setTier / setStatus / list / countByStatus / countByTier / countCreatedSince)', () => {
     expect(body).toMatch(/export interface AccountsAdminRepo \{/);
     expect(body).toMatch(/findById\(id: string\): Promise<AccountRow \| null>;/);
     expect(body).toMatch(
@@ -84,6 +84,18 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
       /countByStatus\(status: 'active' \| 'suspended' \| 'deleted'\): Promise<number>;/,
     );
     expect(body).toMatch(/countByTier\(\): Promise<Record<AccountTier, number>>;/);
+    expect(body).toMatch(/countCreatedSince\(since: Date\): Promise<number>;/);
+  });
+
+  it('AccountsAdminService.signupCounts: windowed signup stats (today/7d/30d) backed by countCreatedSince', () => {
+    expect(body).toMatch(/export interface SignupWindowCounts \{/);
+    expect(body).toMatch(/today: number;/);
+    expect(body).toMatch(/last_7d: number;/);
+    expect(body).toMatch(/last_30d: number;/);
+    expect(body).toMatch(
+      /async signupCounts\(ctx: AccountContext, now: Date\): Promise<SignupWindowCounts> \{/,
+    );
+    expect(body).toMatch(/this\.repo\.countCreatedSince\(startOfToday\)/);
   });
 
   it('AccountsAdminService: constructor takes repo + optional authCache + optional sessions reclaimer', () => {
@@ -96,11 +108,11 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     );
   });
 
-  it('All 7 methods require driftstack_internal_admin scope (throwIfMissingScope first)', () => {
-    // Count occurrences — should be 7 (one per method: getAccount, list,
-    // countByStatus, countByTier, changeTier, suspend, unsuspend).
+  it('All 8 methods require driftstack_internal_admin scope (throwIfMissingScope first)', () => {
+    // Count occurrences — should be 8 (one per method: getAccount, list,
+    // countByStatus, countByTier, signupCounts, changeTier, suspend, unsuspend).
     const scopeChecks = body.match(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/g);
-    expect(scopeChecks?.length).toBe(7);
+    expect(scopeChecks?.length).toBe(8);
   });
 
   it('getAccount: scope check → repo.findById → NotFoundError-or-row', () => {

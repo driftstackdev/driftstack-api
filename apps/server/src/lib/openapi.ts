@@ -2014,6 +2014,12 @@ function buildRegistry(): OpenAPIRegistry {
       total: z.number().int().nonnegative(),
       // Account count per tier (every AccountTier key present, zero-filled).
       by_tier: z.record(z.string(), z.number().int().nonnegative()),
+      // New-signup counts over rolling UTC windows.
+      signups: z.object({
+        today: z.number().int().nonnegative(),
+        last_7d: z.number().int().nonnegative(),
+        last_30d: z.number().int().nonnegative(),
+      }),
     }),
     webhooks: z.object({
       dlq_depth: z.number().int().nonnegative(),

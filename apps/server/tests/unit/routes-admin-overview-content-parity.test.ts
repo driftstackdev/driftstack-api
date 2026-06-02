@@ -15,10 +15,11 @@
 //   • V-515 framing pinned: deleted-account count + computed total
 //     so admin panel renders "X of Y accounts active" without extra
 //     roundtrip.
-//   • Counts source: 5-way Promise.all over countByStatus(active|
-//     suspended|deleted) + countByTier + webhooksAdmin.countDlq.
-//   • Reply shape: {accounts:{active,suspended,deleted,total,by_tier},
-//     webhooks:{dlq_depth}} — total = active+suspended+deleted.
+//   • Counts source: 6-way Promise.all over countByStatus(active|
+//     suspended|deleted) + countByTier + signupCounts +
+//     webhooksAdmin.countDlq.
+//   • Reply shape: {accounts:{active,suspended,deleted,total,by_tier,
+//     signups}, webhooks:{dlq_depth}} — total = active+suspended+deleted.
 //   • AdminOverviewRoutesOptions: accountsAdmin + webhooksAdmin.
 //   • Future-extension framing: response shape will add leads.open
 //     when leads tracking gets a Postgres surface.
@@ -82,24 +83,26 @@ describe('W413.B apps/server/src/routes/admin-overview.ts content parity', () =>
     );
   });
 
-  it('5-way Promise.all: countByStatus active/suspended/deleted + countByTier + countDlq', () => {
+  it('6-way Promise.all: countByStatus active/suspended/deleted + countByTier + signupCounts + countDlq', () => {
     // Individual line pins (no long \s*\n?\s* chain — avoids backtracking hazard).
     expect(body).toMatch(
-      /const \[activeAccounts, suspendedAccounts, deletedAccounts, byTier, dlqDepth\] =/,
+      /const \[activeAccounts, suspendedAccounts, deletedAccounts, byTier, signups, dlqDepth\] =/,
     );
     expect(body).toMatch(/accountsAdmin\.countByStatus\(ctx, 'active'\),/);
     expect(body).toMatch(/accountsAdmin\.countByStatus\(ctx, 'suspended'\),/);
     expect(body).toMatch(/accountsAdmin\.countByStatus\(ctx, 'deleted'\),/);
     expect(body).toMatch(/accountsAdmin\.countByTier\(ctx\),/);
+    expect(body).toMatch(/accountsAdmin\.signupCounts\(ctx, new Date\(\)\),/);
     expect(body).toMatch(/webhooksAdmin\.countDlq\(ctx\),/);
   });
 
-  it('Reply shape: accounts{active,suspended,deleted,total=active+suspended+deleted,by_tier} + webhooks{dlq_depth}', () => {
+  it('Reply shape: accounts{active,suspended,deleted,total=active+suspended+deleted,by_tier,signups} + webhooks{dlq_depth}', () => {
     expect(body).toMatch(/active: activeAccounts,/);
     expect(body).toMatch(/suspended: suspendedAccounts,/);
     expect(body).toMatch(/deleted: deletedAccounts,/);
     expect(body).toMatch(/total: activeAccounts \+ suspendedAccounts \+ deletedAccounts,/);
     expect(body).toMatch(/by_tier: byTier,/);
+    expect(body).toMatch(/signups,/);
     expect(body).toMatch(/dlq_depth: dlqDepth,/);
   });
 

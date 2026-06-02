@@ -15,16 +15,17 @@
 //   the service. The service stays focused on the mutation; the
 //   route owns the request/response envelope'.
 //
-//   AccountsAdminService 7 methods + 1 private:
+//   AccountsAdminService 8 methods + 1 private:
 //     - getAccount(ctx, accountId) — 404 on missing.
 //     - list(ctx, args) — paginated cross-account.
 //     - countByStatus(ctx, status).
 //     - countByTier(ctx) — account distribution per tier.
+//     - signupCounts(ctx, now) — new-signup windows (today/7d/30d).
 //     - changeTier(ctx, accountId, newTier) — invalidates cache.
 //     - suspend(ctx, accountId) → status='suspended', invalidates.
 //     - unsuspend(ctx, accountId) → status='active', invalidates.
 //
-//   All 7 methods require 'driftstack_internal_admin' scope (not
+//   All 8 methods require 'driftstack_internal_admin' scope (not
 //   plain 'admin' — internal-admin is stricter, cross-account
 //   access).
 //
@@ -33,8 +34,8 @@
 //   ListAccountsArgs cursor — 'prior page's last id (created_at
 //   desc + id desc tie-break)'.
 //
-//   AccountsAdminRepo 6-method interface: findById + setTier +
-//     setStatus + list + countByStatus + countByTier.
+//   AccountsAdminRepo 7-method interface: findById + setTier +
+//     setStatus + list + countByStatus + countByTier + countCreatedSince.
 //
 //   invalidateCache graceful-degradation framing — 'Cache failures
 //   must not propagate as admin-action failures — the underlying
@@ -89,11 +90,11 @@ describe('W940 admin-accounts cross-source invariant', () => {
 
   // ─── 5 methods all require driftstack_internal_admin ─────────
 
-  it("CRITICAL all 7 service methods require 'driftstack_internal_admin' scope — getAccount + list + countByStatus + countByTier + changeTier + suspend + unsuspend. The internal-admin (not plain 'admin') scope keeps cross-account mutations internal-only.", () => {
+  it("CRITICAL all 8 service methods require 'driftstack_internal_admin' scope — getAccount + list + countByStatus + countByTier + signupCounts + changeTier + suspend + unsuspend. The internal-admin (not plain 'admin') scope keeps cross-account mutations internal-only.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-accounts.ts'));
-    // 7 throwIfMissingScope calls (getAccount + list + countByStatus + countByTier + changeTier + suspend + unsuspend).
+    // 8 throwIfMissingScope calls (getAccount + list + countByStatus + countByTier + signupCounts + changeTier + suspend + unsuspend).
     const matches = p.match(/throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);/g) ?? [];
-    expect(matches.length).toBeGreaterThanOrEqual(7);
+    expect(matches.length).toBeGreaterThanOrEqual(8);
   });
 
   // ─── 3-value account status enum ─────────────────────────────
@@ -146,7 +147,7 @@ describe('W940 admin-accounts cross-source invariant', () => {
 
   // ─── AccountsAdminRepo 5-method interface ────────────────────
 
-  it('CRITICAL AccountsAdminRepo has 6 methods — findById + setTier + setStatus + list + countByStatus + countByTier. The 6-method interface is the storage seam; setTier + setStatus return AccountRow | null (null = row missing).', () => {
+  it('CRITICAL AccountsAdminRepo has 7 methods — findById + setTier + setStatus + list + countByStatus + countByTier + countCreatedSince. The 7-method interface is the storage seam; setTier + setStatus return AccountRow | null (null = row missing).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-accounts.ts'));
     expect(p).toMatch(/export interface AccountsAdminRepo \{/);
     expect(p).toMatch(/findById\(id: string\): Promise<AccountRow \| null>;/);
@@ -159,6 +160,7 @@ describe('W940 admin-accounts cross-source invariant', () => {
       /countByStatus\(status: 'active' \| 'suspended' \| 'deleted'\): Promise<number>;/,
     );
     expect(p).toMatch(/countByTier\(\): Promise<Record<AccountTier, number>>;/);
+    expect(p).toMatch(/countCreatedSince\(since: Date\): Promise<number>;/);
   });
 
   // ─── 404 on missing account ──────────────────────────────────

@@ -5,8 +5,8 @@
 //   Header — 'Drizzle-backed AccountsAdminRepo. Updates accounts.tier
 //   / accounts.status'.
 //
-//   DrizzleAccountsAdminRepo 6-method surface — findById + setTier +
-//     setStatus + list + countByStatus + countByTier.
+//   DrizzleAccountsAdminRepo 7-method surface — findById + setTier +
+//     setStatus + list + countByStatus + countByTier + countCreatedSince.
 //
 //   status 3-value union — 'active' | 'suspended' | 'deleted'.
 //
@@ -26,6 +26,9 @@
 //
 //   countByTier groupBy(accounts.tier) → zero-filled Record over
 //     AccountTierSchema.options (every AccountTier present).
+//
+//   countCreatedSince count(*)::int where gte(createdAt, since) —
+//     backs the signup-window stats.
 //
 //   toRow 11-field shape — id + email + name + tier + status +
 //     timezone + avatarR2Key + slug + region + createdAt + updatedAt
@@ -56,9 +59,9 @@ describe('W1005 db/admin-accounts-repo cross-source invariant', () => {
     expect(p).toMatch(/export class DrizzleAccountsAdminRepo implements AccountsAdminRepo \{/);
   });
 
-  // ─── 6-method surface ────────────────────────────────────────
+  // ─── 7-method surface ────────────────────────────────────────
 
-  it('CRITICAL 6-method surface — findById + setTier + setStatus + list + countByStatus + countByTier. The admin contract covers id-lookup + 2 mutations + paged-list + status-count + tier-distribution.', () => {
+  it('CRITICAL 7-method surface — findById + setTier + setStatus + list + countByStatus + countByTier + countCreatedSince. The admin contract covers id-lookup + 2 mutations + paged-list + status-count + tier-distribution + signup-window count.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/admin-accounts-repo.ts'));
     expect(p).toMatch(/async findById\(id: string\): Promise<AccountRow \| null> \{/);
     expect(p).toMatch(
@@ -71,6 +74,8 @@ describe('W1005 db/admin-accounts-repo cross-source invariant', () => {
     );
     expect(p).toMatch(/async countByTier\(\): Promise<Record<AccountTier, number>> \{/);
     expect(p).toMatch(/\.groupBy\(accounts\.tier\);/);
+    expect(p).toMatch(/async countCreatedSince\(since: Date\): Promise<number> \{/);
+    expect(p).toMatch(/\.where\(gte\(accounts\.createdAt, since\)\);/);
   });
 
   // ─── status 3-value union ────────────────────────────────────

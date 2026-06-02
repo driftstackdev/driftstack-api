@@ -78,4 +78,11 @@ export class InMemoryAccountsAdminRepo implements AccountsAdminRepo {
     for (const r of this.authRepo.allAccounts()) out[r.tier] += 1;
     return Promise.resolve(out);
   }
+
+  countCreatedSince(since: Date): Promise<number> {
+    const cnt = this.authRepo
+      .allAccounts()
+      .filter((r) => r.createdAt.getTime() >= since.getTime()).length;
+    return Promise.resolve(cnt);
+  }
 }

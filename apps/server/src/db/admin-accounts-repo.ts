@@ -1,6 +1,6 @@
 // Drizzle-backed AccountsAdminRepo. Updates accounts.tier / accounts.status.
 
-import { type SQL, and, desc, eq, ilike, lt, or, sql } from 'drizzle-orm';
+import { type SQL, and, desc, eq, gte, ilike, lt, or, sql } from 'drizzle-orm';
 import { AccountTierSchema, type AccountTier } from '@driftstack/api-types';
 import type {
   AccountsAdminRepo,
@@ -104,6 +104,14 @@ export class DrizzleAccountsAdminRepo implements AccountsAdminRepo {
     const out = emptyTierCounts();
     for (const row of rows) out[row.tier] = row.cnt;
     return out;
+  }
+
+  async countCreatedSince(since: Date): Promise<number> {
+    const [row] = await this.database.db
+      .select({ cnt: sql<number>`count(*)::int` })
+      .from(accounts)
+      .where(gte(accounts.createdAt, since));
+    return row?.cnt ?? 0;
   }
 }
 

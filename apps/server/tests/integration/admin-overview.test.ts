@@ -24,6 +24,7 @@ interface OverviewResponse {
     deleted: number;
     total: number;
     by_tier: Record<string, number>;
+    signups: { today: number; last_7d: number; last_30d: number };
   };
   webhooks: { dlq_depth: number };
 }
@@ -145,6 +146,26 @@ describe('GET /v1/admin/overview', () => {
     expect(body.accounts.by_tier.api_builder).toBeGreaterThanOrEqual(1);
     const tierSum = Object.values(body.accounts.by_tier).reduce((a, b) => a + b, 0);
     expect(tierSum).toBe(body.accounts.total);
+  });
+
+  // Signup windows are wired into the response with the right shape. The
+  // windows are defined as nested (wider ⊇ narrower), so the counts are
+  // monotonically nondecreasing regardless of seed dates. The exact
+  // window-bucketing math is asserted deterministically in the service unit
+  // test (admin-accounts-service.test.ts), which controls createdAt + now.
+  it('exposes a well-formed signups object (today ≤ 7d ≤ 30d) wired into the overview', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/overview',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const { signups } = res.json<OverviewResponse>().accounts;
+    expect(typeof signups.today).toBe('number');
+    expect(signups.today).toBeGreaterThanOrEqual(0);
+    expect(signups.last_7d).toBeGreaterThanOrEqual(signups.today);
+    expect(signups.last_30d).toBeGreaterThanOrEqual(signups.last_7d);
   });
 
   it('rejects without admin scope', async () => {

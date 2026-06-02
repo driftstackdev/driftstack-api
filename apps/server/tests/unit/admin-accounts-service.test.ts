@@ -92,6 +92,8 @@ function makeRepo(initial: AccountRow[] = []): {
       for (const r of rows) out[r.tier] += 1;
       return Promise.resolve(out);
     },
+    countCreatedSince: (since) =>
+      Promise.resolve(rows.filter((r) => r.createdAt.getTime() >= since.getTime()).length),
   };
   return { repo, rows };
 }
@@ -113,6 +115,9 @@ describe('V-553.B-15 AccountsAdminService — scope gates', () => {
       /driftstack_internal_admin/,
     );
     await expect(svc.countByTier(unscoped)).rejects.toThrow(/driftstack_internal_admin/);
+    await expect(svc.signupCounts(unscoped, new Date())).rejects.toThrow(
+      /driftstack_internal_admin/,
+    );
     await expect(svc.changeTier(unscoped, 'acc_1', 'team_manual')).rejects.toThrow(
       /driftstack_internal_admin/,
     );
@@ -182,6 +187,21 @@ describe('V-553.B-15 AccountsAdminService.list + countByStatus', () => {
     // Every canonical tier key is present and the distribution sums to the row count.
     expect(Object.keys(dist).sort()).toEqual([...AccountTierSchema.options].sort());
     expect(Object.values(dist).reduce((a, b) => a + b, 0)).toBe(3);
+  });
+
+  it('signupCounts buckets accounts by created-at into today / 7d / 30d windows', async () => {
+    const now = new Date('2026-06-02T12:00:00.000Z');
+    const { repo } = makeRepo([
+      baseAccount({ id: 'd0', createdAt: new Date('2026-06-02T01:00:00.000Z') }), // today
+      baseAccount({ id: 'd3', createdAt: new Date('2026-05-30T12:00:00.000Z') }), // 3d ago
+      baseAccount({ id: 'd20', createdAt: new Date('2026-05-13T12:00:00.000Z') }), // 20d ago
+      baseAccount({ id: 'd60', createdAt: new Date('2026-04-03T12:00:00.000Z') }), // 60d ago
+    ]);
+    const svc = new AccountsAdminService(repo);
+    const s = await svc.signupCounts(ctxWith(['driftstack_internal_admin']), now);
+    expect(s.today).toBe(1); // only d0
+    expect(s.last_7d).toBe(2); // d0 + d3
+    expect(s.last_30d).toBe(3); // d0 + d3 + d20 (not d60)
   });
 });
 

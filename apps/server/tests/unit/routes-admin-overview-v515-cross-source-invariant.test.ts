@@ -24,11 +24,11 @@
 //   Endpoint — GET /v1/admin/overview + preHandler [requireScope
 //     ('driftstack_internal_admin'), rateLimit('global')].
 //
-//   5 parallel counts via Promise.all — active + suspended + deleted
-//     status counts + by-tier distribution + DLQ depth.
+//   6 parallel counts via Promise.all — active + suspended + deleted
+//     status counts + by-tier distribution + signup windows + DLQ depth.
 //
 //   Response shape — { accounts: {active, suspended, deleted, total,
-//     by_tier}, webhooks: {dlq_depth} }.
+//     by_tier, signups}, webhooks: {dlq_depth} }.
 //
 //   total = active + suspended + deleted (no separate query).
 //
@@ -85,25 +85,27 @@ describe('W1018 routes/admin-overview V-515 cross-source invariant', () => {
     );
   });
 
-  it('CRITICAL 5-parallel-counts via Promise.all — active + suspended + deleted + by-tier + DLQ depth.', () => {
+  it('CRITICAL 6-parallel-counts via Promise.all — active + suspended + deleted + by-tier + signups + DLQ depth.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-overview.ts'));
     expect(p).toMatch(
-      /const \[activeAccounts, suspendedAccounts, deletedAccounts, byTier, dlqDepth\] =/,
+      /const \[activeAccounts, suspendedAccounts, deletedAccounts, byTier, signups, dlqDepth\] =/,
     );
     expect(p).toMatch(/accountsAdmin\.countByStatus\(ctx, 'active'\),/);
     expect(p).toMatch(/accountsAdmin\.countByStatus\(ctx, 'suspended'\),/);
     expect(p).toMatch(/accountsAdmin\.countByStatus\(ctx, 'deleted'\),/);
     expect(p).toMatch(/accountsAdmin\.countByTier\(ctx\),/);
+    expect(p).toMatch(/accountsAdmin\.signupCounts\(ctx, new Date\(\)\),/);
     expect(p).toMatch(/webhooksAdmin\.countDlq\(ctx\),/);
   });
 
-  it('CRITICAL response envelope — { accounts: {active, suspended, deleted, total, by_tier}, webhooks: {dlq_depth} } + total = active+suspended+deleted (no separate query).', () => {
+  it('CRITICAL response envelope — { accounts: {active, suspended, deleted, total, by_tier, signups}, webhooks: {dlq_depth} } + total = active+suspended+deleted (no separate query).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-overview.ts'));
     expect(p).toMatch(/active: activeAccounts,/);
     expect(p).toMatch(/suspended: suspendedAccounts,/);
     expect(p).toMatch(/deleted: deletedAccounts,/);
     expect(p).toMatch(/total: activeAccounts \+ suspendedAccounts \+ deletedAccounts,/);
     expect(p).toMatch(/by_tier: byTier,/);
+    expect(p).toMatch(/signups,/);
     expect(p).toMatch(/dlq_depth: dlqDepth,/);
   });
 

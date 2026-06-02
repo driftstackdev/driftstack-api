@@ -47,6 +47,15 @@ export interface AccountsAdminRepo {
   countByStatus(status: 'active' | 'suspended' | 'deleted'): Promise<number>;
   /** Account count grouped by tier — every AccountTier present, zero-filled. Sums to the total row count (all statuses). */
   countByTier(): Promise<Record<AccountTier, number>>;
+  /** Count of accounts created at or after `since` (inclusive). Used for signup-window stats. */
+  countCreatedSince(since: Date): Promise<number>;
+}
+
+/** New-signup counts over rolling windows (UTC). `today` = since 00:00:00 UTC; 7d/30d are now-minus-N-days. */
+export interface SignupWindowCounts {
+  today: number;
+  last_7d: number;
+  last_30d: number;
 }
 
 /** Minimal sessions-service surface the suspend-reclaim path depends on. */
@@ -84,6 +93,24 @@ export class AccountsAdminService {
   async countByTier(ctx: AccountContext): Promise<Record<AccountTier, number>> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
     return this.repo.countByTier();
+  }
+
+  // Signup counts over rolling windows. Windowing lives here (not the repo)
+  // so the repo stays a primitive countCreatedSince(since); `now` is injected
+  // by the caller for deterministic tests. `today` is from 00:00:00 UTC.
+  async signupCounts(ctx: AccountContext, now: Date): Promise<SignupWindowCounts> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    const startOfToday = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const [today, last_7d, last_30d] = await Promise.all([
+      this.repo.countCreatedSince(startOfToday),
+      this.repo.countCreatedSince(sevenDaysAgo),
+      this.repo.countCreatedSince(thirtyDaysAgo),
+    ]);
+    return { today, last_7d, last_30d };
   }
 
   async changeTier(

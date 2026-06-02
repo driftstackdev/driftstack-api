@@ -17,6 +17,8 @@
 //   • countByStatus: select count(*)::int where status; row?.cnt ?? 0.
 //   • countByTier: select tier + count(*)::int groupBy tier; zero-fill
 //     from AccountTierSchema.options (every tier present).
+//   • countCreatedSince: select count(*)::int where gte(createdAt,
+//     since); row?.cnt ?? 0.
 //   • toRow: 11-field AccountRow including V-237 timezone, V-352b
 //     avatarR2Key, V-298a slug, V-298b region.
 
@@ -44,7 +46,7 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
 
   it('imports: SQL type + and/desc/eq/ilike/lt/or/sql; AccountTier; AccountsAdminRepo/ListAccountsArgs/Page; AccountRow; Database; accounts schema', () => {
     expect(body).toMatch(
-      /import \{ type SQL, and, desc, eq, ilike, lt, or, sql \} from 'drizzle-orm';/,
+      /import \{ type SQL, and, desc, eq, gte, ilike, lt, or, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(
       /import \{ AccountTierSchema, type AccountTier \} from '@driftstack\/api-types';/,
@@ -106,6 +108,11 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
     expect(body).toMatch(
       /function emptyTierCounts\(\): Record<AccountTier, number> \{\s*\n?\s*const out = \{\} as Record<AccountTier, number>;\s*\n?\s*for \(const tier of AccountTierSchema\.options\) out\[tier\] = 0;\s*\n?\s*return out;\s*\n?\s*\}/,
     );
+  });
+
+  it('countCreatedSince: select count(*)::int where gte(createdAt, since); row?.cnt ?? 0', () => {
+    expect(body).toMatch(/async countCreatedSince\(since: Date\): Promise<number> \{/);
+    expect(body).toMatch(/\.where\(gte\(accounts\.createdAt, since\)\);/);
   });
 
   it('toRow: 11-field AccountRow (id + email + name + tier + status + V-237 timezone + V-352b avatarR2Key + V-298a slug + V-298b region + created/updated_at)', () => {

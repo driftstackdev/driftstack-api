@@ -40,12 +40,17 @@ export function registerAdminOverviewRoutes(
       // by_tier — account distribution across every AccountTier (one
       // GROUP BY count, zero-filled). Lets the dashboard render the
       // tier-mix stat without a separate roundtrip; sum equals total.
-      const [activeAccounts, suspendedAccounts, deletedAccounts, byTier, dlqDepth] =
+      //
+      // signups — new-account counts over rolling windows (today/7d/30d,
+      // UTC) so the dashboard can show the growth trend in the same
+      // roundtrip. `now` is injected for deterministic windowing.
+      const [activeAccounts, suspendedAccounts, deletedAccounts, byTier, signups, dlqDepth] =
         await Promise.all([
           accountsAdmin.countByStatus(ctx, 'active'),
           accountsAdmin.countByStatus(ctx, 'suspended'),
           accountsAdmin.countByStatus(ctx, 'deleted'),
           accountsAdmin.countByTier(ctx),
+          accountsAdmin.signupCounts(ctx, new Date()),
           webhooksAdmin.countDlq(ctx),
         ]);
 
@@ -56,6 +61,7 @@ export function registerAdminOverviewRoutes(
           deleted: deletedAccounts,
           total: activeAccounts + suspendedAccounts + deletedAccounts,
           by_tier: byTier,
+          signups,
         },
         webhooks: {
           dlq_depth: dlqDepth,
