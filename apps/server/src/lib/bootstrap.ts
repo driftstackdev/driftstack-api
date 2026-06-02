@@ -179,6 +179,9 @@ export async function createProductionDeps(
           },
         }
       : {}),
+    ...(config.dbStatementTimeoutMs !== undefined
+      ? { statementTimeoutMs: config.dbStatementTimeoutMs }
+      : {}),
   });
   await dbHandle.client`SELECT 1`;
   if (config.slowQueryLogThresholdMs !== undefined) {

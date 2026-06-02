@@ -222,6 +222,11 @@ describe('W966 config lib cross-source invariant', () => {
     expect(p).toMatch(
       /slowQueryLogThresholdMs: z\.coerce\.number\(\)\.int\(\)\.positive\(\)\.optional\(\),/,
     );
+    // V-156 follow-up — opt-in per-connection statement_timeout field (off by
+    // default; app-path only via DB_STATEMENT_TIMEOUT_MS; migrations exempt).
+    expect(p).toMatch(
+      /dbStatementTimeoutMs: z\.coerce\.number\(\)\.int\(\)\.positive\(\)\.optional\(\),/,
+    );
   });
 
   // ─── V-333b Playwright driver framing ────────────────────────

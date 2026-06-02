@@ -260,4 +260,31 @@ describe('loadConfig', () => {
       }),
     ).toThrow(/32 bytes/);
   });
+
+  it('V-156 DB_STATEMENT_TIMEOUT_MS coerces to dbStatementTimeoutMs (opt-in pool statement_timeout)', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      DB_STATEMENT_TIMEOUT_MS: '30000',
+    });
+    expect(cfg.dbStatementTimeoutMs).toBe(30000);
+  });
+
+  it('V-156 dbStatementTimeoutMs undefined when unset (OFF by default — no statement_timeout, zero behaviour change)', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+    });
+    expect(cfg.dbStatementTimeoutMs).toBeUndefined();
+  });
+
+  it('V-156 DB_STATEMENT_TIMEOUT_MS rejects non-positive (must be a positive int ms)', () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+        REDIS_URL: 'redis://localhost:6379',
+        DB_STATEMENT_TIMEOUT_MS: '0',
+      }),
+    ).toThrow();
+  });
 });

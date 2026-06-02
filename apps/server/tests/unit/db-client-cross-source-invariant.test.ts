@@ -48,6 +48,7 @@ describe('W988 db/client cross-source invariant', () => {
     expect(p).toMatch(/opts\?: \{/);
     expect(p).toMatch(/max\?: number;/);
     expect(p).toMatch(/slowQueryLog\?: SlowQueryLogConfig;/);
+    expect(p).toMatch(/statementTimeoutMs\?: number;/);
     expect(p).toMatch(/client: ReturnType<typeof postgres>;/);
     expect(p).toMatch(/db: ReturnType<typeof drizzle<typeof schema>>;/);
     expect(p).toMatch(/close: \(\) => Promise<void>;/);
@@ -77,6 +78,14 @@ describe('W988 db/client cross-source invariant', () => {
     );
     expect(p).toMatch(/if \(opts\?\.slowQueryLog\) \{/);
     expect(p).toMatch(/client = instrumentSlowQueryLogging\(client, opts\.slowQueryLog\);/);
+  });
+
+  // ─── opt-in statement_timeout ────────────────────────────────
+
+  it("CRITICAL opt-in statement_timeout — when opts.statementTimeoutMs is set, postgres() receives connection: { statement_timeout: opts.statementTimeoutMs } (number ms, per postgres-js's ConnectionParameters type) — a per-connection cap so a runaway query can't hold a pool slot forever and exhaust the pool; the key is omitted when unset = Postgres default (no timeout). App-path only — migrate.ts uses its own postgres({ max: 1 }) client, so long DDL is never capped.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/db/client.ts'));
+    expect(p).toMatch(/opts\?\.statementTimeoutMs !== undefined/);
+    expect(p).toMatch(/connection: \{ statement_timeout: opts\.statementTimeoutMs \}/);
   });
 
   // ─── drizzle handle ──────────────────────────────────────────

@@ -20,6 +20,16 @@ const ConfigSchema = z.object({
   // duration emit a warn-level structured log via postgres-js client
   // instrumentation. Unset = disabled (default for dev/test).
   slowQueryLogThresholdMs: z.coerce.number().int().positive().optional(),
+  // V-156 follow-up — optional per-connection Postgres statement_timeout (ms).
+  // When set, the app-path pool (bootstrap → createDb) cancels any single
+  // query exceeding it, so a runaway/stuck query (bad plan, lock wait, missing
+  // index) can't hold a pool slot (max 10) indefinitely and exhaust the pool.
+  // OFF by default — zero behaviour change until DB_STATEMENT_TIMEOUT_MS is set
+  // (mirrors the SLOW_QUERY_LOG_THRESHOLD_MS opt-in). Migrations are exempt:
+  // migrate.ts uses its own postgres({ max: 1 }) client, so long DDL is never
+  // cancelled. Suggested prod value well above normal query time (e.g. 30000)
+  // so it only ever catches true runaways.
+  dbStatementTimeoutMs: z.coerce.number().int().positive().optional(),
   // Cloudflare R2 — recordings durability + cross-device access. All
   // four required to enable R2; if any is missing, R2 is disabled and
   // the readiness probe skips the R2 check (logged at boot).
@@ -479,6 +489,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     playwrightBrowser: env.PLAYWRIGHT_BROWSER,
     playwrightHeaded: env.PLAYWRIGHT_HEADED,
     slowQueryLogThresholdMs: env.SLOW_QUERY_LOG_THRESHOLD_MS,
+    dbStatementTimeoutMs: env.DB_STATEMENT_TIMEOUT_MS,
     r2: readR2Config(env),
     postmark: readPostmarkConfig(env),
     sentry: readSentryConfig(env),

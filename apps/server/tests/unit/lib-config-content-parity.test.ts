@@ -172,6 +172,11 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
     expect(body).toMatch(
       /slowQueryLogThresholdMs: z\.coerce\.number\(\)\.int\(\)\.positive\(\)\.optional\(\),/,
     );
+    // V-156 follow-up — opt-in per-connection statement_timeout (off by default,
+    // mirrors the slow-query-log opt-in; app-path only, migrations exempt).
+    expect(body).toMatch(
+      /dbStatementTimeoutMs: z\.coerce\.number\(\)\.int\(\)\.positive\(\)\.optional\(\),/,
+    );
   });
 
   it('driver enum: mock | webkit | playwright; default mock', () => {

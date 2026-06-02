@@ -42,16 +42,32 @@ describe('W440.C apps/server/src/db/client.ts content parity', () => {
     expect(body).toMatch(/export type Database = ReturnType<typeof createDb>;/);
   });
 
-  it('createDb signature: databaseUrl + opts {max? + slowQueryLog?}; slowQueryLog comment "When set, queries ≥ thresholdMs emit a warn-level slow_query log."', () => {
+  it('createDb signature: databaseUrl + opts {max? + slowQueryLog? + statementTimeoutMs?}; slowQueryLog comment "When set, queries ≥ thresholdMs emit a warn-level slow_query log." + 3-field return {client, db, close}. Short focused pins (not one long-chain regex) per the no-long-chain-regex rule.', () => {
+    expect(body).toMatch(/export function createDb\(/);
+    expect(body).toMatch(/databaseUrl: string,/);
+    expect(body).toMatch(/opts\?: \{/);
+    expect(body).toMatch(/max\?: number;/);
     expect(body).toMatch(
-      /export function createDb\(\s*\n?\s*databaseUrl: string,\s*\n?\s*opts\?: \{\s*\n?\s*max\?: number;\s*\n?\s*\/\*\* When set, queries ≥ thresholdMs emit a warn-level slow_query log\. \*\/\s*\n?\s*slowQueryLog\?: SlowQueryLogConfig;\s*\n?\s*\},\s*\n?\s*\): \{\s*\n?\s*client: ReturnType<typeof postgres>;\s*\n?\s*db: ReturnType<typeof drizzle<typeof schema>>;\s*\n?\s*close: \(\) => Promise<void>;\s*\n?\s*\}/,
+      /\/\*\* When set, queries ≥ thresholdMs emit a warn-level slow_query log\. \*\//,
     );
+    expect(body).toMatch(/slowQueryLog\?: SlowQueryLogConfig;/);
+    // V-156 follow-up — opt-in statement_timeout opt added after slowQueryLog.
+    expect(body).toMatch(/statementTimeoutMs\?: number;/);
+    expect(body).toMatch(/client: ReturnType<typeof postgres>;/);
+    expect(body).toMatch(/db: ReturnType<typeof drizzle<typeof schema>>;/);
+    expect(body).toMatch(/close: \(\) => Promise<void>;/);
   });
 
-  it('postgres init: default max 10; onnotice swallow rationale (Pino logger handles real ops, not driver NOTICE noise)', () => {
+  it('postgres init: default max 10; OPT-IN connection.statement_timeout (number ms) when set; onnotice swallow rationale (Pino handles real ops, not driver NOTICE noise). Short focused pins per the no-long-chain-regex rule.', () => {
+    expect(body).toMatch(/let client = postgres\(databaseUrl, \{/);
+    expect(body).toMatch(/max: opts\?\.max \?\? 10,/);
+    // V-156 follow-up — runaway-query cap, off (no key) when unset.
+    expect(body).toMatch(/opts\?\.statementTimeoutMs !== undefined/);
+    expect(body).toMatch(/connection: \{ statement_timeout: opts\.statementTimeoutMs \}/);
     expect(body).toMatch(
-      /let client = postgres\(databaseUrl, \{\s*\n?\s*max: opts\?\.max \?\? 10,\s*\n?\s*onnotice: \(\) => \{\s*\n?\s*\/\* swallow Postgres NOTICE messages — Pino logger handles real ops \*\/\s*\n?\s*\},\s*\n?\s*\}\);/,
+      /\/\* swallow Postgres NOTICE messages — Pino logger handles real ops \*\//,
     );
+    expect(body).toMatch(/onnotice: \(\) => \{/);
   });
 
   it('slow-query log instrumentation: client = instrumentSlowQueryLogging(client, opts.slowQueryLog) wraps client when configured', () => {
