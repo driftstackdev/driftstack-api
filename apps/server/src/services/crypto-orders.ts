@@ -725,7 +725,19 @@ export class CryptoOrdersService {
     const days = opts.days ?? 7;
     const scanLimit = opts.scanLimit ?? 10_000;
     const now = this.nowFn();
-    const cutoff = now - days * 24 * 60 * 60 * 1000;
+    // Align the lookback to UTC-date boundaries. The method buckets by
+    // UTC date (created_at → YYYY-MM-DD), so the filter must be date-
+    // aligned too: a rolling `now - days*24h` cutoff makes the oldest
+    // day a partial slice (under-counted) and lets the window spill into
+    // a days+1-th date. cutoff = 00:00:00 UTC of (days-1) days ago, so
+    // the window is exactly the last `days` full UTC dates incl. today.
+    const nowDate = new Date(now);
+    const startOfTodayUtc = Date.UTC(
+      nowDate.getUTCFullYear(),
+      nowDate.getUTCMonth(),
+      nowDate.getUTCDate(),
+    );
+    const cutoff = startOfTodayUtc - (days - 1) * 24 * 60 * 60 * 1000;
     const rows = await this.opts.repo.listAll({ limit: scanLimit });
     const buckets = new Map<string, number>();
     for (const o of rows) {

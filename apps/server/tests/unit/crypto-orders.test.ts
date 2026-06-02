@@ -1045,6 +1045,41 @@ describe('V-666.O getDailyBreakdownForAdmin', () => {
     ]);
   });
 
+  it('aligns the window to UTC date boundaries — oldest in-window date is a full day; the day before the window is excluded even though within days*24h', async () => {
+    const now = Date.parse('2026-05-11T12:00:00Z');
+    const { svc, setNow } = makeServiceAt(now);
+    // days=7, now=05-11T12:00 → window = the 7 UTC dates [05-05 .. 05-11].
+    // Order on 05-05 at 01:00 — early morning of the OLDEST in-window
+    // date. Must be counted, proving the oldest day is a full day (a
+    // rolling now-7*24h=05-04T12:00 cutoff would include it too, but the
+    // point is it stays in under date-alignment).
+    setNow(Date.parse('2026-05-05T01:00:00Z'));
+    await svc.create({
+      order_id: 'edge-in',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    // Order on 05-04 at 18:00 — its UTC date (05-04) is OUTSIDE the
+    // 7-date window, yet it falls within a rolling now-7*24h window
+    // (cutoff 05-04T12:00). Date-alignment must exclude it (the old
+    // rolling filter wrongly surfaced a partial '2026-05-04' bucket).
+    setNow(Date.parse('2026-05-04T18:00:00Z'));
+    await svc.create({
+      order_id: 'edge-out',
+      account_id: 'a',
+      product: 'x',
+      price_cents: 100,
+      price_currency: 'EUR',
+    });
+    setNow(now);
+    const out = await svc.getDailyBreakdownForAdmin({ days: 7 });
+    const dates = out.rows.map((r) => r.date);
+    expect(dates).toContain('2026-05-05');
+    expect(dates).not.toContain('2026-05-04');
+  });
+
   it('flags truncated=true when scanLimit hits the order count', async () => {
     const { svc, setNow } = makeServiceAt(Date.parse('2026-05-11T12:00:00Z'));
     for (let i = 0; i < 5; i += 1) {
