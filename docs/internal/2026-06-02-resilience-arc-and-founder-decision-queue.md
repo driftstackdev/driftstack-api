@@ -128,6 +128,45 @@ item 10 below.
   override anywhere. `genReqId` caps inbound `x-request-id` at 128 chars. The only unset ingress
   knobs are `requestTimeout` (§2 item 4) and `trustProxy` (§2 item 5, LOCKED) — already queued;
   `keepAliveTimeout` uses the safe Fastify 72s default. Don't re-check.
+- **Runtime / behavioral dimensions (fresh, 2026-06-02) — all SOUND, don't re-check:**
+  - _Process error handling + crash observability:_ Sentry default integrations capture
+    `uncaughtException` + `unhandledRejection` (never disabled), Fastify `onError`→Sentry with
+    request context, `teardown()` flushes Sentry on every shutdown path — let-it-crash + fully observable.
+  - _HTTP verb-safety:_ all mutations are POST/PUT/PATCH/DELETE; the only side-effecting GET is the
+    deliberate billing-portal 302-redirect; zero destructive-GET handlers.
+  - _SSE connection-lifecycle:_ all 3 SSE routes clear the heartbeat interval + unsubscribe on both
+    `'close'` and `'error'` — no per-disconnect leak.
+  - _Process background timers:_ 10 in-process pollers, 10/10 `setInterval`/`clearInterval` (all
+    cleared on teardown), all `.unref()`'d, each tick try/catch-guarded, overlap-safe by claim
+    semantics, teardown stops pollers first.
+  - _Rate-limit policy:_ 4 buckets — `'global'` + 3 dedicated stricter buckets for the expensive
+    LLM/session ops (`sessions:create`, `agent_sessions:message`/`input_event`); tier-based values.
+  - _Money-precision:_ all money is integer cents in storage + arithmetic; floats only for display
+    formatting + an immaterial alert-threshold heuristic; no charged-amount float math.
+  - _Email-normalization:_ `createAccount` + `findAccountByEmail` lowercase (content-parity-pinned);
+    OAuth collision lookup is case-insensitive → no anti-takeover bypass, no case-variant dup accounts.
+  - _GDPR / erasure / retention doc-vs-reality:_ legal docs (privacy/DPA §9) are precise + consistent
+    with the suspend→retention→archive lifecycle; Art-17 self-service deletion correctly roadmapped.
 
-**Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined. Genuine
-forward progress now needs a founder decision from §2 or a new track.
+## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
+
+All belt-and-suspenders on already-sound surfaces; none is a current bug. Listed so they're
+founder-visible (detail lives in Agent-2 auto-memory). Distinct from §2 (which needs decisions).
+
+1. **DB-level email case-insensitivity** — a `LOWER(email)`/citext functional unique index would move
+   the email-uniqueness guarantee from the app+test layer (createAccount lowercases + content-parity
+   pin) to the DB. Can't autopilot (prod-applied migration; would fail on a pre-existing case-variant
+   dup, which can't be checked offline).
+2. **Webhook DNS-rebind connection-time pin** — create-time SSRF guard is comprehensive (literal
+   v4/v6/::ffff/localhost/numeric-encodings/trailing-dot + 2 KiB URL cap); the lone residual is a
+   hostname resolving public-at-create / private-at-delivery → needs undici custom-connector IP-pinning.
+3. **Rate-limit coverage drift-guard** — no test asserts every customer-facing route carries
+   `rateLimit()` (application is currently consistent); a guard needs a careful legitimate-exception
+   allowlist (admin / webhook-receiver / public routes) → moderate complexity + false-positive risk.
+4. **Status-site unsub-token HMAC** — `rotateUnsubscribeToken` mints a fresh token per notification
+   (only the latest email's unsub link verifies); a stable HMAC token needs a signing-key-source
+   decision. Pre-launch (status site not live) → zero urgency.
+
+**Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
+verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
+an item from the §4 backlog, or a new track.
