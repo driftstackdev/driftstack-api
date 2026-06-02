@@ -106,12 +106,14 @@ describe('W1035 routes/account-mfa V-353b cross-source invariant', () => {
     expect(p).toMatch(/\/\/ same handler\. Some clients prefer POST for non-idempotent ops\./);
   });
 
-  it('CRITICAL DELETE + POST disable both step-up-gated (requireMfaFresh) + account_owner-scoped + share disableHandler.', () => {
+  it('CRITICAL THREE step-up-gated routes (requireMfaFresh): DELETE + POST disable + recovery-codes/regenerate (V-353e bypass-closure) + account_owner-scoped + disable routes share disableHandler.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/account-mfa.ts'));
     // V-481 added app.requireScope('account_owner') to the disable/delete
     // preHandler arrays (now multi-line under prettier), so count each
-    // guard independently rather than as the old adjacent triple.
-    expect((p.match(/app\.requireMfaFresh\(\)/g) ?? []).length).toBe(2);
+    // guard independently rather than as the old adjacent triple. 3 sites:
+    // DELETE /mfa + POST /mfa/disable + POST /mfa/recovery-codes/regenerate
+    // (the regen gate closes the mint-codes→satisfy-step-up→disable bypass).
+    expect((p.match(/app\.requireMfaFresh\(\)/g) ?? []).length).toBe(3);
     expect((p.match(/app\.requireScope\('account_owner'\)/g) ?? []).length).toBeGreaterThanOrEqual(
       2,
     );

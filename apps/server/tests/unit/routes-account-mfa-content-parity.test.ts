@@ -120,9 +120,14 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
     );
   });
 
-  it('Recovery codes regen: POST /v1/account/mfa/recovery-codes/regenerate; account_owner-scoped, no step-up gate (no requireMfaFresh); returns { recovery_codes }', () => {
+  it('Recovery codes regen: POST /v1/account/mfa/recovery-codes/regenerate; account_owner-scoped + STEP-UP-gated (requireMfaFresh, V-353e — closes the regen→disable bypass); returns { recovery_codes }', () => {
+    // V-353e bypass-closure rationale pinned — drift that drops the gate
+    // would re-open: stolen session mints fresh codes → redeems one to
+    // satisfy step-up on disable → full MFA bypass.
+    expect(body).toMatch(/Without it a stolen web session could mint fresh/);
+    expect(body).toMatch(/legitimate lost-device-but-logged-in flow still/);
     expect(body).toMatch(
-      /app\.post\(\s*\n?\s*'\/v1\/account\/mfa\/recovery-codes\/regenerate',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.requireScope\('account_owner'\), app\.rateLimit\('global'\)\] \},/,
+      /app\.post\(\s*\n?\s*'\/v1\/account\/mfa\/recovery-codes\/regenerate',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),?\s*\],\s*\},/,
     );
     expect(body).toMatch(
       /const \{ recoveryCodes \} = await service\.regenerateRecoveryCodes\(\{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*\}\);\s*\n?\s*return \{ recovery_codes: recoveryCodes \};/,

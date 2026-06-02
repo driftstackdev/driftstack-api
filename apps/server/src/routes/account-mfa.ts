@@ -125,9 +125,22 @@ export function registerAccountMfaRoutes(
     disableHandler,
   );
 
+  // V-353e step-up gate — regenerating recovery codes is a step-up-gated
+  // op alongside disable. Without it a stolen web session could mint fresh
+  // recovery codes, then redeem one to satisfy `requireMfaFresh` on disable
+  // → full MFA bypass. The legitimate lost-device-but-logged-in flow still
+  // works: an EXISTING recovery code satisfies step-up (POST /v1/auth/mfa/
+  // step-up) before regenerating. Same gate/order as the disable routes.
   app.post(
     '/v1/account/mfa/recovery-codes/regenerate',
-    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
+    {
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('account_owner'),
+        app.requireMfaFresh(),
+        app.rateLimit('global'),
+      ],
+    },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
