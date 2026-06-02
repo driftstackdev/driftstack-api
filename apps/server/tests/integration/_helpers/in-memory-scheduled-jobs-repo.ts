@@ -40,7 +40,14 @@ export class InMemoryScheduledJobsRepo implements ScheduledJobsRepo {
   }
 
   enqueue(input: EnqueueScheduledJobInput): Promise<{ enqueued: boolean }> {
-    if (input.dedupOnAccountAndType === true && input.accountId !== null) {
+    // Mirror DrizzleScheduledJobsRepo: dedup applies for ANY accountId,
+    // null INCLUDED (global jobs like auth_tokens.sweep / cost.recompute_
+    // nightly). The real repo uses isNull() for the null branch + eq() for
+    // the set branch; here `r.accountId === input.accountId` covers both
+    // (null === null is true). Skipping the null case was the prod
+    // 2026-05-20 bug — 13 pending auth_tokens.sweep rows accumulated across
+    // restarts — so the mock must dedup null too or it masks that bug.
+    if (input.dedupOnAccountAndType === true) {
       for (const r of this.rows.values()) {
         if (
           r.accountId === input.accountId &&

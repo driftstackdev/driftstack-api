@@ -164,4 +164,113 @@ describe('ScheduledJobsService — dispatch', () => {
     });
     expect(second.enqueued).toBe(true);
   });
+
+  it('dedupOnAccountAndType dedups NULL-accountId (global) jobs too — regression for the 2026-05-20 prod incident', async () => {
+    // Global jobs (auth_tokens.sweep, cost.recompute_nightly) carry
+    // accountId=null. The real DrizzleScheduledJobsRepo dedups them via
+    // isNull(); the mock must match or it silently masks the duplicate-
+    // accumulation bug (13 pending auth_tokens.sweep rows in prod).
+    const first = await repo.enqueue({
+      jobType: 'auth_tokens.sweep',
+      accountId: null,
+      payload: {},
+      runAt: new Date(2026, 0, 1),
+      dedupOnAccountAndType: true,
+    });
+    expect(first.enqueued).toBe(true);
+
+    const second = await repo.enqueue({
+      jobType: 'auth_tokens.sweep',
+      accountId: null,
+      payload: {},
+      runAt: new Date(2026, 0, 1),
+      dedupOnAccountAndType: true,
+    });
+    expect(second.enqueued).toBe(false);
+
+    // A different global job_type is independent (matched on jobType too).
+    const otherType = await repo.enqueue({
+      jobType: 'cost.recompute_nightly',
+      accountId: null,
+      payload: {},
+      runAt: new Date(2026, 0, 1),
+      dedupOnAccountAndType: true,
+    });
+    expect(otherType.enqueued).toBe(true);
+  });
+});
+
+describe('ScheduledJobsService — stale-lock reclaim (crash recovery)', () => {
+  // claimDue reclaims a job whose worker locked it but never marked it
+  // complete/retry/failed (process crash mid-handler) once the lock is
+  // older than the 5-min staleness window. A FRESH lock must NOT be
+  // stealable — that is what stops two live workers double-running a job.
+  it('does NOT reclaim a job whose lock is still fresh (< 5 min)', async () => {
+    await repo.enqueue({
+      jobType: 'test.sweep',
+      accountId: null,
+      payload: {},
+      runAt: new Date(2026, 0, 1),
+    });
+    const t0 = new Date(2026, 0, 1, 0, 0, 1);
+    const firstClaim = await repo.claimDue({ batchSize: 10, now: t0, workerId: 'worker-A' });
+    expect(firstClaim).toHaveLength(1);
+    expect(firstClaim[0]!.attempts).toBe(1);
+
+    // 4 minutes later: lock is still fresh → a second worker must NOT steal it.
+    const t4 = new Date(t0.getTime() + 4 * 60_000);
+    const secondClaim = await repo.claimDue({ batchSize: 10, now: t4, workerId: 'worker-B' });
+    expect(secondClaim).toHaveLength(0);
+
+    const row = repo.read(firstClaim[0]!.id)!;
+    expect(row.lockedBy).toBe('worker-A'); // lock owner unchanged
+    expect(row.attempts).toBe(1); // not re-incremented
+  });
+
+  it('reclaims a job whose lock is stale (>= 5 min) and re-increments attempts', async () => {
+    await repo.enqueue({
+      jobType: 'test.sweep',
+      accountId: null,
+      payload: {},
+      runAt: new Date(2026, 0, 1),
+    });
+    const t0 = new Date(2026, 0, 1, 0, 0, 1);
+    const claimed = await repo.claimDue({ batchSize: 10, now: t0, workerId: 'dead-worker' });
+    expect(claimed).toHaveLength(1);
+
+    // 6 minutes later (past the 5-min stale window): a fresh worker reclaims it.
+    const t6 = new Date(t0.getTime() + 6 * 60_000);
+    const reclaim = await repo.claimDue({ batchSize: 10, now: t6, workerId: 'worker-B' });
+    expect(reclaim).toHaveLength(1);
+    expect(reclaim[0]!.attempts).toBe(2); // first claim → 1, reclaim → 2
+
+    const row = repo.read(reclaim[0]!.id)!;
+    expect(row.lockedBy).toBe('worker-B');
+  });
+
+  it('processTick reclaims an orphaned job and runs its handler after the stale window', async () => {
+    const handler = vi.fn().mockResolvedValue(undefined);
+    service.register('test.sweep', handler);
+    await repo.enqueue({
+      jobType: 'test.sweep',
+      accountId: null,
+      payload: {},
+      runAt: new Date(2026, 0, 1),
+    });
+    // A worker claims it then crashes (never marks complete/retry/failed).
+    const t0 = new Date(2026, 0, 1, 0, 0, 1);
+    await repo.claimDue({ batchSize: 10, now: t0, workerId: 'dead-worker' });
+
+    // Before the stale window: the live worker (workerId 'test') finds nothing.
+    const before = await service.processTick(new Date(t0.getTime() + 4 * 60_000));
+    expect(before.processed).toBe(0);
+    expect(handler).not.toHaveBeenCalled();
+
+    // After the stale window: the job is reclaimed + the handler runs to completion.
+    const after = await service.processTick(new Date(t0.getTime() + 6 * 60_000));
+    expect(after.processed).toBe(1);
+    expect(handler).toHaveBeenCalledTimes(1);
+    const row = repo.all()[0]!;
+    expect(row.completedAt).toBeInstanceOf(Date);
+  });
 });
