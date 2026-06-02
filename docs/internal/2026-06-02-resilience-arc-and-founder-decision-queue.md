@@ -84,7 +84,10 @@ so runtime validation is a `gui-v*` tag push. CI/CD-config fix (no prod-runtime 
     breaking bumps that a root-lockfile edit can't safely gate-validate, so they're a separate
     founder-reviewed change: `drizzle-orm@0.45.2` (SQLi via `sql.identifier` — **NOT exploitable
     here**: the codebase has zero `sql.identifier`/`sql.raw` usage, drift-guarded → low urgency
-    despite the HIGH rating); `undici` (HTTP-client: decompression-DoS / WebSocket-overflow /
+    despite the HIGH rating; **BUT NOT a clean bump — see §17: 0.45's `DrizzleQueryError` wrapping
+    moves the PG `code`/`constraint_name` to `err.cause`, breaking every top-level 23505-error
+    translation [slug/profile-name-race/idempotency/signup] → needs a coordinated err.cause migration;
+    PR #17 is this bump + fails the slug-409 E2E because of it**); `undici` (HTTP-client: decompression-DoS / WebSocket-overflow /
     request-smuggling / CRLF); `@astrojs/cloudflare` image-transform SSRF (Astro adapter). The
     two non-breaking server-runtime highs were already fixed (§1 `c907bcba`). Dev/build-tooling
     advisories (Astro `check`/`language-server`, incl. the full-tree "2 critical") never ship to
@@ -201,9 +204,21 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
     auto-merge; red CI blocks manual merge too). **Agent-2 cannot safely self-do this** — merging a
     dep/lockfile bump can't be gate-validated by a root-lockfile edit (item 10's reasoning), it triggers
     a prod deploy, and the real E2E break below needs a focused fix. **Triage (diagnosed this wave):**
-    - **#17 runtime-deps-minor (5 pkgs)** — fails the REAL gating E2E (Playwright) test (+ the non-gating
-      perf job): a runtime bump genuinely breaks an E2E flow → needs investigation before it can land.
-      Highest priority (runtime + real break).
+    - **#17 runtime-deps-minor (5 pkgs: drizzle-orm 0.38→0.45.2, @aws-sdk/client-s3 + s3-presigner
+      3.1041→3.1058, @scalar/fastify-api-reference 1.55→1.58, ioredis 5.10→5.11)** — DIAGNOSED this wave:
+      the gating E2E failure is `account-me.spec.ts:93 › PATCH /v1/account/me 409 on slug collision`
+      (got 500, expected 409). **Root cause = the drizzle-orm 0.45 bump** (the other 4 are benign minors):
+      0.45 wraps query errors in `DrizzleQueryError`, moving the Postgres `code`/`constraint_name` to
+      `err.cause` — but the codebase's 23505-translation reads them TOP-LEVEL (`auth-repo.ts:150-152`
+      slug→`SLUG_TAKEN`; `profiles.ts:86 isProfileNameRaceViolation`; + idempotency-replay + signup
+      email-unique) → the catch misses → 23505 propagates → 500 instead of the clean 409/replay. So
+      drizzle-0.45 breaks the ENTIRE 23505-error-translation family (slug caught it via E2E; the others —
+      profile-name-race ×6, agent-session idempotency, signup — aren't all E2E-tested but break the same
+      way). **This is ALSO item-10's drizzle-0.45 security bump** → item-10's "low urgency" is right on
+      SECURITY but understates the UPGRADE EFFORT: it's a coupled dep+code change (update every 23505-catch
+      to read `err.cause.{code,constraint_name}`), founder-reviewed, can't ship the err.cause migration
+      alone (would break current 0.38). Founder option: split #17 to merge the 4 benign minors (aws-sdk×2 +
+      scalar + ioredis) now, handle drizzle-0.45 + the err.cause migration as a coordinated change.
     - **#6 astro 5→6 / #7 react(+@types)** — customer-shipped MAJORs → founder/astro-build-validated path
       (same class as item 10's astro note); month-old + stale.
     - **#16 concurrently 9→10 / #15 dev-deps-minor-patch (8) / #14 cargo-minor-patch (3, gui Rust)** —
