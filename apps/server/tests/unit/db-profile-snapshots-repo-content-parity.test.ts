@@ -62,9 +62,20 @@ describe('W444.A apps/server/src/db/profile-snapshots-repo.ts content parity', (
     );
   });
 
-  it('composite cursor framing: lookup row by id via 2-field select; build OR(lt(createdAt, c.createdAt), and(eq(createdAt, c.createdAt), lt(id, c.id))) — required because multiple snapshots can share same createdAt', () => {
+  it('composite cursor framing: 2-field cursor-row lookup, ACCOUNT-SCOPED (id AND accountId), then OR(lt(createdAt), and(eq(createdAt), lt(id))) keyset — multiple snapshots can share createdAt. The cursor-row lookup is account-scoped (NOT id-only) so a forged cross-account cursor cannot mis-position the caller page or leak a snapshot-id-exists oracle; the main query is account-scoped too. (Short focused pins, not one long-chain regex, per the no-long-chain-regex rule.)', () => {
+    expect(body).toMatch(/const \[c\] = await this\.database\.db/);
+    expect(body).toMatch(/createdAt: profileSnapshots\.createdAt,/);
+    expect(body).toMatch(/id: profileSnapshots\.id,/);
+    // IDOR guard: cursor-row lookup filters by BOTH id AND accountId.
     expect(body).toMatch(
-      /const \[c\] = await this\.database\.db\s*\n?\s*\.select\(\{\s*\n?\s*createdAt: profileSnapshots\.createdAt,\s*\n?\s*id: profileSnapshots\.id,\s*\n?\s*\}\)\s*\n?\s*\.from\(profileSnapshots\)\s*\n?\s*\.where\(eq\(profileSnapshots\.id, args\.cursor\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*if \(c\) \{\s*\n?\s*const cur = or\(\s*\n?\s*lt\(profileSnapshots\.createdAt, c\.createdAt\),\s*\n?\s*and\(eq\(profileSnapshots\.createdAt, c\.createdAt\), lt\(profileSnapshots\.id, c\.id\)\),\s*\n?\s*\);\s*\n?\s*if \(cur !== undefined\) filters\.push\(cur\);\s*\n?\s*\}/,
+      /and\(eq\(profileSnapshots\.id, args\.cursor\), eq\(profileSnapshots\.accountId, args\.accountId\)\)/,
+    );
+    expect(body).not.toMatch(/\.where\(eq\(profileSnapshots\.id, args\.cursor\)\)/);
+    // Composite keyset (handles same-createdAt rows).
+    expect(body).toMatch(/const cur = or\(/);
+    expect(body).toMatch(/lt\(profileSnapshots\.createdAt, c\.createdAt\)/);
+    expect(body).toMatch(
+      /and\(eq\(profileSnapshots\.createdAt, c\.createdAt\), lt\(profileSnapshots\.id, c\.id\)\)/,
     );
   });
 

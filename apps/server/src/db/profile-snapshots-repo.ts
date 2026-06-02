@@ -59,7 +59,15 @@ export class DrizzleProfileSnapshotsRepo implements ProfileSnapshotsRepo {
           id: profileSnapshots.id,
         })
         .from(profileSnapshots)
-        .where(eq(profileSnapshots.id, args.cursor))
+        // Scope the cursor-row lookup by accountId (matches profiles-repo /
+        // sessions-repo + the in-memory mirror). Without it a forged
+        // cross-account cursor resolves to another account's (createdAt,id),
+        // mis-positioning the caller's own keyset page and leaking a weak
+        // snapshot-id-exists oracle. The main query below is already
+        // account-scoped, so this is the residual cursor-scoping gap.
+        .where(
+          and(eq(profileSnapshots.id, args.cursor), eq(profileSnapshots.accountId, args.accountId)),
+        )
         .limit(1);
       if (c) {
         const cur = or(
