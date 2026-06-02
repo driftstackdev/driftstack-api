@@ -63,6 +63,7 @@ import {
   ValidationError,
 } from '../lib/errors.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
+import { isUniqueViolation } from '../lib/pg-error.js';
 import { readClientIp } from '../lib/client-ip.js';
 
 const DEFAULT_TOKEN_BUDGET = 100_000;
@@ -433,12 +434,10 @@ export function registerAgentSessionsRoutes(
         // exactly one win and raises 23505 on the loser. Replay the winner's
         // 201 instead of surfacing a 500 — matches the Stripe idempotency
         // contract + the pre-check replay path above. Any other error
-        // re-throws untouched.
-        if (
-          idempotencyKey !== null &&
-          typeof (err as { code?: unknown }).code === 'string' &&
-          (err as { code: string }).code === '23505'
-        ) {
+        // re-throws untouched. (code-only 23505 — any unique index on the
+        // insert is the idempotency-key race; isUniqueViolation reads top
+        // level on drizzle 0.38, err.cause on 0.45.)
+        if (idempotencyKey !== null && isUniqueViolation(err)) {
           const winner = await sessions.findByIdempotencyKey(ctx.account.id, idempotencyKey);
           if (winner !== null) {
             if (byokService !== undefined && byokKeyCache !== undefined) {

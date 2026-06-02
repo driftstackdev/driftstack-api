@@ -103,7 +103,7 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
       /\/\/ V-298a — translate Postgres unique-violation on the slug\s*\n?\s*\/\/ index into a SlugTakenError so the route layer returns 409\./,
     );
     expect(body).toMatch(
-      /\(err as \{ code: string \}\)\.code === '23505'[\s\S]*?\(err as \{ constraint_name: string \}\)\.constraint_name === 'accounts_slug_unique'[\s\S]*?throw new Error\('SLUG_TAKEN'\);/,
+      /if \(isUniqueViolation\(err, 'accounts_slug_unique'\)\) \{\s*\n?\s*throw new Error\('SLUG_TAKEN'\);/,
     );
   });
 

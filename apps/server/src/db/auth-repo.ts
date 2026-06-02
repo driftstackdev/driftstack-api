@@ -10,6 +10,7 @@ import type {
   WebSessionAuthRow,
 } from '../services/auth.js';
 import type { Database } from './client.js';
+import { isUniqueViolation } from '../lib/pg-error.js';
 import { accounts, apiKeys, rateLimitOverrides, teamMembers, webSessions } from './schema.js';
 
 export class DrizzleAccountAuthRepo implements AccountAuthRepo {
@@ -145,12 +146,8 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
     } catch (err) {
       // V-298a — translate Postgres unique-violation on the slug
       // index into a SlugTakenError so the route layer returns 409.
-      if (
-        typeof (err as { code?: unknown }).code === 'string' &&
-        (err as { code: string }).code === '23505' &&
-        typeof (err as { constraint_name?: unknown }).constraint_name === 'string' &&
-        (err as { constraint_name: string }).constraint_name === 'accounts_slug_unique'
-      ) {
+      // drizzle-version-agnostic (top level on 0.38, err.cause on 0.45).
+      if (isUniqueViolation(err, 'accounts_slug_unique')) {
         throw new Error('SLUG_TAKEN');
       }
       throw err;

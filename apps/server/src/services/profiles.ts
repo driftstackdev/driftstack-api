@@ -12,6 +12,7 @@
 
 import { LOCKED_ARCHETYPE_ID, type AccountTier } from '@driftstack/api-types';
 import { ConflictError, NotFoundError, TierLimitError } from '../lib/errors.js';
+import { isUniqueViolation } from '../lib/pg-error.js';
 import { profileLimitFor } from './sessions.js';
 import type { AccountAuditService } from './account-audit.js';
 
@@ -92,11 +93,8 @@ const DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID;
  * any other error) still surfaces.
  */
 export function isProfileNameRaceViolation(err: unknown): boolean {
-  return (
-    typeof (err as { code?: unknown }).code === 'string' &&
-    (err as { code: string }).code === '23505' &&
-    (err as { constraint_name?: unknown }).constraint_name === 'profiles_account_name_unique'
-  );
+  // drizzle-version-agnostic (reads top level on 0.38, err.cause on 0.45).
+  return isUniqueViolation(err, 'profiles_account_name_unique');
 }
 
 export interface CreateProfileArgs {

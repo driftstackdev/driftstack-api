@@ -15,6 +15,7 @@
 //     RFC 7807 problem responses.
 
 import type { Logger } from '../lib/logger.js';
+import { isUniqueViolation } from '../lib/pg-error.js';
 import type { EmailService } from './email.js';
 import type { AuthCache } from './auth-cache.js';
 import type { AccountAuditService } from './account-audit.js';
@@ -451,11 +452,7 @@ export class AuthFlowsService {
       // win and raises 23505 on the loser. Translate to the same
       // email_already_registered (409) the pre-check throws — not an
       // uncaught 500. Any other error re-throws untouched.
-      if (
-        typeof (err as { code?: unknown }).code === 'string' &&
-        (err as { code: string }).code === '23505' &&
-        (err as { constraint_name?: unknown }).constraint_name === 'accounts_email_unique'
-      ) {
+      if (isUniqueViolation(err, 'accounts_email_unique')) {
         throw new AuthFlowError('email_already_registered');
       }
       throw err;

@@ -163,10 +163,10 @@ describe('W993 db/auth-repo V-016 + V-298a cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/auth-repo.ts'));
     expect(p).toMatch(/V-298a — translate Postgres unique-violation on the slug/);
     expect(p).toMatch(/index into a SlugTakenError so the route layer returns 409\./);
-    expect(p).toMatch(/\(err as \{ code: string \}\)\.code === '23505'/);
-    expect(p).toMatch(
-      /\(err as \{ constraint_name: string \}\)\.constraint_name === 'accounts_slug_unique'/,
-    );
+    // V-714 — the 23505 + accounts_slug_unique check delegates to the
+    // drizzle-version-agnostic isUniqueViolation helper (top level on 0.38,
+    // err.cause on 0.45).
+    expect(p).toMatch(/isUniqueViolation\(err, 'accounts_slug_unique'\)/);
     expect(p).toMatch(/throw new Error\('SLUG_TAKEN'\);/);
   });
 

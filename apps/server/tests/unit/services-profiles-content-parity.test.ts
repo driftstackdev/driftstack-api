@@ -84,8 +84,9 @@ describe('W407.A apps/server/src/services/profiles.ts content parity', () => {
 
   it('concurrent same-name insert race: isProfileNameRaceViolation detector (23505 + profiles_account_name_unique) guards the insert paths → 409 not 500', () => {
     expect(body).toMatch(/export function isProfileNameRaceViolation\(err: unknown\): boolean \{/);
-    expect(body).toMatch(/=== '23505'/);
-    expect(body).toMatch(/=== 'profiles_account_name_unique'/);
+    // V-714 — delegates to the drizzle-version-agnostic helper (reads top level
+    // on 0.38, err.cause on 0.45); the 23505 + constraint check lives there now.
+    expect(body).toMatch(/return isUniqueViolation\(err, 'profiles_account_name_unique'\);/);
     // the create/clone/import/transfer inserts catch + translate it
     expect(body).toMatch(/if \(isProfileNameRaceViolation\(err\)\) \{/);
   });
