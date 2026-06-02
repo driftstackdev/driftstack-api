@@ -35,6 +35,36 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     return Promise.resolve(n);
   }
 
+  // V-714 — atomic limit-check + insert. The prod Drizzle repo serialises this
+  // via a `FOR UPDATE` lock on the accounts row; here the count + insert run
+  // synchronously (JS single-thread → no interleave), which models the same
+  // "loser sees the post-insert count and is refused" outcome.
+  insertWithLimit(
+    input: NewProfileInput,
+    limit: number | null,
+  ): Promise<{ record: ProfileRecord } | { limitExceeded: true; current: number }> {
+    if (limit !== null) {
+      let current = 0;
+      for (const r of this.rows.values()) if (r.accountId === input.accountId) current += 1;
+      if (current >= limit) {
+        return Promise.resolve({ limitExceeded: true as const, current });
+      }
+    }
+    const now = new Date();
+    const row: ProfileRecord = {
+      id: randomUUID(),
+      accountId: input.accountId,
+      name: input.name,
+      archetype: input.archetype,
+      description: input.description,
+      lastUsedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.rows.set(row.id, row);
+    return Promise.resolve({ record: row });
+  }
+
   findById(args: { id: string; accountId: string }): Promise<ProfileRecord | null> {
     const r = this.rows.get(args.id);
     if (!r || r.accountId !== args.accountId) return Promise.resolve(null);

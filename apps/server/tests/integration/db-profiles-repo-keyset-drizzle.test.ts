@@ -120,3 +120,52 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     });
   },
 );
+
+// V-714 — the TOCTOU guard this change exists for. Only a REAL Postgres
+// exercises the `FOR UPDATE` account-row lock inside insertWithLimit; the
+// in-memory repo's JS-single-thread atomicity can't reproduce the race.
+describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
+  'DrizzleProfilesRepo.insertWithLimit (V-714 — atomic tier-cap under real concurrency)',
+  () => {
+    it('serialises N concurrent creates so exactly `limit` succeed (no over-create past the cap)', async () => {
+      if (!dbReachable || !client) {
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`limit-prof-${accountId}@test.local`})`;
+
+      // Fire N concurrent creates against a cap of 1, each with a DISTINCT name
+      // (so the unique index is NOT the limiter — only the tier cap is). Without
+      // the FOR UPDATE lock all N read count=0 and all insert (the TOCTOU); the
+      // account-row lock serialises them so exactly `LIMIT` win.
+      const LIMIT = 1;
+      const N = 8;
+      const results = await Promise.all(
+        Array.from({ length: N }, (_unused, i) =>
+          repo.insertWithLimit(
+            {
+              accountId,
+              name: `limit-prof-${i.toString()}`,
+              archetype: 'iphone16pro_ios18_7_safari26_4',
+              description: null,
+            },
+            LIMIT,
+          ),
+        ),
+      );
+      const accepted = results.filter((r) => 'record' in r);
+      const refused = results.filter((r) => 'limitExceeded' in r);
+      expect(accepted).toHaveLength(LIMIT);
+      expect(refused).toHaveLength(N - LIMIT);
+
+      // The DB agrees: exactly LIMIT rows exist for the account.
+      const countRows = await client`
+        SELECT count(*)::int AS n FROM profiles WHERE account_id = ${accountId}`;
+      expect(countRows[0]?.n).toBe(LIMIT);
+    });
+  },
+);

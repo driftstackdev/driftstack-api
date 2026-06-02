@@ -120,6 +120,26 @@ function makeRepos(
       profiles.push(row);
       return Promise.resolve(row);
     },
+    insertWithLimit: (input, limit) => {
+      if (limit !== null) {
+        const current =
+          opts.countOverride ?? profiles.filter((p) => p.accountId === input.accountId).length;
+        if (current >= limit) return Promise.resolve({ limitExceeded: true as const, current });
+      }
+      profileCounter += 1;
+      const row: ProfileRecord = {
+        id: `prof_${profileCounter.toString()}`,
+        accountId: input.accountId,
+        name: input.name,
+        archetype: input.archetype,
+        description: input.description,
+        lastUsedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      profiles.push(row);
+      return Promise.resolve({ record: row });
+    },
     countByAccount: (accountId) =>
       Promise.resolve(
         opts.countOverride ?? profiles.filter((p) => p.accountId === accountId).length,

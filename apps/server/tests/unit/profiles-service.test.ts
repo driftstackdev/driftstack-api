@@ -65,6 +65,26 @@ function makeRepo(
       rows.push(row);
       return Promise.resolve(row);
     },
+    insertWithLimit: (input: NewProfileInput, limit: number | null) => {
+      if (limit !== null) {
+        const current =
+          opts.countOverride ?? rows.filter((r) => r.accountId === input.accountId).length;
+        if (current >= limit) return Promise.resolve({ limitExceeded: true as const, current });
+      }
+      counter += 1;
+      const row: ProfileRecord = {
+        id: `p_new_${counter.toString()}`,
+        accountId: input.accountId,
+        name: input.name,
+        archetype: input.archetype,
+        description: input.description,
+        lastUsedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      rows.push(row);
+      return Promise.resolve({ record: row });
+    },
     countByAccount: (accountId) =>
       Promise.resolve(opts.countOverride ?? rows.filter((r) => r.accountId === accountId).length),
     findById: ({ id, accountId }) =>
@@ -156,7 +176,7 @@ describe('V-553.B-21 ProfilesService.create', () => {
     // The findByAccountAndName pre-check misses (empty store), but a sibling
     // request committed first → insert hits profiles_account_name_unique.
     const { repo } = makeRepo();
-    repo.insert = () => Promise.reject(nameRace23505());
+    repo.insertWithLimit = () => Promise.reject(nameRace23505());
     const svc = new ProfilesService(repo);
     await expect(svc.create({ accountId: 'acc_1', tier: SOLO, name: 'racy' })).rejects.toThrow(
       ConflictError,
@@ -165,7 +185,7 @@ describe('V-553.B-21 ProfilesService.create', () => {
 
   it('re-throws a non-constraint insert error (the race catch is precise, not a catch-all)', async () => {
     const { repo } = makeRepo();
-    repo.insert = () => Promise.reject(new Error('db exploded'));
+    repo.insertWithLimit = () => Promise.reject(new Error('db exploded'));
     const svc = new ProfilesService(repo);
     await expect(svc.create({ accountId: 'acc_1', tier: SOLO, name: 'boom' })).rejects.toThrow(
       'db exploded',

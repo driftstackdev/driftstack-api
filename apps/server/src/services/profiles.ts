@@ -54,6 +54,17 @@ export interface ListProfilesPage {
 
 export interface ProfilesRepo {
   insert(input: NewProfileInput): Promise<ProfileRecord>;
+  /**
+   * V-714 — atomic tier-limit check + insert under an account-row lock, so
+   * concurrent creates can't both pass the per-tier profile cap (the plain
+   * countByAccount-then-insert is a TOCTOU). `limit === null` = unmetered tier
+   * (insert without count). Returns `{ limitExceeded, current }` instead of
+   * the record when the cap is hit, so the service maps it to a TierLimitError.
+   */
+  insertWithLimit(
+    input: NewProfileInput,
+    limit: number | null,
+  ): Promise<{ record: ProfileRecord } | { limitExceeded: true; current: number }>;
   countByAccount(accountId: string): Promise<number>;
   findById(args: { id: string; accountId: string }): Promise<ProfileRecord | null>;
   findByAccountAndName(args: { accountId: string; name: string }): Promise<ProfileRecord | null>;
@@ -158,14 +169,22 @@ export class ProfilesService {
       });
     }
 
-    let row: Awaited<ReturnType<typeof this.repo.insert>>;
+    // V-714 — the count check above is a fast-fail pre-check (preserves error
+    // precedence + skips a tx when clearly over). insertWithLimit RE-checks the
+    // count + inserts atomically under an account-row lock, so a concurrent
+    // create that passed the pre-check still can't push the account past its
+    // per-tier cap (was a count-then-insert TOCTOU).
+    let result: Awaited<ReturnType<typeof this.repo.insertWithLimit>>;
     try {
-      row = await this.repo.insert({
-        accountId: args.accountId,
-        name: args.name,
-        archetype: args.archetype ?? DEFAULT_ARCHETYPE,
-        description: args.description ?? null,
-      });
+      result = await this.repo.insertWithLimit(
+        {
+          accountId: args.accountId,
+          name: args.name,
+          archetype: args.archetype ?? DEFAULT_ARCHETYPE,
+          description: args.description ?? null,
+        },
+        limit,
+      );
     } catch (err) {
       // Concurrent same-name create race (the double-click case): the loser's
       // insert trips profiles_account_name_unique → 409, not an uncaught 500.
@@ -177,6 +196,16 @@ export class ProfilesService {
       }
       throw err;
     }
+    if ('limitExceeded' in result) {
+      // Lost the under-lock count re-check to a concurrent create. `limit` is
+      // non-null here (insertWithLimit only refuses when limit !== null), so
+      // `limit ?? 0` never coerces — it just satisfies the type narrower.
+      throw new TierLimitError(
+        `Tier "${args.tier}" permits at most ${(limit ?? 0).toString()} profiles; you have ${result.current.toString()}.`,
+        { limit: limit ?? 0, current: result.current, resource: 'profile', tier: args.tier },
+      );
+    }
+    const row = result.record;
     await this.emitAuditBestEffort(args.accountId, 'profile.created', `profile_${row.id}`, {
       name: row.name,
       archetype: row.archetype,

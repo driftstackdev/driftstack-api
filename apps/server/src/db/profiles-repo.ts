@@ -10,7 +10,7 @@ import type {
   ProfilesRepo,
 } from '../services/profiles.js';
 import type { Database } from './client.js';
-import { profiles } from './schema.js';
+import { accounts, profiles } from './schema.js';
 
 const DEFAULT_PAGE = 50;
 const MAX_PAGE = 100;
@@ -51,6 +51,51 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
       .from(profiles)
       .where(eq(profiles.accountId, accountId));
     return row?.n ?? 0;
+  }
+
+  // V-714 — atomic tier-limit check + insert. The plain count-then-insert in
+  // the service is a TOCTOU: N concurrent creates all read count < limit, all
+  // insert, and the per-tier profile cap (free = 1) is exceeded. Here the
+  // count + insert run inside ONE transaction under a `FOR UPDATE` lock on the
+  // owning accounts row, so concurrent creates for the same account serialize
+  // — the loser reads the post-insert count and is refused. Mirrors
+  // stripe-webhooks-repo.setAccountTier's lock idiom; locks the accounts row
+  // FIRST (consistent ordering with every other account-row-locking txn →
+  // deadlock-safe; nothing locks profiles-then-accounts). `limit === null` is
+  // an unmetered tier → no lock/count needed, just insert.
+  async insertWithLimit(
+    input: NewProfileInput,
+    limit: number | null,
+  ): Promise<{ record: ProfileRecord } | { limitExceeded: true; current: number }> {
+    return this.database.db.transaction(async (tx) => {
+      if (limit !== null) {
+        await tx
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(eq(accounts.id, input.accountId))
+          .for('update')
+          .limit(1);
+        const [c] = await tx
+          .select({ n: count() })
+          .from(profiles)
+          .where(eq(profiles.accountId, input.accountId));
+        const current = c?.n ?? 0;
+        if (current >= limit) {
+          return { limitExceeded: true as const, current };
+        }
+      }
+      const [row] = await tx
+        .insert(profiles)
+        .values({
+          accountId: input.accountId,
+          name: input.name,
+          archetype: input.archetype,
+          description: input.description,
+        })
+        .returning();
+      if (!row) throw new Error('insertWithLimit profile: no row returned');
+      return { record: toRecord(row) };
+    });
   }
 
   async findById(args: { id: string; accountId: string }): Promise<ProfileRecord | null> {
