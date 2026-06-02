@@ -29,6 +29,14 @@ host-confusion) and `fast-xml-builder 1.1.5→1.2.0` (attribute/comment bypass,
 resolution change), gate-green. The remaining (breaking) audit advisories are
 item 10 below.
 
+**Also shipped (`fb205608`):** fixed the GUI release workflow (`gui-release.yml`, tag `gui-v*`)
+which would build the Tauri bundles but FAIL to publish the GitHub Release — the `tauri-action`
+step lacked `GITHUB_TOKEN` in its env (tauri-action reads `process.env.GITHUB_TOKEN`, which Actions
+does not auto-export) AND the job had no `permissions: contents: write` (inherited the repo's
+read-only default). Added both (least-privilege — only this job, only `gui-v*` tags). Standard
+tauri-action release setup; latent until the first GUI release (ships with the canvas-gated launch),
+so runtime validation is a `gui-v*` tag push. CI/CD-config fix (no prod-runtime change).
+
 ## 2. FOUNDER-DECISION QUEUE (gated — Agent-2 cannot safely self-do these)
 
 1. **`DEPLOY_DOTENV_BASE64` GH Actions secret likely still holds the HEX `MFA_ENCRYPTION_KEY`.**
@@ -96,6 +104,17 @@ item 10 below.
     `conclusion == 'success'` job-condition, OR add a test job to deploy.yml's chain, OR rely on
     branch-protection required-checks (note: direct `HEAD:main` pushes bypass PR-merge checks). Today
     the local hook is the real gate; this is a defense-in-depth gap, not an active hole.
+13. **CF-Pages site deploys silent-skip on a missing CF token** (found 2026-06-02; compounds 11-12).
+    All 5 site-deploy workflows (`deploy-{customer-dashboard,marketing,docs,status-site,admin-panel}.yml`)
+    gate their wrangler upload with `if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo …; exit 0; fi` — a
+    SILENT-SKIP, the exact masking-pattern `deploy.yml`'s Hetzner gate was deliberately fixed away from
+    (2026-05-20, after a silent-skip let main go ~10h un-deployed while CI reported success). So if
+    `CLOUDFLARE_API_TOKEN` is unset/rotated-wrong/expired, all 5 customer-facing sites silently stop
+    deploying — CI green, stale sites, no operator signal. **Founder/ops fix (low-risk consistency
+    change): mirror deploy.yml — change the CF-token `exit 0` → `::error` + `exit 1` in all 5 (inert
+    when the token is set; fail-loud only on token-loss; same fresh-repo-CI tradeoff deploy.yml took).
+    OR confirm the CF-Pages silent-skip is intentionally different.** The PROJECT_NAME check in each
+    already fails-loud; only the token check silent-skips. (A deploy-pipeline-hardening batch with 11-12.)
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
