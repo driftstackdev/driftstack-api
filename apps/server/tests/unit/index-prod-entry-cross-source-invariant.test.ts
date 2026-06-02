@@ -19,12 +19,14 @@
 //   deps.sentry. teardown holds the SentryClient reference for
 //   flush/close on shutdown via the bootstrap closure'.
 //
-//   shutdown 3-step — app.close() → teardown() → process.exit(0).
+//   shutdown 3-step — app.close() (raced vs CLOSE_DEADLINE_MS so an
+//     active SSE stream can't hang the drain) → teardown() →
+//     process.exit(0).
 //
 //   SIGTERM + SIGINT handlers — process.on('SIGTERM' / 'SIGINT', ...).
 //
-//   app.close failure swallow framing — 'app close failed (proceeding
-//     to teardown)' warn log.
+//   app.close failure/timeout swallow framing — 'app close failed or
+//     timed out (proceeding to teardown)' warn log.
 //
 //   app.listen failure — fatal log + teardown + process.exit(1).
 //
@@ -100,9 +102,10 @@ describe('W990 production entry V-117 + V-167 cross-source invariant', () => {
 
   // ─── shutdown 3-step ─────────────────────────────────────────
 
-  it('CRITICAL shutdown 3-step — app.close() → teardown() → process.exit(0). The 3-step graceful-drain matches the V-167 lifecycle order.', () => {
+  it('CRITICAL shutdown 3-step — app.close() (RACED against a CLOSE_DEADLINE_MS timeout) → teardown() → process.exit(0). The 3-step graceful-drain matches the V-167 lifecycle order; the timeout race keeps an active SSE stream from hanging the close past the systemd stop window while still guaranteeing teardown runs.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/index.ts'));
-    expect(p).toMatch(/await app\.close\(\);/);
+    expect(p).toMatch(/await Promise\.race\(\[\s*\n?\s*app\.close\(\),/);
+    expect(p).toMatch(/const CLOSE_DEADLINE_MS = 10_000;/);
     expect(p).toMatch(/await teardown\(\);/);
     expect(p).toMatch(/process\.exit\(0\);/);
   });
@@ -114,9 +117,9 @@ describe('W990 production entry V-117 + V-167 cross-source invariant', () => {
     );
   });
 
-  it("CRITICAL app.close failure swallow — 'app close failed (proceeding to teardown)' warn. The proceed-on-close-fail design ensures teardown runs even when Fastify hooks throw.", () => {
+  it("CRITICAL app.close failure/timeout swallow — 'app close failed or timed out (proceeding to teardown)' warn. The proceed-on-close design ensures teardown runs even when Fastify hooks throw OR the close races past its deadline (active SSE held the socket open).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/index.ts'));
-    expect(p).toMatch(/'app close failed \(proceeding to teardown\)',/);
+    expect(p).toMatch(/'app close failed or timed out \(proceeding to teardown\)',/);
   });
 
   // ─── SIGTERM + SIGINT handlers ───────────────────────────────

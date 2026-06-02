@@ -80,10 +80,23 @@ describe('W461.A apps/server/src/index.ts content parity', () => {
     );
   });
 
-  it("shutdown handler: 'shutdown signal received' log + try/await app.close() with catch logger.warn 'app close failed (proceeding to teardown)' (full err object incl. stack+cause for Pino stdSerializers) + await teardown() + process.exit(0)", () => {
+  it("shutdown handler: 'shutdown signal received' log + app.close() RACED against a CLOSE_DEADLINE_MS timeout (an active SSE stream can't hang the drain past systemd's stop window; default forceCloseConnections:'idle' won't reap it) + catch logger.warn 'app close failed or timed out (proceeding to teardown)' + teardown() ALWAYS runs + process.exit(0). Short focused pins (not one long-chain regex) per the no-long-chain-regex rule.", () => {
+    expect(body).toMatch(/const shutdown = async \(signal: string\): Promise<void> => \{/);
     expect(body).toMatch(
-      /const shutdown = async \(signal: string\): Promise<void> => \{\s*\n?\s*logger\.info\(\{ component: 'lifecycle', signal \}, 'shutdown signal received'\);\s*\n?\s*try \{\s*\n?\s*await app\.close\(\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*logger\.warn\(\s*\n?\s*\{\s*\n?\s*component: 'lifecycle',\s*\n?\s*err:\s*\n?\s*err instanceof Error\s*\n?\s*\? \{ name: err\.name, message: err\.message, stack: err\.stack, cause: err\.cause \}\s*\n?\s*: \{ value: err \},\s*\n?\s*\},\s*\n?\s*'app close failed \(proceeding to teardown\)',\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*await teardown\(\);\s*\n?\s*process\.exit\(0\);\s*\n?\s*\};/,
+      /logger\.info\(\{ component: 'lifecycle', signal \}, 'shutdown signal received'\);/,
     );
+    // The hardening: bound app.close() with a deadline so a never-ending SSE
+    // response can't hang shutdown until SIGKILL (which would SKIP teardown).
+    expect(body).toMatch(/const CLOSE_DEADLINE_MS = 10_000;/);
+    expect(body).toMatch(/await Promise\.race\(\[\s*\n?\s*app\.close\(\),/);
+    expect(body).toMatch(/app\.close did not settle within \$\{CLOSE_DEADLINE_MS\}ms/);
+    expect(body).toMatch(/\)\.unref\(\);/);
+    // Warn on close failure/timeout, then ALWAYS teardown + clean exit.
+    expect(body).toMatch(/'app close failed or timed out \(proceeding to teardown\)',/);
+    expect(body).toMatch(/await teardown\(\);\s*\n?\s*process\.exit\(0\);/);
+    // Regression guard: the old UNBOUNDED `await app.close();` (no race) is gone —
+    // that form hung shutdown on active SSE until systemd SIGKILL, skipping teardown.
+    expect(body).not.toMatch(/try \{\s*\n?\s*await app\.close\(\);\s*\n?\s*\} catch/);
   });
 
   it('Both SIGTERM + SIGINT wired to shutdown via process.on(...) with void wrapping for fire-and-forget', () => {

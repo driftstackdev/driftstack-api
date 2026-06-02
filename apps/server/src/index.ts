@@ -40,10 +40,29 @@ async function main(): Promise<void> {
   // bootstrap closure.
   const app = await buildApp(deps);
 
+  // Bound the graceful drain. app.close() waits for in-flight requests to
+  // finish — but a long-lived SSE stream (status / notification / transcript)
+  // never ends on its own, and Fastify's default forceCloseConnections:'idle'
+  // only reaps idle keep-alives, not an active SSE response. So an unbounded
+  // `await app.close()` hangs until systemd's TimeoutStopSec SIGKILLs us —
+  // which SKIPS teardown(), losing buffered Sentry events + leaking the
+  // Postgres/Redis handles, and stalls the deploy for the full stop window.
+  // Race the close against a deadline (well under TimeoutStopSec) so teardown
+  // ALWAYS runs and the process exits cleanly within the stop window. The
+  // normal (no-active-SSE) path is unchanged — app.close() resolves in ms.
+  const CLOSE_DEADLINE_MS = 10_000;
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ component: 'lifecycle', signal }, 'shutdown signal received');
     try {
-      await app.close();
+      await Promise.race([
+        app.close(),
+        new Promise<never>((_, reject) => {
+          setTimeout(
+            () => reject(new Error(`app.close did not settle within ${CLOSE_DEADLINE_MS}ms`)),
+            CLOSE_DEADLINE_MS,
+          ).unref();
+        }),
+      ]);
     } catch (err) {
       logger.warn(
         {
@@ -53,7 +72,7 @@ async function main(): Promise<void> {
               ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
               : { value: err },
         },
-        'app close failed (proceeding to teardown)',
+        'app close failed or timed out (proceeding to teardown)',
       );
     }
     await teardown();
