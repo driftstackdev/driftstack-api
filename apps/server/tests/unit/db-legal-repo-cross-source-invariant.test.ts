@@ -19,7 +19,8 @@
 //
 //   Raw SQL with 8-field SELECT — id + account_id + document_key +
 //     version + content_hash + accepted_from_ip + accepted_user_agent
-//     + accepted_at + ORDER BY document_key, accepted_at DESC.
+//     + accepted_at + ORDER BY document_key, accepted_at DESC, id DESC
+//     (id tiebreaker = deterministic per-doc pick on an accepted_at tie).
 //
 //   RowList vs array framing — 'Drizzle's execute() returns RowList
 //   iterable but TS sometimes narrows differently per driver. Iterate
@@ -95,14 +96,14 @@ describe('W994 db/legal-repo cross-source invariant', () => {
 
   // ─── Raw SQL 8-field SELECT ──────────────────────────────────
 
-  it('CRITICAL raw SQL has DISTINCT ON (document_key) + 8-field SELECT + WHERE account_id + ORDER BY document_key, accepted_at DESC. The DISTINCT-ON + ORDER-BY pair is what makes the latest-per-doc query work.', () => {
+  it('CRITICAL raw SQL has DISTINCT ON (document_key) + 8-field SELECT + WHERE account_id + ORDER BY document_key, accepted_at DESC, id DESC. The DISTINCT-ON + ORDER-BY pair is what makes the latest-per-doc query work; the id tiebreaker makes the pick deterministic on an accepted_at tie.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/legal-repo.ts'));
     expect(p).toMatch(/SELECT DISTINCT ON \(document_key\)/);
     expect(p).toMatch(/id, account_id, document_key, version, content_hash,/);
     expect(p).toMatch(/accepted_from_ip, accepted_user_agent, accepted_at/);
     expect(p).toMatch(/FROM legal_acceptances/);
     expect(p).toMatch(/WHERE account_id = \$\{accountId\}/);
-    expect(p).toMatch(/ORDER BY document_key, accepted_at DESC/);
+    expect(p).toMatch(/ORDER BY document_key, accepted_at DESC, id DESC/);
   });
 
   // ─── RowList vs array framing ────────────────────────────────

@@ -33,8 +33,14 @@ export class InMemoryLegalRepo implements LegalRepo {
   ): Promise<Map<string, LegalAcceptanceRecord>> {
     await Promise.resolve();
     const out = new Map<string, LegalAcceptanceRecord>();
-    // Iterate newest-first; first hit per documentKey wins.
-    const sorted = [...this.rows].sort((a, b) => b.acceptedAt.getTime() - a.acceptedAt.getTime());
+    // Iterate newest-first; first hit per documentKey wins. The `id`
+    // tiebreaker mirrors the Drizzle repo's `accepted_at DESC, id DESC`
+    // so a same-millisecond tie (Date is ms-resolution) resolves
+    // deterministically AND identically to the production query.
+    const sorted = [...this.rows].sort(
+      (a, b) =>
+        b.acceptedAt.getTime() - a.acceptedAt.getTime() || (a.id > b.id ? -1 : a.id < b.id ? 1 : 0),
+    );
     for (const row of sorted) {
       if (row.accountId !== accountId) continue;
       if (!out.has(row.documentKey)) out.set(row.documentKey, row);

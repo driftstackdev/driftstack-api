@@ -11,7 +11,9 @@
 //     (document_key) keeps the row with the latest accepted_at;
 //     Drizzle doesn't expose DISTINCT ON natively but raw SQL is
 //     fine.
-//   • Raw SQL with ORDER BY document_key, accepted_at DESC.
+//   • Raw SQL with ORDER BY document_key, accepted_at DESC, id DESC
+//     (the id tiebreaker makes the per-doc pick deterministic on an
+//     accepted_at tie).
 //   • Dual-shape iter framing pinned: Drizzle's execute() returns
 //     RowList iterable but TS sometimes narrows differently per
 //     driver; iterate for-of so both pg-style { rows } and array-
@@ -59,9 +61,9 @@ describe('W443.B apps/server/src/db/legal-repo.ts content parity', () => {
     );
   });
 
-  it('Raw SQL: SELECT DISTINCT ON (document_key) <8 fields> FROM legal_acceptances WHERE account_id = ${accountId} ORDER BY document_key, accepted_at DESC', () => {
+  it('Raw SQL: SELECT DISTINCT ON (document_key) <8 fields> FROM legal_acceptances WHERE account_id = ${accountId} ORDER BY document_key, accepted_at DESC, id DESC (id tiebreaker = deterministic per-doc pick)', () => {
     expect(body).toMatch(
-      /SELECT DISTINCT ON \(document_key\)\s*\n?\s*id, account_id, document_key, version, content_hash,\s*\n?\s*accepted_from_ip, accepted_user_agent, accepted_at\s*\n?\s*FROM legal_acceptances\s*\n?\s*WHERE account_id = \$\{accountId\}\s*\n?\s*ORDER BY document_key, accepted_at DESC/,
+      /SELECT DISTINCT ON \(document_key\)\s*\n?\s*id, account_id, document_key, version, content_hash,\s*\n?\s*accepted_from_ip, accepted_user_agent, accepted_at\s*\n?\s*FROM legal_acceptances\s*\n?\s*WHERE account_id = \$\{accountId\}\s*\n?\s*ORDER BY document_key, accepted_at DESC, id DESC/,
     );
   });
 

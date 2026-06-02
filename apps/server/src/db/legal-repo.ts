@@ -32,6 +32,11 @@ export class DrizzleLegalRepo implements LegalRepo {
     // For each (account, document_key), keep the row with the latest
     // accepted_at. Postgres DISTINCT ON is the cleanest way; Drizzle
     // doesn't expose it natively but raw SQL is fine.
+    // The `id DESC` tiebreaker makes the per-doc pick deterministic when
+    // two acceptances for one doc share an accepted_at (accepted_at is
+    // not monotonic-unique) — mirrors the id-based keyset tiebreaker
+    // discipline used across the other repos, and keeps this in lockstep
+    // with the in-memory double's matching tiebreaker.
     const rows = await this.database.db.execute<{
       id: string;
       account_id: string;
@@ -47,7 +52,7 @@ export class DrizzleLegalRepo implements LegalRepo {
         accepted_from_ip, accepted_user_agent, accepted_at
       FROM legal_acceptances
       WHERE account_id = ${accountId}
-      ORDER BY document_key, accepted_at DESC
+      ORDER BY document_key, accepted_at DESC, id DESC
     `);
     const out = new Map<string, LegalAcceptanceRecord>();
     // Drizzle's execute() returns RowList iterable but TS sometimes
