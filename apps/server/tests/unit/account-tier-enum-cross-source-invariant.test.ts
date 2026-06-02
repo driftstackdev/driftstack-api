@@ -55,6 +55,23 @@ describe('W850 AccountTier 8-value cross-source invariant', () => {
     }
   });
 
+  // ─── DB pgEnum lockstep (Postgres runtime) ───────────────────
+  // Mirrors the account_status guard: the Postgres `account_tier` enum
+  // MUST hold the exact same value set as AccountTierSchema. Postgres
+  // rejects INSERTs of unknown enum values, so a tier added to the Zod
+  // schema (+ config maps) but NOT this pgEnum would pass the rest of the
+  // suite yet 500 on the first INSERT of an account at that tier.
+  it("CRITICAL apps/server/src/db/schema.ts accountTier = pgEnum('account_tier', [...]) holds the EXACT 8-value set in lockstep with AccountTierSchema — a tier in the Zod schema but missing from this pgEnum would 500 at INSERT time.", () => {
+    const schema = read(resolve(REPO_ROOT, 'apps/server/src/db/schema.ts'));
+    const block = schema.match(/accountTier = pgEnum\('account_tier', \[([\s\S]*?)\]\)/);
+    expect(block, 'accountTier pgEnum declaration must exist in schema.ts').not.toBeNull();
+    const valuesBlock = block?.[1] ?? '';
+    const pgEnumValues = [...valuesBlock.matchAll(/'([^']+)'/g)].map((m) => m[1] ?? '');
+    expect(pgEnumValues).toEqual([...ACCOUNT_TIERS]);
+    // Lockstep with the Zod source-of-truth (catches drift in either direction).
+    expect(pgEnumValues).toEqual(AccountTierSchema.options);
+  });
+
   it("CRITICAL AccountTier type re-exports from AccountTierSchema z.infer — 'export type AccountTier = z.infer<typeof AccountTierSchema>;'. Drift to a hand-written type would let it drift from the runtime schema.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
     expect(p).toMatch(/export type AccountTier = z\.infer<typeof AccountTierSchema>;/);
