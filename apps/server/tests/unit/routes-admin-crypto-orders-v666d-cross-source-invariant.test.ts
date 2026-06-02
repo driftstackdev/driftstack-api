@@ -3,22 +3,26 @@
 //
 //   V-666.D anchor — 'V-666.D — admin crypto-orders routes'.
 //
-//   Endpoint roster — 9 routes:
-//     GET  /v1/admin/crypto-orders
-//     GET  /v1/admin/crypto-orders/stats                  (V-666.N)
-//     GET  /v1/admin/crypto-orders/daily                  (V-666.O)
-//     GET  /v1/admin/crypto-orders/pending-age            (V-666.AC)
-//     GET  /v1/admin/crypto-orders.csv                    (V-666.V)
-//     GET  /v1/admin/crypto-orders/:order_id
-//     POST /v1/admin/crypto-orders/:order_id/apply-ipn    (V-666.F)
+//   Endpoint roster — 11 routes:
+//     GET   /v1/admin/crypto-orders
+//     GET   /v1/admin/crypto-orders.csv                     (V-666.V)
+//     GET   /v1/admin/crypto-orders/stats                   (V-666.N)
+//     GET   /v1/admin/crypto-orders/daily                   (V-666.O)
+//     GET   /v1/admin/crypto-orders/pending-age             (V-666.AC)
+//     GET   /v1/admin/crypto-orders/idempotency-metrics     (V-666.AP)
+//     GET   /v1/admin/crypto-orders/:order_id
+//     GET   /v1/admin/crypto-orders/:order_id/events        (V-666.AT)
+//     POST  /v1/admin/crypto-orders/:order_id/apply-ipn     (V-666.F)
+//     POST  /v1/admin/crypto-orders/sweep-expired           (V-666.L)
 //     PATCH /v1/admin/crypto-orders/:order_id/internal-note (V-666.AA)
-//     POST /v1/admin/crypto-orders/sweep-expired          (V-666.L)
 //
 //   driftstack_internal_admin scope on every route.
 //
-//   Read-only framing — 'Read-only — order mutations happen via the
-//   IPN pipeline (V-666 / B)'. The single exception is apply-ipn
-//   (V-666.F) which mirrors the IPN state machine.
+//   Mutation framing — mostly read-only reporting; three endpoints
+//   mutate: apply-ipn (V-666.F) + sweep-expired (V-666.L) advance order
+//   state through the same forward-only state machine as the public IPN
+//   pipeline (V-666 / B); internal-note (V-666.AA) sets an admin-only
+//   annotation field outside the order state machine.
 //
 //   V-666.T list filter — status enum + search free-text + V-666.AS
 //   exact-match payment_id (capped at 128).
@@ -52,24 +56,28 @@ function read(p: string): string {
 }
 
 describe('W1047 routes/admin-crypto-orders V-666.D + family cross-source invariant', () => {
-  // ─── V-666.D anchor + 9-endpoint roster ──────────────────────
+  // ─── V-666.D anchor + 11-endpoint roster ─────────────────────
 
   it("CRITICAL V-666.D anchor — 'V-666.D — admin crypto-orders routes'. The single-anchor design ties the admin surface to the V-666 NowPayments rail.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-crypto-orders.ts'));
     expect(p).toMatch(/V-666\.D — admin crypto-orders routes\./);
   });
 
-  it('CRITICAL endpoint roster — 9 routes covered (list / stats / daily / pending-age / .csv / single / apply-ipn / internal-note / sweep-expired). The exhaustive header comment is the canonical contract.', () => {
+  it('CRITICAL endpoint roster — 11 routes covered (list / .csv / stats / daily / pending-age / idempotency-metrics / single / events / apply-ipn / sweep-expired / internal-note). The exhaustive header comment is the canonical contract.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-crypto-orders.ts'));
     expect(p).toMatch(/GET\s+\/v1\/admin\/crypto-orders\?account_id=acc_X&limit=N/);
+    expect(p).toMatch(/GET\s+\/v1\/admin\/crypto-orders\.csv\s+\(V-666\.V\)/);
     expect(p).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/stats\s+\(V-666\.N\)/);
     expect(p).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/daily\?days=N\s+\(V-666\.O\)/);
     expect(p).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/pending-age\s+\(V-666\.AC\)/);
-    expect(p).toMatch(/GET\s+\/v1\/admin\/crypto-orders\.csv\s+\(V-666\.V\)/);
+    expect(p).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/idempotency-metrics\s+\(V-666\.AP\)/);
     expect(p).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/:order_id/);
-    expect(p).toMatch(/POST \/v1\/admin\/crypto-orders\/:order_id\/apply-ipn\s+\(V-666\.F\)/);
-    expect(p).toMatch(/PATCH \/v1\/admin\/crypto-orders\/:order_id\/internal-note \(V-666\.AA\)/);
-    expect(p).toMatch(/POST \/v1\/admin\/crypto-orders\/sweep-expired\s+\(V-666\.L\)/);
+    expect(p).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/:order_id\/events\s+\(V-666\.AT\)/);
+    expect(p).toMatch(/POST\s+\/v1\/admin\/crypto-orders\/:order_id\/apply-ipn\s+\(V-666\.F\)/);
+    expect(p).toMatch(/POST\s+\/v1\/admin\/crypto-orders\/sweep-expired\s+\(V-666\.L\)/);
+    expect(p).toMatch(
+      /PATCH\s+\/v1\/admin\/crypto-orders\/:order_id\/internal-note\s+\(V-666\.AA\)/,
+    );
   });
 
   it("CRITICAL admin auth framing — 'Auth: driftstack_internal_admin scope. Used by the founder dashboard + support ops to look up the order behind a customer's \"I sent the payment but the dashboard still says pending\" ticket'. The support-ops use-case is the load-bearing design driver.", () => {
@@ -79,10 +87,13 @@ describe('W1047 routes/admin-crypto-orders V-666.D + family cross-source invaria
     expect(p).toMatch(/"I sent the payment but the dashboard still says pending" ticket\./);
   });
 
-  it("CRITICAL read-only framing — 'Read-only — order mutations happen via the IPN pipeline (V-666 / B)'. The single mutation exception is apply-ipn which mirrors the IPN state machine.", () => {
+  it("CRITICAL mutation framing — 'Mostly read-only reporting. Three endpoints mutate: apply-ipn and sweep-expired advance order state through the same forward-only crypto-order state machine as the public IPN pipeline (V-666 / B) (neither bypasses it); internal-note sets an admin-only annotation field that is not part of the order state machine'. The accurate mutation surface is what an auditor reads to scope the write-paths.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-crypto-orders.ts'));
-    expect(p).toMatch(/Read-only — order mutations happen via the IPN pipeline/);
-    expect(p).toMatch(/\(V-666 \/ B\)\./);
+    expect(p).toMatch(/Mostly read-only reporting\. Three endpoints mutate: apply-ipn and/);
+    expect(p).toMatch(/sweep-expired advance order state through the same forward-only/);
+    expect(p).toMatch(/crypto-order state machine as the public IPN pipeline \(V-666 \/ B\)/);
+    expect(p).toMatch(/internal-note sets an admin-only annotation/);
+    expect(p).toMatch(/field that is not part of the order state machine\./);
   });
 
   // ─── ListQuery filter knobs ──────────────────────────────────
@@ -171,9 +182,9 @@ describe('W1047 routes/admin-crypto-orders V-666.D + family cross-source invaria
 
   // ─── Admin scope on every route ──────────────────────────────
 
-  it('CRITICAL driftstack_internal_admin scope on every route. The 9-endpoint surface uniformly requires the admin scope; drift on any one would let normal customer keys hit admin tooling.', () => {
+  it('CRITICAL driftstack_internal_admin scope on every route. The 11-endpoint surface uniformly requires the admin scope; drift on any one would let normal customer keys hit admin tooling.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-crypto-orders.ts'));
     const refs = p.match(/app\.requireScope\('driftstack_internal_admin'\)/g) ?? [];
-    expect(refs.length, 'admin scope reference count').toBeGreaterThanOrEqual(9);
+    expect(refs.length, 'admin scope reference count').toBeGreaterThanOrEqual(11);
   });
 });

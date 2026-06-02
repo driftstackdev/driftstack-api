@@ -1,19 +1,26 @@
 // V-666.D — admin crypto-orders routes.
 //
-//   GET  /v1/admin/crypto-orders?account_id=acc_X&limit=N
-//   GET  /v1/admin/crypto-orders/stats                (V-666.N)
-//   GET  /v1/admin/crypto-orders/daily?days=N         (V-666.O)
-//   GET  /v1/admin/crypto-orders/pending-age           (V-666.AC)
-//   GET  /v1/admin/crypto-orders.csv                  (V-666.V)
-//   GET  /v1/admin/crypto-orders/:order_id
-//   POST /v1/admin/crypto-orders/:order_id/apply-ipn  (V-666.F)
-//   PATCH /v1/admin/crypto-orders/:order_id/internal-note (V-666.AA)
-//   POST /v1/admin/crypto-orders/sweep-expired        (V-666.L)
+//   GET   /v1/admin/crypto-orders?account_id=acc_X&limit=N
+//   GET   /v1/admin/crypto-orders.csv                        (V-666.V)
+//   GET   /v1/admin/crypto-orders/stats                      (V-666.N)
+//   GET   /v1/admin/crypto-orders/daily?days=N               (V-666.O)
+//   GET   /v1/admin/crypto-orders/pending-age                (V-666.AC)
+//   GET   /v1/admin/crypto-orders/idempotency-metrics        (V-666.AP)
+//   GET   /v1/admin/crypto-orders/:order_id
+//   GET   /v1/admin/crypto-orders/:order_id/events           (V-666.AT)
+//   POST  /v1/admin/crypto-orders/:order_id/apply-ipn        (V-666.F)
+//   POST  /v1/admin/crypto-orders/sweep-expired              (V-666.L)
+//   PATCH /v1/admin/crypto-orders/:order_id/internal-note    (V-666.AA)
 //
 // Auth: driftstack_internal_admin scope. Used by the founder dashboard
 // + support ops to look up the order behind a customer's
 // "I sent the payment but the dashboard still says pending" ticket.
-// Read-only — order mutations happen via the IPN pipeline (V-666 / B).
+//
+// Mostly read-only reporting. Three endpoints mutate: apply-ipn and
+// sweep-expired advance order state through the same forward-only
+// crypto-order state machine as the public IPN pipeline (V-666 / B)
+// (neither bypasses it); internal-note sets an admin-only annotation
+// field that is not part of the order state machine.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';

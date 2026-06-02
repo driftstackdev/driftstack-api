@@ -35,14 +35,16 @@ function read(p: string): string {
 describe('W422.C apps/server/src/routes/admin-crypto-orders.ts content parity', () => {
   const body = read(LIB);
 
-  it('V-666.D framing pinned: 10 admin crypto-orders routes enumerated', () => {
+  it('V-666.D framing pinned: 11 admin crypto-orders routes enumerated', () => {
     expect(body).toMatch(/\/\/ V-666\.D — admin crypto-orders routes\./);
     expect(body).toMatch(/GET\s+\/v1\/admin\/crypto-orders\?account_id=acc_X&limit=N/);
     expect(body).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/stats\s+\(V-666\.N\)/);
     expect(body).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/daily\?days=N\s+\(V-666\.O\)/);
     expect(body).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/pending-age\s+\(V-666\.AC\)/);
+    expect(body).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/idempotency-metrics\s+\(V-666\.AP\)/);
     expect(body).toMatch(/GET\s+\/v1\/admin\/crypto-orders\.csv\s+\(V-666\.V\)/);
     expect(body).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/:order_id/);
+    expect(body).toMatch(/GET\s+\/v1\/admin\/crypto-orders\/:order_id\/events\s+\(V-666\.AT\)/);
     expect(body).toMatch(/POST\s+\/v1\/admin\/crypto-orders\/:order_id\/apply-ipn\s+\(V-666\.F\)/);
     expect(body).toMatch(
       /PATCH\s+\/v1\/admin\/crypto-orders\/:order_id\/internal-note\s+\(V-666\.AA\)/,
@@ -50,9 +52,13 @@ describe('W422.C apps/server/src/routes/admin-crypto-orders.ts content parity', 
     expect(body).toMatch(/POST\s+\/v1\/admin\/crypto-orders\/sweep-expired\s+\(V-666\.L\)/);
   });
 
-  it('Auth posture pinned: driftstack_internal_admin scope + founder-dashboard/support-ops use case + read-only (mutations via IPN pipeline V-666/B)', () => {
+  it('Auth posture pinned: driftstack_internal_admin scope + founder-dashboard/support-ops use case + accurate mutation framing (3 mutating endpoints; 2 via the IPN state machine V-666/B)', () => {
     expect(body).toMatch(
-      /\/\/ Auth: driftstack_internal_admin scope\. Used by the founder dashboard\s*\n?\s*\/\/ \+ support ops to look up the order behind a customer's\s*\n?\s*\/\/ "I sent the payment but the dashboard still says pending" ticket\.\s*\n?\s*\/\/ Read-only — order mutations happen via the IPN pipeline \(V-666 \/ B\)\./,
+      /\/\/ Auth: driftstack_internal_admin scope\. Used by the founder dashboard\s*\n?\s*\/\/ \+ support ops to look up the order behind a customer's\s*\n?\s*\/\/ "I sent the payment but the dashboard still says pending" ticket\./,
+    );
+    expect(body).toMatch(/\/\/ Mostly read-only reporting\. Three endpoints mutate: apply-ipn and/);
+    expect(body).toMatch(
+      /\/\/ crypto-order state machine as the public IPN pipeline \(V-666 \/ B\)/,
     );
   });
 
