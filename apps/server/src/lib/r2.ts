@@ -83,6 +83,14 @@ function createR2ClientForBucket(config: R2Config, bucket: string): R2 {
     },
     // R2 uses path-style access via the auto region.
     forcePathStyle: false,
+    // Bound every R2 request so a stuck connection can't hang a background
+    // worker (recording upload / status-snapshot write) indefinitely. AWS
+    // SDK v3 retries up to maxAttempts (default 3) but sets NO socket timeout
+    // by default — a hung-but-not-erroring connection would never trip a
+    // retry. connectionTimeout caps the TCP connect; requestTimeout caps
+    // socket inactivity. Generous (3s / 15s) so normal sub-second R2 ops are
+    // unaffected; only true hangs are cut (then maxAttempts retries apply).
+    requestHandler: { connectionTimeout: 3000, requestTimeout: 15000 },
   };
   const s3 = new S3Client(clientConfig);
 

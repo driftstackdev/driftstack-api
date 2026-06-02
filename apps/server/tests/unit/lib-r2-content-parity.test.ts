@@ -92,7 +92,7 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
     );
   });
 
-  it('S3Client config: region=auto, endpoint=config.endpointUrl, forcePathStyle=false', () => {
+  it('S3Client config: region=auto, endpoint=config.endpointUrl, forcePathStyle=false, requestHandler timeouts (connect 3s / request 15s)', () => {
     expect(body).toMatch(/region: 'auto',/);
     expect(body).toMatch(/endpoint: config\.endpointUrl,/);
     expect(body).toMatch(
@@ -101,6 +101,9 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ R2 uses path-style access via the auto region\.\s*\n?\s*forcePathStyle: false,/,
     );
+    // Bounded R2 requests so a stuck connection can't hang a background worker
+    // (AWS SDK v3 has maxAttempts:3 but NO socket timeout by default).
+    expect(body).toMatch(/requestHandler: \{ connectionTimeout: 3000, requestTimeout: 15000 \}/);
   });
 
   it('headObject: returns {exists:false} on 404 or NotFound name; rethrows other errors', () => {
