@@ -143,6 +143,18 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toMatch(/function renderTiers\(byTier, total\) \{/);
   });
 
+  it("new-signups section: today / 7d / 30d stat fields (SSR '—' placeholders) + live hydration from overview.accounts.signups — pinned so the growth stat keeps real-data wiring (drift would drop the signup metric or leave it on the dash placeholder)", () => {
+    expect(body).toMatch(/New signups/);
+    expect(body).toMatch(/data-field="signups-today"/);
+    expect(body).toMatch(/data-field="signups-7d"/);
+    expect(body).toMatch(/data-field="signups-30d"/);
+    // Live hydration reads the server window fields.
+    expect(body).toMatch(/if \(body\.accounts\.signups\) \{/);
+    expect(body).toMatch(/setText\('signups-today', String\(body\.accounts\.signups\.today\)\);/);
+    expect(body).toMatch(/setText\('signups-7d', String\(body\.accounts\.signups\.last_7d\)\);/);
+    expect(body).toMatch(/setText\('signups-30d', String\(body\.accounts\.signups\.last_30d\)\);/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

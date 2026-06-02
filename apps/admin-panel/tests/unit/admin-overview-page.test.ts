@@ -175,6 +175,30 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(window.document.querySelectorAll('[data-list="tier-distribution"] li').length).toBe(8);
   });
 
+  it('new-signups: today / 7d / 30d stats populate from overview.accounts.signups', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: {
+            active: 5,
+            suspended: 0,
+            deleted: 0,
+            total: 5,
+            signups: { today: 2, last_7d: 9, last_30d: 41 },
+          },
+          webhooks: { dlq_depth: 0 },
+        },
+        audit: [],
+      }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-field="signups-today"]')).toBe('2');
+    expect(text(window, '[data-field="signups-7d"]')).toBe('9');
+    expect(text(window, '[data-field="signups-30d"]')).toBe('41');
+  });
+
   it('recent-actions feed renders an admin action with actor, action, result, and target', async () => {
     const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
       token: 'tok',

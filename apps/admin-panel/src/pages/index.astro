@@ -135,6 +135,35 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </section>
 
+    <!-- New signups (growth) -->
+    <section class="mt-6 dashboard-card">
+      <div class="flex items-center justify-between">
+        <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M23 6l-9.5 9.5-5-5L1 18" /><path d="M17 6h6v6" />
+            </svg>
+          </span>
+          New signups
+        </h2>
+        <span class="font-mono text-xs text-slate-400">new accounts · UTC</span>
+      </div>
+      <dl class="mt-4 grid gap-4 sm:grid-cols-3">
+        <div>
+          <dt class="font-mono text-xs uppercase tracking-widest text-slate-500">Today</dt>
+          <dd class="mt-1 text-2xl font-semibold text-slate-900" data-field="signups-today">—</dd>
+        </div>
+        <div>
+          <dt class="font-mono text-xs uppercase tracking-widest text-slate-500">Last 7 days</dt>
+          <dd class="mt-1 text-2xl font-semibold text-slate-900" data-field="signups-7d">—</dd>
+        </div>
+        <div>
+          <dt class="font-mono text-xs uppercase tracking-widest text-slate-500">Last 30 days</dt>
+          <dd class="mt-1 text-2xl font-semibold text-slate-900" data-field="signups-30d">—</dd>
+        </div>
+      </dl>
+    </section>
+
     <!-- Accounts by tier -->
     <section class="mt-6 dashboard-card">
       <div class="flex items-center justify-between">
@@ -405,6 +434,13 @@ const apiBaseUrl = resolveApiBaseUrl();
               // don't yet return by_tier (the SSR preview stays).
               if (body.accounts.by_tier) {
                 renderTiers(body.accounts.by_tier, total);
+              }
+              // signups (server 2026-06-02) — today/7d/30d new-account
+              // counts. Tolerates older servers that omit signups.
+              if (body.accounts.signups) {
+                setText('signups-today', String(body.accounts.signups.today));
+                setText('signups-7d', String(body.accounts.signups.last_7d));
+                setText('signups-30d', String(body.accounts.signups.last_30d));
               }
             }
             if (body && body.webhooks) {
