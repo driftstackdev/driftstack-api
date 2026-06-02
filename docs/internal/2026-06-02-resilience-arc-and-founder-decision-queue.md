@@ -37,6 +37,17 @@ read-only default). Added both (least-privilege — only this job, only `gui-v*`
 tauri-action release setup; latent until the first GUI release (ships with the canvas-gated launch),
 so runtime validation is a `gui-v*` tag push. CI/CD-config fix (no prod-runtime change).
 
+**Also shipped (`42a0f7bf`):** full programmatic logger↔Sentry secret-redaction-list lockstep
+guard. The V-494 redaction is a hardcoded denylist in `lib/logger.ts::redact.paths` (29 fields)
+that MUST be mirrored in `lib/sentry.ts::SENTRY_SENSITIVE_KEYS` (31 keys), but the existing
+cross-source-invariant test only SPOT-CHECKED specific keys + the doc comments — blind to growth
+(a new sensitive field added to one list but not the other would pass silently and leak that
+secret to whichever observability sink was missed). Added a programmatic assertion that extracts
+both lists (line-based, prettier-reflow-robust), normalizes each logger path to its bare key, and
+asserts the set ⊆ `SENTRY_SENSITIVE_KEYS`. Verified teeth (a planted logger-only field fails);
+passes current code. Test-only (no prod-runtime change); the redaction-list sync is now
+gate-enforced rather than human-discipline + spot-check.
+
 ## 2. FOUNDER-DECISION QUEUE (gated — Agent-2 cannot safely self-do these)
 
 > **RECOMMENDED PRIORITY (the items below are numbered by discovery, not severity — start here):**
@@ -349,6 +360,19 @@ founder-visible (detail lives in Agent-2 auto-memory). Distinct from §2 (which 
    merge-verify → link created); narrow crash-window; no data-loss/cross-customer/security impact. NOT a
    discipline gap — `db.transaction()` IS used where atomicity matters (11 usages, §3); this is the lone
    cross-repo exception. A fix needs a transaction straddling two repos (architectural) → low priority.
+7. **Agent-sessions idempotency body-mismatch observability (parity with crypto)** — the two
+   idempotency implementations differ in mismatch-detection. `crypto-orders` is body-hash aware:
+   `getIdempotencyMetrics()` returns a `bodyMismatches` count + a `crypto_checkout_idempotency_body_mismatch`
+   warn log when a key is reused with a DIFFERENT request body (documented in `api/billing-crypto.md`).
+   The v1.0 customer LLM path (`POST /v1/agent-sessions`) is key-ONLY: `findByIdempotencyKey(account_id,
+key)` (schema has `idempotency_key` but NO request-hash column) silently replays the original session
+   on a different-body reuse, with no metric/log. NOT a bug — it's replay-safe, account-scoped, and matches
+   the documented "same key replays the original 201" contract (`api/agent-sessions.md`; `reference/idempotency.md`
+   is silent on body-mismatch, consistent with both paths). The gap is purely OBSERVABILITY: an operator can
+   detect accidental key reuse on crypto but not on the LLM endpoint. Closing it needs a request-hash column
+   (prod-applied migration — can't autopilot) + a product call on whether agent-sessions should match
+   crypto's detect-and-warn (vs the strict-Stripe 422-on-mismatch, which the platform deliberately does NOT
+   do — it stays replay-safe). Low priority; surfaced for parity visibility.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
