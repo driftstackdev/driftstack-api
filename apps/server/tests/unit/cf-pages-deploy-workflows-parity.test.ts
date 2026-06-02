@@ -20,7 +20,7 @@
 //      fail the workflow on missing secret).
 //   4. wrangler@^3 pages deploy with --project-name + --branch +
 //      --commit-hash + --commit-message flags.
-//   5. Node 22 + actions/setup-node@v4 + actions/checkout@v6.
+//   5. Node 22 + actions/setup-node@v6 + actions/checkout@v6.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -91,11 +91,11 @@ describe('W725 Cloudflare Pages deploy workflows parity', () => {
     }
   });
 
-  it('CRITICAL all 3 workflows pin Node 22 + actions/setup-node@v4 + actions/checkout@v6 + permissions contents:read + deployments:write.', () => {
+  it('CRITICAL all 3 workflows pin Node 22 + actions/setup-node@v6 + actions/checkout@v6 + permissions contents:read + deployments:write.', () => {
     for (const path of [MARKETING, DASHBOARD, DOCS]) {
       const w = read(path);
       expect(w, `${path} checkout`).toMatch(/uses: actions\/checkout@v6/);
-      expect(w, `${path} setup-node`).toMatch(/uses: actions\/setup-node@v4/);
+      expect(w, `${path} setup-node`).toMatch(/uses: actions\/setup-node@v6/);
       expect(w, `${path} node-version 22`).toMatch(/node-version: 22/);
       expect(w, `${path} permissions`).toMatch(
         /permissions:\s*\n\s*contents: read\s*\n\s*deployments: write/,
