@@ -119,13 +119,16 @@ describe('W747 server stripe-signing.ts parity', () => {
     const s = read(SIGNING);
 
     expect(s).toMatch(
-      /Format: t=<seconds>,v1=<hex>,v0=<legacy>\. We tolerate ordering\s*\n\s+\/\/ and ignore unknown keys \(e\.g\., a future `v2`\)/,
+      /Format: t=<seconds>,v1=<hex>\[,v1=<hex>\]\[,v0=<legacy>\]\. We tolerate\s*\n\s+\/\/ ordering, collect EVERY `v1`/,
     );
+    expect(s).toMatch(/and ignore unknown keys \(e\.g\., a future `v2`\)/);
 
-    // Implementation: loop over header.split(','), check key for 't' or 'v1', ignore else.
+    // Implementation: loop over header.split(','), check key for 't' or 'v1'
+    // (collecting every non-empty v1 — secret-roll accept-any), ignore else.
     expect(s).toMatch(/for \(const part of header\.split\(','\)\)/);
     expect(s).toMatch(/if \(key === 't'\)/);
-    expect(s).toMatch(/else if \(key === 'v1'\)/);
+    expect(s).toMatch(/else if \(key === 'v1' && value\.length > 0\)/);
+    expect(s).toMatch(/v1\.push\(value\);/);
   });
 
   it('CRITICAL parseHeader Number.isFinite guard on t= pinned. Drift to dropping would let `t=NaN` or `t=Infinity` pass through + crash downstream Math.abs comparison.', () => {
@@ -158,12 +161,10 @@ describe('W747 server stripe-signing.ts parity', () => {
     expect(s).toMatch(/import \{ createHmac, timingSafeEqual \} from 'node:crypto';/);
   });
 
-  it('CRITICAL ParsedHeader internal type 2-field shape pinned — `t: number; v1: string | null`. Drift to adding v0 to the parser would let SHA-1 verification leak in.', () => {
+  it('CRITICAL ParsedHeader internal type 2-field shape pinned — `t: number; v1: string[]` (collects every v1 for secret-roll accept-any). Drift to adding v0 to the parser would let SHA-1 verification leak in.', () => {
     const s = read(SIGNING);
 
-    expect(s).toMatch(
-      /interface ParsedHeader \{\s*\n\s+t: number;\s*\n\s+v1: string \| null;\s*\n\}/,
-    );
+    expect(s).toMatch(/interface ParsedHeader \{\s*\n\s+t: number;\s*\n\s+v1: string\[\];\s*\n\}/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

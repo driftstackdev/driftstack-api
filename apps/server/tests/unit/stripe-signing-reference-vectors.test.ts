@@ -134,4 +134,61 @@ describe('verifyStripeSignature — cross-implementation reference vectors', () 
     });
     expect(result.ok).toBe(true);
   });
+
+  // ─── Secret-roll: Stripe dual-signs with old+new secret → MULTIPLE v1 ───────
+  // We must accept the event if ANY v1 verifies, regardless of position, so a
+  // webhook-secret rotation is zero-downtime (matches Stripe's official SDK +
+  // our own outbound verifier). Each candidate still requires a real HMAC, so
+  // two non-matching v1 reject (accepting-any is not a bypass).
+  const wrong = 'f'.repeat(64);
+
+  it('accepts when the matching v1 is NOT first (correct listed last — on new secret during roll)', () => {
+    const v = VECTORS[0]!;
+    const header = `t=${String(v.timestampSec)},v1=${wrong},v1=${v.expectedHex}`;
+    const result = verifyStripeSignature({
+      rawBody: v.rawBody,
+      header,
+      secret: v.secret,
+      nowSec: v.timestampSec,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts when the matching v1 is NOT last (correct listed first — on old secret during roll)', () => {
+    const v = VECTORS[0]!;
+    const header = `t=${String(v.timestampSec)},v1=${v.expectedHex},v1=${wrong}`;
+    const result = verifyStripeSignature({
+      rawBody: v.rawBody,
+      header,
+      secret: v.secret,
+      nowSec: v.timestampSec,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects when NONE of multiple v1 match (accept-any is not a bypass)', () => {
+    const v = VECTORS[0]!;
+    const header = `t=${String(v.timestampSec)},v1=${wrong},v1=${'e'.repeat(64)}`;
+    const result = verifyStripeSignature({
+      rawBody: v.rawBody,
+      header,
+      secret: v.secret,
+      nowSec: v.timestampSec,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('invalid_signature');
+  });
+
+  it('reports missing_v1 when the only v1 is empty (t=...,v1=)', () => {
+    const v = VECTORS[0]!;
+    const header = `t=${String(v.timestampSec)},v1=`;
+    const result = verifyStripeSignature({
+      rawBody: v.rawBody,
+      header,
+      secret: v.secret,
+      nowSec: v.timestampSec,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('missing_v1');
+  });
 });

@@ -10,6 +10,17 @@
 // with the webhook secret as the key). We verify only `v1`; v0 is
 // legacy SHA-1 and Stripe stopped issuing it for new webhooks.
 //
+// Stripe may include MULTIPLE `v1` signatures in one header (most
+// commonly during a webhook-secret roll, where the event is signed with
+// BOTH the old and the new secret). We accept the event if ANY `v1`
+// verifies against our configured secret — matching Stripe's official
+// SDK and our own outbound verifier (packages/webhook-delivery +
+// sdk-*). This is security-neutral: each candidate must independently
+// match a real HMAC over `<t>.<raw body>`, so an attacker adding bogus
+// `v1` entries gains nothing without the secret; it only makes a
+// legitimate secret rotation zero-downtime instead of dropping the
+// mid-roll deliveries whose matching signature wasn't listed last.
+//
 // The `t=` timestamp is checked against a tolerance window (default 5
 // minutes) to bound replay; Stripe's official SDK uses the same window.
 
@@ -46,7 +57,7 @@ export type VerifyFailureReason =
 export function verifyStripeSignature(args: VerifyArgs): VerifyResult {
   const parsed = parseHeader(args.header);
   if (parsed === null) return { ok: false, reason: 'malformed_header' };
-  if (parsed.v1 === null) return { ok: false, reason: 'missing_v1' };
+  if (parsed.v1.length === 0) return { ok: false, reason: 'missing_v1' };
 
   const now = args.nowSec ?? Math.floor(Date.now() / 1000);
   const tolerance = args.toleranceSec ?? 300;
@@ -57,7 +68,9 @@ export function verifyStripeSignature(args: VerifyArgs): VerifyResult {
   const expectedHex = createHmac('sha256', args.secret)
     .update(`${parsed.t.toString()}.${args.rawBody}`)
     .digest('hex');
-  if (!constantTimeHexEq(expectedHex, parsed.v1)) {
+  // Accept if ANY of the header's `v1` signatures matches (Stripe
+  // dual-signs during a secret roll). Constant-time per candidate.
+  if (!parsed.v1.some((sig) => constantTimeHexEq(expectedHex, sig))) {
     return { ok: false, reason: 'invalid_signature' };
   }
 
@@ -66,14 +79,15 @@ export function verifyStripeSignature(args: VerifyArgs): VerifyResult {
 
 interface ParsedHeader {
   t: number;
-  v1: string | null;
+  v1: string[];
 }
 
 function parseHeader(header: string): ParsedHeader | null {
-  // Format: t=<seconds>,v1=<hex>,v0=<legacy>. We tolerate ordering
-  // and ignore unknown keys (e.g., a future `v2`).
+  // Format: t=<seconds>,v1=<hex>[,v1=<hex>][,v0=<legacy>]. We tolerate
+  // ordering, collect EVERY `v1` (Stripe dual-signs during a secret
+  // roll), and ignore unknown keys (e.g., a future `v2`).
   let t: number | null = null;
-  let v1: string | null = null;
+  const v1: string[] = [];
   for (const part of header.split(',')) {
     const eq = part.indexOf('=');
     if (eq <= 0) continue;
@@ -83,8 +97,8 @@ function parseHeader(header: string): ParsedHeader | null {
       const n = Number(value);
       if (!Number.isFinite(n)) return null;
       t = Math.floor(n);
-    } else if (key === 'v1') {
-      v1 = value;
+    } else if (key === 'v1' && value.length > 0) {
+      v1.push(value);
     }
   }
   if (t === null) return null;

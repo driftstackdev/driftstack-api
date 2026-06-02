@@ -14,8 +14,9 @@
 //     missing_v1 / invalid_signature / timestamp_outside_tolerance).
 //   • constantTimeHexEq: length pre-check + hex-regex guard +
 //     timingSafeEqual (Buffer.from silently truncates on bad chars).
-//   • parseHeader: tolerates key ordering + ignores unknown future
-//     keys (e.g. v2).
+//   • parseHeader: tolerates key ordering, collects EVERY v1 (Stripe
+//     dual-signs during a secret roll → accept-any), ignores unknown
+//     future keys (e.g. v2).
 //   • signStripePayload helper for tests (inverse of verify).
 //   • randomBytes/timingSafeEqual from node:crypto only.
 
@@ -82,11 +83,17 @@ describe('W387.B apps/server/src/lib/stripe-signing.ts content parity', () => {
     );
   });
 
-  it('verifyStripeSignature: HMAC-SHA256 of "${t}.${rawBody}" + constant-time hex compare', () => {
+  it('verifyStripeSignature: HMAC-SHA256 of "${t}.${rawBody}" + constant-time accept-any-v1 compare', () => {
     expect(body).toMatch(
       /const expectedHex = createHmac\('sha256', args\.secret\)\s*\n?\s*\.update\(`\$\{parsed\.t\.toString\(\)\}\.\$\{args\.rawBody\}`\)\s*\n?\s*\.digest\('hex'\);/,
     );
-    expect(body).toMatch(/if \(!constantTimeHexEq\(expectedHex, parsed\.v1\)\)/);
+    // Accept-any-v1 (Stripe dual-signs during a secret roll); constant-time per candidate.
+    expect(body).toMatch(
+      /if \(!parsed\.v1\.some\(\(sig\) => constantTimeHexEq\(expectedHex, sig\)\)\)/,
+    );
+    expect(body).toMatch(
+      /if \(parsed\.v1\.length === 0\) return \{ ok: false, reason: 'missing_v1' \};/,
+    );
   });
 
   it('constantTimeHexEq: length pre-check + hex regex guard + timingSafeEqual (silent-truncation defense)', () => {
@@ -100,9 +107,13 @@ describe('W387.B apps/server/src/lib/stripe-signing.ts content parity', () => {
     expect(body).toMatch(/timingSafeEqual\(Buffer\.from\(a, 'hex'\), Buffer\.from\(b, 'hex'\)\)/);
   });
 
-  it('parseHeader: tolerates key ordering + ignores future keys (e.g. v2)', () => {
+  it('parseHeader: tolerates ordering, collects EVERY v1 (secret-roll), ignores future keys (e.g. v2)', () => {
+    expect(body).toMatch(/We tolerate\s*\n?\s*\/\/\s*ordering, collect EVERY `v1`/);
+    expect(body).toMatch(/and ignore unknown keys \(e\.g\., a future `v2`\)/);
+    // The v1 collection itself: typed string[] + push-every.
+    expect(body).toMatch(/const v1: string\[\] = \[\];/);
     expect(body).toMatch(
-      /We tolerate ordering\s*\n?\s*\/\/\s*and ignore unknown keys \(e\.g\., a future `v2`\)/,
+      /else if \(key === 'v1' && value\.length > 0\) \{\s*\n?\s*v1\.push\(value\);/,
     );
   });
 
