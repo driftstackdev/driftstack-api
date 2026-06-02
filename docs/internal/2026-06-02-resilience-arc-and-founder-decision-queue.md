@@ -174,28 +174,26 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
     undermines; the "lost device AND codes but still logged in" recovery is better served by a support
     identity-check than by a control-bypassing self-service endpoint. (Requires session theft first, but
     nullifies a control built specifically for that threat → MEDIUM-HIGH, not low.)
-16. **DPA §11 retention promises lack code-enforced purge mechanisms** (found 2026-06-02; **MEDIUM**,
-    compliance, mostly time-bombed/forward). The DPA (`docs/legal/dpa.md` §11) + Privacy Policy §9
-    promise concrete retention windows, but the only purge sweepers that exist are `auth_tokens.sweep`,
-    `sessions.duration_sweep` (marks sessions `destroyed`, does NOT delete the record), the
-    status-subscriber 90d email-tombstone, and secret-prev/rotation-reminder jobs — **none enforces the
-    DPA's data-class retention.** Per promise:
-    - **Session metadata "90 days operational"** — sessions persist in the table after the duration-sweep
-      marks them terminal; there is NO 90d session-record purge/aggregation. The data IS produced today,
-      so once the platform ages past 90d the raw metadata exceeds the promised window. _Most concrete gap._
-    - **Session Recordings (1–365d, default 30)** — FORWARD: recordings are unwired (no recordings table,
-      no write-call; the `R2_BUCKET_RECORDINGS` bucket + upload helper exist but the mock driver produces
-      none). A retention-purge honoring the customer-controlled window must ship WITH the real-driver
-      recording capture.
-    - **Customer-Provided Secrets deleted ≤30d post account-termination** — FORWARD: there is no customer
-      account-termination/delete flow (accounts suspend; `status='deleted'` is referenced but nothing
-      sets-it-then-purges-secrets), so the 30d trigger doesn't exist yet.
-      **Founder/data-lifecycle decision (NOT an autopilot build — needs per-data-class purge sweepers +
-      a retention-config surface + likely migrations):** build the session-metadata-90d purge before data
-      ages past 90d (the live-relevant one), and wire the recording-retention + secret-on-termination purges
-      AS those features land. Until then the DPA promises out-run the enforcement. (Distinct from the
-      cascade/referential-integrity data-lifecycle audit, which was sound — this is doc-promise↔code-purge
-      parity, a previously-unchecked dimension.) Not a security hole; a compliance-enforcement gap.
+16. **Retention-ENFORCEMENT sweepers to build before first paying customer** (LAUNCH/forward item, NOT
+    a current bug — surfaced into this queue 2026-06-02; the underlying doc↔reality assessment was already
+    done in auto-memory `project_data_lifecycle_findings`: the DPA §11 / Privacy §9 retention claims are
+    **CONSISTENT + correctly caveated** [legal docs are "baseline drafts under counsel review; first paying
+    customer onboards only after review"], so there is **no false-promise breach today**). The gap is purely
+    that the _enforcing_ purge sweepers don't exist yet — the only purge jobs are `auth_tokens.sweep`, the
+    status-subscriber 90d email-tombstone, and secret-prev/rotation-reminder jobs; `sessions.duration_sweep`
+    marks a session `destroyed` but does NOT delete the record. So, to build alongside launch:
+    - **Session metadata "90 days operational"** — no 90d session-record purge/aggregation exists; build it
+      before real customer data ages past 90d (pre-launch there is no aged data yet → not urgent, but it's
+      the one over data that's already produced).
+    - **Session Recordings (1–365d, default 30)** — recordings are unwired today (no recordings table/
+      write-call; `R2_BUCKET_RECORDINGS` + upload helper exist, mock driver produces none); ship the
+      retention-purge WITH the real-driver recording capture (same fix-at-wiring note as recipe-library).
+    - **Customer-Provided Secrets ≤30d post account-termination** — no customer account-termination/delete
+      flow exists yet (accounts suspend); wire the 30d secret-purge WITH the roadmapped Art-17 self-service
+      deletion (which also needs cross-store erasure: R2 + Stripe customer + Sentry PII, per the data-lifecycle
+      forward-note). **Founder/data-lifecycle, NOT an autopilot build** (per-data-class sweepers + retention-
+      config + migrations). Net: docs are sound + caveated; this is the enforcement-to-build-at-launch list,
+      not a present compliance breach.
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
