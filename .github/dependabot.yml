@@ -1,8 +1,8 @@
 # Dependabot configuration (V-105).
 #
-# Schedules weekly automated update PRs across the four ecosystems
-# we run (npm root + each workspace, pip Python SDK, cargo Tauri
-# GUI, github-actions workflows). Minor/patch bumps within an
+# Schedules weekly automated update PRs across the five ecosystems
+# we run (npm root + each workspace, pip Python SDK, gomod Go SDK,
+# cargo Tauri GUI, github-actions workflows). Minor/patch bumps within an
 # ecosystem are grouped into a single PR per week to reduce review
 # load; major bumps land as individual PRs because they typically
 # need code-side migration.
@@ -91,6 +91,20 @@ updates:
     open-pull-requests-limit: 3
     groups:
       cargo-minor-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # ── gomod (Go SDK) ───────────────────────────────────────────────────
+  - package-ecosystem: gomod
+    directory: /packages/sdk-go
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 3
+    groups:
+      gomod-minor-patch:
         applies-to: version-updates
         update-types: [minor, patch]
 

@@ -133,12 +133,12 @@ describe('W615 gap close-out content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'docs/deployment/env-vars.md'))).toBe(true);
   });
 
-  it('.github/dependabot.yml: V-105 weekly Monday-04:00 Europe/Amsterdam updates + 4 ecosystems (npm root + pip sdk-python + cargo gui-client/src-tauri + github-actions) + 4-group npm pattern (types + dev-deps-minor-patch + runtime-deps-patch + runtime-deps-minor) + locked-stack-no-grouped-majors (drizzle-orm + drizzle-kit + fastify + ioredis + postgres) + no-auto-merge-here policy pinned', () => {
+  it('.github/dependabot.yml: V-105 weekly Monday-04:00 Europe/Amsterdam updates + 5 ecosystems (npm root + pip sdk-python + gomod sdk-go + cargo gui-client/src-tauri + github-actions) + 4-group npm pattern (types + dev-deps-minor-patch + runtime-deps-patch + runtime-deps-minor) + locked-stack-no-grouped-majors (drizzle-orm + drizzle-kit + fastify + ioredis + postgres) + no-auto-merge-here policy pinned', () => {
     const body = read('.github/dependabot.yml');
     expect(body).toMatch(/^# Dependabot configuration \(V-105\)\.$/m);
-    expect(body).toMatch(/^# Schedules weekly automated update PRs across the four ecosystems$/m);
-    expect(body).toMatch(/^# we run \(npm root \+ each workspace, pip Python SDK, cargo Tauri$/m);
-    expect(body).toMatch(/^# GUI, github-actions workflows\)\./m);
+    expect(body).toMatch(/^# Schedules weekly automated update PRs across the five ecosystems$/m);
+    expect(body).toMatch(/^# we run \(npm root \+ each workspace, pip Python SDK, gomod Go SDK,$/m);
+    expect(body).toMatch(/^# cargo Tauri GUI, github-actions workflows\)\./m);
     expect(body).toMatch(/Minor\/patch bumps within an/);
     expect(body).toMatch(/ecosystem are grouped into a single PR per week to reduce review/);
     expect(body).toMatch(/major bumps land as individual PRs because they typically/);
@@ -180,6 +180,9 @@ describe('W615 gap close-out content parity', () => {
     expect(body).toMatch(/^\s+- package-ecosystem: cargo$/m);
     expect(body).toMatch(/^\s+directory: \/apps\/gui-client\/src-tauri$/m);
     expect(body).toMatch(/^\s+cargo-minor-patch:$/m);
+    expect(body).toMatch(/^\s+- package-ecosystem: gomod$/m);
+    expect(body).toMatch(/^\s+directory: \/packages\/sdk-go$/m);
+    expect(body).toMatch(/^\s+gomod-minor-patch:$/m);
     expect(body).toMatch(/^\s+- package-ecosystem: github-actions$/m);
     expect(body).toMatch(/^\s+gha-minor-patch:$/m);
     expect(existsSync(resolve(REPO_ROOT, '.github/dependabot.yml'))).toBe(true);
