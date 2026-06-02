@@ -174,6 +174,28 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
     undermines; the "lost device AND codes but still logged in" recovery is better served by a support
     identity-check than by a control-bypassing self-service endpoint. (Requires session theft first, but
     nullifies a control built specifically for that threat → MEDIUM-HIGH, not low.)
+16. **DPA §11 retention promises lack code-enforced purge mechanisms** (found 2026-06-02; **MEDIUM**,
+    compliance, mostly time-bombed/forward). The DPA (`docs/legal/dpa.md` §11) + Privacy Policy §9
+    promise concrete retention windows, but the only purge sweepers that exist are `auth_tokens.sweep`,
+    `sessions.duration_sweep` (marks sessions `destroyed`, does NOT delete the record), the
+    status-subscriber 90d email-tombstone, and secret-prev/rotation-reminder jobs — **none enforces the
+    DPA's data-class retention.** Per promise:
+    - **Session metadata "90 days operational"** — sessions persist in the table after the duration-sweep
+      marks them terminal; there is NO 90d session-record purge/aggregation. The data IS produced today,
+      so once the platform ages past 90d the raw metadata exceeds the promised window. _Most concrete gap._
+    - **Session Recordings (1–365d, default 30)** — FORWARD: recordings are unwired (no recordings table,
+      no write-call; the `R2_BUCKET_RECORDINGS` bucket + upload helper exist but the mock driver produces
+      none). A retention-purge honoring the customer-controlled window must ship WITH the real-driver
+      recording capture.
+    - **Customer-Provided Secrets deleted ≤30d post account-termination** — FORWARD: there is no customer
+      account-termination/delete flow (accounts suspend; `status='deleted'` is referenced but nothing
+      sets-it-then-purges-secrets), so the 30d trigger doesn't exist yet.
+      **Founder/data-lifecycle decision (NOT an autopilot build — needs per-data-class purge sweepers +
+      a retention-config surface + likely migrations):** build the session-metadata-90d purge before data
+      ages past 90d (the live-relevant one), and wire the recording-retention + secret-on-termination purges
+      AS those features land. Until then the DPA promises out-run the enforcement. (Distinct from the
+      cascade/referential-integrity data-lifecycle audit, which was sound — this is doc-promise↔code-purge
+      parity, a previously-unchecked dimension.) Not a security hole; a compliance-enforcement gap.
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
