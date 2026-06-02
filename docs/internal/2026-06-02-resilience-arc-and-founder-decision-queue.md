@@ -166,6 +166,17 @@ item 10 below.
     both scoped); updater ed25519 **signature-verified** (trusted GitHub endpoint, fail-closed); macOS
     entitlements minimal (WebKit-JIT pair only, none of the dangerous ones).
   - _Codebase hygiene:_ zero `FIXME`/`HACK`/`XXX` debt markers; no leaky response headers (`Server: cloudflare` only).
+- **Operational / data-integrity dimensions (fresh, 2026-06-02 batch 3) — all SOUND, don't re-check:**
+  - _DB migration expand-contract:_ across 67 migrations — mostly additive; the only constraint changes are
+    RELAXING (`DROP NOT NULL`); no NOT-NULL-add-without-default / `RENAME` / type-narrowing; lone `DROP COLUMN`
+    is `0065` (trial_pack dead-code). Deploy runs migrate-**before**-restart → a future `DROP`/`RENAME` needs
+    2-phase sequencing (code-removal deploy first, schema-change later).
+  - _Audit-log coverage:_ security-relevant mutations emit audit entries at BOTH route-layer (BYOK / admin
+    suspend·tier / oauth / crypto-billing / profile / email-prefs) AND service-layer (MFA enroll/disable/
+    recovery via `mfa.ts` → `account.mfa_disabled`). No forensic blindspot.
+  - _Transaction-atomicity:_ `db.transaction()` used where multi-write atomicity matters (11 usages —
+    agent-sessions RMW, webhooks, stripe-event-dispatch, incidents). The lone non-transactional multi-write
+    is the OAuth create-new path (cross-repo `accounts`+`links`; self-healing, low-severity — §4 item 6).
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
@@ -191,6 +202,14 @@ founder-visible (detail lives in Agent-2 auto-memory). Distinct from §2 (which 
    (mitigates XSS-via-API-data exfiltration). Not a blind fix — a wrong `connect-src` breaks the app's
    API/SSE/LiveKit/R2 calls and the Tauri runtime isn't in the server pre-push gate; needs a deliberate
    change enumerating all egress origins + gui-runtime validation.
+6. **OAuth create-new transaction-atomicity** — `linkOrCreateAccount` Step 3 (no link, no email
+   collision → create) does account-create (`createFromIdp`) + oauth-link-insert (`insertLink`) as two
+   separate writes across two injected repos (`accounts` + `links`), no shared transaction. A crash
+   between → an orphaned account (verified email, no link, no password). LOW-severity + SELF-HEALING:
+   the customer's next OAuth sign-in hits the audited collision-merge flow (`findIdByEmail` → Verdict-1
+   merge-verify → link created); narrow crash-window; no data-loss/cross-customer/security impact. NOT a
+   discipline gap — `db.transaction()` IS used where atomicity matters (11 usages, §3); this is the lone
+   cross-repo exception. A fix needs a transaction straddling two repos (architectural) → low priority.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
