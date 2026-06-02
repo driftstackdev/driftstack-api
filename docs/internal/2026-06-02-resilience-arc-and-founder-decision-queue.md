@@ -187,9 +187,14 @@ so runtime validation is a `gui-v*` tag push. CI/CD-config fix (no prod-runtime 
   - _Codebase hygiene:_ zero `FIXME`/`HACK`/`XXX` debt markers; no leaky response headers (`Server: cloudflare` only).
 - **Operational / data-integrity dimensions (fresh, 2026-06-02 batch 3) — all SOUND, don't re-check:**
   - _DB migration expand-contract:_ across 67 migrations — mostly additive; the only constraint changes are
-    RELAXING (`DROP NOT NULL`); no NOT-NULL-add-without-default / `RENAME` / type-narrowing; lone `DROP COLUMN`
-    is `0065` (trial_pack dead-code). Deploy runs migrate-**before**-restart → a future `DROP`/`RENAME` needs
-    2-phase sequencing (code-removal deploy first, schema-change later).
+    RELAXING (`DROP NOT NULL`, in `0027`/`0059`); no NOT-NULL-add-without-default / `RENAME COLUMN` /
+    type-narrowing. The lone destructive migration is `0065` (trial_pack dead-code): 4× `DROP COLUMN` on
+    `accounts` **plus** an `ALTER TYPE account_tier RENAME VALUE 'trial_pack' → 'free'` — an in-place enum
+    relabel (low-risk vs a query-breaking `RENAME COLUMN`; trial_pack was pre-LIVE/Stripe-test-mode so ~0 rows
+    were relabelled and the dropped credit columns were never populated). `0066` (latest) is Class-A safe
+    (`ADD COLUMN … NOT NULL DEFAULT … CHECK`). Deploy runs migrate-**before**-restart → a future
+    `DROP`/`RENAME COLUMN` needs 2-phase sequencing (code-removal deploy first, schema-change later); the
+    migration-rehearsal taxonomy (Class C destructive → rehearsal + founder approval) governs this.
   - _Audit-log coverage:_ security-relevant mutations emit audit entries at BOTH route-layer (BYOK / admin
     suspend·tier / oauth / crypto-billing / profile / email-prefs) AND service-layer (MFA enroll/disable/
     recovery via `mfa.ts` → `account.mfa_disabled`). No forensic blindspot.
