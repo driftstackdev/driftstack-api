@@ -6,7 +6,7 @@
 //
 // Auth: `Authorization: Bearer <DRIFTSTACK_FLEET_INTERNAL_TOKEN>` header.
 // Compared with timingSafeEqual to defeat string-length timing attacks.
-// The token is provisioned via /etc/driftstack/api.env (operator) and
+// The token is provisioned via /opt/driftstack/api/.env (operator) and
 // shipped to fleet nodes via the bootstrap config (Agent 1 reads from
 // its own env). No customer or unauthenticated traffic can reach these
 // routes — preHandler rejects with 401 before the handler runs.

@@ -8,7 +8,7 @@
 // is exposed publicly (so external scrapers can reach it without
 // needing an internal-only path), but the token prevents unauthenticated
 // readers from harvesting internal counters. The deploy bridge writes
-// the token to /etc/driftstack/api.env; the value is rotated on the
+// the token to /opt/driftstack/api/.env; the value is rotated on the
 // same cadence as other internal credentials.
 //
 // If METRICS_SCRAPE_TOKEN is unset, the route returns 503 — surfaces a

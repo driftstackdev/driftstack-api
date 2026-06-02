@@ -7,7 +7,7 @@ runners, atlas-priority queue inspectors. NOT customer-facing.
 
 **Auth:** `Authorization: Bearer <DRIFTSTACK_FLEET_INTERNAL_TOKEN>`.
 The token is in the operator-trusted fleet's env (sourced from
-`/etc/driftstack/api.env` on Hetzner + `~/.driftstack-secrets.env`
+`/opt/driftstack/api/.env` on Hetzner + `~/.driftstack-secrets.env`
 on the founder workstation). Constant-time compared via
 `timingSafeEqual` to defeat string-length timing attacks. Unset
 token → all 4 routes return 503 FeatureUnavailable (activation

@@ -34,7 +34,7 @@ gate is opt-in; the registry isn't constructed unless the token
 env var is wired).
 
 The token rotates on the same cadence as other internal credentials
-and is provisioned via the deploy bridge (`/etc/driftstack/api.env`).
+and is provisioned via the deploy bridge (`/opt/driftstack/api/.env`).
 
 ## Cardinality
 

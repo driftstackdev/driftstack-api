@@ -2,7 +2,7 @@
 // Smoke test for LiveKit go-live (V-531.B). Mints a short-lived
 // publisher token against the env-configured LiveKit credentials and
 // reports the WS handshake outcome. Use after wiring LIVEKIT_API_KEY
-// + LIVEKIT_API_SECRET + LIVEKIT_WS_URL to /etc/driftstack/api.env
+// + LIVEKIT_API_SECRET + LIVEKIT_WS_URL to /opt/driftstack/api/.env
 // on prod or staging.
 //
 // Usage:

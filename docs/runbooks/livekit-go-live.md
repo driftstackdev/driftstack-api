@@ -60,7 +60,7 @@ v1/webhooks/livekit` once the future webhook route lands (room
 
 ## Step 1 — wire env on prod + staging
 
-Write the three vars to `/etc/driftstack/api.env` on each app server.
+Write the three vars to `/opt/driftstack/api/.env` on each app server.
 Values come from `1Password / Driftstack / LiveKit prod key` — **not**
 from this runbook, the repo, or any chat transcript.
 

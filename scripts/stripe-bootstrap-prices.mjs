@@ -20,7 +20,7 @@
 //      reuses if found AND amount matches.
 //   3. Creates missing products + prices.
 //   4. Prints the final DRIFTSTACK_TIER_PRICE_IDS JSON + STRIPE_TRIAL_PACK_PRICE_ID
-//      block ready to paste into /etc/driftstack/api.env (or .env.local for
+//      block ready to paste into /opt/driftstack/api/.env (or .env.local for
 //      dev runs).
 //
 // Idempotent + safe to re-run. Each Stripe create call has an Idempotency-
@@ -210,7 +210,7 @@ async function main() {
   );
 
   process.stdout.write('\n========================================\n');
-  process.stdout.write('Paste into /etc/driftstack/api.env:\n');
+  process.stdout.write('Paste into /opt/driftstack/api/.env:\n');
   process.stdout.write('========================================\n');
   process.stdout.write(`DRIFTSTACK_TIER_PRICE_IDS='${JSON.stringify(tierPrices)}'\n`);
   process.stdout.write(`STRIPE_TRIAL_PACK_PRICE_ID='${trialPriceId}'\n`);

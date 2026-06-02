@@ -50,7 +50,7 @@ Cross-agent dependencies coordinate via planning file 133 schema + `docs/interna
 - **Rule M**: ≥3 tracks per wave HARD multi-track (no single-track absorption).
 - **Rule R**: per-wave commit discipline ≤50 files uncommitted.
 - **Rule L**: empirical proof per slice; integration tests catch real bugs (see W1037+ lesson: SESSION_ID_RE prefix mismatch + ownership check broken caught by integration tests).
-- **Credentials via env vars only**: SSH-write to `/etc/driftstack/api.env` on Hetzner prod + staging; NEVER commit to repo files (even gitignored); NEVER echo in Bash output; NEVER log values.
+- **Credentials via env vars only**: SSH-write to `/opt/driftstack/api/.env` on Hetzner prod + staging; NEVER commit to repo files (even gitignored); NEVER echo in Bash output; NEVER log values.
 - **/loop 3m via Skill invocation** is canonical autopilot mechanism (NOT CronCreate direct registration).
 
 ## Production state (verify before assuming current)

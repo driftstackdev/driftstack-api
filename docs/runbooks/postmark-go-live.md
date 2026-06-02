@@ -25,7 +25,7 @@ set the env vars, restart, smoke-test.
 
 ## Step 1 — wire env on prod + staging
 
-Write the three vars to `/etc/driftstack/api.env` on each app server.
+Write the three vars to `/opt/driftstack/api/.env` on each app server.
 Values come from `1Password / Driftstack / Postmark prod token` —
 **not** from this runbook, the repo, or any chat transcript.
 

@@ -213,7 +213,7 @@ const ConfigSchema = z.object({
    * path); when set, the routes activate with constant-time bearer
    * comparison (lib/internal-fleet-auth.ts). Same env-var-only
    * provisioning convention as the other shared secrets — SSH-write
-   * to /etc/driftstack/api.env, never commit, never echo.
+   * to /opt/driftstack/api/.env, never commit, never echo.
    */
   fleetInternalToken: z.string().min(16).optional(),
   /**
@@ -449,7 +449,7 @@ function readSentryConfig(env: NodeJS.ProcessEnv): SentryConfig | null {
   // Arc 7 obs.1 — Sentry release auto-tagging. Prefer the explicit
   // SENTRY_RELEASE env when set; otherwise fall back to GIT_SHA so
   // every deploy gets a release tag without manual env config. The
-  // deploy bridge already writes GIT_SHA to /etc/driftstack/api.env
+  // deploy bridge already writes GIT_SHA to /opt/driftstack/api/.env
   // for the /version endpoint; this slice re-uses the same source
   // of truth so the Sentry release matches the git_sha surfaced on
   // GET /version. No fallback to 'unknown' here — better to emit
