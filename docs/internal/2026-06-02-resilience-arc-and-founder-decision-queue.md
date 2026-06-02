@@ -48,6 +48,18 @@ asserts the set ⊆ `SENTRY_SENSITIVE_KEYS`. Verified teeth (a planted logger-on
 passes current code. Test-only (no prod-runtime change); the redaction-list sync is now
 gate-enforced rather than human-discipline + spot-check.
 
+**Also shipped (`e47f7e00`, deployed + live — prod `/version`=`e47f7e0`):** Stripe INBOUND
+webhook signature verifier (`lib/stripe-signing.ts`) now accepts ANY `v1=` from the
+`Stripe-Signature` header instead of only the last. Stripe dual-signs during a webhook-secret
+roll (old+new secret → two `v1=` entries); the old last-only behavior rejected a legitimate
+delivery mid-roll when the matching signature wasn't listed last (fail-closed, but dropped until
+config caught up + Stripe retried). `parseHeader` now collects every non-empty `v1` (`string[]`);
+verify accepts if ANY matches the HMAC over `<t>.<rawBody>`, constant-time per candidate.
+Security-neutral (each candidate must independently match a real HMAC — bogus entries gain nothing
+without the secret) and aligns inbound with Stripe's official SDK + our own outbound verifier.
++4 reference-vector tests (both orderings accept, none-match rejects, empty-v1 → missing_v1); BOTH
+stripe-signing parity files updated same commit (the full pre-push gate caught the second one).
+
 ## 2. FOUNDER-DECISION QUEUE (gated — Agent-2 cannot safely self-do these)
 
 > **RECOMMENDED PRIORITY (the items below are numbered by discovery, not severity — start here):**
@@ -311,6 +323,17 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
     both scoped); updater ed25519 **signature-verified** (trusted GitHub endpoint, fail-closed); macOS
     entitlements minimal (WebKit-JIT pair only, none of the dangerous ones).
   - _Codebase hygiene:_ zero `FIXME`/`HACK`/`XXX` debt markers; no leaky response headers (`Server: cloudflare` only).
+  - _Password policy (2026-06-02):_ signup + password-reset/confirm share one schema
+    (`api-types/auth.ts`): `z.string().min(12).max(128)`, NIST 800-63B-aligned (length-based, NO
+    composition rules — modern best practice), max-128 bounds the scrypt input. Sound. (The
+    `egress.ts` `password.min(1)` is a customer-supplied PROXY credential passthrough — SOCKS5/
+    OpenVPN — NOT an account-auth gate, so the looser bound is correct.)
+  - _Auth token-type dispatch (2026-06-02):_ `authenticate()` routes by `ds_` prefix → API-key
+    scrypt path, else → web-session sha256 path. Token-confusion impossible (both paths require the
+    real secret; routing alone can't be exploited); the only edge — a web-session token randomly
+    `ds_`-prefixed (~1/262k) — is a benign fail-closed false-negative (rejected + retry, never
+    cross-validated). Cache keyed on full-plaintext sha (no cross-type collision); revocation
+    invalidates the cache. Sound.
 - **Operational / data-integrity dimensions (fresh, 2026-06-02 batch 3) — all SOUND, don't re-check:**
   - _DB migration expand-contract:_ across 67 migrations — mostly additive; the only constraint changes are
     RELAXING (`DROP NOT NULL`, in `0027`/`0059`); no NOT-NULL-add-without-default / `RENAME COLUMN` /
