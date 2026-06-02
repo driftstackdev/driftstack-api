@@ -145,4 +145,26 @@ describe('GET /v1/webhooks/:id/deliveries — status filter (V-403)', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it('ignores a malformed cursor — returns the first page, not a 500/empty', async () => {
+    fx = await buildTestApp();
+    const endpointId = await createEndpoint(fx);
+    await fx.webhooksService.enqueueEvent(fx.accountId, 'session.completed', {
+      id: 'ses_cur',
+      status: 'completed',
+    });
+
+    // `?cursor=not-a-valid-cursor` → new Date('not-a-valid-cursor') is an
+    // Invalid Date (truthy). Without the repo's guard this would reach the
+    // lt(createdAt, …) keyset filter and 500 on serialization (Drizzle) or
+    // silently match nothing (in-memory). The guard treats it as absent →
+    // the caller gets the first page.
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/webhooks/whk_${endpointId}/deliveries?cursor=not-a-valid-cursor`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ data: unknown[] }>().data.length).toBeGreaterThan(0);
+  });
 });

@@ -345,7 +345,11 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     cursor?: string;
     endpointId?: string;
   }): Promise<ListDeliveriesPage> {
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    // Mirror the Drizzle repo's malformed-cursor guard: an Invalid Date
+    // (truthy) would otherwise silently match nothing here. Invalid → absent.
+    const cursorParsed = opts.cursor ? new Date(opts.cursor) : null;
+    const cursorDate =
+      cursorParsed !== null && !Number.isNaN(cursorParsed.getTime()) ? cursorParsed : null;
     const all = Array.from(this.deliveries.values())
       .filter((r) => r.status === 'dlq')
       .filter((r) => (cursorDate ? r.createdAt < cursorDate : true))
@@ -408,7 +412,11 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     if (!ep || ep.accountId !== accountId) {
       return Promise.resolve({ items: [], nextCursor: null });
     }
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    // Mirror the Drizzle repo's malformed-cursor guard: an Invalid Date
+    // (truthy) would otherwise silently match nothing here. Invalid → absent.
+    const cursorParsed = opts.cursor ? new Date(opts.cursor) : null;
+    const cursorDate =
+      cursorParsed !== null && !Number.isNaN(cursorParsed.getTime()) ? cursorParsed : null;
     const all = Array.from(this.deliveries.values())
       .filter((r) => r.webhookId === endpointId)
       .filter((r) => (cursorDate ? r.createdAt < cursorDate : true))

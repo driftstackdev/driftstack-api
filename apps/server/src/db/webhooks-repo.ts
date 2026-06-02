@@ -462,7 +462,12 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     cursor?: string;
     endpointId?: string;
   }): Promise<ListDeliveriesPage> {
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    // A malformed/tampered cursor parses to an Invalid Date (truthy), which
+    // would reach the lt() filter below and throw on serialization (500).
+    // Treat an invalid cursor as absent → first page (decodeCursor contract).
+    const cursorParsed = opts.cursor ? new Date(opts.cursor) : null;
+    const cursorDate =
+      cursorParsed !== null && !Number.isNaN(cursorParsed.getTime()) ? cursorParsed : null;
     const filters = [eq(webhookDeliveries.status, 'dlq' as WebhookDeliveryStatus)];
     if (cursorDate) filters.push(lt(webhookDeliveries.createdAt, cursorDate));
     // V-512 — drill-down filter; uuid scoped to a single endpoint
@@ -533,7 +538,12 @@ export class DrizzleWebhooksRepo implements WebhooksRepo {
     const owned = await this.findEndpoint(endpointId, accountId);
     if (!owned) return { items: [], nextCursor: null };
 
-    const cursorDate = opts.cursor ? new Date(opts.cursor) : null;
+    // A malformed/tampered cursor parses to an Invalid Date (truthy), which
+    // would reach the lt() filter below and throw on serialization (500).
+    // Treat an invalid cursor as absent → first page (decodeCursor contract).
+    const cursorParsed = opts.cursor ? new Date(opts.cursor) : null;
+    const cursorDate =
+      cursorParsed !== null && !Number.isNaN(cursorParsed.getTime()) ? cursorParsed : null;
     const filters = [eq(webhookDeliveries.webhookId, endpointId)];
     if (cursorDate) filters.push(lt(webhookDeliveries.createdAt, cursorDate));
     if (opts.status) filters.push(eq(webhookDeliveries.status, opts.status));
