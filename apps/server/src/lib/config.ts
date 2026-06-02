@@ -176,8 +176,23 @@ const ConfigSchema = z.object({
    *   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
    * Rotation is a future runbook item — changing the key invalidates
    * every existing enrollment (customers must re-enroll).
+   *
+   * Validated eagerly here (length-checked at config-parse), not just
+   * lazily in each crypto module's decodeKey: a wrong-length key would
+   * otherwise boot fine + register the routes, then 500 the first
+   * customer who enrolls MFA / saves a BYOK key / mints a LiveKit token
+   * (one key backs all four AES-256-GCM surfaces). Failing the boot
+   * config-parse surfaces the misconfig to the operator on deploy.
+   * Mirrors the eager .min(16) on metricsScrapeToken + fleetInternalToken.
    */
-  mfaEncryptionKey: z.string().optional(),
+  mfaEncryptionKey: z
+    .string()
+    .refine((v) => Buffer.from(v, 'base64').length === 32, {
+      message:
+        'MFA_ENCRYPTION_KEY must base64-decode to exactly 32 bytes (AES-256). ' +
+        "Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
+    })
+    .optional(),
   /**
    * Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus /metrics
    * scrape bearer token. Required for the /metrics endpoint to

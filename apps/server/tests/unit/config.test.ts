@@ -228,4 +228,36 @@ describe('loadConfig', () => {
     });
     expect(cfg.sentry?.release).toBeUndefined();
   });
+
+  it('V-353b MFA_ENCRYPTION_KEY accepts a valid base64 32-byte AES-256 key', () => {
+    const key = Buffer.alloc(32, 7).toString('base64');
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      MFA_ENCRYPTION_KEY: key,
+    });
+    expect(cfg.mfaEncryptionKey).toBe(key);
+  });
+
+  it('V-353b MFA_ENCRYPTION_KEY undefined when unset (MFA + BYOK + LiveKit + gui-control routes disabled)', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+    });
+    expect(cfg.mfaEncryptionKey).toBeUndefined();
+  });
+
+  it('V-353b MFA_ENCRYPTION_KEY that base64-decodes to != 32 bytes is rejected EAGERLY at config-parse (boot fails, not a lazy first-customer 500)', () => {
+    // 16 bytes → valid base64 but wrong AES-256 length. Pre-hardening this
+    // booted fine + registered the routes, then threw inside decodeKey the
+    // first time a customer enrolled MFA / saved a BYOK key.
+    const shortKey = Buffer.alloc(16, 7).toString('base64');
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+        REDIS_URL: 'redis://localhost:6379',
+        MFA_ENCRYPTION_KEY: shortKey,
+      }),
+    ).toThrow(/32 bytes/);
+  });
 });

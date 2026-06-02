@@ -176,7 +176,13 @@ describe('W966 config lib cross-source invariant', () => {
     expect(p).toMatch(/V-353b — base64-encoded 32-byte AES-256-GCM key used to encrypt/);
     expect(p).toMatch(/TOTP secrets at rest\. When unset, \/v1\/account\/mfa\/\* routes are/);
     expect(p).toMatch(/not registered \(MFA disabled\)\./);
-    expect(p).toMatch(/mfaEncryptionKey: z\.string\(\)\.optional\(\),/);
+    // V-353b hardening: the key is length-validated EAGERLY at config-parse
+    // (was a bare z.string().optional() — a wrong-length key booted fine then
+    // 500-ed the first customer to enroll MFA / save a BYOK key / mint a
+    // LiveKit token; one key backs all four AES-256-GCM surfaces).
+    expect(p).toMatch(/Validated eagerly here \(length-checked at config-parse\)/);
+    expect(p).toMatch(/mfaEncryptionKey: z/);
+    expect(p).toMatch(/\.refine\(\(v\) => Buffer\.from\(v, 'base64'\)\.length === 32/);
   });
 
   it("CRITICAL V-487 nowpayments framing — 'V-487 — NowPayments crypto-rail scaffold. Conditional, opt-in sub-processor (Estonia EEA-internal per the V-308a legal scaffolding). When apiKey + ipnSecret are unset, the /v1/billing/crypto/* route stubs return 501 Not Implemented; the code is wired but inactive until the founder creates the NowPayments account and SSH-writes the credentials. This lets launch-day flip the rail on without redeploying'. The opt-in + 501-when-unset design lets V-487 ship dark.", () => {

@@ -139,11 +139,18 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
     );
   });
 
-  it('V-353b MFA encryption key: base64-encoded 32-byte AES-256-GCM, optional (when unset MFA disabled)', () => {
+  it('V-353b MFA encryption key: base64-encoded 32-byte AES-256-GCM, optional (when unset MFA disabled); length-validated EAGERLY at config-parse (not just lazily in decodeKey) so a wrong-length key fails the boot rather than the first customer', () => {
     expect(body).toMatch(
       /V-353b — base64-encoded 32-byte AES-256-GCM key used to encrypt\s*\n?\s*\*\s*TOTP secrets at rest\. When unset, \/v1\/account\/mfa\/\* routes are\s*\n?\s*\*\s*not registered \(MFA disabled\)/,
     );
-    expect(body).toMatch(/mfaEncryptionKey: z\.string\(\)\.optional\(\),/);
+    // Field present (still optional → conditional-feature: unset = MFA disabled,
+    // asserted behaviorally in config.test.ts). Short focused pins, not one
+    // long-chain regex, per the no-long-chain-regex rule.
+    expect(body).toMatch(/mfaEncryptionKey: z/);
+    // The hardening: eager length-check at parse-time (base64-decode === 32
+    // bytes), mirroring the .min(16) on metricsScrapeToken/fleetInternalToken.
+    expect(body).toMatch(/\.refine\(\(v\) => Buffer\.from\(v, 'base64'\)\.length === 32/);
+    expect(body).toMatch(/MFA_ENCRYPTION_KEY must base64-decode to exactly 32 bytes \(AES-256\)/);
   });
 
   it('V-333b Playwright driver channel: webkit default + headed=false default', () => {
