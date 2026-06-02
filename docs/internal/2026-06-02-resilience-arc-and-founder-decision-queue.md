@@ -60,15 +60,30 @@ without the secret) and aligns inbound with Stripe's official SDK + our own outb
 +4 reference-vector tests (both orderings accept, none-match rejects, empty-v1 → missing_v1); BOTH
 stripe-signing parity files updated same commit (the full pre-push gate caught the second one).
 
+**§2 FOUNDER-DECISION QUEUE — TOP-3 + DRIZZLE ROOT-CAUSE CLEARED (founder approved "do everything", 2026-06-02):**
+the recommended priority queue is shipped + live. `8e4d810d` MFA regen step-up gate (§2-15);
+`f93c509a`+`e6ac9f1c` profile-count TOCTOU atomic `insertWithLimit` across all 4 creation paths
+(§2-14); `DB_STATEMENT_TIMEOUT_MS=30000` set on staging+prod (§2-2, ops); `3fbd2f97` version-agnostic
+`err.cause` 23505-translation helper (§2-17 root-cause) → **#17 drizzle 0.38→0.45.2 MERGED `6eeb3fc4`**,
+deployed + prod-smoke + full-CI-on-0.45 validated. Only the genuinely-gated items remain (agent_sessions
+strict-FK = needs FK-behavior + orphan-row spec; iphone17 = needs Agent-1 canvas-readiness) + the
+lower-priority dependabot PRs (founder cadence). See the §2 header below.
+
 ## 2. FOUNDER-DECISION QUEUE (gated — Agent-2 cannot safely self-do these)
 
-> **RECOMMENDED PRIORITY (the items below are numbered by discovery, not severity — start here):**
+> **STATUS 2026-06-02 — founder approved "do everything"; the recommended top-3 + the drizzle root-cause are ALL SHIPPED, LIVE, and CI/prod-validated:**
 >
-> 1. **Item 15 — MFA recovery-code regen step-up bypass (MEDIUM-HIGH security).** A stolen session can mint fresh recovery codes (ungated) → satisfy step-up → disable MFA. One-line fix recommended (add `requireMfaFresh()` to the regen route); the only tradeoff is the "lost-device-but-logged-in" self-service recovery path.
-> 2. **Item 14 — profile-count quota TOCTOU (monetization).** Concurrent creates bypass the per-tier profile cap (persistent for free=1). Fix = the proven `FOR UPDATE` tx pattern across 6 sites + a CI-only PG test.
-> 3. **Item 2 — enable `DB_STATEMENT_TIMEOUT_MS` in prod (~30s).** Already de-risked here (all app queries bounded; migrations exempt) → low-risk ops toggle that closes the only runaway-query pool-exhaustion gap. Pure env-var + restart, no code.
+> 1. ✅ **Item 15 — MFA recovery-code regen step-up bypass** — SHIPPED `8e4d810d` (added `requireMfaFresh()` to the regen route, closing the mint-codes→satisfy-step-up→disable bypass; existing recovery codes still satisfy step-up; live).
+> 2. ✅ **Item 14 — profile-count quota TOCTOU** — SHIPPED `f93c509a` + `e6ac9f1c` (atomic `insertWithLimit` FOR UPDATE account-row lock across ALL 4 creation paths — create/clone/import/transfer; real-PG concurrency-tested; live).
+> 3. ✅ **Item 2 — `DB_STATEMENT_TIMEOUT_MS=30000`** — SET on staging + prod (ops; restart-verified; runaway-query pool-exhaustion gap closed; live).
 >
-> The remaining items (deploy approval-gate/CI-gating 11-12, CORS/trustProxy 5-6, agent_sessions-FK 7, iphone17 8, dep-bumps 10, CF-skip 13, etc.) are infra/policy/cosmetic — lower urgency. Full per-item detail below.
+> - ✅ **Item 10 / #17 — drizzle-0.45 bump** — the `err.cause` 23505-translation root-cause FIXED (`3fbd2f97`, version-agnostic `lib/pg-error.ts` helper across all 4 unique-violation sites) → #17 MERGED `6eeb3fc4`, deployed, prod-smoke + full-CI-on-0.45 validated (incl the slug-409 E2E that was the original break).
+>
+> **REMAINING — genuinely need founder input / a spec (NOT auto-doable):**
+>
+> - **agent_sessions strict-FK (item 7)** — need the FK behavior (cascade / restrict / set-null) + how to handle existing orphan rows. Breaking migration.
+> - **iphone17 cutover (item 8)** — need Agent-1 to confirm canvas/atlas readiness (else rendering breaks).
+> - Lower-priority/infra: deploy approval-gate/CI-gating (11-12), CORS/trustProxy (5-6, LOCKED), CF-skip (13), and the remaining dependabot PRs (#15/#16 dev-tooling, #14 cargo, #1/#2/#3 CI-actions, #6/#7 framework majors) — founder cadence. Full per-item detail below.
 
 1. **`DEPLOY_DOTENV_BASE64` GH Actions secret likely still holds the HEX `MFA_ENCRYPTION_KEY`.**
    Used only by the abandoned `server-deploy.yml` (the active path is `deploy.yml`, which
