@@ -66,6 +66,36 @@ item 10 below.
     advisories (Astro `check`/`language-server`, incl. the full-tree "2 critical") never ship to
     prod; customer-shipped Astro deps (`astro`/`devalue`, in-range) are left to dependabot / their
     own astro-build-validated path rather than a root-lockfile edit the server gate can't validate.
+11. **Production deploys have NO human approval gate** (found 2026-06-02). `deploy.yml` is Option B
+    (LIVE): every push to `main` auto-runs `deploy-bridge.sh staging` → `deploy-bridge.sh prod`
+    back-to-back. The `deploy-production` job comment claims the `production` GitHub environment
+    "requires approval from the founder," but `gh api .../environments` shows `protection_rules=NONE`
+    on every environment, and the `2c2375f` prod job ran in 53s with no approval wait. So any commit
+    to main (including autopilot docs/chore commits) ships straight to prod; the only safety net is
+    `deploy-bridge`'s post-deploy-verify (14 invariants) + auto-revert (robust). **Founder decisions
+    (need repo-admin + policy — Agent-2 can't self-do):** (a) configure `required_reviewers` on the
+    `production` environment if a human gate is wanted, OR amend the comment to reflect intentional
+    auto-deploy; (b) optional `paths-ignore: [docs/**, '**/*.md']` on the `push` trigger so docs/chore
+    commits don't gratuitously rebuild+restart prod — but a wrong filter UNDER-deploys (silent
+    staleness, the exact failure the "gate FAILS loudly" guards were added to prevent), so it's a
+    deliberate founder change, not an autopilot edit. Also note: staging→prod runs with ZERO soak
+    (V-507 60-min staging soak is not enforced in CI).
+12. **Prod deploy is NOT gated on CI passing** (found 2026-06-02, compounds item 11). `ci.yml`
+    (test suite) and `deploy.yml` both trigger independently on `push: [main]`; deploy.yml's
+    `needs:` only chain its own jobs (source-map-upload → staging → prod) — there is no
+    `workflow_run` trigger or cross-workflow status gate, so the two run **in parallel**. Worse,
+    deploy.yml's build job runs `npm ci` + build only (no test step), so **tests never gate the
+    deploy**. What DOES protect prod: (1) the local pre-push hook (full vitest + tsc — the primary
+    gate, strong, but bypassable via `git push --no-verify` and it cannot run the CI-only real-PG
+    `*-drizzle` tests); (2) build/tsc failure blocks the deploy (source-map-upload fails →
+    deploy-staging skipped); (3) post-deploy-verify's 14 HTTP invariants + auto-revert. The narrow
+    exposure: a regression caught ONLY by CI-exclusive real-PG tests (not the local hook, not the
+    HTTP invariants) ships to prod ungated. **Founder/ops decision (NOT an autopilot edit — a wrong
+    `workflow_run` restructure could halt all deploys or create races):** gate `deploy.yml` on CI
+    success via a `workflow_run: {workflows: [CI], types: [completed]}` trigger with a
+    `conclusion == 'success'` job-condition, OR add a test job to deploy.yml's chain, OR rely on
+    branch-protection required-checks (note: direct `HEAD:main` pushes bypass PR-merge checks). Today
+    the local hook is the real gate; this is a defense-in-depth gap, not an active hole.
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
