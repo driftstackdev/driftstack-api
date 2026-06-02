@@ -194,6 +194,27 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
       forward-note). **Founder/data-lifecycle, NOT an autopilot build** (per-data-class sweepers + retention-
       config + migrations). Net: docs are sound + caveated; this is the enforcement-to-build-at-launch list,
       not a present compliance breach.
+17. **Dependabot PR pipeline is STALLED — all 9 open PRs have failing CI** (found 2026-06-02; MEDIUM
+    maintenance/security-hygiene). `gh pr list` shows 9 open dependabot PRs, EVERY one with a red check,
+    several a month old (since 2026-05-04) → dependency updates aren't landing, so deps accumulate
+    unpatched (the auto-merge is actor-gated + patch-ONLY, and these are minor/major groups → never
+    auto-merge; red CI blocks manual merge too). **Agent-2 cannot safely self-do this** — merging a
+    dep/lockfile bump can't be gate-validated by a root-lockfile edit (item 10's reasoning), it triggers
+    a prod deploy, and the real E2E break below needs a focused fix. **Triage (diagnosed this wave):**
+    - **#17 runtime-deps-minor (5 pkgs)** — fails the REAL gating E2E (Playwright) test (+ the non-gating
+      perf job): a runtime bump genuinely breaks an E2E flow → needs investigation before it can land.
+      Highest priority (runtime + real break).
+    - **#6 astro 5→6 / #7 react(+@types)** — customer-shipped MAJORs → founder/astro-build-validated path
+      (same class as item 10's astro note); month-old + stale.
+    - **#16 concurrently 9→10 / #15 dev-deps-minor-patch (8) / #14 cargo-minor-patch (3, gui Rust)** —
+      dev/build-tooling; lower risk; their lone failures may be the non-gating perf job or stale-base.
+    - **#1 docker/build-push 6→7 / #3 docker/login 3→4** — CI-config; the docker-\* actions are used by the
+      ABANDONED `server-deploy.yml` (item 1) → likely CLOSE-or-retire-with-that-workflow, not bump.
+      **#2 setup-node 4→6** — active CI; its build-test failure is likely stale-base (month-old) → rebase.
+      **Action:** founder triage — rebase the month-old stale ones, fix/assess the #17 E2E break, decide the
+      customer MAJORs (astro/react), and either close the docker-action PRs with server-deploy.yml or merge
+      after rebase. The non-gating perf-job red is benign noise (item 9 / advisory). Distinct from item 10
+      (3 specific npm-audit advisories) — this is the broader stalled-PR-pipeline signal.
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
