@@ -147,6 +147,25 @@ item 10 below.
     OAuth collision lookup is case-insensitive → no anti-takeover bypass, no case-variant dup accounts.
   - _GDPR / erasure / retention doc-vs-reality:_ legal docs (privacy/DPA §9) are precise + consistent
     with the suspend→retention→archive lifecycle; Art-17 self-service deletion correctly roadmapped.
+- **Security / supply-chain / SDK / desktop-app dimensions (fresh, 2026-06-02 batch 2) — all SOUND, don't re-check:**
+  - _Token / cookie security:_ tokens are hand-rolled fixed-HMAC (NO JWT lib → structurally immune to
+    alg-confusion/`none`-alg); OAuth state token + PKCE cookie verify-before-decode + timing-safe + TTL;
+    the only cookie (PKCE) is `HttpOnly; Secure; SameSite=Lax`, Path-scoped; web-session is bearer (no cookie).
+  - _Mass-assignment / field-level privesc:_ customer-write schemas whitelist non-privileged fields only
+    (no tier/status/role/accountId); Zod strips unknown keys; routes use `parsed.data` not raw body; owner
+    accountId from auth-context. No over-posting privesc.
+  - _Webhook replay:_ Stripe 5-min timestamp tolerance (abs-window) + idempotency; NowPayments timestamp-less
+    → idempotent state-machine; outbound webhooks timestamp-signed.
+  - _Secret-leak vectors:_ zero committed secrets (repo content + filenames; `.env` gitignored; prod `.env`
+    SSH-managed) AND zero secrets in the Astro client bundle (only `PUBLIC_*` URLs inlined).
+  - _Supply-chain:_ dependency-confusion structurally prevented (all `@driftstack/*` workspace-local; lockfile
+    resolves them as local links, zero registry-resolved → `npm ci` never fetches them publicly).
+  - _SDK client-side:_ full-jitter exponential backoff (no retry-storm), bounded retries, correct eligibility,
+    no insecure-TLS option; pagination yields-before-terminate (no drop-last / non-termination).
+  - _Desktop-app (Tauri/macOS):_ capabilities least-privilege (no `shell:execute`; `shell:allow-open` + `fs`
+    both scoped); updater ed25519 **signature-verified** (trusted GitHub endpoint, fail-closed); macOS
+    entitlements minimal (WebKit-JIT pair only, none of the dangerous ones).
+  - _Codebase hygiene:_ zero `FIXME`/`HACK`/`XXX` debt markers; no leaky response headers (`Server: cloudflare` only).
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
@@ -166,6 +185,12 @@ founder-visible (detail lives in Agent-2 auto-memory). Distinct from §2 (which 
 4. **Status-site unsub-token HMAC** — `rotateUnsubscribeToken` mints a fresh token per notification
    (only the latest email's unsub link verifies); a stable HMAC token needs a signing-key-source
    decision. Pre-launch (status site not live) → zero urgency.
+5. **gui-client Tauri `csp: null`** — the desktop webview ships with no Content-Security-Policy.
+   Low-severity (local bundled content + capability-gated IPC; capabilities + updater + entitlements
+   all verified least-privilege/signature-verified), but Tauri recommends a CSP even for local content
+   (mitigates XSS-via-API-data exfiltration). Not a blind fix — a wrong `connect-src` breaks the app's
+   API/SSE/LiveKit/R2 calls and the Tauri runtime isn't in the server pre-push gate; needs a deliberate
+   change enumerating all egress origins + gui-runtime validation.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
