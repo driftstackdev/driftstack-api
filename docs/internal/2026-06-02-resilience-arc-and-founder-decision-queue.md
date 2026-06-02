@@ -44,9 +44,17 @@ so runtime validation is a `gui-v*` tag push. CI/CD-config fix (no prod-runtime 
    leaves `.env` SSH-managed). If `server-deploy.yml` is ever run it would reintroduce the
    hex key. **Action:** update the secret to the base64 form, or retire `server-deploy.yml`.
    (Agent can't read/write a key-bearing secret safely.)
-2. **Enable `DB_STATEMENT_TIMEOUT_MS` in prod** (suggest ~`30000`) after a glance at query
-   profiles — the capability shipped (`7e63f6ff`) but is inert until set. It caps every app
-   query, so enabling/value is an ops judgement.
+2. **Enable `DB_STATEMENT_TIMEOUT_MS` in prod** (suggest ~`30000`) — the capability shipped
+   (`7e63f6ff`) but is inert until set; it caps every app query, so enabling/value is an ops
+   judgement. _Status 2026-06-02 (SSH-verified): still NOT set in prod_ → the pool (postgres-js
+   `max: 10`/instance) has no runaway-query guard, so a stuck/slow query (lock wait, slow Neon)
+   holds a connection until it completes; under load several such could exhaust the 10-conn pool.
+   _Query-profile glance (the homework this item asked for): all app-path queries are bounded —
+   keyset pagination, Zod-validated `limit` caps (≤100/200/1000), no unbounded scans — and
+   migrations run via the separate `{ max: 1 }` client that is NOT subject to this timeout (long
+   DDL stays safe). So a generous `~30000` (30s) would cap only pathological/stuck queries, never
+   a legitimate one → low-risk to enable. Action = set the env var on prod + staging `.env` +
+   restart (read at boot)._
 3. **Rate-limit Redis-down posture.** `middleware/rate-limit.ts` propagates a store error →
    **500 on every authed request** during a sustained Redis outage (auth-cache degrades
    gracefully; rate-limit doesn't). Decide: fail-open (availability, but disables limiting →
