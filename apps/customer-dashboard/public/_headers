@@ -44,7 +44,16 @@
 # Permissions-Policy: deny camera/microphone/geolocation/USB/payment
 #   etc. — the dashboard never needs any of these; explicit denial
 #   eliminates an attack surface category entirely.
+# Strict-Transport-Security: 2-year max-age + includeSubDomains + preload —
+#   force HTTPS for the dashboard, which holds the ds_web_session_token in
+#   localStorage. Without HSTS a network attacker could TLS-strip the first
+#   visit and MITM the session token / credentials. Matches the API's HSTS
+#   (apps/server/src/lib/app.ts). Added 2026-06-03 — the CF-Pages edge was
+#   serving NO Strict-Transport-Security on this surface (verified live).
+#   (The preload directive is advisory; hstspreload.org submission of the
+#   apex is a separate founder/infra step.)
 /*
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   X-Frame-Options: DENY
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

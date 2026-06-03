@@ -61,6 +61,16 @@ describe('authenticated-frontend _headers security parity (customer-dashboard + 
         expect(body).toMatch(/^ {2}X-Frame-Options: DENY$/m);
       });
 
+      it('CRITICAL: Strict-Transport-Security forces HTTPS (2026-06-03 — these surfaces hold ds_web_session_token; CF edge served no STS so a TLS-strip on first visit could MITM the token)', () => {
+        // 2-year max-age + includeSubDomains, matching the API's HSTS
+        // (apps/server/src/lib/app.ts). Dropping this reopens a
+        // TLS-stripping / session-token-MITM window on the authenticated
+        // frontends.
+        expect(body).toMatch(
+          /^ {2}Strict-Transport-Security: max-age=63072000; includeSubDomains; preload$/m,
+        );
+      });
+
       it('CRITICAL: X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin', () => {
         expect(body).toMatch(/^ {2}X-Content-Type-Options: nosniff$/m);
         expect(body).toMatch(/^ {2}Referrer-Policy: strict-origin-when-cross-origin$/m);
