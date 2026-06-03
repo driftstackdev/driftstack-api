@@ -931,3 +931,26 @@ already-audited surface** (caught via grep-first-read) — the re-sweep/churn bo
 about is now materializing. **Net unchanged + reinforced:** the input-bounds/error-path lens has now
 been mined too; remaining forward progress is founder-gated. FOUNDER REDIRECTION remains the
 highest-leverage next step.
+
+---
+
+## ⚡ FOUNDER QUICK-WINS (≤15 min total — all detailed in §4 above; consolidated here for triage)
+
+The autopilot has shipped everything safely-shippable + surfaced the rest. These are the fastest
+founder actions that close real surfaced gaps — no code, no big decisions, just config/content:
+
+1. **Add a DMARC DNS record** (§4.20, MEDIUM — email-spoofing/phishing-enablement; biggest of these).
+   Cloudflare DNS: `_dmarc.driftstack.dev TXT "v=DMARC1; p=none; rua=mailto:dmarc@driftstack.dev; fo=1"`
+   (monitor mode — won't break mail), review reports, then escalate `p=quarantine`→`p=reject`. ~5 min.
+2. **Add a CAA DNS record** (§4.20 sibling, LOW — cert-misissuance defense). Cloudflare DNS: authorize
+   the CAs Cloudflare uses (confirm its set first) + `0 iodef "mailto:security@driftstack.dev"`. ~5 min.
+3. **Fix the honour-roll dead link** (§4.19, LOW — a 404 in the LIVE vulnerability-disclosure policy):
+   create a stub `apps/marketing-site/src/pages/legal/security-research-honour-roll.md` (recommended —
+   fulfills the policy's promise) or drop the link from `vulnerability-disclosure.md`. ~5 min (content).
+4. **Confirm Postmark DKIM** for driftstack.dev (Postmark dashboard → Sender Signatures); the
+   `pm-bounces` CNAME is set so it's likely already done — verify (needed before DMARC `p=reject`).
+
+Bigger, decision/coordination-required items remain in §2 (trustProxy, PERMISSIVE_CORS,
+errors.driftstack.dev DNS, metrics enablement, webhook-worker wiring) + §4 (data-residency assertions,
+SSE cap, egress-SSRF guard at EG-API-1.6 wiring, `@astrojs/cloudflare` major bump) + founder-design
+items (agent_sessions FK, iphone17 archetype cutover, gui `csp:null`).
