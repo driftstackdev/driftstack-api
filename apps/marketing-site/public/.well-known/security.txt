@@ -1,0 +1,17 @@
+# Driftstack — security.txt (RFC 9116 responsible-disclosure metadata).
+#
+# Published because the coordinated-disclosure policy at the Policy URL
+# below already directs researchers to this file
+# (/legal/vulnerability-disclosure references this exact canonical URL),
+# and the DPA commits to "a published mechanism for security researchers
+# to report issues at security@driftstack.dev". This file IS that
+# discoverable mechanism.
+#
+# NOTE: `Expires` must stay in the future — renew it (≈annually) before it
+# lapses, or parsers will treat this file as stale.
+
+Contact: mailto:security@driftstack.dev
+Expires: 2027-06-03T00:00:00.000Z
+Policy: https://driftstack.dev/legal/vulnerability-disclosure/
+Canonical: https://driftstack.dev/.well-known/security.txt
+Preferred-Languages: en
