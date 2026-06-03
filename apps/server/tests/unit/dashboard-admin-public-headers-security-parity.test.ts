@@ -1,0 +1,77 @@
+// Drift guard for the AUTHENTICATED frontends' Cloudflare Pages security
+// headers: apps/customer-dashboard/public/_headers + apps/admin-panel/public/_headers.
+//
+// Why this guard exists: the marketing-site (W523.C) and docs (W792) _headers
+// already pin their X-Frame-Options/nosniff/Referrer security set, and the
+// status-site is pinned as intentionally-fileless (CF-edge headers). But the
+// two authenticated surfaces — which render the MOST sensitive data (customer
+// dashboard: API keys, billing, account, audit log; admin panel: cross-customer
+// account/audit/crypto views) — had NO parity guard on their security headers.
+// A refactor of the cache rules (or an accidental deletion) could silently drop
+// `X-Frame-Options: DENY` and reintroduce a clickjacking surface on the exact
+// pages where it matters most, with no test catching the regression.
+//
+// Scope: pin the per-path `/*` security-header block on BOTH files. CSP is
+// INTENTIONALLY DEFERRED on these two surfaces (docs/internal/2026-05-20-csp-header-audit.md
+// — needs an inline-script/Sentry/Stripe-domain enumeration first; adding it
+// blind risks breaking the dashboard), so this guard does NOT require a CSP
+// header — only the clickjacking + MIME + referrer + sensor-lockdown set that
+// is actually present.
+
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
+const SURFACES = [
+  {
+    name: 'customer-dashboard',
+    path: 'apps/customer-dashboard/public/_headers',
+    title: '# Cloudflare Pages security headers for the customer dashboard.',
+  },
+  {
+    name: 'admin-panel',
+    path: 'apps/admin-panel/public/_headers',
+    title: '# Cloudflare Pages security headers for the admin panel.',
+  },
+] as const;
+
+describe('authenticated-frontend _headers security parity (customer-dashboard + admin-panel)', () => {
+  for (const surface of SURFACES) {
+    describe(surface.name, () => {
+      const file = resolve(REPO_ROOT, surface.path);
+
+      it(`${surface.path} exists`, () => {
+        expect(existsSync(file)).toBe(true);
+      });
+
+      const body = existsSync(file) ? readFileSync(file, 'utf8') : '';
+
+      it('documents its purpose as Cloudflare Pages SECURITY headers (intent survives a cache-only refactor)', () => {
+        expect(body).toMatch(
+          new RegExp(`^${surface.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'm'),
+        );
+      });
+
+      it('CRITICAL: catch-all /* sets X-Frame-Options: DENY — the clickjacking defense on the authenticated surface MUST NOT silently regress', () => {
+        expect(body).toMatch(/^\/\*$/m);
+        expect(body).toMatch(/^ {2}X-Frame-Options: DENY$/m);
+      });
+
+      it('CRITICAL: X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin', () => {
+        expect(body).toMatch(/^ {2}X-Content-Type-Options: nosniff$/m);
+        expect(body).toMatch(/^ {2}Referrer-Policy: strict-origin-when-cross-origin$/m);
+      });
+
+      it('Permissions-Policy locks the sensitive sensor/payment surface (camera + microphone + geolocation + payment disabled)', () => {
+        expect(body).toMatch(/^ {2}Permissions-Policy:.*\bcamera=\(\)/m);
+        expect(body).toMatch(/^ {2}Permissions-Policy:.*\bmicrophone=\(\)/m);
+        expect(body).toMatch(/^ {2}Permissions-Policy:.*\bgeolocation=\(\)/m);
+        expect(body).toMatch(/^ {2}Permissions-Policy:.*\bpayment=\(\)/m);
+      });
+    });
+  }
+});
