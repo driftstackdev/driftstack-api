@@ -102,12 +102,18 @@ export function registerAdminIncidentsRoutes(
   async function withAudit(
     request: FastifyRequest,
     action: AdminAuditAction,
-    targetResourceId: string,
+    // string for mutations whose target id is known up front (the :id
+    // routes); a thunk for create, whose real `inc_<uuid>` only exists
+    // after perform() runs — resolved at record time so the audit row
+    // stores the real id (not a placeholder) per the file-header contract.
+    targetResourceId: string | (() => string),
     inputPayload: Record<string, unknown>,
     perform: () => Promise<void>,
   ): Promise<void> {
     const ctx = request.account;
     if (!ctx) throw new Error('account context missing after requireAuth');
+    const resolveTargetResourceId = (): string =>
+      typeof targetResourceId === 'function' ? targetResourceId() : targetResourceId;
     try {
       await perform();
       await audit.record({
@@ -115,7 +121,7 @@ export function registerAdminIncidentsRoutes(
         adminKeyId: ctx.apiKey.id,
         action,
         targetAccountId: null,
-        targetResourceId,
+        targetResourceId: resolveTargetResourceId(),
         inputPayload,
         result: 'success',
         ipAddress: readClientIp(request),
@@ -128,7 +134,7 @@ export function registerAdminIncidentsRoutes(
         adminKeyId: ctx.apiKey.id,
         action,
         targetAccountId: null,
-        targetResourceId,
+        targetResourceId: resolveTargetResourceId(),
         inputPayload,
         result: `error: ${code}`,
         ipAddress: readClientIp(request),
@@ -149,20 +155,28 @@ export function registerAdminIncidentsRoutes(
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
       let result: { incident: IncidentRow; update: IncidentUpdateRow } | null = null;
-      const tempId = 'pending';
-      await withAudit(request, 'incident.created', `inc_${tempId}`, parsed.data, async () => {
-        result = await incidentsService.create({
-          title: parsed.data.title,
-          description: parsed.data.description,
-          severity: parsed.data.severity,
-          status: parsed.data.status,
-          affectedComponents: parsed.data.affected_components ?? [],
-          public: parsed.data.public ?? true,
-          startedAt: parsed.data.started_at ? new Date(parsed.data.started_at) : new Date(),
-          createdByAdminId: ctx.account.id,
-          createdByAdminKeyId: ctx.apiKey.id,
-        });
-      });
+      // The real `inc_<uuid>` only exists after create() runs, so the audit
+      // targetResourceId is resolved lazily: the real id on success, and
+      // `inc_pending` only if create() throws before an incident exists.
+      await withAudit(
+        request,
+        'incident.created',
+        () => (result ? `inc_${result.incident.id}` : 'inc_pending'),
+        parsed.data,
+        async () => {
+          result = await incidentsService.create({
+            title: parsed.data.title,
+            description: parsed.data.description,
+            severity: parsed.data.severity,
+            status: parsed.data.status,
+            affectedComponents: parsed.data.affected_components ?? [],
+            public: parsed.data.public ?? true,
+            startedAt: parsed.data.started_at ? new Date(parsed.data.started_at) : new Date(),
+            createdByAdminId: ctx.account.id,
+            createdByAdminKeyId: ctx.apiKey.id,
+          });
+        },
+      );
       if (!result) throw new Error('incident creation produced no result');
       const created = result as { incident: IncidentRow; update: IncidentUpdateRow };
       return reply.code(201).send({

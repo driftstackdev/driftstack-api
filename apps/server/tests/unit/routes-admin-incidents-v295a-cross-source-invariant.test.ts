@@ -134,7 +134,9 @@ describe('W1042 routes/admin-incidents V-295a + V-281 cross-source invariant', (
 
   it("CRITICAL AdminAuditAction taxonomy — 3 entries ('incident.created' / 'incident.updated' / 'incident.resolved'). Drift would break the admin-audit-log filter pages.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-incidents.ts'));
-    expect(p).toMatch(/withAudit\(request, 'incident\.created',/);
+    // create passes its target id as a lazy thunk, so its withAudit call is
+    // multi-line — match the action string with flexible leading whitespace.
+    expect(p).toMatch(/withAudit\(\s*\n?\s*request,\s*\n?\s*'incident\.created',/);
     expect(p).toMatch(/withAudit\(request, 'incident\.updated',/);
     expect(p).toMatch(/withAudit\(request, 'incident\.resolved',/);
   });

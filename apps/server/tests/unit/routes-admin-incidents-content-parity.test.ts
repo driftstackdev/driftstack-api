@@ -19,8 +19,9 @@
 //     11-field wire shape with nullable resolved_at + ISO timestamps.
 //   • publicIncidentUpdate: incu_<uuid> + incident_id=inc_<uuid> +
 //     message + status + posted_at ISO.
-//   • Pending-id audit pre-create: `inc_pending` written when
-//     creating (real id not yet assigned).
+//   • Create audit targetResourceId is resolved lazily to the real
+//     `inc_<uuid>` after create() runs (falls back to `inc_pending`
+//     only if create() throws before an incident exists).
 //   • Schemas: Add/Create/List/Resolve from @driftstack/api-types.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -72,20 +73,28 @@ describe('W420.B apps/server/src/routes/admin-incidents.ts content parity', () =
   });
 
   it('withAudit wrapper: targetAccountId always null (admin actions on global incidents); dual-write success + error with err.name lowercase /error$/ strip', () => {
+    // withAudit signature — targetResourceId accepts a string OR a thunk
+    // (the create route passes a thunk; the :id routes pass a string).
+    expect(body).toMatch(/async function withAudit\(/);
+    expect(body).toMatch(/action: AdminAuditAction,/);
+    expect(body).toMatch(/targetResourceId: string \| \(\(\) => string\),/);
+    expect(body).toMatch(/perform: \(\) => Promise<void>,\s*\n?\s*\): Promise<void> \{/);
+    // The target id is resolved at record time so the create route can
+    // log the real inc_<uuid> (known only after perform()).
     expect(body).toMatch(
-      /async function withAudit\(\s*\n?\s*request: FastifyRequest,\s*\n?\s*action: AdminAuditAction,\s*\n?\s*targetResourceId: string,\s*\n?\s*inputPayload: Record<string, unknown>,\s*\n?\s*perform: \(\) => Promise<void>,\s*\n?\s*\): Promise<void> \{/,
+      /const resolveTargetResourceId = \(\): string =>\s*\n?\s*typeof targetResourceId === 'function' \? targetResourceId\(\) : targetResourceId;/,
     );
+    expect(body).toMatch(/targetResourceId: resolveTargetResourceId\(\),/);
     expect(body).toMatch(/targetAccountId: null,/);
     expect(body).toMatch(
       /const code =\s*\n?\s*err instanceof Error && err\.name \? err\.name\.toLowerCase\(\)\.replace\(\/error\$\/, ''\) : 'unknown';/,
     );
   });
 
-  it("POST create: action='incident.created'; pending-id audit pre-create (`inc_pending`); spread-conditional affected_components ?? [] + public ?? true + started_at fallback to new Date()", () => {
-    expect(body).toMatch(/const tempId = 'pending';/);
-    expect(body).toMatch(
-      /await withAudit\(request, 'incident\.created', `inc_\$\{tempId\}`, parsed\.data, async \(\) => \{\s*\n?\s*result = await incidentsService\.create\(\{/,
-    );
+  it("POST create: action='incident.created'; lazy real-id audit (`inc_<uuid>` resolved after create, `inc_pending` only on pre-create failure); spread-conditional affected_components ?? [] + public ?? true + started_at fallback to new Date()", () => {
+    // Lazy id thunk: real inc_<uuid> on success, inc_pending only if create() throws.
+    expect(body).toMatch(/\(\) => \(result \? `inc_\$\{result\.incident\.id\}` : 'inc_pending'\),/);
+    expect(body).toMatch(/result = await incidentsService\.create\(\{/);
     expect(body).toMatch(/affectedComponents: parsed\.data\.affected_components \?\? \[\],/);
     expect(body).toMatch(/public: parsed\.data\.public \?\? true,/);
     expect(body).toMatch(

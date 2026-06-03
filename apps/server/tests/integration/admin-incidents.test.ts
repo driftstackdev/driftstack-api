@@ -68,7 +68,13 @@ describe('POST /v1/admin/incidents', () => {
     expect(body.updates[0]?.message).toBe('Investigating high error rate on /v1/sessions/create.');
 
     const adminRows = fx.adminAuditRepo.getAll();
-    expect(adminRows.some((r) => r.action === 'incident.created')).toBe(true);
+    const createdRow = adminRows.find((r) => r.action === 'incident.created');
+    expect(createdRow).toBeDefined();
+    // The audit row must carry the REAL incident id (inc_<uuid>), not the
+    // 'inc_pending' placeholder — so the audit log is filterable by the
+    // created incident's id (the file-header contract).
+    expect(createdRow?.targetResourceId).toBe(body.incident.id);
+    expect(createdRow?.targetResourceId).not.toBe('inc_pending');
   });
 
   it('400 when title is empty', async () => {
