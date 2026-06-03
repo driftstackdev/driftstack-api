@@ -756,6 +756,23 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
       and/or a per-account/per-IP concurrent-SSE cap (the event buses already expose `subscriberCount(...)`),
       or set a Fastify/Node `maxConnections` + `keepAliveTimeout`. Detail: auto-memory
       `project_sse_no_concurrent_connection_cap`.
+16. **R2 object-storage endpoint has NO EU-jurisdiction (data-residency) config assertion — LOW–MEDIUM,
+    GDPR-adjacent; surfaced 2026-06-03.** The "EU-only storage" marketing/data-residency claim
+    (`comparison.astro`, `docs/data-residency.astro`) is config-ENFORCED for **Sentry** (`config.ts:65-74`
+    rejects boot unless `SENTRY_DSN` contains `.de.` — _"must use the EU region per data-residency
+    policy"_) but **NOT for R2** — the PRIMARY customer-data store (recordings/snapshots/avatars).
+    `R2_ENDPOINT_URL` is validated as `z.string().url()` only (`config.ts:50`); the client uses
+    `region:'auto'` + that env endpoint (`lib/r2.ts`). Cloudflare R2 residency is set at bucket creation
+    (`jurisdiction:eu` → endpoint `<acct>.eu.r2.cloudflarestorage.com`; the default `<acct>.r2.cloudflarestorage.com`
+    is NOT EU-pinned), and the bucket is founder-provisioned. So a misconfigured non-EU endpoint passes
+    silently → customer data stored outside the EU, unguarded — despite the Sentry precedent showing the
+    policy is meant to be config-enforced. **Severity:** belt-and-suspenders IF the founder provisioned EU
+    buckets + endpoint (claim holds); but if prod `R2_ENDPOINT_URL` is NOT the `.eu.` host, it's a LIVE
+    GDPR/residency violation. **Founder/infra call (NOT autopilot — a boot assertion would brick prod if
+    the env isn't EU, and the env isn't visible from here):** (1) VERIFY prod `R2_ENDPOINT_URL` is the
+    `.eu.r2.cloudflarestorage.com` jurisdiction host (+ buckets `jurisdiction:eu`); fix first if not.
+    (2) THEN add the EU-marker assertion to `config.ts` mirroring the Sentry `.de.` check. Detail:
+    auto-memory `project_r2_data_residency_endpoint_unasserted`.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
