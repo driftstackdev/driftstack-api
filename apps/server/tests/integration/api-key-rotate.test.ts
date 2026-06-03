@@ -80,6 +80,20 @@ describe('POST /v1/api-keys/:id/rotate', () => {
     expect(res.json<{ name: string }>().name).toBe('production-2025');
   });
 
+  it('400 when the rename exceeds 120 chars (matches the create-key name bound)', async () => {
+    // Regression: the rotate body is validated by a manual typeof check (no
+    // zod schema), so an over-long name used to persist unbounded (capped only
+    // by bodyLimit) while POST /v1/api-keys caps name at min(1).max(120).
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/api-keys/key_${fx.apiKeyId}/rotate`,
+      headers: { ...headers, authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'x'.repeat(121) },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('preserves scopes from the old key', async () => {
     fx = await buildTestApp({ scopes: ['read', 'write', 'account_owner'] });
     const res = await fx.app.inject({

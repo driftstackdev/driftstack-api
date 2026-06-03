@@ -167,7 +167,17 @@ export function registerAdminRoutes(app: FastifyInstance, opts: AdminRoutesOptio
         effectiveAccountId?: string;
         effectiveTier?: AccountTier;
       } = {};
-      if (typeof body.name === 'string') rotateOpts.name = body.name;
+      if (typeof body.name === 'string') {
+        // V-296 — the optional rename must honor the same bound the create
+        // path enforces (CreateApiKeyRequestSchema: name min(1).max(120)).
+        // The rotate body is validated by a manual typeof check (no zod
+        // schema attached), so without this guard a rotate could persist an
+        // arbitrarily long name (capped only by bodyLimit) that create rejects.
+        if (body.name.length < 1 || body.name.length > 120) {
+          throw new BadRequestError('Key name must be 1–120 characters.');
+        }
+        rotateOpts.name = body.name;
+      }
       if (eff !== undefined) {
         const owner = await authRepo.getAccount(eff);
         if (!owner) throw new ForbiddenError('Owner account no longer exists.');
