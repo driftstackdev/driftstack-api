@@ -178,14 +178,24 @@ export class ProfileSnapshotsService {
       });
     }
 
-    let restored: ProfileRecord;
+    // V-714 — the count pre-check above is a fast-fail (preserves error
+    // precedence + skips a tx when clearly over). insertWithLimit RE-checks
+    // the count + inserts atomically under an account-row lock, so a
+    // concurrent create/restore that passed the pre-check still can't push
+    // the account past its per-tier cap (was a count-then-insert TOCTOU —
+    // the 5th profile-creation path, missed by the original create/clone/
+    // import/transfer fix).
+    let result: Awaited<ReturnType<typeof this.profilesRepo.insertWithLimit>>;
     try {
-      restored = await this.profilesRepo.insert({
-        accountId: args.accountId,
-        name: args.name,
-        archetype: snapshot.parentArchetype,
-        description: snapshot.description,
-      });
+      result = await this.profilesRepo.insertWithLimit(
+        {
+          accountId: args.accountId,
+          name: args.name,
+          archetype: snapshot.parentArchetype,
+          description: snapshot.description,
+        },
+        limit,
+      );
     } catch (err) {
       // Concurrent same-name race: another create/restore took args.name
       // between the pre-check above and this insert. Translate the
@@ -199,6 +209,14 @@ export class ProfileSnapshotsService {
       }
       throw err;
     }
+    if ('limitExceeded' in result) {
+      // Lost the under-lock count re-check to a concurrent create/restore.
+      throw new TierLimitError(
+        `Tier "${args.tier}" permits at most ${(limit ?? 0).toString()} profiles; you have ${result.current.toString()}.`,
+        { limit: limit ?? 0, current: result.current, resource: 'profile', tier: args.tier },
+      );
+    }
+    const restored = result.record;
     await this.emitAuditBestEffort(args.accountId, 'profile.created', `profile_${restored.id}`, {
       name: restored.name,
       archetype: restored.archetype,

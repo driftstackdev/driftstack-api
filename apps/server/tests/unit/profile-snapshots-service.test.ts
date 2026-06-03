@@ -307,7 +307,9 @@ describe('V-553.B-19 ProfileSnapshotsService.restore', () => {
     // create/restore took it before this insert commits → the
     // profiles_account_name_unique index fires on the loser.
     const { snapshotsRepo, profilesRepo } = makeRepos({ snapshots: [makeSnapshot()] });
-    profilesRepo.insert = () =>
+    // restore now inserts via the atomic insertWithLimit (the count-TOCTOU
+    // fix); the same-name 23505 surfaces from there.
+    profilesRepo.insertWithLimit = () =>
       Promise.reject(
         Object.assign(
           new Error(
@@ -329,7 +331,7 @@ describe('V-553.B-19 ProfileSnapshotsService.restore', () => {
 
   it('re-throws a non-constraint restore insert error (the catch is precise)', async () => {
     const { snapshotsRepo, profilesRepo } = makeRepos({ snapshots: [makeSnapshot()] });
-    profilesRepo.insert = () => Promise.reject(new Error('db exploded'));
+    profilesRepo.insertWithLimit = () => Promise.reject(new Error('db exploded'));
     const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
     await expect(
       svc.restore({
@@ -339,6 +341,24 @@ describe('V-553.B-19 ProfileSnapshotsService.restore', () => {
         name: 'fresh',
       }),
     ).rejects.toThrow('db exploded');
+  });
+
+  it('restore closes the count-TOCTOU: under-lock insertWithLimit limitExceeded → TierLimitError', async () => {
+    // The fast pre-check passes (under the cap), but a concurrent create/restore
+    // wins the under-lock re-check → insertWithLimit returns limitExceeded. Restore
+    // must surface a TierLimitError, not insert past the cap (the 5th profile-
+    // creation path, now on the same atomic guard as create/clone/import/transfer).
+    const { snapshotsRepo, profilesRepo } = makeRepos({ snapshots: [makeSnapshot()] });
+    profilesRepo.insertWithLimit = () => Promise.resolve({ limitExceeded: true, current: 5 });
+    const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
+    await expect(
+      svc.restore({
+        accountId: 'acc_1',
+        snapshotId: 'psnap_1',
+        tier: 'team_manual',
+        name: 'fresh',
+      }),
+    ).rejects.toThrow(TierLimitError);
   });
 });
 

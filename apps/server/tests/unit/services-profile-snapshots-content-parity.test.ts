@@ -120,13 +120,16 @@ describe('W401.C apps/server/src/services/profile-snapshots.ts content parity', 
     );
   });
 
-  it('restore: insert profile with snapshot.parentArchetype + emit profile.created audit with restored_from_snapshot=psnap_<id> link', () => {
-    // The insert is wrapped in a try/catch (concurrent same-name race →
-    // ConflictError, not 500), so the assignment is `restored = await ...`
-    // inside the try, not a `const` declaration.
+  it('restore: atomic insertWithLimit (count-TOCTOU close) with snapshot.parentArchetype + limitExceeded→TierLimitError + emit profile.created audit with restored_from_snapshot=psnap_<id> link', () => {
+    // V-714 — restore inserts via the atomic insertWithLimit (count re-check +
+    // insert under an account-row lock), the same guard as create/clone/import/
+    // transfer; wrapped in try/catch (concurrent same-name race → ConflictError,
+    // not 500), so the assignment is `result = await ...` inside the try.
     expect(body).toMatch(
-      /restored = await this\.profilesRepo\.insert\(\{\s*\n?\s*accountId: args\.accountId,\s*\n?\s*name: args\.name,\s*\n?\s*archetype: snapshot\.parentArchetype,\s*\n?\s*description: snapshot\.description,\s*\n?\s*\}\);/,
+      /result = await this\.profilesRepo\.insertWithLimit\(\s*\n?\s*\{\s*\n?\s*accountId: args\.accountId,\s*\n?\s*name: args\.name,\s*\n?\s*archetype: snapshot\.parentArchetype,\s*\n?\s*description: snapshot\.description,\s*\n?\s*\},\s*\n?\s*limit,\s*\n?\s*\);/,
     );
+    expect(body).toMatch(/if \('limitExceeded' in result\) \{/);
+    expect(body).toMatch(/const restored = result\.record;/);
     expect(body).toMatch(
       /await this\.emitAuditBestEffort\(args\.accountId, 'profile\.created', `profile_\$\{restored\.id\}`, \{\s*\n?\s*name: restored\.name,\s*\n?\s*archetype: restored\.archetype,\s*\n?\s*restored_from_snapshot: `psnap_\$\{snapshot\.id\}`,\s*\n?\s*\}\);/,
     );
