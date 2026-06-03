@@ -251,8 +251,8 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
       forward-note). **Founder/data-lifecycle, NOT an autopilot build** (per-data-class sweepers + retention-
       config + migrations). Net: docs are sound + caveated; this is the enforcement-to-build-at-launch list,
       not a present compliance breach.
-17. **Dependabot PR pipeline is STALLED — all 9 open PRs have failing CI** (found 2026-06-02; MEDIUM
-    maintenance/security-hygiene). `gh pr list` shows 9 open dependabot PRs, EVERY one with a red check,
+17. **Dependabot PR pipeline** — _[PARTIAL-RESOLVED 2026-06-03: #17 (drizzle-0.45 + the err.cause migration) + #15 MERGED, 3 stale closed → **6 PRs remain** (#16 concurrently, #14 cargo, #7 react MAJOR, #6 astro 5→6 MAJOR, #3+#1 docker-actions). The drizzle root-cause below is DONE (verified live, no 23505→500 regression) — see the §2 STATUS block. Remaining = the 2 framework majors (#6/#7, founder review) + the docker pair (close-with-item-1). Diagnosis history retained below.]_ Originally **STALLED — all 9 open PRs had failing CI** (found 2026-06-02; MEDIUM
+    maintenance/security-hygiene). `gh pr list` showed 9 open dependabot PRs, EVERY one with a red check,
     several a month old (since 2026-05-04) → dependency updates aren't landing, so deps accumulate
     unpatched (the auto-merge is actor-gated + patch-ONLY, and these are minor/major groups → never
     auto-merge; red CI blocks manual merge too). **Agent-2 cannot safely self-do this** — merging a
