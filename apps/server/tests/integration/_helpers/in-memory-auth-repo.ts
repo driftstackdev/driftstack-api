@@ -71,7 +71,11 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
 
   touchApiKeyLastUsed(id: string, at: Date): Promise<void> {
     const row = this.keysById.get(id);
-    if (row) {
+    // Mirror DrizzleAccountAuthRepo's 30s throttle so in-memory and Drizzle
+    // stay behaviorally consistent (an unthrottled in-memory write previously
+    // masked the Drizzle write-once bug where last_used_at never updated).
+    const THROTTLE_MS = 30_000;
+    if (row && (row.lastUsedAt === null || row.lastUsedAt.getTime() < at.getTime() - THROTTLE_MS)) {
       const updated: ApiKeyRow = { ...row, lastUsedAt: at };
       this.keysById.set(id, updated);
       this.keysByPrefix.set(updated.keyPrefix, updated);

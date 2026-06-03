@@ -1,6 +1,6 @@
 // Drizzle-backed implementation of AccountAuthRepo.
 
-import { and, eq, gt, isNull, or } from 'drizzle-orm';
+import { and, eq, gt, isNull, lt, or } from 'drizzle-orm';
 import type {
   AccountAuthRepo,
   AccountRow,
@@ -12,6 +12,11 @@ import type {
 import type { Database } from './client.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { accounts, apiKeys, rateLimitOverrides, teamMembers, webSessions } from './schema.js';
+
+// Throttle window for the per-request api_keys.last_used_at write — at most
+// one update per key per this interval, so the hot auth path doesn't write a
+// row on every authenticated request. See touchApiKeyLastUsed.
+const API_KEY_LAST_USED_THROTTLE_MS = 30_000;
 
 export class DrizzleAccountAuthRepo implements AccountAuthRepo {
   constructor(private readonly database: Database) {}
@@ -63,8 +68,7 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
           // a row update on every authenticated request.
           or(
             isNull(apiKeys.lastUsedAt),
-            // Compare last_used_at < (at - 30s): SQL would be more idiomatic
-            // here; we fall back to JS-side staleness check for now.
+            lt(apiKeys.lastUsedAt, new Date(at.getTime() - API_KEY_LAST_USED_THROTTLE_MS)),
           ),
         ),
       );

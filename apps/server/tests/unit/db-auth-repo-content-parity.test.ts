@@ -42,8 +42,8 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ Drizzle-backed implementation of AccountAuthRepo\./);
   });
 
-  it('imports: and/eq/gt/isNull/or from drizzle-orm; 6 service types; Database; 5 schema tables (accounts + apiKeys + rateLimitOverrides + teamMembers + webSessions)', () => {
-    expect(body).toMatch(/import \{ and, eq, gt, isNull, or \} from 'drizzle-orm';/);
+  it('imports: and/eq/gt/isNull/lt/or from drizzle-orm; 6 service types; Database; 5 schema tables (accounts + apiKeys + rateLimitOverrides + teamMembers + webSessions)', () => {
+    expect(body).toMatch(/import \{ and, eq, gt, isNull, lt, or \} from 'drizzle-orm';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*AccountAuthRepo,\s*\n?\s*AccountRow,\s*\n?\s*ApiKeyRow,\s*\n?\s*RateLimitOverride,\s*\n?\s*TeamMembership,\s*\n?\s*WebSessionAuthRow,\s*\n?\s*\} from '\.\.\/services\/auth\.js';/,
     );
@@ -74,6 +74,13 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
   it("touchApiKeyLastUsed: 30s staleness rationale 'Skip the write if last_used_at was set within the last 30s — saves a row update on every authenticated request.'", () => {
     expect(body).toMatch(
       /\/\/ Skip the write if last_used_at was set within the last 30s — saves\s*\n?\s*\/\/ a row update on every authenticated request\./,
+    );
+    // The throttle predicate MUST include both the null branch AND the
+    // staleness comparison — a regression to `or(isNull(...))`-only silently
+    // freezes last_used_at at first use (the row only updates while NULL).
+    expect(body).toMatch(/const API_KEY_LAST_USED_THROTTLE_MS = 30_000;/);
+    expect(body).toMatch(
+      /or\(\s*\n?\s*isNull\(apiKeys\.lastUsedAt\),\s*\n?\s*lt\(apiKeys\.lastUsedAt, new Date\(at\.getTime\(\) - API_KEY_LAST_USED_THROTTLE_MS\)\),\s*\n?\s*\),/,
     );
   });
 
