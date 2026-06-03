@@ -739,3 +739,20 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
 an item from the §4 backlog, or a new track.
+
+**EXHAUSTION CONFIRMED — 2026-06-03 (multiple later waves + an index reconciliation; FOUNDER INPUT
+NOW THE BLOCKER).** Since the Net above, the autopilot ran several more fresh-audit waves. New
+genuine output was thin and bounded: shipped two drift-guards (rate-limit-coverage + the signup
+UTC-boundary pin) and surfaced four LOW/latent defense-in-depth items (§4.12 unauth token-route IP
+limiter, §4.13 `session.failed` webhook raw-error leak, §4.14 BYOK key-cache orphan on out-of-band
+close, §4.15 SSE concurrent-connection cap). Everything else came back **clean OR already-covered** —
+including **three re-sweeps of mined veins** (team-RBAC member-removal revocation, fleet-nonce-cache,
+sla-reporting) caught and reverted, which is itself the saturation signal (coverage is now so dense
+that fresh picks keep landing on existing memories). A MEMORY.md open-state-hook **reconciliation this
+wave found every still-OPEN hook accurate** — and every one is **founder-gated / ops / surfaced-LOW**
+(iphone17 cutover, webhook-delivery-worker wiring, trustProxy, PERMISSIVE_CORS, SSRF DNS-rebind pin
+§4.2, SSE-nginx redaction, the §4 backlog). **Recommendation: continued solo autopilot waves now yield
+diminishing value and carry re-sweep/churn risk; the highest-leverage next step is FOUNDER REDIRECTION**
+— unblock a §2 item, greenlight a §4 hardening (e.g. §4.15 SSE cap or §4.2 DNS-rebind pin), authorize
+the admin-panel redesign, or assign new scope. The /loop stays armed per the never-stop directive;
+this note is the durable signal that the productive non-gated surface is exhausted.
