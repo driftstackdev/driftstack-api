@@ -152,13 +152,28 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
     );
   });
 
-  it('archiveAll: sequential per-table; one failure does not abort others (per-table breakdown)', () => {
+  it('archiveAll: sequential per-table; one failure does not abort others (try/catch isolates each table; failures recorded in the errors[] breakdown)', () => {
     expect(body).toMatch(
       /Archive all four audit-shaped tables in sequence\. Each table\s*\n?\s*\*\s*archives independently — a failure on one does not abort the\s*\n?\s*\*\s*others\. Returns a per-table breakdown\./,
     );
+    // The independence is implemented: each table's archiveTable is wrapped
+    // in try/catch; a thrown table is recorded in errors[] and the loop
+    // continues. (Previously the loop had no try/catch — one failure
+    // aborted all remaining tables, contradicting the docstring.)
     expect(body).toMatch(
-      /for \(const \{ tableName \} of AUDIT_TABLES\) \{\s*\n?\s*const result = await this\.archiveTable\(tableName\);\s*\n?\s*results\.push\(result\);\s*\n?\s*\}/,
+      /for \(const \{ tableName \} of AUDIT_TABLES\) \{\s*\n?\s*try \{\s*\n?\s*const result = await this\.archiveTable\(tableName\);\s*\n?\s*results\.push\(result\);\s*\n?\s*\} catch \(err\) \{/,
     );
+    expect(body).toMatch(
+      /errors\.push\(\{ tableName, error: err instanceof Error \? err\.message : String\(err\) \}\);/,
+    );
+    expect(body).toMatch(/return \{ results, errors, startedAt, completedAt \};/);
+  });
+
+  it('ArchiveAllResult carries an errors[] breakdown (ArchiveTableError: tableName + error) alongside results', () => {
+    expect(body).toMatch(
+      /export interface ArchiveTableError \{\s*\n?\s*tableName: ArchiveTableName;\s*\n?\s*error: string;\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(/errors: readonly ArchiveTableError\[\];/);
   });
 
   it('AuditArchiveDeps: r2 + ledger + rows + r2Prefix? (default audit-archive) + now? test seam', () => {

@@ -306,6 +306,55 @@ describe('AuditArchiveService.archiveAll — orchestrates four tables', () => {
     // are empty so deletes list stays empty for them.
     expect(deletes).toEqual([{ tableName: 'admin_audit_log', ids: ['a1'] }]);
   });
+
+  it('isolates a per-table failure — one table throwing does not abort the others; errors[] records it', async () => {
+    // Per the docstring + ADR §3: a failure on one table must not abort the
+    // rest. Make R2 fail only for the admin_audit_log object key; the other
+    // three tables must still archive, and the failure is surfaced in errors[].
+    const uploads: UploadedObject[] = [];
+    const ledgerRows: LedgerInsert[] = [];
+    const deletes: DeleteCall[] = [];
+    const flakyR2: R2 = {
+      bucket: 'test-bucket',
+      headObject: () => Promise.resolve({ exists: false }),
+      putObject: ({ key, body, contentType }) => {
+        if (key.includes('admin_audit_log')) {
+          return Promise.reject(new Error('R2 unavailable for admin_audit_log'));
+        }
+        uploads.push({ key, body: Buffer.isBuffer(body) ? body : Buffer.from(body), contentType });
+        return Promise.resolve();
+      },
+      presignPut: () => Promise.resolve('https://presigned.test/put'),
+      presignGet: () => Promise.resolve('https://presigned.test/get'),
+    };
+    const svc = new AuditArchiveService({
+      r2: flakyR2,
+      ledger: fakeLedger(ledgerRows),
+      rows: fakeRows({
+        rowsByTable: {
+          admin_audit_log: [adminAuditRow('a1', '2026-04-01T00:00:00.000Z')],
+          processed_stripe_events: [],
+          legal_acceptances: [],
+          webhook_deliveries: [],
+        },
+        deletes,
+      }),
+      now: () => FIXED_NOW,
+    });
+    const result = await svc.archiveAll();
+    // admin_audit_log failed but the other three still ran.
+    expect(result.errors.map((e) => e.tableName)).toEqual(['admin_audit_log']);
+    expect(result.errors[0]?.error).toContain('R2 unavailable');
+    expect(result.results.map((r) => r.tableName).sort()).toEqual([
+      'legal_acceptances',
+      'processed_stripe_events',
+      'webhook_deliveries',
+    ]);
+    expect(uploads).toHaveLength(3);
+    expect(ledgerRows).toHaveLength(3);
+    // admin_audit_log's row was never deleted (no archived copy) — stays in PG.
+    expect(deletes).toHaveLength(0);
+  });
 });
 
 describe('Re-export — gzipSync available for callers', () => {

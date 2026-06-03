@@ -101,8 +101,24 @@ export interface ArchiveTableResult {
   deletedFromPostgres: boolean;
 }
 
+/**
+ * A table whose archival threw this run. Recorded (rather than
+ * propagated) so archiveAll continues to the remaining tables — the
+ * per-table-independence contract in ADR §3 / archiveAll's docstring.
+ */
+export interface ArchiveTableError {
+  tableName: ArchiveTableName;
+  error: string;
+}
+
 export interface ArchiveAllResult {
   results: readonly ArchiveTableResult[];
+  /**
+   * Tables whose archival failed this run; the other tables still ran.
+   * Empty on a fully-successful run. The failed tables' hot rows stay in
+   * Postgres (archive-before-delete) and the next run retries them.
+   */
+  errors: readonly ArchiveTableError[];
   startedAt: Date;
   completedAt: Date;
 }
@@ -218,12 +234,21 @@ export class AuditArchiveService {
   async archiveAll(): Promise<ArchiveAllResult> {
     const startedAt = this.now();
     const results: ArchiveTableResult[] = [];
+    const errors: ArchiveTableError[] = [];
     for (const { tableName } of AUDIT_TABLES) {
-      const result = await this.archiveTable(tableName);
-      results.push(result);
+      try {
+        const result = await this.archiveTable(tableName);
+        results.push(result);
+      } catch (err) {
+        // Per-table independence (ADR §3): one table's failure (R2 down,
+        // a malformed row, a DELETE error) must not abort the others.
+        // Record it and continue; the failed table's hot rows stay in
+        // Postgres (archive-before-delete) and the next run retries.
+        errors.push({ tableName, error: err instanceof Error ? err.message : String(err) });
+      }
     }
     const completedAt = this.now();
-    return { results, startedAt, completedAt };
+    return { results, errors, startedAt, completedAt };
   }
 }
 
