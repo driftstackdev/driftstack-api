@@ -504,9 +504,13 @@ founder-visible (detail lives in Agent-2 auto-memory). Distinct from §2 (which 
 2. **Webhook DNS-rebind connection-time pin** — create-time SSRF guard is comprehensive (literal
    v4/v6/::ffff/localhost/numeric-encodings/trailing-dot + 2 KiB URL cap); the lone residual is a
    hostname resolving public-at-create / private-at-delivery → needs undici custom-connector IP-pinning.
-3. **Rate-limit coverage drift-guard** — no test asserts every customer-facing route carries
-   `rateLimit()` (application is currently consistent); a guard needs a careful legitimate-exception
-   allowlist (admin / webhook-receiver / public routes) → moderate complexity + false-positive risk.
+3. **Rate-limit coverage drift-guard** — _[SHIPPED 2026-06-03:
+   `route-mutation-ratelimit-coverage-invariant.test.ts`. Statically classifies every
+   POST/PUT/PATCH/DELETE in `apps/server/src/routes` into limiter / admin-scope / gated-stub /
+   explicit-exempt; a wide-open new route now fails CI. The "false-positive risk" was de-risked by
+   validating green against the current consistent tree (the scanner never descends into handler
+   bodies — it bounds each decl to the text up to the next decl + stops the guard region at the
+   handler boundary). **Building it SURFACED a real gap manual audits missed → see new §4.12.**]_
 4. **Status-site unsub-token HMAC** — `rotateUnsubscribeToken` mints a fresh token per notification
    (only the latest email's unsub link verifies); a stable HMAC token needs a signing-key-source
    decision. Pre-launch (status site not live) → zero urgency.
@@ -572,6 +576,31 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
     autopilot — egress is founder-gated/Tier-3-LOCKED per planning 133):** add `requireScope('write')` (or a
     new `write:proxies`) to the POST/DELETE preHandlers in the SAME commit that lands the storage layer. LOW
     (currently un-mutatable). Detail: [[project_scope_correctness_audit]].
+
+12. **Unauth auth token-consume / session routes lack an IP rate-limit gate (LOW defense-in-depth;
+    surfaced 2026-06-03 by the new §4.3 guard).** The 2026-05-15/19/20 unauth-gate sweep added
+    `ipRateLimit` gates to the email-SENDING auth endpoints (signup / login / verify-email /
+    resend-verification / magic-link-REQUEST / password-reset-REQUEST / mfa-challenge / oauth-client
+    start+callback+confirm / status-subscribe) but NOT to these token-CONSUMING / session siblings,
+    which register with an empty `{}` options object (no preHandler, no limiter):
+    `POST /v1/auth/magic-link/consume`, `POST /v1/auth/password-reset/confirm`,
+    `POST /v1/auth/refresh`, `POST /v1/auth/logout` (all unauth — the token is in the body, verified
+    in-handler), plus `POST /v1/oauth/authorize/complete` (authed via `requireAuth` but omits
+    `rateLimit('global')` — NOT a public vector, lowest severity). The
+    `project_ratelimit_route_coverage_clean` audit memory had asserted "all 79 mutation routes
+    protected" — that claim was INCOMPLETE for these 5; memory corrected.
+    **Severity LOW (defense-in-depth, not a live vuln):** the consumed tokens are cryptographically
+    sound — high-entropy, single-use, TTL'd (`project_auth_flow_token_audit_2026_05_31`) — so token
+    brute-force is already infeasible; the residual is only unbounded-request DoS (cheap fast-fail,
+    bounded by bodyLimit). **Founder/maintainer call (NOT autopilot):** adding an `ipRateLimit` gate is
+    an outward-facing auth-flow behavior change that interacts with the founder-LOCKED `trustProxy`
+    "one global bucket" behavior (prod `req.ip` resolves to the proxy → §2 item 5), most disruptive on
+    the higher-frequency `/v1/auth/refresh`; and it would 429 legit users if mis-tuned. If gating is
+    wanted: add `ipRateLimit(rateLimitStore, AUTH_IP_LIMITS.login)` (or a new bucket) to the 4 unauth
+    preHandlers + `app.rateLimit('global')` to authorize/complete, and DELETE the matching entries from
+    `SURFACED_PENDING_LIMITER` in the guard test in the SAME commit (else the guard goes red). Pinned
+    meanwhile in that test's `SURFACED_PENDING_LIMITER` allowlist so the reality is explicit.
+    Detail: auto-memory `project_unauth_token_route_ratelimit_gap`.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
