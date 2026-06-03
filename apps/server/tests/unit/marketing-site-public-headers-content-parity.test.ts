@@ -109,6 +109,19 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
     expect(body).toMatch(/^ {2}Referrer-Policy: strict-origin-when-cross-origin$/m);
   });
 
+  it('HSTS present on both the / homepage and /* catch-all HTML blocks (2026-06-03 — apex TLS-strip defense + preload anchor; matches the API + the authenticated frontends)', () => {
+    // First-match-wins on CF Pages (per this file's own framing), so the
+    // homepage `/` rule and the `/*` catch-all each need their own STS or
+    // one surface would be served without it. The apex is the highest-
+    // traffic public entry (login click-through) and the includeSubDomains
+    // preload anchor for the whole driftstack.dev tree.
+    const stsLines = body.match(
+      /^ {2}Strict-Transport-Security: max-age=63072000; includeSubDomains; preload$/gm,
+    );
+    expect(stsLines, 'STS must be on BOTH the / and /* blocks').not.toBeNull();
+    expect(stsLines!.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
