@@ -536,6 +536,15 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
     pinned V-266 "public, no preHandler" parity assertions): if a limiter is wanted, add
     `ipRateLimit(rateLimitStore, AUTH_IP_LIMITS.signup)` to initiate + update the parity pins in the same
     commit. LOW; flow code-security separately clean (V-266: 256-bit code/5-min TTL/one-shot/timing-safe).
+11. **saved-proxies mutations lack a write-scope gate (latent; lands with EG-API-1.6).** `saved-proxies.ts`
+    POST `/v1/proxies`, POST `/v1/proxies/:id/test`, and DELETE are `requireAuth + rateLimit` only — NO
+    `requireScope`, unlike profiles/sessions (`write:profiles`/`write:sessions`) or recipes (`write`). So a
+    read-only API key isn't blocked from mutating. MOOT today — every mutating saved-proxies route currently
+    `throw`s `FeatureUnavailableError` (503) because the storage backend (EG-API-1.6) isn't wired. The gap
+    goes LIVE when EG-API-1.6 replaces the 503 with a real insert/delete. **Egress-arc owner fix (NOT
+    autopilot — egress is founder-gated/Tier-3-LOCKED per planning 133):** add `requireScope('write')` (or a
+    new `write:proxies`) to the POST/DELETE preHandlers in the SAME commit that lands the storage layer. LOW
+    (currently un-mutatable). Detail: [[project_scope_correctness_audit]].
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
