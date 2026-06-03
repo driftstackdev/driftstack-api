@@ -540,6 +540,17 @@ transcript.length` guard); account-scoped (cross-account → 404).
     taxonomy), not a leaked mistake — don't "fix" it. Roster is comprehensively drift-guarded (every enum
     value iterated vs catalog + cross-SDK exact + dashboard + schema-invariants). Don't re-chase "quota
     webhooks broken". Detail in Agent-2 auto-memory `project_webhook_quota_events_declared_not_a_bug`.
+  - _Legal-document catalog loader + acceptance gating (fresh-audited 2026-06-03, uncovered until now —
+    only the acceptance-tiebreaker + filename-pattern were covered; compliance-correct):_ tested whether
+    editing a legal doc's CONTENT without bumping its `**Version:**` header escapes re-acceptance.
+    REFUTED — the system keys on BOTH `version` AND a sha256 `contentHash` end-to-end:
+    `legal-catalog.ts` fail-fasts on a missing/unparseable header + captures version+hash; `accept()`
+    rejects a stale version OR hash; `required()` flags `never_accepted`/`version_outdated`/
+    `content_hash_changed` (the last = same version, edited content); the enforcement gate
+    (`api-keys.ts:173`) blocks on ANY pending incl. `content_hash_changed` → content-drift is caught +
+    enforced. Gating chokepoint is key-CREATE + dashboard-prompt (not every request — existing keys keep
+    working; defensible compliance posture). Detail in Agent-2 auto-memory
+    `project_legal_catalog_and_acceptance_gating_clean`.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
