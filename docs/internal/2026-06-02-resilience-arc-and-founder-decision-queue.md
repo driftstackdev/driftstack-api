@@ -807,6 +807,36 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
     data outside the EU, unguarded. Founder/infra: verify prod `DATABASE_URL` is an EU-region Neon endpoint
     FIRST (live violation if not), then add a config assertion for it too (mirror the Sentry `.de.`
     pattern). The DB assertion is higher-priority than R2 (it holds everything).
+17. **SOCKS5 egress backend TCP-probes a customer-supplied host with NO SSRF guard — LATENT
+    internal-network reachability oracle; surfaced 2026-06-03 by a fresh read of the
+    previously-unaudited `services/proxy-backends/socks5.ts` implementation.** `SocksProxyBackend.applyToSession`
+    validates only host-non-empty + port-range, then `defaultTcpProbe(host, port)` opens a real TCP
+    connection FROM the prod server to the customer's `socks5.host` (a fail-fast reachability check at
+    session-create). There is NO private/loopback/link-local/metadata-IP guard — so a customer setting
+    `socks5.host` to `169.254.169.254` (cloud metadata), `127.0.0.1`, or an internal `10.x`/`192.168.x`
+    would make the origin probe that internal address, and probe-resolves-vs-errors becomes an
+    SSRF reachability/port-scan oracle for the origin's internal network. The platform ALREADY guards this
+    exact class for webhooks (`lib/webhook-target-guard.ts` `unsafeWebhookTargetReason` — `net.BlockList`
+    over RFC1918/loopback/169.254/CGNAT/reserved + numeric-encoding bypasses), and `routes/saved-proxies.ts:19`
+    even documents the INTENT ("the storage layer must apply the same protections as session-egress") — so
+    this is a gap against stated design, not a new decision. **Severity: LATENT, NOT live.** Despite
+    `bootstrap.ts:714` injecting `new SocksProxyBackend()`, the active `POST /v1/sessions/:id/proxy`
+    (`routes/session-proxy.ts`) Zod-validates the body then throws `FeatureUnavailableError` (503) and
+    **never calls `applyToSession`** (the `_service` dep is unused) — so the probe is unreachable from any
+    HTTP route today. It becomes a live MEDIUM SSRF the moment the **EG-API-1.6** propagation slice wires
+    `applyToSession` into the route. Same "fix at wiring" shape as §4.11 (recipe-library) / §4.13. **Two
+    real implementation constraints found (must inform the fix):** (a) the guard MUST be server-side — the
+    `SocksProxyConfigSchema` lives in `packages/api-types` (`egress.ts:57`, `host: z.string().min(1).max(253)`,
+    no refine) which the BROWSER-capable TS SDK imports, so `node:net.BlockList` can't go in the schema;
+    put the guard in `socks5.ts` before the probe (or the route before `applyToSession`). (b) the backend's
+    existing validation throws are PLAIN `Error` (no `statusCode`) → they'd map to 500 when wired (the same
+    parser-error class as `d3fa18e7`); the SSRF throw + the existing host/port throws should be typed
+    `BadRequestError` (400) at wiring. **RESIDUAL (surface alongside, don't try to solve now):** a HOSTNAME
+    that resolves to a private IP (DNS-rebind) needs connection-time resolution + IP pinning in the probe —
+    identical to the webhook guard's known residual (`project_webhook_ssrf_outbound_target`, §4.2). **Cross-agent +
+    planning-133-LOCKED egress subsystem → SURFACED, not flipped** (no unilateral validation change on the
+    flagship egress path; the route is 503 today so there's zero live urgency). Detail: auto-memory
+    `project_socks5_egress_ssrf_unguarded_latent`.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
