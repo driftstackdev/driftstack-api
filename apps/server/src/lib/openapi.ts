@@ -2004,6 +2004,26 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
+  const AdminSessionStatsResponseSchema = z.object({
+    // Count per session status (every status key present, zero-filled).
+    by_status: z.record(z.string(), z.number().int().nonnegative()),
+    active: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/admin/sessions/stats',
+    summary: 'Cross-account session counts by status (admin)',
+    tags: ['admin'],
+    security: auth,
+    responses: {
+      200: {
+        description: 'Session counts grouped by status, plus active + total.',
+        content: { 'application/json': { schema: AdminSessionStatsResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
 
   // Overview — aggregate counts the admin-panel index renders.
   const AdminOverviewResponseSchema = z.object({

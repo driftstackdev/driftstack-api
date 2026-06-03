@@ -1,7 +1,7 @@
 // In-memory SessionRepo for integration tests.
 
 import { randomUUID } from 'node:crypto';
-import type { AccountTier } from '@driftstack/api-types';
+import { SessionStatusSchema, type AccountTier } from '@driftstack/api-types';
 import type {
   NewSessionInput,
   SessionEventInput,
@@ -85,6 +85,13 @@ export class InMemorySessionsRepo implements SessionRepo {
       if (s.accountId === accountId && s.destroyedAt === null) count += 1;
     }
     return Promise.resolve(count);
+  }
+
+  countAllByStatus(): Promise<Record<SessionRecord['status'], number>> {
+    const out = {} as Record<SessionRecord['status'], number>;
+    for (const status of SessionStatusSchema.options) out[status] = 0;
+    for (const s of this.sessions.values()) out[s.status] += 1;
+    return Promise.resolve(out);
   }
 
   listActiveByAccount(accountId: string): Promise<SessionRecord[]> {

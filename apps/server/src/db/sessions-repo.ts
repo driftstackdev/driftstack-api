@@ -3,7 +3,7 @@
 // `tests/integration/_helpers/in-memory-sessions-repo.ts`.
 
 import { type SQL, and, asc, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
-import type { AccountTier } from '@driftstack/api-types';
+import { SessionStatusSchema, type AccountTier } from '@driftstack/api-types';
 import type {
   NewSessionInput,
   SessionEventInput,
@@ -77,6 +77,19 @@ export class DrizzleSessionRepo implements SessionRepo {
       .from(sessions)
       .where(and(eq(sessions.accountId, accountId), isNull(sessions.destroyedAt)));
     return row?.count ?? 0;
+  }
+
+  // Cross-account count grouped by status — one GROUP BY, zero-filled from
+  // SessionStatusSchema.options so every status is present (no hardcoded
+  // list to drift from the enum). Powers the admin session-stats tile.
+  async countAllByStatus(): Promise<Record<SessionRecord['status'], number>> {
+    const rows = await this.database.db
+      .select({ status: sessions.status, count: sql<number>`count(*)::int` })
+      .from(sessions)
+      .groupBy(sessions.status);
+    const out = emptySessionStatusCounts();
+    for (const row of rows) out[row.status] = row.count;
+    return out;
   }
 
   async listActiveByAccount(accountId: string): Promise<SessionRecord[]> {
@@ -245,4 +258,11 @@ function toSessionRecord(r: typeof sessions.$inferSelect): SessionRecord {
     lastStateAt: r.lastStateAt,
     destroyedAt: r.destroyedAt,
   };
+}
+
+/** Zero-filled count record over every SessionStatus (canonical enum). */
+function emptySessionStatusCounts(): Record<SessionRecord['status'], number> {
+  const out = {} as Record<SessionRecord['status'], number>;
+  for (const status of SessionStatusSchema.options) out[status] = 0;
+  return out;
 }

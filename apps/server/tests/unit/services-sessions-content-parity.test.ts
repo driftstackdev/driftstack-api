@@ -108,6 +108,9 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
     expect(body).toMatch(/countActiveSessions\(accountId: string\): Promise<number>;/);
     expect(body).toMatch(
+      /countAllByStatus\(\): Promise<Record<SessionRecord\['status'\], number>>;/,
+    );
+    expect(body).toMatch(
       /listSessions\(\s*\n?\s*accountId: string,\s*\n?\s*opts: \{ limit: number; cursor\?: string \},\s*\n?\s*\): Promise<SessionListPage>;/,
     );
     expect(body).toMatch(/listAllSessions\(opts: \{/);
@@ -117,6 +120,13 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(
       /tierCutoffs: ReadonlyArray<\{ tier: AccountTier; expiredBefore: Date \}>;/,
     );
+  });
+
+  it('statsForAdmin: scope-gated cross-account session stats — by_status + active (creating+ready+busy) + total', () => {
+    expect(body).toMatch(/async statsForAdmin\(ctx: AccountContext\): Promise<\{/);
+    expect(body).toMatch(/const byStatus = await this\.deps\.repo\.countAllByStatus\(\);/);
+    expect(body).toMatch(/const active = byStatus\.creating \+ byStatus\.ready \+ byStatus\.busy;/);
+    expect(body).toMatch(/const total = active \+ byStatus\.destroyed \+ byStatus\.errored;/);
   });
 
   it('SessionsServiceDeps: 4 fields — repo + driver + V-216 accountAudit (session.created/destroyed only) + V-202c/V-304a accountLifecycle', () => {

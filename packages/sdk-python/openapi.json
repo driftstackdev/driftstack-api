@@ -10435,6 +10435,87 @@
         }
       }
     },
+    "/v1/admin/sessions/stats": {
+      "get": {
+        "summary": "Cross-account session counts by status (admin)",
+        "tags": ["admin"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session counts grouped by status, plus active + total.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "by_status": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "active": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "total": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": ["by_status", "active", "total"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/overview": {
       "get": {
         "summary": "Aggregate counts for the admin panel index page (admin)",
@@ -10462,9 +10543,42 @@
                         "suspended": {
                           "type": "integer",
                           "minimum": 0
+                        },
+                        "deleted": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "by_tier": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "signups": {
+                          "type": "object",
+                          "properties": {
+                            "today": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "last_7d": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "last_30d": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          },
+                          "required": ["today", "last_7d", "last_30d"]
                         }
                       },
-                      "required": ["active", "suspended"]
+                      "required": ["active", "suspended", "deleted", "total", "by_tier", "signups"]
                     },
                     "webhooks": {
                       "type": "object",

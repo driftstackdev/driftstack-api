@@ -45,12 +45,15 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
-  it('imports: asc/and/desc/eq/inArray/isNull/lt/or/sql from drizzle-orm; AccountTier; 5 service types; Database; accounts + sessionEvents + sessions schemas', () => {
+  it('imports: asc/and/desc/eq/inArray/isNull/lt/or/sql from drizzle-orm; SessionStatusSchema + AccountTier; 5 service types; Database; accounts + sessionEvents + sessions schemas', () => {
     expect(body).toMatch(
       /import \{ type SQL, and, asc, desc, eq, inArray, isNull, lt, or, sql \} from 'drizzle-orm';/,
     );
-    // 6.g — AccountTier for the listExpiredForAutoDestroy tierCutoffs.
-    expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
+    // 6.g — AccountTier for listExpiredForAutoDestroy tierCutoffs; SessionStatusSchema
+    // for the countAllByStatus zero-fill.
+    expect(body).toMatch(
+      /import \{ SessionStatusSchema, type AccountTier \} from '@driftstack\/api-types';/,
+    );
     expect(body).toMatch(
       /import type \{\s*\n?\s*NewSessionInput,\s*\n?\s*SessionEventInput,\s*\n?\s*SessionListPage,\s*\n?\s*SessionRecord,\s*\n?\s*SessionRepo,\s*\n?\s*\} from '\.\.\/services\/sessions\.js';/,
     );
@@ -82,6 +85,21 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
   it('countActiveSessions: count(*)::int where and(accountId, isNull(destroyedAt)) — concurrent-cap source of truth', () => {
     expect(body).toMatch(
       /async countActiveSessions\(accountId: string\): Promise<number> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\{ count: sql<number>`count\(\*\)::int` \}\)\s*\n?\s*\.from\(sessions\)\s*\n?\s*\.where\(and\(eq\(sessions\.accountId, accountId\), isNull\(sessions\.destroyedAt\)\)\);\s*\n?\s*return row\?\.count \?\? 0;\s*\n?\s*\}/,
+    );
+  });
+
+  it('countAllByStatus: count(*)::int groupBy status; zero-fill from SessionStatusSchema.options', () => {
+    expect(body).toMatch(
+      /async countAllByStatus\(\): Promise<Record<SessionRecord\['status'\], number>> \{/,
+    );
+    expect(body).toMatch(
+      /\.select\(\{ status: sessions\.status, count: sql<number>`count\(\*\)::int` \}\)/,
+    );
+    expect(body).toMatch(/\.groupBy\(sessions\.status\);/);
+    expect(body).toMatch(/const out = emptySessionStatusCounts\(\);/);
+    expect(body).toMatch(/for \(const row of rows\) out\[row\.status\] = row\.count;/);
+    expect(body).toMatch(
+      /function emptySessionStatusCounts\(\): Record<SessionRecord\['status'\], number> \{\s*\n?\s*const out = \{\} as Record<SessionRecord\['status'\], number>;\s*\n?\s*for \(const status of SessionStatusSchema\.options\) out\[status\] = 0;\s*\n?\s*return out;\s*\n?\s*\}/,
     );
   });
 

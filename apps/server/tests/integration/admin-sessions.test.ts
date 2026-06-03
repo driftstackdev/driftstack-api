@@ -98,3 +98,44 @@ describe('GET /v1/admin/sessions', () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+interface SessionStatsResponse {
+  by_status: Record<string, number>;
+  active: number;
+  total: number;
+}
+
+describe('GET /v1/admin/sessions/stats', () => {
+  it('returns counts by status (every status present) + active + total', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    await createSession(fx, fx.plaintext);
+    await createSession(fx, fx.plaintext);
+
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/sessions/stats',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<SessionStatsResponse>();
+    // Every canonical status key is present (zero-filled).
+    for (const status of ['creating', 'ready', 'busy', 'destroyed', 'errored']) {
+      expect(typeof body.by_status[status]).toBe('number');
+    }
+    // The two freshly-created sessions are counted as active + total.
+    expect(body.active).toBeGreaterThanOrEqual(2);
+    expect(body.total).toBeGreaterThanOrEqual(body.active);
+    const sum = Object.values(body.by_status).reduce((a, b) => a + b, 0);
+    expect(sum).toBe(body.total);
+  });
+
+  it('rejects without admin scope', async () => {
+    fx = await buildTestApp({ scopes: ['read', 'write'] });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/sessions/stats',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});

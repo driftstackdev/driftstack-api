@@ -40,6 +40,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/overview',
         '/v1/admin/rate-limit-overrides',
         '/v1/admin/sessions',
+        '/v1/admin/sessions/stats',
         '/v1/admin/validation-schedules',
         '/v1/admin/validation-schedules/{archetype}',
         '/v1/admin/validation-schedules/{archetype}/trigger',

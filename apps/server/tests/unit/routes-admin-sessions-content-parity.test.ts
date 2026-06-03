@@ -102,6 +102,14 @@ describe('W415.A apps/server/src/routes/admin-sessions.ts content parity', () =>
     );
   });
 
+  it('GET /v1/admin/sessions/stats: scope-gated read-only; dispatches sessionsService.statsForAdmin(ctx); reply { by_status, active, total }', () => {
+    expect(body).toMatch(/'\/v1\/admin\/sessions\/stats',/);
+    expect(body).toMatch(/const stats = await sessionsService\.statsForAdmin\(ctx\);/);
+    expect(body).toMatch(
+      /return \{\s*\n?\s*by_status: stats\.by_status,\s*\n?\s*active: stats\.active,\s*\n?\s*total: stats\.total,\s*\n?\s*\};/,
+    );
+  });
+
   it('BadRequestError on safeParse fail with "Invalid query parameters."', () => {
     expect(body).toMatch(
       /if \(!parsed\.success\) throw new BadRequestError\('Invalid query parameters\.'\);/,

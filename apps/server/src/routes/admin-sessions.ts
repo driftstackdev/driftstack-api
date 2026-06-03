@@ -2,6 +2,9 @@
 // Read-only; no audit row written for the read itself. Mutating
 // admin actions on sessions live in admin-force-actions.ts
 // (POST /v1/admin/sessions/:id/destroy).
+//
+// Also GET /v1/admin/sessions/stats — cross-account session counts by
+// status + active total, for the ops dashboard. Read-only, no audit.
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -89,6 +92,25 @@ export function registerAdminSessionsRoutes(
       return {
         data: page.items.map(publicSession),
         next_cursor: page.nextCursor,
+      };
+    },
+  );
+
+  // Aggregate session counts by status (+ active total) for the ops
+  // dashboard. Read-only; no audit row. Same scope-gate as the list.
+  app.get(
+    '/v1/admin/sessions/stats',
+    {
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const stats = await sessionsService.statsForAdmin(ctx);
+      return {
+        by_status: stats.by_status,
+        active: stats.active,
+        total: stats.total,
       };
     },
   );

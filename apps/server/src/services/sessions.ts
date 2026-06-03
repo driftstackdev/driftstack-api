@@ -146,6 +146,12 @@ export interface SessionRepo {
   ): Promise<void>;
   countActiveSessions(accountId: string): Promise<number>;
   /**
+   * Cross-account session count grouped by status — every SessionStatus
+   * present, zero-filled. Powers the admin ops dashboard's session-stats
+   * tile. System-scoped (no AccountContext; the route gates the scope).
+   */
+  countAllByStatus(): Promise<Record<SessionRecord['status'], number>>;
+  /**
    * Every still-active session (status creating | ready | busy) for an
    * account. Drives the suspend-reclaim path (destroyAllForAccount);
    * system-scoped, no AccountContext.
@@ -758,6 +764,25 @@ export class SessionsService {
   ): Promise<SessionListPage> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
     return this.deps.repo.listAllSessions(opts);
+  }
+
+  /**
+   * Cross-account session stats for the admin ops dashboard: count by
+   * status (every status present, zero-filled), plus `active` (the
+   * currently-running statuses creating + ready + busy) and `total`.
+   * Requires driftstack_internal_admin scope (compat alias 'admin' per
+   * the V-174 migration, same as listAll).
+   */
+  async statsForAdmin(ctx: AccountContext): Promise<{
+    by_status: Record<SessionRecord['status'], number>;
+    active: number;
+    total: number;
+  }> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    const byStatus = await this.deps.repo.countAllByStatus();
+    const active = byStatus.creating + byStatus.ready + byStatus.busy;
+    const total = active + byStatus.destroyed + byStatus.errored;
+    return { by_status: byStatus, active, total };
   }
 
   /**
