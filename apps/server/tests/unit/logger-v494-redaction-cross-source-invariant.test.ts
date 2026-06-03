@@ -138,6 +138,15 @@ describe('W968 V-494 logger redaction cross-source invariant', () => {
     expect(p).toMatch(/'client_secret',/);
   });
 
+  // ─── OAuth token redaction paths ─────────────────────────────
+
+  it("CRITICAL OAuth token redaction paths — 'body.token' (introspect/revoke request body) + 'access_token' + 'refresh_token' (token-endpoint response). Without these a live OAuth token in a request body / response object could reach Pino logs (and, via the mirror invariant, Sentry) unredacted.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/logger.ts'));
+    expect(p).toMatch(/'body\.token',/);
+    expect(p).toMatch(/'access_token',/);
+    expect(p).toMatch(/'refresh_token',/);
+  });
+
   // ─── '[redacted]' censor token ───────────────────────────────
 
   it("CRITICAL censor token = '[redacted]'. The bracket-redacted convention matches the Sentry sanitizer + customer-facing log expectations.", () => {

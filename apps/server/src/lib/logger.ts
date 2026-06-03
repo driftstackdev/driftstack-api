@@ -71,6 +71,15 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         'totp_secret',
         'mfaSecret',
         'client_secret',
+        // OAuth token fields. The introspect/revoke request body carries
+        // the bearer/refresh token as `{ token }` (routes/oauth.ts
+        // IntrospectBody/RevokeBody); the token-endpoint response carries
+        // `{ access_token, refresh_token }`. Same defense-in-depth as the
+        // api_key fields above — scrub even though no current path logs
+        // these, so a future request-trace log can't leak a live token.
+        'body.token',
+        'access_token',
+        'refresh_token',
       ],
       censor: '[redacted]',
     },

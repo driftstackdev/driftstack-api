@@ -66,6 +66,14 @@ const SENTRY_SENSITIVE_KEYS = new Set<string>([
   'byokanthropicapikey',
   'gui_control_key',
   'guicontrolkey',
+  // OAuth token fields — mirror of the lib/logger.ts token redaction.
+  // OAuth introspect/revoke take `{ token }` in the request body; the
+  // token endpoint returns `{ access_token, refresh_token }`. Bare
+  // exact-key match (the `?ds_token=`/`?code=` URL form is handled
+  // separately by redactUrlQueryTokens in scrubSentryEvent).
+  'token',
+  'access_token',
+  'refresh_token',
 ]);
 
 function isSensitiveKey(key: string): boolean {

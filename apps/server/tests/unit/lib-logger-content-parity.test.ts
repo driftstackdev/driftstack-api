@@ -98,6 +98,12 @@ describe('W391.A apps/server/src/lib/logger.ts content parity', () => {
     expect(body).toMatch(/'client_secret',/);
   });
 
+  it('redact paths: OAuth token fields — body.token (introspect/revoke request) + access_token + refresh_token (token-endpoint response)', () => {
+    expect(body).toMatch(/'body\.token',/);
+    expect(body).toMatch(/'access_token',/);
+    expect(body).toMatch(/'refresh_token',/);
+  });
+
   it('formatters.level: object-form ({ level: label }) so level surfaces as a structured field', () => {
     expect(body).toMatch(
       /formatters: \{\s*\n?\s*level: \(label\) => \(\{ level: label \}\),\s*\n?\s*\},/,

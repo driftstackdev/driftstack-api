@@ -57,6 +57,16 @@ describe('V-494 — Sentry scrub: top-level keys', () => {
     expect(e.api_key).toBe('[redacted]');
   });
 
+  it('redacts OAuth token fields — token + access_token + refresh_token (introspect/revoke body + token-endpoint response)', () => {
+    const e = { token: 'tok_x', access_token: 'at_x', refresh_token: 'rt_x', client_id: 'public' };
+    scrubInPlace(e);
+    expect(e.token).toBe('[redacted]');
+    expect(e.access_token).toBe('[redacted]');
+    expect(e.refresh_token).toBe('[redacted]');
+    // client_id is a public identifier — must NOT be redacted.
+    expect(e.client_id).toBe('public');
+  });
+
   it('redacts authorization / cookie / set-cookie / stripe-signature headers', () => {
     const e = {
       authorization: 'Bearer x',
