@@ -634,6 +634,29 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
     approach — keep the raw error in the private session-event row + logs, forward a sanitized +
     length-capped message on the webhook. Same "fix when the surface goes live" shape as §4.8 / §4.11.
     Detail: auto-memory `project_webhook_session_failed_error_message_leak`.
+14. **`InMemoryByokKeyCache` plaintext keys are orphaned on OUT-OF-BAND session closes (admin
+    force-destroy / suspend-reclaim) — LATENT plaintext-secret retention; surfaced 2026-06-03.**
+    Extends the earlier route-only fix `938ebf3a` (which closed the budget-exhausted turn-close path).
+    The cache (`services/byok-anthropic-key-cache.ts`, founder verdict Q.1.c — decrypt the customer's
+    BYOK Anthropic key ONCE at agent-session create, hold the plaintext in process heap for the session
+    lifetime, evict on close) is "route-owned": the ONLY `byokKeyCache.delete` calls are in
+    `routes/agent-sessions.ts` (the customer `DELETE /:id` handler + the post-turn `status==='closed'`
+    handler). But a session can also be closed OUT-OF-BAND, bypassing those handlers:
+    `POST /v1/admin/sessions/:id/destroy` (`admin-force-actions.ts:143` → `updateSessionStatus(id,
+'destroyed')` directly) and account suspend-reclaim — NEITHER evicts the cache. So an admin
+    force-destroying (or a suspend reclaiming) a paid customer's active BYOK agent-session leaves the
+    decrypted Anthropic key in process heap until process restart, plus unbounded `Map` growth — the
+    exact symptom `938ebf3a` targeted, via a close path that fix didn't cover. (The free-tier
+    duration-sweeper is MOOT here: it only sweeps `free`, and free can't use BYOK — `aiAgent:false` /
+    `llmBilling:null`.) **Severity LOW–MEDIUM** (heap-only retention extension, not a new disclosure
+    channel; cleared on restart; BYOK is opt-in/paid-only) and **LATENT** — the agent-runtime LLM path
+    is activation-gated (`driver:"mock"`, `agentRuntime` unset), so the cache is unpopulated in prod
+    today; it materializes at the v1.0 agent-runtime launch. **Founder/maintainer call (NOT autopilot —
+    it's the gated, Q.1.c-scoped v1.0 LLM surface + the clean fix is an eviction-architecture decision):**
+    either plumb `byokKeyCache.delete(id)` into the admin-force-destroy + suspend-reclaim paths
+    (mirroring `938ebf3a`), or centralize eviction via a session-closed event the cache owner subscribes
+    to (cleaner — covers every present + future close path). Detail: auto-memory
+    `project_byok_key_cache_orphan_on_out_of_band_close`.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
