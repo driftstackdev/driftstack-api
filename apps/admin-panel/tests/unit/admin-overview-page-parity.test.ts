@@ -43,18 +43,23 @@ describe('W347.C admin /index overview parity', () => {
     expect(auditLog).toContain("'/v1/admin/audit-log'");
   });
 
-  it('four overview tiles render (active / suspended / open leads / DLQ depth)', () => {
+  it('four overview tiles render (active / suspended / open incidents / DLQ depth)', () => {
     expect(page).toMatch(/data-field="active-accounts"/);
     expect(page).toMatch(/data-field="suspended-accounts"/);
     expect(page).toMatch(/data-field="dlq-depth"/);
-    // Open leads is mock-only — no data-field hook by design.
-    expect(page).toMatch(/Open leads/);
+    // 2026-06-03 — the 3rd tile is now a REAL "Open incidents" KPI
+    // (data-field hook + live hydration), replacing the former mock leads tile.
+    expect(page).toMatch(/Open incidents/);
+    expect(page).toMatch(/data-field="incidents-open"/);
   });
 
-  it('Open-leads tile carries the "mock — leads endpoint TBD" disclaimer', () => {
-    // Honesty cue. Catches a future polish pass that drops the
-    // disclaimer without wiring the live endpoint.
-    expect(page).toMatch(/mock — leads endpoint TBD/);
+  it('Open-incidents tile is real (no mock leads tile / disclaimer remains)', () => {
+    // 2026-06-03 — the former mock "Open leads" tile + its
+    // "mock — leads endpoint TBD" caveat were removed when the tile
+    // became a real /v1/admin/incidents count. Guards against regression
+    // back to a fabricated tile.
+    expect(page).not.toMatch(/Open leads/);
+    expect(page).not.toMatch(/mock — leads endpoint TBD/);
   });
 
   it('active/suspended tiles filter MOCK_ACCOUNTS by canonical AccountStatusSchema values', () => {

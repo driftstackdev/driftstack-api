@@ -60,13 +60,18 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(body).toMatch(/setText\('dlq-depth',\s*String\(body\.webhooks\.dlq_depth\)\)/);
   });
 
-  it('open-leads tile is intentionally still on mock (leads endpoint deferred)', () => {
-    // V-666 "Prod wire-up deferred slices" — the leads tile is
-    // load-bearing for the deferred-slice tracking. A future
-    // "live" wire-up that lands before the endpoint exists would
-    // silently show 0 instead of the mock count.
-    expect(body).toContain('MOCK_LEADS.length');
-    expect(body).toMatch(/mock — leads endpoint TBD/);
+  it('3rd health tile is the REAL Open-incidents KPI (2026-06-03 — replaced the former mock leads tile)', () => {
+    // The 3rd of the 4 health tiles was a mock (MOCK_LEADS.length) until
+    // 2026-06-03; it is now a real "Open incidents" count from
+    // /v1/admin/incidents (status !== resolved), SSR'd as an honest "—"
+    // placeholder that hydrates to the live count. Guards against (a) the
+    // mock tile coming back and (b) the data-field/wiring being dropped.
+    expect(body).toMatch(/data-field="incidents-open">—</);
+    expect(body).toMatch(/authedFetch\('\/v1\/admin\/incidents'\)/);
+    expect(body).toContain("setText('incidents-open'");
+    // The old mock tile + its caveat must be gone.
+    expect(body).not.toContain('MOCK_LEADS.length');
+    expect(body).not.toMatch(/mock — leads endpoint TBD/);
   });
 
   it('D-025 audit-before-response contract pinned (staff-transparency commitment)', () => {

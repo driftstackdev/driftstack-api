@@ -1,6 +1,6 @@
 ---
 import AdminLayout from '../layouts/AdminLayout.astro';
-import { MOCK_ACCOUNTS, MOCK_AUDIT_LOG, MOCK_LEADS } from '../data/mocks.ts';
+import { MOCK_ACCOUNTS, MOCK_AUDIT_LOG } from '../data/mocks.ts';
 
 // V-190 — progressive-enhancement against /v1/admin/overview +
 // /v1/admin/audit-log?limit=5. SSG renders mock counts; an inline
@@ -8,8 +8,9 @@ import { MOCK_ACCOUNTS, MOCK_AUDIT_LOG, MOCK_LEADS } from '../data/mocks.ts';
 // recent-activity list. Banner surfaces no-token / 403 forbidden /
 // fetch-error states.
 //
-// Open-leads tile remains on mock (MOCK_LEADS.length) — leads
-// tracking has no Postgres surface yet.
+// 2026-06-03 — the 3rd health tile is now a REAL "Open incidents" count
+// from /v1/admin/incidents (status != resolved), replacing a prior mock
+// tile (no Postgres surface) so the grid carries no fabricated number.
 
 const activeAccounts = MOCK_ACCOUNTS.filter((a) => a.status === 'active');
 const suspendedAccounts = MOCK_ACCOUNTS.filter((a) => a.status === 'suspended');
@@ -112,15 +113,15 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
       <div class="dashboard-card">
         <div class="flex items-start justify-between">
-          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Open leads</p>
+          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Open incidents</p>
           <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><path d="M20 8v6M23 11h-6" />
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" />
             </svg>
           </span>
         </div>
-        <p class="mt-3 text-3xl font-semibold text-slate-900">{MOCK_LEADS.length}</p>
-        <p class="mt-1 text-[11px] text-slate-400">mock — leads endpoint TBD</p>
+        <p class="mt-3 text-3xl font-semibold text-slate-900" data-field="incidents-open">—</p>
+        <p class="mt-1 text-[11px] text-slate-400">active (not resolved)</p>
       </div>
       <div class="dashboard-card">
         <div class="flex items-start justify-between">
@@ -501,6 +502,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       const sessionsP = fetchSessionStats();
 
+      // Open incidents (2026-06-03) — REAL count of non-resolved incidents
+      // from /v1/admin/incidents (status !== 'resolved'), replacing the
+      // former mock leads tile. Tolerates both the {data:[...]} envelope
+      // and a bare array. Rides the 30s poll like the others.
+      function fetchOpenIncidents() {
+        return authedFetch('/v1/admin/incidents')
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then((body) => {
+            const rows = Array.isArray(body) ? body : (body && body.data) || [];
+            const open = rows.filter((i) => i && i.status !== 'resolved').length;
+            setText('incidents-open', String(open));
+          });
+      }
+      const incidentsP = fetchOpenIncidents();
+
       // 2026-05-21 — live activity feed. The audit-log fetch is
       // extracted so we can refresh it on a 30s timer + bind to the
       // "Refresh now" button. Each refresh updates `lastAuditFetch`
@@ -526,7 +545,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       const auditP = fetchAudit();
 
-      Promise.all([overviewP, auditP, sessionsP])
+      Promise.all([overviewP, auditP, sessionsP, incidentsP])
         .then(() => hideBanner())
         .catch((err) => {
           const msg = err && err.message ? err.message : 'network error';
@@ -557,6 +576,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         void fetchAudit();
         void fetchOverview().catch(() => {});
         void fetchSessionStats().catch(() => {});
+        void fetchOpenIncidents().catch(() => {});
       }
       const refreshBtn = root.querySelector('[data-live-refresh]');
       if (refreshBtn) refreshBtn.addEventListener('click', refreshAll);

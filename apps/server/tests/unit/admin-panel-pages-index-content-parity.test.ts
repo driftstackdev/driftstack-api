@@ -37,11 +37,11 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
       /\/\/ V-190 — progressive-enhancement against \/v1\/admin\/overview \+\s*\n?\s*\/\/ \/v1\/admin\/audit-log\?limit=5\. SSG renders mock counts; an inline\s*\n?\s*\/\/ <script> fetches both endpoints and replaces the tile values \+ the\s*\n?\s*\/\/ recent-activity list\. Banner surfaces no-token \/ 403 forbidden \/\s*\n?\s*\/\/ fetch-error states\./,
     );
     expect(body).toMatch(
-      /\/\/ Open-leads tile remains on mock \(MOCK_LEADS\.length\) — leads\s*\n?\s*\/\/ tracking has no Postgres surface yet\./,
+      /\/\/ 2026-06-03 — the 3rd health tile is now a REAL "Open incidents" count\s*\n?\s*\/\/ from \/v1\/admin\/incidents \(status != resolved\), replacing a prior mock\s*\n?\s*\/\/ tile \(no Postgres surface\) so the grid carries no fabricated number\./,
     );
   });
 
-  it("4-tile grid layout: Active accounts (data-field='active-accounts') / Suspended (data-field='suspended-accounts') / Open leads (mock — leads endpoint TBD) / DLQ depth (data-field='dlq-depth' default '0') — pinned so the at-a-glance health surface keeps the 4 canonical metrics + the 'mock' indicator on the leads tile (drift would either hide the mock-data caveat or shift which metric is mocked)", () => {
+  it("4-tile grid layout: Active accounts (data-field='active-accounts') / Suspended (data-field='suspended-accounts') / Open incidents (data-field='incidents-open', REAL — from /v1/admin/incidents) / DLQ depth (data-field='dlq-depth' default '0') — pinned so the at-a-glance health surface keeps the 4 canonical metrics. 2026-06-03: the 3rd tile was swapped from the former mock 'Open leads' to a real 'Open incidents' count (count of non-resolved incidents), removing the last fabricated number from the grid; drift back to a mock tile would reintroduce fake data.", () => {
     expect(body).toMatch(
       /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">Active accounts<\/p>/,
     );
@@ -51,11 +51,13 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     );
     expect(body).toMatch(/data-field="suspended-accounts"/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">Open leads<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">Open incidents<\/p>/,
     );
-    expect(body).toMatch(
-      /<p class="mt-1 text-\[11px\] text-slate-400">mock — leads endpoint TBD<\/p>/,
-    );
+    // Honest SSR placeholder (no fabricated number) — hydrates to the real count.
+    expect(body).toMatch(/data-field="incidents-open">—<\/p>/);
+    // The mock-leads tile + its "mock — leads endpoint TBD" caveat must be GONE.
+    expect(body).not.toMatch(/Open leads/);
+    expect(body).not.toMatch(/leads endpoint TBD/);
     expect(body).toMatch(
       /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">DLQ depth<\/p>/,
     );
@@ -166,7 +168,7 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toMatch(/setText\('sessions-total', String\(body\.total\)\);/);
     expect(body).toMatch(/setText\('sessions-errored', String\(body\.by_status\.errored\)\);/);
     // Wired into the boot Promise.all gate + the 30s refresh timer.
-    expect(body).toMatch(/Promise\.all\(\[overviewP, auditP, sessionsP\]\)/);
+    expect(body).toMatch(/Promise\.all\(\[overviewP, auditP, sessionsP, incidentsP\]\)/);
     expect(body).toMatch(/void fetchSessionStats\(\)\.catch\(\(\) => \{\}\);/);
   });
 

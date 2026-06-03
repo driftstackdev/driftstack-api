@@ -81,8 +81,13 @@ function makeRouter(opts: {
   auditStatus?: number;
   sessionStats?: Record<string, unknown>;
   sessionStatsStatus?: number;
+  incidents?: Array<Record<string, unknown>>;
+  incidentsStatus?: number;
 }): (c: MockFetchCall) => Response {
   return (call) => {
+    if (/\/v1\/admin\/incidents/.test(call.url)) {
+      return json({ data: opts.incidents ?? [] }, opts.incidentsStatus ?? 200);
+    }
     if (/\/v1\/admin\/sessions\/stats/.test(call.url)) {
       return json(
         opts.sessionStats ?? {
@@ -143,6 +148,39 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(text(window, '[data-field="suspended-accounts"]')).toBe('3');
     expect(text(window, '[data-field="total-accounts-annotation"]')).toContain('of 50 total');
     expect(text(window, '[data-field="dlq-depth"]')).toBe('7');
+  });
+
+  it('open-incidents KPI: counts non-resolved incidents from /v1/admin/incidents (status !== resolved)', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: { accounts: { active: 1, suspended: 0, deleted: 0, total: 1 } },
+        incidents: [
+          { id: 'inc_1', status: 'investigating' },
+          { id: 'inc_2', status: 'monitoring' },
+          { id: 'inc_3', status: 'resolved' },
+        ],
+        audit: [],
+      }),
+    });
+    win = window;
+    await flush();
+    // 2 of the 3 incidents are non-resolved → open count = 2 (real data, not the old mock tile).
+    expect(text(window, '[data-field="incidents-open"]')).toBe('2');
+  });
+
+  it('open-incidents KPI: zero non-resolved incidents → 0 (all resolved)', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: { accounts: { active: 1, suspended: 0, deleted: 0, total: 1 } },
+        incidents: [{ id: 'inc_1', status: 'resolved' }],
+        audit: [],
+      }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-field="incidents-open"]')).toBe('0');
   });
 
   it('accounts-by-tier: renders a labelled bar per tier with live counts + total from overview.by_tier', async () => {
