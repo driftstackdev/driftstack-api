@@ -73,6 +73,8 @@ describe('BYOK Anthropic encryption', () => {
   it('looksLikeAnthropicKey accepts well-formed Anthropic key prefixes', () => {
     expect(looksLikeAnthropicKey('sk-ant-api03-abc123-XYZ_-456')).toBe(true);
     expect(looksLikeAnthropicKey('sk-ant-future-api04-format-12345')).toBe(true);
+    // 512-char body is the upper bound (real keys are ~108 chars) — still accepted.
+    expect(looksLikeAnthropicKey('sk-ant-' + 'a'.repeat(512))).toBe(true);
   });
 
   it('looksLikeAnthropicKey rejects garbage / wrong prefixes', () => {
@@ -81,5 +83,8 @@ describe('BYOK Anthropic encryption', () => {
     expect(looksLikeAnthropicKey('sk_ant_api03_under_score')).toBe(false);
     expect(looksLikeAnthropicKey('hey-there-anthropic-key')).toBe(false);
     expect(looksLikeAnthropicKey('sk-openai-totally-wrong-vendor')).toBe(false);
+    // Over the 512-char body bound — an oversized blob is rejected before we
+    // encrypt + store it (capped only by bodyLimit otherwise).
+    expect(looksLikeAnthropicKey('sk-ant-' + 'a'.repeat(513))).toBe(false);
   });
 });

@@ -84,6 +84,8 @@ export function decryptByokAnthropicKey(
 export function looksLikeAnthropicKey(s: string): boolean {
   // Anthropic API keys are documented as `sk-ant-api03-...` (base prefix
   // `sk-ant-`). Allow some forward compatibility for future `apiNN`
-  // versions — match `sk-ant-` + at least one char.
-  return /^sk-ant-[A-Za-z0-9_-]{1,}$/.test(s);
+  // versions — match `sk-ant-` + 1 to 512 chars. The upper bound rejects an
+  // oversized blob (real keys are ~108 chars); without it a customer could PUT
+  // a ~1 MB "key" we'd encrypt + store, bounded only by the request bodyLimit.
+  return /^sk-ant-[A-Za-z0-9_-]{1,512}$/.test(s);
 }

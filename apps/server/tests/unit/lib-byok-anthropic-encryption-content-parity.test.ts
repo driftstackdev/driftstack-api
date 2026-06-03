@@ -89,8 +89,8 @@ describe('lib/byok-anthropic-encryption content parity', () => {
       /\/\*\* Lightweight prefix sanity-check that the customer provided what\s*\n?\s*\*\s+looks like an Anthropic key\. Used at PUT time before storing —\s*\n?\s*\*\s+not a substitute for a real connection test \(the POST \/test endpoint\s*\n?\s*\*\s+fires a small Anthropic call to verify\)\. \*\//,
     );
     expect(body).toMatch(
-      /\/\/ Anthropic API keys are documented as `sk-ant-api03-\.\.\.` \(base prefix\s*\n?\s*\/\/ `sk-ant-`\)\. Allow some forward compatibility for future `apiNN`\s*\n?\s*\/\/ versions — match `sk-ant-` \+ at least one char\./,
+      /\/\/ Anthropic API keys are documented as `sk-ant-api03-\.\.\.` \(base prefix\s*\n?\s*\/\/ `sk-ant-`\)\. Allow some forward compatibility for future `apiNN`\s*\n?\s*\/\/ versions — match `sk-ant-` \+ 1 to 512 chars\./,
     );
-    expect(body).toMatch(/return \/\^sk-ant-\[A-Za-z0-9_-\]\{1,\}\$\/\.test\(s\);/);
+    expect(body).toMatch(/return \/\^sk-ant-\[A-Za-z0-9_-\]\{1,512\}\$\/\.test\(s\);/);
   });
 });
