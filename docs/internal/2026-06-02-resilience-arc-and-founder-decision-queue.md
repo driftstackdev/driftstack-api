@@ -613,6 +613,27 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
     `SURFACED_PENDING_LIMITER` in the guard test in the SAME commit (else the guard goes red). Pinned
     meanwhile in that test's `SURFACED_PENDING_LIMITER` allowlist so the reality is explicit.
     Detail: auto-memory `project_unauth_token_route_ratelimit_gap`.
+13. **`session.failed` webhook payload forwards the raw driver `error_message` verbatim (LATENT
+    info-leak; surfaced 2026-06-03 by a fresh webhook-payload-disclosure audit).** A sweep of every
+    `enqueueEvent` producer found all payloads clean EXCEPT this one: `api_key.revoked` carries only
+    `{api_key_id, name, revoked_at}` (no hash/prefix/plaintext); `session.completed` /
+    `egress_capability_changed` carry ids + duration + capability flags; `crypto.order.paid/failed`
+    carry the customer's own order fields — all sound. But `session.failed`
+    (`services/sessions.ts` `runWithFailureCapture`) sets `error_message = err.message` (the RAW driver
+    error, unsanitized AND length-unbounded) and forwards it into the webhook payload + the stored
+    session event. **Why it matters:** this is a SEPARATE disclosure channel that bypasses the
+    deliberate 5xx-hides-cause posture the platform applies to the HTTP error response
+    (`project_redos_and_error_response_infoleak_clean`, `d99b0a82`) — the HTTP response hides the
+    internal cause, but the webhook leaks it. When the real WebKit driver lands (today `driver:"mock"`,
+    so latent), a mid-operation infra failure (`connect ECONNREFUSED 10.x.x.x`, an internal
+    node hostname, a driver-internal URL) could reach the customer's webhook endpoint. **Severity LOW**
+    (customer-scoped — the customer's own session → the customer's own webhook, NOT cross-customer; and
+    customers generally WANT driver-error detail). **Founder/maintainer call at real-driver-wiring time
+    (NOT autopilot — outward-facing webhook-payload content + needs an error-disclosure taxonomy
+    decision on which driver errors are customer-safe vs internal):** mirror the §4.8 health-probe
+    approach — keep the raw error in the private session-event row + logs, forward a sanitized +
+    length-capped message on the webhook. Same "fix when the surface goes live" shape as §4.8 / §4.11.
+    Detail: auto-memory `project_webhook_session_failed_error_message_leak`.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
