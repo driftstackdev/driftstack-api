@@ -316,6 +316,55 @@ describe('V-553.B-10 StatusSubscribersService — admin + housekeeping', () => {
     // The original unsubscribedAt is preserved.
     expect(rows[0]?.unsubscribedAt).toEqual(alreadyOut);
   });
+
+  it('adminForceSubscribe (fresh email): confirms without an email + returns a WORKING /subscribe/unsubscribe link', async () => {
+    const { service: email, sends } = makeEmail();
+    const { repo, rows } = makeRepo();
+    const svc = new StatusSubscribersService(repo, email, CONFIG);
+    const out = await svc.adminForceSubscribe('  Admin@Example.COM ', NOW);
+    // Bypasses double-opt-in: no confirmation/welcome email fired.
+    expect(sends).toHaveLength(0);
+    expect(out.email).toBe('admin@example.com');
+    expect(out.confirmedAt).toEqual(NOW);
+    // CRITICAL — the unsubscribe link must use the SAME path the status-site
+    // routes (`/subscribe/unsubscribe`), not a bare `/unsubscribe` (404). This
+    // is the link the docstring says staff copy/share with the subscriber.
+    const url = new URL(out.unsubscribeLink);
+    expect(url.pathname).toBe('/subscribe/unsubscribe');
+    // The link is functional end-to-end: its token hashes to the stored hash.
+    const token = url.searchParams.get('token');
+    expect(token).toBeTruthy();
+    expect(rows[0]?.unsubscribeTokenHash).toBe(tokenHash(token ?? ''));
+  });
+
+  it('adminForceSubscribe (re-adding an existing subscriber): re-confirms + mints a fresh WORKING /subscribe/unsubscribe link, invalidating the old token', async () => {
+    // upsertPending clears confirmed_at (re-subscribe semantics), so the
+    // already-confirmed fast-path in adminForceSubscribe is unreachable —
+    // a re-add always flows through markConfirmed, re-confirming at `now`
+    // and minting a fresh unsubscribe token.
+    const { service: email } = makeEmail();
+    const row: StatusSubscriberRow = {
+      id: 'sub_1',
+      email: 'admin@example.com',
+      confirmTokenHash: null,
+      confirmExpiresAt: null,
+      confirmedAt: new Date('2026-04-01Z'),
+      unsubscribeTokenHash: tokenHash('old-tok'),
+      unsubscribedAt: null,
+      createdAt: new Date(),
+    };
+    const { repo, rows } = makeRepo([row]);
+    const svc = new StatusSubscribersService(repo, email, CONFIG);
+    const out = await svc.adminForceSubscribe('admin@example.com', NOW);
+    expect(out.confirmedAt).toEqual(NOW);
+    const url = new URL(out.unsubscribeLink);
+    expect(url.pathname).toBe('/subscribe/unsubscribe');
+    const token = url.searchParams.get('token');
+    expect(token).toBeTruthy();
+    // The link carries the freshly-minted token (old one invalidated).
+    expect(rows[0]?.unsubscribeTokenHash).toBe(tokenHash(token ?? ''));
+    expect(rows[0]?.unsubscribeTokenHash).not.toBe(tokenHash('old-tok'));
+  });
 });
 
 describe('V-553.B-10 StatusSubscribersService.processPurge', () => {

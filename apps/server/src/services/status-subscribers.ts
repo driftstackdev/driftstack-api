@@ -223,7 +223,7 @@ export class StatusSubscribersService {
         id: pending.id,
         email: pending.email ?? normalized,
         confirmedAt: pending.confirmedAt,
-        unsubscribeLink: `${this.baseUrl}/unsubscribe?token=${encodeURIComponent(fresh)}`,
+        unsubscribeLink: `${this.baseUrl}/subscribe/unsubscribe?token=${encodeURIComponent(fresh)}`,
       };
     }
     const unsubPlaintext = generateAuthToken();
@@ -236,7 +236,7 @@ export class StatusSubscribersService {
       id: confirmed.id,
       email: confirmed.email ?? normalized,
       confirmedAt: confirmed.confirmedAt ?? now,
-      unsubscribeLink: `${this.baseUrl}/unsubscribe?token=${encodeURIComponent(unsubPlaintext)}`,
+      unsubscribeLink: `${this.baseUrl}/subscribe/unsubscribe?token=${encodeURIComponent(unsubPlaintext)}`,
     };
   }
 
