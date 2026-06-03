@@ -524,8 +524,13 @@ transcript.length` guard); account-scoped (cross-account → 404).
     rolling. **Gap found + closed:** the UTC construction was NOT source-pinned (only the
     `countCreatedSince(startOfToday)` call was), and a UTC CI runner can't catch a UTC→local-midnight
     regression behaviorally — so a regression to local time would silently re-introduce `b70366ea` on this
-    endpoint. Added a source-pin in `services-admin-accounts-content-parity.test.ts`. Detail in Agent-2
-    auto-memory `project_admin_analytics_utc_window_guard`.
+    endpoint. Added a source-pin in `services-admin-accounts-content-parity.test.ts`. **Follow-up: the
+    3rd overview analytic `countByTier`/`by_tier` was audited clean + guarded too** — zero-fill is derived
+    from `AccountTierSchema.options` (can't drift), and the claimed `sum(by_tier) == total` invariant holds
+    because account status is exactly `active/suspended/deleted` (so `count(*)` == `total`); a future 4th
+    status would break it but the overview integration test (`summing to total`) would catch that. The
+    admin-overview analytics surface (signupCounts + statsForAdmin + countByTier + countByStatus) is now
+    wholly verified. Detail in Agent-2 auto-memory `project_admin_analytics_utc_window_guard`.
   - _Webhook quota events `[DECLARED]`-not-firing is INTENTIONAL, not a bug (investigated 2026-06-03,
     two hypotheses refuted):_ `quota.warning_80pct` + `quota.exceeded` are subscribable but have no
     `enqueueEvent` producer — because there is no usage-quota ENFORCEMENT/metering in the v1.0
