@@ -334,6 +334,18 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
     `docs.driftstack.dev/errors/<slug>`). Mirrors the [[project_status_site_cloudflare_setup]] "done except
     the DNS CNAME (founder)" pattern. Do NOT repoint the type URIs — that's a 52-file contract break + the
     namespace is the right one; just make it resolve. Detail: [[project_errors_domain_nxdomain]].
+22. **Metrics/observability layer is INERT in prod — enable before launch (founder/ops).** Prod
+    `GET /metrics` → app 404 "No route" (NOT nginx/401/503), which means `METRICS_SCRAPE_TOKEN` is UNSET:
+    `app.ts:906` registers `/metrics` only `if (metricsRegistry !== undefined)`, and `bootstrap.ts:289`
+    creates the registry only when `metricsScrapeToken` is set. So the registry is never created → EVERY
+    `metrics?.inc(...)` across the obs.3-16 instrumentation (http_request/auth/rate_limit/email/webhook/
+    stripe/nowpayments/audit-emit/livekit/agent-decompose/byok counters) is a silent no-op + no /metrics
+    endpoint → Grafana/VictoriaMetrics collects nothing. Likely INTENTIONAL pre-launch (prod `/version`
+    `driver:"mock"`, no real traffic; `routes/metrics.ts` says the deploy bridge sets the token at the real
+    deploy). **Launch-prep (founder/ops decision; NOT autopilot — needs scraper coordination):** before
+    launch, set `METRICS_SCRAPE_TOKEN` (≥16 chars) in prod `.env` AND wire the Prometheus/VictoriaMetrics
+    scraper to `https://api.driftstack.dev/metrics` (Bearer token), else all the obs work + dashboards stay
+    blind. (otel.ts is also unwired — same observability-deferred theme.) Detail: [[project_metrics_layer_inert_in_prod]].
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
