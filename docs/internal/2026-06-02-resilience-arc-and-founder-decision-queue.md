@@ -837,6 +837,28 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
     planning-133-LOCKED egress subsystem → SURFACED, not flipped** (no unilateral validation change on the
     flagship egress path; the route is 503 today so there's zero live urgency). Detail: auto-memory
     `project_socks5_egress_ssrf_unguarded_latent`.
+18. **2 HIGH npm-audit advisories in the Astro frontend BUILD toolchain (undici + devalue) — API
+    server runtime UNAFFECTED; LOW live exposure; surfaced 2026-06-03 by a fresh `npm audit` sweep
+    (genuinely-fresh dimension — no prior npm-audit memory).** `npm audit --omit=dev` → 2 HIGH:
+    (a) **undici 7.0.0–7.23.0** (request/response smuggling, CRLF injection, unbounded decompression →
+    resource exhaustion, WebSocket length overflow) pulled by **`@astrojs/cloudflare`** (the Astro
+    Cloudflare-Pages adapter for `apps/customer-dashboard` + `apps/admin-panel`); (b) **devalue
+    5.6.3–5.8.0** (sparse-array deserialization DoS). **Key scoping — LOW live exposure:** `apps/server`
+    (the Fastify control plane = the actual API runtime on Hetzner) depends on NONE of
+    undici/`@astrojs/cloudflare`/devalue/astro (verified empty grep) — it uses Node 22's built-in fetch,
+    NOT this `node_modules/undici@7`, so the **API runtime is unaffected**. The vulnerable undici is a
+    frontend BUILD/adapter dep; marketing/docs/status are `output:'static'` (undici not served), and the
+    dashboards are Cloudflare-Pages-fronted (CF Workers' own fetch, not bundled undici) — the undici
+    smuggling/CRLF vulns require undici to be a live HTTP server/client on untrusted traffic, which isn't
+    this deployment model. **Disposition — SURFACED, NOT auto-fixed:** the undici fix is
+    `@astrojs/cloudflare@13.6.1` = **semver MAJOR** (`isSemVerMajor`), a framework bump that could break
+    the dashboard/admin Astro build+deploy → founder-gated (same class as the dependabot patch-only
+    policy); `npm audit fix --force` is NOT safe on autopilot. devalue's fix is non-major but a transitive
+    build-time astro dep (bumping standalone risks the astro build for negligible live gain). **Founder
+    action (LOW urgency — build-time, API unaffected, CF-fronted):** bump `@astrojs/cloudflare` to ≥13.6.1
+    on the next frontend dependency pass (clears the undici HIGH set), verify the dashboard/admin build +
+    CF-Pages deploy, re-run `npm audit --omit=dev`. Detail: auto-memory
+    `project_dependency_audit_astro_high_vulns`.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
