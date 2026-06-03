@@ -858,3 +858,24 @@ diminishing value and carry re-sweep/churn risk; the highest-leverage next step 
 — unblock a §2 item, greenlight a §4 hardening (e.g. §4.15 SSE cap or §4.2 DNS-rebind pin), authorize
 the admin-panel redesign, or assign new scope. The /loop stays armed per the never-stop directive;
 this note is the durable signal that the productive non-gated surface is exhausted.
+
+**ADDENDUM 2026-06-03 (later, honest correction + reinforcement).** The "exhaustion" above was
+slightly PREMATURE: a fresh **customer-write input-bounds** lens (string + numeric) + an
+**error-path** probe found 3 MORE genuine (LOW-severity, real) bugs and shipped fixes —
+(1) malformed-JSON request body returned 500 instead of 400 (`d3fa18e7`, custom JSON parser passed a
+bare `SyntaxError`); (2) the api-key **rotate** rename was unbounded vs create's `max(120)`
+(`6ef20d70`); (3) the BYOK Anthropic key format check `looksLikeAnthropicKey` was unbounded
+(`/^sk-ant-[A-Za-z0-9_-]{1,}$/`) so a ~1 MB key could be encrypted + stored (`21c40901` → `{1,512}`).
+Plus surfaced §4.17 (latent SOCKS5-egress probe SSRF, no host guard — fix at EG-API-1.6 wiring). So
+there WAS more shippable non-gated work than the note implied — the input-bounds/error-handling lens
+was productive where dimension-sweeps had saturated. **BUT those veins are now ALSO closed:** every
+live customer-write string field is `.max()`-bounded (rotate-name + BYOK were the last two gaps) and
+every live numeric input is `positive`/`nonnegative`-guarded; subsequent fresh-audit waves
+(date/period-boundary local-vs-UTC → zero remaining non-UTC date methods; navigate-intent URL →
+customer's-own-session, no SSRF; profile-transfer → atomic recipient-cap + source-preservation;
+email-preferences route → requireAuth + account-scoped; timing-safe-compare; cache-control no-store)
+all came back **clean OR already-covered**, and a profile-transfer probe this wave **re-tread an
+already-audited surface** (caught via grep-first-read) — the re-sweep/churn boundary the note warned
+about is now materializing. **Net unchanged + reinforced:** the input-bounds/error-path lens has now
+been mined too; remaining forward progress is founder-gated. FOUNDER REDIRECTION remains the
+highest-leverage next step.
