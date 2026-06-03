@@ -320,6 +320,11 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
   (CWE-532, V-494 redact + Sentry mirror drift-guarded), crypto-at-rest (AES-256-GCM family),
   OAuth/PKCE/MFA/auth-token, CI/GitHub-Actions, CF-Pages security headers, config/env validation — clean.
 - **SDKs** (TS/Go/Python) swept; AI subsystem, status surface, billing (Stripe + crypto IPN) audited.
+  _Customer Stripe checkout/portal routes (`routes/billing.ts`) verified clean 2026-06-03:_ V-248
+  origin-allowlist open-redirect guard on customer `success_url`/`cancel_url` (hardcoded by design,
+  malformed→reject), **server-side** tier→price (no client price = no tampering, like the crypto
+  checkout), account-bound (`ctx.account.id`, no IDOR), `admin:billing` scope satisfied by
+  `account_owner`, unauthed-503 stub when Stripe unconfigured. Don't re-audit.
 - **Dormant / not Agent-2 deep-audit targets:** crypto rail (501 stubs), session-egress
   (`session-proxy`, EG-API-1.6 pending), behavioural-simulation (complete + unwired), customer
   dashboard (static SPA, client-side bearer — no SSR layer).
