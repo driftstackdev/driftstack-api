@@ -551,6 +551,15 @@ transcript.length` guard); account-scoped (cross-account → 404).
     enforced. Gating chokepoint is key-CREATE + dashboard-prompt (not every request — existing keys keep
     working; defensible compliance posture). Detail in Agent-2 auto-memory
     `project_legal_catalog_and_acceptance_gating_clean`.
+  - _Webhook signing-secret force-rotation sweep (fresh-audited 2026-06-03, uncovered until now —
+    clean):_ `webhook-secret-force-rotation.ts` auto-rotates webhook signing secrets past 91 days
+    (security hygiene). NO customer breakage — `forceRotateSecret` stamps `secret_prev` +
+    `secret_prev_expires_at` for a 7-day DUAL-SECRET grace so existing verification keeps working;
+    emails the new prefix + grace deadline (non-fatal on send failure, dashboard fallback); bounded
+    `perTickLimit=50`; idempotent. WIRED (`bootstrap.ts:1579` + an error-isolated poller) but
+    effectively dormant — the delivery worker is unwired with 0 prod endpoints (§ webhook-delivery),
+    so it finds 0 eligible today. Detail in Agent-2 auto-memory
+    `project_webhook_secret_force_rotation_clean`.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
