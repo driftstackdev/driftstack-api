@@ -16,8 +16,8 @@
 //     return 401 uniformly).
 //   • SHA-512 64-byte hex digest length check.
 //   • Recursive sortKeys helper for nested objects.
-//   • Scaffold-not-wired-yet framing pinned (501 stub at billing-
-//     crypto route).
+//   • Live-consumer framing pinned (webhooks-nowpayments route;
+//     gated on NOWPAYMENTS_IPN_SECRET).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -41,18 +41,19 @@ describe('W387.C apps/server/src/lib/nowpayments-signing.ts content parity', () 
     );
   });
 
-  it('x-nowpayments-sig header format pinned (hex HMAC-SHA512 of the body)', () => {
+  it('x-nowpayments-sig header format pinned (hex HMAC-SHA512 of the canonicalised body)', () => {
     expect(body).toMatch(
-      /Header format:\s*\n?\s*\/\/\s*x-nowpayments-sig: <hex HMAC-SHA512 of the body>/,
+      /Header format:\s*\n?\s*\/\/\s*x-nowpayments-sig: <hex HMAC-SHA512 of the canonicalised body>/,
     );
   });
 
-  it('raw-body framing: no JSON re-stringify, order-sensitive on JSON-serialised body', () => {
+  it('canonicalise-before-HMAC framing: sorted-key serialisation (not wire byte order); non-JSON falls back to raw-body HMAC', () => {
     expect(body).toMatch(
-      /Body must be the raw bytes received — no JSON re-stringify \(the\s*\n?\s*\/\/\s*signature is order-sensitive on the JSON-serialised body NowPayments\s*\n?\s*\/\/\s*sent us\)/,
+      /The body is canonicalised before HMAC: JSON-parsed, keys sorted\s*\n?\s*\/\/\s*lexicographically at every level, then re-serialised/,
     );
+    expect(body).toMatch(/A non-JSON body falls back to\s*\n?\s*\/\/\s*raw-body HMAC\./);
     expect(body).toMatch(
-      /Fastify exposes the raw buffer via `request\.rawBody` when\s*\n?\s*\/\/\s*the route opts in/,
+      /Fastify exposes the raw buffer via `request\.rawBody`\s*\n?\s*\/\/\s*when the route opts in/,
     );
   });
 
@@ -60,12 +61,12 @@ describe('W387.C apps/server/src/lib/nowpayments-signing.ts content parity', () 
     expect(body).toMatch(/https:\/\/documenter\.getpostman\.com\/view\/7907941\/2s93JusNJt/);
   });
 
-  it('Scaffold-not-wired framing pinned (501 stub at billing-crypto route)', () => {
+  it('Live-consumer framing pinned (webhooks-nowpayments route; gated on NOWPAYMENTS_IPN_SECRET)', () => {
     expect(body).toMatch(
-      /scaffolding for the V-487 NowPayments\s*\n?\s*\/\/\s*scaffold: the verifier is implemented and tested, but there is no\s*\n?\s*\/\/\s*route consuming it yet/,
+      /Consumed by the NowPayments IPN route\s*\n?\s*\/\/\s*\(`apps\/server\/src\/routes\/webhooks-nowpayments\.ts`\): it verifies the\s*\n?\s*\/\/\s*signature and rejects a mismatch with 401/,
     );
     expect(body).toMatch(
-      /When the route stub at\s*\n?\s*\/\/\s*`apps\/server\/src\/routes\/billing-crypto\.ts` flips from 501 to live/,
+      /registered\s*\n?\s*\/\/\s*only when `NOWPAYMENTS_IPN_SECRET` is configured/,
     );
   });
 

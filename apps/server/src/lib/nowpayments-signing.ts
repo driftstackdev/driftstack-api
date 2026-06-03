@@ -5,19 +5,21 @@
 //   https://documenter.getpostman.com/view/7907941/2s93JusNJt
 //
 // Header format:
-//   x-nowpayments-sig: <hex HMAC-SHA512 of the body>
+//   x-nowpayments-sig: <hex HMAC-SHA512 of the canonicalised body>
 //
-// Body must be the raw bytes received — no JSON re-stringify (the
-// signature is order-sensitive on the JSON-serialised body NowPayments
-// sent us). Fastify exposes the raw buffer via `request.rawBody` when
-// the route opts in.
+// The body is canonicalised before HMAC: JSON-parsed, keys sorted
+// lexicographically at every level, then re-serialised — NowPayments'
+// IPN signing protocol computes the signature over the sorted-key
+// serialisation, not the wire byte order. A non-JSON body falls back to
+// raw-body HMAC. Fastify exposes the raw buffer via `request.rawBody`
+// when the route opts in.
 //
-// This module is engineering scaffolding for the V-487 NowPayments
-// scaffold: the verifier is implemented and tested, but there is no
-// route consuming it yet. When the route stub at
-// `apps/server/src/routes/billing-crypto.ts` flips from 501 to live,
-// it imports `verifyNowpaymentsSignature` and rejects mismatched
-// signatures with 401.
+// Consumed by the NowPayments IPN route
+// (`apps/server/src/routes/webhooks-nowpayments.ts`): it verifies the
+// signature and rejects a mismatch with 401. The route is registered
+// only when `NOWPAYMENTS_IPN_SECRET` is configured (the wiring in
+// `lib/app.ts` is gated on it), so the verifier stays dormant until the
+// founder lands a merchant account.
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 

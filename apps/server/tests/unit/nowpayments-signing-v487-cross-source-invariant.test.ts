@@ -8,19 +8,21 @@
 //   set in the merchant dashboard'.
 //
 //   Header format — 'x-nowpayments-sig: <hex HMAC-SHA512 of the
-//   body>'.
+//   canonicalised body>'.
 //
-//   Raw-body framing — 'Body must be the raw bytes received — no
-//   JSON re-stringify (the signature is order-sensitive on the
-//   JSON-serialised body NowPayments sent us). Fastify exposes the
-//   raw buffer via request.rawBody when the route opts in'.
+//   Canonicalise-before-HMAC framing — 'The body is canonicalised
+//   before HMAC: JSON-parsed, keys sorted lexicographically at every
+//   level, then re-serialised — NowPayments' IPN signing protocol
+//   computes the signature over the sorted-key serialisation, not the
+//   wire byte order. A non-JSON body falls back to raw-body HMAC.
+//   Fastify exposes the raw buffer via request.rawBody when the route
+//   opts in'.
 //
-//   Scaffolding-not-wired framing — 'This module is engineering
-//   scaffolding for the V-487 NowPayments scaffold: the verifier
-//   is implemented and tested, but there is no route consuming it
-//   yet. When the route stub at billing-crypto.ts flips from 501
-//   to live, it imports verifyNowpaymentsSignature and rejects
-//   mismatched signatures with 401'.
+//   Live-consumer framing — 'Consumed by the NowPayments IPN route
+//   (routes/webhooks-nowpayments.ts): it verifies the signature and
+//   rejects a mismatch with 401. The route is registered only when
+//   NOWPAYMENTS_IPN_SECRET is configured (lib/app.ts gate), so the
+//   verifier stays dormant until the founder lands a merchant account'.
 //
 //   VerifyNowpaymentsSignatureOpts (3 fields): body (string |
 //     Buffer) + secret + signature (hex string).
@@ -83,31 +85,31 @@ describe('W963 V-487 nowpayments-signing IPN cross-source invariant', () => {
 
   // ─── Header format framing ───────────────────────────────────
 
-  it("CRITICAL header format framing — 'x-nowpayments-sig: <hex HMAC-SHA512 of the body>'. The hex-encoded SHA-512 (128 hex chars = 64 bytes) is the wire format.", () => {
+  it("CRITICAL header format framing — 'x-nowpayments-sig: <hex HMAC-SHA512 of the canonicalised body>'. The hex-encoded SHA-512 (128 hex chars = 64 bytes) over the canonicalised body is the wire format.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/nowpayments-signing.ts'));
-    expect(p).toMatch(/x-nowpayments-sig: <hex HMAC-SHA512 of the body>/);
+    expect(p).toMatch(/x-nowpayments-sig: <hex HMAC-SHA512 of the canonicalised body>/);
   });
 
-  // ─── Raw-body framing ────────────────────────────────────────
+  // ─── Canonicalise-before-HMAC framing ────────────────────────
 
-  it("CRITICAL raw-body framing — 'Body must be the raw bytes received — no JSON re-stringify (the signature is order-sensitive on the JSON-serialised body NowPayments sent us). Fastify exposes the raw buffer via request.rawBody when the route opts in'. The raw-not-restringified contract matches W962 stripe-signing raw-body invariant.", () => {
+  it("CRITICAL canonicalise framing — 'The body is canonicalised before HMAC: JSON-parsed, keys sorted lexicographically at every level, then re-serialised — NowPayments' IPN signing protocol computes the signature over the sorted-key serialisation, not the wire byte order. A non-JSON body falls back to raw-body HMAC. Fastify exposes the raw buffer via request.rawBody when the route opts in'. The canonicalise-then-HMAC contract is what an auditor relies on; the impl re-serialises sorted keys (sortKeys), NOT raw bytes.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/nowpayments-signing.ts'));
-    expect(p).toMatch(/Body must be the raw bytes received — no JSON re-stringify \(the/);
-    expect(p).toMatch(/signature is order-sensitive on the JSON-serialised body NowPayments/);
-    expect(p).toMatch(/sent us\)\. Fastify exposes the raw buffer via `request\.rawBody` when/);
-    expect(p).toMatch(/the route opts in\./);
+    expect(p).toMatch(/The body is canonicalised before HMAC: JSON-parsed, keys sorted/);
+    expect(p).toMatch(/lexicographically at every level, then re-serialised/);
+    expect(p).toMatch(/IPN signing protocol computes the signature over the sorted-key/);
+    expect(p).toMatch(/serialisation, not the wire byte order\. A non-JSON body falls back to/);
+    expect(p).toMatch(/raw-body HMAC\. Fastify exposes the raw buffer via `request\.rawBody`/);
   });
 
-  // ─── Scaffolding-not-wired framing ───────────────────────────
+  // ─── Live-consumer framing ───────────────────────────────────
 
-  it("CRITICAL scaffolding-not-wired framing — 'This module is engineering scaffolding for the V-487 NowPayments scaffold: the verifier is implemented and tested, but there is no route consuming it yet. When the route stub at apps/server/src/routes/billing-crypto.ts flips from 501 to live, it imports verifyNowpaymentsSignature and rejects mismatched signatures with 401'. The implemented-but-not-wired + 501→live + 401-on-mismatch is the V-487 rollout plan.", () => {
+  it("CRITICAL live-consumer framing — 'Consumed by the NowPayments IPN route (apps/server/src/routes/webhooks-nowpayments.ts): it verifies the signature and rejects a mismatch with 401. The route is registered only when NOWPAYMENTS_IPN_SECRET is configured (the wiring in lib/app.ts is gated on it), so the verifier stays dormant until the founder lands a merchant account'. The live-consumer + 401-on-mismatch + secret-gated registration is the accurate wiring.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/nowpayments-signing.ts'));
-    expect(p).toMatch(/This module is engineering scaffolding for the V-487 NowPayments/);
-    expect(p).toMatch(/scaffold: the verifier is implemented and tested, but there is no/);
-    expect(p).toMatch(/route consuming it yet\. When the route stub at/);
-    expect(p).toMatch(/`apps\/server\/src\/routes\/billing-crypto\.ts` flips from 501 to live,/);
-    expect(p).toMatch(/it imports `verifyNowpaymentsSignature` and rejects mismatched/);
-    expect(p).toMatch(/signatures with 401\./);
+    expect(p).toMatch(/Consumed by the NowPayments IPN route/);
+    expect(p).toMatch(/`apps\/server\/src\/routes\/webhooks-nowpayments\.ts`\): it verifies the/);
+    expect(p).toMatch(/signature and rejects a mismatch with 401\./);
+    expect(p).toMatch(/registered\s*\n?\s*\/\/ only when `NOWPAYMENTS_IPN_SECRET` is configured/);
+    expect(p).toMatch(/so the verifier stays dormant until the/);
   });
 
   // ─── VerifyNowpaymentsSignatureOpts 3-field shape ────────────
