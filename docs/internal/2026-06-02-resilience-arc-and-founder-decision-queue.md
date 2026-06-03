@@ -773,6 +773,14 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
     `.eu.r2.cloudflarestorage.com` jurisdiction host (+ buckets `jurisdiction:eu`); fix first if not.
     (2) THEN add the EU-marker assertion to `config.ts` mirroring the Sentry `.de.` check. Detail:
     auto-memory `project_r2_data_residency_endpoint_unasserted`.
+    **GENERALIZED (R2 is one instance — the PRIMARY DB is also unasserted, and is higher-priority):**
+    `config.ts:8` validates `databaseUrl: z.string().url()` — URL only, NO EU-region assertion — yet the
+    Postgres/Neon DB holds ALL customer data (accounts, profiles, sessions, audit logs). So
+    data-residency config-enforcement is **Sentry-ONLY**; both the DATABASE (most critical) and R2 lack an
+    EU-region assertion — a non-EU `DATABASE_URL` (e.g. a US Neon region) passes silently → all customer
+    data outside the EU, unguarded. Founder/infra: verify prod `DATABASE_URL` is an EU-region Neon endpoint
+    FIRST (live violation if not), then add a config assertion for it too (mirror the Sentry `.de.`
+    pattern). The DB assertion is higher-priority than R2 (it holds everything).
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
