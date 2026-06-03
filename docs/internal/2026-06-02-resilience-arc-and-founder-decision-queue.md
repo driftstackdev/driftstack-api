@@ -524,6 +524,18 @@ key)` (schema has `idempotency_key` but NO request-hash column) silently replays
    one target. LOW probability (a tick probes all targets in parallel with ~5s timeouts; should be
    well under 60s) + the bootstrap setInterval may not overlap in practice. Fully closing it needs a
    partial-unique index (prod migration — can't autopilot) or a per-target in-flight guard. Surfaced.
+10. **cli-authorize/initiate (+exchange) unauth without an IP rate-limit gate** — `POST /v1/auth/
+cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pending `cli_authorize`
+    row per call → unauth table-bloat / minor DoS, bounded by the 5-min TTL + the code being inert
+    without an authed `bind`/approve). It's the LONE unauth endpoint without a limiter — every other
+    unauth family (auth signup/login/reset/magic-link, status-subscribe, oauth authorize/token,
+    oauth-client start/callback) got an `ipRateLimit` gate in the 2026-05-19/20 unauth-gate sweep.
+    AMBIGUOUS + pinned: `routes-auth-cli-content-parity.test.ts` explicitly pins initiate+exchange as
+    "public (no preHandler)" (a deliberate V-266 decision), so this is EITHER an intentional exemption
+    OR a gap the sweep missed. **Founder/maintainer call** (NOT autopilot — flipping it overrides the
+    pinned V-266 "public, no preHandler" parity assertions): if a limiter is wanted, add
+    `ipRateLimit(rateLimitStore, AUTH_IP_LIMITS.signup)` to initiate + update the parity pins in the same
+    commit. LOW; flow code-security separately clean (V-266: 256-bit code/5-min TTL/one-shot/timing-safe).
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
