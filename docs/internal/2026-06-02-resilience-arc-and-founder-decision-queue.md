@@ -600,7 +600,13 @@ transcript.length` guard); account-scoped (cross-account → 404).
     Analytics is cookieless). **This COMPLETES the compliance-posture verification family** — marketing
     claims honest + sub-processors complete + cookies tracker-free, all clean; the sole OPEN compliance
     item is the §4.16 data-residency config-assertion gap (DB + R2 EU-region unasserted). Detail in
-    Agent-2 auto-memory `project_cookie_tracker_disclosure_clean`.
+    Agent-2 auto-memory `project_cookie_tracker_disclosure_clean`. **Now drift-guarded:**
+    `marketing-site-tracker-free-invariant.test.ts` (2026-06-03) scans the 75 marketing-site source files
+    and fails CI if any third-party tracker (GA/GTM/Segment/Mixpanel/Hotjar/PostHog/Plausible/Fathom/Meta
+    Pixel/DoubleClick) script-load or init-call appears — so a future change can't silently add a
+    cookie-setting tracker (which would create an ePrivacy consent obligation) without the gate forcing a
+    consent banner + disclosure. Patterns match script-loads/init-calls, not prose (honest "no Google
+    Analytics" disclaimers don't trip it); validated green against the current tracker-free source.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
