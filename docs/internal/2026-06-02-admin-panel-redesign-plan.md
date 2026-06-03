@@ -103,3 +103,47 @@ migrate. Each wave: ship ONE coherent slice (a component set, a page, or an endp
   until a leads source is defined — don't show fake leads. Founder can define a CRM/leads source later.
 - Theme: light-first (admin readability). Dark mode deferred to Phase 6 if wanted.
 - Charts: lightweight inline-SVG (no heavy charting dep) unless the founder wants richer interactivity.
+
+## ⚠️ Phase-0 BLOCKER discovered (2026-06-03) — the shared data layer is unadoptable as-is
+
+**Finding (verified by read, not assumed):** `src/lib/admin-client.ts` (the Phase-0 "single
+source of truth" data layer — `adminFetch` / `adminFetchJson` / `AdminApiError` / `escapeHtml` /
+`fmtIso` / `fmtInt` / `fmtCents`, built 2026-06-02) is **dead code**: NO page imports it; only
+its own unit test (`admin-client.test.ts`) references it. Every page that fetches real data
+(`index`, `cost`, `accounts/[id]`, and the rest) re-defines `authedFetch` **inline** inside a
+`<script is:inline define:vars={{ apiBaseUrl, ... }}>` block.
+
+**Root cause — an architectural incompatibility, not an oversight:** Astro `is:inline` scripts are
+NOT processed/bundled, so they **cannot `import`** the shared module. The pages use `is:inline`
+specifically because `define:vars` (the mechanism that passes SSR-computed values like
+`apiBaseUrl` / `tierOrder` / `tierLabels` into the client script) **only works on `is:inline`
+scripts**. So the inline-`authedFetch` duplication is a _consequence_ of the `define:vars`
+pattern. You cannot adopt `admin-client.ts` without first changing how SSR→client values are
+passed. This is why no clean incremental "consolidate the fetch helper" micro-slice exists — the
+whole Phase-0 data-layer adoption is gated on this one pattern decision.
+
+**FOUNDER / ARCHITECTURE DECISION (surfaced, not flipped):** pick the SSR→client value-passing
+pattern so pages can drop `is:inline` and import `admin-client.ts`:
+
+- **(Recommended) Bundled `<script>` + JSON data-island.** Emit SSR values in a
+  `<script type="application/json" id="page-data">{...}</script>` (or `data-*` attributes on a
+  root element); the page's now-bundled `<script>` reads + parses that, then imports `adminFetch`
+  et al. Standard Astro idiom; unlocks the shared layer + kills per-page drift. Cost: each page
+  migrated is a parity-churn slice (its content-parity tests pin the inline `authedFetch` strings
+  - script shape — update same commit).
+- **(Alt) Keep `is:inline`, delete `admin-client.ts`.** Accept inline duplication as the
+  permanent pattern; add a drift-guard pinning the N inline `authedFetch` copies byte-identical.
+  Cheaper now, but abandons the "single source of truth" goal + the formatters.
+
+**Recommended sequenced execution (once the pattern is approved) — lightest-pinned first to
+de-risk:** `accounts/[id]` (~14 parity refs) as the proof-of-pattern → then the remaining
+inline-fetch pages → `index` LAST (~42 parity refs across 4 test files; highest blast radius).
+Each page = one validated+deployed wave. Do NOT migrate `index` first.
+
+**Until the decision lands:** admin-panel code slices are effectively blocked on this — the
+remaining "enhance" options are either marginal churn (e.g. making KPI tiles clickable when the
+AdminLayout sidebar already navigates to those pages) or heavy multi-invariant changes (e.g. an
+"active API keys" KPI needs a new dep injected into `AccountsAdminService` + V-515 cross-source
+invariant + content-parity interface pin + the 4→5 tile grid — ~8 files, 2 critical pinned
+invariants). Neither is a clean "one safe slice." See
+[[project_admin_panel_isinline_blocks_shared_client]].
