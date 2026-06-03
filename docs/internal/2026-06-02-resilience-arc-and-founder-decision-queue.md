@@ -491,6 +491,18 @@ transcript.length` guard); account-scoped (cross-account → 404).
     dispatcher — atomic first-failure/first-success CAS dedup), `status-subscribers.ts`
     (admin-link bug FIXED `743fb484`), `health-probe.ts` (config-driven targets, no user SSRF; 2 LOW
     latent items in §4.8/§4.9). Detail in Agent-2 auto-memory.
+  - _API-key management authorization (fresh-audited 2026-06-03 — tested a privilege-escalation
+    hypothesis, REFUTED):_ the `routes/admin.ts` key routes (POST/DELETE/rotate `/v1/api-keys`) are
+    `requireAuth + rateLimit` with NO `requireScope` in the preHandler, but scope is enforced
+    SERVICE-side — `ApiKeysService.create`/`revoke` both `throwIfMissingScope(ctx,'account_owner')`,
+    plus the V-174 de-escalation guard (`ELEVATED_SCOPES=['admin','driftstack_internal_admin']`;
+    granting an unheld elevated scope → `ForbiddenError`). So a read-only key cannot mint a key, and
+    even an `account_owner` key cannot escalate to a staff scope. FULLY tested behaviorally
+    (`api-keys-service.test.ts`) + content-parity-pinned. **Meta-lesson:** scope is enforced in the
+    service layer, not the preHandler → a naive preHandler-based scope-coverage drift-guard would
+    FALSE-POSITIVE here (so none was built). Cache-Control (`lib/app.ts` global `no-store, private`
+    hook, V-666) + the 28 timing-safe comparison sites were re-confirmed clean/saturated the same wave.
+    Detail in Agent-2 auto-memory `project_api_key_management_authz_clean`.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
