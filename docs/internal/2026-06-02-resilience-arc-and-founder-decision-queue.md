@@ -560,6 +560,16 @@ transcript.length` guard); account-scoped (cross-account → 404).
     effectively dormant — the delivery worker is unwired with 0 prod endpoints (§ webhook-delivery),
     so it finds 0 eligible today. Detail in Agent-2 auto-memory
     `project_webhook_secret_force_rotation_clean`.
+  - _Marketing COMPLIANCE/security claim accuracy (fresh dimension 2026-06-03; pricing/tier-cap claims
+    were already guarded by W246/W248, but cert/compliance CLAIM accuracy was not) — HONEST + consistent,
+    no false legal claim:_ SOC 2 is correctly disclaimed everywhere — `security.astro` "No SOC 2 / not yet
+    certified", `trust/compliance.astro` a status-tagged roadmap (Type I "In progress Q3 2026", Type II
+    "Planned Q1 2027"; "In place" only on the DPA-with-SCCs row), `about.astro` "SOC 2 is a future-revenue
+    milestone, not today's marketing line"; ISO 27001 "No ISO 27001"; PCI-DSS correctly attributed to
+    Stripe (DriftStack holds no card data, only the customer_id linkage). No overstated/false compliance
+    claim — important to have verified pre-launch (FTC/trust risk class). (`matchRatePercentage:99.9` is an
+    Agent-1 fp-domain claim; support-response SLAs are business commitments — both out of this lens.)
+    Detail in Agent-2 auto-memory `project_marketing_compliance_claim_accuracy_clean`.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
