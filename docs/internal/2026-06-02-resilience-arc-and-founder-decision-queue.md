@@ -859,6 +859,22 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
     on the next frontend dependency pass (clears the undici HIGH set), verify the dashboard/admin build +
     CF-Pages deploy, re-run `npm audit --omit=dev`. Detail: auto-memory
     `project_dependency_audit_astro_high_vulns`.
+19. **The coordinated-disclosure policy links to a 404'ing honour-roll page — LOW doc-integrity;
+    surfaced 2026-06-03 (FOUNDER/CONTENT call, not auto-fixed).** While shipping `/.well-known/security.txt`
+    (now live — `1a3b08bf`, verified 200), a sweep of the legal pages' internal links found them ALL
+    resolving 200 EXCEPT one: `legal/vulnerability-disclosure.md:227` links to
+    `/legal/security-research-honour-roll`, which **404s** (no backing page). So a researcher who
+    responsibly discloses and follows the policy to "see the honour roll" hits a dead link in a LIVE
+    legal/security policy. **Why not auto-fixed:** both fixes are PROSE/content decisions, not a
+    standardized file — (a) create a stub honour-roll page (commits to a maintained "hall of fame" +
+    its framing / "with researcher permission" tone / brand voice), or (b) drop the link from the
+    policy (retracts a published commitment to credit researchers). Either is a founder/content call
+    (distinct from the security.txt, which was a standard RFC-9116 metadata file with the
+    already-established contact → safely self-shipped). **Recommended:** create the stub page (the
+    lower-risk fix — fulfills the commitment rather than retracting it). Detail: auto-memory
+    `project_security_txt_and_robots_gaps`. (Same wave also: shipped the security.txt + a frontend
+    `_headers` clickjacking drift-guard `39111921`; verified the rest of the legal-link integrity +
+    the dashboard/admin XSS-escaping posture clean — all recorded in memory.)
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
