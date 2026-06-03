@@ -526,6 +526,15 @@ transcript.length` guard); account-scoped (cross-account → 404).
     regression behaviorally — so a regression to local time would silently re-introduce `b70366ea` on this
     endpoint. Added a source-pin in `services-admin-accounts-content-parity.test.ts`. Detail in Agent-2
     auto-memory `project_admin_analytics_utc_window_guard`.
+  - _Webhook quota events `[DECLARED]`-not-firing is INTENTIONAL, not a bug (investigated 2026-06-03,
+    two hypotheses refuted):_ `quota.warning_80pct` + `quota.exceeded` are subscribable but have no
+    `enqueueEvent` producer — because there is no usage-quota ENFORCEMENT/metering in the v1.0
+    subscription-tier model (`usage.ts` only REPORTS `quotas`, `null=unmetered`); the events are declared
+    for a future metered model and `webhooks/events.md` HONESTLY tags them `[DECLARED]`. The literal
+    `V-NNN` in customer docs is an INTENTIONAL pinned generic placeholder (the `[LIVE]/[DECLARED]/[PLANNED]`
+    taxonomy), not a leaked mistake — don't "fix" it. Roster is comprehensively drift-guarded (every enum
+    value iterated vs catalog + cross-SDK exact + dashboard + schema-invariants). Don't re-chase "quota
+    webhooks broken". Detail in Agent-2 auto-memory `project_webhook_quota_events_declared_not_a_bug`.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
