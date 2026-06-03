@@ -51,10 +51,12 @@ describe('W412.B apps/server/src/routes/status-stream.ts content parity', () => 
     );
   });
 
-  it('Unauth + connection-limit posture pinned: status site is public; SSE connection-limited by Fastify + OS/Cloudflare TCP layer', () => {
-    expect(body).toMatch(
-      /Both endpoints are unauthenticated \(the status site is public\)\.\s*\n?\s*\/\/\s*SLA is rate-limited globally; SSE is connection-limited by Fastify\s*\n?\s*\/\/\s*itself \+ the per-IP TCP-connection ceiling at the OS \/ Cloudflare layer\./,
-    );
+  it('Unauth + connection-limit posture pinned: status site is public; SSE has NO app-level cap and Fastify/Node set no maxConnections — bounded only at the OS/Cloudflare edge (surfaced gap)', () => {
+    expect(body).toMatch(/Both endpoints are unauthenticated \(the status site is public\)\./);
+    // Corrected posture: NO app-level cap + no Fastify/Node maxConnections (the
+    // prior "connection-limited by Fastify itself" claim was inaccurate).
+    expect(body).toMatch(/rate-limit or concurrent-connection cap, and Fastify\/Node set no/);
+    expect(body).toMatch(/TCP-connection ceiling at the OS \/ Cloudflare edge layer/);
   });
 
   it('Heartbeat default 30_000ms with proxy-timeout rationale (Cloudflare 60s)', () => {

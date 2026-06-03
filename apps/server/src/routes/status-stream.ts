@@ -9,8 +9,11 @@
 //   computed from the V-295b system_health_probes table.
 //
 // Both endpoints are unauthenticated (the status site is public).
-// SLA is rate-limited globally; SSE is connection-limited by Fastify
-// itself + the per-IP TCP-connection ceiling at the OS / Cloudflare layer.
+// SLA is rate-limited globally. The SSE stream has NO app-level
+// rate-limit or concurrent-connection cap, and Fastify/Node set no
+// maxConnections — so its connection bounding is only the per-IP
+// TCP-connection ceiling at the OS / Cloudflare edge layer (a
+// defense-in-depth gap surfaced as queue item 4.15).
 
 import type { FastifyInstance } from 'fastify';
 import type { IncidentEvent, IncidentEventBus } from '../services/incident-event-bus.js';

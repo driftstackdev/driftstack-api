@@ -694,6 +694,27 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
     (mirroring `938ebf3a`), or centralize eviction via a session-closed event the cache owner subscribes
     to (cleaner — covers every present + future close path). Detail: auto-memory
     `project_byok_key_cache_orphan_on_out_of_band_close`.
+15. **SSE streams have no app-level concurrent-connection cap; the PUBLIC `/v1/status/stream` has no
+    app-level limiter at all (LOW–MEDIUM resource-exhaustion defense-in-depth; surfaced 2026-06-03).** A
+    fresh SSE-connection-limit audit (genuinely uncovered — `sse_server_lifecycle_clean` covered
+    disconnect/cleanup, not connection COUNT) found: (a) the two AUTHENTICATED streams
+    (`/v1/account/me/notifications/stream`, `/v1/agent-sessions/:id/transcript`) carry
+    `rateLimit('global')` on OPEN (caps the open RATE) but no per-account CONCURRENT cap — a patient
+    client can accumulate many held-open streams (each = 1 FD + a subscriber-map entry + a 25s heartbeat
+    timer); (b) the PUBLIC, unauthenticated `/v1/status/stream` (`routes/status-stream.ts`) has NO
+    preHandler at all — no auth, no `ipRateLimit`, no concurrent cap. \*\*And the code comment claimed it
+    was "connection-limited by Fastify itself" — that was INACCURATE: no `maxConnections` is configured
+    anywhere (Node's default is unlimited), so Fastify imposes no cap; bounding is ONLY the OS FD ceiling
+    - the Cloudflare edge.** (Fixed the misleading comment this wave + its two parity pins; surfaced the
+      gap here.) Because the connection pool is shared with the API, an anonymous SSE-connection flood
+      could exhaust FDs/memory and degrade the whole origin. **Severity LOW–MEDIUM** (Cloudflare edge +
+      OS FD limits are real backstops; the status site is CF-fronted; the authed streams are
+      accountable + open-rate-limited; agent-sessions is activation-gated/latent). **Founder/infra call
+      (NOT autopilot — outward-facing + interacts with the CF/nginx edge layer + legit anonymous viewers):\*\*
+      add an `ipRateLimit` on the `/v1/status/stream` open (mirroring `status-subscribe`'s `subscribeGate`)
+      and/or a per-account/per-IP concurrent-SSE cap (the event buses already expose `subscriberCount(...)`),
+      or set a Fastify/Node `maxConnections` + `keepAliveTimeout`. Detail: auto-memory
+      `project_sse_no_concurrent_connection_cap`.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,

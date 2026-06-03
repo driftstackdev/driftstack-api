@@ -12,10 +12,11 @@
 //     - GET /v1/status/sla — rolling 30-day uptime per probe target
 //       from V-295b system_health_probes.
 //
-//   Unauth + connection-limited framing — 'Both endpoints are
+//   Unauth + connection-posture framing — 'Both endpoints are
 //   unauthenticated (the status site is public). SLA is rate-limited
-//   globally; SSE is connection-limited by Fastify itself + the
-//   per-IP TCP-connection ceiling at the OS / Cloudflare layer'.
+//   globally. The SSE stream has NO app-level rate-limit or
+//   concurrent-connection cap, and Fastify/Node set no maxConnections —
+//   bounded only by the OS / Cloudflare edge TCP ceiling' (queue §4.15).
 //
 //   heartbeatMs default 30_000 framing — 'Heartbeat interval in ms.
 //   Defaults to 30s — well below typical proxy idle-timeouts (60s on
@@ -70,13 +71,11 @@ describe('W1022 routes/status-stream V-295e cross-source invariant', () => {
     expect(p).toMatch(/computed from the V-295b system_health_probes table\./);
   });
 
-  it("CRITICAL unauth + connection-limit framing — 'Both endpoints are unauthenticated (the status site is public). SLA is rate-limited globally; SSE is connection-limited by Fastify itself + the per-IP TCP-connection ceiling at the OS / Cloudflare layer'.", () => {
+  it("CRITICAL unauth + connection-posture framing — 'Both endpoints are unauthenticated (the status site is public). SLA is rate-limited globally. The SSE stream has NO app-level rate-limit or concurrent-connection cap, and Fastify/Node set no maxConnections — bounded only by the OS / Cloudflare edge TCP ceiling' (queue §4.15; the prior 'connection-limited by Fastify itself' claim was inaccurate — no maxConnections is configured).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/status-stream.ts'));
     expect(p).toMatch(/Both endpoints are unauthenticated \(the status site is public\)\./);
-    expect(p).toMatch(/SLA is rate-limited globally; SSE is connection-limited by Fastify/);
-    expect(p).toMatch(
-      /itself \+ the per-IP TCP-connection ceiling at the OS \/ Cloudflare layer\./,
-    );
+    expect(p).toMatch(/rate-limit or concurrent-connection cap, and Fastify\/Node set no/);
+    expect(p).toMatch(/TCP-connection ceiling at the OS \/ Cloudflare edge layer/);
   });
 
   it("CRITICAL heartbeatMs default — '30_000' + framing 'well below typical proxy idle-timeouts (60s on Cloudflare, longer elsewhere)'.", () => {
