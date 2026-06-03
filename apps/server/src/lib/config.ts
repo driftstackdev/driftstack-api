@@ -15,7 +15,10 @@ const ConfigSchema = z.object({
   // Safari for non-stealth E2E smoke testing on Mac).
   playwrightBrowser: z.enum(['webkit', 'chromium', 'firefox']).default('webkit'),
   // V-333b — true = visible window (Mac dev), false = headless (CI).
-  playwrightHeaded: z.coerce.boolean().default(false),
+  // z.boolean() (NOT z.coerce.boolean()): the env mapping converts via
+  // `=== 'true'`, because z.coerce.boolean() does Boolean(str) so "false"
+  // would wrongly coerce to true.
+  playwrightHeaded: z.boolean().default(false),
   // V-113: Slow-query log threshold. When set, queries at or above this
   // duration emit a warn-level structured log via postgres-js client
   // instrumentation. Unset = disabled (default for dev/test).
@@ -162,8 +165,13 @@ const ConfigSchema = z.object({
      * a `debug_token` field containing the plaintext token. ENABLE ONLY
      * in dev / test — production must never leak these tokens via the
      * response body. Default false.
+     *
+     * z.boolean() (NOT z.coerce.boolean()): the env mapping converts the raw
+     * string via `=== 'true'`. z.coerce.boolean() does Boolean(str), so
+     * AUTH_EXPOSE_DEBUG_TOKEN=false (or 0/no/off) would coerce to TRUE — i.e.
+     * an operator DISABLING this would actually ENABLE plaintext-token leakage.
      */
-    exposeDebugToken: z.coerce.boolean().default(false),
+    exposeDebugToken: z.boolean().default(false),
   }),
   /**
    * V-266 — origin of the customer dashboard. Used to build the
@@ -369,7 +377,9 @@ function deriveAuthFlowUrls(env: NodeJS.ProcessEnv): {
   verifyEmail?: string;
   magicLink?: string;
   passwordReset?: string;
-  exposeDebugToken?: string;
+  // boolean (parsed via `=== 'true'` below), NOT the raw env string — the
+  // schema uses z.boolean() to avoid the z.coerce.boolean() "false"→true footgun.
+  exposeDebugToken?: boolean;
 } {
   const origin = env.DASHBOARD_ORIGIN?.replace(/\/+$/, '');
   const fromOrigin = (path: string): string | undefined =>
@@ -383,7 +393,7 @@ function deriveAuthFlowUrls(env: NodeJS.ProcessEnv): {
     verifyEmail: env.AUTH_VERIFY_EMAIL_URL ?? fromOrigin('/verify-email'),
     magicLink: env.AUTH_MAGIC_LINK_URL ?? fromOrigin('/auth/magic-link'),
     passwordReset: env.AUTH_PASSWORD_RESET_URL ?? fromOrigin('/reset-password'),
-    exposeDebugToken: env.AUTH_EXPOSE_DEBUG_TOKEN,
+    exposeDebugToken: env.AUTH_EXPOSE_DEBUG_TOKEN === 'true',
   };
   if (env.NODE_ENV === 'production') {
     for (const [name, value] of Object.entries({
@@ -487,7 +497,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     mockNavigateLatencyMs: env.MOCK_NAVIGATE_LATENCY_MS,
     mockInteractLatencyMs: env.MOCK_INTERACT_LATENCY_MS,
     playwrightBrowser: env.PLAYWRIGHT_BROWSER,
-    playwrightHeaded: env.PLAYWRIGHT_HEADED,
+    playwrightHeaded: env.PLAYWRIGHT_HEADED === 'true',
     slowQueryLogThresholdMs: env.SLOW_QUERY_LOG_THRESHOLD_MS,
     dbStatementTimeoutMs: env.DB_STATEMENT_TIMEOUT_MS,
     r2: readR2Config(env),

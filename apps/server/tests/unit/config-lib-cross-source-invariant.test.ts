@@ -244,7 +244,7 @@ describe('W966 config lib cross-source invariant', () => {
   it("CRITICAL playwrightHeaded framing — 'V-333b — true = visible window (Mac dev), false = headless (CI)'. The visible-vs-headless toggle is the Mac-dev-vs-CI distinction.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/config.ts'));
     expect(p).toMatch(/V-333b — true = visible window \(Mac dev\), false = headless \(CI\)\./);
-    expect(p).toMatch(/playwrightHeaded: z\.coerce\.boolean\(\)\.default\(false\),/);
+    expect(p).toMatch(/playwrightHeaded: z\.boolean\(\)\.default\(false\),/);
   });
 
   // ─── Driver enum 3-value ──────────────────────────────────────

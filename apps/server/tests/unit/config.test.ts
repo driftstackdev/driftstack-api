@@ -26,6 +26,29 @@ describe('loadConfig', () => {
     expect(cfg.mockNavigateLatencyMs).toBe(50);
   });
 
+  it('boolean env vars use strict === \'true\' parsing (NOT z.coerce.boolean which makes "false" → true)', () => {
+    const base = {
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+    };
+    // The security-relevant one: AUTH_EXPOSE_DEBUG_TOKEN gates plaintext-token
+    // leakage in auth responses. Setting it to "false" MUST disable it (the old
+    // z.coerce.boolean() coerced "false" → true → leak-when-meant-to-disable).
+    expect(
+      loadConfig({ ...base, AUTH_EXPOSE_DEBUG_TOKEN: 'false' }).authFlowUrls.exposeDebugToken,
+    ).toBe(false);
+    expect(
+      loadConfig({ ...base, AUTH_EXPOSE_DEBUG_TOKEN: '0' }).authFlowUrls.exposeDebugToken,
+    ).toBe(false);
+    expect(
+      loadConfig({ ...base, AUTH_EXPOSE_DEBUG_TOKEN: 'true' }).authFlowUrls.exposeDebugToken,
+    ).toBe(true);
+    expect(loadConfig(base).authFlowUrls.exposeDebugToken).toBe(false); // unset → default false
+    // Same fix for PLAYWRIGHT_HEADED.
+    expect(loadConfig({ ...base, PLAYWRIGHT_HEADED: 'false' }).playwrightHeaded).toBe(false);
+    expect(loadConfig({ ...base, PLAYWRIGHT_HEADED: 'true' }).playwrightHeaded).toBe(true);
+  });
+
   it('rejects invalid driver', () => {
     expect(() =>
       loadConfig({

@@ -161,8 +161,12 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
       /playwrightBrowser: z\.enum\(\['webkit', 'chromium', 'firefox'\]\)\.default\('webkit'\),/,
     );
     expect(body).toMatch(
-      /\/\/ V-333b — true = visible window \(Mac dev\), false = headless \(CI\)\.\s*\n?\s*playwrightHeaded: z\.coerce\.boolean\(\)\.default\(false\),/,
+      /\/\/ V-333b — true = visible window \(Mac dev\), false = headless \(CI\)\./,
     );
+    // z.boolean() NOT z.coerce.boolean() — the env mapping converts via
+    // `=== 'true'` (coerce.boolean would make "false" → true). Pinned so a
+    // future "simplify" can't reintroduce the footgun.
+    expect(body).toMatch(/playwrightHeaded: z\.boolean\(\)\.default\(false\),/);
   });
 
   it('V-113 slow-query log threshold: optional, unset = disabled (default for dev/test)', () => {
@@ -199,7 +203,7 @@ describe('W390.A apps/server/src/lib/config.ts content parity', () => {
     expect(body).toMatch(
       /When true, signup \/ magic-link \/ password-reset responses include\s*\n?\s*\*\s*a `debug_token` field containing the plaintext token\. ENABLE ONLY\s*\n?\s*\*\s*in dev \/ test — production must never leak these tokens via the\s*\n?\s*\*\s*response body\. Default false/,
     );
-    expect(body).toMatch(/exposeDebugToken: z\.coerce\.boolean\(\)\.default\(false\),/);
+    expect(body).toMatch(/exposeDebugToken: z\.boolean\(\)\.default\(false\),/);
   });
 
   it('exported types: Config + R2Config + PostmarkConfig + SentryConfig (NonNullable shorthand)', () => {
