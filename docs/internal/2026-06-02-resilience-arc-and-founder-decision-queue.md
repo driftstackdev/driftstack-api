@@ -581,6 +581,17 @@ transcript.length` guard); account-scoped (cross-account → 404).
     Forward note: a future hand-written data migration or a `SET NOT NULL`/no-default-`ADD NOT NULL` on a
     then-populated table is the thing to re-check; the generated-migration discipline is sound. Detail in
     Agent-2 auto-memory `project_db_migration_safety_clean`.
+  - _Sub-processor disclosure completeness (fresh dimension 2026-06-03; GDPR Art-28) — COMPLETE, no gap:_
+    cross-checked every external-service integration in the code against `data/sub-processors.ts` (the
+    source-of-truth for `/trust/sub-processors`). All 12 prod customer-data processors are disclosed
+    (Hetzner / Neon / Upstash / Cloudflare R2 / Postmark / Sentry / Stripe / Anthropic / Moneybird /
+    MacStadium / NowPayments / LiveKit — incl. the easily-forgotten Upstash-Redis, Moneybird-accounting,
+    MacStadium-fleet). The two code integrations NOT listed are correctly excluded: Google/GitHub OAuth
+    (relying-party IdPs, not DriftStack sub-processors) + BrowserStack (Agent-1 dev/fp-capture tooling, no
+    prod customer data). No undisclosed sub-processor → no Article 28 gap. Completes the compliance-posture
+    verification family (marketing claims honest + sub-processors complete; the one OPEN item is the
+    §4.16 data-residency config-assertion gap). Detail in Agent-2 auto-memory
+    `project_subprocessor_disclosure_completeness_clean`.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
