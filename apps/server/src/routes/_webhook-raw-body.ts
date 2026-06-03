@@ -28,6 +28,18 @@ const RAW_BODY_URLS: ReadonlySet<string> = new Set([
 
 const REGISTERED = new WeakSet<FastifyInstance>();
 
+// A malformed JSON request body is a CLIENT error → 400, not 500. Fastify's
+// built-in JSON parser sets statusCode 400 on a parse failure; this custom
+// parser (which replaces it to capture rawBody for webhook signatures) must
+// do the same — otherwise the bare SyntaxError reaches the error handler with
+// no statusCode and is mapped to a generic 500 (false 5xx on a client error).
+// Generic message — never echoes the offending body.
+function invalidJsonBody(): Error & { statusCode: number } {
+  const e = new Error('Invalid JSON in request body.') as Error & { statusCode: number };
+  e.statusCode = 400;
+  return e;
+}
+
 export function registerWebhookRawBodyParser(app: FastifyInstance): void {
   if (REGISTERED.has(app)) return;
   REGISTERED.add(app);
@@ -43,8 +55,8 @@ export function registerWebhookRawBodyParser(app: FastifyInstance): void {
         try {
           const parsed: unknown = text.length === 0 ? {} : JSON.parse(text);
           done(null, parsed);
-        } catch (err) {
-          done(err instanceof Error ? err : new Error(String(err)), undefined);
+        } catch {
+          done(invalidJsonBody(), undefined);
         }
         return;
       }
@@ -52,8 +64,8 @@ export function registerWebhookRawBodyParser(app: FastifyInstance): void {
       try {
         const parsed: unknown = typeof body === 'string' && body.length > 0 ? JSON.parse(body) : {};
         done(null, parsed);
-      } catch (err) {
-        done(err instanceof Error ? err : new Error(String(err)), undefined);
+      } catch {
+        done(invalidJsonBody(), undefined);
       }
     },
   );

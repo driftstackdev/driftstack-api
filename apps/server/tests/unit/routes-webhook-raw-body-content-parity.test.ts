@@ -92,10 +92,9 @@ describe('W410.C apps/server/src/routes/_webhook-raw-body.ts content parity', ()
     );
   });
 
-  it('Error path: wraps non-Error throws in new Error(String(err)); done(err, undefined) on parse failure', () => {
-    expect(body).toMatch(
-      /\} catch \(err\) \{\s*\n?\s*done\(err instanceof Error \? err : new Error\(String\(err\)\), undefined\);/,
-    );
+  it('Error path: malformed JSON → done(invalidJsonBody(), undefined) — a 400 client error, not a 500', () => {
+    expect(body).toMatch(/\} catch \{\s*\n?\s*done\(invalidJsonBody\(\), undefined\);/);
+    expect(body).toMatch(/e\.statusCode = 400;/);
   });
 
   it('imports: FastifyInstance + FastifyRequest types from fastify', () => {

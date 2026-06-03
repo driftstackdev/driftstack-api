@@ -84,15 +84,21 @@ describe('W461.B apps/server/src/routes/_webhook-raw-body.ts content parity', ()
     );
   });
 
-  it("URL-allowlist branch: req.routeOptions.url ?? '' lookup; RAW_BODY_URLS.has(url) → req.rawBody = text + JSON.parse OR empty-string→{} fallback + done(null, parsed); JSON.parse error done(err) catch path", () => {
+  it("URL-allowlist branch: req.routeOptions.url ?? '' lookup; RAW_BODY_URLS.has(url) → req.rawBody = text + JSON.parse OR empty-string→{} fallback + done(null, parsed); malformed JSON → done(invalidJsonBody(), undefined) (400, not 500)", () => {
     expect(body).toMatch(
-      /\(req: FastifyRequest, body, done\) => \{\s*\n?\s*const url = req\.routeOptions\.url \?\? '';\s*\n?\s*if \(RAW_BODY_URLS\.has\(url\)\) \{\s*\n?\s*const text = typeof body === 'string' \? body : '';\s*\n?\s*req\.rawBody = text;\s*\n?\s*try \{\s*\n?\s*const parsed: unknown = text\.length === 0 \? \{\} : JSON\.parse\(text\);\s*\n?\s*done\(null, parsed\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*done\(err instanceof Error \? err : new Error\(String\(err\)\), undefined\);\s*\n?\s*\}\s*\n?\s*return;\s*\n?\s*\}/,
+      /\(req: FastifyRequest, body, done\) => \{\s*\n?\s*const url = req\.routeOptions\.url \?\? '';\s*\n?\s*if \(RAW_BODY_URLS\.has\(url\)\) \{\s*\n?\s*const text = typeof body === 'string' \? body : '';\s*\n?\s*req\.rawBody = text;\s*\n?\s*try \{\s*\n?\s*const parsed: unknown = text\.length === 0 \? \{\} : JSON\.parse\(text\);\s*\n?\s*done\(null, parsed\);\s*\n?\s*\} catch \{\s*\n?\s*done\(invalidJsonBody\(\), undefined\);\s*\n?\s*\}\s*\n?\s*return;\s*\n?\s*\}/,
     );
   });
 
-  it("Non-webhook branch framing pinned: 'Non-webhook routes: standard parse, no raw stash.' + standard JSON.parse + empty-string→{} fallback + matching catch-and-done(err) pattern", () => {
+  it("Non-webhook branch framing pinned: 'Non-webhook routes: standard parse, no raw stash.' + standard JSON.parse + empty-string→{} fallback + matching catch → done(invalidJsonBody(), undefined) (400)", () => {
     expect(body).toMatch(
-      /\/\/ Non-webhook routes: standard parse, no raw stash\.\s*\n?\s*try \{\s*\n?\s*const parsed: unknown = typeof body === 'string' && body\.length > 0 \? JSON\.parse\(body\) : \{\};\s*\n?\s*done\(null, parsed\);\s*\n?\s*\} catch \(err\) \{\s*\n?\s*done\(err instanceof Error \? err : new Error\(String\(err\)\), undefined\);\s*\n?\s*\}/,
+      /\/\/ Non-webhook routes: standard parse, no raw stash\.\s*\n?\s*try \{\s*\n?\s*const parsed: unknown = typeof body === 'string' && body\.length > 0 \? JSON\.parse\(body\) : \{\};\s*\n?\s*done\(null, parsed\);\s*\n?\s*\} catch \{\s*\n?\s*done\(invalidJsonBody\(\), undefined\);\s*\n?\s*\}/,
+    );
+  });
+
+  it('malformed JSON is a 400 client error, not 500: invalidJsonBody() sets statusCode 400 + a generic non-echoing message', () => {
+    expect(body).toMatch(
+      /function invalidJsonBody\(\): Error & \{ statusCode: number \} \{\s*\n?\s*const e = new Error\('Invalid JSON in request body\.'\) as Error & \{ statusCode: number \};\s*\n?\s*e\.statusCode = 400;\s*\n?\s*return e;\s*\n?\s*\}/,
     );
   });
 

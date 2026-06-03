@@ -91,6 +91,23 @@ describe('POST /v1/webhooks/nowpayments (V-666 + V-487)', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('malformed JSON body → 400 (client error), NOT 500', async () => {
+    // Regression: the custom application/json parser used to pass the bare
+    // SyntaxError to done(), which the error handler (no statusCode) mapped
+    // to a 500 — a client error misreported as a server error (false 5xx).
+    // invalidJsonBody() now sets statusCode 400.
+    fx = await buildTestApp({ nowpaymentsIpnSecret: IPN_SECRET });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: ROUTE,
+      headers: { 'content-type': 'application/json', 'x-nowpayments-sig': 'sig' },
+      payload: '{ not valid json',
+    });
+    expect(res.statusCode).toBe(400);
+    const problem = JSON.parse(res.body) as { status: number };
+    expect(problem.status).toBe(400);
+  });
+
   it('invalid signature → 401', async () => {
     fx = await buildTestApp({ nowpaymentsIpnSecret: IPN_SECRET });
     const payload: IpnPayload = { payment_id: 'pay_123', payment_status: 'confirmed' };
