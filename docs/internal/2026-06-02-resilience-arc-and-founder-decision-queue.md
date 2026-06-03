@@ -60,6 +60,22 @@ without the secret) and aligns inbound with Stripe's official SDK + our own outb
 +4 reference-vector tests (both orderings accept, none-match rejects, empty-v1 → missing_v1); BOTH
 stripe-signing parity files updated same commit (the full pre-push gate caught the second one).
 
+**Also shipped — 2026-06-03 waves (admin-panel statistics buildout + fresh-audit fixes; all deployed, gate-green, V-205-clean):**
+
+- **Admin-panel stats (founder's "statistics" mandate):** `admin-client.ts` shared data layer (`43203bd4`);
+  `/v1/admin/overview` enriched with `accounts.by_tier` (`be726888`) + `accounts.signups` today/7d/30d
+  (`2da8b9d0`); new `/v1/admin/sessions/stats` count-by-status endpoint (`2fa03e86`). Dashboard now renders
+  all of it: tier-distribution bars (`2f0a2812`), New-signups tile (`d31d75a4`), Live-sessions tile
+  (`21947429`) — each real-data-wired with JSDOM no-blind-ship validation + content-parity.
+- **Fresh-audit fixes:** crypto daily-breakdown UTC-window misalignment (`b70366ea`); incident-create
+  audit row logged the real `inc_<uuid>` not `inc_pending` (`9a3eff6a`); audit-archive `archiveAll`
+  per-table failure isolation (`ef552795`); validation-schedule trigger body now zod-validated, not an
+  `as`-cast (`94ef5a89`); two stale/misleading security-code headers corrected (crypto-orders `5e315eb7`,
+  nowpayments-signing `1f1425cd`).
+- **Audit-saturation reached:** the last several waves yield increasingly LATENT findings (see §2-18/19) —
+  the safe non-gated server surface is comprehensively mined. Highest-leverage remaining = the
+  founder-collaborative admin-panel VISUAL REDESIGN (`2026-06-02-admin-panel-redesign-plan.md`).
+
 **§2 FOUNDER-DECISION QUEUE — TOP-3 + DRIZZLE ROOT-CAUSE CLEARED (founder approved "do everything", 2026-06-02):**
 the recommended priority queue is shipped + live. `8e4d810d` MFA regen step-up gate (§2-15);
 `f93c509a`+`e6ac9f1c` profile-count TOCTOU atomic `insertWithLimit` across all 4 creation paths
@@ -268,6 +284,32 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
       customer MAJORs (astro/react), and either close the docker-action PRs with server-deploy.yml or merge
       after rebase. The non-gating perf-job red is benign noise (item 9 / advisory). Distinct from item 10
       (3 specific npm-audit advisories) — this is the broader stalled-PR-pipeline signal.
+18. **LiveKit token-route divergence (found 2026-06-03; LATENT — both routes gated on `config.livekit`,
+    unset in prod → NOT live).** Two access-token mint routes embody inconsistent designs. The newer
+    canonical `routes/agent-sessions-livekit-token.ts` (LK.3) is **subscriber-only** (`canPublish:false`;
+    the Mac-side capture is the publisher, provisioned out-of-band) with a **per-participant identity**
+    (`customer-<account-id>`, "so the SFU can dedupe joins"). The older `routes/sessions-livekit-token.ts`
+    (V-531.B) **diverges**: (a) it's customer-facing yet lets the body pick `role:'publisher'` →
+    `canPublish:true` (over-grant — self-scoped to the caller's own room, no cross-account exposure, but
+    unnecessary), and (b) it mints every participant with `identity:sessionId` → LiveKit disconnects
+    duplicate identities, so the capture-publisher + customer-subscriber kick each other out (the
+    documented live-preview wouldn't work under this scheme). Both routes are otherwise sound (auth +
+    rate-limit + ownership 404 anti-enum). **Founder/LiveKit-wirer decision (NOT autopilot — realtime-infra
+    route-canonicality + identity scheme):** before keying `config.livekit`, align V-531.B to the canonical
+    pattern (subscriber-only + per-participant identity) OR deprecate it if `/v1/agent-sessions` supersedes
+    `/v1/sessions` for LiveKit. Detail: `2026-06-03-livekit-token-route-divergence.md`. No current prod impact.
+19. **Two LATENT findings from the 2026-06-03 sweep (documented; not auto-changed).** (a) **Duration-sweep
+    `minCapFor`** records the smallest cap across capped tiers for every candidate's destroy-event payload —
+    correct today (only `free` is capped → always 20), wrong once a 2nd tier gains a cap (needs the
+    candidate's tier carried on the row). (b) **Self-re-arm fan-out under poller retry** — the self-re-arming
+    jobs re-arm `dedup:false` inside the handler before `markComplete`; the "one run → one enqueue, can't
+    fan out" reasoning omits retries (if `markComplete` throws after the re-arm, the retried handler
+    re-arms a 2nd time → duplicate chains that never collapse). Rare trigger, low blast radius, but affects
+    ALL self-re-arming jobs; the robust fix (dedup excluding the in-flight job id + `dedup:true`) touches
+    the prior-incident dedup logic → deliberate review. Detail: `2026-06-03-duration-sweep-and-rearm-audit.md`.
+    Also (c) **audit-archive R2 partitioning** keys by the oldest archivable row's month, so a multi-month
+    window lands in one mislabelled file — recoverable via the `audit_archive_runs` ledger; true monthly
+    partitioning is a separate change (`project_audit_archive_isolation_fix` memory). All latent / low-priority.
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
@@ -382,8 +424,12 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
 transcript.length` guard); account-scoped (cross-account → 404).
   - _LiveKit token grants:_ `sessions-livekit-token.ts` ownership-gated (`isSessionOwned` → cross-account
     404), `room == sessionId` (one room/session → no other-customer room), minimal grants (`roomJoin` +
-    `canPublish`/`canSubscribe`, NO `roomAdmin`/`roomCreate`), 600s TTL → no cross-account stream / grant
-    privesc.
+    `canPublish`/`canSubscribe`, NO `roomAdmin`/`roomCreate`), 600s TTL → **no cross-account** stream /
+    grant privesc. ⚠️ **UPDATE 2026-06-03:** the cross-account claim still holds, but a fresh audit found
+    this V-531.B route **diverges from the canonical LK.3 route** (`agent-sessions-livekit-token.ts`) on
+    two SELF-scoped/functional points — it lets a customer mint a `publisher` token (over-grant) and uses
+    `identity:sessionId` (LiveKit duplicate-identity collision → the live-preview wouldn't work). Both
+    not-live (config.livekit unset). See §2-18 + `2026-06-03-livekit-token-route-divergence.md`.
   - _Account email immutability:_ `UpdateAccountMeRequestSchema` whitelists only name/timezone/slug/region —
     NO `email` (nor tier/status/role) → no email-change endpoint exists → the email-change-then-reset
     takeover class has no surface; mass-assignment-safe.
