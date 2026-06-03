@@ -949,6 +949,14 @@ founder actions that close real surfaced gaps — no code, no big decisions, jus
    fulfills the policy's promise) or drop the link from `vulnerability-disclosure.md`. ~5 min (content).
 4. **Confirm Postmark DKIM** for driftstack.dev (Postmark dashboard → Sender Signatures); the
    `pm-bounces` CNAME is set so it's likely already done — verify (needed before DMARC `p=reject`).
+5. **Submit the apex to hstspreload.org** — _NEW 2026-06-03: the HSTS arc is COMPLETE._ All 5 CF-Pages
+   apps (dashboard `9332e9e9`, admin, apex marketing `e358094f`, docs+status `1684a703`) + the API now
+   serve a single clean `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`
+   (verified live; the apex's earlier doubled/comma-joined header was de-duped in `8099f767` so it
+   passes strict validation). The remaining step is the one-time submission of `driftstack.dev` at
+   https://hstspreload.org. **Mildly irreversible** (commits the whole `*.driftstack.dev` tree to
+   HTTPS-forever; de-listing takes weeks–months) → founder call, but every prerequisite header is now
+   in place. Detail: auto-memory `project_cfpages_hsts_gap`. ~5 min.
 
 Bigger, decision/coordination-required items remain in §2 (trustProxy, PERMISSIVE_CORS,
 errors.driftstack.dev DNS, metrics enablement, webhook-worker wiring) + §4 (data-residency assertions,
