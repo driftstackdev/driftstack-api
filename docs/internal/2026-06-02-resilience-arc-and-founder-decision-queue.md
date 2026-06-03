@@ -257,33 +257,36 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
     unpatched (the auto-merge is actor-gated + patch-ONLY, and these are minor/major groups → never
     auto-merge; red CI blocks manual merge too). **Agent-2 cannot safely self-do this** — merging a
     dep/lockfile bump can't be gate-validated by a root-lockfile edit (item 10's reasoning), it triggers
-    a prod deploy, and the real E2E break below needs a focused fix. **Triage (diagnosed this wave):**
-    - **#17 runtime-deps-minor (5 pkgs: drizzle-orm 0.38→0.45.2, @aws-sdk/client-s3 + s3-presigner
-      3.1041→3.1058, @scalar/fastify-api-reference 1.55→1.58, ioredis 5.10→5.11)** — DIAGNOSED this wave:
-      the gating E2E failure is `account-me.spec.ts:93 › PATCH /v1/account/me 409 on slug collision`
-      (got 500, expected 409). **Root cause = the drizzle-orm 0.45 bump** (the other 4 are benign minors):
-      0.45 wraps query errors in `DrizzleQueryError`, moving the Postgres `code`/`constraint_name` to
-      `err.cause` — but the codebase's 23505-translation reads them TOP-LEVEL (`auth-repo.ts:150-152`
-      slug→`SLUG_TAKEN`; `profiles.ts:86 isProfileNameRaceViolation`; + idempotency-replay + signup
-      email-unique) → the catch misses → 23505 propagates → 500 instead of the clean 409/replay. So
-      drizzle-0.45 breaks the ENTIRE 23505-error-translation family (slug caught it via E2E; the others —
-      profile-name-race ×6, agent-session idempotency, signup — aren't all E2E-tested but break the same
-      way). **This is ALSO item-10's drizzle-0.45 security bump** → item-10's "low urgency" is right on
-      SECURITY but understates the UPGRADE EFFORT: it's a coupled dep+code change (update every 23505-catch
-      to read `err.cause.{code,constraint_name}`), founder-reviewed, can't ship the err.cause migration
-      alone (would break current 0.38). Founder option: split #17 to merge the 4 benign minors (aws-sdk×2 +
-      scalar + ioredis) now, handle drizzle-0.45 + the err.cause migration as a coordinated change.
-    - **#6 astro 5→6 / #7 react(+@types)** — customer-shipped MAJORs → founder/astro-build-validated path
-      (same class as item 10's astro note); month-old + stale.
-    - **#16 concurrently 9→10 / #15 dev-deps-minor-patch (8) / #14 cargo-minor-patch (3, gui Rust)** —
-      dev/build-tooling; lower risk; their lone failures may be the non-gating perf job or stale-base.
-    - **#1 docker/build-push 6→7 / #3 docker/login 3→4** — CI-config; the docker-\* actions are used by the
-      ABANDONED `server-deploy.yml` (item 1) → likely CLOSE-or-retire-with-that-workflow, not bump.
-      **#2 setup-node 4→6** — active CI; its build-test failure is likely stale-base (month-old) → rebase.
-      **Action:** founder triage — rebase the month-old stale ones, fix/assess the #17 E2E break, decide the
-      customer MAJORs (astro/react), and either close the docker-action PRs with server-deploy.yml or merge
-      after rebase. The non-gating perf-job red is benign noise (item 9 / advisory). Distinct from item 10
-      (3 specific npm-audit advisories) — this is the broader stalled-PR-pipeline signal.
+    a prod deploy, and the real E2E break below needs a focused fix. **Triage (diagnosed this wave):** - **#17 runtime-deps-minor (5 pkgs: drizzle-orm 0.38→0.45.2, @aws-sdk/client-s3 + s3-presigner
+    3.1041→3.1058, @scalar/fastify-api-reference 1.55→1.58, ioredis 5.10→5.11)** — DIAGNOSED this wave:
+    the gating E2E failure is `account-me.spec.ts:93 › PATCH /v1/account/me 409 on slug collision`
+    (got 500, expected 409). **Root cause = the drizzle-orm 0.45 bump** (the other 4 are benign minors):
+    0.45 wraps query errors in `DrizzleQueryError`, moving the Postgres `code`/`constraint_name` to
+    `err.cause` — but the codebase's 23505-translation reads them TOP-LEVEL (`auth-repo.ts:150-152`
+    slug→`SLUG_TAKEN`; `profiles.ts:86 isProfileNameRaceViolation`; + idempotency-replay + signup
+    email-unique) → the catch misses → 23505 propagates → 500 instead of the clean 409/replay. So
+    drizzle-0.45 breaks the ENTIRE 23505-error-translation family (slug caught it via E2E; the others —
+    profile-name-race ×6, agent-session idempotency, signup — aren't all E2E-tested but break the same
+    way). **This is ALSO item-10's drizzle-0.45 security bump** → item-10's "low urgency" is right on
+    SECURITY but understates the UPGRADE EFFORT: it's a coupled dep+code change (update every 23505-catch
+    to read `err.cause.{code,constraint_name}`), founder-reviewed, can't ship the err.cause migration
+    alone (would break current 0.38). Founder option: split #17 to merge the 4 benign minors (aws-sdk×2 +
+    scalar + ioredis) now, handle drizzle-0.45 + the err.cause migration as a coordinated change. - **#6 astro 5→6 / #7 react(+@types)** — customer-shipped MAJORs → founder/astro-build-validated path
+    (same class as item 10's astro note); month-old + stale. **#6 DIAGNOSED 2026-06-03 (coupled major,
+    like #17/drizzle):** red because it bumps `astro` alone while `@astrojs/cloudflare ^12.6.13` (the
+    astro-**5** adapter major, used by admin-panel + customer-dashboard) is left mismatched → build WARNs
+    `"default" not exported by @astrojs/cloudflare/.../server.js` + `entrypointResolution:"explicit"
+deprecated` → build/check fail. To LAND: ONE PR bumping `astro ^6` + `@astrojs/cloudflare ^13`
+    together + migrating `entrypointResolution:"explicit"→"auto"` in the 2 astro.config.mjs (docs/
+    marketing/status are static → unaffected). #7 likely the same coupled-major shape. Detail:
+    [[project_dependabot_astro6_react_coupled_majors]]. - **#16 concurrently 9→10 / #15 dev-deps-minor-patch (8) / #14 cargo-minor-patch (3, gui Rust)** —
+    dev/build-tooling; lower risk; their lone failures may be the non-gating perf job or stale-base. - **#1 docker/build-push 6→7 / #3 docker/login 3→4** — CI-config; the docker-\* actions are used by the
+    ABANDONED `server-deploy.yml` (item 1) → likely CLOSE-or-retire-with-that-workflow, not bump.
+    **#2 setup-node 4→6** — active CI; its build-test failure is likely stale-base (month-old) → rebase.
+    **Action:** founder triage — rebase the month-old stale ones, fix/assess the #17 E2E break, decide the
+    customer MAJORs (astro/react), and either close the docker-action PRs with server-deploy.yml or merge
+    after rebase. The non-gating perf-job red is benign noise (item 9 / advisory). Distinct from item 10
+    (3 specific npm-audit advisories) — this is the broader stalled-PR-pipeline signal.
 18. **LiveKit token-route divergence (found 2026-06-03; LATENT — both routes gated on `config.livekit`,
     unset in prod → NOT live).** Two access-token mint routes embody inconsistent designs. The newer
     canonical `routes/agent-sessions-livekit-token.ts` (LK.3) is **subscriber-only** (`canPublish:false`;
