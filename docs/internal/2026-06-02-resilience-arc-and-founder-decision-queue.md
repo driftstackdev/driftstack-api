@@ -503,6 +503,18 @@ transcript.length` guard); account-scoped (cross-account → 404).
     FALSE-POSITIVE here (so none was built). Cache-Control (`lib/app.ts` global `no-store, private`
     hook, V-666) + the 28 timing-safe comparison sites were re-confirmed clean/saturated the same wave.
     Detail in Agent-2 auto-memory `project_api_key_management_authz_clean`.
+  - _Auth-flow sweeper retention + cost-monitoring + Stripe-adapter (fresh-read sweep 2026-06-03,
+    all clean — two bug hypotheses tested + refuted):_ (a) `auth-flows-sweeper.ts` retention — tested
+    whether short-lived CONSUMED tokens get deleted at ~7d (the expired clause) instead of the intended
+    30d forensic window; REFUTED — `deleteStaleAuthTokens` (`db/auth-flows-repo.ts`) gates the expired
+    clause on `isNull(consumedAt)`, so consumed rows use only the 30d clause (a recently-consumed but
+    long-expired row matches neither → kept). Re-arm `dedup:false` is documented + safe (single locked
+    executor); ISO-string params per the `d9417a91` postgres-js pattern. (b) `cost-monitoring.ts` is a
+    thin ADMIN cost-to-serve VISIBILITY wrapper (soft/hard thresholds are admin paging, NOT customer
+    spend-blocking — billing is subscription-tier-based, so no runaway-bill enforcement gap); cost math
+    in `lib/cost-estimator.ts` is fully covered. (c) `stripe-billing-provider.ts` adapter — per-account
+    `Idempotency-Key` prevents orphan-customer races (behaviorally tested). Detail in Agent-2 auto-memory
+    `project_auth_sweeper_cost_stripe_reads_clean`.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
