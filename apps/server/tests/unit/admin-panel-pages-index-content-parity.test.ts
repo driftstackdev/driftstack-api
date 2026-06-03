@@ -155,6 +155,21 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).toMatch(/setText\('signups-30d', String\(body\.accounts\.signups\.last_30d\)\);/);
   });
 
+  it("live-sessions section: active / errored / total stat fields (SSR '—' placeholders) + live hydration from /v1/admin/sessions/stats — pinned so the session-usage KPI keeps its real-data wiring (drift would drop the stat or leave it on the dash placeholder)", () => {
+    expect(body).toMatch(/Live sessions/);
+    expect(body).toMatch(/data-field="sessions-active"/);
+    expect(body).toMatch(/data-field="sessions-errored"/);
+    expect(body).toMatch(/data-field="sessions-total"/);
+    // Dedicated fetch + hydration from the sessions-stats endpoint.
+    expect(body).toMatch(/authedFetch\('\/v1\/admin\/sessions\/stats'\)/);
+    expect(body).toMatch(/setText\('sessions-active', String\(body\.active\)\);/);
+    expect(body).toMatch(/setText\('sessions-total', String\(body\.total\)\);/);
+    expect(body).toMatch(/setText\('sessions-errored', String\(body\.by_status\.errored\)\);/);
+    // Wired into the boot Promise.all gate + the 30s refresh timer.
+    expect(body).toMatch(/Promise\.all\(\[overviewP, auditP, sessionsP\]\)/);
+    expect(body).toMatch(/void fetchSessionStats\(\)\.catch\(\(\) => \{\}\);/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

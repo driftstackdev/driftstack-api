@@ -164,6 +164,35 @@ const apiBaseUrl = resolveApiBaseUrl();
       </dl>
     </section>
 
+    <!-- Live sessions -->
+    <section class="mt-6 dashboard-card">
+      <div class="flex items-center justify-between">
+        <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
+            </svg>
+          </span>
+          Live sessions
+        </h2>
+        <span class="font-mono text-xs text-slate-400">browser sessions</span>
+      </div>
+      <dl class="mt-4 grid gap-4 sm:grid-cols-3">
+        <div>
+          <dt class="font-mono text-xs uppercase tracking-widest text-slate-500">Active now</dt>
+          <dd class="mt-1 text-2xl font-semibold text-slate-900" data-field="sessions-active">—</dd>
+        </div>
+        <div>
+          <dt class="font-mono text-xs uppercase tracking-widest text-slate-500">Errored</dt>
+          <dd class="mt-1 text-2xl font-semibold text-slate-900" data-field="sessions-errored">—</dd>
+        </div>
+        <div>
+          <dt class="font-mono text-xs uppercase tracking-widest text-slate-500">Total</dt>
+          <dd class="mt-1 text-2xl font-semibold text-slate-900" data-field="sessions-total">—</dd>
+        </div>
+      </dl>
+    </section>
+
     <!-- Accounts by tier -->
     <section class="mt-6 dashboard-card">
       <div class="flex items-center justify-between">
@@ -450,6 +479,28 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       const overviewP = fetchOverview();
 
+      // Live session stats (server 2026-06-03) — active / errored / total
+      // browser sessions from /v1/admin/sessions/stats. Extracted like
+      // fetchOverview so the 30s timer refreshes it too. Tolerates older
+      // servers (the SSR "—" placeholders stay).
+      function fetchSessionStats() {
+        return authedFetch('/v1/admin/sessions/stats')
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then((body) => {
+            if (body) {
+              setText('sessions-active', String(body.active));
+              setText('sessions-total', String(body.total));
+              if (body.by_status) {
+                setText('sessions-errored', String(body.by_status.errored));
+              }
+            }
+          });
+      }
+      const sessionsP = fetchSessionStats();
+
       // 2026-05-21 — live activity feed. The audit-log fetch is
       // extracted so we can refresh it on a 30s timer + bind to the
       // "Refresh now" button. Each refresh updates `lastAuditFetch`
@@ -475,7 +526,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       const auditP = fetchAudit();
 
-      Promise.all([overviewP, auditP])
+      Promise.all([overviewP, auditP, sessionsP])
         .then(() => hideBanner())
         .catch((err) => {
           const msg = err && err.message ? err.message : 'network error';
@@ -505,6 +556,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       function refreshAll() {
         void fetchAudit();
         void fetchOverview().catch(() => {});
+        void fetchSessionStats().catch(() => {});
       }
       const refreshBtn = root.querySelector('[data-live-refresh]');
       if (refreshBtn) refreshBtn.addEventListener('click', refreshAll);

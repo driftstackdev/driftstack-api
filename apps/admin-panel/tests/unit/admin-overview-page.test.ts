@@ -79,8 +79,20 @@ function makeRouter(opts: {
   overviewStatus?: number;
   audit?: Array<Record<string, unknown>>;
   auditStatus?: number;
+  sessionStats?: Record<string, unknown>;
+  sessionStatsStatus?: number;
 }): (c: MockFetchCall) => Response {
   return (call) => {
+    if (/\/v1\/admin\/sessions\/stats/.test(call.url)) {
+      return json(
+        opts.sessionStats ?? {
+          by_status: { creating: 0, ready: 0, busy: 0, destroyed: 0, errored: 0 },
+          active: 0,
+          total: 0,
+        },
+        opts.sessionStatsStatus ?? 200,
+      );
+    }
     if (/\/v1\/admin\/audit-log/.test(call.url)) {
       return json({ data: opts.audit ?? [] }, opts.auditStatus ?? 200);
     }
@@ -197,6 +209,26 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(text(window, '[data-field="signups-today"]')).toBe('2');
     expect(text(window, '[data-field="signups-7d"]')).toBe('9');
     expect(text(window, '[data-field="signups-30d"]')).toBe('41');
+  });
+
+  it('live sessions: active / errored / total populate from /v1/admin/sessions/stats', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: { accounts: { active: 1, suspended: 0, total: 1 }, webhooks: { dlq_depth: 0 } },
+        sessionStats: {
+          by_status: { creating: 1, ready: 3, busy: 2, destroyed: 8, errored: 4 },
+          active: 6,
+          total: 18,
+        },
+        audit: [],
+      }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-field="sessions-active"]')).toBe('6');
+    expect(text(window, '[data-field="sessions-errored"]')).toBe('4');
+    expect(text(window, '[data-field="sessions-total"]')).toBe('18');
   });
 
   it('recent-actions feed renders an admin action with actor, action, result, and target', async () => {
