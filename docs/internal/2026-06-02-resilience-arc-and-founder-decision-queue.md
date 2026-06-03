@@ -515,6 +515,17 @@ transcript.length` guard); account-scoped (cross-account → 404).
     in `lib/cost-estimator.ts` is fully covered. (c) `stripe-billing-provider.ts` adapter — per-account
     `Idempotency-Key` prevents orphan-customer races (behaviorally tested). Detail in Agent-2 auto-memory
     `project_auth_sweeper_cost_stripe_reads_clean`.
+  - _New admin analytics endpoints (recently-changed code, audited 2026-06-03 for the `b70366ea`
+    UTC-boundary bug class — clean + a regression guard SHIPPED):_ `GET /v1/admin/overview` signup-window
+    counts (`signupCounts`, today/7d/30d) and `GET /v1/admin/sessions/stats` (`statsForAdmin`,
+    cross-account counts by status). Both scope-gated (`driftstack_internal_admin`) at the route AND
+    service layers, parameterized (Drizzle), correct aggregation. `signupCounts` correctly applies the
+    `b70366ea` lesson — `startOfToday = Date.UTC(now.getUTCFullYear/Month/Date)` (UTC day boundary), 7d/30d
+    rolling. **Gap found + closed:** the UTC construction was NOT source-pinned (only the
+    `countCreatedSince(startOfToday)` call was), and a UTC CI runner can't catch a UTC→local-midnight
+    regression behaviorally — so a regression to local time would silently re-introduce `b70366ea` on this
+    endpoint. Added a source-pin in `services-admin-accounts-content-parity.test.ts`. Detail in Agent-2
+    auto-memory `project_admin_analytics_utc_window_guard`.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 

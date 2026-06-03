@@ -98,6 +98,22 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     expect(body).toMatch(/this\.repo\.countCreatedSince\(startOfToday\)/);
   });
 
+  it("signupCounts windows use UTC day boundaries — 'today' from Date.UTC(getUTCFullYear/Month/Date), NOT local time; 7d/30d are now-minus-N-days rolling. Regression guard for the b70366ea bug class (admin daily-breakdown was off-by-a-day on a non-UTC server before being aligned to UTC). A UTC CI runner can't catch a UTC->local-midnight regression behaviorally (local==UTC midnight there), so the UTC construction is pinned at the source level here.", () => {
+    // The UTC day-boundary construction — the core regression guard. Drift
+    // to `new Date(now.getFullYear(), now.getMonth(), now.getDate())` (local
+    // midnight) would silently re-introduce b70366ea for non-UTC server time.
+    expect(body).toMatch(
+      /Date\.UTC\(now\.getUTCFullYear\(\), now\.getUTCMonth\(\), now\.getUTCDate\(\)\)/,
+    );
+    // 7d / 30d are timezone-agnostic rolling windows (now - N days in ms).
+    expect(body).toMatch(
+      /const sevenDaysAgo = new Date\(now\.getTime\(\) - 7 \* 24 \* 60 \* 60 \* 1000\)/,
+    );
+    expect(body).toMatch(
+      /const thirtyDaysAgo = new Date\(now\.getTime\(\) - 30 \* 24 \* 60 \* 60 \* 1000\)/,
+    );
+  });
+
   it('AccountsAdminService: constructor takes repo + optional authCache + optional sessions reclaimer', () => {
     expect(body).toMatch(/export class AccountsAdminService \{/);
     expect(body).toMatch(
