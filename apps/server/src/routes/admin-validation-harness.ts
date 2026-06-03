@@ -5,12 +5,24 @@
 //   POST   /v1/admin/validation-schedules/:archetype/trigger — manual fire
 
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { UpsertValidationScheduleRequestSchema } from '@driftstack/api-types';
 import type {
   ValidationHarnessService,
   ValidationScheduleRow,
 } from '../services/validation-harness.js';
 import { BadRequestError } from '../lib/errors.js';
+
+// Manual-trigger body. `reason` is optional operator free-text persisted
+// on the schedule row, so it is validated + length-capped (matching the
+// 500-char cap on the force-action reason) rather than read off an
+// unchecked `as`-cast — a non-string or unbounded reason must not reach
+// the service / the persisted row.
+const TriggerValidationScheduleBodySchema = z
+  .object({
+    reason: z.string().min(1).max(500).optional(),
+  })
+  .optional();
 
 function publicSchedule(row: ValidationScheduleRow): Record<string, unknown> {
   return {
@@ -91,8 +103,9 @@ export function registerAdminValidationHarnessRoutes(
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
-      const body = (request.body ?? {}) as { reason?: string };
-      const out = await harness.triggerNow(ctx, request.params.archetype, body.reason ?? undefined);
+      const parsed = TriggerValidationScheduleBodySchema.safeParse(request.body ?? {});
+      if (!parsed.success) throw new BadRequestError('Invalid request body.');
+      const out = await harness.triggerNow(ctx, request.params.archetype, parsed.data?.reason);
       return { run_id: out.runId };
     },
   );

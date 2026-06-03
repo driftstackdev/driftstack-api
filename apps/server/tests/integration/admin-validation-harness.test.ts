@@ -158,4 +158,26 @@ describe('POST /v1/admin/validation-schedules/:archetype/trigger', () => {
     const body = res.json<{ run_id: string }>();
     expect(body.run_id).toMatch(/^run_/);
   });
+
+  it('400 on an over-long reason (capped at 500 chars, not read off an unchecked cast)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/validation-schedules/iphone16pro_ios18_7_safari26_4/trigger',
+      headers: auth(fx),
+      payload: { reason: 'x'.repeat(501) },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('400 on a non-string reason (zod rejects the wrong type instead of the `as` cast passing it through)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/admin/validation-schedules/iphone16pro_ios18_7_safari26_4/trigger',
+      headers: auth(fx),
+      payload: { reason: { nested: 'object' } },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });

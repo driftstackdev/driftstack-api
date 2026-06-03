@@ -16,7 +16,8 @@
 //     reason + created_at/updated_at ISO.
 //   • Upsert: snake-case → camelCase + spread-conditional `reason`.
 //   • Delete: 204 reply; route param `:archetype` passed verbatim.
-//   • Trigger: body.reason ?? undefined; returns { run_id }.
+//   • Trigger: body zod-validated (reason optional, ≤500) →
+//     parsed.data?.reason; returns { run_id }.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -96,13 +97,20 @@ describe('W416.B apps/server/src/routes/admin-validation-harness.ts content pari
     expect(body).toMatch(/return reply\.code\(204\)\.send\(\);/);
   });
 
-  it('POST trigger: body.reason ?? undefined; harness.triggerNow returns runId; reply { run_id }', () => {
+  it('POST trigger: body validated (reason optional, capped) → parsed.data?.reason; harness.triggerNow returns runId; reply { run_id }', () => {
     expect(body).toMatch(
       /app\.post<\{ Params: \{ archetype: string \} \}>\(\s*\n?\s*'\/v1\/admin\/validation-schedules\/:archetype\/trigger',/,
     );
-    expect(body).toMatch(/const body = \(request\.body \?\? \{\}\) as \{ reason\?: string \};/);
+    // Body is zod-validated + length-capped (no unchecked `as` cast).
+    expect(body).toMatch(/reason: z\.string\(\)\.min\(1\)\.max\(500\)\.optional\(\),/);
     expect(body).toMatch(
-      /const out = await harness\.triggerNow\(ctx, request\.params\.archetype, body\.reason \?\? undefined\);\s*\n?\s*return \{ run_id: out\.runId \};/,
+      /const parsed = TriggerValidationScheduleBodySchema\.safeParse\(request\.body \?\? \{\}\);/,
+    );
+    expect(body).toMatch(
+      /if \(!parsed\.success\) throw new BadRequestError\('Invalid request body\.'\);/,
+    );
+    expect(body).toMatch(
+      /const out = await harness\.triggerNow\(ctx, request\.params\.archetype, parsed\.data\?\.reason\);\s*\n?\s*return \{ run_id: out\.runId \};/,
     );
   });
 
