@@ -187,6 +187,17 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/public/robots.txt'))).toBe(true);
   });
 
+  it('HSTS (2026-06-03) — docs + status _headers force HTTPS on /* (completes the family-wide Strict-Transport-Security posture; dashboard/admin/apex shipped earlier). Added to /* only so CF Pages merges it onto every path with a single header. Dropping it reopens a TLS-strip window on these public surfaces.', () => {
+    const docs = read(DOCS_HEADERS);
+    const status = read(resolve(REPO_ROOT, 'apps/status-site/public/_headers'));
+    expect(docs).toMatch(
+      /^ {2}Strict-Transport-Security: max-age=63072000; includeSubDomains; preload$/m,
+    );
+    expect(status).toMatch(
+      /^ {2}Strict-Transport-Security: max-age=63072000; includeSubDomains; preload$/m,
+    );
+  });
+
   it('test file metadata — file exists at canonical path', () => {
     expect(
       existsSync(
