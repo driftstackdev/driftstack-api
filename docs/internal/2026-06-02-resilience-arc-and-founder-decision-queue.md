@@ -592,6 +592,15 @@ transcript.length` guard); account-scoped (cross-account → 404).
     verification family (marketing claims honest + sub-processors complete; the one OPEN item is the
     §4.16 data-residency config-assertion gap). Detail in Agent-2 auto-memory
     `project_subprocessor_disclosure_completeness_clean`.
+  - _Cookie/tracker disclosure (fresh dimension 2026-06-03; GDPR/ePrivacy) — CLEAN, tracker-free:_ scanned
+    `apps/marketing-site/src` + `public` for third-party analytics/tracker scripts
+    (GA/GTM/Segment/Mixpanel/Hotjar/PostHog/Plausible/Fathom/Facebook/doubleclick/external `<script src>`)
+    → NONE (only an og:image-format comment matched); auth is Bearer-only (no session cookies). So no
+    non-essential cookies are set → no EU consent-banner obligation, no disclosure gap (any Cloudflare Web
+    Analytics is cookieless). **This COMPLETES the compliance-posture verification family** — marketing
+    claims honest + sub-processors complete + cookies tracker-free, all clean; the sole OPEN compliance
+    item is the §4.16 data-residency config-assertion gap (DB + R2 EU-region unasserted). Detail in
+    Agent-2 auto-memory `project_cookie_tracker_disclosure_clean`.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
