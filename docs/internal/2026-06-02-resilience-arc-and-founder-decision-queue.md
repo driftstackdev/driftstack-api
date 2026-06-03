@@ -570,6 +570,17 @@ transcript.length` guard); account-scoped (cross-account → 404).
     claim — important to have verified pre-launch (FTC/trust risk class). (`matchRatePercentage:99.9` is an
     Agent-1 fp-domain claim; support-response SLAs are business commitments — both out of this lens.)
     Detail in Agent-2 auto-memory `project_marketing_compliance_claim_accuracy_clean`.
+  - _DB migration-file safety (fresh dimension 2026-06-03; db-repo-tier covered repos + deploy-bridge
+    covered the deploy mechanism, but migration-FILE safety was uncovered) — SOUND:_ the 67
+    `db/migrations/*.sql` follow safe drizzle-generated patterns; the deploy-bridge applies them on every
+    deploy so this matters. NO `ADD COLUMN … NOT NULL` without a `DEFAULT` (the populated-table
+    lock/fail pattern is absent), NO `DELETE`/`TRUNCATE`/`DROP TABLE`/`SET NOT NULL`; the `DROP NOT NULL`
+    ops are constraint relaxations (safe); the only irreversible ops — `0065` trial_pack `DROP COLUMN`
+    (retirement, dead code) + `0001`/`0006` `DROP TYPE account_tier` (standard drizzle enum
+    drop-default→drop-type→recreate) — are intentional + pre-launch (no customer data) + already-applied.
+    Forward note: a future hand-written data migration or a `SET NOT NULL`/no-default-`ADD NOT NULL` on a
+    then-populated table is the thing to re-check; the generated-migration discipline is sound. Detail in
+    Agent-2 auto-memory `project_db_migration_safety_clean`.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
