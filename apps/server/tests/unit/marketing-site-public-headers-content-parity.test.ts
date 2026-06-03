@@ -109,17 +109,25 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
     expect(body).toMatch(/^ {2}Referrer-Policy: strict-origin-when-cross-origin$/m);
   });
 
-  it('HSTS present on both the / homepage and /* catch-all HTML blocks (2026-06-03 — apex TLS-strip defense + preload anchor; matches the API + the authenticated frontends)', () => {
-    // First-match-wins on CF Pages (per this file's own framing), so the
-    // homepage `/` rule and the `/*` catch-all each need their own STS or
-    // one surface would be served without it. The apex is the highest-
-    // traffic public entry (login click-through) and the includeSubDomains
-    // preload anchor for the whole driftstack.dev tree.
+  it('HSTS on the /* catch-all block ONLY — single header (2026-06-03 de-dup: CF Pages MERGES /* onto every path incl. /, proven live by the previously-doubled header, so one STS on /* covers the apex; a single clean header is preload-submission-ready, unlike the prior comma-joined double)', () => {
+    // Apex = highest-traffic public entry (login click-through) + the
+    // includeSubDomains preload anchor for the driftstack.dev tree. STS
+    // lives on /* only (same pattern as docs/status); the / homepage rule
+    // intentionally has NO STS — it inherits it via the /* merge, exactly
+    // as /index.html inherits its security headers from /*.
     const stsLines = body.match(
       /^ {2}Strict-Transport-Security: max-age=63072000; includeSubDomains; preload$/gm,
     );
-    expect(stsLines, 'STS must be on BOTH the / and /* blocks').not.toBeNull();
-    expect(stsLines!.length).toBeGreaterThanOrEqual(2);
+    // Exactly ONE STS line (on /*). length===1 is itself the negative
+    // guard against regressing to STS-on-both (the doubled comma-joined
+    // header that fails strict hstspreload.org validation).
+    expect(stsLines, 'STS must be present on the /* catch-all').not.toBeNull();
+    expect(stsLines!.length).toBe(1);
+    // Confirm the surviving STS sits in the /* catch-all block (the line
+    // immediately after that block's Referrer-Policy at EOF).
+    expect(body).toMatch(
+      /\/\*\n(?: {2}.+\n)* {2}Strict-Transport-Security: max-age=63072000; includeSubDomains; preload/,
+    );
   });
 
   it('file exists at canonical path', () => {
