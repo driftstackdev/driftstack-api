@@ -310,6 +310,18 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
     Also (c) **audit-archive R2 partitioning** keys by the oldest archivable row's month, so a multi-month
     window lands in one mislabelled file — recoverable via the `audit_archive_runs` ledger; true monthly
     partitioning is a separate change (`project_audit_archive_isolation_fix` memory). All latent / low-priority.
+20. **CI coverage step duration exceeds the autopilot wave cadence (ops finding).** The CI "Test (unit +
+    integration) with coverage thresholds" job runs the full ~22k-test suite single-threaded under coverage
+    instrumentation — observed ~20-30 min wall — while the autopilot wave cadence is ~12 min. `ci.yml` has
+    `concurrency: cancel-in-progress: true` with NO `paths` filter, so each new push to `main` cancels the
+    prior commit's still-running CI → in back-to-back waves, commits chronically cancel each other's CI and
+    few get a complete green run. NOT a correctness risk: the husky **pre-push gate runs the identical full
+    suite green before every push** (authoritative validation) and `deploy.yml` is `cancel-in-progress:false`
+    (deploys queue, prod stays correct — e.g. `743fb484` deployed clean while its CI was still running).
+    **Founder/ops decision (NOT autopilot — CI quality-gate config):** options are (a) move coverage to a
+    separate non-blocking workflow or nightly, (b) shard/parallelize the coverage run, (c) add a `paths`
+    filter so docs-only commits skip CI, or (d) accept the pre-push gate as the gate and treat CI as
+    best-effort. Surfaced for visibility; the pre-push gate keeps `main` safe regardless.
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
@@ -445,6 +457,13 @@ transcript.length` guard); account-scoped (cross-account → 404).
     `Referrer-Policy: no-referrer` / HSTS (2yr+preload) / `CORP: cross-origin`; CSP intentionally off
     (JSON-only). Pinned by the V-664 `security-headers.test.ts` regression suite (distinct from the
     CF-Pages headers above).
+  - _Core AI-chat + lifecycle services (fresh-audited 2026-06-03, all sound):_ `agent-runtime.ts`
+    (turn loop — budget-exhaustion close on both paths, best-effort usage/metrics, founder-verdict
+    transient/fatal classification), `agent-pair-mode-state.ts` (pure takeover reducer — all
+    queue/decline/cancel/heartbeat edges handled), `account-lifecycle.ts` (lifecycle email/audit
+    dispatcher — atomic first-failure/first-success CAS dedup), `status-subscribers.ts`
+    (admin-link bug FIXED `743fb484`), `health-probe.ts` (config-driven targets, no user SSRF; 2 LOW
+    latent items in §4.8/§4.9). Detail in Agent-2 auto-memory.
 
 ## 4. Low-priority defense-in-depth backlog (NO decision required now — surfaced for visibility)
 
@@ -491,6 +510,20 @@ key)` (schema has `idempotency_key` but NO request-hash column) silently replays
    (prod-applied migration — can't autopilot) + a product call on whether agent-sessions should match
    crypto's detect-and-warn (vs the strict-Stripe 422-on-mismatch, which the platform deliberately does NOT
    do — it stays replay-safe). Low priority; surfaced for parity visibility.
+8. **Health-probe auto-incident error-message info-leak** — `HealthProbeService.evaluateThresholds`
+   auto-creates a `public:true` incident whose description interpolates the raw probe `errorMessage`
+   (sliced to 500 chars) + `target.url`. HTTP failures are benign (`HTTP 503`), but a _network_
+   failure's raw error (`FetchProber` catch branch) can embed an internal IP/host
+   (e.g. `connect ECONNREFUSED 10.x.x.x:port`) → exposed on the public status page. LOW (all
+   configured targets are currently public endpoints; status site not yet live). A fix would sanitize
+   the public description to a generic message (keep the raw error in the private probe row + logs)
+   — touches customer-facing incident copy, so deferred to a deliberate change, not a blind edit.
+9. **Health-probe auto-create TOCTOU** — `findOpenAutoIncident(target) → create` has no DB-level
+   uniqueness guard on open auto-incidents per `auto_probe_target`. A `processTick` exceeding the 60s
+   bootstrap interval lets overlapping ticks both pass the `!open` check → duplicate auto-incidents for
+   one target. LOW probability (a tick probes all targets in parallel with ~5s timeouts; should be
+   well under 60s) + the bootstrap setInterval may not overlap in practice. Fully closing it needs a
+   partial-unique index (prod migration — can't autopilot) or a per-target in-flight guard. Surfaced.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
