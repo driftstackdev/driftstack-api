@@ -183,6 +183,34 @@ describe('PATCH /v1/account/me (V-352)', () => {
     expect(body.timezone).toBeNull();
   });
 
+  // 2026-06-03 — IANA timezone validation is Intl-based, not a regex. The
+  // prior regex (`^[A-Za-z]+(?:/[A-Za-z0-9_+-]+)+$`) wrongly REJECTED valid
+  // single-segment zones (UTC / GMT / Japan) — so a UTC-based customer
+  // couldn't save their own timezone — and wrongly ACCEPTED non-zones that
+  // merely matched "Area/City" (e.g. "Foo/Bar"). These two cases pin the fix.
+  it('200 accepts a single-segment IANA zone (UTC) — regression: the old regex rejected it', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { timezone: 'UTC' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<{ timezone: string }>().timezone).toBe('UTC');
+  });
+
+  it('400 rejects a non-IANA timezone that merely looks like Area/City (Foo/Bar) — regression: the old regex accepted it', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'PATCH',
+      url: '/v1/account/me',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { timezone: 'Foo/Bar' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   // ── End-to-end shape pin: PATCH 200 returns the FULL AccountMeResponse,
   // matching GET /me + the OpenAPI claim + every SDK type. Previously the
   // route returned only the 8 written/persisted fields, leaving the other
@@ -251,13 +279,19 @@ describe('PATCH /v1/account/me (V-352)', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('400 when timezone is not an IANA name', async () => {
+  it('400 when timezone is not a renderable IANA zone', async () => {
+    // 2026-06-03 — validation is now Intl-renderability (was a regex). A
+    // value Intl.DateTimeFormat can't resolve → 400. (Renderable
+    // abbreviations like "PST" are now ACCEPTED — they resolve to a real
+    // offset; the prior regex rejected them only as a side-effect of
+    // requiring an "Area/City" slash form, which also wrongly rejected
+    // "UTC". See the UTC-accepted + Foo/Bar-rejected cases above.)
     fx = await buildTestApp();
     const res = await fx.app.inject({
       method: 'PATCH',
       url: '/v1/account/me',
       headers: { ...auth(fx), 'content-type': 'application/json' },
-      payload: { timezone: 'PST' },
+      payload: { timezone: 'NotAZone' },
     });
     expect(res.statusCode).toBe(400);
   });

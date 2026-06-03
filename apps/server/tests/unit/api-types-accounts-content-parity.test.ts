@@ -80,7 +80,7 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
     );
   });
 
-  it('V-352 UpdateAccountMe framing + V-298a slug regex (3..32 lowercase a-z+0-9+hyphen no leading/trailing/consecutive) + V-298b region enum us|eu|apac; UpdateAccountMeRequest at-least-one-field refine + IANA timezone regex', () => {
+  it('V-352 UpdateAccountMe framing + V-298a slug regex (3..32 lowercase a-z+0-9+hyphen no leading/trailing/consecutive) + V-298b region enum us|eu|apac; UpdateAccountMeRequest at-least-one-field refine + IANA timezone Intl-validity refine (2026-06-03: replaced a regex that wrongly rejected single-segment zones like UTC/GMT/Japan AND wrongly accepted non-zones like Foo/Bar)', () => {
     expect(body).toMatch(
       /\*\s*V-352 — partial update of self-editable basics\. At least one\s*\n?\s*\*\s*field must be provided\. `name` may be set to null to clear; the\s*\n?\s*\*\s*email-display fallback uses the email address\. `timezone` accepts\s*\n?\s*\*\s*an IANA name \(e\.g\. `Europe\/Amsterdam`\) or null to clear \(UTC fallback\)\./,
     );
@@ -95,7 +95,13 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
     );
     expect(body).toMatch(/export const AccountRegionSchema = z\.enum\(\['us', 'eu', 'apac'\]\);/);
     expect(body).toMatch(
-      /timezone: z\s*\n?\s*\.string\(\)\s*\n?\s*\.trim\(\)\s*\n?\s*\.min\(1\)\s*\n?\s*\.max\(64\)\s*\n?\s*\.regex\(\s*\n?\s*\/\^\[A-Za-z\]\+\(\?:\\\/\[A-Za-z0-9_\+-\]\+\)\+\$\/,\s*\n?\s*'Must be an IANA timezone name like "Europe\/Amsterdam"\.',\s*\n?\s*\)/,
+      /timezone: z\s*\n?\s*\.string\(\)\s*\n?\s*\.trim\(\)\s*\n?\s*\.min\(1\)\s*\n?\s*\.max\(64\)\s*\n?\s*\.refine\(isValidIanaTimeZone, \{\s*\n?\s*message: 'Must be a valid IANA timezone name like "Europe\/Amsterdam" or "UTC"\.',\s*\n?\s*\}\)/,
+    );
+    // The IANA validity check MUST stay Intl-based (a regex can't correctly
+    // accept single-segment zones like UTC/GMT/Japan nor reject non-zones
+    // like Foo/Bar). Pin the helper + its Intl.DateTimeFormat impl.
+    expect(body).toMatch(
+      /function isValidIanaTimeZone\(tz: string\): boolean \{\s*\n?\s*try \{\s*\n?\s*new Intl\.DateTimeFormat\('en-US', \{ timeZone: tz \}\);\s*\n?\s*return true;\s*\n?\s*\} catch \{\s*\n?\s*return false;\s*\n?\s*\}\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /message: 'At least one field \(name, timezone, slug, or region\) must be provided\.',/,

@@ -73,10 +73,18 @@ describe('W889 V-352 UpdateAccountMe cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     const start = p.indexOf('UpdateAccountMeRequestSchema = z');
     expect(start, 'UpdateAccountMeRequestSchema not found').toBeGreaterThanOrEqual(0);
-    // The object literal closes at the `.refine(` that follows it.
-    const refineAt = p.indexOf('.refine(', start);
-    expect(refineAt, '.refine( terminator not found').toBeGreaterThan(start);
-    const objectLiteral = p.slice(start, refineAt);
+    // The object literal is the body of `.object({ … })`. Slice from `.object({`
+    // to the `\n  })` that closes it at 2-space indent. NOTE: do NOT key off the
+    // first `.refine(` — a FIELD can carry its own `.refine(...)` (e.g. timezone's
+    // IANA Intl-validity check, 2026-06-03), which is not the schema-level
+    // at-least-one-field refine; keying off `.refine(` would truncate the literal
+    // before slug/region. The 2-space `})` only matches the .object closing
+    // (field method-chains close at 6-space indent), so this is unambiguous.
+    const objStart = p.indexOf('.object({', start);
+    expect(objStart, '.object({ not found').toBeGreaterThan(start);
+    const objEnd = p.indexOf('\n  })', objStart);
+    expect(objEnd, '.object({ … }) close (\\n  }) ) not found').toBeGreaterThan(objStart);
+    const objectLiteral = p.slice(objStart, objEnd);
     const PRIVILEGED_KEY = [
       /\btier\s*:/,
       /\bsuspended\s*:/,

@@ -96,6 +96,23 @@ export type AccountSlug = z.infer<typeof AccountSlugSchema>;
 export const AccountRegionSchema = z.enum(['us', 'eu', 'apac']);
 export type AccountRegion = z.infer<typeof AccountRegionSchema>;
 
+/**
+ * True iff `tz` is a real IANA time-zone name. `Intl.DateTimeFormat` throws a
+ * RangeError on an unknown zone, so this is the authoritative check. Replaces
+ * an earlier `/^[A-Za-z]+(?:\/[A-Za-z0-9_+-]+)+$/` regex that was wrong in BOTH
+ * directions: it rejected valid single-segment zones ("UTC" / "GMT" / "Japan" /
+ * "Singapore") AND accepted non-zones that merely looked like "Area/City"
+ * ("Foo/Bar"). Available in every consuming runtime (Node + browsers).
+ */
+function isValidIanaTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const UpdateAccountMeRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120).nullable().optional(),
@@ -104,10 +121,9 @@ export const UpdateAccountMeRequestSchema = z
       .trim()
       .min(1)
       .max(64)
-      .regex(
-        /^[A-Za-z]+(?:\/[A-Za-z0-9_+-]+)+$/,
-        'Must be an IANA timezone name like "Europe/Amsterdam".',
-      )
+      .refine(isValidIanaTimeZone, {
+        message: 'Must be a valid IANA timezone name like "Europe/Amsterdam" or "UTC".',
+      })
       .nullable()
       .optional(),
     // V-298a — readable account handle. Pass null to clear; pass a
