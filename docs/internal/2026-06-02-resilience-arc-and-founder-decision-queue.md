@@ -322,6 +322,18 @@ profileLimitFor(tier)` then a separate `insert`) — **found 2026-06-02. More mo
     separate non-blocking workflow or nightly, (b) shard/parallelize the coverage run, (c) add a `paths`
     filter so docs-only commits skip CI, or (d) accept the pre-push gate as the gate and treat CI as
     best-effort. Surfaced for visibility; the pre-push gate keeps `main` safe regardless.
+21. **`errors.driftstack.dev` is NXDOMAIN — provision it (founder/infra; like the status-site DNS).** The
+    API emits RFC-7807 `type: https://errors.driftstack.dev/<slug>` in EVERY error response (hardcoded
+    `middleware/error-handler.ts`: not-found/unauthorized/forbidden/bad-request; + egress-tunnel-unreachable),
+    and that namespace is the documented error contract — referenced across 15 docs + 7 SDK + 30 test files.
+    But `errors.driftstack.dev` doesn't resolve (`nslookup` → NXDOMAIN; curl 000), so every error's `type`
+    is a dead link. NOT a code bug (the URIs are intentional + contract-pinned; RFC-7807 `type` is primarily
+    an identifier so the API is functionally fine) — a DX gap (developers following the link get NXDOMAIN).
+    **Founder/infra (NOT autopilot — DNS + outward-facing; agent wrangler is zone:read-only):** provision
+    `errors.driftstack.dev` (DNS + a static error-docs site, one page per slug, OR a redirect to
+    `docs.driftstack.dev/errors/<slug>`). Mirrors the [[project_status_site_cloudflare_setup]] "done except
+    the DNS CNAME (founder)" pattern. Do NOT repoint the type URIs — that's a 52-file contract break + the
+    namespace is the right one; just make it resolve. Detail: [[project_errors_domain_nxdomain]].
 
 ## 3. Audit-saturation map (comprehensively swept — don't re-sweep without a concrete reason)
 
