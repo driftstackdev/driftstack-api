@@ -875,6 +875,20 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
     `project_security_txt_and_robots_gaps`. (Same wave also: shipped the security.txt + a frontend
     `_headers` clickjacking drift-guard `39111921`; verified the rest of the legal-link integrity +
     the dashboard/admin XSS-escaping posture clean — all recorded in memory.)
+20. **No DMARC record for driftstack.dev — email-spoofing / phishing-enablement; MEDIUM; surfaced
+    2026-06-03 by a fresh email-auth DNS audit (FOUNDER/DNS — not fixable from the repo).** The
+    platform emails customers account-security messages (verification, password-reset, billing,
+    lifecycle) from `@driftstack.dev` via Postmark. DNS check: **`_dmarc.driftstack.dev` TXT = empty
+    (no DMARC, confirmed twice)** → receiving servers have no policy for mail that fails SPF/DKIM
+    alignment, so an attacker can **spoof `From:@driftstack.dev`** (phish customers as Driftstack)
+    and there's no `rua` reporting/visibility. SPF + Postmark sending ARE correctly set (root
+    `v=spf1 include:_spf.mx.cloudflare.net ~all`; Postmark via `pm-bounces.driftstack.dev`→`pm.mtasv.net`
+    custom Return-Path = SPF-aligned for Postmark mail); DKIM selector unconfirmed (Postmark custom
+    selector — pm-bounces being set implies it's configured; confirm in the Postmark dashboard). **Fix
+    (Cloudflare DNS, NOT repo):** add `_dmarc.driftstack.dev TXT "v=DMARC1; p=none;
+rua=mailto:dmarc@driftstack.dev; fo=1"` to start (monitor mode — won't break legit mail), review
+    the aggregate reports to confirm SPF+DKIM alignment for all senders, then escalate to
+    `p=quarantine` → `p=reject`. Detail: auto-memory `project_dmarc_absent_email_antispoofing_gap`.
 
 **Net:** the safe, non-gated Agent-2 audit/hardening surface is comprehensively mined (§1 shipped, §3
 verified-sound across ~15 dimensions). Genuine forward progress now needs a founder decision from §2,
