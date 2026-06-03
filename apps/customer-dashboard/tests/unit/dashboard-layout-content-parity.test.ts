@@ -225,4 +225,24 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     // font-medium is now applied unconditionally on the <a> base class.
     expect(body).toMatch(/text-sm font-medium transition-colors/);
   });
+
+  it('SECURITY — admin SSO bounce validates the redirect origin before attaching the #token= hash (no token exfiltration via ?next-admin=)', () => {
+    // 2026-06-03 — the admin bounce builds the redirect from the
+    // attacker-controllable ?next-admin= query param:
+    //   new URL('https://admin.driftstack.dev' + nextAdmin)
+    // Without an origin check, nextAdmin=".evil.com/" or "@evil.com/"
+    // parses to a non-admin host and the session token (#token=) would be
+    // exfiltrated → account takeover. The guard below MUST stay: on any
+    // host escape, reset to the admin root so the token only ever reaches
+    // the real admin origin. Dropping it reopens the takeover.
+    expect(body).toMatch(/'https:\/\/admin\.driftstack\.dev' \+ nextAdmin/);
+    expect(body).toMatch(/if \(u\.origin !== 'https:\/\/admin\.driftstack\.dev'\) \{/);
+    expect(body).toMatch(/u = new URL\('https:\/\/admin\.driftstack\.dev\/'\);/);
+    expect(body).toMatch(/u\.hash = '#token=' \+ encodeURIComponent\(t\)/);
+    // The guard MUST precede the token-hash assignment in source order.
+    const guardIdx = body.indexOf("if (u.origin !== 'https://admin.driftstack.dev')");
+    const hashIdx = body.indexOf("u.hash = '#token=' + encodeURIComponent(t)");
+    expect(guardIdx).toBeGreaterThan(-1);
+    expect(hashIdx).toBeGreaterThan(guardIdx);
+  });
 });

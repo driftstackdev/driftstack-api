@@ -164,6 +164,18 @@ const navSections: NavSection[] = [
                   var u = new URL(
                     'https://admin.driftstack.dev' + nextAdmin,
                   );
+                  // 2026-06-03 — origin guard. nextAdmin is an attacker-
+                  // controllable query param (?next-admin=); a value like
+                  // ".evil.com/" or "@evil.com/" parses to a NON-admin host
+                  // (admin.driftstack.dev.evil.com / evil.com), which would
+                  // exfiltrate the session token via the #token= hash below
+                  // → account takeover. Only ever hand the token to the real
+                  // admin origin; on any host escape, fall back to admin root
+                  // (drops the attacker-controlled path). Same intent as
+                  // lib/safe-next.ts (which this is:inline block can't import).
+                  if (u.origin !== 'https://admin.driftstack.dev') {
+                    u = new URL('https://admin.driftstack.dev/');
+                  }
                   u.searchParams.set('bounced', '1');
                   u.hash = '#token=' + encodeURIComponent(t);
                   location.replace(u.toString());
