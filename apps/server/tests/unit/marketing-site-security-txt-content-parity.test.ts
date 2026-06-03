@@ -46,4 +46,21 @@ describe('marketing-site /.well-known/security.txt content parity (RFC 9116)', (
   it('Canonical: matches the URL the disclosure policy directs researchers to', () => {
     expect(body).toMatch(/^Canonical: https:\/\/driftstack\.dev\/\.well-known\/security\.txt$/m);
   });
+
+  // Cross-source link-rot guard: the Policy: URL points at a /legal/<slug> page;
+  // assert the backing marketing-site source page actually exists. Motivated by
+  // a PROVEN bug class in this repo — the same disclosure policy links a
+  // /legal/security-research-honour-roll page that 404s (queue §4.19). Without
+  // this, renaming/removing the disclosure-policy page would silently turn the
+  // security.txt Policy: link (a published, researcher-followed URL) into a 404.
+  it("Policy: target /legal/<slug> page exists in the marketing site (link-rot guard — re-derived from the security.txt's actual Policy URL)", () => {
+    const m = body.match(/^Policy: https:\/\/driftstack\.dev\/legal\/([a-z0-9-]+)\/?$/m);
+    expect(m, 'security.txt must carry a /legal/<slug> Policy URL').not.toBeNull();
+    const slug = m![1];
+    const page = resolve(REPO_ROOT, `apps/marketing-site/src/pages/legal/${slug}.md`);
+    expect(
+      existsSync(page),
+      `security.txt Policy points to /legal/${slug} but apps/marketing-site/src/pages/legal/${slug}.md does not exist (link would 404)`,
+    ).toBe(true);
+  });
 });
