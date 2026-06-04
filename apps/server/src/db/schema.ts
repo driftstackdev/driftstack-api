@@ -457,6 +457,22 @@ export const subscriptions = pgTable(
   ],
 );
 
+// pricing — owner-editable per-tier monthly price (pricing-as-data Phase A).
+// DB source-of-truth for the internal $ values. The PricingService falls back
+// to the TIER_MONTHLY_PRICE_CENTS constant when a tier row is absent, and the
+// table is SEEDED from those constants in migration 0067, so the DB equals the
+// constants on day one and behaviour is unchanged until the owner edits a price.
+// One row per paid AccountTier (tier is the PK).
+export const pricing = pgTable('pricing', {
+  tier: accountTier('tier').primaryKey(),
+  monthlyCents: integer('monthly_cents').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+  /** API key id of the owner who last edited this row (null = seeded default). */
+  updatedByKeyId: uuid('updated_by_key_id'),
+});
+
 // profiles — persistent customer-defined identity slots that sessions
 // are created against. The Manual ladder caps profile count as the
 // tier-defining metric (e.g. team_manual = 50 profiles); the API ladder
