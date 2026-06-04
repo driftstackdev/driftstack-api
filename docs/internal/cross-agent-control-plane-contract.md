@@ -186,24 +186,23 @@ Agent-3 has fully wired the harness intent executor (`harness/Sources/BrowserCon
 `agent3-progress.md` W1–W9) and asked Agent 2 to "expose scroll/behavioral_pause intents + per-session
 persona".
 
-**⚠️ PERSONA TRANSPORT MISMATCH — do not conflate (per `agent3-progress.md` "W17 bug" note):** two
-DIFFERENT behaviour concepts exist, and the harness's session-assign field carries the WRONG one for direct
-persona selection:
+**PERSONA TRANSPORT — RESOLVED on the harness side by W17/W18 (updated 2026-06-05).** The
+`SessionAssign.behaviorProfile: String` field is **polymorphic**: after Agent-3's W17 (CRITICAL fix —
+`resolvePersonaForSession` previously did `personas[behaviorProfile]`, but `behaviorProfile` is the speed
+axis, so it was always nil → ALL behavioural sim was INERT) + W18 (integration guard), the harness's
+`resolvePersona(profileKey:in:)` resolves the field as **direct persona NAME** (`casual|regular|power_user`)
+**OR** a **SPEED modifier** (`fast|balanced|careful` on the `regular` base) **OR** `custom` fallback. So:
 
-- **Persona IDENTITY** = `casual | regular | power_user` (the `personas.json` ids). My session-create
-  `behavioral_profile` field (commits c0a46694/2990fb86/7309117c) is a DIRECT PERSONA SELECTOR using these —
-  which IS what Agent-3 asked for ("per-session direct persona selection is the open Agent-2 ask"). The IDs
-  match `personas.json`. ✓
-- **SPEED modifier** = `fast | balanced | careful | custom` — this is what the harness's
-  `ControlInbound.SessionAssign.behaviorProfile: String` field ACTUALLY carries today; the harness's
-  `resolvePersona` maps the speed modifier onto the `regular` persona BASE (so today you can only pick a speed
-  on `regular`, NOT a different persona). NOT a persona id.
-  So `behavioral_profile` (persona id) ≠ `SessionAssign.behaviorProfile` (speed modifier) — they're ORTHOGONAL.
-  The webkit driver (`apps/server/src/drivers/webkit.ts`) is still a stub, so my `behavioral_profile` reaches
-  only the mock today (no live SessionAssign). **Wiring decision needed (Agent-2 ⊕ Agent-3): the harness must
-  accept the direct persona id (extend `resolvePersona`/`SessionAssign` with a persona field, or repurpose
-  `behaviorProfile` to carry an id) — DON'T put `"regular"` into a field expecting `"balanced"` (the W17 bug
-  Agent-3 fixed).** My earlier "persona DONE + ALIGNED" note was only half-right (ids align; transport differs).
+- My session-create **`behavioral_profile`** (`casual|regular|power_user`, commits c0a46694/2990fb86/7309117c)
+  is a DIRECT persona selector — and it now maps **cleanly** into `behaviorProfile` via the direct-name branch.
+  No harness extension needed (W17 added it); no transport mismatch. (My prior "orthogonal — harness must be
+  extended" note is SUPERSEDED — W17 made the field accept persona ids.)
+- The field also still accepts the speed modifiers (`fast/balanced/careful/custom`) — a separate, complementary
+  axis (speed on the `regular` base) that the API doesn't yet expose. Optional future: an API speed knob.
+- **Only remaining piece = the control-plane→harness WIRING:** `apps/server/src/drivers/webkit.ts` is still a
+  stub (`DriverNotIntegratedError` until Phase-2 integration, Agent-1-owned). When wired, it sets
+  `SessionAssign.behaviorProfile = <the session's behavioral_profile>` (a persona name) and W17's resolver
+  honours it. Gated on the webkit-driver integration; no Agent-2 schema change required.
 
 The **intents** are NOT a quick add either — there are THREE divergent intent vocabularies that must be reconciled:
 
