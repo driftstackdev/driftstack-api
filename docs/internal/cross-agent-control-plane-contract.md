@@ -184,9 +184,28 @@ control-plane halves gated + tested.
 
 Agent-3 has fully wired the harness intent executor (`harness/Sources/BrowserController/IntentExecutor.swift`,
 `agent3-progress.md` W1–W9) and asked Agent 2 to "expose scroll/behavioral_pause intents + per-session
-persona". Per-session **persona is DONE + ALIGNED** (`behavioral_profile` on session-create = `casual|regular|
-power_user`, matching the harness's `shared/behavior/personas.json` ids; commits c0a46694/2990fb86/7309117c).
-The **intents** are NOT a quick add — there are THREE divergent intent vocabularies that must be reconciled:
+persona".
+
+**⚠️ PERSONA TRANSPORT MISMATCH — do not conflate (per `agent3-progress.md` "W17 bug" note):** two
+DIFFERENT behaviour concepts exist, and the harness's session-assign field carries the WRONG one for direct
+persona selection:
+
+- **Persona IDENTITY** = `casual | regular | power_user` (the `personas.json` ids). My session-create
+  `behavioral_profile` field (commits c0a46694/2990fb86/7309117c) is a DIRECT PERSONA SELECTOR using these —
+  which IS what Agent-3 asked for ("per-session direct persona selection is the open Agent-2 ask"). The IDs
+  match `personas.json`. ✓
+- **SPEED modifier** = `fast | balanced | careful | custom` — this is what the harness's
+  `ControlInbound.SessionAssign.behaviorProfile: String` field ACTUALLY carries today; the harness's
+  `resolvePersona` maps the speed modifier onto the `regular` persona BASE (so today you can only pick a speed
+  on `regular`, NOT a different persona). NOT a persona id.
+  So `behavioral_profile` (persona id) ≠ `SessionAssign.behaviorProfile` (speed modifier) — they're ORTHOGONAL.
+  The webkit driver (`apps/server/src/drivers/webkit.ts`) is still a stub, so my `behavioral_profile` reaches
+  only the mock today (no live SessionAssign). **Wiring decision needed (Agent-2 ⊕ Agent-3): the harness must
+  accept the direct persona id (extend `resolvePersona`/`SessionAssign` with a persona field, or repurpose
+  `behaviorProfile` to carry an id) — DON'T put `"regular"` into a field expecting `"balanced"` (the W17 bug
+  Agent-3 fixed).** My earlier "persona DONE + ALIGNED" note was only half-right (ids align; transport differs).
+
+The **intents** are NOT a quick add either — there are THREE divergent intent vocabularies that must be reconciled:
 
 1. **`AgentIntent`** (driftstack-api `api-types/agent-intents.ts` — the LLM decomposer's output): discriminated
    union `navigate{url}` / `interact{action: tap|type|scroll|swipe, selector?, value?}` / `wait{condition:
