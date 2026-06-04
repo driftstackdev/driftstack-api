@@ -180,6 +180,54 @@ alignment** — documented here so Agent 2 doesn't ship a harness-facing
 shape the harness then can't match. Once aligned, Agent 2 builds the
 control-plane halves gated + tested.
 
+### Intent-dispatch contract — AgentIntent ↔ harness IntentDispatch (reverse-engineered from the wired harness 2026-06-05)
+
+Agent-3 has fully wired the harness intent executor (`harness/Sources/BrowserController/IntentExecutor.swift`,
+`agent3-progress.md` W1–W9) and asked Agent 2 to "expose scroll/behavioral_pause intents + per-session
+persona". Per-session **persona is DONE + ALIGNED** (`behavioral_profile` on session-create = `casual|regular|
+power_user`, matching the harness's `shared/behavior/personas.json` ids; commits c0a46694/2990fb86/7309117c).
+The **intents** are NOT a quick add — there are THREE divergent intent vocabularies that must be reconciled:
+
+1. **`AgentIntent`** (driftstack-api `api-types/agent-intents.ts` — the LLM decomposer's output): discriminated
+   union `navigate{url}` / `interact{action: tap|type|scroll|swipe, selector?, value?}` / `wait{condition:
+idle|selector_visible}` / `capture{screenshot|dom_snapshot|pdf}`.
+2. **`InteractActionSchema`** (driftstack-api `api-types/sessions.ts` — the DIRECT `/v1/sessions/:id/interact`
+   route + the `Driver` contract): discriminated union `tap{selector}` / `type{selector,text,delay_ms}` /
+   `scroll{selector?,delta_x,delta_y}` / `press{key}`.
+3. **Harness `ControlInbound.IntentDispatch`** (Agent-3, what ACTUALLY executes): `{ intentName: string,
+inputParams: <opaque JSON> }`. The 9 `intentName`s + params the harness handles:
+   - `navigate` — `{url}`
+   - `click` — `{element_id}` OR `{strategy, value}` (NOT "tap")
+   - `send_keys` — `{strategy, value, text}` (NOT "type")
+   - `execute_script` — `{script, args?}`
+   - `screenshot` — `{}`
+   - `get_page_source` — `{}` (≈ dom_snapshot)
+   - `wait_for` — `{predicate, timeout_seconds?}`
+   - `scroll` — `{direction?: up|down, distance_px?: number, start_x?: int, start_y?: int}` (persona drives the flick/momentum/overshoot)
+   - `behavioral_pause` — `{duration_ms?}` OR `{kind:"reading", word_count}` OR (none → persona idle pause)
+
+**Proposed AgentIntent → IntentDispatch translation (the executor-wiring layer — still `StubAgentExecutor`;
+real dispatch = "AI-B2.b, pending"):** navigate→navigate; interact:tap→click{strategy,value from selector};
+interact:type→send_keys; interact:scroll→scroll{direction,distance_px}; capture:screenshot→screenshot;
+capture:dom_snapshot→get_page_source; wait:selector_visible→wait_for{predicate}.
+
+**GAPS / product decisions to resolve before wiring:**
+
+- `AgentIntent.interact:swipe` has NO harness target (harness has `scroll`, not swipe) — drop swipe or map to scroll?
+- `AgentIntent.capture:pdf` has NO harness target — drop or add a harness `pdf` intentName?
+- `behavioral_pause` is harness-only — the decomposer CANNOT currently emit it; needs a new `AgentIntent` kind
+  (and/or a direct-route exposure) for customers/the agent to invoke it.
+- `AgentIntent.scroll` carries no direction/distance; the harness `scroll` wants `direction`+`distance_px`.
+- `wait`: AgentIntent `condition: idle|selector_visible` vs harness `wait_for{predicate}` + `behavioral_pause`(idle) — map which to which.
+
+**Two-behavioral-models ownership split = FOUNDER-DECISION-PENDING** (Agent-3 `agent3-progress.md`): the harness
+self-generates touch/timing from `personas.json` + `BehavioralRhythm` (Swift) and is the DE-FACTO executor+model
+today; the Agent-2 `behavioural-simulation` TS lib (rich distributions) is unwired/parallel. Proposed (relayed):
+TS lib generates the plan, harness executes — but the harness already works standalone, so consolidation
+(personas.json ⟷ the TS distributions) is a real divergent-fingerprint risk needing a founder call. **Do NOT
+unilaterally build the intent reconciliation or pick the model owner** — it needs the executor-wiring (gated) +
+these product decisions. This section is the map so whoever builds it has the exact contract.
+
 ---
 
 ## Other landed cross-agent surfaces (reference)
