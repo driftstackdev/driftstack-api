@@ -38,7 +38,9 @@ export type AdminAuditAction =
   | 'incident.reopened'
   | 'status_subscriber.purged'
   // LK.2: per-Mac LiveKit credential registration (migration 0057).
-  | 'mac_node.livekit_registered';
+  | 'mac_node.livekit_registered'
+  // owner price edit — pricing-as-data master-owner cockpit (migration 0068).
+  | 'pricing.updated';
 
 export interface AdminAuditLogRow {
   id: string;

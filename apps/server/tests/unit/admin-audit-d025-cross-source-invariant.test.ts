@@ -128,7 +128,12 @@ describe('W936 D-025 admin-audit cross-source invariant', () => {
   it("CRITICAL LK.2 anchor — 'LK.2: per-Mac LiveKit credential registration (migration 0057)' + mac_node.livekit_registered. The 1-action LK.2 group covers operator provisioning of per-Mac LiveKit credentials via POST /v1/mac-nodes/register.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-audit.ts'));
     expect(p).toMatch(/\/\/ LK\.2: per-Mac LiveKit credential registration \(migration 0057\)\./);
-    expect(p).toMatch(/\| 'mac_node\.livekit_registered';/);
+    expect(p).toMatch(/\| 'mac_node\.livekit_registered'/);
+  });
+
+  it('CRITICAL pricing anchor — pricing.updated is the union terminator (migration 0068). The 1-action pricing group covers the master-owner price editor (pricing-as-data Phase A) recording each tier price change.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-audit.ts'));
+    expect(p).toMatch(/\| 'pricing\.updated';/);
   });
 
   // ─── AdminAuditLogRow 10-field shape ─────────────────────────

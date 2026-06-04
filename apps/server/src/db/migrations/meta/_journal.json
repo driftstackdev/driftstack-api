@@ -477,6 +477,13 @@
       "when": 1779748800000,
       "tag": "0067_pricing_table",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1779835200000,
+      "tag": "0068_pricing_updated_audit_action",
+      "breakpoints": true
     }
   ]
 }

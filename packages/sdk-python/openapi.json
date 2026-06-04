@@ -1968,7 +1968,8 @@
               "status_subscriber.force_unsubscribed",
               "status_subscriber.purged",
               "status_subscriber.force_subscribed",
-              "mac_node.livekit_registered"
+              "mac_node.livekit_registered",
+              "pricing.updated"
             ]
           },
           "target_account_id": {
@@ -7223,7 +7224,8 @@
                 "status_subscriber.force_unsubscribed",
                 "status_subscriber.purged",
                 "status_subscriber.force_subscribed",
-                "mac_node.livekit_registered"
+                "mac_node.livekit_registered",
+                "pricing.updated"
               ]
             },
             "required": false,
@@ -7327,7 +7329,8 @@
                               "status_subscriber.force_unsubscribed",
                               "status_subscriber.purged",
                               "status_subscriber.force_subscribed",
-                              "mac_node.livekit_registered"
+                              "mac_node.livekit_registered",
+                              "pricing.updated"
                             ]
                           },
                           "target_account_id": {

@@ -15,9 +15,9 @@
 //   • SetQuotaOverride: bucket enum (global|sessions:create) + capacity
 //     1..1M + refill 0.01..100k + duration 1..30d + reason.
 //   • V-512 ListDlqQuery endpoint_id drill-down rationale.
-//   • AdminAuditAction enum: 20 values (account/webhook/rate-limit/
+//   • AdminAuditAction enum: 21 values (account/webhook/rate-limit/
 //     V-100 force/V-281 support/V-295a incidents/V-295c3-tombstone
-//     status subscribers/LK.2 mac-node) — in lockstep with the DB enum.
+//     status subscribers/LK.2 mac-node/pricing) — lockstep with DB enum.
 //   • V-521 ListAuditLogQuery target_resource_id parity with V-484.
 //   • AdminAuditLogEntry shape.
 
@@ -133,7 +133,7 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
     expect(body).toMatch(/endpoint_id: z\.string\(\)\.min\(1\)\.max\(200\)\.optional\(\),/);
   });
 
-  it('AdminAuditAction enum: 20 values pinned (3 account + 3 webhook_delivery + 2 rate_limit_override + V-100 2 force + V-281 2 audit-only + V-295a 4 incident + V-295c3 3 status_subscriber + LK.2 1 mac_node). EXACT order + cardinality is pinned at runtime by the W862 cross-source toEqual (stronger than a source regex); here we assert the declaration + each value + the V-anchor section comments. (2026-06-04: corrected from 16 — api-types had drifted behind the DB enum; see W862 header.)', () => {
+  it('AdminAuditAction enum: 21 values pinned (3 account + 3 webhook_delivery + 2 rate_limit_override + V-100 2 force + V-281 2 audit-only + V-295a 4 incident + V-295c3 3 status_subscriber + LK.2 1 mac_node + 1 pricing). EXACT order + cardinality is pinned at runtime by the W862 cross-source toEqual (stronger than a source regex); here we assert the declaration + each value + the V-anchor section comments. (2026-06-04: corrected from 16 — api-types had drifted behind the DB enum. 2026-06-05: +pricing.updated, migration 0068.)', () => {
     expect(body).toMatch(/export const AdminAuditActionSchema = z\.enum\(\[/);
     for (const a of [
       'account.tier_changed',
@@ -156,6 +156,7 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
       'status_subscriber.purged',
       'status_subscriber.force_subscribed',
       'mac_node.livekit_registered',
+      'pricing.updated',
     ]) {
       expect(body, `AdminAuditActionSchema must include '${a}'`).toMatch(
         new RegExp(`'${a.replace(/[.]/g, '\\.')}'`),

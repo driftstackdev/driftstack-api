@@ -187,6 +187,8 @@ export const adminAuditAction = pgEnum('admin_audit_action', [
   'status_subscriber.force_subscribed',
   // LK.2: per-Mac LiveKit credential registration (migration 0057).
   'mac_node.livekit_registered',
+  // owner price edit — pricing-as-data master-owner cockpit (migration 0068).
+  'pricing.updated',
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────

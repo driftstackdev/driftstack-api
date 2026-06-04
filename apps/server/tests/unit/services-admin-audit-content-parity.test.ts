@@ -86,11 +86,13 @@ describe('W399.B apps/server/src/services/admin-audit.ts content parity', () => 
     expect(body).toMatch(/\| 'incident\.resolved'/);
   });
 
-  it('AdminAuditAction: V-295c3-tombstone status-subscriber cluster (force_unsubscribed / purged) + LK.2 mac_node.livekit_registered terminator', () => {
+  it('AdminAuditAction: V-295c3-tombstone status-subscriber cluster (force_unsubscribed / purged) + LK.2 mac_node.livekit_registered + pricing.updated terminator (migration 0068)', () => {
     expect(body).toMatch(/\/\/ V-295c3-tombstone: status-page email subscriber admin actions\./);
     expect(body).toMatch(/\| 'status_subscriber\.force_unsubscribed'/);
     expect(body).toMatch(/\| 'status_subscriber\.purged'/);
-    expect(body).toMatch(/\| 'mac_node\.livekit_registered';/);
+    expect(body).toMatch(/\| 'mac_node\.livekit_registered'/);
+    // pricing-as-data owner price-edit audit action is now the union terminator.
+    expect(body).toMatch(/\| 'pricing\.updated';/);
   });
 
   it('AdminAuditLogRow: 9 camelCased fields (id, adminAccountId, adminKeyId, action, targetAccountId?, targetResourceId?, inputPayload?, result, ipAddress?, timestamp)', () => {

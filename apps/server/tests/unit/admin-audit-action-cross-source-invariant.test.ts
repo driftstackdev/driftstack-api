@@ -1,4 +1,4 @@
-// W862 — AdminAuditAction 20-value cross-source invariant. One-
+// W862 — AdminAuditAction 21-value cross-source invariant. One-
 // hundred-eighty-eighth in the drift-guard series. Pins the
 // admin-audit closed-action roster:
 //
@@ -18,6 +18,7 @@
 //                                  unsubscribed + status_subscriber.purged +
 //                                  status_subscriber.force_subscribed.
 //   LK.2 mac-node (1): mac_node.livekit_registered.
+//   Pricing (1): pricing.updated.
 //
 // 2026-06-04 — corrected from 16 → 20: migrations 0057/0061/0062/0063
 // had added the last value of operational/incident/subscriber + the
@@ -72,6 +73,7 @@ const ADMIN_AUDIT_ACTIONS = [
   'status_subscriber.purged',
   'status_subscriber.force_subscribed',
   'mac_node.livekit_registered',
+  'pricing.updated',
 ] as const;
 
 describe('W862 AdminAuditAction cross-source invariant', () => {
@@ -141,8 +143,8 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
 
   // ─── 16-value cardinality + 6-category split ─────────────────
 
-  it('CRITICAL AdminAuditAction = EXACTLY 20 values across 7 categories — 3 lifecycle + 5 operational + 2 V-100 force + 2 V-281 support + 4 V-295a incident + 3 V-295c3 subscriber + 1 LK.2 mac-node. The 3/5/2/2/4/3/1 split is what the audit-log filter dropdown groups by. (2026-06-04: api-types brought into lockstep with the DB enum — migrations 0057/0061/0062/0063 had added discarded/reopened/force_subscribed/mac_node to the pgEnum + service union but not to this canonical schema, so the admin audit-log filter rejected those 4 actions with a 400 and the SDK response type omitted them.)', () => {
-    expect(ADMIN_AUDIT_ACTIONS.length).toBe(20);
+  it('CRITICAL AdminAuditAction = EXACTLY 21 values across 8 categories — 3 lifecycle + 5 operational + 2 V-100 force + 2 V-281 support + 4 V-295a incident + 3 V-295c3 subscriber + 1 LK.2 mac-node + 1 pricing. The 3/5/2/2/4/3/1/1 split is what the audit-log filter dropdown groups by. (2026-06-04: api-types brought into lockstep with the DB enum at 20. 2026-06-05: +pricing.updated for the owner price-edit audit, migration 0068 — see [[project_admin_full_control_cockpit_buildout]].)', () => {
+    expect(ADMIN_AUDIT_ACTIONS.length).toBe(21);
     const lifecycle = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('account.'));
     const operational = ADMIN_AUDIT_ACTIONS.filter(
       (a) => a.startsWith('webhook_delivery.') || a.startsWith('rate_limit_override.'),
@@ -154,6 +156,7 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
     const incident = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('incident.'));
     const subscriber = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('status_subscriber.'));
     const macNode = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('mac_node.'));
+    const pricing = ADMIN_AUDIT_ACTIONS.filter((a) => a.startsWith('pricing.'));
     expect(lifecycle.length).toBe(3);
     expect(operational.length).toBe(5);
     expect(force.length).toBe(2);
@@ -161,6 +164,7 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
     expect(incident.length).toBe(4);
     expect(subscriber.length).toBe(3);
     expect(macNode.length).toBe(1);
+    expect(pricing.length).toBe(1);
   });
 
   // ─── Verb:resource naming convention ─────────────────────────
