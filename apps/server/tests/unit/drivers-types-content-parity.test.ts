@@ -49,9 +49,9 @@ describe('W430.B apps/server/src/drivers/types.ts content parity', () => {
     );
   });
 
-  it('imports: CaptureKind + InteractAction + WaitCondition (api-types) + GUIInputAction (schemas/gui-input)', () => {
+  it('imports: BehavioralProfile + CaptureKind + InteractAction + WaitCondition (api-types) + GUIInputAction (schemas/gui-input)', () => {
     expect(body).toMatch(
-      /import type \{ CaptureKind, InteractAction, WaitCondition \} from '@driftstack\/api-types';/,
+      /import type \{\s*\n?\s*BehavioralProfile,\s*\n?\s*CaptureKind,\s*\n?\s*InteractAction,\s*\n?\s*WaitCondition,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ GUIInputAction \} from '\.\.\/schemas\/gui-input\.js';/);
   });

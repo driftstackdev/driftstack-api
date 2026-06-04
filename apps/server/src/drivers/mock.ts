@@ -18,6 +18,7 @@
 
 import { setTimeout as sleep } from 'node:timers/promises';
 import { DriverError, SessionTimeoutError } from '../lib/errors.js';
+import type { BehavioralProfile } from '@driftstack/api-types';
 import type {
   CaptureInput,
   CaptureResult,
@@ -69,6 +70,8 @@ interface InternalSession {
   archetype: string;
   /** V-169 — captured for test inspection; mock doesn't act on it. */
   purpose: 'production_customer' | 'cumulative_rig_validation' | 'test_domain_probe';
+  /** Behavioural persona — captured for test inspection; mock doesn't act on it. */
+  behavioralProfile: BehavioralProfile | undefined;
   currentUrl: string | null;
   currentTitle: string | null;
   destroyed: boolean;
@@ -113,6 +116,7 @@ export class MockDriver implements Driver {
       driverSessionId: id,
       archetype: input.archetype,
       purpose: input.purpose,
+      behavioralProfile: input.behavioralProfile,
       currentUrl: null,
       currentTitle: null,
       destroyed: false,

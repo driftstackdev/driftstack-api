@@ -7,6 +7,7 @@
 // can operate on it.
 
 import {
+  DEFAULT_BEHAVIORAL_PROFILE,
   DEFAULT_SESSION_PURPOSE,
   LOCKED_ARCHETYPE_ID,
   MAX_SESSION_MINUTES_PER_TIER,
@@ -303,9 +304,14 @@ export class SessionsService {
 
     const archetype = body.archetype ?? LOCKED_ARCHETYPE_ID;
     const purpose: SessionPurpose = body.purpose ?? DEFAULT_SESSION_PURPOSE;
+    // 2026-06-05 — behavioural persona, defaulted at the service like purpose
+    // (the harness always gets a persona). Passed to the driver create-input;
+    // not persisted (a create-time harness config, not a queryable column).
+    const behavioralProfile = body.behavioral_profile ?? DEFAULT_BEHAVIORAL_PROFILE;
     const driverResult = await this.deps.driver.createSession({
       archetype,
       purpose,
+      behavioralProfile,
       ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
     });
 

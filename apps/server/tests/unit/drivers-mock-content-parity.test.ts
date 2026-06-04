@@ -86,9 +86,9 @@ describe('W431.C apps/server/src/drivers/mock.ts content parity', () => {
     );
   });
 
-  it('InternalSession shape pinned: driverSessionId + archetype + V-169 purpose (captured for test inspection; mock doesnt act on it) + currentUrl/Title (nullable) + destroyed + opSeq', () => {
+  it('InternalSession shape pinned: driverSessionId + archetype + V-169 purpose + behavioralProfile (both captured for test inspection; mock doesnt act on them) + currentUrl/Title (nullable) + destroyed + opSeq', () => {
     expect(body).toMatch(
-      /interface InternalSession \{\s*\n?\s*driverSessionId: DriverSessionId;\s*\n?\s*archetype: string;\s*\n?\s*\/\*\* V-169 — captured for test inspection; mock doesn't act on it\. \*\/\s*\n?\s*purpose: 'production_customer' \| 'cumulative_rig_validation' \| 'test_domain_probe';\s*\n?\s*currentUrl: string \| null;\s*\n?\s*currentTitle: string \| null;\s*\n?\s*destroyed: boolean;/,
+      /interface InternalSession \{\s*\n?\s*driverSessionId: DriverSessionId;\s*\n?\s*archetype: string;\s*\n?\s*\/\*\* V-169 — captured for test inspection; mock doesn't act on it\. \*\/\s*\n?\s*purpose: 'production_customer' \| 'cumulative_rig_validation' \| 'test_domain_probe';\s*\n?\s*\/\*\* Behavioural persona — captured for test inspection; mock doesn't act on it\. \*\/\s*\n?\s*behavioralProfile: BehavioralProfile \| undefined;\s*\n?\s*currentUrl: string \| null;\s*\n?\s*currentTitle: string \| null;\s*\n?\s*destroyed: boolean;/,
     );
     expect(body).toMatch(
       /\/\*\* Sequence counter incremented on every operation; lets tests reason about ordering\. \*\/\s*\n?\s*opSeq: number;/,
@@ -118,7 +118,7 @@ describe('W431.C apps/server/src/drivers/mock.ts content parity', () => {
       /const id = `mock_ses_\$\{this\.nextId\.toString\(\)\.padStart\(8, '0'\)\}`;\s*\n?\s*this\.nextId \+= 1;/,
     );
     expect(body).toMatch(
-      /this\.sessions\.set\(id, \{\s*\n?\s*driverSessionId: id,\s*\n?\s*archetype: input\.archetype,\s*\n?\s*purpose: input\.purpose,\s*\n?\s*currentUrl: null,\s*\n?\s*currentTitle: null,\s*\n?\s*destroyed: false,\s*\n?\s*opSeq: 0,\s*\n?\s*\}\);/,
+      /this\.sessions\.set\(id, \{\s*\n?\s*driverSessionId: id,\s*\n?\s*archetype: input\.archetype,\s*\n?\s*purpose: input\.purpose,\s*\n?\s*behavioralProfile: input\.behavioralProfile,\s*\n?\s*currentUrl: null,\s*\n?\s*currentTitle: null,\s*\n?\s*destroyed: false,\s*\n?\s*opSeq: 0,\s*\n?\s*\}\);/,
     );
   });
 

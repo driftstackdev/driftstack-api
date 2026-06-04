@@ -1050,6 +1050,10 @@
           "profile_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "behavioral_profile": {
+            "type": "string",
+            "enum": ["casual", "regular", "power_user"]
           }
         }
       },
@@ -2810,6 +2814,10 @@
                   "profile_id": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "behavioral_profile": {
+                    "type": "string",
+                    "enum": ["casual", "regular", "power_user"]
                   }
                 }
               }

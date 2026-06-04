@@ -53,6 +53,20 @@ export const SessionPurposeSchema = z.enum([
 export type SessionPurpose = z.infer<typeof SessionPurposeSchema>;
 export const DEFAULT_SESSION_PURPOSE: SessionPurpose = 'production_customer';
 
+/**
+ * 2026-06-05 — per-session behavioural persona (file 05 §"Persona model").
+ * Selects the human-behaviour profile the harness drives the session with:
+ * touch/scroll/typing cadence + dwell distributions. The values mirror the
+ * canonical persona catalogue in `@driftstack/behavioural-simulation`
+ * (`PersonaId`); a cross-source guard pins them in lockstep. The control
+ * plane passes the chosen persona to the driver at create-time; the harness
+ * (single source of truth for the behavioural model) consumes it. Optional
+ * on session-create; the service defaults it to the middle persona.
+ */
+export const BehavioralProfileSchema = z.enum(['casual', 'regular', 'power_user']);
+export type BehavioralProfile = z.infer<typeof BehavioralProfileSchema>;
+export const DEFAULT_BEHAVIORAL_PROFILE: BehavioralProfile = 'regular';
+
 export const SessionSchema = z.object({
   id: SessionIdSchema,
   account_id: AccountIdSchema,
@@ -107,6 +121,13 @@ export const CreateSessionRequestSchema = z.object({
    * (no persistent state) still work as before.
    */
   profile_id: z.string().uuid().optional(),
+  /**
+   * 2026-06-05 — behavioural persona for this session. When supplied, the
+   * harness drives touch/scroll/typing with the selected persona's profile;
+   * omitted → the server applies DEFAULT_BEHAVIORAL_PROFILE. Set once for the
+   * session's lifetime (file 05 §"Persona consistency").
+   */
+  behavioral_profile: BehavioralProfileSchema.optional(),
 });
 
 export type CreateSessionRequest = z.infer<typeof CreateSessionRequestSchema>;

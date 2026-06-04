@@ -90,13 +90,14 @@ describe('W984 drivers/types V-169 + L-001 cross-source invariant', () => {
 
   // ─── CreateSessionInput shape ────────────────────────────────
 
-  it('CRITICAL CreateSessionInput 3-field shape — archetype + V-169 purpose + optional metadata. The 3-field shape is what services-level pass to the driver.', () => {
+  it('CRITICAL CreateSessionInput 4-field shape — archetype + V-169 purpose + optional behavioralProfile + optional metadata. The shape is what services-level pass to the driver (2026-06-05: behavioralProfile added — the per-session persona the harness drives the session with).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/drivers/types.ts'));
     expect(p).toMatch(/export interface CreateSessionInput \{/);
     expect(p).toMatch(/archetype: string;/);
     expect(p).toMatch(
       /purpose: 'production_customer' \| 'cumulative_rig_validation' \| 'test_domain_probe';/,
     );
+    expect(p).toMatch(/behavioralProfile\?: BehavioralProfile;/);
     expect(p).toMatch(/metadata\?: Record<string, unknown>;/);
   });
 

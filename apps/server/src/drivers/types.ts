@@ -10,7 +10,12 @@
 // (route layer parses, services pass through). This avoids re-validation cost
 // on every driver call and keeps the driver pure of HTTP concerns.
 
-import type { CaptureKind, InteractAction, WaitCondition } from '@driftstack/api-types';
+import type {
+  BehavioralProfile,
+  CaptureKind,
+  InteractAction,
+  WaitCondition,
+} from '@driftstack/api-types';
 import type { GUIInputAction } from '../schemas/gui-input.js';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -35,6 +40,14 @@ export interface CreateSessionInput {
    * is where the harness branching lives.
    */
   purpose: 'production_customer' | 'cumulative_rig_validation' | 'test_domain_probe';
+  /**
+   * 2026-06-05 — behavioural persona for the session (file 05 §"Persona
+   * model"). The WebKit harness drives touch/scroll/typing with this
+   * persona's profile from @driftstack/behavioural-simulation (the single
+   * source of truth for the model). MockDriver accepts but doesn't act on it
+   * (captured for test inspection); omitted → service applies the default.
+   */
+  behavioralProfile?: BehavioralProfile;
   /** Free-form metadata supplied by the customer. Driver may ignore. */
   metadata?: Record<string, unknown>;
 }
