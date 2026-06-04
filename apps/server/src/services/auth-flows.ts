@@ -358,6 +358,19 @@ export interface RefreshSessionResult {
   session: { plaintext: string; row: WebSessionRow };
 }
 
+// Login user-enumeration timing mitigation (CWE-208). When an email has no
+// account (or is OAuth-only with a null password hash), login still runs a
+// throwaway scrypt verify against this fixed dummy hash so the no-account path
+// takes ~the same time as a real wrong-password attempt (scrypt logN=15 is
+// tens of ms; skipping it would let an attacker enumerate registered emails by
+// response latency). Computed lazily once, then reused — the plaintext is a
+// fixed non-secret; only the resulting scrypt cost matters.
+let dummyPasswordHashPromise: Promise<string> | null = null;
+function dummyPasswordHash(): Promise<string> {
+  dummyPasswordHashPromise ??= hashPassword('driftstack-login-timing-equalizer');
+  return dummyPasswordHashPromise;
+}
+
 export class AuthFlowsService {
   constructor(
     private readonly repo: AuthFlowsRepo,
@@ -558,14 +571,26 @@ export class AuthFlowsService {
 
   async login(args: LoginArgs): Promise<LoginResult> {
     const account = await this.repo.findAccountByEmail(args.email.trim().toLowerCase());
+
+    // Authenticate BEFORE branching on account state so the response time +
+    // error are identical whether the email is unknown, password-less
+    // (OAuth-only), suspended, or simply wrong-password — closing a login
+    // user-enumeration side-channel (CWE-208). A non-existent / password-less
+    // account runs a throwaway scrypt verify against a dummy hash so it can't
+    // be told apart from a real wrong-password attempt by latency.
     if (account === null || account.passwordHash === null) {
+      await verifyPassword(args.password, await dummyPasswordHash());
       throw new AuthFlowError('invalid_credentials');
-    }
-    if (account.status !== 'active') {
-      throw new AuthFlowError('account_suspended');
     }
     const ok = await verifyPassword(args.password, account.passwordHash);
     if (!ok) throw new AuthFlowError('invalid_credentials');
+    // Account-state checks come AFTER authentication: a wrong-password attempt
+    // on a suspended/unverified account is then indistinguishable from any
+    // other bad login, so neither state leaks to an unauthenticated probe. A
+    // correct-password caller (the account owner) still learns the real state.
+    if (account.status !== 'active') {
+      throw new AuthFlowError('account_suspended');
+    }
     if (account.emailVerifiedAt === null) {
       throw new AuthFlowError('email_not_verified');
     }

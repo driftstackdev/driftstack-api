@@ -123,7 +123,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('login: 4-failure-mode cascade (invalid_credentials × 2 + account_suspended + email_not_verified) + V-353d branch returns mfa_required with challenge_token', () => {
     expect(body).toMatch(
-      /if \(account === null \|\| account\.passwordHash === null\) \{\s*\n?\s*throw new AuthFlowError\('invalid_credentials'\);/,
+      /if \(account === null \|\| account\.passwordHash === null\) \{\s*\n?\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*\n?\s*throw new AuthFlowError\('invalid_credentials'\);/,
     );
     expect(body).toMatch(
       /if \(account\.status !== 'active'\) \{\s*\n?\s*throw new AuthFlowError\('account_suspended'\);/,
@@ -138,6 +138,30 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     expect(body).toMatch(
       /return \{\s*\n?\s*kind: 'mfa_required',\s*\n?\s*account,\s*\n?\s*challengeToken: token,\s*\n?\s*challengeExpiresAt: new Date\(Date\.now\(\) \+ MFA_CHALLENGE_TTL_SECONDS \* 1000\),/,
     );
+  });
+
+  // CWE-208 login user-enumeration timing mitigation — pin both halves so a
+  // refactor can't silently reopen it: (1) the no-account / password-less
+  // branch runs a throwaway scrypt verify against a fixed dummy hash before
+  // throwing, so it can't be distinguished from a real wrong-password attempt
+  // by latency; (2) the account-state checks (suspended / unverified) come
+  // AFTER the real verifyPassword (authenticate before authorize), so a
+  // wrong-password probe can't distinguish account state by error or timing.
+  it('login is timing-safe against user enumeration (dummy-verify on no-account + authenticate-before-state-check)', () => {
+    // (1) throwaway scrypt verify on the no-account / null-password branch.
+    expect(body).toMatch(
+      /if \(account === null \|\| account\.passwordHash === null\) \{\s*\n?\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*\n?\s*throw new AuthFlowError\('invalid_credentials'\);/,
+    );
+    // dummyPasswordHash lazily computes one fixed scrypt hash, then reuses it.
+    expect(body).toMatch(/dummyPasswordHashPromise \?\?= hashPassword\(/);
+    // (2) the real verifyPassword + its throw must PRECEDE the account-state
+    // checks. indexOf ordering is robust to whitespace/refactor reflow.
+    const okIdx = body.indexOf(
+      'const ok = await verifyPassword(args.password, account.passwordHash);',
+    );
+    const suspendedIdx = body.indexOf("if (account.status !== 'active')");
+    expect(okIdx).toBeGreaterThan(-1);
+    expect(suspendedIdx).toBeGreaterThan(okIdx);
   });
 
   it("V-353d completeMfaChallenge: peek-before-consume (IP mismatch doesn't consume); markWebSessionMfaSatisfied on success; via='totp'|'recovery' result", () => {
