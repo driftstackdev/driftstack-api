@@ -50,8 +50,9 @@ describe('W254.A docs/reference/rate-limits ↔ TIER_RATE_LIMIT_DEFAULTS parity'
   // columns (global + sessions:create), leaving global-refill and the
   // agent_sessions:message capacity unpinned so a future
   // TIER_RATE_LIMIT_DEFAULTS change to those would silently drift the doc.
-  // These integer columns are pinnable directly (fractional refill columns
-  // render as "1/N (M per minute)" and are left to a separate prose pin).
+  // These integer columns are pinnable directly; the fractional refill
+  // columns ("1/N (M per minute)") are pinned cell-exact in the dedicated
+  // refill-column test below.
   it('every per-tier global-bucket refill (rps) matches TIER_RATE_LIMIT_DEFAULTS', () => {
     for (const t of tiers) {
       const cfg = TIER_RATE_LIMIT_DEFAULTS[t as keyof typeof TIER_RATE_LIMIT_DEFAULTS];
@@ -74,6 +75,47 @@ describe('W254.A docs/reference/rate-limits ↔ TIER_RATE_LIMIT_DEFAULTS parity'
         `\`${t}\`\\s*\\|[^|]+\\|[^|]+\\|[^|]+\\|[^|]+\\|\\s*${cap.replace(/,/g, ',?')}\\s*\\|`,
       );
       expect(doc, `agent_sessions:message capacity mismatch for ${t} (expect ${cap})`).toMatch(re);
+    }
+  });
+
+  // W254.A follow-up — the capacity pins above (+ the integer global-refill
+  // pin) left the two REFILL columns (sessions:create + agent_sessions:message)
+  // uncovered, and the prior revision deferred the fractional ones ("1/N
+  // (M per minute)") to a "separate prose pin" that never landed. So a
+  // TIER_RATE_LIMIT_DEFAULTS refill change would silently drift the
+  // customer-facing doc while every capacity pin still passed. Pin both refill
+  // columns cell-exact (split the row on `|`) so a value like "1" can't alias
+  // inside "1/60" / "120" the way a substring/loose-regex match would.
+  it('every sessions:create + agent_sessions:message refill column matches TIER_RATE_LIMIT_DEFAULTS', () => {
+    // Doc renders an integer rps as the number, a fractional rps as
+    // "1/N (M per minute)" (N = 1/rps, M = rps*60). Mirrors the doc table.
+    const renderRefill = (rps: number): string =>
+      Number.isInteger(rps)
+        ? rps.toLocaleString('en-US')
+        : `1/${Math.round(1 / rps)} (${Math.round(rps * 60)} per minute)`;
+
+    // Parse the markdown table into tier -> trimmed cells. A leading `|`
+    // makes cells[0] the empty pre-pipe segment, so cells[1] is the tier and
+    // the numeric columns are: [2] global cap, [3] global refill, [4] sc cap,
+    // [5] sc refill, [6] msg cap, [7] msg refill.
+    const rowByTier = new Map<string, string[]>();
+    for (const line of doc.split('\n')) {
+      if (!line.trimStart().startsWith('|')) continue;
+      const cells = line.split('|').map((c) => c.trim());
+      const tierCell = cells[1]?.replace(/`/g, '');
+      if (tierCell && (tiers as string[]).includes(tierCell)) rowByTier.set(tierCell, cells);
+    }
+
+    for (const t of tiers) {
+      const cfg = TIER_RATE_LIMIT_DEFAULTS[t as keyof typeof TIER_RATE_LIMIT_DEFAULTS];
+      const cells = rowByTier.get(t);
+      expect(cells, `no rate-limit table row found for tier ${t}`).toBeDefined();
+      expect(cells?.[5], `sessions:create refill mismatch for ${t}`).toBe(
+        renderRefill(cfg['sessions:create'].refill_per_second),
+      );
+      expect(cells?.[7], `agent_sessions:message refill mismatch for ${t}`).toBe(
+        renderRefill(cfg['agent_sessions:message'].refill_per_second),
+      );
     }
   });
 
