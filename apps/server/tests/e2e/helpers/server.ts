@@ -28,6 +28,8 @@ import { WebhookDeliveryWorker } from '../../../src/services/webhook-worker.js';
 import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { AdminBillingService } from '../../../src/services/admin-billing.js';
+import { PricingService } from '../../../src/services/pricing.js';
+import { DrizzlePricingRepo } from '../../../src/db/pricing-repo.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../../src/services/legal.js';
 import { buildLegalCatalog } from '../../../src/services/legal-catalog.js';
@@ -183,6 +185,7 @@ export async function startTestServer(): Promise<TestServer> {
   const accountsAdminRepo = new DrizzleAccountsAdminRepo(database);
   const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);
   const adminBillingService = new AdminBillingService(new DrizzleAdminBillingRepo(database));
+  const pricingService = new PricingService(new DrizzlePricingRepo(database));
 
   const rateLimitOverridesRepo = new DrizzleRateLimitOverridesRepo(database);
   const rateLimitOverridesService = new RateLimitOverridesService(
@@ -393,6 +396,7 @@ export async function startTestServer(): Promise<TestServer> {
     adminAuditService,
     accountsAdminService,
     adminBillingService,
+    pricingService,
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,

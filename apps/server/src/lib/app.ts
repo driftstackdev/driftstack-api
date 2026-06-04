@@ -20,6 +20,7 @@ import type { WebhooksService, WebhooksAdminService } from '../services/webhooks
 import type { AdminAuditService } from '../services/admin-audit.js';
 import type { AccountsAdminService } from '../services/admin-accounts.js';
 import type { AdminBillingService } from '../services/admin-billing.js';
+import type { PricingService } from '../services/pricing.js';
 import type { IncidentsService } from '../services/incidents.js';
 import type { StatusSubscribersService } from '../services/status-subscribers.js';
 import { registerStatusSubscribeRoutes } from '../routes/status-subscribe.js';
@@ -191,6 +192,7 @@ export interface AppDeps {
   adminAuditService: AdminAuditService;
   accountsAdminService: AccountsAdminService;
   adminBillingService: AdminBillingService;
+  pricingService: PricingService;
   /** V-295a — incidents service. Optional during migration window;
    *  when omitted, /v1/admin/incidents/* + /v1/status/incidents are
    *  not registered. */
@@ -878,6 +880,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       sentry: deps.sentry !== undefined,
       permissive_cors: deps.permissiveCors === true,
     },
+    pricing: deps.pricingService,
   });
   registerAdminSessionsRoutes(app, { sessionsService: deps.sessionsService });
   registerAdminApiKeysRoutes(app, { apiKeysService: deps.apiKeysService });

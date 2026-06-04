@@ -66,12 +66,13 @@ describe('apps/server/src/routes/admin-owner.ts content parity', () => {
     expect(app).toContain('permissive_cors: deps.permissiveCors === true');
   });
 
-  it('owner pricing view: GET /v1/admin/owner/pricing, OWNER-gated, read-only from TIER_MONTHLY_PRICE_CENTS', () => {
+  it('owner pricing view: GET /v1/admin/owner/pricing, OWNER-gated, reads from PricingService (DB+constant fallback)', () => {
     expect(body).toContain("'/v1/admin/owner/pricing'");
-    // Same owner-gate as platform-status (identity, not scope).
-    expect(body).toContain('TIER_MONTHLY_PRICE_CENTS');
+    // Now DB-backed via PricingService (migration 0067 + constant fallback), not the constant directly.
+    expect(body).toContain('opts.pricing.listEffective()');
+    expect(body).toContain('pricing: PricingService');
     expect(body).toContain('monthly_cents');
-    // Read-only — no mutation of pricing here (the editable/Stripe-sync arc is gated).
+    // Still READ-ONLY — no mutation of pricing in this route (owner CRUD is a later increment).
     expect(body).not.toMatch(/insert|update|\.set\(|delete/i);
   });
 });

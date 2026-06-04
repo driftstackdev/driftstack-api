@@ -17,7 +17,7 @@
 // reflects whether the feature is live in this deployment.
 
 import type { FastifyInstance } from 'fastify';
-import { TIER_MONTHLY_PRICE_CENTS } from '../lib/cost-defaults.js';
+import type { PricingService } from '../services/pricing.js';
 
 export interface OwnerPlatformStatus {
   billing: boolean;
@@ -30,6 +30,7 @@ export interface OwnerPlatformStatus {
 
 export interface AdminOwnerRoutesOptions {
   platformStatus: OwnerPlatformStatus;
+  pricing: PricingService;
 }
 
 export function registerAdminOwnerRoutes(
@@ -49,19 +50,14 @@ export function registerAdminOwnerRoutes(
   app.get(
     '/v1/admin/owner/pricing',
     { preHandler: [app.requireOwner, app.rateLimit('global')] },
-    () => {
-      // Current per-tier monthly pricing (cents) — the single source that
-      // the crypto-checkout charge, the cost-cap thresholds, and the
-      // customer-facing display all derive from (TIER_MONTHLY_PRICE_CENTS).
-      // READ-ONLY: the foundation for owner-editable pricing. Making this
-      // DB-sourced + live-editable + Stripe-synced is the separate,
-      // founder-design-gated pricing-as-data arc (grandfathering + sync
-      // semantics must be decided first) — no mutation here.
-      const tiers = Object.entries(TIER_MONTHLY_PRICE_CENTS).map(([tier, monthlyCents]) => ({
-        tier,
-        monthly_cents: monthlyCents ?? 0,
-      }));
-      return { tiers };
+    async () => {
+      // Current per-tier monthly pricing (cents) via PricingService — the DB
+      // pricing table (migration 0067), falling back to the TIER_MONTHLY_PRICE_CENTS
+      // constant per tier (seeded == constants, so identical until an owner edits).
+      // READ-ONLY here; owner-edit (CRUD) + the crypto/cost-cap rewire onto this
+      // same service are the next pricing-as-data increments.
+      const rows = await opts.pricing.listEffective();
+      return { tiers: rows.map((r) => ({ tier: r.tier, monthly_cents: r.monthlyCents })) };
     },
   );
 }

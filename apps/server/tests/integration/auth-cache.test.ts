@@ -24,6 +24,8 @@ import { WebhooksService, WebhooksAdminService } from '../../src/services/webhoo
 import { AdminAuditService } from '../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../src/services/admin-accounts.js';
 import { AdminBillingService } from '../../src/services/admin-billing.js';
+import { PricingService } from '../../src/services/pricing.js';
+import { InMemoryPricingRepo } from './_helpers/in-memory-pricing-repo.js';
 import { RateLimitOverridesService } from '../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../src/services/legal.js';
 import { buildLegalCatalogFromContent } from '../../src/services/legal-catalog.js';
@@ -259,6 +261,7 @@ describe('auth cache — graceful degradation', () => {
       null,
     );
     const adminBillingService = new AdminBillingService(new InMemoryAdminBillingRepo());
+    const pricingService = new PricingService(new InMemoryPricingRepo());
     const rateLimitOverridesService = new RateLimitOverridesService(
       new InMemoryRateLimitOverridesRepo(authRepo),
       null,
@@ -277,6 +280,7 @@ describe('auth cache — graceful degradation', () => {
       adminAuditService,
       accountsAdminService,
       adminBillingService,
+      pricingService,
       rateLimitOverridesService,
       legalService: new LegalService(
         buildLegalCatalogFromContent([
@@ -368,6 +372,7 @@ describe('auth cache — graceful degradation', () => {
       null,
     );
     const adminBillingService = new AdminBillingService(new InMemoryAdminBillingRepo());
+    const pricingService = new PricingService(new InMemoryPricingRepo());
     const rateLimitOverridesService = new RateLimitOverridesService(
       new InMemoryRateLimitOverridesRepo(authRepo),
       null,
@@ -386,6 +391,7 @@ describe('auth cache — graceful degradation', () => {
       adminAuditService,
       accountsAdminService,
       adminBillingService,
+      pricingService,
       rateLimitOverridesService,
       legalService: new LegalService(
         buildLegalCatalogFromContent([

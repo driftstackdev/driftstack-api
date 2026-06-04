@@ -41,6 +41,8 @@ import { WebhooksService, WebhooksAdminService } from '../../../src/services/web
 import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { AdminBillingService } from '../../../src/services/admin-billing.js';
+import { PricingService } from '../../../src/services/pricing.js';
+import { InMemoryPricingRepo } from './in-memory-pricing-repo.js';
 import { IncidentsService } from '../../../src/services/incidents.js';
 import { InMemoryIncidentsRepo } from './in-memory-incidents-repo.js';
 import { InMemoryIncidentUpdateNotificationsRepo } from './in-memory-incident-update-notifications-repo.js';
@@ -912,6 +914,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     sessionsService,
   );
   const adminBillingService = new AdminBillingService(new InMemoryAdminBillingRepo());
+  const pricingService = new PricingService(new InMemoryPricingRepo());
   // Legal-acceptance plumbing — uses an in-memory catalog with a fixed
   // canned document set (one per documentKey) so tests don't depend on
   // file-system reads.
@@ -1219,6 +1222,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     adminAuditService,
     accountsAdminService,
     adminBillingService,
+    pricingService,
     incidentsService,
     statusSubscribersService,
     incidentEventBus,
