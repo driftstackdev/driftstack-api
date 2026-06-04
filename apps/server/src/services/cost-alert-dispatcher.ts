@@ -88,19 +88,34 @@ export class CostAlertDispatcher {
     for (const summary of summaries) {
       const prior = this.lastState.get(summary.account_id) ?? null;
       const current = summary.breakdown.thresholdState;
-      this.lastState.set(summary.account_id, current);
 
       if (prior === current) {
-        // No transition — already alerted (or already-OK).
+        // No transition — already alerted (or already-OK). `lastState`
+        // already holds `current` (that's where `prior` was read from), so
+        // there's nothing to record.
         alertsSkipped += 1;
         continue;
       }
       const severity = classifyTransition(prior, current);
       if (severity === null) {
+        // Transition exists but isn't alert-worthy (first-run still-under-
+        // soft). Record the new state so a later genuine transition is
+        // detected against it.
+        this.lastState.set(summary.account_id, current);
         alertsSkipped += 1;
         continue;
       }
+      // Deliver first, THEN advance the remembered state — only on a
+      // successful send. If the (real Postmark / Slack) sink rejects, the
+      // error bubbles out of evaluate (fail-loud — sendAlert is awaited) and
+      // `lastState` stays at `prior`, so the next run re-detects this
+      // transition and retries the alert instead of silently dropping a
+      // threshold page. Advancing BEFORE the await would record the alert as
+      // delivered even when the send failed, turning a transient channel
+      // outage into a permanently-missed page — the design biases toward a
+      // duplicate over a drop.
       await this.opts.sendAlert(buildAlertPayload(summary, prior, current, severity));
+      this.lastState.set(summary.account_id, current);
       alertsFired += 1;
     }
 

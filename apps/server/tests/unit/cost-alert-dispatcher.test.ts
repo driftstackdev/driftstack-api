@@ -143,6 +143,48 @@ describe('V-541.C dispatcher — transitions across evaluations', () => {
     await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
     expect(capturedAlerts).toHaveLength(2);
   });
+
+  it('does NOT advance remembered state when a send fails — next eval retries the transition (no silently-dropped page)', async () => {
+    // Regression guard: lastState must be advanced only AFTER a successful
+    // send. If it were advanced before the await (mark-before-send), a
+    // transient sink failure would record the transition as delivered, and
+    // the next run would see prior === current and never re-send — a
+    // permanently-missed threshold page. The design biases toward a duplicate
+    // over a drop, so the failed transition must re-fire once the channel
+    // recovers.
+    const rows = new Map<string, UsageInputs>([['a', { ...EMPTY, sessionMinutes: 1_000 }]]); // over-hard
+    const aggregator: UsageAggregator = {
+      aggregateForAccount: ({ accountId }) => Promise.resolve(rows.get(accountId) ?? null),
+    };
+    const service = new CostMonitoringService({
+      aggregator,
+      rates: RATES,
+      tierThresholds: { solo_manual: { softCents: 100, hardCents: 200 } },
+      resolveTier: () => Promise.resolve('solo_manual'),
+    });
+    let calls = 0;
+    const captured: CostAlertPayload[] = [];
+    const sink: AlertSink = (alert) => {
+      calls += 1;
+      if (calls === 1) return Promise.reject(new Error('postmark down'));
+      captured.push(alert);
+      return Promise.resolve();
+    };
+    const dispatcher = new CostAlertDispatcher({ service, sendAlert: sink });
+    // First eval: the send rejects and the error bubbles out (fail-loud).
+    await expect(
+      dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' }),
+    ).rejects.toThrow('postmark down');
+    expect(captured).toHaveLength(0);
+    // Second eval (channel recovered): the same transition is re-detected
+    // because its state was never advanced → the critical alert is delivered.
+    const r2 = await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(r2.alertsFired).toBe(1);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.severity).toBe('critical');
+    expect(captured[0]?.previous_state).toBeNull();
+    expect(captured[0]?.current_state).toBe('over-hard');
+  });
 });
 
 describe('V-541.C dispatcher — payload shape', () => {

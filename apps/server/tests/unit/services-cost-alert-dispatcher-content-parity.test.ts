@@ -116,13 +116,17 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
     );
   });
 
-  it('evaluate: classifyTransition returns null → skip; non-null → sendAlert + alertsFired++', () => {
+  it('evaluate: classifyTransition returns null → record state + skip; non-null → sendAlert THEN advance lastState (only on success) + alertsFired++', () => {
     expect(body).toMatch(/const severity = classifyTransition\(prior, current\);/);
+    // null-severity (first-run under-soft) still records state before skipping.
     expect(body).toMatch(
-      /if \(severity === null\) \{\s*\n?\s*alertsSkipped \+= 1;\s*\n?\s*continue;\s*\n?\s*\}/,
+      /if \(severity === null\) \{[\s\S]*?this\.lastState\.set\(summary\.account_id, current\);\s*\n?\s*alertsSkipped \+= 1;\s*\n?\s*continue;\s*\n?\s*\}/,
     );
+    // The send is awaited FIRST, and lastState is advanced AFTER it resolves —
+    // so a rejecting sink leaves prior state intact for next-run retry rather
+    // than recording a never-delivered alert as sent.
     expect(body).toMatch(
-      /await this\.opts\.sendAlert\(buildAlertPayload\(summary, prior, current, severity\)\);\s*\n?\s*alertsFired \+= 1;/,
+      /await this\.opts\.sendAlert\(buildAlertPayload\(summary, prior, current, severity\)\);\s*\n?\s*this\.lastState\.set\(summary\.account_id, current\);\s*\n?\s*alertsFired \+= 1;/,
     );
     expect(body).toMatch(/return \{ alertsFired, alertsSkipped \};/);
   });
