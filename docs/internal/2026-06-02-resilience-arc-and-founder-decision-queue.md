@@ -101,6 +101,21 @@ lower-priority dependabot PRs (founder cadence). See the §2 header below.
 > - **iphone17 cutover (item 8)** — need Agent-1 to confirm canvas/atlas readiness (else rendering breaks).
 > - Lower-priority/infra: deploy approval-gate/CI-gating (11-12), CORS/trustProxy (5-6, LOCKED), CF-skip (13), and the remaining dependabot PRs (#15/#16 dev-tooling, #14 cargo, #1/#2/#3 CI-actions, #6/#7 framework majors) — founder cadence. Full per-item detail below.
 
+> **STATUS 2026-06-04 — additional fixes shipped + items surfaced this session (Agent-2 autopilot). Detail in the linked auto-memories.**
+>
+> _Shipped (all pre-push-gate-green, V-205-clean, live in prod):_
+>
+> - ✅ **Login user-enumeration timing side-channel (CWE-208)** — `0b1e57c8`. `AuthFlowsService.login` skipped the scrypt `verifyPassword` for unknown / OAuth-only-password emails (→ enumerate registered emails by response latency) AND checked account-state before the password (→ leaked suspended-state to wrong-password probes). Fixed via dummy scrypt verify on the no-account branch + authenticate-before-authorize ordering; bug-class swept (no siblings — TOTP/api-key/MFA all constant-time). (`login_timing_enumeration_fixed`)
+> - ✅ **api-key rotate grace-window comment** — `17f82c4a`. The inline comment claimed the old key's expiry "becomes the later of (existing, now+grace)" while the code + docstring + parity test correctly compute the EARLIER (min) — a future MAX "fix" would have EXTENDED a rotated (possibly-compromised) key's life past the grace window. Corrected + added a negative-assertion drift-guard. (`apikey_rotate_comment_and_count_cap`)
+> - ✅ **Unbounded email inputs** — `e25a0282`. `status-subscribe` + `team-invite` email fields validated format but lacked the `.max(254)` (RFC 5321) bound the rest of the codebase applies (AuthEmailSchema + admin endpoints); added it + updated all 4 content-parity / cross-source pins. (`string_field_length_bounds_audit`)
+>
+> _Newly SURFACED (founder / cross-agent-gated — NOT auto-doable; Agent-2 did not flip):_
+>
+> - **Navigate-URL SSRF/LFI (egress cluster)** — `NavigateRequestSchema.url` is a bare `z.string().url()` (accepts `file://` / `http://169.254.169.254` / internal IPs); `service.navigate` passes it straight to `driver.navigate` with no scheme/IP guard. NOT live (prod `driver:mock`) + mitigated by the LOCKED Tier-3 isolated-guest-VM + customer-SOCKS5 egress arch (planning-133). **Fix-at-driver-wiring**: http/https scheme allowlist + IP/metadata blocklist via `lib/webhook-target-guard`, server-side. Clusters with the SOCKS5 egress SSRF (§4.17). Cross-agent + planning-133 LOCKED. (`navigate_url_scheme_ssrf_latent`)
+> - **Team collaboration not tier/seat-gated (packaging call)** — `POST /v1/team/invites` is `account_owner`-scoped but ANY tier can invite UNLIMITED members. NOT a security/billing bug (members share the owner's tier-limited profiles/concurrency pool; soft-gated by concurrency — solo=1 concurrent). Open question = should team collaboration be HARD tier-gated to team_manual+, or stay soft-gated? Product/packaging decision. (`team_invite_not_tier_gated_surfaced`)
+> - **No self-service account deletion (roadmap)** — no `DELETE /v1/account` (future; step-up infra pre-wired). Erasure is operator-assisted (admin force-actions + `archiveAll`) and the privacy policy correctly routes GDPR Art.17 to the Privacy Contact → NO doc-accuracy or compliance gap. Building self-service is a product roadmap call. (`account_deletion_not_built_operator_erasure`)
+> - **(LOW) No api-key count cap** — `create` has no per-account key limit + `listApiKeys` is unbounded. Defensible (credentials, not a metered resource; creation rate-limited; auth resolves by hash/prefix so many keys don't slow it). A hard cap is a packaging call, not a defect. (`apikey_rotate_comment_and_count_cap`)
+
 1. **`DEPLOY_DOTENV_BASE64` GH Actions secret likely still holds the HEX `MFA_ENCRYPTION_KEY`.**
    Used only by the abandoned `server-deploy.yml` (the active path is `deploy.yml`, which
    leaves `.env` SSH-managed). If `server-deploy.yml` is ever run it would reintroduce the
