@@ -238,13 +238,34 @@ capture:dom_snapshot→get_page_source; wait:selector_visible→wait_for{predica
 - `AgentIntent.scroll` carries no direction/distance; the harness `scroll` wants `direction`+`distance_px`.
 - `wait`: AgentIntent `condition: idle|selector_visible` vs harness `wait_for{predicate}` + `behavioral_pause`(idle) — map which to which.
 
-**Two-behavioral-models ownership split = FOUNDER-DECISION-PENDING** (Agent-3 `agent3-progress.md`): the harness
-self-generates touch/timing from `personas.json` + `BehavioralRhythm` (Swift) and is the DE-FACTO executor+model
-today; the Agent-2 `behavioural-simulation` TS lib (rich distributions) is unwired/parallel. Proposed (relayed):
-TS lib generates the plan, harness executes — but the harness already works standalone, so consolidation
-(personas.json ⟷ the TS distributions) is a real divergent-fingerprint risk needing a founder call. **Do NOT
-unilaterally build the intent reconciliation or pick the model owner** — it needs the executor-wiring (gated) +
-these product decisions. This section is the map so whoever builds it has the exact contract.
+**Two-behavioral-models ownership split — AGENT-2 DECISION (relayed to founder for ratification; now in the
+ORCHESTRATOR-STATE founder-decision queue).** Context: the harness self-generates touch/timing from
+`personas.json` + `BehavioralRhythm` (Swift) and is the de-facto executor+model today; the Agent-2
+`behavioural-simulation` TS lib (rich per-element-class distributions) is unwired/parallel → two models =
+divergent-fingerprint risk.
+
+- **DECISION (mine): the TS lib (`packages/behavioural-simulation/`) owns the MODEL; the harness EXECUTES the
+  plan, verbatim, with NO Swift-side re-derivation.** One model → one fingerprint.
+  - **TARGET:** the server runs the TS lib → emits the `TouchSample[]` (x/y/pressure/tMs) / `ScrollPattern`
+    plan → ships it to the harness over the control-plane intent contract; the harness consumes + executes.
+  - **INTERIM (until that plan-handoff is built):** `personas.json` stays the executor's source BUT must mirror
+    the TS lib's persona catalogue (ids + key params) — the TS lib is the authority it mirrors — so the two
+    don't diverge before consolidation. The server→harness plan transport is the consolidation milestone
+    (future Agent-2 build).
+- **Persona on session-create: ALREADY SHIPPED** (`behavioral_profile ∈ casual|regular|power_user`,
+  c0a46694/2990fb86/7309117c, across api-types + 3 SDKs + docs). The harness `resolvePersona` is polymorphic
+  (direct persona name OR speed modifier) so it maps cleanly; only the Agent-1 `webkit.ts` driver wiring remains.
+- **FINDING (surfaced, founder/behavioral-data-gated): the over-dwell tap tell is MODEL-FAMILY-WIDE.** Founder
+  H3.exec.38: real tap dwell ~37-54ms (median ~46, N=1) vs `personas.json` `tap_dwell_ms_mean` 82/95/105. My TS
+  lib's per-element-class `meanDwellMs` (touch.ts) = 110/90/140/180/220/280/130 — also 2-6× the real ~46ms. DO
+  NOT retune on N=1 (person-variable; needs ≥2-3 more captures; founder/behavioral-data call); when captures
+  land I retune the TS lib `meanDwellMs` toward ~40-70ms IN LOCKSTEP with personas.json.
+- **scroll/`behavioral_pause` intents — NOT yet buildable; gated on (not just param confirmation):** (a) the
+  server `AgentExecutor` is still a STUB (AI-B2.b) — it would DROP the intents (synthetic success, no dispatch);
+  (b) the vocabulary gaps below (swipe target, behavioral_pause-as-new-AgentIntent-kind, scroll direction/distance,
+  wait mapping) are product decisions; (c) this ownership decision ratified. Param shapes ARE reverse-engineered
+  (above) so the build is ready the moment (a)+(b) clear. **Do NOT unilaterally ship the intent schema before the
+  executor can dispatch it** (would be a no-op customer capability). This section is the map for whoever wires it.
 
 ---
 
