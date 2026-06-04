@@ -83,8 +83,16 @@ function makeRouter(opts: {
   sessionStatsStatus?: number;
   incidents?: Array<Record<string, unknown>>;
   incidentsStatus?: number;
+  payingStats?: Record<string, unknown>;
+  payingStatsStatus?: number;
 }): (c: MockFetchCall) => Response {
   return (call) => {
+    if (/\/v1\/admin\/billing\/subscriptions\/stats/.test(call.url)) {
+      return json(
+        opts.payingStats ?? { by_tier: {}, total_active: 0 },
+        opts.payingStatsStatus ?? 200,
+      );
+    }
     if (/\/v1\/admin\/incidents/.test(call.url)) {
       return json({ data: opts.incidents ?? [] }, opts.incidentsStatus ?? 200);
     }
@@ -223,6 +231,31 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(text(window, '[data-field="tier-total"]')).toContain('13 total');
     // Eight tiers → eight bar rows.
     expect(window.document.querySelectorAll('[data-list="tier-distribution"] li').length).toBe(8);
+  });
+
+  it('paying-subscriber tier card populates from /v1/admin/billing/subscriptions/stats', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: { active: 6, suspended: 0, deleted: 0, total: 6 },
+          webhooks: { dlq_depth: 0 },
+        },
+        payingStats: { by_tier: { solo_manual: 4, api_scale: 2 }, total_active: 6 },
+      }),
+    });
+    win = window;
+    await flush();
+    const paying = text(window, '[data-list="paying-tier-distribution"]');
+    // Live active-subscription counts replace the SSR "—" preview.
+    expect(paying).toContain('4');
+    expect(paying).toContain('2');
+    // Total-active annotation reflects total_active.
+    expect(text(window, '[data-field="paying-total"]')).toContain('6 active');
+    // Eight tiers → eight bar rows (zero-filled tiers still render).
+    expect(
+      window.document.querySelectorAll('[data-list="paying-tier-distribution"] li').length,
+    ).toBe(8);
   });
 
   it('new-signups: today / 7d / 30d stats populate from overview.accounts.signups', async () => {

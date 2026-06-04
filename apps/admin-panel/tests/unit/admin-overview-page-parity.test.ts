@@ -23,6 +23,7 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/index.astro');
 const OVERVIEW_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-overview.ts');
 const AUDIT_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-audit-log.ts');
+const BILLING_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-billing.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -41,6 +42,13 @@ describe('W347.C admin /index overview parity', () => {
   it('recent-activity list hits /v1/admin/audit-log?limit=5', () => {
     expect(page).toMatch(/\/v1\/admin\/audit-log\?[^'"`]*limit=5/);
     expect(auditLog).toContain("'/v1/admin/audit-log'");
+  });
+
+  it('paying-subscriber card hits GET /v1/admin/billing/subscriptions/stats + server registers it', () => {
+    expect(page).toMatch(/\/v1\/admin\/billing\/subscriptions\/stats/);
+    expect(read(BILLING_ROUTE)).toContain("'/v1/admin/billing/subscriptions/stats'");
+    expect(page).toMatch(/data-list="paying-tier-distribution"/);
+    expect(page).toMatch(/data-field="paying-total"/);
   });
 
   it('four overview tiles render (active / suspended / open incidents / DLQ depth)', () => {

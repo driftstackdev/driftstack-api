@@ -30,6 +30,7 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/index.astro');
 const OVERVIEW_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-overview.ts');
 const AUDIT_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-audit-log.ts');
+const BILLING_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-billing.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -45,6 +46,14 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(read(OVERVIEW_ROUTE)).toContain("'/v1/admin/overview'");
     expect(existsSync(AUDIT_ROUTE)).toBe(true);
     expect(read(AUDIT_ROUTE)).toContain("'/v1/admin/audit-log'");
+  });
+
+  it('paying-subscriber card hits GET /v1/admin/billing/subscriptions/stats (best-effort) + server registers it', () => {
+    expect(body).toContain("authedFetch('/v1/admin/billing/subscriptions/stats')");
+    expect(body).toContain("setText('paying-total'");
+    expect(body).toMatch(/data-list="paying-tier-distribution"/);
+    expect(existsSync(BILLING_ROUTE)).toBe(true);
+    expect(read(BILLING_ROUTE)).toContain("'/v1/admin/billing/subscriptions/stats'");
   });
 
   it('tile data-fields map to overview-response keys', () => {
