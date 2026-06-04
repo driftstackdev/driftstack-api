@@ -38,6 +38,8 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/api-keys',
         '/v1/admin/audit-log',
         '/v1/admin/overview',
+        // admin billing analytics — active-subscription mix by tier
+        '/v1/admin/billing/subscriptions/stats',
         '/v1/admin/rate-limit-overrides',
         '/v1/admin/sessions',
         '/v1/admin/sessions/stats',

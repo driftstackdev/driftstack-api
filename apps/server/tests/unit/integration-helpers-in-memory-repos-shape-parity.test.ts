@@ -1,4 +1,4 @@
-// W811 — 24 in-memory integration repo content-parity. One-hundred-
+// W811 — 25 in-memory integration repo content-parity. One-hundred-
 // thirty-seventh in the drift-guard series. Pins the in-memory repo
 // substitutes used by all 102 integration tests (per W795). Each
 // must implement a real Repo interface from src/services/* + use
@@ -29,6 +29,7 @@ const REPOS: Array<readonly [string, string, string]> = [
   ['in-memory-account-lifecycle-repo.ts', 'InMemoryAccountLifecycleRepo', 'AccountLifecycleRepo'],
   ['in-memory-admin-accounts-repo.ts', 'InMemoryAccountsAdminRepo', 'AccountsAdminRepo'],
   ['in-memory-admin-audit-repo.ts', 'InMemoryAdminAuditLogRepo', 'AdminAuditLogRepo'],
+  ['in-memory-admin-billing-repo.ts', 'InMemoryAdminBillingRepo', 'AdminBillingRepo'],
   ['in-memory-api-keys-repo.ts', 'InMemoryApiKeysRepo', 'ApiKeysRepo'],
   ['in-memory-auth-flows-repo.ts', 'InMemoryAuthFlowsRepo', 'AuthFlowsRepo'],
   ['in-memory-auth-repo.ts', 'InMemoryAuthRepo', 'AccountAuthRepo'],
@@ -69,14 +70,14 @@ const REPOS: Array<readonly [string, string, string]> = [
 const BILLING_FILE = 'in-memory-billing.ts';
 
 describe('W811 integration in-memory repos shape parity', () => {
-  it('all 24 in-memory helper files exist at canonical paths', () => {
+  it('all 25 in-memory helper files exist at canonical paths', () => {
     for (const [filename] of REPOS) {
       expect(existsSync(resolve(HELPERS_DIR, filename))).toBe(true);
     }
     expect(existsSync(resolve(HELPERS_DIR, BILLING_FILE))).toBe(true);
   });
 
-  it('CRITICAL all 23 standard in-memory repos export the canonical InMemoryXxxRepo class + implement matching XxxRepo interface. The class-name + interface-name pairing is what makes build-test-app.ts wiring type-safe; drift to a renamed class would break every integration test.', () => {
+  it('CRITICAL all 24 standard in-memory repos export the canonical InMemoryXxxRepo class + implement matching XxxRepo interface. The class-name + interface-name pairing is what makes build-test-app.ts wiring type-safe; drift to a renamed class would break every integration test.', () => {
     for (const [filename, className, interfaceName] of REPOS) {
       const p = read(resolve(HELPERS_DIR, filename));
       const pattern = new RegExp(`export class ${className} implements ${interfaceName}\\s*\\{`);
@@ -93,7 +94,7 @@ describe('W811 integration in-memory repos shape parity', () => {
     expect(p).toMatch(/export class InMemoryBillingRepo implements BillingRepo/);
   });
 
-  it("CRITICAL all 24 in-memory helpers import their Repo interfaces from '../../../src/services/' (3-up path). Drift to importing from production code via a different path (e.g. ../../src/) would break the fixture-vs-production boundary that monorepo project-references enforce.", () => {
+  it("CRITICAL all 24 standard in-memory helpers import their Repo interfaces from '../../../src/services/' (3-up path). Drift to importing from production code via a different path (e.g. ../../src/) would break the fixture-vs-production boundary that monorepo project-references enforce.", () => {
     for (const [filename] of REPOS) {
       const p = read(resolve(HELPERS_DIR, filename));
       // Each file must import at least one type from src/services/ via the 3-up path.
@@ -103,7 +104,7 @@ describe('W811 integration in-memory repos shape parity', () => {
     }
   });
 
-  it("CRITICAL all 24 in-memory helpers use Map<string, X> for stable cross-test isolation. The canonical 'new Map' pattern (vs an object literal) preserves insertion order + supports .clear() between tests. Drift to plain objects would break test-isolation reset logic.", () => {
+  it("CRITICAL all 25 in-memory helpers use Map<string, X> for stable cross-test isolation. The canonical 'new Map' pattern (vs an object literal) preserves insertion order + supports .clear() between tests. Drift to plain objects would break test-isolation reset logic.", () => {
     // At least 20 of 24 must use 'new Map' — some legitimately use arrays (events lists).
     let mapCount = 0;
     for (const [filename] of REPOS) {
@@ -153,7 +154,7 @@ describe('W811 integration in-memory repos shape parity', () => {
 
   it('CRITICAL exact 25 in-memory helper files exist in _helpers/. Drift to adding a new helper without pinning it here would silently bypass this parity guard.', () => {
     const allFiles = REPOS.map(([f]) => f).concat(BILLING_FILE);
-    expect(allFiles.length).toBe(24);
+    expect(allFiles.length).toBe(25);
     // Also verify directory listing matches.
     // (Defensive: if a new in-memory-*.ts is added, this test fails so the parity table is updated.)
     expect(allFiles.every((f) => existsSync(resolve(HELPERS_DIR, f)))).toBe(true);

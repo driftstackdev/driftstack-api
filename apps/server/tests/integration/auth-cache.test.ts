@@ -23,6 +23,7 @@ import type { AccountContext } from '../../src/services/auth.js';
 import { WebhooksService, WebhooksAdminService } from '../../src/services/webhooks.js';
 import { AdminAuditService } from '../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../src/services/admin-accounts.js';
+import { AdminBillingService } from '../../src/services/admin-billing.js';
 import { RateLimitOverridesService } from '../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../src/services/legal.js';
 import { buildLegalCatalogFromContent } from '../../src/services/legal-catalog.js';
@@ -34,6 +35,7 @@ import { InMemoryUsageRepo } from './_helpers/in-memory-usage-repo.js';
 import { InMemoryWebhooksRepo } from './_helpers/in-memory-webhooks-repo.js';
 import { InMemoryAdminAuditLogRepo } from './_helpers/in-memory-admin-audit-repo.js';
 import { InMemoryAccountsAdminRepo } from './_helpers/in-memory-admin-accounts-repo.js';
+import { InMemoryAdminBillingRepo } from './_helpers/in-memory-admin-billing-repo.js';
 import { InMemoryRateLimitOverridesRepo } from './_helpers/in-memory-rate-limit-overrides-repo.js';
 import { EmailPreferencesService } from '../../src/services/email-preferences.js';
 import { InMemoryEmailPreferencesRepo } from './_helpers/in-memory-email-preferences-repo.js';
@@ -256,6 +258,7 @@ describe('auth cache — graceful degradation', () => {
       new InMemoryAccountsAdminRepo(authRepo),
       null,
     );
+    const adminBillingService = new AdminBillingService(new InMemoryAdminBillingRepo());
     const rateLimitOverridesService = new RateLimitOverridesService(
       new InMemoryRateLimitOverridesRepo(authRepo),
       null,
@@ -273,6 +276,7 @@ describe('auth cache — graceful degradation', () => {
       webhooksAdminService,
       adminAuditService,
       accountsAdminService,
+      adminBillingService,
       rateLimitOverridesService,
       legalService: new LegalService(
         buildLegalCatalogFromContent([
@@ -363,6 +367,7 @@ describe('auth cache — graceful degradation', () => {
       new InMemoryAccountsAdminRepo(authRepo),
       null,
     );
+    const adminBillingService = new AdminBillingService(new InMemoryAdminBillingRepo());
     const rateLimitOverridesService = new RateLimitOverridesService(
       new InMemoryRateLimitOverridesRepo(authRepo),
       null,
@@ -380,6 +385,7 @@ describe('auth cache — graceful degradation', () => {
       webhooksAdminService,
       adminAuditService,
       accountsAdminService,
+      adminBillingService,
       rateLimitOverridesService,
       legalService: new LegalService(
         buildLegalCatalogFromContent([

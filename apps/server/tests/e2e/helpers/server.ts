@@ -27,6 +27,7 @@ import { WebhooksService, WebhooksAdminService } from '../../../src/services/web
 import { WebhookDeliveryWorker } from '../../../src/services/webhook-worker.js';
 import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
+import { AdminBillingService } from '../../../src/services/admin-billing.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../../src/services/legal.js';
 import { buildLegalCatalog } from '../../../src/services/legal-catalog.js';
@@ -57,6 +58,7 @@ import { DrizzleUsageRepo } from '../../../src/db/usage-repo.js';
 import { DrizzleWebhooksRepo } from '../../../src/db/webhooks-repo.js';
 import { DrizzleAdminAuditLogRepo } from '../../../src/db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../../../src/db/admin-accounts-repo.js';
+import { DrizzleAdminBillingRepo } from '../../../src/db/admin-billing-repo.js';
 import { DrizzleRateLimitOverridesRepo } from '../../../src/db/rate-limit-overrides-repo.js';
 import { RedisRateLimitStore } from '../../../src/lib/redis-rate-limit-store.js';
 import { EmailPreferencesService } from '../../../src/services/email-preferences.js';
@@ -180,6 +182,7 @@ export async function startTestServer(): Promise<TestServer> {
 
   const accountsAdminRepo = new DrizzleAccountsAdminRepo(database);
   const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);
+  const adminBillingService = new AdminBillingService(new DrizzleAdminBillingRepo(database));
 
   const rateLimitOverridesRepo = new DrizzleRateLimitOverridesRepo(database);
   const rateLimitOverridesService = new RateLimitOverridesService(
@@ -389,6 +392,7 @@ export async function startTestServer(): Promise<TestServer> {
     webhooksAdminService,
     adminAuditService,
     accountsAdminService,
+    adminBillingService,
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,

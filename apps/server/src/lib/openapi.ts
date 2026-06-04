@@ -3820,6 +3820,30 @@ function buildRegistry(): OpenAPIRegistry {
   });
   registerRoute(r, {
     method: 'get',
+    path: '/v1/admin/billing/subscriptions/stats',
+    summary: 'Active-subscription distribution by tier (paying-customer mix)',
+    tags: ['admin', 'billing'],
+    security: auth,
+    responses: {
+      200: {
+        description:
+          'Active-subscription count by tier + total active (status in active/trialing).',
+        content: {
+          'application/json': {
+            schema: z
+              .object({
+                by_tier: z.record(z.string(), z.number().int().nonnegative()),
+                total_active: z.number().int().nonnegative(),
+              })
+              .openapi('AdminSubscriptionStatsResponse'),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
     path: '/v1/admin/crypto-orders/daily',
     summary: 'Per-(date, status) counts for the last N days (max 90)',
     tags: ['admin', 'crypto'],

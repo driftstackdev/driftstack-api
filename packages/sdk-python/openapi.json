@@ -182,8 +182,7 @@
           "timezone": {
             "type": ["string", "null"],
             "minLength": 1,
-            "maxLength": 64,
-            "pattern": "^[A-Za-z]+(?:\\/[A-Za-z0-9_+-]+)+$"
+            "maxLength": 64
           },
           "slug": {
             "type": ["string", "null"],
@@ -2648,6 +2647,23 @@
           }
         },
         "required": ["mac_node_id", "livekit"]
+      },
+      "AdminSubscriptionStatsResponse": {
+        "type": "object",
+        "properties": {
+          "by_tier": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "total_active": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["by_tier", "total_active"]
       },
       "LaunchProfileRequest": {
         "type": "object",
@@ -7930,8 +7946,7 @@
                   "timezone": {
                     "type": ["string", "null"],
                     "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": "^[A-Za-z]+(?:\\/[A-Za-z0-9_+-]+)+$"
+                    "maxLength": 64
                   },
                   "slug": {
                     "type": ["string", "null"],
@@ -19288,6 +19303,69 @@
                     "truncated",
                     "scanned"
                   ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/billing/subscriptions/stats": {
+      "get": {
+        "summary": "Active-subscription distribution by tier (paying-customer mix)",
+        "tags": ["admin", "billing"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active-subscription count by tier + total active (status in active/trialing).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSubscriptionStatsResponse"
                 }
               }
             }

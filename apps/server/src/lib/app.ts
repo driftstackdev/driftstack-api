@@ -19,6 +19,7 @@ import type { UsageService } from '../services/usage.js';
 import type { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
 import type { AdminAuditService } from '../services/admin-audit.js';
 import type { AccountsAdminService } from '../services/admin-accounts.js';
+import type { AdminBillingService } from '../services/admin-billing.js';
 import type { IncidentsService } from '../services/incidents.js';
 import type { StatusSubscribersService } from '../services/status-subscribers.js';
 import { registerStatusSubscribeRoutes } from '../routes/status-subscribe.js';
@@ -92,6 +93,7 @@ import { registerAdminIncidentsRoutes } from '../routes/admin-incidents.js';
 import { registerAdminWebhookRoutes } from '../routes/admin-webhooks.js';
 import { registerAdminAuditLogRoutes } from '../routes/admin-audit-log.js';
 import { registerAdminOverviewRoutes } from '../routes/admin-overview.js';
+import { registerAdminBillingRoutes } from '../routes/admin-billing.js';
 import { registerAdminSessionsRoutes } from '../routes/admin-sessions.js';
 import { registerAdminApiKeysRoutes } from '../routes/admin-api-keys.js';
 import { registerAdminRateLimitOverridesRoutes } from '../routes/admin-rate-limit-overrides.js';
@@ -187,6 +189,7 @@ export interface AppDeps {
   webhooksAdminService: WebhooksAdminService;
   adminAuditService: AdminAuditService;
   accountsAdminService: AccountsAdminService;
+  adminBillingService: AdminBillingService;
   /** V-295a — incidents service. Optional during migration window;
    *  when omitted, /v1/admin/incidents/* + /v1/status/incidents are
    *  not registered. */
@@ -862,6 +865,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     accountsAdmin: deps.accountsAdminService,
     webhooksAdmin: deps.webhooksAdminService,
   });
+  registerAdminBillingRoutes(app, { adminBilling: deps.adminBillingService });
   registerAdminSessionsRoutes(app, { sessionsService: deps.sessionsService });
   registerAdminApiKeysRoutes(app, { apiKeysService: deps.apiKeysService });
   registerAdminRateLimitOverridesRoutes(app, {

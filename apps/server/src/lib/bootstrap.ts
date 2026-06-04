@@ -38,6 +38,7 @@ import { ByokAnthropicRotationReminderService } from '../services/byok-anthropic
 import { WebhookSecretForceRotationService } from '../services/webhook-secret-force-rotation.js';
 import { DrizzleAdminAuditLogRepo } from '../db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../db/admin-accounts-repo.js';
+import { DrizzleAdminBillingRepo } from '../db/admin-billing-repo.js';
 import { DrizzleEmailPreferencesRepo } from '../db/email-preferences-repo.js';
 import { EmailPreferencesService } from '../services/email-preferences.js';
 import { DrizzleAccountAuditRepo } from '../db/account-audit-repo.js';
@@ -86,6 +87,7 @@ import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
 import { AdminAuditService } from '../services/admin-audit.js';
 import { AccountsAdminService } from '../services/admin-accounts.js';
+import { AdminBillingService } from '../services/admin-billing.js';
 import { IncidentsService } from '../services/incidents.js';
 import { DrizzleIncidentsRepo } from '../db/incidents-repo.js';
 import { DrizzleIncidentUpdateNotificationsRepo } from '../db/incident-update-notifications-repo.js';
@@ -241,6 +243,7 @@ export async function createProductionDeps(
   const webhooksRepo = new DrizzleWebhooksRepo(dbHandle);
   const adminAuditRepo = new DrizzleAdminAuditLogRepo(dbHandle);
   const accountsAdminRepo = new DrizzleAccountsAdminRepo(dbHandle);
+  const adminBillingRepo = new DrizzleAdminBillingRepo(dbHandle);
   const rateLimitOverridesRepo = new DrizzleRateLimitOverridesRepo(dbHandle);
   const legalRepo = new DrizzleLegalRepo(dbHandle);
   const emailPreferencesRepo = new DrizzleEmailPreferencesRepo(dbHandle);
@@ -509,6 +512,7 @@ export async function createProductionDeps(
     authCache,
     sessionsService,
   );
+  const adminBillingService = new AdminBillingService(adminBillingRepo);
   const rateLimitOverridesService = new RateLimitOverridesService(
     rateLimitOverridesRepo,
     authCache,
@@ -1166,6 +1170,7 @@ export async function createProductionDeps(
     webhooksAdminService,
     adminAuditService,
     accountsAdminService,
+    adminBillingService,
     incidentsService,
     statusSubscribersService,
     incidentEventBus,
