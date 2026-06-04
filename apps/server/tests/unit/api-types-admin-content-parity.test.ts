@@ -15,9 +15,9 @@
 //   • SetQuotaOverride: bucket enum (global|sessions:create) + capacity
 //     1..1M + refill 0.01..100k + duration 1..30d + reason.
 //   • V-512 ListDlqQuery endpoint_id drill-down rationale.
-//   • AdminAuditAction enum: 16 values (account/webhook/rate-limit/
+//   • AdminAuditAction enum: 20 values (account/webhook/rate-limit/
 //     V-100 force/V-281 support/V-295a incidents/V-295c3-tombstone
-//     status subscribers).
+//     status subscribers/LK.2 mac-node) — in lockstep with the DB enum.
 //   • V-521 ListAuditLogQuery target_resource_id parity with V-484.
 //   • AdminAuditLogEntry shape.
 
@@ -133,10 +133,39 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
     expect(body).toMatch(/endpoint_id: z\.string\(\)\.min\(1\)\.max\(200\)\.optional\(\),/);
   });
 
-  it('AdminAuditAction enum: 16 values pinned (3 account + 2 webhook_delivery + 2 rate_limit_override + V-100 2 force + V-281 2 audit-only + V-295a 3 incident + V-295c3-tombstone 2 status_subscriber)', () => {
-    expect(body).toMatch(
-      /export const AdminAuditActionSchema = z\.enum\(\[\s*\n?\s*'account\.tier_changed',\s*\n?\s*'account\.suspended',\s*\n?\s*'account\.unsuspended',\s*\n?\s*'webhook_delivery\.replayed',\s*\n?\s*'webhook_delivery\.requeued',\s*\n?\s*'rate_limit_override\.set',\s*\n?\s*'rate_limit_override\.cleared',\s*\n?\s*\/\/ V-100: force actions on customer resources\.\s*\n?\s*'session\.destroyed_by_admin',\s*\n?\s*'api_key\.revoked_by_admin',\s*\n?\s*\/\/ V-281: customer-support tooling \(audit-only\)\.\s*\n?\s*'audit_note\.added',\s*\n?\s*'refund\.recorded',\s*\n?\s*\/\/ V-295a: status-page incident management\.\s*\n?\s*'incident\.created',\s*\n?\s*'incident\.updated',\s*\n?\s*'incident\.resolved',\s*\n?\s*\/\/ V-295c3-tombstone: status-page email subscriber admin actions\.\s*\n?\s*'status_subscriber\.force_unsubscribed',\s*\n?\s*'status_subscriber\.purged',\s*\n?\s*\]\);/,
-    );
+  it('AdminAuditAction enum: 20 values pinned (3 account + 3 webhook_delivery + 2 rate_limit_override + V-100 2 force + V-281 2 audit-only + V-295a 4 incident + V-295c3 3 status_subscriber + LK.2 1 mac_node). EXACT order + cardinality is pinned at runtime by the W862 cross-source toEqual (stronger than a source regex); here we assert the declaration + each value + the V-anchor section comments. (2026-06-04: corrected from 16 — api-types had drifted behind the DB enum; see W862 header.)', () => {
+    expect(body).toMatch(/export const AdminAuditActionSchema = z\.enum\(\[/);
+    for (const a of [
+      'account.tier_changed',
+      'account.suspended',
+      'account.unsuspended',
+      'webhook_delivery.replayed',
+      'webhook_delivery.requeued',
+      'webhook_delivery.discarded',
+      'rate_limit_override.set',
+      'rate_limit_override.cleared',
+      'session.destroyed_by_admin',
+      'api_key.revoked_by_admin',
+      'audit_note.added',
+      'refund.recorded',
+      'incident.created',
+      'incident.updated',
+      'incident.resolved',
+      'incident.reopened',
+      'status_subscriber.force_unsubscribed',
+      'status_subscriber.purged',
+      'status_subscriber.force_subscribed',
+      'mac_node.livekit_registered',
+    ]) {
+      expect(body, `AdminAuditActionSchema must include '${a}'`).toMatch(
+        new RegExp(`'${a.replace(/[.]/g, '\\.')}'`),
+      );
+    }
+    // V-anchor section comments retained as readable provenance dividers.
+    expect(body).toMatch(/\/\/ V-100: force actions on customer resources\./);
+    expect(body).toMatch(/\/\/ V-281: customer-support tooling \(audit-only\)\./);
+    expect(body).toMatch(/\/\/ V-295a: status-page incident management\./);
+    expect(body).toMatch(/\/\/ V-295c3-tombstone: status-page email subscriber admin actions\./);
   });
 
   it('V-521 ListAuditLogQuery target_resource_id framing pinned: admin-side parity with V-484 customer audit-log filter set; drill into single resource (one webhook delivery) across every admin action that touched it', () => {

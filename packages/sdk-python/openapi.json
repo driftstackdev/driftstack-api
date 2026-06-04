@@ -1954,6 +1954,7 @@
               "account.unsuspended",
               "webhook_delivery.replayed",
               "webhook_delivery.requeued",
+              "webhook_delivery.discarded",
               "rate_limit_override.set",
               "rate_limit_override.cleared",
               "session.destroyed_by_admin",
@@ -1963,8 +1964,11 @@
               "incident.created",
               "incident.updated",
               "incident.resolved",
+              "incident.reopened",
               "status_subscriber.force_unsubscribed",
-              "status_subscriber.purged"
+              "status_subscriber.purged",
+              "status_subscriber.force_subscribed",
+              "mac_node.livekit_registered"
             ]
           },
           "target_account_id": {
@@ -7205,6 +7209,7 @@
                 "account.unsuspended",
                 "webhook_delivery.replayed",
                 "webhook_delivery.requeued",
+                "webhook_delivery.discarded",
                 "rate_limit_override.set",
                 "rate_limit_override.cleared",
                 "session.destroyed_by_admin",
@@ -7214,8 +7219,11 @@
                 "incident.created",
                 "incident.updated",
                 "incident.resolved",
+                "incident.reopened",
                 "status_subscriber.force_unsubscribed",
-                "status_subscriber.purged"
+                "status_subscriber.purged",
+                "status_subscriber.force_subscribed",
+                "mac_node.livekit_registered"
               ]
             },
             "required": false,
@@ -7305,6 +7313,7 @@
                               "account.unsuspended",
                               "webhook_delivery.replayed",
                               "webhook_delivery.requeued",
+                              "webhook_delivery.discarded",
                               "rate_limit_override.set",
                               "rate_limit_override.cleared",
                               "session.destroyed_by_admin",
@@ -7314,8 +7323,11 @@
                               "incident.created",
                               "incident.updated",
                               "incident.resolved",
+                              "incident.reopened",
                               "status_subscriber.force_unsubscribed",
-                              "status_subscriber.purged"
+                              "status_subscriber.purged",
+                              "status_subscriber.force_subscribed",
+                              "mac_node.livekit_registered"
                             ]
                           },
                           "target_account_id": {

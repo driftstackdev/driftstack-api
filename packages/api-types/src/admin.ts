@@ -174,6 +174,8 @@ export const AdminAuditActionSchema = z.enum([
   'account.unsuspended',
   'webhook_delivery.replayed',
   'webhook_delivery.requeued',
+  // hard-delete a DLQ row (migration 0061); the audit entry is the only trace.
+  'webhook_delivery.discarded',
   'rate_limit_override.set',
   'rate_limit_override.cleared',
   // V-100: force actions on customer resources.
@@ -186,9 +188,15 @@ export const AdminAuditActionSchema = z.enum([
   'incident.created',
   'incident.updated',
   'incident.resolved',
+  // admin reopen for false-alarm / regression (migration 0063).
+  'incident.reopened',
   // V-295c3-tombstone: status-page email subscriber admin actions.
   'status_subscriber.force_unsubscribed',
   'status_subscriber.purged',
+  // admin force-subscribe bypassing double-opt-in (migration 0062).
+  'status_subscriber.force_subscribed',
+  // LK.2: per-Mac LiveKit credential registration (migration 0057).
+  'mac_node.livekit_registered',
 ]);
 export type AdminAuditAction = z.infer<typeof AdminAuditActionSchema>;
 
