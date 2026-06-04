@@ -96,4 +96,24 @@ describe('V-666.H POST /v1/billing/crypto-checkout/quote', () => {
     const body = res.json<QuoteResponse>();
     expect(body.price_cents).toBe(149900);
   });
+
+  it('quote tracks an owner price edit (pricing-as-data: quote == charge source)', async () => {
+    // Regression for the pricing-as-data incomplete-migration bug: the charge
+    // path was rewired to PricingService.listEffective() but the quote was
+    // left reading the static TIER_PRICE_CENTS constant, so an owner price
+    // edit moved the charge while the quote still showed the seed price.
+    // The quote MUST now reflect the edited DB price.
+    fx = await buildTestApp();
+    // Seed price is 7900; owner edits solo_manual to 6500.
+    await fx.pricingService.setPrice('solo_manual', 6500);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/billing/crypto-checkout/quote',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { product: 'solo_manual' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<QuoteResponse>();
+    expect(body.price_cents).toBe(6500);
+  });
 });

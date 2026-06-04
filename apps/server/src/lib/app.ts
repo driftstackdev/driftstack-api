@@ -1077,7 +1077,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerCustomerCryptoOrdersRoutes(app, { service: deps.cryptoOrdersService });
     registerAdminCryptoOrdersRoutes(app, { service: deps.cryptoOrdersService });
   }
-  registerCryptoQuoteRoutes(app);
+  registerCryptoQuoteRoutes(app, { pricing: deps.pricingService });
   if (deps.oauthStore !== undefined) {
     registerOAuthRoutes(app, {
       service: new OAuthService(deps.oauthStore),

@@ -456,6 +456,9 @@ export interface TestAppFixture {
   cryptoOrdersService: CryptoOrdersService;
   /** V-666.C — in-memory repo so tests can read back orders by id. */
   cryptoOrdersRepo: InMemoryCryptoOrdersRepo;
+  /** Pricing-as-data Phase A — exposed so tests can setPrice() and assert
+   *  the owner-edited price flows through the quote + charge reads. */
+  pricingService: PricingService;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
   plaintext: string;
   accountId: string;
@@ -1393,6 +1396,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     costUsageByAccount,
     cryptoOrdersService,
     cryptoOrdersRepo,
+    pricingService,
     oauthLinksRepo,
     plaintext,
     accountId,

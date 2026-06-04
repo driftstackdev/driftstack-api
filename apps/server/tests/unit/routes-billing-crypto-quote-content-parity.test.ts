@@ -101,15 +101,32 @@ describe('W411.C apps/server/src/routes/billing-crypto-quote.ts content parity',
     expect(body).toMatch(
       /if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);/,
     );
-    expect(body).toMatch(/const priceCents = TIER_PRICE_CENTS\[product\];/);
   });
 
-  it('imports: FastifyInstance/FastifyRequest + AccountTier (SDK mirror) + zod + ValidationError + TIER_PRICE_CENTS (the checkout-authoritative price table, so quote == charge)', () => {
+  it('price source: reads the SAME PricingService.listEffective() the crypto-checkout CHARGE uses (quote == charge through owner edits), found by tier → monthlyCents', () => {
+    expect(body).toMatch(/const effectivePricing = await deps\.pricing\.listEffective\(\);/);
+    expect(body).toMatch(
+      /const priceCents = effectivePricing\.find\(\(row\) => row\.tier === product\)\?\.monthlyCents;/,
+    );
+    // Must NOT read the static constant directly (that diverged quote from
+    // charge the moment an owner edited a DB price — the bug this closed).
+    expect(body).not.toMatch(/const priceCents = TIER_PRICE_CENTS\[product\];/);
+  });
+
+  it('deps: CryptoQuoteRoutesDeps carries pricing: PricingService (same source as the charge route)', () => {
+    expect(body).toMatch(/export interface CryptoQuoteRoutesDeps \{/);
+    expect(body).toMatch(/pricing: PricingService;/);
+    expect(body).toMatch(
+      /export function registerCryptoQuoteRoutes\(app: FastifyInstance, deps: CryptoQuoteRoutesDeps\): void/,
+    );
+  });
+
+  it('imports: FastifyInstance/FastifyRequest + AccountTier (SDK mirror) + zod + ValidationError + PricingService (the checkout-authoritative price source, so quote == charge)', () => {
     expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
     expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(/import \{ ValidationError \} from '\.\.\/lib\/errors\.js';/);
-    expect(body).toMatch(/import \{ TIER_PRICE_CENTS \} from '\.\/billing-crypto\.js';/);
+    expect(body).toMatch(/import type \{ PricingService \} from '\.\.\/services\/pricing\.js';/);
   });
 
   it('file exists at canonical path', () => {
