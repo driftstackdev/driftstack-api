@@ -62,6 +62,14 @@ describe('W347.C admin /index overview parity', () => {
     expect(page).toMatch(/class="mt-6 dashboard-card hidden"/);
   });
 
+  it('owner-only pricing card hits GET /v1/admin/owner/pricing + server registers it (owner-gated, read-only)', () => {
+    expect(page).toMatch(/\/v1\/admin\/owner\/pricing/);
+    expect(read(OWNER_ROUTE)).toContain("'/v1/admin/owner/pricing'");
+    // SSR-hidden owner-only card + dynamic per-tier list.
+    expect(page).toMatch(/data-owner-only="pricing"/);
+    expect(page).toMatch(/data-list="owner-pricing"/);
+  });
+
   it('four overview tiles render (active / suspended / open incidents / DLQ depth)', () => {
     expect(page).toMatch(/data-field="active-accounts"/);
     expect(page).toMatch(/data-field="suspended-accounts"/);

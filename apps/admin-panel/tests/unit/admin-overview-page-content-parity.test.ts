@@ -67,6 +67,13 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(read(OWNER_ROUTE)).toContain("'/v1/admin/owner/platform-status'");
   });
 
+  it('owner pricing card hits GET /v1/admin/owner/pricing (owner-gated, reveal-on-200) + server registers it', () => {
+    expect(body).toContain("authedFetch('/v1/admin/owner/pricing')");
+    expect(body).toContain('renderPricing');
+    expect(body).toMatch(/data-list="owner-pricing"/);
+    expect(read(OWNER_ROUTE)).toContain("'/v1/admin/owner/pricing'");
+  });
+
   it('tile data-fields map to overview-response keys', () => {
     // The progressive-enhancement script setText()s these three
     // fields from the body.accounts / body.webhooks payload —

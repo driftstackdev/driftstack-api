@@ -87,8 +87,14 @@ function makeRouter(opts: {
   payingStatsStatus?: number;
   platformStatus?: Record<string, unknown>;
   platformStatusStatus?: number;
+  pricing?: Record<string, unknown>;
+  pricingStatus?: number;
 }): (c: MockFetchCall) => Response {
   return (call) => {
+    if (/\/v1\/admin\/owner\/pricing/.test(call.url)) {
+      // Default 403 — owner-only; staff fetch forbidden → card stays hidden.
+      return json(opts.pricing ?? { tiers: [] }, opts.pricingStatus ?? 403);
+    }
     if (/\/v1\/admin\/owner\/platform-status/.test(call.url)) {
       // Default 403 — the platform-status card is owner-only, so a normal
       // staff-admin fetch is forbidden and the card stays hidden.
@@ -310,6 +316,50 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     win = window;
     await flush();
     const card = window.document.querySelector('[data-owner-only="platform-status"]');
+    expect(card?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('owner pricing card reveals + lists per-tier $/mo on a 200 (owner account)', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+          webhooks: { dlq_depth: 0 },
+        },
+        pricingStatus: 200,
+        pricing: {
+          tiers: [
+            { tier: 'solo_manual', monthly_cents: 7900 },
+            { tier: 'api_scale', monthly_cents: 149900 },
+          ],
+        },
+      }),
+    });
+    win = window;
+    await flush();
+    const card = window.document.querySelector('[data-owner-only="pricing"]');
+    expect(card?.classList.contains('hidden')).toBe(false);
+    const pricing = text(window, '[data-list="owner-pricing"]');
+    expect(pricing).toContain('solo_manual');
+    expect(pricing).toContain('$79/mo');
+    expect(pricing).toContain('$1499/mo');
+  });
+
+  it('owner pricing card stays hidden for staff-admins (403)', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+          webhooks: { dlq_depth: 0 },
+        },
+        // pricing defaults to 403 in makeRouter → forbidden for staff.
+      }),
+    });
+    win = window;
+    await flush();
+    const card = window.document.querySelector('[data-owner-only="pricing"]');
     expect(card?.classList.contains('hidden')).toBe(true);
   });
 

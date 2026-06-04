@@ -296,6 +296,29 @@ const apiBaseUrl = resolveApiBaseUrl();
       </p>
     </section>
 
+    {/* Owner-only tier pricing. SSR-hidden; revealed only when GET
+        /v1/admin/owner/pricing returns 200 (the owner). Read-only view —
+        the foundation for owner-editable pricing. */}
+    <section class="mt-6 dashboard-card hidden" data-owner-only="pricing">
+      <div class="flex items-center justify-between">
+        <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 1v22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+          </span>
+          Tier pricing
+        </h2>
+        <span class="font-mono text-xs text-slate-400">owner-only · $/mo</span>
+      </div>
+      <dl class="mt-4 grid gap-3 sm:grid-cols-2" data-list="owner-pricing">
+        <div class="text-sm text-slate-400">Loading…</div>
+      </dl>
+      <p class="mt-3 text-[11px] text-slate-400">
+        Current per-tier monthly price (read-only — the source crypto / cost-caps / display derive from).
+      </p>
+    </section>
+
     {/* 2026-05-23 — icon on Recent admin activity header. */}
     <!-- Recent admin activity -->
     <section class="mt-10 dashboard-card">
@@ -660,6 +683,39 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       void fetchPlatformStatus().catch(() => {});
 
+      // Owner-only tier pricing (2026-06-04) — GET /v1/admin/owner/pricing
+      // returns { tiers: [{ tier, monthly_cents }] } for the OWNER (403 for
+      // staff). Best-effort + owner-gated: reveals the SSR-hidden card only on
+      // a 200; staff stay hidden. Read-only view of current per-tier pricing.
+      function renderPricing(tiers) {
+        const card = root.querySelector('[data-owner-only="pricing"]');
+        const list = root.querySelector('[data-list="owner-pricing"]');
+        if (!card || !list || !Array.isArray(tiers)) return;
+        list.innerHTML = tiers
+          .map((t) => {
+            const dollars = '$' + (Number(t.monthly_cents || 0) / 100).toFixed(0) + '/mo';
+            return (
+              '<div class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">' +
+              '<dt class="text-sm text-slate-600">' +
+              escapeHtml(String(t.tier)) +
+              '</dt>' +
+              '<dd class="font-mono text-xs text-slate-900">' +
+              escapeHtml(dollars) +
+              '</dd></div>'
+            );
+          })
+          .join('');
+        card.classList.remove('hidden');
+      }
+      function fetchPricing() {
+        return authedFetch('/v1/admin/owner/pricing')
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => {
+            if (body && Array.isArray(body.tiers)) renderPricing(body.tiers);
+          });
+      }
+      void fetchPricing().catch(() => {});
+
       // 2026-05-21 — live activity feed. The audit-log fetch is
       // extracted so we can refresh it on a 30s timer + bind to the
       // "Refresh now" button. Each refresh updates `lastAuditFetch`
@@ -719,6 +775,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         void fetchOpenIncidents().catch(() => {});
         void fetchPayingTiers().catch(() => {});
         void fetchPlatformStatus().catch(() => {});
+        void fetchPricing().catch(() => {});
       }
       const refreshBtn = root.querySelector('[data-live-refresh]');
       if (refreshBtn) refreshBtn.addEventListener('click', refreshAll);
