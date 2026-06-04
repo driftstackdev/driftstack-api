@@ -1,5 +1,5 @@
 // In-memory PricingRepo for integration tests. Seeded empty; tests upsert rows
-// via the test seam to exercise the DB-overrides-constant path.
+// to exercise the DB-overrides-constant path and the owner price-edit write.
 
 import type { AccountTier } from '@driftstack/api-types';
 import type { PricingRepo, PricingRow } from '../../../src/services/pricing.js';
@@ -7,9 +7,12 @@ import type { PricingRepo, PricingRow } from '../../../src/services/pricing.js';
 export class InMemoryPricingRepo implements PricingRepo {
   private readonly rows = new Map<AccountTier, number>();
 
-  /** Test seam: set a per-tier price row (simulates a seeded/edited row). */
-  upsert(tier: AccountTier, monthlyCents: number): void {
+  // Mirrors DrizzlePricingRepo.upsert: insert-or-update keyed by tier. The
+  // in-memory store doesn't track updated_at / updatedByKeyId (not asserted by
+  // any consumer of listAll), so the param is accepted and ignored.
+  upsert(tier: AccountTier, monthlyCents: number, _updatedByKeyId?: string): Promise<void> {
     this.rows.set(tier, monthlyCents);
+    return Promise.resolve();
   }
 
   listAll(): Promise<PricingRow[]> {

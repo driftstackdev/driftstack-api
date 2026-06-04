@@ -56,5 +56,26 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       // No extra/unknown tiers seeded.
       expect(rows.length).toBe(Object.keys(TIER_MONTHLY_PRICE_CENTS).length);
     });
+
+    it('upsert overrides a tier price on the real PK conflict path, then a re-upsert overwrites; restores the seed', async () => {
+      if (!client) return; // skipped (unreachable/unmigrated local)
+      const repo = new DrizzlePricingRepo({ db: drizzle(client, { schema }) });
+      const seed = TIER_MONTHLY_PRICE_CENTS.api_scale ?? 149900;
+      try {
+        // First upsert hits onConflictDoUpdate (the row was seeded by 0067).
+        await repo.upsert('api_scale', 199900);
+        let byTier = new Map((await repo.listAll()).map((r) => [r.tier, r.monthlyCents]));
+        expect(byTier.get('api_scale')).toBe(199900);
+        // Re-upsert overwrites (idempotent on the tier PK).
+        await repo.upsert('api_scale', 209900);
+        byTier = new Map((await repo.listAll()).map((r) => [r.tier, r.monthlyCents]));
+        expect(byTier.get('api_scale')).toBe(209900);
+        // Untouched tiers stay at their seed.
+        expect(byTier.get('solo_manual')).toBe(TIER_MONTHLY_PRICE_CENTS.solo_manual);
+      } finally {
+        // Restore the seed so later tests reading pricing see day-one values.
+        await repo.upsert('api_scale', seed);
+      }
+    });
   },
 );
