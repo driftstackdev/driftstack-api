@@ -89,8 +89,25 @@ function makeRouter(opts: {
   platformStatusStatus?: number;
   pricing?: Record<string, unknown>;
   pricingStatus?: number;
+  pricingEditStatus?: number;
 }): (c: MockFetchCall) => Response {
   return (call) => {
+    // PATCH /v1/admin/owner/pricing/:tier (the edit route) — matched BEFORE the
+    // generic GET below (it carries a trailing /:tier segment). Echoes the body.
+    if (/\/v1\/admin\/owner\/pricing\/[^/]+$/.test(call.url)) {
+      const tierMatch = call.url.match(/pricing\/([^/?]+)/);
+      const tier = tierMatch ? tierMatch[1] : '';
+      let cents = 0;
+      try {
+        cents = Number(
+          (JSON.parse(String(call.init?.body ?? '{}')) as { monthly_cents?: number })
+            .monthly_cents ?? 0,
+        );
+      } catch {
+        cents = 0;
+      }
+      return json({ tier, monthly_cents: cents }, opts.pricingEditStatus ?? 200);
+    }
     if (/\/v1\/admin\/owner\/pricing/.test(call.url)) {
       // Default 403 — owner-only; staff fetch forbidden → card stays hidden.
       return json(opts.pricing ?? { tiers: [] }, opts.pricingStatus ?? 403);
@@ -361,6 +378,86 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     await flush();
     const card = window.document.querySelector('[data-owner-only="pricing"]');
     expect(card?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('owner edits a tier price → PATCHes the audited edit route with the new monthly_cents + shows saved', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+          webhooks: { dlq_depth: 0 },
+        },
+        pricingStatus: 200,
+        pricing: { tiers: [{ tier: 'api_scale', monthly_cents: 149900 }] },
+      }),
+    });
+    win = window;
+    await flush();
+    const input = window.document.querySelector(
+      '[data-edit-tier="api_scale"]',
+    ) as HTMLInputElement | null;
+    const btn = window.document.querySelector(
+      '[data-save-tier="api_scale"]',
+    ) as HTMLButtonElement | null;
+    expect(input).toBeTruthy();
+    expect(btn).toBeTruthy();
+    input!.value = '199900'; // $1,499 -> $1,999
+    btn!.click();
+    await flush();
+    const patch = fetchCalls.find(
+      (c) =>
+        /\/v1\/admin\/owner\/pricing\/api_scale$/.test(c.url) &&
+        String(c.init?.method ?? '').toUpperCase() === 'PATCH',
+    );
+    expect(patch, 'a PATCH to the owner edit route was issued').toBeTruthy();
+    expect(JSON.parse(String(patch?.init?.body))).toEqual({ monthly_cents: 199900 });
+    expect(text(window, '[data-save-status="api_scale"]')).toContain('saved');
+  });
+
+  it('owner edit shows an error when the edit route rejects (non-200)', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+          webhooks: { dlq_depth: 0 },
+        },
+        pricingStatus: 200,
+        pricing: { tiers: [{ tier: 'team_manual', monthly_cents: 24900 }] },
+        pricingEditStatus: 400,
+      }),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-edit-tier="team_manual"]') as HTMLInputElement).value =
+      '27500';
+    (window.document.querySelector('[data-save-tier="team_manual"]') as HTMLButtonElement).click();
+    await flush();
+    expect(text(window, '[data-save-status="team_manual"]')).toContain('error');
+  });
+
+  it('owner edit blocks an out-of-range value client-side (no PATCH issued)', async () => {
+    const { window, fetchCalls } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+          webhooks: { dlq_depth: 0 },
+        },
+        pricingStatus: 200,
+        pricing: { tiers: [{ tier: 'solo_manual', monthly_cents: 7900 }] },
+      }),
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-edit-tier="solo_manual"]') as HTMLInputElement).value =
+      '0';
+    (window.document.querySelector('[data-save-tier="solo_manual"]') as HTMLButtonElement).click();
+    await flush();
+    const patch = fetchCalls.find((c) => /\/v1\/admin\/owner\/pricing\/solo_manual$/.test(c.url));
+    expect(patch, 'no PATCH for an invalid value').toBeFalsy();
+    expect(text(window, '[data-save-status="solo_manual"]')).toContain('invalid');
   });
 
   it('new-signups: today / 7d / 30d stats populate from overview.accounts.signups', async () => {

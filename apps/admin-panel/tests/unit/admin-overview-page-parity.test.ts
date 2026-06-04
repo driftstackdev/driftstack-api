@@ -62,12 +62,19 @@ describe('W347.C admin /index overview parity', () => {
     expect(page).toMatch(/class="mt-6 dashboard-card hidden"/);
   });
 
-  it('owner-only pricing card hits GET /v1/admin/owner/pricing + server registers it (owner-gated, read-only)', () => {
+  it('owner-only pricing card hits GET /v1/admin/owner/pricing + the editable rows Save to the PATCH edit route (owner-gated, audited)', () => {
     expect(page).toMatch(/\/v1\/admin\/owner\/pricing/);
     expect(read(OWNER_ROUTE)).toContain("'/v1/admin/owner/pricing'");
     // SSR-hidden owner-only card + dynamic per-tier list.
     expect(page).toMatch(/data-owner-only="pricing"/);
     expect(page).toMatch(/data-list="owner-pricing"/);
+    // 2026-06-05: editable — per-row input + Save → PATCH /v1/admin/owner/pricing/:tier.
+    expect(page).toMatch(/data-edit-tier=/);
+    expect(page).toMatch(/data-save-tier=/);
+    expect(page).toMatch(/savePricing/);
+    expect(page).toMatch(/'\/v1\/admin\/owner\/pricing\/'/);
+    // The server registers the PATCH edit route.
+    expect(read(OWNER_ROUTE)).toContain("'/v1/admin/owner/pricing/:tier'");
   });
 
   it('four overview tiles render (active / suspended / open incidents / DLQ depth)', () => {

@@ -93,9 +93,13 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
 
   it("Token storage key 'ds_web_session_token' + authedFetch helper: apiBaseUrl + path + 'authorization: Bearer ' + credentials:'include' — pinned so the customer-dashboard ↔ admin-panel token-storage key stays in sync and the credentials-include flag carries the session cookie (required for V-269 dual-cookie session model on cross-origin admin requests)", () => {
     expect(body).toMatch(/const token = localStorage\.getItem\('ds_web_session_token'\);/);
-    expect(body).toMatch(
-      /function authedFetch\(path\) \{\s*\n?\s*return fetch\(apiBaseUrl \+ path, \{\s*\n?\s*headers: \{ authorization: 'Bearer ' \+ token \},\s*\n?\s*credentials: 'include',\s*\n?\s*\}\);\s*\n?\s*\}/,
-    );
+    // 2026-06-05: authedFetch gained an optional `init` (so the owner pricing
+    // PATCH can issue a non-GET) — it still injects the bearer + credentials.
+    // Pinned as discrete facts rather than a brittle full-body regex.
+    expect(body).toMatch(/function authedFetch\(path, init\) \{/);
+    expect(body).toContain("authorization: 'Bearer ' + token");
+    expect(body).toContain("credentials: 'include'");
+    expect(body).toMatch(/fetch\(apiBaseUrl \+ path,/);
   });
 
   it("Endpoint contract: GET /v1/admin/overview reads body.accounts.{active,suspended,total} + body.webhooks.dlq_depth into the live tiles + GET /v1/admin/audit-log?limit=5 reads body.data[] into the recent-activity list — pinned so the field names match the server response shape (drift to body.active_accounts or body.dlq would silently zero out the tile). Slice 136 added a 'of N total' annotation under the Active-accounts tile, surfacing the V-515 server-returned `body.accounts.total` field (with a defensive a+s+d fallback if total is missing)", () => {

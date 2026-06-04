@@ -297,8 +297,8 @@ const apiBaseUrl = resolveApiBaseUrl();
     </section>
 
     {/* Owner-only tier pricing. SSR-hidden; revealed only when GET
-        /v1/admin/owner/pricing returns 200 (the owner). Read-only view —
-        the foundation for owner-editable pricing. */}
+        /v1/admin/owner/pricing returns 200 (the owner). Editable — Save
+        PATCHes the audited owner price-edit route. */}
     <section class="mt-6 dashboard-card hidden" data-owner-only="pricing">
       <div class="flex items-center justify-between">
         <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
@@ -315,7 +315,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         <div class="text-sm text-slate-400">Loading…</div>
       </dl>
       <p class="mt-3 text-[11px] text-slate-400">
-        Current per-tier monthly price (read-only — the source crypto / cost-caps / display derive from).
+        Per-tier monthly price in cents. Editing the price changes what customers are charged (crypto
+        checkout) and the displayed pricing — both read the same source. Each Save is audited.
       </p>
     </section>
 
@@ -436,11 +437,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
       }
 
-      function authedFetch(path) {
-        return fetch(apiBaseUrl + path, {
-          headers: { authorization: 'Bearer ' + token },
-          credentials: 'include',
-        });
+      function authedFetch(path, init) {
+        // Optional `init` lets callers issue non-GET requests (e.g. the owner
+        // pricing PATCH); the bearer + credentials are merged in. Back-compat:
+        // GET callers pass no init and behave exactly as before.
+        var opts = init || {};
+        var headers = Object.assign({ authorization: 'Bearer ' + token }, opts.headers || {});
+        return fetch(apiBaseUrl + path, Object.assign({ credentials: 'include' }, opts, { headers: headers }));
       }
 
       // Replace the SSR mock tier bars with the live distribution from
@@ -683,25 +686,46 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       void fetchPlatformStatus().catch(() => {});
 
-      // Owner-only tier pricing (2026-06-04) — GET /v1/admin/owner/pricing
-      // returns { tiers: [{ tier, monthly_cents }] } for the OWNER (403 for
-      // staff). Best-effort + owner-gated: reveals the SSR-hidden card only on
-      // a 200; staff stay hidden. Read-only view of current per-tier pricing.
+      // Owner-only tier pricing (2026-06-04; editable 2026-06-05) — GET
+      // /v1/admin/owner/pricing returns { tiers: [{ tier, monthly_cents }] }
+      // for the OWNER (403 for staff). Best-effort + owner-gated: reveals the
+      // SSR-hidden card only on a 200; staff stay hidden. Each row is editable
+      // — Save PATCHes /v1/admin/owner/pricing/:tier { monthly_cents } (the
+      // audited owner edit route); the change moves both this view and the
+      // crypto-checkout charge (both read PricingService.listEffective).
       function renderPricing(tiers) {
         const card = root.querySelector('[data-owner-only="pricing"]');
         const list = root.querySelector('[data-list="owner-pricing"]');
         if (!card || !list || !Array.isArray(tiers)) return;
+        // Don't clobber an in-progress edit when the 30s poll re-renders.
+        const active = window.document.activeElement;
+        if (active && list.contains(active)) return;
         list.innerHTML = tiers
           .map((t) => {
-            const dollars = '$' + (Number(t.monthly_cents || 0) / 100).toFixed(0) + '/mo';
+            const tier = String(t.tier);
+            const cents = Number(t.monthly_cents || 0);
+            const dollars = '$' + (cents / 100).toFixed(0) + '/mo';
             return (
-              '<div class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">' +
-              '<dt class="text-sm text-slate-600">' +
-              escapeHtml(String(t.tier)) +
-              '</dt>' +
-              '<dd class="font-mono text-xs text-slate-900">' +
+              '<div class="flex items-center justify-between gap-2 rounded-md bg-slate-50 px-3 py-2" data-pricing-row="' +
+              escapeHtml(tier) +
+              '"><dt class="text-sm text-slate-600">' +
+              escapeHtml(tier) +
+              '<span class="ml-1 text-[11px] text-slate-400">' +
               escapeHtml(dollars) +
-              '</dd></div>'
+              '</span></dt><dd class="flex items-center gap-1">' +
+              '<input type="number" min="1" max="1000000" step="1" value="' +
+              String(cents) +
+              '" data-edit-tier="' +
+              escapeHtml(tier) +
+              '" aria-label="' +
+              escapeHtml(tier) +
+              ' monthly price in cents" class="w-24 rounded border border-slate-300 px-2 py-1 text-right font-mono text-xs text-slate-900" />' +
+              '<button type="button" data-save-tier="' +
+              escapeHtml(tier) +
+              '" class="rounded bg-oxblood-700 px-2 py-1 text-xs font-medium text-white hover:bg-oxblood-800">Save</button>' +
+              '<span class="w-12 text-[11px]" data-save-status="' +
+              escapeHtml(tier) +
+              '"></span></dd></div>'
             );
           })
           .join('');
@@ -713,6 +737,57 @@ const apiBaseUrl = resolveApiBaseUrl();
           .then((body) => {
             if (body && Array.isArray(body.tiers)) renderPricing(body.tiers);
           });
+      }
+      function savePricing(tier) {
+        const input = root.querySelector('[data-edit-tier="' + tier + '"]');
+        const status = root.querySelector('[data-save-status="' + tier + '"]');
+        if (!input) return;
+        const cents = Number(input.value);
+        if (!Number.isInteger(cents) || cents < 1 || cents > 1000000) {
+          if (status) {
+            status.textContent = 'invalid';
+            status.className = 'w-12 text-[11px] text-rose-600';
+          }
+          return;
+        }
+        if (status) {
+          status.textContent = '…';
+          status.className = 'w-12 text-[11px] text-slate-400';
+        }
+        authedFetch('/v1/admin/owner/pricing/' + encodeURIComponent(tier), {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ monthly_cents: cents }),
+        })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then(() => {
+            // Reflect the saved price in-place — a full re-render (fetchPricing)
+            // would wipe this status + clobber any other in-progress edit. The
+            // 30s poll reconciles the rest.
+            const row = root.querySelector('[data-pricing-row="' + tier + '"]');
+            const label = row ? row.querySelector('dt span') : null;
+            if (label) label.textContent = '$' + (cents / 100).toFixed(0) + '/mo';
+            if (status) {
+              status.textContent = 'saved';
+              status.className = 'w-12 text-[11px] text-emerald-600';
+            }
+          })
+          .catch(() => {
+            if (status) {
+              status.textContent = 'error';
+              status.className = 'w-12 text-[11px] text-rose-600';
+            }
+          });
+      }
+      // Delegated Save handler — bound once (renderPricing replaces innerHTML
+      // on each poll, so a per-row listener would leak; delegation survives).
+      const pricingList = root.querySelector('[data-list="owner-pricing"]');
+      if (pricingList) {
+        pricingList.addEventListener('click', (e) => {
+          const t = e.target;
+          const btn = t && t.closest ? t.closest('[data-save-tier]') : null;
+          if (btn) savePricing(btn.getAttribute('data-save-tier'));
+        });
       }
       void fetchPricing().catch(() => {});
 
