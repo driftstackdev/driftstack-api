@@ -216,6 +216,42 @@ describe('W980 auth middleware V-353e MFA step-up cross-source invariant', () =>
     );
   });
 
+  // ─── requireOwner gate (2026-06-04 master-owner foundation) ──
+
+  it('CRITICAL requireOwner — project-owner gate: ownerEmail AuthPluginOptions field + FastifyInstance decorator decl + the identity check (account.email vs ownerEmail) + fails CLOSED when no owner configured. Admits ONLY the owner, not staff-admins.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/auth.ts'));
+    // AuthPluginOptions carries the owner email.
+    expect(p).toMatch(/ownerEmail\?: string \| null;/);
+    // FastifyInstance decorator declaration.
+    expect(p).toMatch(
+      /requireOwner: \(request: FastifyRequest, reply: FastifyReply\) => Promise<void>;/,
+    );
+    // Decorator impl: lowercase the configured owner, lazy-auth, then
+    // forbid when no owner configured OR account email != owner.
+    expect(p).toMatch(
+      /const ownerEmail = opts\.ownerEmail != null \? opts\.ownerEmail\.trim\(\)\.toLowerCase\(\) : null;/,
+    );
+    expect(p).toMatch(/app\.decorate\(\s*\n?\s*'requireOwner',/);
+    expect(p).toMatch(/if \(ownerEmail === null \|\| ownerEmail\.length === 0\) \{/);
+    expect(p).toMatch(/if \(ctx\.account\.email\.toLowerCase\(\) !== ownerEmail\) \{/);
+    expect(p).toMatch(/This action requires the project owner account\./);
+  });
+
+  it('CRITICAL bootstrap wires the owner — DRIFTSTACK_OWNER_EMAIL (default founder account), unioned into the staff set (owner always admin), passed as deps.ownerEmail.', () => {
+    const b = read(resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts'));
+    expect(b).toMatch(
+      /const ownerEmailRaw = process\.env\.DRIFTSTACK_OWNER_EMAIL \?\? 'joeltheunissen89@gmail\.com';/,
+    );
+    expect(b).toMatch(
+      /const ownerEmail: string \| null = ownerEmailRaw\.trim\(\)\.toLowerCase\(\) \|\| null;/,
+    );
+    // Owner unioned into the staff set → always admin.
+    expect(b).toMatch(
+      /ownerEmail !== null \? new Set\(\[\.\.\.staffEmails, ownerEmail\]\) : staffEmails;/,
+    );
+    expect(b).toMatch(/\.\.\.\(ownerEmail !== null \? \{ ownerEmail \} : \{\}\),/);
+  });
+
   // ─── Plugin name ─────────────────────────────────────────────
 
   it("CRITICAL plugin name 'auth' — registered via fp(authPlugin, { name: 'auth' }). The named-plugin lets bootstrap.ts assert ordering.", () => {

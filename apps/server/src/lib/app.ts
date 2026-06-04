@@ -489,6 +489,16 @@ export interface AppDeps {
    */
   staffEmails?: ReadonlySet<string>;
   /**
+   * 2026-06-04 — lowercased email of the project OWNER (master) account.
+   * The owner passes the `requireOwner` guard that gates the high-power
+   * admin surfaces (pricing, secrets, project config). Sourced from
+   * DRIFTSTACK_OWNER_EMAIL at bootstrap (defaults to the founder account)
+   * and also unioned into `staffEmails` so the owner is always admin.
+   * Undefined → `requireOwner` fails closed (no owner configured = no
+   * owner access).
+   */
+  ownerEmail?: string | null;
+  /**
    * AI-CHAT BYOK Anthropic — per-customer key storage service.
    * Activation-gate: present when MFA_ENCRYPTION_KEY env var is
    * configured (the BYOK store reuses the MFA encryption key per
@@ -706,6 +716,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // set when undefined (default; no bump). See deps.staffEmails
     // sourcing at bootstrap time.
     ...(deps.staffEmails !== undefined ? { staffEmails: deps.staffEmails } : {}),
+    // 2026-06-04 — project owner email for the requireOwner gate.
+    ...(deps.ownerEmail != null ? { ownerEmail: deps.ownerEmail } : {}),
     ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
   });
   await app.register(rateLimitPlugin, {

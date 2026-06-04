@@ -274,6 +274,24 @@ export async function createProductionDeps(
     );
   }
 
+  // 2026-06-04 — project OWNER (master) account. The owner is the single
+  // top-tier account with full control of the high-power admin surfaces
+  // (pricing, secrets, project config), gated by the `requireOwner` guard.
+  // Defaults to the founder account; override via DRIFTSTACK_OWNER_EMAIL.
+  // The owner is ALWAYS unioned into the staff set, so they receive
+  // `driftstack_internal_admin` on web-session auth (full admin) without
+  // needing to also be listed in DRIFTSTACK_STAFF_EMAILS. Set-once at boot.
+  const ownerEmailRaw = process.env.DRIFTSTACK_OWNER_EMAIL ?? 'joeltheunissen89@gmail.com';
+  const ownerEmail: string | null = ownerEmailRaw.trim().toLowerCase() || null;
+  const effectiveStaffEmails: ReadonlySet<string> =
+    ownerEmail !== null ? new Set([...staffEmails, ownerEmail]) : staffEmails;
+  if (ownerEmail !== null) {
+    logger.info(
+      { component: 'auth' },
+      'project owner account wired (requireOwner gate + always-admin)',
+    );
+  }
+
   // Rate limit store.
   const rateLimitStore = new RedisRateLimitStore(redis);
 
@@ -1138,7 +1156,8 @@ export async function createProductionDeps(
     authRepo,
     authCache,
     authCoalescer,
-    ...(staffEmails.size > 0 ? { staffEmails } : {}),
+    ...(effectiveStaffEmails.size > 0 ? { staffEmails: effectiveStaffEmails } : {}),
+    ...(ownerEmail !== null ? { ownerEmail } : {}),
     rateLimitStore,
     sessionsService,
     apiKeysService,

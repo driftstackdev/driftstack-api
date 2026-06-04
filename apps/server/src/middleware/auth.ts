@@ -51,6 +51,15 @@ declare module 'fastify' {
     requireMfaFresh: (opts?: {
       freshnessSeconds?: number;
     }) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    /**
+     * 2026-06-04 — project-OWNER gate. Lazy-auths (runs requireAuth if
+     * not yet authed), then admits ONLY the configured owner account
+     * ({@link AuthPluginOptions.ownerEmail}); throws ForbiddenError (403)
+     * for everyone else, including staff-admins. Fails CLOSED when no
+     * owner is configured. Wire on the high-power owner-only routes
+     * (pricing, secrets, project config).
+     */
+    requireOwner: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
 
@@ -75,6 +84,14 @@ export interface AuthPluginOptions {
    * (default) → no bump.
    */
   staffEmails?: ReadonlySet<string>;
+  /**
+   * 2026-06-04 — lowercased email of the project OWNER (master) account.
+   * The `requireOwner` gate admits ONLY this account (high-power admin
+   * surfaces: pricing, secrets, project config). Undefined/empty → the
+   * gate fails closed (forbids everyone). The owner is separately unioned
+   * into {@link staffEmails} at bootstrap so they are always admin too.
+   */
+  ownerEmail?: string | null;
 }
 
 /** Map a thrown auth error to a bounded outcome label. */
@@ -211,6 +228,27 @@ function authPlugin(
       }
     };
   });
+
+  // 2026-06-04 — project-OWNER gate. Admits ONLY the configured owner
+  // account; fails CLOSED when no owner is configured. Lazy-auths like
+  // requireScope so a route can use `[app.requireOwner]` alone.
+  const ownerEmail = opts.ownerEmail != null ? opts.ownerEmail.trim().toLowerCase() : null;
+  app.decorate(
+    'requireOwner',
+    async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+      if (!request.account) {
+        await requireAuth(request, reply);
+      }
+      const ctx = request.account;
+      if (!ctx) return; // requireAuth would have thrown
+      if (ownerEmail === null || ownerEmail.length === 0) {
+        throw new ForbiddenError('This action requires the project owner account.');
+      }
+      if (ctx.account.email.toLowerCase() !== ownerEmail) {
+        throw new ForbiddenError('This action requires the project owner account.');
+      }
+    },
+  );
 
   done();
 }
