@@ -310,8 +310,12 @@ export class ApiKeysService {
     });
 
     // Schedule the old key's automatic revocation. The old key's
-    // expires_at becomes the later of (existing, now + grace). The auth
-    // path already rejects keys past expires_at; no separate cron needed.
+    // expires_at becomes the EARLIER of (existing, now + grace) — so
+    // rotation never EXTENDS the old key's life: a long-lived or
+    // no-expiry key is shortened to the grace window, and a sooner-
+    // expiring key keeps its earlier deadline. (The next line computes
+    // that minimum.) The auth path already rejects keys past expires_at;
+    // no separate cron needed.
     const gracePeriodMs = opts.gracePeriodMs ?? 24 * 60 * 60 * 1000;
     const candidate = new Date(Date.now() + gracePeriodMs);
     const gracePeriodEndsAt =

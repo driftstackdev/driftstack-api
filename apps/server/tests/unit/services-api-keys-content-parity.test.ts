@@ -146,6 +146,11 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
       /const gracePeriodEndsAt =\s*\n?\s*oldKey\.expiresAt && oldKey\.expiresAt < candidate \? oldKey\.expiresAt : candidate;/,
     );
     expect(body).toMatch(/await this\.repo\.setExpiresAt\(oldKey\.id, gracePeriodEndsAt\);/);
+    // The inline comment must NOT describe this as the "later of" (the code
+    // computes the EARLIER/min so rotation never extends the old key's life);
+    // a "later of" comment contradicts the logic + could mislead a future
+    // dev into a security-regressing MAX refactor.
+    expect(body).not.toMatch(/becomes the later of \(existing/);
   });
 
   it('rotate: insertApiKey with same scopes + preserves original expiry (may be null); cache.invalidateKey on OLD; emits api_key.rotated audit with both ids', () => {
