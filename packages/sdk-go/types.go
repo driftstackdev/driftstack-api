@@ -86,6 +86,20 @@ const (
 // DefaultSessionPurpose matches packages/api-types DEFAULT_SESSION_PURPOSE.
 const DefaultSessionPurpose = PurposeProductionCustomer
 
+// BehavioralProfile selects the per-session human-behaviour persona the
+// harness drives touch/scroll/typing with (file 05 "Persona model"). These
+// are the only values the server's BehavioralProfileSchema accepts.
+type BehavioralProfile string
+
+const (
+	PersonaCasual    BehavioralProfile = "casual"
+	PersonaRegular   BehavioralProfile = "regular"
+	PersonaPowerUser BehavioralProfile = "power_user"
+)
+
+// DefaultBehavioralProfile matches packages/api-types DEFAULT_BEHAVIORAL_PROFILE.
+const DefaultBehavioralProfile = PersonaRegular
+
 // WebhookEventType — closed enum of supported webhook events.
 type WebhookEventType string
 
@@ -288,14 +302,19 @@ type EgressCapabilities struct {
 	Warnings         []string `json:"warnings"`
 }
 
-// CreateSessionRequest. The `Archetype` and `Purpose` fields are
-// required server-side (V-169); leave empty to let the server default
-// to the locked archetype + DefaultSessionPurpose.
+// CreateSessionRequest. All fields are optional; leave empty to let the
+// server default (Archetype → locked archetype, Purpose →
+// DefaultSessionPurpose, BehavioralProfile → DefaultBehavioralProfile).
 type CreateSessionRequest struct {
 	Archetype string         `json:"archetype,omitempty"`
 	Purpose   SessionPurpose `json:"purpose,omitempty"`
 	Label     string         `json:"label,omitempty"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
+	// ProfileID binds the session to a persistent antidetect profile
+	// (cookies/localStorage/archetype inherited). Optional (V-081/V-480).
+	ProfileID string `json:"profile_id,omitempty"`
+	// BehavioralProfile selects the per-session persona (2026-06-05).
+	BehavioralProfile BehavioralProfile `json:"behavioral_profile,omitempty"`
 }
 
 // CreateSessionResponse mirrors the server's POST /v1/sessions

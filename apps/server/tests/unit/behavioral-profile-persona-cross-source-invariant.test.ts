@@ -59,4 +59,16 @@ describe('BehavioralProfile ⇔ persona-catalogue cross-source invariant', () =>
       /behavioralProfile: input\.behavioralProfile/,
     );
   });
+
+  it('CRITICAL the Go SDK exposes the persona — BehavioralProfile type + 3 consts + default + the CreateSessionRequest.BehavioralProfile field (so Go customers can select it; guards the create-field-completeness gap from re-opening)', () => {
+    const goTypes = read('packages/sdk-go/types.go');
+    expect(goTypes).toMatch(/type BehavioralProfile string/);
+    expect(goTypes).toMatch(/PersonaCasual\s+BehavioralProfile = "casual"/);
+    expect(goTypes).toMatch(/PersonaRegular\s+BehavioralProfile = "regular"/);
+    expect(goTypes).toMatch(/PersonaPowerUser\s+BehavioralProfile = "power_user"/);
+    expect(goTypes).toMatch(/DefaultBehavioralProfile = PersonaRegular/);
+    expect(goTypes).toMatch(
+      /BehavioralProfile BehavioralProfile `json:"behavioral_profile,omitempty"`/,
+    );
+  });
 });
