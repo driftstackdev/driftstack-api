@@ -238,8 +238,9 @@ capture:dom_snapshot→get_page_source; wait:selector_visible→wait_for{predica
 - `AgentIntent.scroll` carries no direction/distance; the harness `scroll` wants `direction`+`distance_px`.
 - `wait`: AgentIntent `condition: idle|selector_visible` vs harness `wait_for{predicate}` + `behavioral_pause`(idle) — map which to which.
 
-**Two-behavioral-models ownership split — AGENT-2 DECISION (relayed to founder for ratification; now in the
-ORCHESTRATOR-STATE founder-decision queue).** Context: the harness self-generates touch/timing from
+**Two-behavioral-models ownership split — FOUNDER-RATIFIED 2026-06-04 ("do everything as recommended").**
+The Agent-2 decision below is now the ratified contract; founder-decision-queue item #2 is RESOLVED. Build is
+greenlit (see AI-B2.b plan at the end of this section). Context: the harness self-generates touch/timing from
 `personas.json` + `BehavioralRhythm` (Swift) and is the de-facto executor+model today; the Agent-2
 `behavioural-simulation` TS lib (rich per-element-class distributions) is unwired/parallel → two models =
 divergent-fingerprint risk.
@@ -266,6 +267,36 @@ divergent-fingerprint risk.
   wait mapping) are product decisions; (c) this ownership decision ratified. Param shapes ARE reverse-engineered
   (above) so the build is ready the moment (a)+(b) clear. **Do NOT unilaterally ship the intent schema before the
   executor can dispatch it** (would be a no-op customer capability). This section is the map for whoever wires it.
+
+**AI-B2.b BUILD PLAN (scoped 2026-06-04; architecture + signatures confirmed). Two increments:**
+
+_Increment 1 — RealAgentExecutor (server-side; NO customer-schema/SDK change; SAFE — prod driver is `mock`):_
+
+- New `RealAgentExecutor implements AgentExecutor` in `services/agent-executor.ts` (keep `StubAgentExecutor`
+  for tests/demo). Dispatches each `plan.intent` against the in-process `SessionsService` (the file header's
+  stated AI-B2.b target), translating the EXISTING `AgentIntent` vocab:
+  - `navigate{url}` → `sessionsService.navigate(ctx, sessionId, {url})` → summary `navigated → {finalUrl} (status {n})`.
+  - `interact{action:'tap', selector}` → `interact(ctx, sessionId, {action:{kind:'tap', selector}})`.
+  - `interact{action:'type', selector, value}` → `{action:{kind:'type', selector, text:value}}`.
+  - `wait{condition, timeoutMs?}` → `wait(ctx, sessionId, {condition, timeout_ms:timeoutMs})` → summary incl. `satisfied`.
+  - `capture{capture}` → `sessionsService.capture(...)` → `captureId` on the IntentResult.
+  - `interact{action:'scroll'|'swipe'}` → typed `kind:'failure'` IntentResult, reason
+    "scroll/swipe dispatch pending vocabulary reconciliation (AI-B2.c)" — NOT a guess; halts the plan like any failure.
+- `ExecuteArgs` gains `account?: AccountContext` (ADDITIVE — stub ignores it; Real requires it, fails closed with a
+  clear reason if absent). AgentRuntime passes its ctx through. Halt-on-first-failure + capture aggregation per the
+  existing `ExecutorRunResult` contract. Map `SessionsService` problem-errors → `kind:'failure'` (never throw).
+- Tests: unit-test RealAgentExecutor against a MOCK SessionsService (success path per intent kind; halt-on-failure;
+  scroll/swipe→failure; capture→captureId). Update `services-agent-executor-content-parity` + the v-invariant for the
+  additive field. DO NOT wire into bootstrap yet (stub stays wired) → zero prod-behavior change.
+- PREREQ to verify before the bootstrap swap (Increment 1.5, 1-line): does agent-sessions provision a REAL
+  `/v1/sessions` session for the executor to own/dispatch against? (agent-runtime.ts:330 warns the wired executor
+  "will 400 without a [real session]".) Confirm the session-provisioning path, THEN swap stub→real in bootstrap.
+
+_Increment 2 — customer-facing intents (schema/SDK/decomposer; needs the vocab product-calls):_ add
+`scroll{direction, distance_px?}` + `behavioral_pause{reason?, hintMs?}` + `back`/`forward` to `AgentIntentSchema`
+(align scroll to the harness's reverse-engineered `{direction, distance_px}`; drop `swipe` OR map→scroll), regen
+SDKs, update the decomposer to emit them, fix the false "maps 1:1" docstring + the AgentIntent⇄driver drift. Confirm
+final shapes with Agent-3 (harness `IntentDispatch`) before shipping the customer schema.
 
 ---
 
