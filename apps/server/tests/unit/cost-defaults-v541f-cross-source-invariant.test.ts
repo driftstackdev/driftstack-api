@@ -76,6 +76,7 @@ import {
   TIER_MONTHLY_PRICE_CENTS,
   deriveThresholdsFromMonthlyPrice,
 } from '../../src/lib/cost-defaults.js';
+import { TIER_PRICE_CENTS } from '../../src/routes/billing-crypto.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -191,6 +192,30 @@ describe('W973 V-541.F cost-defaults cross-source invariant', () => {
     expect(TIER_MONTHLY_PRICE_CENTS.api_starter).toBe(14900);
     expect(TIER_MONTHLY_PRICE_CENTS.api_builder).toBe(49900);
     expect(TIER_MONTHLY_PRICE_CENTS.api_scale).toBe(149900);
+  });
+
+  it('CRITICAL TIER_MONTHLY_PRICE_CENTS === billing-crypto TIER_PRICE_CENTS for all 6 paid tiers — the two price sources MUST agree. Pricing-as-data routes the crypto quote + charge through PricingService.listEffective(), which falls back to TIER_MONTHLY_PRICE_CENTS (and migration 0067 seeds the same figures), while TIER_PRICE_CENTS drives the crypto SUPPORTED_PRODUCTS list. They were "previously" divergent (a past under-quote bug); enforcing equality (not just the prose claim above) stops a future edit of one constant from silently diverging the charged price from the crypto price map.', () => {
+    const PAID_TIERS = [
+      'solo_manual',
+      'team_manual',
+      'agency_manual',
+      'api_starter',
+      'api_builder',
+      'api_scale',
+    ] as const;
+    for (const tier of PAID_TIERS) {
+      expect(TIER_MONTHLY_PRICE_CENTS[tier]).toBe(TIER_PRICE_CENTS[tier]);
+    }
+    // Both constants cover exactly the same paid-tier set (no tier priced in
+    // one but missing from the other).
+    expect(Object.keys(TIER_PRICE_CENTS).sort()).toEqual([...PAID_TIERS].sort());
+    expect(
+      Object.keys(TIER_MONTHLY_PRICE_CENTS)
+        .filter(
+          (t) => TIER_MONTHLY_PRICE_CENTS[t as keyof typeof TIER_MONTHLY_PRICE_CENTS] !== undefined,
+        )
+        .sort(),
+    ).toEqual([...PAID_TIERS].sort());
   });
 
   it("CRITICAL future-tier api_pro placeholder framing — 'tiers not on Stripe (e.g. the future api_pro tier) get a placeholder so the derive helper doesn't break'. The placeholder design keeps the derive-helper total-coverage even when a tier is not-yet-priced.", () => {
