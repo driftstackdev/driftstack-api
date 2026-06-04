@@ -107,4 +107,25 @@ describe('services/agent-executor content parity', () => {
     );
     expect(body).toMatch(/role: 'agent',/);
   });
+
+  it('AI-B2.b RealAgentExecutor pinned: ExecuteArgs.account?, ExecutorSessionsPort, real dispatch of navigate/tap/type/capture, and wait/scroll/swipe → typed failure "pending vocabulary reconciliation (AI-B2.c)" — pinned so the honest-foundation scope (clean intents dispatch; vocab-gap intents fail rather than guess) + the never-throw contract survive', () => {
+    expect(body).toMatch(/account\?: AccountContext;/);
+    expect(body).toMatch(/export interface ExecutorSessionsPort \{/);
+    expect(body).toMatch(/export class RealAgentExecutor implements AgentExecutor \{/);
+    expect(body).toMatch(
+      /this\.deps\.sessions\.navigate\(account, sessionId, \{ url: intent\.url \}\)/,
+    );
+    expect(body).toMatch(/action: \{ kind: 'tap', selector: intent\.selector \}/);
+    expect(body).toMatch(
+      /action: \{ kind: 'type', selector: intent\.selector, text: intent\.value \}/,
+    );
+    expect(body).toMatch(
+      /this\.deps\.sessions\.capture\(account, sessionId, \{ kind: intent\.capture \}\)/,
+    );
+    expect(body).toMatch(/wait dispatch pending vocabulary reconciliation \(AI-B2\.c\)/);
+    expect(body).toMatch(
+      /\$\{intent\.action\} dispatch pending vocabulary reconciliation \(AI-B2\.c\)/,
+    );
+    expect(body).toMatch(/executor missing account context/);
+  });
 });

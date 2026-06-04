@@ -17,6 +17,8 @@
 // AI-B2.b dispatches against the in-process SessionsService instead.
 
 import type { AgentIntent, DecomposeResult, TranscriptEntry } from './agent-decomposer.js';
+import type { AccountContext } from './auth.js';
+import type { CaptureKind, InteractAction } from '@driftstack/api-types';
 
 /**
  * Per-intent execution result. The discriminated union lets callers
@@ -59,6 +61,15 @@ export interface ExecuteArgs {
    *  the caller (agent runtime) handles those before reaching the
    *  executor. The narrowing happens at the type level. */
   plan: Extract<DecomposeResult, { kind: 'plan' }>;
+  /**
+   * AI-B2.b — the caller's AccountContext, required by RealAgentExecutor
+   * for ownership-scoped SessionsService dispatch. Optional on the
+   * interface so StubAgentExecutor (which ignores it) + existing callers
+   * keep working; RealAgentExecutor surfaces a typed failure if it's
+   * absent. The runtime threads it once the bootstrap swap (increment
+   * 1.5) wires the real executor.
+   */
+  account?: AccountContext;
 }
 
 export interface AgentExecutor {
@@ -93,6 +104,152 @@ export class StubAgentExecutor implements AgentExecutor {
       });
     }
     return Promise.resolve({ results, ok: true });
+  }
+}
+
+/**
+ * The narrow slice of SessionsService the executor dispatches against.
+ * Declared as a port (not the whole SessionsService) so the executor stays
+ * decoupled + unit-testable with a mock; the real SessionsService satisfies
+ * it structurally.
+ */
+export interface ExecutorSessionsPort {
+  navigate(
+    ctx: AccountContext,
+    sessionId: string,
+    body: { url: string },
+  ): Promise<{ finalUrl: string; status: number }>;
+  interact(
+    ctx: AccountContext,
+    sessionId: string,
+    body: { action: InteractAction },
+  ): Promise<{ durationMs: number }>;
+  capture(
+    ctx: AccountContext,
+    sessionId: string,
+    body: { kind: CaptureKind },
+  ): Promise<{ kind: CaptureKind; byteSize: number }>;
+}
+
+export interface RealAgentExecutorDeps {
+  sessions: ExecutorSessionsPort;
+}
+
+/**
+ * AI-B2.b increment 1 — real intent executor. Dispatches each plan intent
+ * against the in-process SessionsService (the /v1/sessions/:id/{navigate,
+ * interact,capture} surface), halting on first failure, never throwing.
+ * Replaces StubAgentExecutor's synthetic success.
+ *
+ * SCOPE (increment 1): the cleanly-mapping intents only — navigate /
+ * interact:tap / interact:type / capture. `wait`, `interact:scroll`, and
+ * `interact:swipe` return a typed failure ("pending vocabulary
+ * reconciliation, AI-B2.c") because their AgentIntent vocab does NOT map 1:1
+ * onto the driver: AgentIntent.wait.condition (idle|selector_visible) ≠ driver
+ * WaitCondition (selector|selector_hidden|url_matches|time); AgentIntent.scroll
+ * carries no delta_x/delta_y; swipe has no driver target. Increment 2
+ * reconciles those + confirms shapes with Agent-3.
+ *
+ * NOT wired into bootstrap yet — the runtime still uses StubAgentExecutor —
+ * pending the real-session-provisioning check (the wired executor 400s without
+ * a real /v1/sessions session; agent-runtime uses 'unattached' when none).
+ * prod driver is `mock`, so once wired, dispatch hits the deterministic mock
+ * until Agent-1's webkit driver lands.
+ */
+export class RealAgentExecutor implements AgentExecutor {
+  constructor(private readonly deps: RealAgentExecutorDeps) {}
+
+  async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
+    const account = args.account;
+    if (!account) {
+      // The real executor requires the caller's AccountContext for
+      // ownership-scoped dispatch. Surface as failure(s) rather than
+      // throwing (the never-throw contract).
+      const results: IntentResult[] = args.plan.intents.map((intent) => ({
+        kind: 'failure',
+        intent,
+        reason: 'executor missing account context',
+      }));
+      return { results, ok: results.length === 0 };
+    }
+    const results: IntentResult[] = [];
+    for (const intent of args.plan.intents) {
+      const result = await this.dispatch(account, args.sessionId, intent);
+      results.push(result);
+      if (result.kind === 'failure') return { results, ok: false };
+    }
+    return { results, ok: true };
+  }
+
+  private async dispatch(
+    account: AccountContext,
+    sessionId: string,
+    intent: AgentIntent,
+  ): Promise<IntentResult> {
+    try {
+      switch (intent.kind) {
+        case 'navigate': {
+          const r = await this.deps.sessions.navigate(account, sessionId, { url: intent.url });
+          return {
+            kind: 'success',
+            intent,
+            summary: `navigated → ${r.finalUrl} (status ${r.status})`,
+          };
+        }
+        case 'interact':
+          return await this.dispatchInteract(account, sessionId, intent);
+        case 'capture': {
+          const r = await this.deps.sessions.capture(account, sessionId, { kind: intent.capture });
+          return { kind: 'success', intent, summary: `captured ${r.kind} (${r.byteSize} bytes)` };
+        }
+        case 'wait':
+          return {
+            kind: 'failure',
+            intent,
+            reason: 'wait dispatch pending vocabulary reconciliation (AI-B2.c)',
+          };
+      }
+    } catch (err) {
+      return {
+        kind: 'failure',
+        intent,
+        reason: err instanceof Error ? err.message : 'dispatch failed',
+      };
+    }
+  }
+
+  private async dispatchInteract(
+    account: AccountContext,
+    sessionId: string,
+    intent: Extract<AgentIntent, { kind: 'interact' }>,
+  ): Promise<IntentResult> {
+    switch (intent.action) {
+      case 'tap': {
+        if (intent.selector === undefined) {
+          return { kind: 'failure', intent, reason: 'tap requires a selector' };
+        }
+        await this.deps.sessions.interact(account, sessionId, {
+          action: { kind: 'tap', selector: intent.selector },
+        });
+        return { kind: 'success', intent, summary: `tapped ${intent.selector}` };
+      }
+      case 'type': {
+        if (intent.selector === undefined || intent.value === undefined) {
+          return { kind: 'failure', intent, reason: 'type requires a selector and value' };
+        }
+        await this.deps.sessions.interact(account, sessionId, {
+          action: { kind: 'type', selector: intent.selector, text: intent.value },
+        });
+        return { kind: 'success', intent, summary: `typed into ${intent.selector}` };
+      }
+      case 'scroll':
+      case 'swipe':
+        return {
+          kind: 'failure',
+          intent,
+          reason: `${intent.action} dispatch pending vocabulary reconciliation (AI-B2.c)`,
+        };
+    }
   }
 }
 
