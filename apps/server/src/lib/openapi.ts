@@ -3902,6 +3902,43 @@ function buildRegistry(): OpenAPIRegistry {
     },
   });
   registerRoute(r, {
+    method: 'patch',
+    path: '/v1/admin/owner/pricing/{tier}',
+    summary: "Owner-only: edit a tier's monthly price (pricing-as-data; audited)",
+    tags: ['admin', 'owner'],
+    security: auth,
+    request: {
+      params: z.object({
+        tier: z
+          .string()
+          .describe('Paid tier slug (e.g. api_scale). Free/unpriced tiers are rejected.'),
+      }),
+      body: {
+        content: {
+          'application/json': {
+            schema: z
+              .object({ monthly_cents: z.number().int().positive().max(1_000_000) })
+              .openapi('OwnerPricingEditRequest'),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          'Updated tier price. Reflected by the owner pricing view AND the crypto-checkout charge.',
+        content: {
+          'application/json': {
+            schema: z
+              .object({ tier: z.string(), monthly_cents: z.number().int().nonnegative() })
+              .openapi('OwnerPricingEditResponse'),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
     method: 'get',
     path: '/v1/admin/crypto-orders/daily',
     summary: 'Per-(date, status) counts for the last N days (max 90)',

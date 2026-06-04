@@ -881,6 +881,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       permissive_cors: deps.permissiveCors === true,
     },
     pricing: deps.pricingService,
+    audit: deps.adminAuditService,
   });
   registerAdminSessionsRoutes(app, { sessionsService: deps.sessionsService });
   registerAdminApiKeysRoutes(app, { apiKeysService: deps.apiKeysService });

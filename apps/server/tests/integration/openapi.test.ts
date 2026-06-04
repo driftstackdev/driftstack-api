@@ -42,8 +42,10 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/billing/subscriptions/stats',
         // owner-only platform activation status (master-owner cockpit)
         '/v1/admin/owner/platform-status',
-        // owner-only current per-tier pricing (read-only)
+        // owner-only current per-tier pricing (read)
         '/v1/admin/owner/pricing',
+        // owner-only edit a tier's monthly price (audited)
+        '/v1/admin/owner/pricing/{tier}',
         '/v1/admin/rate-limit-overrides',
         '/v1/admin/sessions',
         '/v1/admin/sessions/stats',

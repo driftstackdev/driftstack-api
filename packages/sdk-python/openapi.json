@@ -2729,6 +2729,30 @@
         },
         "required": ["tiers"]
       },
+      "OwnerPricingEditResponse": {
+        "type": "object",
+        "properties": {
+          "tier": {
+            "type": "string"
+          },
+          "monthly_cents": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["tier", "monthly_cents"]
+      },
+      "OwnerPricingEditRequest": {
+        "type": "object",
+        "properties": {
+          "monthly_cents": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 1000000
+          }
+        },
+        "required": ["monthly_cents"]
+      },
       "LaunchProfileRequest": {
         "type": "object",
         "properties": {
@@ -19566,6 +19590,90 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OwnerPricingResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/owner/pricing/{tier}": {
+      "patch": {
+        "summary": "Owner-only: edit a tier's monthly price (pricing-as-data; audited)",
+        "tags": ["admin", "owner"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Paid tier slug (e.g. api_scale). Free/unpriced tiers are rejected."
+            },
+            "required": true,
+            "description": "Paid tier slug (e.g. api_scale). Free/unpriced tiers are rejected.",
+            "name": "tier",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnerPricingEditRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated tier price. Reflected by the owner pricing view AND the crypto-checkout charge.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerPricingEditResponse"
                 }
               }
             }

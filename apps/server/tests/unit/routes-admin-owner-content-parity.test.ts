@@ -72,7 +72,32 @@ describe('apps/server/src/routes/admin-owner.ts content parity', () => {
     expect(body).toContain('opts.pricing.listEffective()');
     expect(body).toContain('pricing: PricingService');
     expect(body).toContain('monthly_cents');
-    // Still READ-ONLY — no mutation of pricing in this route (owner CRUD is a later increment).
-    expect(body).not.toMatch(/insert|update|\.set\(|delete/i);
+    // The GET handler reads only — its body must not mutate. (Scoped to the GET
+    // arrow handler, not the whole file: the PATCH edit route below legitimately
+    // mutates. We slice from the GET route string to the PATCH route string.)
+    const getStart = body.indexOf("'/v1/admin/owner/pricing'");
+    const patchStart = body.indexOf("'/v1/admin/owner/pricing/:tier'");
+    const getHandler = body.slice(getStart, patchStart > getStart ? patchStart : undefined);
+    expect(getHandler).not.toMatch(/setPrice|\.record\(|insert|\.set\(|delete/i);
+  });
+
+  it('owner price EDIT: PATCH /v1/admin/owner/pricing/:tier — OWNER-gated, validates tier in EDITABLE_TIERS + monthly_cents, calls PricingService.setPrice, and audits pricing.updated per D-025 (audit-before-response on success AND error)', () => {
+    expect(body).toContain("'/v1/admin/owner/pricing/:tier'");
+    // OWNER identity gate (not a scope) + rate limit.
+    expect(body).toMatch(/preHandler: \[app\.requireOwner, app\.rateLimit\('global'\)\]/);
+    expect(body).not.toContain('requireScope');
+    // Editable-tier allowlist derived from the price map (free/unpriced rejected).
+    expect(body).toContain('Object.keys(TIER_MONTHLY_PRICE_CENTS)');
+    expect(body).toContain('EditPricingParamsSchema');
+    expect(body).toContain('monthly_cents: z.number().int().positive().max(1_000_000)');
+    // Mutation flows through the audited service write.
+    expect(body).toContain('opts.pricing.setPrice(tier, monthlyCents, ctx.apiKey.id)');
+    // D-025 audit: action pricing.updated, on BOTH success and error branches.
+    expect(body).toContain("action: 'pricing.updated'");
+    expect(body).toContain("result: 'success'");
+    expect(body).toMatch(/result: `error: \$\{code\}`/);
+    expect(body).toContain('audit: AdminAuditService');
+    // app.ts wires the audit recorder into the owner routes.
+    expect(app).toContain('audit: deps.adminAuditService');
   });
 });
