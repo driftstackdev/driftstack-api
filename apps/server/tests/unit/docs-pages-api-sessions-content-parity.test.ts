@@ -115,6 +115,14 @@ describe('W761 docs /api/sessions content parity', () => {
     );
   });
 
+  it('2026-06-05 — behavioral_profile (per-session persona) documented on POST /v1/sessions: in the request example + the casual/regular/power_user values + the regular default. Guards the API-reference doc from lagging the schema field (the gap this pin fixed).', () => {
+    const p = read(PAGE);
+    expect(p).toMatch(/"behavioral_profile": "regular"/);
+    expect(p).toMatch(
+      /`behavioral_profile` \(2026-06-05\) selects the per-session behavioural\s*\n?persona[\s\S]*?`casual`, `regular`, or `power_user`\. Defaults to `regular`/,
+    );
+  });
+
   it('CRITICAL 3-wait_until-strategy enum pinned — load/domcontentloaded/networkidle. The previous pin used `wait_for` which is fictional; the actual NavigateRequest schema at packages/api-types/src/sessions.ts:116 uses `wait_until`. Drift to dropping a strategy would silently break SDK consumers using it.', () => {
     const p = read(PAGE);
 

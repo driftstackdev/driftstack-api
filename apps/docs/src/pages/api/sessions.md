@@ -95,7 +95,8 @@ nullable on every read.
   "purpose": "production_customer",
   "label": "login flow",
   "metadata": { "ticket": "SUP-42" },
-  "profile_id": "prof_01HV..."
+  "profile_id": "prof_01HV...",
+  "behavioral_profile": "regular"
 }
 ```
 
@@ -110,6 +111,11 @@ bumps the profile's `last_used_at` fire-and-forget. Cross-account
 `profile_id` returns `404` (anti-enumeration — indistinguishable
 from a missing one). See also `POST /v1/profiles/:id/launch` for
 the one-round-trip launch helper.
+
+`behavioral_profile` (2026-06-05) selects the per-session behavioural
+persona the harness drives touch / scroll / typing cadence with — one
+of `casual`, `regular`, or `power_user`. Defaults to `regular` when
+omitted; set once for the session's lifetime.
 
 Returns the created session (200).
 
