@@ -40,6 +40,16 @@ const USAGE_RECORD_TYPES = [
   'screenshot_capture',
 ] as const;
 
+// Server-internal cost-accounting record types that are INTENTIONALLY absent
+// from the customer-facing api-types UsageRecordTypeSchema: the usage-repo
+// aggregation filters them out of customer totals (db/usage-repo.ts
+// INTERNAL_RECORD_TYPES — SQL `ne(...)` + a JS skip), so a customer /v1/usage
+// response keyed by UsageRecordType never carries them. They exist only in the
+// DB pgEnum (migrations 0046/0051). Pinned here so the pgEnum's superset over
+// api-types stays EXACT + documented — see [[project_admin_audit_action_enum_drift_fixed]]
+// for why an undocumented pgEnum→api-types delta is a drift hazard.
+const INTERNAL_ONLY_RECORD_TYPES = ['agent_decomposer', 'agent_decomposer_bundled'] as const;
+
 describe('W857 UsageRecordType cross-source invariant', () => {
   // ─── api-types canonical source ──────────────────────────────
 
@@ -60,7 +70,7 @@ describe('W857 UsageRecordType cross-source invariant', () => {
 
   // ─── DB pgEnum lockstep ──────────────────────────────────────
 
-  it("CRITICAL apps/server/src/db/schema.ts usageRecordType = pgEnum('usage_record_type', [6 values]). Postgres rejects INSERTs of unknown values — drift would drop billable events.", () => {
+  it("CRITICAL apps/server/src/db/schema.ts usageRecordType = pgEnum('usage_record_type', [6 customer + 2 internal]). Postgres rejects INSERTs of unknown values — drift would drop billable events.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/schema.ts'));
     expect(p).toMatch(/usageRecordType = pgEnum\('usage_record_type', \[/);
     const m = p.match(/usageRecordType = pgEnum\('usage_record_type', \[([\s\S]+?)\]\);/);
@@ -68,6 +78,35 @@ describe('W857 UsageRecordType cross-source invariant', () => {
     const body = m![1];
     for (const t of USAGE_RECORD_TYPES) {
       expect(body, `pgEnum must include '${t}'`).toMatch(new RegExp(`'${t}'`));
+    }
+    // 2026-06-05 anti-recurrence — the pgEnum is a SUPERSET of the customer
+    // api-types enum by EXACTLY the documented internal-only record types, no
+    // more. A prior subset-only check here would let a new pgEnum value lead
+    // api-types silently (the drift class that broke the admin audit-log filter
+    // — [[project_admin_audit_action_enum_drift_fixed]]). This EXACT-set pin
+    // forces a conscious choice for any new usage_record_type: expose it to
+    // customers (add to USAGE_RECORD_TYPES + api-types) or mark it internal
+    // (add to INTERNAL_ONLY_RECORD_TYPES + the usage-repo filter).
+    const pgValues = ((body ?? '').match(/'([^']+)'/g) ?? []).map((s) => s.replace(/'/g, ''));
+    expect(new Set(pgValues)).toEqual(
+      new Set([...USAGE_RECORD_TYPES, ...INTERNAL_ONLY_RECORD_TYPES]),
+    );
+  });
+
+  it('CRITICAL the internal-only record types (agent_decomposer + agent_decomposer_bundled) are filtered out of customer usage totals by db/usage-repo.ts INTERNAL_RECORD_TYPES — they must NOT leak into the api-types UsageRecordType-keyed response.', () => {
+    const repo = read(resolve(REPO_ROOT, 'apps/server/src/db/usage-repo.ts'));
+    expect(repo).toMatch(
+      /INTERNAL_RECORD_TYPES = \['agent_decomposer', 'agent_decomposer_bundled'\]/,
+    );
+    // The aggregation excludes them (SQL ne(...) filter + a defensive JS skip).
+    expect(repo).toMatch(/INTERNAL_RECORD_TYPES\[0\]/);
+    expect(repo).toMatch(/INTERNAL_RECORD_TYPES as readonly string\[\]\)\.includes/);
+    // And none of them appear in the customer-facing api-types enum.
+    for (const internal of INTERNAL_ONLY_RECORD_TYPES) {
+      expect(
+        USAGE_RECORD_TYPES.includes(internal as (typeof USAGE_RECORD_TYPES)[number]),
+        `${internal} must stay internal-only (absent from the customer enum)`,
+      ).toBe(false);
     }
   });
 

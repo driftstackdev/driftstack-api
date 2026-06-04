@@ -104,7 +104,7 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
 
   // ─── DB pgEnum lockstep ──────────────────────────────────────
 
-  it("CRITICAL apps/server/src/db/schema.ts adminAuditAction = pgEnum('admin_audit_action', [16 values]). Postgres rejects INSERTs of unknown values — drift would silently DROP the audit row (compliance/forensics gap).", () => {
+  it("CRITICAL apps/server/src/db/schema.ts adminAuditAction = pgEnum('admin_audit_action', [21 values]). Postgres rejects INSERTs of unknown values — drift would silently DROP the audit row (compliance/forensics gap).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/schema.ts'));
     expect(p).toMatch(/adminAuditAction = pgEnum\('admin_audit_action', \[/);
     const m = p.match(/adminAuditAction = pgEnum\('admin_audit_action', \[([\s\S]+?)\]\);/);
@@ -115,6 +115,16 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
         new RegExp(`'${a.replace(/[.]/g, '\\.')}'`),
       );
     }
+    // 2026-06-05 anti-recurrence — the pgEnum must contain NO value beyond the
+    // 21 (there are no internal-only admin actions: every admin_audit_action is
+    // written to a customer-visible audit row + must be filterable). A prior
+    // subset-only check here let the DB enum lead api-types silently — migrations
+    // 0057/0061/0062/0063 added 4 values the canonical schema lacked, breaking the
+    // audit-log filter (fixed a50151db). This EXACT-set pin makes that drift class
+    // (a pgEnum value with no api-types counterpart) fail loudly. See
+    // [[project_admin_audit_action_enum_drift_fixed]].
+    const pgValues = ((body ?? '').match(/'([^']+)'/g) ?? []).map((s) => s.replace(/'/g, ''));
+    expect(new Set(pgValues)).toEqual(new Set(ADMIN_AUDIT_ACTIONS));
   });
 
   // ─── V-anchor traceability ───────────────────────────────────
