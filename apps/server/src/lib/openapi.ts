@@ -3844,6 +3844,36 @@ function buildRegistry(): OpenAPIRegistry {
   });
   registerRoute(r, {
     method: 'get',
+    path: '/v1/admin/owner/platform-status',
+    summary: 'Owner-only: which activation-gated features are wired in this deployment',
+    tags: ['admin', 'owner'],
+    security: auth,
+    responses: {
+      200: {
+        description:
+          'Boolean activation flags (no secrets) — billing/livekit/crypto/oauth/sentry/CORS.',
+        content: {
+          'application/json': {
+            schema: z
+              .object({
+                features: z.object({
+                  billing: z.boolean(),
+                  livekit: z.boolean(),
+                  crypto: z.boolean(),
+                  oauth_client: z.boolean(),
+                  sentry: z.boolean(),
+                  permissive_cors: z.boolean(),
+                }),
+              })
+              .openapi('OwnerPlatformStatusResponse'),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
     path: '/v1/admin/crypto-orders/daily',
     summary: 'Per-(date, status) counts for the last N days (max 90)',
     tags: ['admin', 'crypto'],

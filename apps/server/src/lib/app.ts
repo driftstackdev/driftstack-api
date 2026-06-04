@@ -94,6 +94,7 @@ import { registerAdminWebhookRoutes } from '../routes/admin-webhooks.js';
 import { registerAdminAuditLogRoutes } from '../routes/admin-audit-log.js';
 import { registerAdminOverviewRoutes } from '../routes/admin-overview.js';
 import { registerAdminBillingRoutes } from '../routes/admin-billing.js';
+import { registerAdminOwnerRoutes } from '../routes/admin-owner.js';
 import { registerAdminSessionsRoutes } from '../routes/admin-sessions.js';
 import { registerAdminApiKeysRoutes } from '../routes/admin-api-keys.js';
 import { registerAdminRateLimitOverridesRoutes } from '../routes/admin-rate-limit-overrides.js';
@@ -866,6 +867,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     webhooksAdmin: deps.webhooksAdminService,
   });
   registerAdminBillingRoutes(app, { adminBilling: deps.adminBillingService });
+  // Owner-only platform status — flags mirror the exact registration guards
+  // used below so each reflects whether that feature's routes are live.
+  registerAdminOwnerRoutes(app, {
+    platformStatus: {
+      billing: deps.billingService !== undefined,
+      livekit: deps.livekit !== undefined,
+      crypto: deps.cryptoOrdersService !== undefined,
+      oauth_client: deps.oauthClientService !== undefined,
+      sentry: deps.sentry !== undefined,
+      permissive_cors: deps.permissiveCors === true,
+    },
+  });
   registerAdminSessionsRoutes(app, { sessionsService: deps.sessionsService });
   registerAdminApiKeysRoutes(app, { apiKeysService: deps.apiKeysService });
   registerAdminRateLimitOverridesRoutes(app, {

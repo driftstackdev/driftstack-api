@@ -2665,6 +2665,43 @@
         },
         "required": ["by_tier", "total_active"]
       },
+      "OwnerPlatformStatusResponse": {
+        "type": "object",
+        "properties": {
+          "features": {
+            "type": "object",
+            "properties": {
+              "billing": {
+                "type": "boolean"
+              },
+              "livekit": {
+                "type": "boolean"
+              },
+              "crypto": {
+                "type": "boolean"
+              },
+              "oauth_client": {
+                "type": "boolean"
+              },
+              "sentry": {
+                "type": "boolean"
+              },
+              "permissive_cors": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "billing",
+              "livekit",
+              "crypto",
+              "oauth_client",
+              "sentry",
+              "permissive_cors"
+            ]
+          }
+        },
+        "required": ["features"]
+      },
       "LaunchProfileRequest": {
         "type": "object",
         "properties": {
@@ -19366,6 +19403,69 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminSubscriptionStatsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/owner/platform-status": {
+      "get": {
+        "summary": "Owner-only: which activation-gated features are wired in this deployment",
+        "tags": ["admin", "owner"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Boolean activation flags (no secrets) — billing/livekit/crypto/oauth/sentry/CORS.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerPlatformStatusResponse"
                 }
               }
             }

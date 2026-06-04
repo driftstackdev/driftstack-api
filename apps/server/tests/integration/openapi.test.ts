@@ -40,6 +40,8 @@ describe('OpenAPI spec generation', () => {
         '/v1/admin/overview',
         // admin billing analytics — active-subscription mix by tier
         '/v1/admin/billing/subscriptions/stats',
+        // owner-only platform activation status (master-owner cockpit)
+        '/v1/admin/owner/platform-status',
         '/v1/admin/rate-limit-overrides',
         '/v1/admin/sessions',
         '/v1/admin/sessions/stats',
