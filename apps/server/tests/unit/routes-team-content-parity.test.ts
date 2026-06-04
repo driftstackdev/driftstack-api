@@ -52,9 +52,9 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
     );
   });
 
-  it('InviteBody: email trim + email() + role enum (member|admin) optional; AcceptBody: token min 20', () => {
+  it('InviteBody: email trim + email() + .max(254) + role enum (member|admin) optional; AcceptBody: token min 20', () => {
     expect(body).toMatch(
-      /const InviteBodySchema = z\.object\(\{\s*\n?\s*email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email\.'\),\s*\n?\s*role: z\.enum\(\['member', 'admin'\]\)\.optional\(\),\s*\n?\s*\}\);/,
+      /const InviteBodySchema = z\.object\(\{\s*\n?\s*email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email\.'\)\.max\(254\),\s*\n?\s*role: z\.enum\(\['member', 'admin'\]\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /const AcceptBodySchema = z\.object\(\{\s*\n?\s*token: z\.string\(\)\.min\(20, 'Missing or malformed token\.'\),\s*\n?\s*\}\);/,

@@ -90,7 +90,9 @@ describe('W1050 routes/team V-298c + V-326c cross-source invariant', () => {
 
   it("CRITICAL InviteBodySchema — trimmed email + optional role enum ('member' | 'admin'). The trim prevents whitespace-only invites from passing the zod email check.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/team.ts'));
-    expect(p).toMatch(/email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email\.'\),/);
+    expect(p).toMatch(
+      /email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email\.'\)\.max\(254\),/,
+    );
     expect(p).toMatch(/role: z\.enum\(\['member', 'admin'\]\)\.optional\(\),/);
   });
 

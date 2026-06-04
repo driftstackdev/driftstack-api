@@ -56,9 +56,9 @@ describe('W411.A apps/server/src/routes/status-subscribe.ts content parity', () 
     );
   });
 
-  it('SubscribeBodySchema: zod email trim + .email() with "Must be a valid email address." copy', () => {
+  it('SubscribeBodySchema: zod email trim + .email() + .max(254) with "Must be a valid email address." copy', () => {
     expect(body).toMatch(
-      /const SubscribeBodySchema = z\.object\(\{\s*\n?\s*email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email address\.'\),\s*\n?\s*\}\);/,
+      /const SubscribeBodySchema = z\.object\(\{\s*\n?\s*email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email address\.'\)\.max\(254\),\s*\n?\s*\}\);/,
     );
   });
 

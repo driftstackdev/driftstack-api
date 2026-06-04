@@ -16,7 +16,7 @@ import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import { ValidationError } from '../lib/errors.js';
 
 const SubscribeBodySchema = z.object({
-  email: z.string().trim().email('Must be a valid email address.'),
+  email: z.string().trim().email('Must be a valid email address.').max(254),
 });
 
 const TokenQuerySchema = z.object({

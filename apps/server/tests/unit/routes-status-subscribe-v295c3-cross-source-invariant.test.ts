@@ -77,11 +77,11 @@ describe('W1020 routes/status-subscribe V-295c3 cross-source invariant', () => {
     expect(p).toMatch(/\.\.\.AUTH_IP_LIMITS\.statusSubscribe,/);
   });
 
-  it("CRITICAL SubscribeBodySchema — z.object({email: z.string().trim().email('Must be a valid email address.')}).", () => {
+  it("CRITICAL SubscribeBodySchema — z.object({email: z.string().trim().email('Must be a valid email address.').max(254)}).", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/status-subscribe.ts'));
     expect(p).toMatch(/const SubscribeBodySchema = z\.object\(\{/);
     expect(p).toMatch(
-      /email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email address\.'\),/,
+      /email: z\.string\(\)\.trim\(\)\.email\('Must be a valid email address\.'\)\.max\(254\),/,
     );
   });
 

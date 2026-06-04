@@ -17,7 +17,7 @@ import { ValidationError } from '../lib/errors.js';
 import type { TeamInviteRow, TeamMemberRow, TeamMembersService } from '../services/team-members.js';
 
 const InviteBodySchema = z.object({
-  email: z.string().trim().email('Must be a valid email.'),
+  email: z.string().trim().email('Must be a valid email.').max(254),
   role: z.enum(['member', 'admin']).optional(),
 });
 
