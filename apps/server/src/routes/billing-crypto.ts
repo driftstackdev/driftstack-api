@@ -39,9 +39,18 @@ import type { CryptoOrdersService } from '../services/crypto-orders.js';
 import { ValidationError } from '../lib/errors.js';
 import { readIdempotencyKey } from '../lib/idempotency-key.js';
 import type { NowPaymentsApiClient } from '../lib/nowpayments-api.js';
+import type { PricingService } from '../services/pricing.js';
 
 export interface CryptoCheckoutRoutesDeps {
   service: CryptoOrdersService;
+  /**
+   * Pricing-as-data Phase A — authoritative per-tier monthly price. The
+   * handler charges `pricing.listEffective()` (the DB pricing table from
+   * migration 0067, with the TIER_PRICE_CENTS constant as seed + fallback)
+   * rather than the inline constant, so the owner pricing editor (a later
+   * increment) moves the amount customers are actually charged.
+   */
+  pricing: PricingService;
   /**
    * V-666.D — NowPayments HTTP client. When wired, the route mints a
    * real payment address (POST /v1/payment); when omitted, returns
@@ -64,7 +73,16 @@ export interface CryptoCheckoutRoutesDeps {
 // price_cents: 100} → $1 charge for the $1,499/mo tier). The map
 // below mirrors apps/customer-dashboard/src/pages/select-tier.astro's
 // `priceCents` per tier; the SDK + customer-dashboard's request body
-// price_cents is now IGNORED — server uses this table verbatim.
+// price_cents is now IGNORED.
+//
+// 2026-06-04 (pricing-as-data Phase A): this constant is no longer read
+// verbatim for the charge — it is the SEED for the DB pricing table
+// (migration 0067) AND the runtime FALLBACK. The handler charges
+// `deps.pricing.listEffective()` (DB row ?? this constant), which lets
+// the owner pricing editor move the charged amount while keeping
+// checkout safe if the pricing table is ever unreadable. The constant
+// must stay equal to the seed — cost-defaults-v541f + the DB-seed
+// integration test pin that equality.
 //
 // Tier IDs match the canonical AccountTier enum at
 // packages/api-types/src/common.ts. Only the 6 self-serve paid tiers
@@ -137,17 +155,28 @@ export function registerCryptoCheckoutRoutes(
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
       // 2026-05-21 — V-666.SEC: server-side authoritative price lookup.
-      // The customer-supplied price_cents in parsed.data is IGNORED;
-      // we use the TIER_PRICE_CENTS map keyed by product slug. Without
-      // this, a customer could POST {product: 'api_scale',
-      // price_cents: 100} and unlock a $1,499/mo tier for $1.
-      const serverPriceCents = TIER_PRICE_CENTS[parsed.data.product];
+      // The customer-supplied price_cents in parsed.data is IGNORED.
+      // 2026-06-04 (pricing-as-data Phase A): the authoritative charge
+      // now flows through PricingService.listEffective() — the DB pricing
+      // table (migration 0067) is the source of truth, with TIER_PRICE_CENTS
+      // as the seed + fallback (listEffective returns the constant value
+      // for any tier the DB read misses or if the read throws, so a pricing
+      // -table outage never breaks checkout nor charges a wrong amount).
+      // Without an authoritative server price, a customer could POST
+      // {product: 'api_scale', price_cents: 100} and unlock a $1,499/mo
+      // tier for $1.
+      const effectivePricing = await deps.pricing.listEffective();
+      const serverPriceCents = effectivePricing.find(
+        (row) => row.tier === parsed.data.product,
+      )?.monthlyCents;
       if (typeof serverPriceCents !== 'number') {
-        // SUPPORTED_PRODUCTS is derived from TIER_PRICE_CENTS, so this
-        // is defensive — every Zod-accepted product slug MUST have a
-        // price entry. Reaching here means the two went out of sync.
+        // SUPPORTED_PRODUCTS is derived from TIER_PRICE_CENTS and
+        // listEffective() returns every priced tier, so this is
+        // defensive — every Zod-accepted product slug MUST have an
+        // effective price. Reaching here means the price sources
+        // (crypto map, cost-defaults table, DB) went out of sync.
         throw new Error(
-          `BUG: product '${parsed.data.product}' is supported but has no TIER_PRICE_CENTS entry`,
+          `BUG: product '${parsed.data.product}' is supported but has no effective price`,
         );
       }
       // Currency is also locked server-side to USD for now. NowPayments

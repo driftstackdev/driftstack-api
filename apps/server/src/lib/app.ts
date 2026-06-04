@@ -1065,6 +1065,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   if (deps.cryptoOrdersService !== undefined) {
     registerCryptoCheckoutRoutes(app, {
       service: deps.cryptoOrdersService,
+      pricing: deps.pricingService,
       ...(deps.nowpaymentsApiClient !== undefined && deps.nowpaymentsIpnCallbackUrl !== undefined
         ? {
             nowpayments: deps.nowpaymentsApiClient,

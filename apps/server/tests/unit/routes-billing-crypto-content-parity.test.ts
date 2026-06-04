@@ -79,7 +79,7 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     expect(body).toMatch(/'idempotency-key replayed with a different request body',/);
   });
 
-  it('SUPPORTED_PRODUCTS derives from TIER_PRICE_CENTS map keys — server-side authoritative price for the 6 self-serve paid tiers. 2026-05-21 — V-666.SEC: the prior 7-tuple included stale scaffold tier names (solo_automated/team_growth/team_scale/api_pro) AND trusted customer-supplied price_cents (price-tampering vulnerability). The map is now the single source of truth; SUPPORTED_PRODUCTS is `Object.keys(TIER_PRICE_CENTS)` cast. trial_pack was removed 2026-05-27 (free tier is not purchasable).', () => {
+  it('SUPPORTED_PRODUCTS derives from TIER_PRICE_CENTS map keys — the allowlist of the 6 self-serve paid tiers. 2026-05-21 — V-666.SEC: the prior 7-tuple included stale scaffold tier names (solo_automated/team_growth/team_scale/api_pro) AND trusted customer-supplied price_cents (price-tampering vulnerability). 2026-06-04 (pricing-as-data Phase A): TIER_PRICE_CENTS is now the SEED + FALLBACK (the charge reads PricingService); SUPPORTED_PRODUCTS is still `Object.keys(TIER_PRICE_CENTS)` cast (the purchasable-tier domain is constant). trial_pack was removed 2026-05-27 (free tier is not purchasable).', () => {
     expect(body).not.toMatch(/trial_pack: 299/);
     expect(body).toMatch(/solo_manual: 7900,/);
     expect(body).toMatch(/team_manual: 24900,/);
@@ -91,6 +91,21 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
       /const SUPPORTED_PRODUCTS = Object\.keys\(TIER_PRICE_CENTS\) as \[string, \.\.\.string\[\]\];/,
     );
     expect(body).toMatch(/const NOWPAYMENTS_MIN_USD_CENTS = 2000;/);
+  });
+
+  it('pricing-as-data Phase A 2c: the authoritative charge reads PricingService.listEffective() (DB pricing table + constant fallback), NOT the inline constant directly — so the owner pricing editor moves the charged amount. TIER_PRICE_CENTS stays as the seed+fallback (still asserted above). A revert to a direct constant lookup for the charge would re-break the editable-pricing contract.', () => {
+    // Route declares the PricingService dependency.
+    expect(body).toMatch(/import type \{ PricingService \} from '\.\.\/services\/pricing\.js';/);
+    expect(body).toMatch(/pricing: PricingService;/);
+    // The charged amount is sourced from the effective (DB-backed) pricing,
+    // keyed by the validated product slug.
+    expect(body).toMatch(/const effectivePricing = await deps\.pricing\.listEffective\(\);/);
+    expect(body).toMatch(
+      /const serverPriceCents = effectivePricing\.find\(\s*\n?\s*\(row\) => row\.tier === parsed\.data\.product,\s*\n?\s*\)\?\.monthlyCents;/,
+    );
+    // Must NOT read the constant directly for the charge (the bug we're guarding
+    // against): no `TIER_PRICE_CENTS[` index expression in the handler path.
+    expect(body).not.toMatch(/serverPriceCents = TIER_PRICE_CENTS\[/);
   });
 
   it('CreateCryptoCheckoutSchema: zod enum product + price_cents int positive max 1_000_000 + price_currency 3-letter uppercase ISO regex. 2026-05-21 — V-666.SEC inserted explanatory comments between fields; pin matched on each line independently so the comments are admitted.', () => {
@@ -140,7 +155,7 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     );
   });
 
-  it('Service dispatch branch: idempotency valid → createIdempotent (idempotency_key + bodyFingerprintMismatch return); else → create (fresh). 2026-05-21 — V-666.SEC: service receives serverPriceCents + serverPriceCurrency from the TIER_PRICE_CENTS map, NOT parsed.data.price_cents/currency (client-supplied values are ignored to prevent price tampering).', () => {
+  it('Service dispatch branch: idempotency valid → createIdempotent (idempotency_key + bodyFingerprintMismatch return); else → create (fresh). 2026-05-21 — V-666.SEC: service receives serverPriceCents + serverPriceCurrency (authoritative, from PricingService.listEffective() as of pricing-as-data Phase A 2c), NOT parsed.data.price_cents/currency (client-supplied values are ignored to prevent price tampering).', () => {
     expect(body).toMatch(
       /if \(idempotency\.kind === 'valid'\) \{\s*\n?\s*const result = await deps\.service\.createIdempotent\(\{\s*\n?\s*idempotency_key: idempotency\.key,\s*\n?\s*order_id: newOrderId\(\),\s*\n?\s*account_id: ctx\.account\.id,\s*\n?\s*product: parsed\.data\.product,\s*\n?\s*price_cents: serverPriceCents,\s*\n?\s*price_currency: serverPriceCurrency,\s*\n?\s*\}\);\s*\n?\s*order = result\.order;\s*\n?\s*replayed = result\.replayed;\s*\n?\s*bodyFingerprintMismatch = result\.bodyFingerprintMismatch;/,
     );
