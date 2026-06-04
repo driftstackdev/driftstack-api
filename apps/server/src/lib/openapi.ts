@@ -3874,6 +3874,35 @@ function buildRegistry(): OpenAPIRegistry {
   });
   registerRoute(r, {
     method: 'get',
+    path: '/v1/admin/owner/pricing',
+    summary:
+      'Owner-only: current per-tier monthly pricing (read-only foundation for editable pricing)',
+    tags: ['admin', 'owner'],
+    security: auth,
+    responses: {
+      200: {
+        description:
+          'Per-tier monthly price in cents (the source crypto-checkout/cost-caps/display derive from).',
+        content: {
+          'application/json': {
+            schema: z
+              .object({
+                tiers: z.array(
+                  z.object({
+                    tier: z.string(),
+                    monthly_cents: z.number().int().nonnegative(),
+                  }),
+                ),
+              })
+              .openapi('OwnerPricingResponse'),
+          },
+        },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
     path: '/v1/admin/crypto-orders/daily',
     summary: 'Per-(date, status) counts for the last N days (max 90)',
     tags: ['admin', 'crypto'],

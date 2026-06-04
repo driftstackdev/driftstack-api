@@ -1,6 +1,7 @@
 // Owner-only platform routes (master-owner cockpit).
 //
-//   GET /v1/admin/owner/platform-status
+//   GET /v1/admin/owner/platform-status  — activation flags
+//   GET /v1/admin/owner/pricing          — current per-tier monthly pricing (read-only)
 //
 // Read-only operational snapshot for the project OWNER: which
 // activation-gated features are wired in THIS deployment (billing /
@@ -16,6 +17,7 @@
 // reflects whether the feature is live in this deployment.
 
 import type { FastifyInstance } from 'fastify';
+import { TIER_MONTHLY_PRICE_CENTS } from '../lib/cost-defaults.js';
 
 export interface OwnerPlatformStatus {
   billing: boolean;
@@ -41,6 +43,25 @@ export function registerAdminOwnerRoutes(
       // Boot-time activation posture; no secrets, no per-request state.
       // Sync handler — no I/O, so no async (avoids require-await lint).
       return { features: opts.platformStatus };
+    },
+  );
+
+  app.get(
+    '/v1/admin/owner/pricing',
+    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    () => {
+      // Current per-tier monthly pricing (cents) — the single source that
+      // the crypto-checkout charge, the cost-cap thresholds, and the
+      // customer-facing display all derive from (TIER_MONTHLY_PRICE_CENTS).
+      // READ-ONLY: the foundation for owner-editable pricing. Making this
+      // DB-sourced + live-editable + Stripe-synced is the separate,
+      // founder-design-gated pricing-as-data arc (grandfathering + sync
+      // semantics must be decided first) — no mutation here.
+      const tiers = Object.entries(TIER_MONTHLY_PRICE_CENTS).map(([tier, monthlyCents]) => ({
+        tier,
+        monthly_cents: monthlyCents ?? 0,
+      }));
+      return { tiers };
     },
   );
 }

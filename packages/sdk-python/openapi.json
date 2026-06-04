@@ -2702,6 +2702,28 @@
         },
         "required": ["features"]
       },
+      "OwnerPricingResponse": {
+        "type": "object",
+        "properties": {
+          "tiers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tier": {
+                  "type": "string"
+                },
+                "monthly_cents": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": ["tier", "monthly_cents"]
+            }
+          }
+        },
+        "required": ["tiers"]
+      },
       "LaunchProfileRequest": {
         "type": "object",
         "properties": {
@@ -19466,6 +19488,69 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OwnerPlatformStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/owner/pricing": {
+      "get": {
+        "summary": "Owner-only: current per-tier monthly pricing (read-only foundation for editable pricing)",
+        "tags": ["admin", "owner"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Per-tier monthly price in cents (the source crypto-checkout/cost-caps/display derive from).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerPricingResponse"
                 }
               }
             }

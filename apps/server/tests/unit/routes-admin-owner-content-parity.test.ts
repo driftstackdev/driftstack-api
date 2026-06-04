@@ -65,4 +65,13 @@ describe('apps/server/src/routes/admin-owner.ts content parity', () => {
     expect(app).toContain('sentry: deps.sentry !== undefined');
     expect(app).toContain('permissive_cors: deps.permissiveCors === true');
   });
+
+  it('owner pricing view: GET /v1/admin/owner/pricing, OWNER-gated, read-only from TIER_MONTHLY_PRICE_CENTS', () => {
+    expect(body).toContain("'/v1/admin/owner/pricing'");
+    // Same owner-gate as platform-status (identity, not scope).
+    expect(body).toContain('TIER_MONTHLY_PRICE_CENTS');
+    expect(body).toContain('monthly_cents');
+    // Read-only — no mutation of pricing here (the editable/Stripe-sync arc is gated).
+    expect(body).not.toMatch(/insert|update|\.set\(|delete/i);
+  });
 });
