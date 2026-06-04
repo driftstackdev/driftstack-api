@@ -31,6 +31,7 @@ const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/index.astro');
 const OVERVIEW_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-overview.ts');
 const AUDIT_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-audit-log.ts');
 const BILLING_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-billing.ts');
+const OWNER_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-owner.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -54,6 +55,16 @@ describe('W358.C admin-panel /index overview page content parity', () => {
     expect(body).toMatch(/data-list="paying-tier-distribution"/);
     expect(existsSync(BILLING_ROUTE)).toBe(true);
     expect(read(BILLING_ROUTE)).toContain("'/v1/admin/billing/subscriptions/stats'");
+  });
+
+  it('owner platform-status card hits GET /v1/admin/owner/platform-status (owner-gated, reveal-on-200) + server registers it', () => {
+    expect(body).toContain("authedFetch('/v1/admin/owner/platform-status')");
+    expect(body).toContain('renderPlatformStatus');
+    expect(body).toMatch(/data-owner-only="platform-status"/);
+    // SSR-hidden, revealed via classList.remove('hidden') only on success.
+    expect(body).toContain("card.classList.remove('hidden')");
+    expect(existsSync(OWNER_ROUTE)).toBe(true);
+    expect(read(OWNER_ROUTE)).toContain("'/v1/admin/owner/platform-status'");
   });
 
   it('tile data-fields map to overview-response keys', () => {

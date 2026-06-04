@@ -259,6 +259,43 @@ const apiBaseUrl = resolveApiBaseUrl();
       </p>
     </section>
 
+    {/* Owner-only platform status. SSR-hidden; the inline script reveals it
+        only when GET /v1/admin/owner/platform-status returns 200 (the owner
+        account). Staff-admins get 403 and never see it. */}
+    <section class="mt-6 dashboard-card hidden" data-owner-only="platform-status">
+      <div class="flex items-center justify-between">
+        <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 2 4 5v6c0 5 3.4 7.8 8 9 4.6-1.2 8-4 8-9V5l-8-3z" />
+            </svg>
+          </span>
+          Platform status
+        </h2>
+        <span class="font-mono text-xs text-slate-400">owner-only · activation</span>
+      </div>
+      <dl class="mt-4 grid gap-3 sm:grid-cols-2" data-list="platform-status">
+        {
+          [
+            ['billing', 'Billing (Stripe)'],
+            ['livekit', 'LiveKit'],
+            ['crypto', 'Crypto checkout'],
+            ['oauth_client', 'OAuth sign-in'],
+            ['sentry', 'Sentry'],
+            ['permissive_cors', 'Permissive CORS'],
+          ].map(([key, label]) => (
+            <div class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+              <dt class="text-sm text-slate-600">{label}</dt>
+              <dd class="font-mono text-xs text-slate-400" data-field={`flag-${key}`}>—</dd>
+            </div>
+          ))
+        }
+      </dl>
+      <p class="mt-3 text-[11px] text-slate-400">
+        Which activation-gated features are wired in this deployment (owner view).
+      </p>
+    </section>
+
     {/* 2026-05-23 — icon on Recent admin activity header. */}
     <!-- Recent admin activity -->
     <section class="mt-10 dashboard-card">
@@ -599,6 +636,30 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
       void fetchPayingTiers().catch(() => {});
 
+      // Owner-only platform status (2026-06-04) — GET /v1/admin/owner/platform-status
+      // returns { features: { billing, livekit, crypto, oauth_client, sentry,
+      // permissive_cors } } for the OWNER account (403 for staff-admins).
+      // Best-effort + owner-gated: reveals the SSR-hidden card ONLY on a 200;
+      // staff get 403 → the card stays hidden. Never part of the banner gate.
+      function renderPlatformStatus(features) {
+        const card = root.querySelector('[data-owner-only="platform-status"]');
+        if (!card || !features) return;
+        const keys = ['billing', 'livekit', 'crypto', 'oauth_client', 'sentry', 'permissive_cors'];
+        for (const k of keys) {
+          const el = root.querySelector('[data-field="flag-' + k + '"]');
+          if (el) el.textContent = features[k] ? 'wired' : 'not set';
+        }
+        card.classList.remove('hidden');
+      }
+      function fetchPlatformStatus() {
+        return authedFetch('/v1/admin/owner/platform-status')
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => {
+            if (body && body.features) renderPlatformStatus(body.features);
+          });
+      }
+      void fetchPlatformStatus().catch(() => {});
+
       // 2026-05-21 — live activity feed. The audit-log fetch is
       // extracted so we can refresh it on a 30s timer + bind to the
       // "Refresh now" button. Each refresh updates `lastAuditFetch`
@@ -657,6 +718,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         void fetchSessionStats().catch(() => {});
         void fetchOpenIncidents().catch(() => {});
         void fetchPayingTiers().catch(() => {});
+        void fetchPlatformStatus().catch(() => {});
       }
       const refreshBtn = root.querySelector('[data-live-refresh]');
       if (refreshBtn) refreshBtn.addEventListener('click', refreshAll);

@@ -24,6 +24,7 @@ const PAGE = resolve(REPO_ROOT, 'apps/admin-panel/src/pages/index.astro');
 const OVERVIEW_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-overview.ts');
 const AUDIT_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-audit-log.ts');
 const BILLING_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-billing.ts');
+const OWNER_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-owner.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -49,6 +50,16 @@ describe('W347.C admin /index overview parity', () => {
     expect(read(BILLING_ROUTE)).toContain("'/v1/admin/billing/subscriptions/stats'");
     expect(page).toMatch(/data-list="paying-tier-distribution"/);
     expect(page).toMatch(/data-field="paying-total"/);
+  });
+
+  it('owner-only platform-status card hits GET /v1/admin/owner/platform-status + server registers it (owner-gated)', () => {
+    expect(page).toMatch(/\/v1\/admin\/owner\/platform-status/);
+    expect(read(OWNER_ROUTE)).toContain("'/v1/admin/owner/platform-status'");
+    // The server route is OWNER-gated (identity), not a staff scope.
+    expect(read(OWNER_ROUTE)).toContain('app.requireOwner');
+    // SSR-hidden card revealed only on a 200 (staff get 403 → stays hidden).
+    expect(page).toMatch(/data-owner-only="platform-status"/);
+    expect(page).toMatch(/class="mt-6 dashboard-card hidden"/);
   });
 
   it('four overview tiles render (active / suspended / open incidents / DLQ depth)', () => {

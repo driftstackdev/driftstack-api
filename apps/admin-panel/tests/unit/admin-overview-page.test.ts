@@ -85,8 +85,15 @@ function makeRouter(opts: {
   incidentsStatus?: number;
   payingStats?: Record<string, unknown>;
   payingStatsStatus?: number;
+  platformStatus?: Record<string, unknown>;
+  platformStatusStatus?: number;
 }): (c: MockFetchCall) => Response {
   return (call) => {
+    if (/\/v1\/admin\/owner\/platform-status/.test(call.url)) {
+      // Default 403 — the platform-status card is owner-only, so a normal
+      // staff-admin fetch is forbidden and the card stays hidden.
+      return json(opts.platformStatus ?? { features: {} }, opts.platformStatusStatus ?? 403);
+    }
     if (/\/v1\/admin\/billing\/subscriptions\/stats/.test(call.url)) {
       return json(
         opts.payingStats ?? { by_tier: {}, total_active: 0 },
@@ -256,6 +263,54 @@ describe('admin-panel Overview (index.astro) behaviour', () => {
     expect(
       window.document.querySelectorAll('[data-list="paying-tier-distribution"] li').length,
     ).toBe(8);
+  });
+
+  it('owner platform-status card reveals + populates flags on a 200 (owner account)', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+          webhooks: { dlq_depth: 0 },
+        },
+        platformStatusStatus: 200,
+        platformStatus: {
+          features: {
+            billing: true,
+            livekit: false,
+            crypto: true,
+            oauth_client: false,
+            sentry: true,
+            permissive_cors: false,
+          },
+        },
+      }),
+    });
+    win = window;
+    await flush();
+    const card = window.document.querySelector('[data-owner-only="platform-status"]');
+    // Revealed (hidden class removed) for the owner.
+    expect(card?.classList.contains('hidden')).toBe(false);
+    expect(text(window, '[data-field="flag-billing"]')).toBe('wired');
+    expect(text(window, '[data-field="flag-livekit"]')).toBe('not set');
+    expect(text(window, '[data-field="flag-sentry"]')).toBe('wired');
+  });
+
+  it('owner platform-status card stays hidden for staff-admins (403)', async () => {
+    const { window } = setUpDom(readFileSync(BUILT_PAGE, 'utf8'), {
+      token: 'tok',
+      route: makeRouter({
+        overview: {
+          accounts: { active: 1, suspended: 0, deleted: 0, total: 1 },
+          webhooks: { dlq_depth: 0 },
+        },
+        // platformStatus defaults to 403 in makeRouter → forbidden for staff.
+      }),
+    });
+    win = window;
+    await flush();
+    const card = window.document.querySelector('[data-owner-only="platform-status"]');
+    expect(card?.classList.contains('hidden')).toBe(true);
   });
 
   it('new-signups: today / 7d / 30d stats populate from overview.accounts.signups', async () => {
