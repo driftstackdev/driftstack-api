@@ -199,9 +199,14 @@ export class StripeApiClient {
     const timeoutMs = this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const timer = setTimeout(() => ac.abort(), timeoutMs);
 
-    let res: Response;
+    // The timer is cleared in `finally` AFTER the response body is read — the
+    // abort signal must stay armed through `res.text()`, not just the
+    // header-receiving `fetch()`. Otherwise a server that sends headers then
+    // stalls the body holds this worker for up to undici's 300s body-timeout
+    // (30× the intended deadline) instead of `timeoutMs`. (Bug-class shared by
+    // the other hand-rolled fetch clients — see the audit memo.)
     try {
-      res = await this.fetchImpl(url, {
+      const res = await this.fetchImpl(url, {
         method: 'POST',
         headers: {
           Authorization: auth,
@@ -214,45 +219,45 @@ export class StripeApiClient {
         body: formBody,
         signal: ac.signal,
       });
+
+      const text = await res.text();
+      let parsed: unknown;
+      try {
+        parsed = text.length === 0 ? {} : JSON.parse(text);
+      } catch {
+        const err: StripeApiError = Object.assign(new Error('Stripe response was not JSON'), {
+          status: res.status,
+          stripeError: { type: 'malformed_response', message: text.slice(0, 200) },
+        });
+        err.name = 'StripeApiError';
+        throw err;
+      }
+
+      if (!res.ok) {
+        const stripeError = (parsed as { error?: StripeApiError['stripeError'] }).error ?? {
+          type: 'unknown_error',
+        };
+        this.config.logger.warn(
+          {
+            component: 'stripe-api',
+            path,
+            status: res.status,
+            stripeErrorType: stripeError.type,
+            stripeErrorCode: stripeError.code,
+          },
+          'Stripe API error',
+        );
+        const err: StripeApiError = Object.assign(
+          new Error(`Stripe ${path} failed: ${stripeError.message ?? stripeError.type}`),
+          { status: res.status, stripeError },
+        );
+        err.name = 'StripeApiError';
+        throw err;
+      }
+
+      return parsed as T;
     } finally {
       clearTimeout(timer);
     }
-
-    const text = await res.text();
-    let parsed: unknown;
-    try {
-      parsed = text.length === 0 ? {} : JSON.parse(text);
-    } catch {
-      const err: StripeApiError = Object.assign(new Error('Stripe response was not JSON'), {
-        status: res.status,
-        stripeError: { type: 'malformed_response', message: text.slice(0, 200) },
-      });
-      err.name = 'StripeApiError';
-      throw err;
-    }
-
-    if (!res.ok) {
-      const stripeError = (parsed as { error?: StripeApiError['stripeError'] }).error ?? {
-        type: 'unknown_error',
-      };
-      this.config.logger.warn(
-        {
-          component: 'stripe-api',
-          path,
-          status: res.status,
-          stripeErrorType: stripeError.type,
-          stripeErrorCode: stripeError.code,
-        },
-        'Stripe API error',
-      );
-      const err: StripeApiError = Object.assign(
-        new Error(`Stripe ${path} failed: ${stripeError.message ?? stripeError.type}`),
-        { status: res.status, stripeError },
-      );
-      err.name = 'StripeApiError';
-      throw err;
-    }
-
-    return parsed as T;
   }
 }

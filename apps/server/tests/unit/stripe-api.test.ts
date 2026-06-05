@@ -238,6 +238,27 @@ describe('StripeApiClient — error handling', () => {
     const client = makeClient(fetchImpl, { timeoutMs: 50 });
     await expect(client.createCustomer({ email: 'x@y.com' })).rejects.toThrow();
   });
+
+  it('the timeout also bounds the RESPONSE-BODY read (headers arrive, then the body stalls) — regression for the clearTimeout-before-res.text() bug', async () => {
+    // fetch() resolves with headers immediately; res.text() only settles when
+    // the abort signal fires. With the timer cleared after fetch (the old bug)
+    // this would hang past timeoutMs (up to undici's 300s body timeout); with
+    // the timer armed through the body read it aborts at timeoutMs.
+    const fetchImpl: typeof fetch = (_input, init) => {
+      const signal = init?.signal as AbortSignal | undefined;
+      const res = {
+        ok: true,
+        status: 200,
+        text: (): Promise<string> =>
+          new Promise<string>((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(new Error('body aborted')));
+          }),
+      };
+      return Promise.resolve(res as unknown as Response);
+    };
+    const client = makeClient(fetchImpl, { timeoutMs: 50 });
+    await expect(client.createCustomer({ email: 'x@y.com' })).rejects.toThrow();
+  });
 });
 
 describe('StripeApiClient — fetch is invoked once per call', () => {
