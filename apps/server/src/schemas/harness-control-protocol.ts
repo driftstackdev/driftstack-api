@@ -215,15 +215,72 @@ export const SessionStatusSchema = z.object({
 });
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
+// ── HarnessOutbound payloads pinned (A3 bus W124) ─────────────────────
+// Field-sets locked by the harness `testHarnessOutboundPayloadShapesPinned`
+// test. Typed as plain objects (unknown keys STRIPPED, not .strict()-rejected):
+// these are DECODE-side, so tolerating a future additive harness field is safer
+// than rejecting the whole frame — A3 flags any change on the bus regardless.
+// intentResult + sessionStatus (above) are the consumed variants; these three
+// are accepted + currently ignored by the router (liveness/egress/error
+// telemetry — wired when a consumer needs them).
+export const HeartbeatSchema = z.object({
+  type: z.literal('heartbeat'),
+  macNodeId: z.string(),
+  timestamp: z.string(),
+  cpuPercent: z.number(),
+  memoryPercent: z.number(),
+  activeSessionCount: z.number().int().nonnegative(),
+});
+
+export const ErrorEventSchema = z.object({
+  type: z.literal('errorEvent'),
+  sessionId: z.string().optional(),
+  timestamp: z.string(),
+  code: z.string(),
+  severity: z.string(),
+  summary: z.string(),
+  detail: z.string().optional(),
+  customerActionable: z.boolean(),
+  retryable: z.boolean(),
+});
+
+export const CapabilityReportSchema = z.object({
+  type: z.literal('capabilityReport'),
+  sessionId: z.string(),
+  timestamp: z.string(),
+  egressPhase: z.string(),
+  proxyKind: z.string(),
+  proxyUdpSupported: z.boolean(),
+  proxyIpv4Supported: z.boolean(),
+  proxyIpv6Supported: z.boolean(),
+  proxyGeoCountry: z.string().optional(),
+  proxyGeoRegion: z.string().optional(),
+  proxyIpType: z.string().optional(),
+  transportModeRequested: z.string(),
+  transportModeActive: z.string(),
+  h3InterposeLoaded: z.boolean(),
+  httpsSkipActive: z.boolean(),
+  safeguardChecks: z.array(
+    z.object({
+      layer: z.string(),
+      passed: z.boolean(),
+      detail: z.string().optional(),
+      timestamp: z.string(),
+    }),
+  ),
+  archetypeId: z.string(),
+  webkitForkBuild: z.string().optional(),
+});
+
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
-// intentResult + sessionStatus are consumed precisely; heartbeat /
-// capabilityReport / errorEvent are accepted (passthrough) but their payload
-// shapes aren't pinned here yet (not yet consumed; A3 owns them).
+// All 5 variants pinned. intentResult + sessionStatus are consumed precisely;
+// heartbeat / capabilityReport / errorEvent are accepted (typed) + ignored
+// until a consumer wires them.
 export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
-  z.object({ type: z.literal('heartbeat') }).passthrough(),
-  z.object({ type: z.literal('capabilityReport') }).passthrough(),
-  z.object({ type: z.literal('errorEvent') }).passthrough(),
+  HeartbeatSchema,
+  CapabilityReportSchema,
+  ErrorEventSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;

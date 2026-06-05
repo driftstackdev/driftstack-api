@@ -45,6 +45,7 @@ import {
   IntentDispatchSchema,
   IntentResultEnvelopeSchema,
   HarnessErrorCodeSchema,
+  HarnessOutboundSchema,
 } from '../../src/schemas/harness-control-protocol.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -188,8 +189,39 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const SessionStatusSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('sessionStatus'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*status: z\.string\(\)\.min\(1\),\s*\n?\s*timestamp: z\.string\(\),\s*\n?\s*detail: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*z\.object\(\{ type: z\.literal\('heartbeat'\) \}\)\.passthrough\(\),\s*\n?\s*z\.object\(\{ type: z\.literal\('capabilityReport'\) \}\)\.passthrough\(\),\s*\n?\s*z\.object\(\{ type: z\.literal\('errorEvent'\) \}\)\.passthrough\(\),\s*\n?\s*\]\);/,
+      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*\]\);/,
     );
+  });
+
+  it('all 5 HarnessOutbound payloads pinned to A3 W124 field-sets (heartbeat/errorEvent/capabilityReport typed, not passthrough)', () => {
+    // heartbeat
+    expect(body).toMatch(
+      /export const HeartbeatSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('heartbeat'\),\s*\n?\s*macNodeId: z\.string\(\),\s*\n?\s*timestamp: z\.string\(\),\s*\n?\s*cpuPercent: z\.number\(\),\s*\n?\s*memoryPercent: z\.number\(\),\s*\n?\s*activeSessionCount: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*\}\);/,
+    );
+    // errorEvent
+    expect(body).toMatch(/export const ErrorEventSchema = z\.object\(\{/);
+    expect(body).toMatch(/customerActionable: z\.boolean\(\),\s*\n?\s*retryable: z\.boolean\(\),/);
+    // capabilityReport (incl. the nested safeguardChecks array)
+    expect(body).toMatch(/export const CapabilityReportSchema = z\.object\(\{/);
+    expect(body).toMatch(
+      /safeguardChecks: z\.array\(\s*\n?\s*z\.object\(\{\s*\n?\s*layer: z\.string\(\),\s*\n?\s*passed: z\.boolean\(\),\s*\n?\s*detail: z\.string\(\)\.optional\(\),\s*\n?\s*timestamp: z\.string\(\),\s*\n?\s*\}\),\s*\n?\s*\),/,
+    );
+    expect(body).toMatch(/archetypeId: z\.string\(\),/);
+  });
+
+  it('behavioral: HarnessOutbound accepts a valid heartbeat + rejects a malformed one (now typed, not passthrough)', () => {
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'heartbeat',
+        macNodeId: 'n1',
+        timestamp: 't',
+        cpuPercent: 12.5,
+        memoryPercent: 40,
+        activeSessionCount: 3,
+      }).success,
+    ).toBe(true);
+    // missing required fields → rejected (was accepted under passthrough).
+    expect(HarnessOutboundSchema.safeParse({ type: 'heartbeat' }).success).toBe(false);
   });
 
   it('5 error codes pinned in canonical order', () => {
