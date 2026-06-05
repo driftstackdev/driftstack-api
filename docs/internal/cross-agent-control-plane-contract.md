@@ -435,6 +435,7 @@ End-to-end execution still gated on item 9 (harness→fork drive). Don't ship th
 Founder greenlit the control-plane WSS arc ("you choose and do as recommended"). First slice landed:
 `apps/server/src/schemas/harness-control-protocol.ts` + 32-test drift-guard/behavioral test
 (`schemas-harness-control-protocol-content-parity.test.ts`). Mirrors A3's harness-intent-contract.md as Zod:
+
 - `HARNESS_INTENT_NAMES` (11 dispatchable) + `HARNESS_RESERVED_INTENT_NAMES` (fill_form/login/search, not-impl).
 - Per-intent param schemas (strict) + `HARNESS_INTENT_PARAM_SCHEMAS` map (intentName→schema) for server-side
   validation before dispatch.
@@ -444,6 +445,7 @@ Founder greenlit the control-plane WSS arc ("you choose and do as recommended").
 - **Server-internal** (gui-input.ts/L-001 precedent) — NOT @driftstack/api-types (harness ≠ customer).
 
 ### 🔴 OPEN QUESTIONS FOR AGENT-3 (relay via founder) — needed for (a) WSS handler + (b) sender:
+
 1. **`inputParams`/`outputData` wire codec.** Swift `Data` (JSON-encoded). On the wire is it (i) a nested JSON
    object, (ii) a JSON string, or (iii) base64 (Swift Codable's `Data` default)? Modeled `z.unknown()` until pinned.
 2. **Envelope JSON key casing.** Does the harness JSONEncoder apply `.convertToSnakeCase` (→ `session_id`,
@@ -454,6 +456,7 @@ Founder greenlit the control-plane WSS arc ("you choose and do as recommended").
    first message exchange (node-register → which sessionIds it owns)? Needed to build the connection registry.
 
 ### Remaining (a)/(b)/(c) + gates:
+
 - (a) `/v1/fleet/events` WSS handler — BLOCKED on: `fleet_nodes` SQL migration (Tier-2, founder approval;
   design at docs/internal/fleet-nodes-sql-migration-design.md) + mTLS at Cloudflare AOP (infra) +
   `@fastify/websocket` plugin (Agent-2 can add when building). Connection registry + intentId→promise correlation.
