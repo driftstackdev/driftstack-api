@@ -90,7 +90,7 @@ describe('serializeIntentDispatch', () => {
     });
     expect(d.intentName).toBe('send_keys');
     expect(decodeWireData(d.inputParams)).toEqual({
-      strategy: 'css',
+      strategy: 'css selector',
       value: '#email',
       text: 'a@b.com',
     });

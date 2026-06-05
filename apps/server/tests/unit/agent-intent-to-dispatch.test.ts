@@ -20,7 +20,7 @@ describe('agentIntentToDispatch — clean 1:1 mappings', () => {
     expect(r).toEqual({
       ok: true,
       intentName: 'click',
-      params: { strategy: 'css', value: '#submit' },
+      params: { strategy: 'css selector', value: '#submit' },
     });
   });
 
@@ -34,7 +34,7 @@ describe('agentIntentToDispatch — clean 1:1 mappings', () => {
     expect(r).toEqual({
       ok: true,
       intentName: 'send_keys',
-      params: { strategy: 'css', value: '#email', text: 'a@b.com' },
+      params: { strategy: 'css selector', value: '#email', text: 'a@b.com' },
     });
   });
 

@@ -75,7 +75,7 @@ describe('ControlPlaneAgentExecutor', () => {
     expect(got.map((d) => d.sessionId)).toEqual(['ses_x', 'ses_x', 'ses_x']);
     // Params are base64-encoded on the wire.
     expect(decodeWireData(got[0]!.inputParams)).toEqual({ url: 'https://x' });
-    expect(decodeWireData(got[1]!.inputParams)).toEqual({ strategy: 'css', value: '#go' });
+    expect(decodeWireData(got[1]!.inputParams)).toEqual({ strategy: 'css selector', value: '#go' });
   });
 
   it('halts on the first dispatch failure (later intents not dispatched)', async () => {

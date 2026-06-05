@@ -86,10 +86,15 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
         return { ok: false, reason: 'interact:tap requires a selector' };
       }
       // CSS selector is the only locator the AgentIntent carries today.
+      // The harness routes `strategy` straight to W3C WebDriver, so we emit the
+      // W3C rawValue 'css selector' (NOT a friendly 'css') — the API translates
+      // friendly→W3C so the harness stays W3C-faithful (A3 bus W115). When the
+      // customer schema later exposes other locators, map them here too
+      // (xpath→'xpath', link_text→'link text', …).
       return {
         ok: true,
         intentName: 'click',
-        params: { strategy: 'css', value: intent.selector },
+        params: { strategy: 'css selector', value: intent.selector },
       };
 
     case 'type':
@@ -102,7 +107,7 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
       return {
         ok: true,
         intentName: 'send_keys',
-        params: { strategy: 'css', value: intent.selector, text: intent.value },
+        params: { strategy: 'css selector', value: intent.selector, text: intent.value },
       };
 
     case 'scroll':
