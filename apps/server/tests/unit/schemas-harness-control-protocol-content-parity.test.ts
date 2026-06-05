@@ -268,7 +268,7 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(IntentResultEnvelopeSchema.safeParse(frame).success).toBe(true);
   });
 
-  it('EG-API-1.6 SessionAssign (A3 W136): required fields enforced, transportMode enum, initialUrl http(s)-only, livekit snake_case strict', () => {
+  it('EG-API-1.6 SessionAssign (A3 W136 shape, W138 optionality): required vs optional fields, transportMode enum, initialUrl http(s)-only, livekit snake_case strict', () => {
     const valid = {
       type: 'sessionAssign',
       sessionId: 'ses_1',
@@ -279,19 +279,28 @@ describe('harness-control-protocol behavioral contract', () => {
       maxDurationSeconds: 3600,
     };
     expect(SessionAssignSchema.safeParse(valid).success).toBe(true);
-    // Each required field absent → reject (harness decode has no struct defaults).
-    for (const k of [
-      'sessionId',
-      'archetype',
-      'behaviorProfile',
-      'transportMode',
-      'idleTimeoutSeconds',
-      'maxDurationSeconds',
-    ]) {
+    // A3 W138 — the MINIMAL valid assign is just type+sessionId+archetype+
+    // behaviorProfile; transportMode + the two timeouts are optional (omit →
+    // harness defaults).
+    expect(
+      SessionAssignSchema.safeParse({
+        type: 'sessionAssign',
+        sessionId: 'ses_1',
+        archetype: 'iphone17_ios18_7_safari26_4',
+        behaviorProfile: 'regular',
+      }).success,
+    ).toBe(true);
+    // Only sessionId / archetype / behaviorProfile are REQUIRED (no safe default).
+    for (const k of ['sessionId', 'archetype', 'behaviorProfile']) {
       const { [k]: _omit, ...rest } = valid as Record<string, unknown>;
-      expect(SessionAssignSchema.safeParse(rest).success, k).toBe(false);
+      expect(SessionAssignSchema.safeParse(rest).success, `${k} required`).toBe(false);
     }
-    // transportMode is a closed enum (dash-cased, W118).
+    // The W138-optional fields may each be omitted without failing.
+    for (const k of ['transportMode', 'idleTimeoutSeconds', 'maxDurationSeconds']) {
+      const { [k]: _omit, ...rest } = valid as Record<string, unknown>;
+      expect(SessionAssignSchema.safeParse(rest).success, `${k} optional`).toBe(true);
+    }
+    // transportMode (when present) is a closed enum (dash-cased, W118).
     expect(SessionAssignSchema.safeParse({ ...valid, transportMode: 'h2Only' }).success).toBe(
       false,
     );

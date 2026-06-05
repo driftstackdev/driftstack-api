@@ -200,6 +200,20 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     expect(a.livekit).toBeUndefined();
   });
 
+  it('A3 W138 — minimal assign: transportMode + timeouts omitted (→ harness defaults), only the required fields emitted', () => {
+    const a = serializeSessionAssign({
+      sessionId: 'ses_1',
+      archetype: 'iphone17_ios18_7_safari26_4',
+      behaviorProfile: 'regular',
+    });
+    expect(SessionAssignSchema.safeParse(a).success).toBe(true);
+    expect(a.transportMode).toBeUndefined();
+    expect(a.idleTimeoutSeconds).toBeUndefined();
+    expect(a.maxDurationSeconds).toBeUndefined();
+    // The wire object carries exactly the 4 required keys (no explicit-null fields).
+    expect(Object.keys(a).sort()).toEqual(['archetype', 'behaviorProfile', 'sessionId', 'type']);
+  });
+
   it('inlineProxyConfig (SocksProxyConfig) → base64 of utf8 JSON (A3 W136 = Data codec, NOT nested object)', () => {
     const proxy = {
       host: 'proxy.example.com',

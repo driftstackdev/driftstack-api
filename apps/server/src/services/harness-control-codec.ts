@@ -110,9 +110,10 @@ export function serializeSessionAssign(args: {
   sessionId: string;
   archetype: string;
   behaviorProfile: string;
-  transportMode: SessionAssignTransportMode;
-  idleTimeoutSeconds: number;
-  maxDurationSeconds: number;
+  // Optional (A3 W138): omit → harness defaults (h2-and-h3 / 300s idle / 1800s max).
+  transportMode?: SessionAssignTransportMode;
+  idleTimeoutSeconds?: number;
+  maxDurationSeconds?: number;
   proxyConfigId?: string;
   /** Logical SocksProxyConfig; base64-encoded into the wire `inlineProxyConfig`. */
   inlineProxyConfig?: SocksProxyConfig;
@@ -136,9 +137,15 @@ export function serializeSessionAssign(args: {
     sessionId: args.sessionId,
     archetype: args.archetype,
     behaviorProfile: args.behaviorProfile,
-    transportMode: args.transportMode,
-    idleTimeoutSeconds: args.idleTimeoutSeconds,
-    maxDurationSeconds: args.maxDurationSeconds,
+    // Optional fields omitted entirely when not given → harness applies its W138
+    // defaults rather than receiving an explicit null.
+    ...(args.transportMode !== undefined ? { transportMode: args.transportMode } : {}),
+    ...(args.idleTimeoutSeconds !== undefined
+      ? { idleTimeoutSeconds: args.idleTimeoutSeconds }
+      : {}),
+    ...(args.maxDurationSeconds !== undefined
+      ? { maxDurationSeconds: args.maxDurationSeconds }
+      : {}),
     ...(args.proxyConfigId !== undefined ? { proxyConfigId: args.proxyConfigId } : {}),
     ...(inlineProxyConfig !== undefined ? { inlineProxyConfig } : {}),
     ...(args.initialUrl !== undefined ? { initialUrl: args.initialUrl } : {}),

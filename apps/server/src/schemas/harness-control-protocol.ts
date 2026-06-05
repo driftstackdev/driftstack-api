@@ -207,10 +207,14 @@ export type IntentDispatch = z.infer<typeof IntentDispatchSchema>;
 // EG-API-1.6 — assigns a session (+ its egress + persona + transport + caps) to
 // the connected fleet node. Shape empirically pinned by A3's round-trip decode
 // test (bus W136, harness commit dc9e0a49). Build it with serializeSessionAssign()
-// in harness-control-codec.ts. Wire notes the harness decode REQUIRES exactly:
-//   - sessionId / archetype / behaviorProfile / transportMode /
-//     idleTimeoutSeconds / maxDurationSeconds — all REQUIRED (no struct defaults;
-//     an absent field throws harness-side). transportMode is dash-cased (W118).
+// in harness-control-codec.ts. Wire notes (A3 W136 shape, W138 optionality):
+//   - sessionId / archetype / behaviorProfile are REQUIRED (archetype +
+//     behaviorProfile have no safe default — a wrong fingerprint / inert behaviour
+//     would be a silent detection tell).
+//   - transportMode (dash-cased, W118) / idleTimeoutSeconds / maxDurationSeconds are
+//     OPTIONAL (A3 W138, harness commit e18de82f): omit → harness defaults
+//     (h2-and-h3 / 300s idle / 1800s max). The minimal valid assign is
+//     { type, sessionId, archetype, behaviorProfile }.
 //   - inlineProxyConfig is a BASE64 string of the UTF-8 JSON SocksProxyConfig
 //     (Swift `Data` default codec — same encoding as inputParams/outputData), NOT
 //     a nested object or a raw JSON string. serializeSessionAssign base64-encodes it.
@@ -230,11 +234,21 @@ export const SessionAssignSchema = z
   .object({
     type: z.literal('sessionAssign'),
     sessionId: z.string().min(1),
+    // archetype + behaviorProfile stay REQUIRED (A3 W138): no safe default — a
+    // wrong-fingerprint or inert-behaviour fallback would be a silent detection tell.
     archetype: z.string().min(1),
     behaviorProfile: z.string().min(1),
-    transportMode: z.enum(['h2-only', 'h2-and-h3']),
-    idleTimeoutSeconds: z.number().int().positive(),
-    maxDurationSeconds: z.number().int().positive(),
+    // A3 W138 (harness commit e18de82f) made these OPTIONAL on the wire: omit →
+    // harness defaults (transportMode→h2-and-h3, idle→300s, max→1800s). We mirror
+    // the canonical optional contract; serializeSessionAssign omits when not given.
+    transportMode: z.enum(['h2-only', 'h2-and-h3']).optional(),
+    idleTimeoutSeconds: z.number().int().positive().optional(),
+    maxDurationSeconds: z.number().int().positive().optional(),
+    // A3 W137: proxyConfigId is INFORMATIONAL to the harness (no DB to resolve a
+    // saved-proxy id). The egress path acts on inlineProxyConfig ONLY — so when a
+    // session uses a saved proxy, the emission wiring MUST resolve it server-side
+    // into inlineProxyConfig; proxyConfigId may ride along for tracing, but sending
+    // it WITHOUT inlineProxyConfig → the harness sees no proxy → refuses (REQUIRE_PROXY).
     proxyConfigId: z.string().min(1).optional(),
     /** BASE64 of utf8(JSON.stringify(SocksProxyConfig)) — see serializeSessionAssign. */
     inlineProxyConfig: z.string().min(1).optional(),
