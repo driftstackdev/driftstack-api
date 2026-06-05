@@ -1017,3 +1017,18 @@ breaking migration, needs FK-behavior + orphan-handling decision; not safely aut
 iphone17 archetype cutover (canvas-gated, Agent-1), metrics enablement (`METRICS_SCRAPE_TOKEN` ops
 flip), webhook-worker wiring, errors.driftstack.dev DNS, EG-API-1.6 egress-SSRF guard (lands at
 wiring), hstspreload submission. Audit surface remains saturated — fresh probes land on clean ground.
+
+### 2026-06-05 (later) — §2 item 6 PERMISSIVE_CORS RESOLVED on prod (verified live)
+
+Smoke-tested prod (`8c4fc19`): `PERMISSIVE_CORS=false` is now active — the strict
+CORS allow-list is enforced. OPTIONS-preflight probes against api.driftstack.dev:
+`app.driftstack.dev` (allowed — via the V-278.C enabler `e6ce53f5` auto-adding
+`config.dashboardOrigin`), `admin.driftstack.dev` + `driftstack.dev` (allowed —
+`CORS_ALLOWED_ORIGINS`), `evil.example.com` + `staging.driftstack.dev` (BLOCKED — no
+`access-control-allow-origin`). The arbitrary-origin-echo MEDIUM is **closed in prod**.
+Full auth-boundary smoke set still PASS (protected→401, bogus→401, public→200,
+fleet-events→503, clean problem+json 401, helmet headers incl. HSTS-preload). The only
+boundary item still open is the `errors.driftstack.dev` 401-`type:` URI (NXDOMAIN —
+founder/infra DNS). So of the §2 gated infra items, CORS is now done; trustProxy was
+done earlier; remaining = metrics enablement, webhook-worker wiring, errors DNS,
+agent_sessions FK (founder design), iphone17 cutover (canvas/Agent-1).
