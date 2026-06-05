@@ -1,13 +1,15 @@
-// V-820 — integration tests for /v1/fleet/events route stub.
+// V-820 — integration tests for the /v1/fleet/events DISABLED stub.
 //
-// Both postures (no AppDeps wired = disabled stub; AppDeps wired
-// but no real handler yet = wired stub) return 503 + FeatureUnavailable.
-// The disabled stub's detail mentions the SQL-migration-design doc;
-// the wired stub's detail mentions "handler not yet implemented".
-// This double-503 posture is intentional — it makes the "AppDeps
-// wired but route not implemented yet" state explicit so a future
-// founder flip needs a separate handler-implementation slice (not
-// just AppDeps wiring) to take the gate live.
+// When the fleet control-plane deps are NOT wired into AppDeps (the
+// default fixture posture, and prod today since bootstrap doesn't yet
+// construct them), the disabled registrar serves a 503
+// FeatureUnavailable whose detail points at the SQL-migration-design
+// doc. This file pins that disabled posture.
+//
+// The WIRED posture is no longer a 503 stub: once fleetNodeAuth +
+// fleetNonceCache + fleetControlRegistry are present, the live
+// WebSocket handler registers — exercised over a real socket in
+// fleet-events-websocket.test.ts (enableFleetControlPlane).
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';

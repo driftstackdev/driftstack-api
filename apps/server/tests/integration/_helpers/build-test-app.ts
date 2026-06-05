@@ -33,6 +33,12 @@ import { AgentSessionEventBus } from '../../../src/services/agent-session-event-
 import { InMemoryPairModeTakeoverLock } from '../../../src/services/agent-pair-mode-lock.js';
 import { InMemoryPairModeHeartbeatTracker } from '../../../src/services/agent-pair-mode-heartbeat.js';
 import { InMemoryRecipesRepo } from '../../../src/services/recipes.js';
+import {
+  FleetNodeAuthImpl,
+  InMemoryFleetNodesRepo,
+} from '../../../src/services/fleet-node-auth.js';
+import { InMemoryFleetNonceCache } from '../../../src/services/fleet-nonce-cache.js';
+import { FleetControlRegistry } from '../../../src/services/fleet-control-registry.js';
 import { MetricsRegistry, METRIC_NAMES } from '../../../src/services/metrics-registry.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
@@ -339,6 +345,16 @@ export interface TestAppOptions {
    * the live-key /test endpoint.
    */
   enableByokAnthropic?: boolean;
+  /**
+   * V-820 — when `true`, wires the fleet control-plane deps
+   * (FleetNodeAuthImpl over an InMemoryFleetNodesRepo + an
+   * InMemoryFleetNonceCache + a FleetControlRegistry) so the live
+   * `/v1/fleet/events` WebSocket handler registers instead of the 503
+   * disabled stub. Exposes `fx.fleetNodesRepo` (register a node's
+   * Ed25519 pubkey so a signed JWT verifies) + `fx.fleetControlRegistry`
+   * (inspect live connections / drive a dispatch). Default `false`.
+   */
+  enableFleetControlPlane?: boolean;
 }
 
 export interface SeedAdditionalOpts {
@@ -459,6 +475,13 @@ export interface TestAppFixture {
   /** Pricing-as-data Phase A — exposed so tests can setPrice() and assert
    *  the owner-edited price flows through the quote + charge reads. */
   pricingService: PricingService;
+  /** V-820 — fleet-node registry (register a node's Ed25519 pubkey so a
+   *  signed JWT verifies). Always present; only consulted by the live
+   *  route when `enableFleetControlPlane` wired it into AppDeps. */
+  fleetNodesRepo: InMemoryFleetNodesRepo;
+  /** V-820 — live fleet-node connection registry; inspect size() or
+   *  drive `get(nodeId)?.correlator.dispatch(...)` in tests. */
+  fleetControlRegistry: FleetControlRegistry;
   /** Plaintext API key — pass as `Authorization: Bearer <plaintext>`. */
   plaintext: string;
   accountId: string;
@@ -820,6 +843,16 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // registers (activation gate requires both recipesRepo +
   // agentSessionsRepo to be present).
   const recipesRepo = new InMemoryRecipesRepo();
+  // V-820 — fleet control-plane deps. Always constructed so the fixture
+  // shape is stable; only wired into AppDeps (taking the live
+  // /v1/fleet/events WS route off the 503 stub) when
+  // opts.enableFleetControlPlane is set. The nonce cache is passed to
+  // both the verifier (replay defence) and AppDeps (the activation gate
+  // requires all three: auth + nonceCache + registry).
+  const fleetNodesRepo = new InMemoryFleetNodesRepo();
+  const fleetNonceCache = new InMemoryFleetNonceCache();
+  const fleetNodeAuth = new FleetNodeAuthImpl(fleetNodesRepo, fleetNonceCache);
+  const fleetControlRegistry = new FleetControlRegistry();
   // Arc 4 Wave 2.B sub-slice 8.18 — metrics registry is now
   // constructed earlier (before the audit service), see above.
 
@@ -1296,6 +1329,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // PATCH need the service regardless.
     bundledLlmService,
     ...(byokAnthropicService !== undefined ? { byokAnthropicService } : {}),
+    // V-820 — wire the fleet control-plane deps so the live WS handler
+    // registers. All three are required by the app.ts activation gate.
+    ...(opts.enableFleetControlPlane === true
+      ? { fleetNodeAuth, fleetNonceCache, fleetControlRegistry }
+      : {}),
     // Arc 2 sub-slice 8.4 (v2-#8) — stub MFA-key for the gui_control_key
     // mint. 32 raw bytes base64-encoded. Tests assert the route works
     // round-trip; production uses the real MFA_ENCRYPTION_KEY env.
@@ -1371,6 +1409,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     agentDecomposerUsageRecords,
     bundledLlmRepo,
     byokAnthropicRepo,
+    fleetNodesRepo,
+    fleetControlRegistry,
     incidentEventBus,
     probesRepo,
     teamMembersRepo,

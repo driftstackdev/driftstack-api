@@ -1,9 +1,9 @@
-// V-820 — integration tests for the activation-gate-negative case of
-// GET /v1/fleet/events. The route is registered EITHER via the wired
-// registrar (when fleetNodeAuth + fleetNonceCache are wired in
-// AppDeps) OR via the disabled registrar (when they're not). Both
-// return 503 FeatureUnavailable today per the "activation gate +
-// real implementation are separate concerns" pattern.
+// V-820 — integration tests for the activation-gate-NEGATIVE case of
+// GET /v1/fleet/events: when the fleet control-plane deps are absent
+// from AppDeps, the disabled registrar serves a 503 FeatureUnavailable.
+// (The positive case — all three deps wired → the live WebSocket
+// handler accepts upgrades — is covered over a real socket in
+// fleet-events-websocket.test.ts.)
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
