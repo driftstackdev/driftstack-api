@@ -60,6 +60,7 @@ import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { registerMacNodesRoutes } from '../routes/mac-nodes-register.js';
 import { registerAgentSessionsLivekitTokenRoute } from '../routes/agent-sessions-livekit-token.js';
 import type { FleetNonceCache } from '../services/fleet-nonce-cache.js';
+import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
@@ -437,6 +438,14 @@ export interface AppDeps {
    * omitted, JWT verification still works but loses replay defence.
    */
   fleetNonceCache?: FleetNonceCache;
+  /**
+   * V-820 — nodeId→connection registry for the /v1/fleet/events WS route. One
+   * shared instance per app; the route registers each verified node connection
+   * here so the (gated) dispatch path can look up the owning node's socket.
+   * Required (with fleetNodeAuth + fleetNonceCache) to take the live WS route off
+   * the 503 stub.
+   */
+  fleetControlRegistry?: FleetControlRegistry;
   /**
    * LK.2 — POST /v1/mac-nodes/register depends on a Drizzle-backed
    * fleet_nodes repo (so the LiveKit credentials can persist) plus
@@ -1231,16 +1240,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerRecipesDisabledRoutes(app);
   }
 
-  // V-820 — /v1/fleet/events route stub. Activation gate matches the
-  // rest of Wave 1119: when fleetNodeAuth + fleetNonceCache are both
-  // wired, registerFleetEventsRoutes runs (currently still 503-stubs
-  // pending the WebSocket handler + Cloudflare AOP). When omitted,
-  // registerFleetEventsDisabledRoutes surfaces 503 + planning-doc
-  // pointer in detail.
-  if (deps.fleetNodeAuth !== undefined && deps.fleetNonceCache !== undefined) {
-    registerFleetEventsRoutes(app, {
+  // V-820 — /v1/fleet/events fleet-node control-plane WebSocket. Activation
+  // gate: when fleetNodeAuth + fleetNonceCache + fleetControlRegistry are all
+  // wired, the live WS handler registers (verifies the Bearer JWT at upgrade +
+  // routes frames through the registry's correlators). When any is omitted,
+  // registerFleetEventsDisabledRoutes serves the 503 stub. (Bootstrap wires the
+  // deps to take it live in prod — a separate slice; until then the stub runs.)
+  if (
+    deps.fleetNodeAuth !== undefined &&
+    deps.fleetNonceCache !== undefined &&
+    deps.fleetControlRegistry !== undefined
+  ) {
+    await registerFleetEventsRoutes(app, {
       auth: deps.fleetNodeAuth,
       nonceCache: deps.fleetNonceCache,
+      registry: deps.fleetControlRegistry,
     });
   } else {
     registerFleetEventsDisabledRoutes(app);

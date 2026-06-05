@@ -71,6 +71,8 @@ describe('W530.A apps/server/package.json content parity', () => {
     expect(pkg.dependencies).toHaveProperty('@fastify/swagger-ui');
     expect(pkg.dependencies).toHaveProperty('@scalar/fastify-api-reference');
     expect(pkg.dependencies).toHaveProperty('@asteasolutions/zod-to-openapi');
+    // V-820 — @fastify/websocket backs the /v1/fleet/events control-plane WS.
+    expect(pkg.dependencies).toHaveProperty('@fastify/websocket');
   });
 
   it("Data + infra deps framing pinned: 'drizzle-orm' + 'postgres' (Postgres driver) + 'ioredis' (Redis client) + '@aws-sdk/client-s3' + '@aws-sdk/s3-request-presigner' (presigned URL TTL) + 'zod' (runtime schema validation) + 'pino' (structured logging) — pinned so the data-layer (Drizzle + postgres-driver + ioredis) + S3 SDK + zod-runtime-validation + pino-structured-logging commitment survives (drift to a different postgres driver or to console.log would break observability)", () => {

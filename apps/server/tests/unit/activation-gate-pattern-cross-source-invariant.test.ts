@@ -112,7 +112,9 @@ describe('activation-gate pattern cross-source invariant', () => {
       });
 
       it(`exports the wired registrar \`${f.wiredFn}\``, () => {
-        expect(routeBody).toMatch(new RegExp(`export function ${f.wiredFn}\\(`));
+        // `async` tolerated: a WS-route registrar (fleet-events) awaits its
+        // plugin registration, so it's `export async function`.
+        expect(routeBody).toMatch(new RegExp(`export (async )?function ${f.wiredFn}\\(`));
       });
 
       it(`exports the disabled-stub registrar \`${f.disabledFn}\``, () => {
