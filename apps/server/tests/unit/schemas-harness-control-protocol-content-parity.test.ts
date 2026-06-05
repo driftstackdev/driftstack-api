@@ -82,11 +82,12 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).not.toMatch(/from '@driftstack\/api-types'/);
   });
 
-  it('drive-bridge gate (item 9) + the open inputParams/outputData codec caveat documented', () => {
+  it('drive-bridge gate (item 9) + the RESOLVED base64-JSON wire codec documented', () => {
     expect(body).toMatch(/Drive-bridge gate \(ORCHESTRATOR item 9\)/);
     expect(body).toMatch(
-      /Open wire detail \(PENDING Agent-3 confirmation\): IntentDispatch\.inputParams/,
+      /Wire codec \(RESOLVED 2026-06-05 by Agent-3\): IntentDispatch\.inputParams/,
     );
+    expect(body).toMatch(/cross the wire as a BASE64\s*\n?\s*\/\/ STRING of the UTF-8 JSON/);
   });
 
   it('11-intent dispatchable vocab pinned in canonical order', () => {
@@ -168,15 +169,15 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     }
   });
 
-  it('IntentDispatch envelope pinned: sessionId, intentId, intentName (enum), inputParams (unknown)', () => {
+  it('IntentDispatch envelope pinned: sessionId, intentId, intentName (enum), inputParams (base64 string)', () => {
     expect(body).toMatch(
-      /export const IntentDispatchSchema = z\.object\(\{\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*intentId: z\.string\(\)\.min\(1\),\s*\n?\s*intentName: HarnessIntentNameSchema,\s*\n?\s*inputParams: z\.unknown\(\),\s*\n?\s*\}\);/,
+      /export const IntentDispatchSchema = z\.object\(\{\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*intentId: z\.string\(\)\.min\(1\),\s*\n?\s*intentName: HarnessIntentNameSchema,\s*\n?\s*inputParams: z\.string\(\),\s*\n?\s*\}\);/,
     );
   });
 
-  it('IntentResult envelope pinned: sessionId, intentId, success, durationMs, outputData?, errorCode?, errorMessage?', () => {
+  it('IntentResult envelope pinned: sessionId, intentId, success, durationMs, outputData? (base64 string), errorCode?, errorMessage?', () => {
     expect(body).toMatch(
-      /export const IntentResultEnvelopeSchema = z\.object\(\{\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*intentId: z\.string\(\)\.min\(1\),\s*\n?\s*success: z\.boolean\(\),\s*\n?\s*durationMs: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*outputData: z\.unknown\(\)\.optional\(\),\s*\n?\s*errorCode: HarnessErrorCodeSchema\.optional\(\),\s*\n?\s*errorMessage: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const IntentResultEnvelopeSchema = z\.object\(\{\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*intentId: z\.string\(\)\.min\(1\),\s*\n?\s*success: z\.boolean\(\),\s*\n?\s*durationMs: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*outputData: z\.string\(\)\.optional\(\),\s*\n?\s*errorCode: HarnessErrorCodeSchema\.optional\(\),\s*\n?\s*errorMessage: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 
@@ -268,7 +269,16 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(ExecuteScriptParamsSchema.safeParse({}).success).toBe(false);
   });
 
-  it('IntentDispatch envelope validates the 4 fields + intentName enum', () => {
+  it('IntentDispatch envelope validates the 4 fields + intentName enum + base64-string inputParams', () => {
+    expect(
+      IntentDispatchSchema.safeParse({
+        sessionId: 'ses_x',
+        intentId: 'int_1',
+        intentName: 'navigate',
+        inputParams: Buffer.from('{"url":"https://x"}', 'utf8').toString('base64'),
+      }).success,
+    ).toBe(true);
+    // inputParams must be a string (the base64 wire form), not a raw object.
     expect(
       IntentDispatchSchema.safeParse({
         sessionId: 'ses_x',
@@ -276,14 +286,14 @@ describe('harness-control-protocol behavioral contract', () => {
         intentName: 'navigate',
         inputParams: { url: 'https://x' },
       }).success,
-    ).toBe(true);
+    ).toBe(false);
     // Unknown intentName rejected.
     expect(
       IntentDispatchSchema.safeParse({
         sessionId: 'ses_x',
         intentId: 'int_1',
         intentName: 'teleport',
-        inputParams: {},
+        inputParams: '',
       }).success,
     ).toBe(false);
   });
@@ -295,7 +305,7 @@ describe('harness-control-protocol behavioral contract', () => {
         intentId: 'int_1',
         success: true,
         durationMs: 42,
-        outputData: { url: 'https://x' },
+        outputData: Buffer.from('{"url":"https://x"}', 'utf8').toString('base64'),
       }).success,
     ).toBe(true);
     const err = IntentResultEnvelopeSchema.safeParse({

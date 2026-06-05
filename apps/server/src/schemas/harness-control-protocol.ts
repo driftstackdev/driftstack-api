@@ -22,12 +22,13 @@
 // execution against the fork goes live when item 9 lands. The control-path
 // schema + wiring is safe to build now.
 //
-// ⚠️ Open wire detail (PENDING Agent-3 confirmation): IntentDispatch.inputParams
-// and IntentResult.outputData are Swift `Data` (JSON-encoded). Whether they
-// cross the wire as a nested JSON object, a JSON string, or base64
-// (Swift Codable's default for `Data`) is not yet pinned — modeled here as
-// z.unknown() until A3 confirms. The per-intent param schemas below define
-// the LOGICAL payload regardless of the transport codec, so they are stable.
+// Wire codec (RESOLVED 2026-06-05 by Agent-3): IntentDispatch.inputParams and
+// IntentResult.outputData are Swift `Data` and cross the wire as a BASE64
+// STRING of the UTF-8 JSON (Swift Codable's default `Data` encoding). So both
+// are typed `z.string()` here — the base64 envelope. The decoded LOGICAL
+// payload is the per-intent params object (above) / per-intent result JSON;
+// encode/decode lives in `harness-control-codec.ts` (serializeIntentDispatch /
+// parseIntentResult). Envelope keys are camelCase (also A3-confirmed).
 
 import { z } from 'zod';
 
@@ -154,15 +155,15 @@ export const HARNESS_INTENT_PARAM_SCHEMAS: Record<HarnessIntentName, z.ZodTypeAn
 };
 
 // ── Dispatch envelope (ControlInbound.intentDispatch) ─────────────────
-// Mirrors the Swift IntentDispatch struct. `inputParams` is the JSON-encoded
-// params object — modeled z.unknown() until the wire codec is pinned (see the
-// open-wire-detail note above). Validate the logical params against
-// HARNESS_INTENT_PARAM_SCHEMAS[intentName] before building this.
+// Mirrors the Swift IntentDispatch struct. `inputParams` is the BASE64 string
+// of the UTF-8 JSON params object (A3-confirmed wire codec). Build it with
+// serializeIntentDispatch() in harness-control-codec.ts, which validates the
+// logical params against HARNESS_INTENT_PARAM_SCHEMAS[intentName] first.
 export const IntentDispatchSchema = z.object({
   sessionId: z.string().min(1),
   intentId: z.string().min(1),
   intentName: HarnessIntentNameSchema,
-  inputParams: z.unknown(),
+  inputParams: z.string(),
 });
 export type IntentDispatch = z.infer<typeof IntentDispatchSchema>;
 
@@ -178,14 +179,15 @@ export const HARNESS_ERROR_CODES = [
 export const HarnessErrorCodeSchema = z.enum(HARNESS_ERROR_CODES);
 export type HarnessErrorCode = z.infer<typeof HarnessErrorCodeSchema>;
 
-// Mirrors the Swift IntentResult struct. `outputData` is the per-intent JSON
-// result (Data on the Swift side — same codec caveat as inputParams).
+// Mirrors the Swift IntentResult struct. `outputData` is the BASE64 string of
+// the per-intent result JSON (same A3-confirmed codec as inputParams); decode
+// it with parseIntentResult() in harness-control-codec.ts.
 export const IntentResultEnvelopeSchema = z.object({
   sessionId: z.string().min(1),
   intentId: z.string().min(1),
   success: z.boolean(),
   durationMs: z.number().int().nonnegative(),
-  outputData: z.unknown().optional(),
+  outputData: z.string().optional(),
   errorCode: HarnessErrorCodeSchema.optional(),
   errorMessage: z.string().optional(),
 });
