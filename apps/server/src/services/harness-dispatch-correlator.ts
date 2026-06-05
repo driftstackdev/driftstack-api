@@ -98,7 +98,25 @@ export class IntentDispatchCorrelator {
         );
       }, ms);
       this.pending.set(d.intentId, { resolve, timer, sessionId: d.sessionId });
-      this.transport.send(d);
+      try {
+        this.transport.send(d);
+      } catch (err) {
+        // The transport's send is `socket.send(...)`, which throws synchronously
+        // when the WS isn't OPEN (e.g. a dispatch racing a remote close into
+        // CLOSING, before the route's 'close' handler unregisters). Settle a
+        // uniform failure rather than letting this Promise REJECT — the executor
+        // contract is that dispatch() never rejects — and so the timer + pending
+        // entry don't leak (settle clears + deletes them).
+        this.settle(
+          d.intentId,
+          synthFailure(
+            d.sessionId,
+            d.intentId,
+            'intent_dispatch_error',
+            `dispatch send failed: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+      }
     });
   }
 

@@ -228,4 +228,22 @@ describe('IntentDispatchCorrelator', () => {
     }
     expect(c.inFlight()).toBe(0);
   });
+
+  it('a synchronously-throwing transport.send settles a uniform failure (never rejects) + leaks no timer/pending', async () => {
+    // ws.send throws synchronously when the socket isn't OPEN (a dispatch racing a
+    // remote close into CLOSING). dispatch() must still resolve with a failure —
+    // the executor contract is never-rejects — and must not leak the timer/entry.
+    const throwingTransport: DispatchTransport = {
+      send: () => {
+        throw new Error('WebSocket is not open: readyState 2 (CLOSING)');
+      },
+    };
+    const c = new IntentDispatchCorrelator(throwingTransport);
+    const r = await c.dispatch(dispatch('a', 'navigate', { url: 'https://1' }));
+    expect(r.success).toBe(false);
+    expect(r.errorCode).toBe('intent_dispatch_error');
+    expect(r.errorMessage).toMatch(/dispatch send failed: .*CLOSING/);
+    // No leak: the pending entry + its timer were cleared by settle().
+    expect(c.inFlight()).toBe(0);
+  });
 });
