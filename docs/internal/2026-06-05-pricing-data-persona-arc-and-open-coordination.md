@@ -47,3 +47,68 @@ Net: an owner price edit now moves **both** the owner view and the customer cryp
 ## State of the audit surface
 
 Comprehensively swept (see `project_cross_cutting_invariant_audits_roster` — 9 dimensions; Zod-validator vein; driver+mock layer; enum-drift class). Fresh probes now reliably land on already-clean ground, so per the saturation guidance, default waves to **minimal-cost safety checks** (git divergence + prod /health+/version, to catch a new regression/CVE/divergence the moment it appears) + instant ship-readiness; mount a deep probe only on a NEW signal (prod anomaly, fresh CVE, founder §-decision, or a genuinely-untouched track). The two real levers are items (1) and (2) above.
+
+---
+
+## 2026-06-05 (later waves) — Increment-2 control-path shipped + audit/hardening
+
+**Architecture correction (supersedes the driver-path framing above).** Agent-3 confirmed
+(W91 + the canonical `driftstack/docs/internal/harness-intent-contract.md`, drift-guarded +
+behavior-tested per W95/W96) that agent-session intents dispatch as ONE
+`ControlInbound.intentDispatch` per intent over the control-plane WSS, routed by `intentName` —
+NOT the server-local driver. So the unwired `RealAgentExecutor` (AI-B2.b, driver-path) is the
+wrong layer; its translation logic is reusable, the dispatch target changes. Re-scoped + shipped:
+
+### Increment-2 SHIPPED (control-path, unwired — zero prod change)
+
+- **(a) wire schema** `3fa842fa` — `apps/server/src/schemas/harness-control-protocol.ts` (server-internal,
+  gui-input/L-001 precedent): 11 dispatchable intentNames + 3 reserved JSBridge, per-intent param
+  schemas + `HARNESS_INTENT_PARAM_SCHEMAS` map, `IntentDispatch`/`IntentResultEnvelope` envelopes,
+  5 error codes, caps (behavioral_pause 300_000ms / wait_for 300s). 32 tests.
+- **(b) mapping core** `beb41e23` — `apps/server/src/services/agent-intent-to-dispatch.ts`:
+  `agentIntentToDispatch(AgentIntent) → {ok,intentName,params} | {ok:false,reason}`. Clean 1:1
+  (navigate / tap→click / type→send_keys / scroll / wait:selector_visible→wait_for [JSON-escaped
+  querySelector predicate] / screenshot / dom_snapshot→get_page_source); typed-unsupported for
+  swipe / wait:idle / pdf / missing-field. Codec-independent (produces params object, not the wire
+  bytes) → stable regardless of the open codec question. 23 tests.
+
+### 🔴 OPEN — the 3 A3 wire questions are the actual blocker on (a)'s WSS handler (relayed to founder)
+
+Not in the contract doc (they're transport/serialization, modeled `z.unknown()` until confirmed):
+
+1. `inputParams`/`outputData` codec — Swift `Data`: nested JSON object, JSON string, or base64?
+2. Envelope JSON key casing — `.convertToSnakeCase` (session_id…) or literal camelCase (sessionId…)?
+3. `/v1/fleet/events` WSS auth + first-message handshake — Ed25519 fleet-node JWT+nonce / mTLS / both?
+   and the node-register message (which sessionIds it owns) → for the connection registry.
+
+### Remaining (a)/(b)/(c) gates (all founder/cross-agent)
+
+- (a) WSS handler: `fleet_nodes` Tier-2 migration approval + mTLS (Cloudflare AOP) + `@fastify/websocket`
+  (A2 adds when building). `/v1/fleet/events` is a 503 stub today; the `fleet-node-auth.ts` Ed25519
+  verifier is audited SOUND (alg-confusion regression suite added `ca2fd8ad`) + ready for the handshake.
+- (c) customer `AgentIntentSchema` additions (scroll dir/distance, back/forward, behavioral_pause) —
+  HOLD until (a)/(b) wired (else false affordance).
+- End-to-end still gated on item 9 (harness→fork drive; founder Option-1; A1).
+
+### Other ships this session
+
+- `ca2fd8ad` fleet-auth JWT alg-confusion + integrity regression suite (no source change — verifier sound).
+- `51bba3ab` egress: trim `socks5.host` before probe + env var (v1.0 launch path; backend wired-but-uncalled
+  — routes 503-stub, so the probe SSRF stays latent/founder-§4.17 until EG-API-1.6 wires `applyToSession`).
+- `8df88dda` Permissions-Policy added to marketing + docs `_headers` → CF-Pages family 5/5 consistent + per-app
+  drift-guarded (CSP still deferred family-wide).
+
+### Surfaced this session (founder-supervised, NOT autopilot)
+
+- **MFA TOTP replay within the validity window** (RFC-6238 §5.2 — no last-step tracking; rate-limit-mitigated;
+  proper fix needs a column = migration). + `regenerateRecoveryCodes` non-atomic (low). Verify/recovery core
+  otherwise SOUND. (`project_mfa_service_verify_audit`)
+- Master-owner cockpit gate (`requireOwner` + price-edit) adversarially audited **SOUND + fully tested**
+  (`project_admin_owner_gate_audit_clean`) — highest-stakes new code (price-manipulation authority) is secure.
+
+### Audit-surface status
+
+Definitive saturation re-confirmed this session across MFA, legal, rate-limiter (core+store), auth-coalescer,
+client-ip (= the surfaced trustProxy/XFF item), socks5, owner-cockpit, behavioral_profile, webhook, SDK, routes,
+cost. Default waves = safety heartbeat + fresh-audit scope-confirmations; the two real levers remain
+Increment-2 (the 3 wire answers + migration/mTLS/item9) and secrets Phase A. No churn manufactured.
