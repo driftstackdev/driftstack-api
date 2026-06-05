@@ -977,3 +977,43 @@ Bigger, decision/coordination-required items remain in §2 (trustProxy, PERMISSI
 errors.driftstack.dev DNS, metrics enablement, webhook-worker wiring) + §4 (data-residency assertions,
 SSE cap, egress-SSRF guard at EG-API-1.6 wiring, `@astrojs/cloudflare` major bump) + founder-design
 items (agent_sessions FK, iphone17 archetype cutover, gui `csp:null`).
+
+---
+
+## 2026-06-05 status update (Agent-2 autopilot — deltas since 2026-06-02)
+
+**Shipped since this report (all gate-green, deployed, V-205-clean):**
+
+- **Increment-2 control plane COMPLETE + wire-contract-synced with Agent-3.** `/v1/fleet/events`
+  WS route (handler `4d4a537c` + upgrade-auth `2a56af57` + registry `fd848446` + correlator
+  `68b82e41`/`a50e24ce` + codec `8711a319` + bootstrap activation behind `FLEET_CONTROL_PLANE_ENABLED`
+  `a1ace57f`); `SessionAssign` schema+serializer `eda5eb22`/`a14a76f1`; navigate http(s) scheme guard
+  `f25dea49`; `intent_invalid_parameter` decode `64f94705`. Real-socket integration test (`fd8ec43e`).
+  All built **prod-INACTIVE** (the flag is off; 503 stub serves) → zero prod-boot risk; flip is a
+  one-env-var step once Agent-3's harness drive-bridge is ready.
+- **scroll + behavioral_pause customer intents — full arc** (`2944e5e4` types/mapper + `bf058e96`
+  decomposer emission + `4cf8865c` python-SDK regen). Closes Agent-3's API-gap ask across server + all
+  3 SDKs. (Corrected a false alarm: sdk-python openapi.json was NOT 4.5k-lines-stale — that was a
+  prettier array-formatting artifact lint-staged normalizes; no openapi-sync debt exists.)
+- **§2 item 6 — `PERMISSIVE_CORS` DE-RISKED (`e6ce53f5`).** The strict CORS allow-list now always
+  includes `config.dashboardOrigin`, so flipping `PERMISSIVE_CORS=false` can no longer lock out the
+  primary dashboard. **The flip is now a LOW-RISK ops step**: set `PERMISSIVE_CORS=false` on
+  staging→prod (staging-verify the dashboard first) + add `CORS_ALLOWED_ORIGINS=https://admin.driftstack.dev`
+  (admin/extra credentialed browser origins aren't auto-derived). Zero current-prod change (still
+  permissive until flipped). Detail: auto-memory `project_permissive_cors_in_prod`.
+
+**Fresh security audits this wave (recently-changed surfaces, confirmed SOUND — no fix needed):**
+
+- `lib/nowpayments-signing.ts` (crypto IPN HMAC-SHA512 verifier): constant-time length-checked
+  `timingSafeEqual`, no signature-bypass, sorted-key canonicalisation per NowPayments' protocol;
+  well-tested (3 files). Dormant until a merchant account lands.
+- `lib/oauth-client-exchange.ts` (OAuth code→token + userinfo): client_secret never echoed in error
+  paths, AbortController timeouts, strict `email_verified` (Google) + `verified===true` filter
+  (GitHub `/user/emails`); the GitHub public-email-verified assumption is the already-surfaced LOW
+  (`project_oauth_client_flow_audit_clean`) — no account-takeover vector.
+
+**Gated items unchanged (still need founder/cross-agent/ops):** agent_sessions strict-FK (item 7 —
+breaking migration, needs FK-behavior + orphan-handling decision; not safely autopilot-doable),
+iphone17 archetype cutover (canvas-gated, Agent-1), metrics enablement (`METRICS_SCRAPE_TOKEN` ops
+flip), webhook-worker wiring, errors.driftstack.dev DNS, EG-API-1.6 egress-SSRF guard (lands at
+wiring), hstspreload submission. Audit surface remains saturated — fresh probes land on clean ground.
