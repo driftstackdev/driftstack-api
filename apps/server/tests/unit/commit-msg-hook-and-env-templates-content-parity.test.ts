@@ -215,10 +215,10 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
     );
   });
 
-  it('CRITICAL prod env CORS_ALLOWED_ORIGINS pinned to 4 origins — https://app.driftstack.dev + https://driftstack.dev + https://www.driftstack.dev + https://docs.driftstack.dev. Drift to adding a wildcard would break the V-278 CORS allow-list contract.', () => {
+  it('CRITICAL prod env CORS_ALLOWED_ORIGINS pinned to the 6 browser-app origins — app + admin + status + driftstack.dev + www + docs (admin/status added 2026-06-05 when prod flipped PERMISSIVE_CORS→false; both apps make cross-origin API fetches). Drift to adding a wildcard would break the V-278 CORS allow-list contract.', () => {
     for (const f of [ENV_PROD, ENV_STG]) {
       expect(read(f)).toMatch(
-        /CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev/,
+        /CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/admin\.driftstack\.dev,https:\/\/status\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev/,
       );
     }
   });

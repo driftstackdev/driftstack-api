@@ -449,7 +449,7 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/^TRUST_PROXY=1$/m);
     expect(body).toMatch(/V-278 — CORS allow-list\. Comma-separated origin URLs that the/);
     expect(body).toMatch(
-      /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+      /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/admin\.driftstack\.dev,https:\/\/status\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
     );
     expect(existsSync(I('env-templates/production.env.template'))).toBe(true);
   });
@@ -542,7 +542,7 @@ describe('W614 infra/ content parity', () => {
       expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.dev$/m);
       expect(body).toMatch(/^TRUST_PROXY=1$/m);
       expect(body).toMatch(
-        /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+        /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/admin\.driftstack\.dev,https:\/\/status\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
       );
       expect(existsSync(I('env-templates/production.env'))).toBe(true);
     },
