@@ -25,6 +25,9 @@ import { resolve } from 'node:path';
 import { createDb, type Database } from '../db/client.js';
 import { DrizzleAccountAuthRepo } from '../db/auth-repo.js';
 import { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
+import { FleetNodeAuthImpl } from '../services/fleet-node-auth.js';
+import { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import { RedisFleetNonceCache } from '../lib/redis-fleet-nonce-cache.js';
 import { DrizzleAtlasPriorityEventsRepo } from '../db/atlas-priority-events-repo.js';
 import { InternalFleetAuth } from './internal-fleet-auth.js';
 import { DrizzleSessionRepo } from '../db/sessions-repo.js';
@@ -1158,6 +1161,32 @@ export async function createProductionDeps(
     logger.error({ component: 'cors' }, corsWarning);
   }
 
+  // LK.2 + V-820 — the Drizzle fleet_nodes repo backs BOTH the
+  // /v1/mac-nodes/register LiveKit-credential writes AND the fleet-node
+  // JWT verifier. Hoisted to a const so the control-plane deps below can
+  // share the instance.
+  const drizzleFleetNodesRepo = new DrizzleFleetNodesRepo(dbHandle);
+
+  // V-820 — fleet-node control-plane deps. Constructed (boot-safe: redis
+  // is already ping-validated above + dbHandle is live, so neither opens
+  // a new connection) ONLY when FLEET_CONTROL_PLANE_ENABLED=true. When
+  // omitted, app.ts registers the 503 disabled stub — the prod posture
+  // until fleet nodes are deployed (nothing connects yet, so a
+  // live-by-default endpoint would be exposed with no consumer). The
+  // nonce cache instance is shared between the verifier (replay defence)
+  // and AppDeps.fleetNonceCache — app.ts's activation gate requires all
+  // three (fleetNodeAuth + fleetNonceCache + fleetControlRegistry).
+  const fleetControlPlaneDeps = config.fleetControlPlaneEnabled
+    ? (() => {
+        const fleetNonceCache = new RedisFleetNonceCache(redis);
+        return {
+          fleetNodeAuth: new FleetNodeAuthImpl(drizzleFleetNodesRepo, fleetNonceCache),
+          fleetNonceCache,
+          fleetControlRegistry: new FleetControlRegistry(),
+        };
+      })()
+    : {};
+
   const deps: AppDeps = {
     logger,
     authRepo,
@@ -1215,7 +1244,10 @@ export async function createProductionDeps(
     // MFA_ENCRYPTION_KEY for the AES-256-GCM envelope. Both wired
     // unconditionally when the env vars permit; app.ts gates the
     // route registration on both being non-undefined here.
-    drizzleFleetNodesRepo: new DrizzleFleetNodesRepo(dbHandle),
+    drizzleFleetNodesRepo,
+    // V-820 — fleet control-plane WS deps (empty unless
+    // FLEET_CONTROL_PLANE_ENABLED=true; see fleetControlPlaneDeps above).
+    ...fleetControlPlaneDeps,
     // Wave 29-400 §8.5 — atlas-priority observability surface. Repo
     // is always constructed (Drizzle path against the migrated
     // atlas_priority_events table); the InternalFleetAuth activation

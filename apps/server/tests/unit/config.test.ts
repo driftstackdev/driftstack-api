@@ -47,6 +47,16 @@ describe('loadConfig', () => {
     // Same fix for PLAYWRIGHT_HEADED.
     expect(loadConfig({ ...base, PLAYWRIGHT_HEADED: 'false' }).playwrightHeaded).toBe(false);
     expect(loadConfig({ ...base, PLAYWRIGHT_HEADED: 'true' }).playwrightHeaded).toBe(true);
+    // V-820 — FLEET_CONTROL_PLANE_ENABLED gates the live /v1/fleet/events
+    // WS route. Default-off; "false" must stay false (a coerce-inversion
+    // here would activate an unguarded prod WS endpoint with no consumer).
+    expect(loadConfig(base).fleetControlPlaneEnabled).toBe(false); // unset → default false
+    expect(
+      loadConfig({ ...base, FLEET_CONTROL_PLANE_ENABLED: 'false' }).fleetControlPlaneEnabled,
+    ).toBe(false);
+    expect(
+      loadConfig({ ...base, FLEET_CONTROL_PLANE_ENABLED: 'true' }).fleetControlPlaneEnabled,
+    ).toBe(true);
   });
 
   it('rejects invalid driver', () => {

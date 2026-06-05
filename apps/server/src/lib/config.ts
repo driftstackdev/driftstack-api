@@ -246,6 +246,23 @@ const ConfigSchema = z.object({
    */
   fleetInternalToken: z.string().min(16).optional(),
   /**
+   * V-820 — fleet-node control-plane activation flag. Gates the live
+   * `/v1/fleet/events` WebSocket route (fleet nodes connect here with a
+   * per-node Ed25519 JWT; the control plane pushes IntentDispatch and
+   * receives intentResult/sessionStatus/heartbeat). When `false` (the
+   * default), bootstrap omits the fleet deps and app.ts registers the
+   * 503 disabled stub — the prod posture until fleet nodes are deployed
+   * (no node connects today, so live-by-default would be an exposed
+   * endpoint with no consumer). When `true`, bootstrap wires
+   * FleetNodeAuthImpl (over the Drizzle fleet_nodes repo + the Redis
+   * nonce cache) + a FleetControlRegistry and the live handler activates.
+   * Boot-safe either way: the deps construct from already-validated
+   * redis + dbHandle (no new external connection). A boolean (NOT
+   * z.coerce.boolean(), which Boolean("false")===true would invert) —
+   * the env mapping converts via `=== 'true'`.
+   */
+  fleetControlPlaneEnabled: z.boolean().default(false),
+  /**
    * V-487 — NowPayments crypto-rail scaffold. Conditional, opt-in
    * sub-processor (Estonia EEA-internal per the V-308a legal
    * scaffolding). When `apiKey` + `ipnSecret` are unset, the
@@ -585,6 +602,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,
     metricsScrapeToken: env.METRICS_SCRAPE_TOKEN,
     fleetInternalToken: env.DRIFTSTACK_FLEET_INTERNAL_TOKEN,
+    // V-820 — fleet control-plane activation. Boolean via `=== 'true'`
+    // (z.coerce.boolean would invert FLEET_CONTROL_PLANE_ENABLED=false).
+    fleetControlPlaneEnabled: env.FLEET_CONTROL_PLANE_ENABLED === 'true',
     // V-487 — NowPayments scaffold. All fields optional; presence of
     // BOTH apiKey + ipnSecret is what the route registration checks.
     nowpayments:

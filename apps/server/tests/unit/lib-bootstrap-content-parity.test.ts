@@ -299,6 +299,21 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     );
   });
 
+  it("V-820 fleet control-plane WS deps are gated on config.fleetControlPlaneEnabled: the FleetNodeAuthImpl (over the hoisted drizzleFleetNodesRepo + a RedisFleetNonceCache) + FleetControlRegistry are constructed ONLY when the flag is on, and the nonce cache instance is SHARED between the verifier and AppDeps.fleetNonceCache. Pinned so a refactor can't silently flip the route live-by-default (an unguarded prod WS endpoint) or split the nonce cache (replay-defence gap).", () => {
+    // The repo is hoisted (shared by mac-nodes-register + the verifier).
+    expect(body).toMatch(/const drizzleFleetNodesRepo = new DrizzleFleetNodesRepo\(dbHandle\);/);
+    // Gated on the activation flag.
+    expect(body).toMatch(/const fleetControlPlaneDeps = config\.fleetControlPlaneEnabled/);
+    // Shared nonce cache instance (constructed once, used by both).
+    expect(body).toMatch(/const fleetNonceCache = new RedisFleetNonceCache\(redis\);/);
+    expect(body).toMatch(
+      /fleetNodeAuth: new FleetNodeAuthImpl\(drizzleFleetNodesRepo, fleetNonceCache\),/,
+    );
+    expect(body).toMatch(/fleetControlRegistry: new FleetControlRegistry\(\),/);
+    // Spread into AppDeps (empty object when the flag is off → 503 stub).
+    expect(body).toMatch(/\.\.\.fleetControlPlaneDeps,/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
