@@ -145,6 +145,19 @@ describe('EG-API-1.6 SocksProxyBackend', () => {
     );
   });
 
+  it('host with surrounding whitespace is trimmed before BOTH the TCP probe and the env var (no self-inflicted egress-tunnel-unreachable for a stray space)', async () => {
+    const probe = vi.fn().mockResolvedValue(undefined);
+    const backend = new SocksProxyBackend({ tcpProbe: probe });
+    const handle = await backend.applyToSession({
+      config: socks5Config({ host: '  proxy.example.com  ' }),
+    });
+    // Probe gets the trimmed host (untrimmed would DNS-fail → spurious 4xx).
+    expect(probe).toHaveBeenCalledWith('proxy.example.com', 1080, expect.any(Number));
+    // The WebKit fork's env var carries the trimmed host (untrimmed would
+    // mis-configure the fork's NetworkSession SOCKS5 target).
+    expect(handle.cleanup?.envOverrides?.DRIFTSTACK_SOCKS5_PROXY_HOST).toBe('proxy.example.com');
+  });
+
   it('OpenVPN config is rejected with a typed planning-133-phase reference', async () => {
     const backend = new SocksProxyBackend({ tcpProbe: probeOk });
     const config: SessionEgressConfig = {

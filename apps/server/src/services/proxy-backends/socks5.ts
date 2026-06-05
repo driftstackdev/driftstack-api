@@ -89,8 +89,23 @@ export class SocksProxyBackend implements SessionEgressService {
       );
     }
 
-    const { host, port, username, password, udp_associate, require_remote_dns } = proxy.socks5;
-    if (host.trim().length === 0) {
+    const {
+      host: rawHost,
+      port,
+      username,
+      password,
+      udp_associate,
+      require_remote_dns,
+    } = proxy.socks5;
+    // Trim once and use the trimmed value everywhere downstream (probe +
+    // env var). Validating `rawHost.trim()` but then propagating the
+    // untrimmed host would let " proxy.example.com " pass validation, then
+    // fail the TCP probe — and reach the WebKit fork's
+    // DRIFTSTACK_SOCKS5_PROXY_HOST env var — with stray whitespace, a
+    // confusing self-inflicted egress-tunnel-unreachable for a customer who
+    // merely added a space.
+    const host = rawHost.trim();
+    if (host.length === 0) {
       throw new Error('socks5.host must be non-empty');
     }
     if (!Number.isInteger(port) || port < 1 || port > 65535) {

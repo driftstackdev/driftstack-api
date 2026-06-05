@@ -85,9 +85,13 @@ describe('services/proxy-backends/socks5 content parity', () => {
     );
   });
 
-  it('Config validation 4-rule pinned: host non-empty trim + port integer in [1, 65535] + (username defined → password defined) + (password defined → username defined). Drift to dropping the both-or-neither auth rule would let half-configured auth slip through and the WebKit fork would silently authenticate as the host-OS user identity', () => {
+  it('Config validation 4-rule pinned: host TRIMMED-then-non-empty (const host = rawHost.trim() so probe + env var get the clean host) + port integer in [1, 65535] + (username defined → password defined) + (password defined → username defined). Drift to dropping the both-or-neither auth rule would let half-configured auth slip through and the WebKit fork would silently authenticate as the host-OS user identity', () => {
+    // The host is trimmed ONCE and the trimmed value used downstream (probe +
+    // DRIFTSTACK_SOCKS5_PROXY_HOST env var). Validating rawHost.trim() but
+    // propagating the untrimmed host let " host " pass then fail the probe.
+    expect(body).toMatch(/const host = rawHost\.trim\(\);/);
     expect(body).toMatch(
-      /if \(host\.trim\(\)\.length === 0\) \{\s*\n?\s*throw new Error\('socks5\.host must be non-empty'\);/,
+      /if \(host\.length === 0\) \{\s*\n?\s*throw new Error\('socks5\.host must be non-empty'\);/,
     );
     expect(body).toMatch(
       /if \(!Number\.isInteger\(port\) \|\| port < 1 \|\| port > 65535\) \{\s*\n?\s*throw new Error\(`socks5\.port must be in \[1, 65535\]; got \$\{port\}`\);/,
