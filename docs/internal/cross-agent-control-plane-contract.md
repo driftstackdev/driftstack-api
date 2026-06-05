@@ -429,3 +429,36 @@ control-plane WSS arc (prereq: /v1/fleet/events V-820 WSS handler is a 503 stub)
 (a) fleet-events WSS + intentDispatch sender, (b) AgentExecutor v2 (emit intentDispatch per intent, map verbs→intentName,
 parse IntentResult→IntentResult/errors), (c) customer AgentIntentSchema(scroll/behavioral_pause/back/forward+caps)+SDKs.
 End-to-end execution still gated on item 9 (harness→fork drive). Don't ship the schema before the dispatch path (no-op otherwise).
+
+## ✅ Increment-2 (a) FIRST SLICE SHIPPED — wire-protocol schemas (2026-06-05, `3fa842fa`, founder-greenlit)
+
+Founder greenlit the control-plane WSS arc ("you choose and do as recommended"). First slice landed:
+`apps/server/src/schemas/harness-control-protocol.ts` + 32-test drift-guard/behavioral test
+(`schemas-harness-control-protocol-content-parity.test.ts`). Mirrors A3's harness-intent-contract.md as Zod:
+- `HARNESS_INTENT_NAMES` (11 dispatchable) + `HARNESS_RESERVED_INTENT_NAMES` (fill_form/login/search, not-impl).
+- Per-intent param schemas (strict) + `HARNESS_INTENT_PARAM_SCHEMAS` map (intentName→schema) for server-side
+  validation before dispatch.
+- `IntentDispatchSchema` {sessionId,intentId,intentName,inputParams} + `IntentResultEnvelopeSchema`
+  {sessionId,intentId,success,durationMs,outputData?,errorCode?,errorMessage?} + `HarnessErrorCodeSchema` (5).
+- Caps/defaults as exported consts (pause 300_000ms, wait_for 300s, scroll 600px/down, wait_for 30s).
+- **Server-internal** (gui-input.ts/L-001 precedent) — NOT @driftstack/api-types (harness ≠ customer).
+
+### 🔴 OPEN QUESTIONS FOR AGENT-3 (relay via founder) — needed for (a) WSS handler + (b) sender:
+1. **`inputParams`/`outputData` wire codec.** Swift `Data` (JSON-encoded). On the wire is it (i) a nested JSON
+   object, (ii) a JSON string, or (iii) base64 (Swift Codable's `Data` default)? Modeled `z.unknown()` until pinned.
+2. **Envelope JSON key casing.** Does the harness JSONEncoder apply `.convertToSnakeCase` (→ `session_id`,
+   `intent_id`, `intent_name`, `duration_ms`), or are the keys literally camelCase as written
+   (`sessionId`/`intentId`/`intentName`/`durationMs`)? Schema currently uses camelCase per the contract doc.
+3. **Harness WSS auth/handshake.** What does the harness present when it connects to `/v1/fleet/events`
+   (Ed25519-signed JWT per fleet-node-auth + nonce? mTLS client cert at Cloudflare AOP? both?) and what's the
+   first message exchange (node-register → which sessionIds it owns)? Needed to build the connection registry.
+
+### Remaining (a)/(b)/(c) + gates:
+- (a) `/v1/fleet/events` WSS handler — BLOCKED on: `fleet_nodes` SQL migration (Tier-2, founder approval;
+  design at docs/internal/fleet-nodes-sql-migration-design.md) + mTLS at Cloudflare AOP (infra) +
+  `@fastify/websocket` plugin (Agent-2 can add when building). Connection registry + intentId→promise correlation.
+- (b) AgentExecutor v2 — emit `IntentDispatch` per intent (verb→intentName + build/validate params via the map),
+  parse `IntentResultEnvelope` → existing `IntentResult`/typed errors. Buildable as a pure translation layer now.
+- (c) customer `AgentIntentSchema` (scroll/behavioral_pause/back/forward + caps) + 3 SDKs + decomposer — HOLD
+  until (a)/(b) wired (shipping the customer schema before the executor can dispatch = false affordance/no-op).
+- End-to-end still gated on item 9 (harness→fork drive; founder Option-1 sign-off; A1+A3).
