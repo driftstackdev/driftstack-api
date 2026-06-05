@@ -65,6 +65,33 @@ const NUMERIC_ENCODING =
 const NUMERIC_IP_ENCODING = /^(0x[0-9a-f]+|\d+)(\.(0x[0-9a-f]+|\d+))*$/i;
 
 /**
+ * Classify a bare host (hostname or IP literal) against the internal-reachable
+ * block list. Returns the unsafe KIND or null. Shared by the webhook SSRF guard
+ * AND the SOCKS5 egress backend (EG-API egress proxy host — a customer-supplied
+ * socks5.host pointed at a private/loopback/metadata address would let the fork
+ * reach our internal network). Each caller phrases its own message from the kind.
+ * Normalises the host (lowercase, strip IPv6 brackets + trailing FQDN dot) so
+ * `[::1]`, `localhost.`, `127.0.0.1.` etc. can't slip past.
+ */
+export function classifyUnsafeHost(
+  rawHost: string,
+): 'localhost' | 'private' | 'numeric-encoding' | null {
+  let host = rawHost.toLowerCase();
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  if (host.endsWith('.')) host = host.slice(0, -1);
+  if (host === 'localhost' || host.endsWith('.localhost')) return 'localhost';
+  // IPv4-mapped IPv6 (e.g. ::ffff:10.0.0.5) — a private-IPv4 smuggling vector.
+  if (host.startsWith('::ffff:')) return 'private';
+  const family = isIP(host); // 0 = DNS name, 4, or 6
+  // Numeric/hex/octal encodings read as DNS names to isIP but decode to an
+  // address downstream — reject outright.
+  if (family === 0 && NUMERIC_IP_ENCODING.test(host)) return 'numeric-encoding';
+  if (family === 4 && BLOCK.check(host, 'ipv4')) return 'private';
+  if (family === 6 && BLOCK.check(host, 'ipv6')) return 'private';
+  return null;
+}
+
+/**
  * Returns a rejection reason when `url` is an unsafe webhook target
  * (over-length, non-https, localhost, a numeric IP encoding, or a literal
  * private/reserved IP), else null. DNS hostnames are allowed here (rebind is
@@ -85,27 +112,11 @@ export function unsafeWebhookTargetReason(url: string): string | null {
   if (parsed.protocol !== 'https:') {
     return 'Webhook URL must use https://.';
   }
-  // URL keeps `[...]` around IPv6 literals; strip before isIP/BlockList.
-  let host = parsed.hostname.toLowerCase();
-  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
-  // Strip a trailing FQDN-root dot so `localhost.` / `127.0.0.1.` (which
-  // resolve identically) can't slip past the localhost / literal-IP checks.
-  if (host.endsWith('.')) host = host.slice(0, -1);
-
-  if (host === 'localhost' || host.endsWith('.localhost')) {
-    return 'Webhook URL must not target localhost.';
-  }
-  // IPv4-mapped IPv6 (e.g. ::ffff:10.0.0.5, normalized to ::ffff:a00:5) is
-  // never a legitimate webhook target and is a private-IPv4 smuggling vector.
-  if (host.startsWith('::ffff:')) {
-    return PRIVATE_TARGET;
-  }
-
-  const family = isIP(host); // 0 = DNS name, 4, or 6
-  // Numeric/hex/octal IP encodings (decimal/short-form/0x.../0NNN) read as DNS
-  // names to isIP but decode to an address downstream — reject outright.
-  if (family === 0 && NUMERIC_IP_ENCODING.test(host)) return NUMERIC_ENCODING;
-  if (family === 4 && BLOCK.check(host, 'ipv4')) return PRIVATE_TARGET;
-  if (family === 6 && BLOCK.check(host, 'ipv6')) return PRIVATE_TARGET;
+  // Host-level classification (shared with the SOCKS5 egress backend); map the
+  // kind back to the webhook-phrased messages this guard's callers/tests expect.
+  const kind = classifyUnsafeHost(parsed.hostname);
+  if (kind === 'localhost') return 'Webhook URL must not target localhost.';
+  if (kind === 'numeric-encoding') return NUMERIC_ENCODING;
+  if (kind === 'private') return PRIVATE_TARGET;
   return null;
 }

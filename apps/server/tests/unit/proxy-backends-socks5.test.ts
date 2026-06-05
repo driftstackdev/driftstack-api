@@ -145,6 +145,35 @@ describe('EG-API-1.6 SocksProxyBackend', () => {
     );
   });
 
+  it('§4.17 SSRF guard — a private/loopback/metadata/numeric-encoding socks5.host is rejected BEFORE the TCP probe (no internal-network connect)', async () => {
+    const probe = vi.fn().mockResolvedValue(undefined);
+    const backend = new SocksProxyBackend({ tcpProbe: probe });
+    for (const host of [
+      '127.0.0.1', // loopback
+      'localhost', // loopback name
+      '10.0.0.5', // RFC1918
+      '192.168.1.1', // RFC1918
+      '169.254.169.254', // link-local / cloud metadata
+      '::1', // IPv6 loopback
+      '2130706433', // decimal-encoded 127.0.0.1 (smuggling)
+      '0x7f000001', // hex-encoded 127.0.0.1
+    ]) {
+      await expect(
+        backend.applyToSession({ config: socks5Config({ host }) }),
+        host,
+      ).rejects.toThrow(/egress-proxy-host-not-allowed/);
+    }
+    // The guard runs before the probe — no internal-network connection attempted.
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it('§4.17 a public socks5.host passes the guard (probed normally)', async () => {
+    const probe = vi.fn().mockResolvedValue(undefined);
+    const backend = new SocksProxyBackend({ tcpProbe: probe });
+    await backend.applyToSession({ config: socks5Config({ host: 'proxy.example.com' }) });
+    expect(probe).toHaveBeenCalledOnce();
+  });
+
   it('host with surrounding whitespace is trimmed before BOTH the TCP probe and the env var (no self-inflicted egress-tunnel-unreachable for a stray space)', async () => {
     const probe = vi.fn().mockResolvedValue(undefined);
     const backend = new SocksProxyBackend({ tcpProbe: probe });

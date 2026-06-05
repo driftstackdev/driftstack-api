@@ -33,6 +33,7 @@
 
 import { connect, type Socket } from 'node:net';
 import type { EgressHandle, SessionEgressConfig, SessionEgressService } from '../session-egress.js';
+import { classifyUnsafeHost } from '../../lib/webhook-target-guard.js';
 
 const DEFAULT_PROBE_TIMEOUT_MS = 3_000;
 
@@ -107,6 +108,25 @@ export class SocksProxyBackend implements SessionEgressService {
     const host = rawHost.trim();
     if (host.length === 0) {
       throw new Error('socks5.host must be non-empty');
+    }
+    // §4.17 SSRF guard — the egress backend TCP-connects to (and the fork dials)
+    // this customer-supplied host. A private/loopback/link-local/metadata address
+    // (or a numeric-IP-encoding smuggling it) would reach Driftstack's internal
+    // network — the proxy must be a public host. Reuses the vetted webhook
+    // SSRF block list. (A legitimately-public proxy is unaffected; a private host
+    // wouldn't be reachable from our infra anyway except as the SSRF target.)
+    const unsafeHostKind = classifyUnsafeHost(host);
+    if (unsafeHostKind !== null) {
+      const what =
+        unsafeHostKind === 'localhost'
+          ? 'localhost'
+          : unsafeHostKind === 'numeric-encoding'
+            ? 'a non-standard numeric IP encoding'
+            : 'a private, loopback, or reserved';
+      throw new Error(
+        `egress-proxy-host-not-allowed: socks5.host '${host}' is ${what} address — ` +
+          `the egress proxy must be a public host (SSRF guard).`,
+      );
     }
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       throw new Error(`socks5.port must be in [1, 65535]; got ${port}`);

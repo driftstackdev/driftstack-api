@@ -104,6 +104,14 @@ describe('services/proxy-backends/socks5 content parity', () => {
     );
   });
 
+  it('§4.17 SSRF guard pinned: socks5.host is classified via classifyUnsafeHost (shared webhook SSRF block list) + rejected with egress-proxy-host-not-allowed BEFORE the TCP probe. Drift to dropping it would let a customer point socks5.host at 169.254.169.254 / localhost / 10.x and have the backend (and the fork) connect into our internal network', () => {
+    expect(body).toMatch(
+      /import \{ classifyUnsafeHost \} from '\.\.\/\.\.\/lib\/webhook-target-guard\.js';/,
+    );
+    expect(body).toMatch(/const unsafeHostKind = classifyUnsafeHost\(host\);/);
+    expect(body).toMatch(/egress-proxy-host-not-allowed: socks5\.host/);
+  });
+
   it("Q.0.b TCP-probe-before-handle framing pinned: 'TCP-probe the customer's SOCKS5 host:port before returning the handle. Catches \"wrong host / wrong port / firewall blocks\" at session-create time so the customer sees a 4xx egress-tunnel-unreachable immediately rather than a delayed failure once the WebKit fork tries to connect (which surfaces 30+ seconds later with a less helpful error).' + await this.tcpProbe(host, port, this.probeTimeoutMs) — pinned so the Q.0.b verdict + fail-fast-at-create + actionable-immediate-vs-delayed-30s contract all stay documented", () => {
     expect(body).toMatch(
       /\/\/ Q\.0\.b — TCP-probe the customer's SOCKS5 host:port before\s*\n?\s*\/\/ returning the handle\. Catches "wrong host \/ wrong port \/\s*\n?\s*\/\/ firewall blocks" at session-create time so the customer\s*\n?\s*\/\/ sees a 4xx egress-tunnel-unreachable immediately rather\s*\n?\s*\/\/ than a delayed failure once the WebKit fork tries to\s*\n?\s*\/\/ connect \(which surfaces 30\+ seconds later with a less\s*\n?\s*\/\/ helpful error\)\./,
