@@ -496,23 +496,31 @@ The data path is complete + unit-tested end-to-end against a mock transport:
 `agentIntentToDispatch → serializeIntentDispatch → IntentDispatchCorrelator.dispatch → parseIntentResult →
 intentResultToCustomer`, halt-on-failure, in `ControlPlaneAgentExecutor` (implements the existing `AgentExecutor`).
 
-### REMAINING (gated — founder/infra/A3; the go-live steps)
+### REMAINING (all Agent-2-buildable — NOT founder-gated; corrected 2026-06-05)
 
-1. **`fleet_nodes` Tier-2 migration** (founder approval) — pubkey registry; design at
-   `docs/internal/fleet-nodes-sql-migration-design.md`. Backs a Drizzle `FleetNodesRepo` (InMemory variant exists).
-2. **Per-node Ed25519 key provisioning** (infra) — private key → harness (`ControlClientConfig.nodeSigningKeyRaw`),
-   public key → `fleet_nodes`.
-3. **`@fastify/websocket`** dep (A2 adds when building the route — withheld now to avoid an unused dep).
-4. **`/v1/fleet/events` WS route** (A2 builds once 1–3 exist):
-   - On upgrade: verify `Authorization: Bearer <jwt>` via `fleetNodeAuth.verify` (inject the Redis `FleetNonceCache`
-     for replay defense — NOT optional in prod) → 401 before the socket opens on failure.
-   - Build a per-connection `DispatchTransport` (`send(d)` → `socket.send(JSON.stringify(d))`); on inbound frame →
-     `correlator.onResultFrame(frame)` for IntentResults and `correlator.onSessionError(sessionId, detail)` for
-     errored SessionStatus; on close → `correlator.failAll(...)`.
-   - **OPEN (resolve with A3 + the migration design): node→session routing** — how the control plane maps a
-     `sessionId` to the connected node that owns its BrowserProcess (session→node assignment is the control
-     plane's own state per planning 133; confirm whether the node also self-registers its sessionIds on connect).
-5. **Bootstrap swap** (founder/launch): `StubAgentExecutor` → `new ControlPlaneAgentExecutor(new IntentDispatchCorrelator(wsTransport))`.
+> **Correction:** the `fleet_nodes` table is NOT a pending founder gate — it was **APPROVED + shipped
+> 2026-05-17 as migration `0043`** (+ `0056` LiveKit creds), and `DrizzleFleetNodesRepo` (getPublicKey/register/
+> revoke/touchLastSeen/getDetail/listActive) is wired in bootstrap (`drizzleFleetNodesRepo`). Earlier runbook
+> drafts wrongly listed it as gated-on-founder. So the WSS route has NO founder gate — it's a straight A2 build.
+
+1. ✅ **Redis nonce cache** (replay defense) — SHIPPED `lib/redis-fleet-nonce-cache.ts` (atomic `SET NX EX`,
+   NUL-separated keys, TTL clamp). Inject into `FleetNodeAuthImpl` at the route (NOT optional in prod).
+2. **`@fastify/websocket`** dep (A2 adds when building the route — withheld until then to avoid an unused dep).
+3. **`/v1/fleet/events` WS route** (A2 builds — no gate):
+   - On upgrade: verify `Authorization: Bearer <jwt>` via `fleetNodeAuth.verify` (with the Redis nonce cache) →
+     401 before the socket opens on failure.
+   - Per-connection `DispatchTransport` (`send(d)` → `socket.send(JSON.stringify(d))`); inbound frame →
+     `correlator.onResultFrame(frame)` (IntentResults) / `correlator.onSessionError(sessionId, detail)`
+     (errored SessionStatus); on close → `correlator.failAll(...)`.
+   - **OPEN (A2 designs; coordinate the node side via the bus): node→session routing** — the control plane maps
+     a `sessionId` to the connected node owning its BrowserProcess. session→node assignment is the control
+     plane's own state (planning 133); confirm with A3 whether the node also self-registers its sessionIds on
+     connect (the connection-registry shape).
+4. **Bootstrap swap**: `StubAgentExecutor` → `new ControlPlaneAgentExecutor(new IntentDispatchCorrelator(wsTransport))`
+   — sequence on the LIVE transport + a real driver (swapping before end-to-end is real degrades the demo); a
+   technical-readiness call, not a founder gate.
+5. **Per-node Ed25519 key provisioning** (infra) — private key → harness (`ControlClientConfig.nodeSigningKeyRaw`),
+   public key registered in `fleet_nodes` via `DrizzleFleetNodesRepo.register` (table + method already exist).
 6. End-to-end execution against the fork still gated on item 9 (harness→fork drive; A1 Option-1, founder-approved).
 
 ### Customer-facing schema additions (c) — HOLD until 1–5 wired
