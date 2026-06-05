@@ -405,3 +405,27 @@ ORCHESTRATOR action-queue item 9 (cocoa WebDriver server; founder Option-1 sign-
 the harness over the control path now, but won't execute against the fork until item 9 lands. A3: build+ship
 the control-path wiring now; end-to-end goes live with item 9.
 TODO: request A3's full intentName→params table (send_keys/click/wait_for/navigate/...) before mapping (a3 offered).
+
+## A3 intent-contract reference COMPLETE (2026-06-05, W91) — Increment-2 spec is now fully specified
+
+Agent-3 authored the canonical reference: `driftstack/docs/internal/harness-intent-contract.md` (grounded in
+`harness/Sources/BrowserController/IntentExecutor.swift`). Mirror it exactly to prevent server↔harness divergence.
+Build-relevant deltas beyond the scroll/dispatch notes already recorded:
+
+- **Transport:** one `ControlInbound.intentDispatch(IntentDispatch{ sessionId, intentId, intentName, inputParams: JSON(paramsObj) })`
+  per intent over the control-plane WSS. Result = `HarnessOutbound.IntentResult{ sessionId, intentId, success,
+durationMs, outputData: JSON?, errorCode?, errorMessage? }`.
+- **Full param/result table** (in the ref): navigate{url}→{url}; back/forward{}→{url,action}; click{element_id}|{strategy,value}→{clicked,behavioral};
+  send_keys{strategy,value,text}→{typed_into,length,behavioral}; scroll{direction?,distance_px?,start_x?,start_y?}→{scrolled,flicks,steps,behavioral}
+  (SDK exposes direction+distance_px only); behavioral_pause{duration_ms}|{kind:'reading',word_count}|none→{paused_ms,capped,behavioral}
+  (cap ≤300_000ms); wait_for{predicate,timeout_seconds?}→{waited,timeout_capped} (cap ≤300s); execute_script{script,args?}→{value};
+  screenshot{}→{screenshot_b64}; get_page_source{}→{source}; fill_form/login/search = intent_not_implemented (JSBridge-gated).
+- **Error codes:** intent_session_not_established / intent_not_implemented / intent_missing_parameter /
+  intent_webdriver_failed / intent_dispatch_error. The SDK should map these to typed errors.
+- **`behavioral` flag** in results = persona attached (realistic dynamics) vs false (plain). Surface caps via capped/timeout_capped flags.
+
+**STATUS: Increment-2 spec fully unblocked.** Remaining = the BUILD, gated only on the founder's go for the
+control-plane WSS arc (prereq: /v1/fleet/events V-820 WSS handler is a 503 stub) + the wiring. Once greenlit:
+(a) fleet-events WSS + intentDispatch sender, (b) AgentExecutor v2 (emit intentDispatch per intent, map verbs→intentName,
+parse IntentResult→IntentResult/errors), (c) customer AgentIntentSchema(scroll/behavioral_pause/back/forward+caps)+SDKs.
+End-to-end execution still gated on item 9 (harness→fork drive). Don't ship the schema before the dispatch path (no-op otherwise).
