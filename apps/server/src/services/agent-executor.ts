@@ -209,6 +209,28 @@ export class RealAgentExecutor implements AgentExecutor {
         }
         case 'wait':
           return await this.dispatchWait(account, sessionId, intent);
+        case 'scroll': {
+          // Directional viewport scroll → the driver's delta-based scroll
+          // (this superseded local-driver path; the harness control-plane
+          // executes the persona-shaped flick). amount_px omitted → 600px.
+          const delta = (intent.direction === 'up' ? -1 : 1) * (intent.amount_px ?? 600);
+          await this.deps.sessions.interact(account, sessionId, {
+            action: { kind: 'scroll', delta_x: 0, delta_y: delta },
+          });
+          return {
+            kind: 'success',
+            intent,
+            summary: `scrolled ${intent.direction}${intent.amount_px !== undefined ? ` ${intent.amount_px}px` : ''}`,
+          };
+        }
+        case 'behavioral_pause':
+          // The local driver has no persona-timing; the real persona-shaped
+          // pause runs harness-side over the control plane. Acknowledge here.
+          return {
+            kind: 'success',
+            intent,
+            summary: 'behavioural pause (executed harness-side; no-op in local-driver executor)',
+          };
       }
     } catch (err) {
       return {
@@ -315,6 +337,10 @@ function stubSummary(intent: AgentIntent): string {
       return `stub wait ${intent.condition}${intent.selector ? ' on ' + intent.selector : ''}${intent.timeoutMs !== undefined ? ' (' + intent.timeoutMs + 'ms)' : ''}`;
     case 'capture':
       return `stub captured ${intent.capture}`;
+    case 'scroll':
+      return `stub scroll ${intent.direction}${intent.amount_px !== undefined ? ' ' + intent.amount_px + 'px' : ''}`;
+    case 'behavioral_pause':
+      return `stub behavioural pause${intent.reading_word_count !== undefined ? ' (reading ' + intent.reading_word_count + ' words)' : intent.duration_ms !== undefined ? ' (' + intent.duration_ms + 'ms)' : ''}`;
   }
 }
 

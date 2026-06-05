@@ -59,16 +59,28 @@ describe('agent-session response schema parity', () => {
     expect(oapi).toMatch(/intents: z\.array\(AgentIntentSchema\)/);
     expect(oapi).toMatch(/results: z\.array\(IntentResultSchema\)/);
     // Route parity: the decomposer's AgentIntent union member count == the schema's
-    // (a 5th verb added to the route but not api-types fails here).
+    // (a new verb added to the route but not api-types fails here). W140 added
+    // scroll + behavioral_pause → 6 members.
     const decomposer = read(resolve(REPO_ROOT, 'apps/server/src/services/agent-decomposer.ts'));
     const intentBlock = decomposer.match(/export type AgentIntent =([\s\S]+?)\n\n/)?.[1] ?? '';
     const routeVerbCount = (intentBlock.match(/kind: '/g) ?? []).length;
-    expect(routeVerbCount).toBe(4);
+    expect(routeVerbCount).toBe(6);
     expect(AgentIntentSchema.options).toHaveLength(routeVerbCount);
     expect(IntentResultSchema.options).toHaveLength(2);
     // The closed verb vocabulary parses under the schema.
     expect(AgentIntentSchema.safeParse({ kind: 'navigate', url: 'https://x' }).success).toBe(true);
     expect(AgentIntentSchema.safeParse({ kind: 'capture', capture: 'pdf' }).success).toBe(true);
+    // W140 behavioural intents.
+    expect(
+      AgentIntentSchema.safeParse({ kind: 'scroll', direction: 'down', amount_px: 800 }).success,
+    ).toBe(true);
+    expect(AgentIntentSchema.safeParse({ kind: 'scroll', direction: 'up' }).success).toBe(true);
+    expect(
+      AgentIntentSchema.safeParse({ kind: 'behavioral_pause', reading_word_count: 120 }).success,
+    ).toBe(true);
+    expect(AgentIntentSchema.safeParse({ kind: 'behavioral_pause' }).success).toBe(true);
+    // scroll requires a direction.
+    expect(AgentIntentSchema.safeParse({ kind: 'scroll' }).success).toBe(false);
     expect(
       IntentResultSchema.safeParse({
         kind: 'success',

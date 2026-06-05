@@ -76,6 +76,32 @@ function mapIntent(intent: AgentIntent): AgentIntentDispatch {
 
     case 'capture':
       return mapCapture(intent);
+
+    case 'scroll':
+      // Explicit directional scroll → harness scroll{direction, distance_px}.
+      // amount_px omitted → harness applies its 600px persona default.
+      return {
+        ok: true,
+        intentName: 'scroll',
+        params: {
+          direction: intent.direction,
+          ...(intent.amount_px !== undefined ? { distance_px: intent.amount_px } : {}),
+        },
+      };
+
+    case 'behavioral_pause':
+      // reading_word_count wins (→ persona-scaled reading pause); else duration_ms
+      // (→ explicit pause); else neither → bare {} = harness persona idle pause.
+      return {
+        ok: true,
+        intentName: 'behavioral_pause',
+        params:
+          intent.reading_word_count !== undefined
+            ? { kind: 'reading', word_count: intent.reading_word_count }
+            : intent.duration_ms !== undefined
+              ? { duration_ms: intent.duration_ms }
+              : {},
+      };
   }
 }
 

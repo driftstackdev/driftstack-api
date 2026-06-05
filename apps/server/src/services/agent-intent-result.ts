@@ -46,6 +46,16 @@ function summarize(intent: AgentIntent, outputData: unknown): string {
         : 'wait condition met';
     case 'capture':
       return summarizeCapture(intent);
+    case 'scroll':
+      return intent.amount_px !== undefined
+        ? `scrolled ${intent.direction} ${intent.amount_px}px`
+        : `scrolled ${intent.direction}`;
+    case 'behavioral_pause':
+      return intent.reading_word_count !== undefined
+        ? `paused to read ~${intent.reading_word_count} words`
+        : intent.duration_ms !== undefined
+          ? `paused ${intent.duration_ms}ms`
+          : 'paused';
   }
 }
 

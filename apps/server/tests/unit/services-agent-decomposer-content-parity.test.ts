@@ -88,7 +88,7 @@ describe('services/agent-decomposer content parity', () => {
     );
   });
 
-  it("AgentIntent 4-kind locked vocabulary pinned: navigate + interact (4-action: tap/type/scroll/swipe) + wait (2-condition: idle/selector_visible) + capture (3-kind: screenshot/dom_snapshot/pdf). + 'Mirrors the existing /v1/sessions/:id/{navigate,interact,wait,capture} routes; the agent cannot invent new verbs (the prompt template includes the vocabulary as a constraint). Schema-locked so the executor (B2 follow-up) is a trivial switch.' — pinned so the schema-locked-no-invented-verbs + prompt-template-includes-vocabulary + B2-executor-trivial-switch contract all stay documented", () => {
+  it('AgentIntent 6-kind locked vocabulary pinned: navigate + interact (4-action: tap/type/scroll/swipe) + wait (2-condition) + capture (3-kind) + scroll (W140: direction up|down, amount_px?) + behavioral_pause (W140: duration_ms?, reading_word_count?). The agent cannot invent new verbs (the prompt template includes the vocabulary as a constraint); the two W140 behavioural verbs map server-side onto the harness scroll/behavioral_pause control-plane intents — pinned so the api-types↔server lockstep + the closed vocabulary stay documented', () => {
     expect(body).toMatch(/export type AgentIntent =/);
     expect(body).toMatch(/\{ kind: 'navigate'; url: string \}/);
     expect(body).toMatch(
@@ -98,6 +98,11 @@ describe('services/agent-decomposer content parity', () => {
       /\{ kind: 'wait'; condition: 'idle' \| 'selector_visible'; selector\?: string; timeoutMs\?: number \}/,
     );
     expect(body).toMatch(/\{ kind: 'capture'; capture: 'screenshot' \| 'dom_snapshot' \| 'pdf' \}/);
+    // W140 behavioural intents (api-types ↔ server lockstep).
+    expect(body).toMatch(/\{ kind: 'scroll'; direction: 'up' \| 'down'; amount_px\?: number \}/);
+    expect(body).toMatch(
+      /\{ kind: 'behavioral_pause'; duration_ms\?: number; reading_word_count\?: number \}/,
+    );
     expect(body).toMatch(
       /agent cannot invent new verbs \(the prompt template includes the\s*\n?\s*\*\s+vocabulary as a constraint\)\. Schema-locked so the executor\s*\n?\s*\*\s+\(B2 follow-up\) is a trivial switch\./,
     );

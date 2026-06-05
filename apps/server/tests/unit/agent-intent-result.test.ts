@@ -92,6 +92,18 @@ describe('intentResultToCustomer — success summaries', () => {
     ).toBe('captured DOM snapshot');
   });
 
+  it('W140 scroll + behavioral_pause summaries', () => {
+    const s = (intent: Parameters<typeof intentResultToCustomer>[0]): string =>
+      (intentResultToCustomer(intent, ok()) as { summary: string }).summary;
+    expect(s({ kind: 'scroll', direction: 'down', amount_px: 800 })).toBe('scrolled down 800px');
+    expect(s({ kind: 'scroll', direction: 'up' })).toBe('scrolled up');
+    expect(s({ kind: 'behavioral_pause', reading_word_count: 120 })).toBe(
+      'paused to read ~120 words',
+    );
+    expect(s({ kind: 'behavioral_pause', duration_ms: 2500 })).toBe('paused 2500ms');
+    expect(s({ kind: 'behavioral_pause' })).toBe('paused');
+  });
+
   it('never sets captureId (capture storage is a separate concern)', () => {
     const r = intentResultToCustomer(
       { kind: 'capture', capture: 'screenshot' },

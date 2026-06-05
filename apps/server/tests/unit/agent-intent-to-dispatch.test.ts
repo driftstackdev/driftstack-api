@@ -32,6 +32,50 @@ describe('agentIntentToDispatch — clean 1:1 mappings', () => {
     });
   });
 
+  it('W140 scroll → harness scroll { direction, distance_px } (amount_px omitted → no distance_px, persona default)', () => {
+    expect(agentIntentToDispatch({ kind: 'scroll', direction: 'down', amount_px: 800 })).toEqual({
+      ok: true,
+      intentName: 'scroll',
+      params: { direction: 'down', distance_px: 800 },
+    });
+    expect(agentIntentToDispatch({ kind: 'scroll', direction: 'up' })).toEqual({
+      ok: true,
+      intentName: 'scroll',
+      params: { direction: 'up' },
+    });
+  });
+
+  it('W140 behavioral_pause → harness behavioral_pause: reading_word_count wins → {kind:reading}; else duration_ms; else {} (idle)', () => {
+    expect(agentIntentToDispatch({ kind: 'behavioral_pause', reading_word_count: 120 })).toEqual({
+      ok: true,
+      intentName: 'behavioral_pause',
+      params: { kind: 'reading', word_count: 120 },
+    });
+    expect(agentIntentToDispatch({ kind: 'behavioral_pause', duration_ms: 2500 })).toEqual({
+      ok: true,
+      intentName: 'behavioral_pause',
+      params: { duration_ms: 2500 },
+    });
+    // reading_word_count wins over duration_ms when both present.
+    expect(
+      agentIntentToDispatch({
+        kind: 'behavioral_pause',
+        duration_ms: 2500,
+        reading_word_count: 50,
+      }),
+    ).toEqual({
+      ok: true,
+      intentName: 'behavioral_pause',
+      params: { kind: 'reading', word_count: 50 },
+    });
+    // neither → bare {} (harness persona idle pause).
+    expect(agentIntentToDispatch({ kind: 'behavioral_pause' })).toEqual({
+      ok: true,
+      intentName: 'behavioral_pause',
+      params: {},
+    });
+  });
+
   it('interact:type → send_keys { strategy, value: selector, text: value }', () => {
     const r = agentIntentToDispatch({
       kind: 'interact',

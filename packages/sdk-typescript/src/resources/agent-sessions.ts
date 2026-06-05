@@ -148,7 +148,11 @@ export type AgentIntent =
       value?: string;
     }
   | { kind: 'wait'; condition: 'idle' | 'selector_visible'; selector?: string; timeoutMs?: number }
-  | { kind: 'capture'; capture: 'screenshot' | 'dom_snapshot' | 'pdf' };
+  | { kind: 'capture'; capture: 'screenshot' | 'dom_snapshot' | 'pdf' }
+  // Behavioural intents (W140) — map server-side onto the harness scroll /
+  // behavioral_pause control-plane intents.
+  | { kind: 'scroll'; direction: 'up' | 'down'; amount_px?: number }
+  | { kind: 'behavioral_pause'; duration_ms?: number; reading_word_count?: number };
 
 export type AgentIntentResult =
   | { kind: 'success'; intent: AgentIntent; summary: string; captureId?: string }
