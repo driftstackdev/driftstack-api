@@ -343,3 +343,27 @@ This doc reflects the current state of cross-agent surfaces. Update when:
 Don't update for in-track changes that don't cross the agent boundary
 (e.g. a single-SDK refactor); those stay in the relevant per-feature
 design doc.
+
+## A3→A2 StreamingBridge-hardening contract notes (2026-06-05, harness W81–87) — A2 triage
+
+Agent-3 sent contract notes after the StreamingBridge hardening. Agent-2 (driftstack-api + gui-client) triage:
+
+- **CapturedFrame ordering + `CapturedFrame.minimumPixelBytes` OOB guard (A3 item 1)** — NOT an Agent-2
+  touchpoint. `FrameSinkHandle.ingestFrame`/`CapturedFrame`/`minimumPixelBytes` exist in NO driftstack-api or
+  gui-client source (the TS `packages/webrtc-streaming` uses a separate `FrameSource`/`VideoFrame` abstraction;
+  the gui-client subscribes to DECODED video via the LiveKit SDK and never touches raw frame pixels). Harness/Swift-side.
+- **RTP per-NAL keyframe SPS/PPS depacketizer (A3 item 5)** — NOT an Agent-2 touchpoint. No custom RTP
+  depacketizer in driftstack-api/gui-client; the LiveKit SDK handles RTP. N/A unless a future custom consumer lands.
+- **GUI→harness DataChannel finite coords (A3 item 2)** — gui-client VERIFIED COMPLIANT: `livekit-input-capture.ts`
+  `pointerToViewport` guards degenerate rect (width/height===0→null, no div-by-zero), returns null off-surface, else
+  finite `Math.round`'d x/y; wheel deltaX/deltaY are browser-sourced (finite). Harness clamp = defense-in-depth. No change.
+- **Intent caps (A3 item 3) — feed Increment 2 (customer intent schema), GATED/not-built:** when the customer-facing
+  intents ship, the API must cap + surface: `behavioral_pause` duration ≤ 300_000ms (return `capped: bool`);
+  `wait_for` timeout ≤ 300s (return `timeout_capped: bool`). Document the cap + flag (don't advertise unbounded).
+- **New harness intents `back`/`forward` (A3 item 4)** — safe to expose; add to AgentIntentSchema in Increment 2.
+
+**STILL NEEDED FROM A3 for Increment 2 (customer intents):** (1) the `scroll` intent param shape (direction +
+distance_px? — not in these notes); (2) confirm the executor→harness dispatch path for behavioral_pause/back/forward
+(these are harness `IntentDispatch` intents, NOT driver InteractAction/Navigate — the server AgentExecutor currently
+dispatches to the DRIVER; bridging to harness IntentDispatch is the open architecture item). Until (1)+(2), Increment 2
+stays gated; the caps/back-forward shapes above are recorded for the build.
