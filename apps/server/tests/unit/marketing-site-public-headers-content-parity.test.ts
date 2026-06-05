@@ -100,13 +100,21 @@ describe('W523.C apps/marketing-site/public/_headers content parity', () => {
     );
   });
 
-  it("Catch-all /* + security-header framing pinned: 'Catch-all for HTML pages — Cloudflare Pages serves /pricing/index.html at /pricing, /faq/index.html at /faq, etc. The `/*` pattern (last-resort) covers any HTML response not already matched.' + X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin — pinned so the catch-all-HTML-coverage + 3-security-header (frame-deny + nosniff + strict-origin-when-cross-origin) commitment survives (drift to dropping any security header would weaken the marketing-site security posture)", () => {
+  it("Catch-all /* + security-header framing pinned: 'Catch-all for HTML pages — Cloudflare Pages serves /pricing/index.html at /pricing, /faq/index.html at /faq, etc. The `/*` pattern (last-resort) covers any HTML response not already matched.' + X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin + Permissions-Policy (sensor/payment deny) — pinned so the catch-all-HTML-coverage + 4-security-header commitment survives (drift to dropping any security header would weaken the marketing-site security posture)", () => {
     expect(body).toMatch(
       /# Catch-all for HTML pages — Cloudflare Pages serves \/pricing\/index\.html\s*\n?\s*# at \/pricing, \/faq\/index\.html at \/faq, etc\. The `\/\*` pattern\s*\n?\s*# \(last-resort\) covers any HTML response not already matched\./,
     );
     expect(body).toMatch(/^ {2}X-Frame-Options: DENY$/m);
     expect(body).toMatch(/^ {2}X-Content-Type-Options: nosniff$/m);
     expect(body).toMatch(/^ {2}Referrer-Policy: strict-origin-when-cross-origin$/m);
+    // 2026-06-05 — closed the 2026-05-20-csp-header-audit Permissions-Policy
+    // gap (it shipped on dashboard/admin/status but not marketing/docs). The
+    // marketing site uses none of these features (no getUserMedia / geolocation
+    // / inline PaymentRequest — Stripe checkout is a hosted redirect on the
+    // dashboard), so a deny-all is safe + matches the other 4 Pages apps.
+    expect(body).toMatch(
+      /^ {2}Permissions-Policy: accelerometer=\(\), camera=\(\), geolocation=\(\), gyroscope=\(\), magnetometer=\(\), microphone=\(\), payment=\(\), usb=\(\)$/m,
+    );
   });
 
   it('HSTS on the /* catch-all block ONLY — single header (2026-06-03 de-dup: CF Pages MERGES /* onto every path incl. /, proven live by the previously-doubled header, so one STS on /* covers the apex; a single clean header is preload-submission-ready, unlike the prior comma-joined double)', () => {

@@ -157,3 +157,16 @@ as a separate slice.
 - `apps/customer-dashboard/public/_headers` (new)
 - `apps/admin-panel/public/_headers` (new)
 - `docs/internal/2026-05-20-csp-header-audit.md` (this file)
+
+## 2026-06-05 follow-up — Permissions-Policy gap closed (marketing + docs)
+
+The Permissions-Policy deny (`accelerometer=(), camera=(), geolocation=(), gyroscope=(),
+magnetometer=(), microphone=(), payment=(), usb=()`) recommended above shipped on
+customer-dashboard, admin-panel, and status-site, but had NOT been applied to marketing-site
+or docs (separate Cloudflare Pages projects do not cross-inherit `_headers`). Closed 2026-06-05
+(autopilot): added the identical deny-all line to `apps/marketing-site/public/_headers` +
+`apps/docs/public/_headers`, bringing the Pages family to 5/5 consistent. Safe — both are
+static/content sites that use none of these features (verified: no `getUserMedia` / geolocation /
+inline `PaymentRequest`; Stripe checkout is a hosted redirect on the dashboard). Each app's
+own `*-public-headers-*` parity test now pins Permissions-Policy, so a future per-app drop is
+caught. CSP itself remains intentionally deferred family-wide (unchanged).

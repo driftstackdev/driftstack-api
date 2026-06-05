@@ -93,12 +93,19 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
     );
   });
 
-  it('CRITICAL 3-security-header set pinned — X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin. Drift to dropping any would weaken framing/MIME-sniff/referrer-leak defenses.', () => {
+  it('CRITICAL 4-security-header set pinned — X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin + Permissions-Policy (sensor/payment deny). Drift to dropping any would weaken framing/MIME-sniff/referrer-leak/feature-policy defenses.', () => {
     const p = read(DOCS_HEADERS);
 
     expect(p).toMatch(/X-Frame-Options: DENY/);
     expect(p).toMatch(/X-Content-Type-Options: nosniff/);
     expect(p).toMatch(/Referrer-Policy: strict-origin-when-cross-origin/);
+    // 2026-06-05 — closed the 2026-05-20-csp-header-audit Permissions-Policy
+    // gap (shipped on dashboard/admin/status but not docs/marketing). The docs
+    // site is static content using none of these features, so a deny-all is
+    // safe + brings the Pages family to 5/5 consistent.
+    expect(p).toMatch(
+      /^ {2}Permissions-Policy: accelerometer=\(\), camera=\(\), geolocation=\(\), gyroscope=\(\), magnetometer=\(\), microphone=\(\), payment=\(\), usb=\(\)$/m,
+    );
   });
 
   it("CRITICAL catch-all /* HTML pattern pinned. The '/* pattern (last-resort) covers any HTML response not already matched' wording explains why /* sits at the bottom — first-match-wins means more-specific patterns must come above.", () => {
