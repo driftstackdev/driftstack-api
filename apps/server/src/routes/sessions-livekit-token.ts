@@ -3,10 +3,15 @@
 //   POST /v1/sessions/:id/livekit-token  { role: 'publisher' | 'subscriber' }
 //
 // The route hands a short-lived HS256 JWT + the WS URL back to the
-// caller. The token grants connect-to-room rights scoped to the
-// session id (one room per session). Publisher tokens are issued for
-// the Mac-mini-side capture process; subscriber tokens for the
-// customer-dashboard's live-preview surface.
+// caller. Since the caller is always the CUSTOMER (requireAuth), the
+// token is SUBSCRIBE-ONLY (connect + subscribe to the session's room
+// for the live-preview surface) — the capture/harness process publishes
+// HOST-side with its own credentials, never via this customer route.
+// The `role` body field is retained for backwards-compat + metrics
+// labelling but no longer affects the grant (always subscribe-only).
+// 2026-06-05: hardened from the prior `role==='publisher'` grant +
+// `identity:sessionId` (customer-mintable publisher token + LiveKit
+// duplicate-identity collision); now mirrors canonical LK.3.
 //
 // Posture: wire-ready. lib/app.ts registers this route only when
 // config.livekit is fully populated (apiKey + apiSecret + wsUrl). When
@@ -115,16 +120,24 @@ export function registerLivekitTokenRoute(
         throw new NotFoundError(`Session "${sessionId}" not found.`);
       }
 
+      // 2026-06-05 launch-hardening: this route is CUSTOMER-authed, so it
+      // mints SUBSCRIBE-ONLY tokens regardless of the requested role. The
+      // original `role==='publisher'` grant let a customer mint a publisher
+      // token (the publisher path is the harness/capture process, which now
+      // publishes HOST-side with its own credentials — never via this
+      // customer route). identity is per-account (`customer-<id>`) to avoid
+      // the LiveKit duplicate-identity collision the old `identity:sessionId`
+      // caused. Matches the canonical LK.3 /v1/agent-sessions token route.
       const token = mintLivekitToken({
         apiKey: deps.apiKey,
         apiSecret: deps.apiSecret,
-        identity: sessionId,
+        identity: `customer-${ctx.account.id}`,
         ttlSeconds: deps.ttlSeconds ?? 600,
         video: {
           room: sessionId,
           roomJoin: true,
-          canPublish: parsed.data.role === 'publisher',
-          canSubscribe: parsed.data.role === 'subscriber',
+          canPublish: false,
+          canSubscribe: true,
         },
       });
 

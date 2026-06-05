@@ -102,14 +102,16 @@ describe('POST /v1/sessions/:id/livekit-token (V-531.B)', () => {
       video: { room: string; canPublish: boolean; canSubscribe: boolean; roomJoin: true };
     };
     expect(payload.iss).toBe(LIVEKIT.apiKey);
-    expect(payload.sub).toBe(sessionId);
+    // 2026-06-05 launch-hardening: identity is per-account (customer-<id>),
+    // not sessionId (fixed the LiveKit duplicate-identity collision).
+    expect(payload.sub).toBe(`customer-${fx.accountId}`);
     expect(payload.video.room).toBe(sessionId);
     expect(payload.video.roomJoin).toBe(true);
     expect(payload.video.canPublish).toBe(false);
     expect(payload.video.canSubscribe).toBe(true);
   });
 
-  it('publisher role → 200 with publisher JWT claims', async () => {
+  it('publisher role is DOWNGRADED to subscribe-only (customer-authed route never grants publish)', async () => {
     fx = await buildTestApp({ tier: 'api_builder', livekit: LIVEKIT });
     const sessionId = await createSession(fx);
     const res = await fx.app.inject({
@@ -119,13 +121,18 @@ describe('POST /v1/sessions/:id/livekit-token (V-531.B)', () => {
       payload: { role: 'publisher' },
     });
     expect(res.statusCode).toBe(200);
-    const body = res.json<LivekitTokenResponse>();
-    expect(body.role).toBe('publisher');
-    const payload = decodeJwtPart(body.token.split('.')[1] as string) as {
+    const payload = decodeJwtPart(
+      res.json<LivekitTokenResponse>().token.split('.')[1] as string,
+    ) as {
+      sub: string;
       video: { canPublish: boolean; canSubscribe: boolean };
     };
-    expect(payload.video.canPublish).toBe(true);
-    expect(payload.video.canSubscribe).toBe(false);
+    // 2026-06-05 launch-hardening: even when the caller asks for 'publisher',
+    // the grant is subscribe-only — a customer must not be able to inject
+    // media into the session room (the capture/harness publishes host-side).
+    expect(payload.video.canPublish).toBe(false);
+    expect(payload.video.canSubscribe).toBe(true);
+    expect(payload.sub).toBe(`customer-${fx.accountId}`);
   });
 
   it('cross-account session id → 404 (anti-enumeration)', async () => {

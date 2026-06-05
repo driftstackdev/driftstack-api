@@ -103,16 +103,20 @@ describe('V-531.B routes/sessions-livekit-token cross-source invariant', () => {
     expect(p).toMatch(/ttl_seconds: deps\.ttlSeconds \?\? 600,/);
   });
 
-  it('CRITICAL identity == sessionId; room == sessionId. The 1-room-per-session contract simplifies dashboard subscriber addressing.', () => {
+  it('CRITICAL identity == customer-<accountId> (2026-06-05 launch-hardening, was sessionId — fixed LiveKit duplicate-identity collision); room == sessionId (1-room-per-session).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/sessions-livekit-token.ts'));
-    expect(p).toMatch(/identity: sessionId,/);
+    expect(p).toMatch(/identity: `customer-\$\{ctx\.account\.id\}`,/);
     expect(p).toMatch(/room: sessionId,/);
+    // Regression guard: must NOT revert to the collision-prone identity.
+    expect(p).not.toMatch(/identity: sessionId,/);
   });
 
-  it('CRITICAL canPublish/canSubscribe role mapping — publisher → canPublish=true + canSubscribe=false; subscriber → canPublish=false + canSubscribe=true. The mutual-exclusivity prevents accidental privilege escalation.', () => {
+  it('CRITICAL SUBSCRIBE-ONLY grant — canPublish:false + canSubscribe:true regardless of role (2026-06-05 launch-hardening). This route is customer-authed; the prior role===publisher grant let a customer mint a publisher token (capture/harness publishes host-side, not via this route).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/sessions-livekit-token.ts'));
-    expect(p).toMatch(/canPublish: parsed\.data\.role === 'publisher',/);
-    expect(p).toMatch(/canSubscribe: parsed\.data\.role === 'subscriber',/);
+    expect(p).toMatch(/canPublish: false,/);
+    expect(p).toMatch(/canSubscribe: true,/);
+    // Regression guard: must NOT reintroduce the customer-mintable publisher grant.
+    expect(p).not.toMatch(/canPublish: parsed\.data\.role === 'publisher',/);
   });
 
   // ─── Response envelope ───────────────────────────────────────

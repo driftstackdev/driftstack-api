@@ -30,9 +30,11 @@ describe('routes/sessions-livekit-token content parity', () => {
     expect(body).toMatch(
       /\/\/\s+POST \/v1\/sessions\/:id\/livekit-token\s+\{ role: 'publisher' \| 'subscriber' \}/,
     );
+    // 2026-06-05 launch-hardening: header now documents the SUBSCRIBE-ONLY posture.
     expect(body).toMatch(
-      /\/\/ The route hands a short-lived HS256 JWT \+ the WS URL back to the\s*\n?\s*\/\/ caller\. The token grants connect-to-room rights scoped to the\s*\n?\s*\/\/ session id \(one room per session\)\. Publisher tokens are issued for\s*\n?\s*\/\/ the Mac-mini-side capture process; subscriber tokens for the\s*\n?\s*\/\/ customer-dashboard's live-preview surface\./,
+      /\/\/ token is SUBSCRIBE-ONLY[\s\S]*?capture\/harness process publishes\s*\n?\s*\/\/ HOST-side with its own credentials, never via this customer route\./,
     );
+    expect(body).toMatch(/now mirrors canonical LK\.3\./);
   });
 
   it('Wire-ready stub-until-keyed posture framing pinned: \'Posture: wire-ready. lib/app.ts registers this route only when config.livekit is fully populated (apiKey + apiSecret + wsUrl). When any of the three are absent the route stays unregistered; the client gets a 404 and falls back to the HTTP polling plane. Same "stub-until-keyed" posture as V-487 NowPayments + V-665 Postmark.\' — pinned so the 3-config-field requirement + 404-fallback-to-polling + cross-feature-pattern (NowPayments / Postmark) contract stays documented', () => {
@@ -90,9 +92,9 @@ describe('routes/sessions-livekit-token content parity', () => {
     expect(body).toMatch(/bump\(parsed\.data\.role, 'ok'\);/);
   });
 
-  it("mintLivekitToken call shape pinned: identity: sessionId (with ses_) + ttlSeconds: deps.ttlSeconds ?? 600 + video.room: sessionId + roomJoin: true + canPublish: role === 'publisher' + canSubscribe: role === 'subscriber'. The asymmetric publish-vs-subscribe permission split is the load-bearing capability boundary — drift to canPublish: true for subscribers would let dashboard viewers inject video into the room", () => {
+  it('mintLivekitToken call shape pinned (2026-06-05 SUBSCRIBE-ONLY launch-hardening): identity: customer-<accountId> + ttlSeconds: deps.ttlSeconds ?? 600 + video.room: sessionId + roomJoin: true + canPublish: false + canSubscribe: true. The customer-authed route is subscribe-only — a publisher grant would let a customer inject media into the session room.', () => {
     expect(body).toMatch(
-      /const token = mintLivekitToken\(\{\s*\n?\s*apiKey: deps\.apiKey,\s*\n?\s*apiSecret: deps\.apiSecret,\s*\n?\s*identity: sessionId,\s*\n?\s*ttlSeconds: deps\.ttlSeconds \?\? 600,\s*\n?\s*video: \{\s*\n?\s*room: sessionId,\s*\n?\s*roomJoin: true,\s*\n?\s*canPublish: parsed\.data\.role === 'publisher',\s*\n?\s*canSubscribe: parsed\.data\.role === 'subscriber',/,
+      /const token = mintLivekitToken\(\{\s*\n?\s*apiKey: deps\.apiKey,\s*\n?\s*apiSecret: deps\.apiSecret,\s*\n?\s*identity: `customer-\$\{ctx\.account\.id\}`,\s*\n?\s*ttlSeconds: deps\.ttlSeconds \?\? 600,\s*\n?\s*video: \{\s*\n?\s*room: sessionId,\s*\n?\s*roomJoin: true,\s*\n?\s*canPublish: false,\s*\n?\s*canSubscribe: true,/,
     );
   });
 
