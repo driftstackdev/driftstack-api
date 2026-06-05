@@ -120,7 +120,13 @@ describe('lib/oauth-client-exchange content parity', () => {
     expect(body).toMatch(/async function fetchWithTimeout\(/);
     expect(body).toMatch(/const ac = new AbortController\(\);/);
     expect(body).toMatch(/const timer = setTimeout\(\(\) => ac\.abort\(\), timeoutMs\);/);
-    expect(body).toMatch(/return await fetchImpl\(url, \{ \.\.\.init, signal: ac\.signal \}\);/);
+    expect(body).toMatch(
+      /const res = await fetchImpl\(url, \{ \.\.\.init, signal: ac\.signal \}\);/,
+    );
+    // The body read is INSIDE the timer scope (bug-class fix bc72ff48 —
+    // clearTimeout-after-fetch left res.text() unbounded). Helper returns text.
+    expect(body).toMatch(/const text = await res\.text\(\);/);
+    expect(body).toMatch(/return \{ status: res\.status, ok: res\.ok, text \};/);
     expect(body).toMatch(/clearTimeout\(timer\);/);
     expect(body).toMatch(/fetchWithTimeout\(\s*\n?\s*fetchImpl,\s*\n?\s*provider\.tokenUrl,/);
     expect(body).toMatch(/timeoutMs\?: number;/);

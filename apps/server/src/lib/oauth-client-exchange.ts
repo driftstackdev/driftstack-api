@@ -61,16 +61,30 @@ const DEFAULT_FETCH: typeof fetch = globalThis.fetch;
 // unverified-email — both already-handled results, no new variant.
 const DEFAULT_OAUTH_FETCH_TIMEOUT_MS = 10_000;
 
+/** Status + ok + the fully-read body text. We return the read body (not the
+ *  Response) so the abort timer can stay armed THROUGH the body read — clearing
+ *  it after `fetch()` resolves (headers) but before the caller's `res.text()`
+ *  would leave the body phase unbounded (only undici's ~300s default backstops
+ *  it), the bug-class fixed in stripe-api `bc72ff48`. */
+interface TimedResponse {
+  status: number;
+  ok: boolean;
+  text: string;
+}
+
 async function fetchWithTimeout(
   fetchImpl: typeof fetch,
   url: string,
   init: RequestInit,
   timeoutMs: number,
-): Promise<Response> {
+): Promise<TimedResponse> {
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   try {
-    return await fetchImpl(url, { ...init, signal: ac.signal });
+    const res = await fetchImpl(url, { ...init, signal: ac.signal });
+    // Read the body inside the timer scope so a stalled body aborts at timeoutMs.
+    const text = await res.text();
+    return { status: res.status, ok: res.ok, text };
   } finally {
     clearTimeout(timer);
   }
@@ -96,7 +110,7 @@ export async function exchangeCodeForTokens(opts: ExchangeCodeOpts): Promise<Exc
   });
   const fetchImpl = opts.fetch ?? DEFAULT_FETCH;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_OAUTH_FETCH_TIMEOUT_MS;
-  let res: Response;
+  let res: TimedResponse;
   try {
     res = await fetchWithTimeout(
       fetchImpl,
@@ -118,7 +132,7 @@ export async function exchangeCodeForTokens(opts: ExchangeCodeOpts): Promise<Exc
     };
   }
 
-  const text = await res.text();
+  const text = res.text;
   let parsed: Record<string, unknown>;
   try {
     parsed = text.length > 0 ? (JSON.parse(text) as Record<string, unknown>) : {};
@@ -186,7 +200,7 @@ export async function fetchUserInfo(opts: FetchUserInfoOpts): Promise<FetchUserI
   const provider = OAUTH_CLIENT_PROVIDERS[opts.provider];
   const fetchImpl = opts.fetch ?? DEFAULT_FETCH;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_OAUTH_FETCH_TIMEOUT_MS;
-  let res: Response;
+  let res: TimedResponse;
   try {
     res = await fetchWithTimeout(
       fetchImpl,
@@ -208,7 +222,7 @@ export async function fetchUserInfo(opts: FetchUserInfoOpts): Promise<FetchUserI
     };
   }
   if (res.status === 401) return { kind: 'unauthorized' };
-  const text = await res.text();
+  const text = res.text;
   if (!res.ok) {
     return { kind: 'idp-error', status: res.status, body: text.slice(0, 500) };
   }
@@ -275,7 +289,7 @@ export async function fetchUserInfo(opts: FetchUserInfoOpts): Promise<FetchUserI
         timeoutMs,
       );
       if (emailsRes.ok) {
-        const emailsText = await emailsRes.text();
+        const emailsText = emailsRes.text;
         try {
           const emailsParsed = JSON.parse(emailsText) as Array<{
             email?: string;

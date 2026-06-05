@@ -161,5 +161,10 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/const ac = new AbortController\(\);/);
     expect(body).toMatch(/setTimeout\(\(\) => ac\.abort\(\), this\.requestTimeoutMs\)/);
     expect(body).toMatch(/clearTimeout\(timer\);/);
+    // Body read INSIDE the try (bug-class fix bc72ff48 — reading after the
+    // clearTimeout left res.json() unbounded); parse OUTSIDE so a malformed
+    // success body still throws (not retried).
+    expect(body).toMatch(/bodyText = await safeReadBody\(res\);/);
+    expect(body).toMatch(/return JSON\.parse\(bodyText\) as AnthropicResponseJson;/);
   });
 });

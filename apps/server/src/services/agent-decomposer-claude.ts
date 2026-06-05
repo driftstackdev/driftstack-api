@@ -217,8 +217,13 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
       // Per-attempt timeout: a hung upstream aborts here rather than hanging
       // the turn forever. The abort surfaces as a network error in the catch
       // below (retried once, then thrown → transient-classified refuse).
+      // The body is read INSIDE this try so the abort timer stays armed THROUGH
+      // it — clearing the timer after fetch() (headers) but before res.json()
+      // left the body read unbounded (only undici's ~300s default backstops),
+      // the bug-class fixed in stripe-api bc72ff48.
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), this.requestTimeoutMs);
+      let bodyText: string;
       try {
         res = await this.fetchImpl(ANTHROPIC_API_URL, {
           method: 'POST',
@@ -230,6 +235,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
           body,
           signal: ac.signal,
         });
+        bodyText = await safeReadBody(res);
       } catch (networkErr) {
         if (attempt < MAX_RETRIES_5XX) {
           attempt++;
@@ -242,7 +248,9 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
       }
 
       if (res.ok) {
-        return (await res.json()) as AnthropicResponseJson;
+        // Parse OUTSIDE the try so a malformed-JSON success body throws (not
+        // retried) — same semantics as the prior res.json().
+        return JSON.parse(bodyText) as AnthropicResponseJson;
       }
 
       if (res.status >= 500 && attempt < MAX_RETRIES_5XX) {
@@ -251,8 +259,7 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
         continue;
       }
 
-      const errorText = await safeReadBody(res);
-      throw new Error(`Anthropic API ${res.status}: ${errorText.slice(0, 300)}`);
+      throw new Error(`Anthropic API ${res.status}: ${bodyText.slice(0, 300)}`);
     }
   }
 }
