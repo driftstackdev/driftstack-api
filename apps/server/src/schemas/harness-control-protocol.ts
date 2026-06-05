@@ -207,6 +207,13 @@ export const HARNESS_ERROR_CODES = [
   'intent_session_not_established',
   'intent_not_implemented',
   'intent_missing_parameter',
+  // A3 W135 (commit dae8a50d) — distinct from intent_missing_parameter: the param
+  // was PRESENT but invalid (e.g. the harness-side navigate scheme backstop
+  // rejecting a non-http(s) url that slipped past the server filter — a hit here
+  // is observable as a security event). Must be in the decode enum or an
+  // intentResult carrying it fails IntentResultEnvelopeSchema → the correlator
+  // silently drops the frame → the dispatch hangs to its timeout.
+  'intent_invalid_parameter',
   'intent_webdriver_failed',
   'intent_dispatch_error',
 ] as const;

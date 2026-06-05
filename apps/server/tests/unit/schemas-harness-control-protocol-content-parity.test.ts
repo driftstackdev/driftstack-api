@@ -16,7 +16,7 @@
 //   • Per-intent param shapes (navigate/click/send_keys/scroll/
 //     behavioral_pause/wait_for/execute_script + no-param intents).
 //   • intentName→schema map roster.
-//   • IntentDispatch + IntentResult envelopes + 5 error codes.
+//   • IntentDispatch + IntentResult envelopes + 6 error codes.
 //
 // Plus a behavioral block that exercises the schemas (accept/reject)
 // so the contract is enforced, not just pinned by regex.
@@ -228,10 +228,17 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(HarnessOutboundSchema.safeParse({ type: 'heartbeat' }).success).toBe(false);
   });
 
-  it('5 error codes pinned in canonical order', () => {
-    expect(body).toMatch(
-      /export const HARNESS_ERROR_CODES = \[\s*\n?\s*'intent_session_not_established',\s*\n?\s*'intent_not_implemented',\s*\n?\s*'intent_missing_parameter',\s*\n?\s*'intent_webdriver_failed',\s*\n?\s*'intent_dispatch_error',\s*\n?\s*\] as const;/,
-    );
+  it('6 error codes pinned in canonical order (runtime exact-order — comment-agnostic; intent_invalid_parameter added A3 W135)', () => {
+    // Exact .toEqual (not a source regex): order-sensitive + tolerant of the
+    // inline rationale comments now interleaved in the source array.
+    expect([...HARNESS_ERROR_CODES]).toEqual([
+      'intent_session_not_established',
+      'intent_not_implemented',
+      'intent_missing_parameter',
+      'intent_invalid_parameter',
+      'intent_webdriver_failed',
+      'intent_dispatch_error',
+    ]);
   });
 });
 
@@ -239,11 +246,25 @@ describe('harness-control-protocol behavioral contract', () => {
   it('intent vocab + reserved set + error codes match the canonical counts', () => {
     expect(HARNESS_INTENT_NAMES).toHaveLength(11);
     expect(HARNESS_RESERVED_INTENT_NAMES).toEqual(['fill_form', 'login', 'search']);
-    expect(HARNESS_ERROR_CODES).toHaveLength(5);
+    expect(HARNESS_ERROR_CODES).toHaveLength(6);
     // The param-schema map covers exactly the dispatchable vocab.
     expect(Object.keys(HARNESS_INTENT_PARAM_SCHEMAS).sort()).toEqual(
       [...HARNESS_INTENT_NAMES].sort(),
     );
+  });
+
+  it('A3 W135 — an intentResult carrying errorCode intent_invalid_parameter PARSES (the decode-enum gap: before adding it, IntentResultEnvelopeSchema rejected the frame → the correlator silently dropped it → the dispatch hung to its timeout)', () => {
+    expect(HarnessErrorCodeSchema.safeParse('intent_invalid_parameter').success).toBe(true);
+    const frame = {
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'int_1',
+      success: false,
+      durationMs: 3,
+      errorCode: 'intent_invalid_parameter',
+      errorMessage: 'navigate.url rejected: non-http(s) scheme',
+    };
+    expect(IntentResultEnvelopeSchema.safeParse(frame).success).toBe(true);
   });
 
   it('reserved JSBridge intents are NOT in the dispatchable enum', () => {

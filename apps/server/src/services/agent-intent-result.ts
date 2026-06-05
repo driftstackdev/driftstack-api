@@ -83,6 +83,7 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
   intent_session_not_established: 'the browser session was not established for this action',
   intent_not_implemented: 'this action is not supported by the browser session',
   intent_missing_parameter: 'a required parameter was missing',
+  intent_invalid_parameter: 'a parameter was invalid',
   intent_webdriver_failed: 'the browser failed to perform this action',
   intent_dispatch_error: 'the action could not be dispatched',
 };
