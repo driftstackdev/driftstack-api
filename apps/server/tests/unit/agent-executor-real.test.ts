@@ -23,13 +23,15 @@ function makePort(overrides: Partial<ExecutorSessionsPort> = {}): {
   port: ExecutorSessionsPort;
   navigate: ReturnType<typeof vi.fn>;
   interact: ReturnType<typeof vi.fn>;
+  wait: ReturnType<typeof vi.fn>;
   capture: ReturnType<typeof vi.fn>;
 } {
   const navigate = vi.fn(() => Promise.resolve({ finalUrl: 'https://ex.com/final', status: 200 }));
   const interact = vi.fn(() => Promise.resolve({ durationMs: 12 }));
+  const wait = vi.fn(() => Promise.resolve({ satisfied: true }));
   const capture = vi.fn(() => Promise.resolve({ kind: 'screenshot' as const, byteSize: 4096 }));
-  const port = { navigate, interact, capture, ...overrides };
-  return { port, navigate, interact, capture };
+  const port = { navigate, interact, wait, capture, ...overrides };
+  return { port, navigate, interact, wait, capture };
 }
 
 function plan(intents: AgentIntent[]) {
@@ -94,21 +96,74 @@ describe('AI-B2.b RealAgentExecutor — clean dispatch', () => {
 });
 
 describe('AI-B2.b RealAgentExecutor — vocab gaps + guards', () => {
-  it.each(['wait', 'scroll', 'swipe'] as const)(
-    '%s returns a typed failure (pending vocabulary reconciliation), halting the plan',
-    async (kind) => {
-      const { port } = makePort();
-      const exec = new RealAgentExecutor({ sessions: port });
-      const intent: AgentIntent =
-        kind === 'wait' ? { kind: 'wait', condition: 'idle' } : { kind: 'interact', action: kind };
-      const r = await exec.execute({ account, sessionId: 'ses_1', plan: plan([intent]) });
-      expect(r.ok).toBe(false);
-      expect(r.results[0]).toMatchObject({ kind: 'failure' });
-      expect(r.results[0]?.kind === 'failure' && r.results[0].reason).toContain(
-        'pending vocabulary reconciliation',
-      );
-    },
-  );
+  it('wait:idle → time-bounded driver wait (idle has no driver predicate)', async () => {
+    const { port, wait } = makePort();
+    const exec = new RealAgentExecutor({ sessions: port });
+    const r = await exec.execute({
+      account,
+      sessionId: 'ses_1',
+      plan: plan([{ kind: 'wait', condition: 'idle', timeoutMs: 2000 }]),
+    });
+    expect(r.ok).toBe(true);
+    expect(wait).toHaveBeenCalledWith(account, 'ses_1', { condition: { kind: 'time', ms: 2000 } });
+  });
+
+  it('wait:selector_visible → driver selector wait; missing selector → typed failure', async () => {
+    const { port, wait } = makePort();
+    const exec = new RealAgentExecutor({ sessions: port });
+    const ok = await exec.execute({
+      account,
+      sessionId: 'ses_1',
+      plan: plan([{ kind: 'wait', condition: 'selector_visible', selector: '#ready' }]),
+    });
+    expect(ok.ok).toBe(true);
+    expect(wait).toHaveBeenCalledWith(account, 'ses_1', {
+      condition: { kind: 'selector', selector: '#ready' },
+    });
+    const bad = await exec.execute({
+      account,
+      sessionId: 'ses_1',
+      plan: plan([{ kind: 'wait', condition: 'selector_visible' }]),
+    });
+    expect(bad.ok).toBe(false);
+    expect(bad.results[0]?.kind === 'failure' && bad.results[0].reason).toContain('selector');
+  });
+
+  it('scroll → one-viewport vertical scroll; down by default, up via value', async () => {
+    const { port, interact } = makePort();
+    const exec = new RealAgentExecutor({ sessions: port });
+    await exec.execute({
+      account,
+      sessionId: 'ses_1',
+      plan: plan([{ kind: 'interact', action: 'scroll' }]),
+    });
+    expect(interact).toHaveBeenCalledWith(account, 'ses_1', {
+      action: { kind: 'scroll', delta_x: 0, delta_y: 600 },
+    });
+    interact.mockClear();
+    await exec.execute({
+      account,
+      sessionId: 'ses_1',
+      plan: plan([{ kind: 'interact', action: 'scroll', value: 'up' }]),
+    });
+    expect(interact).toHaveBeenCalledWith(account, 'ses_1', {
+      action: { kind: 'scroll', delta_x: 0, delta_y: -600 },
+    });
+  });
+
+  it('swipe → typed failure (no driver gesture); halts the plan', async () => {
+    const { port } = makePort();
+    const exec = new RealAgentExecutor({ sessions: port });
+    const r = await exec.execute({
+      account,
+      sessionId: 'ses_1',
+      plan: plan([{ kind: 'interact', action: 'swipe' }]),
+    });
+    expect(r.ok).toBe(false);
+    expect(r.results[0]?.kind === 'failure' && r.results[0].reason).toContain(
+      'swipe is not supported',
+    );
+  });
 
   it('tap without a selector → typed failure', async () => {
     const { port, interact } = makePort();
@@ -131,7 +186,7 @@ describe('AI-B2.b RealAgentExecutor — vocab gaps + guards', () => {
       sessionId: 'ses_1',
       plan: plan([
         { kind: 'navigate', url: 'https://ex.com' },
-        { kind: 'interact', action: 'scroll' }, // fails (vocab gap)
+        { kind: 'interact', action: 'swipe' }, // fails (no driver gesture)
         { kind: 'capture', capture: 'screenshot' }, // must NOT run
       ]),
     });

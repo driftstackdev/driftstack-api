@@ -18,7 +18,7 @@
 
 import type { AgentIntent, DecomposeResult, TranscriptEntry } from './agent-decomposer.js';
 import type { AccountContext } from './auth.js';
-import type { CaptureKind, InteractAction } from '@driftstack/api-types';
+import type { CaptureKind, InteractAction, WaitCondition } from '@driftstack/api-types';
 
 /**
  * Per-intent execution result. The discriminated union lets callers
@@ -124,6 +124,11 @@ export interface ExecutorSessionsPort {
     sessionId: string,
     body: { action: InteractAction },
   ): Promise<{ durationMs: number }>;
+  wait(
+    ctx: AccountContext,
+    sessionId: string,
+    body: { condition: WaitCondition },
+  ): Promise<{ satisfied: boolean }>;
   capture(
     ctx: AccountContext,
     sessionId: string,
@@ -141,14 +146,14 @@ export interface RealAgentExecutorDeps {
  * interact,capture} surface), halting on first failure, never throwing.
  * Replaces StubAgentExecutor's synthetic success.
  *
- * SCOPE (increment 1): the cleanly-mapping intents only — navigate /
- * interact:tap / interact:type / capture. `wait`, `interact:scroll`, and
- * `interact:swipe` return a typed failure ("pending vocabulary
- * reconciliation, AI-B2.c") because their AgentIntent vocab does NOT map 1:1
- * onto the driver: AgentIntent.wait.condition (idle|selector_visible) ≠ driver
- * WaitCondition (selector|selector_hidden|url_matches|time); AgentIntent.scroll
- * carries no delta_x/delta_y; swipe has no driver target. Increment 2
- * reconciles those + confirms shapes with Agent-3.
+ * SCOPE: dispatches navigate / interact:tap / interact:type / interact:scroll /
+ * wait / capture against the driver, reconciling the AgentIntent vocab onto the
+ * driver's shapes (AI-B2.c): wait.condition selector_visible→{kind:selector},
+ * idle→{kind:time} (no driver idle predicate — a bounded time wait is the closest
+ * honest mapping); scroll (no AgentIntent delta) → one-viewport vertical scroll,
+ * direction/magnitude from the optional `value`. Only `interact:swipe` returns a
+ * typed failure — it has no driver gesture AND no direction in AgentIntent
+ * (genuinely underspecified; resolved in the customer-schema increment).
  *
  * NOT wired into bootstrap yet — the runtime still uses StubAgentExecutor —
  * pending the real-session-provisioning check (the wired executor 400s without
@@ -203,11 +208,7 @@ export class RealAgentExecutor implements AgentExecutor {
           return { kind: 'success', intent, summary: `captured ${r.kind} (${r.byteSize} bytes)` };
         }
         case 'wait':
-          return {
-            kind: 'failure',
-            intent,
-            reason: 'wait dispatch pending vocabulary reconciliation (AI-B2.c)',
-          };
+          return await this.dispatchWait(account, sessionId, intent);
       }
     } catch (err) {
       return {
@@ -242,14 +243,65 @@ export class RealAgentExecutor implements AgentExecutor {
         });
         return { kind: 'success', intent, summary: `typed into ${intent.selector}` };
       }
-      case 'scroll':
+      case 'scroll': {
+        // AgentIntent scroll carries no delta — map to a one-viewport vertical
+        // scroll (down by default; 'up' via value), honoring an optional
+        // selector + a non-negative integer `value` as the pixel magnitude.
+        const direction = intent.value === 'up' ? -1 : 1;
+        const magnitude =
+          intent.value !== undefined && /^\d+$/.test(intent.value) ? Number(intent.value) : 600;
+        await this.deps.sessions.interact(account, sessionId, {
+          action: {
+            kind: 'scroll',
+            ...(intent.selector !== undefined ? { selector: intent.selector } : {}),
+            delta_x: 0,
+            delta_y: direction * magnitude,
+          },
+        });
+        return {
+          kind: 'success',
+          intent,
+          summary: `scrolled ${intent.value === 'up' ? 'up' : 'down'}`,
+        };
+      }
       case 'swipe':
+        // No driver gesture maps to swipe (the driver has scroll, not swipe) and
+        // AgentIntent.swipe carries no direction — genuinely underspecified.
+        // Resolved in the customer-schema increment (drop or replace with scroll).
         return {
           kind: 'failure',
           intent,
-          reason: `${intent.action} dispatch pending vocabulary reconciliation (AI-B2.c)`,
+          reason: 'swipe is not supported — use scroll (no driver swipe gesture)',
         };
     }
+  }
+
+  private async dispatchWait(
+    account: AccountContext,
+    sessionId: string,
+    intent: Extract<AgentIntent, { kind: 'wait' }>,
+  ): Promise<IntentResult> {
+    // Reconcile the AgentIntent wait vocab (idle | selector_visible) onto the
+    // driver's WaitCondition union. selector_hidden / url_matches aren't
+    // reachable from AgentIntent today.
+    let condition: WaitCondition;
+    if (intent.condition === 'selector_visible') {
+      if (intent.selector === undefined) {
+        return { kind: 'failure', intent, reason: 'wait selector_visible requires a selector' };
+      }
+      condition = { kind: 'selector', selector: intent.selector };
+    } else {
+      // 'idle' has no driver predicate → bounded time wait (clamped to the
+      // driver's 0–60_000ms range; defaults to 1s when no timeout given).
+      const ms = Math.min(60_000, Math.max(0, intent.timeoutMs ?? 1000));
+      condition = { kind: 'time', ms };
+    }
+    const r = await this.deps.sessions.wait(account, sessionId, { condition });
+    return {
+      kind: 'success',
+      intent,
+      summary: `waited (${intent.condition}) → ${r.satisfied ? 'satisfied' : 'timed out'}`,
+    };
   }
 }
 

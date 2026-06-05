@@ -108,7 +108,7 @@ describe('services/agent-executor content parity', () => {
     expect(body).toMatch(/role: 'agent',/);
   });
 
-  it('AI-B2.b RealAgentExecutor pinned: ExecuteArgs.account?, ExecutorSessionsPort, real dispatch of navigate/tap/type/capture, and wait/scroll/swipe → typed failure "pending vocabulary reconciliation (AI-B2.c)" — pinned so the honest-foundation scope (clean intents dispatch; vocab-gap intents fail rather than guess) + the never-throw contract survive', () => {
+  it('AI-B2.b/c RealAgentExecutor pinned: ExecuteArgs.account?, ExecutorSessionsPort (incl wait), real dispatch of navigate/tap/type/scroll/wait/capture with the AgentIntent→driver vocab reconciliation, swipe → typed failure — pinned so the dispatch surface + the honest swipe-unsupported decision + never-throw contract survive', () => {
     expect(body).toMatch(/account\?: AccountContext;/);
     expect(body).toMatch(/export interface ExecutorSessionsPort \{/);
     expect(body).toMatch(/export class RealAgentExecutor implements AgentExecutor \{/);
@@ -122,10 +122,14 @@ describe('services/agent-executor content parity', () => {
     expect(body).toMatch(
       /this\.deps\.sessions\.capture\(account, sessionId, \{ kind: intent\.capture \}\)/,
     );
-    expect(body).toMatch(/wait dispatch pending vocabulary reconciliation \(AI-B2\.c\)/);
-    expect(body).toMatch(
-      /\$\{intent\.action\} dispatch pending vocabulary reconciliation \(AI-B2\.c\)/,
-    );
+    // AI-B2.c wait reconciliation: selector_visible→{kind:selector}, idle→{kind:time}.
+    expect(body).toMatch(/condition = \{ kind: 'selector', selector: intent\.selector \};/);
+    expect(body).toMatch(/condition = \{ kind: 'time', ms \};/);
+    expect(body).toMatch(/this\.deps\.sessions\.wait\(account, sessionId, \{ condition \}\)/);
+    // AI-B2.c scroll reconciliation: one-viewport vertical, direction/magnitude from value.
+    expect(body).toMatch(/delta_y: direction \* magnitude,/);
+    // swipe stays a typed failure (no driver gesture); never-throw account guard.
+    expect(body).toMatch(/swipe is not supported — use scroll \(no driver swipe gesture\)/);
     expect(body).toMatch(/executor missing account context/);
   });
 });
