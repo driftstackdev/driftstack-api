@@ -465,3 +465,57 @@ Founder greenlit the control-plane WSS arc ("you choose and do as recommended").
 - (c) customer `AgentIntentSchema` (scroll/behavioral_pause/back/forward + caps) + 3 SDKs + decomposer — HOLD
   until (a)/(b) wired (shipping the customer schema before the executor can dispatch = false affordance/no-op).
 - End-to-end still gated on item 9 (harness→fork drive; founder Option-1 sign-off; A1+A3).
+
+## ✅ 2026-06-05 — Increment-2 GO-LIVE RUNBOOK (supersedes the stale "open questions / gates" above)
+
+All 3 wire questions are ANSWERED and the entire non-gated API data path is built + tested. This section is
+the turnkey checklist for going live once the founder/infra gates clear.
+
+### Resolved wire facts (A3-confirmed; build to these)
+
+- `inputParams`/`outputData` = **base64 string** of UTF-8 JSON (Swift `Data` default). Envelope keys = **camelCase**.
+- WSS auth = **Ed25519-JWT + nonce** (mTLS NO LONGER required — optional transport DiD later). Verifier =
+  the audited `services/fleet-node-auth.ts` (claims iss=sub=nodeId/iat/exp≤300/nonce; alg header ignored;
+  `Authorization: Bearer <jwt>` on the WS upgrade). Harness signer wired to it (A3 `d1482885`).
+- Dispatch correlation/timeout (A3 W106): 1:1 by `intentId`; fast-fail on the errored SessionStatus
+  `intent_dispatch_no_session: <intentName>`; per-intent timeout `max(30s, cap+15s)` (315s for
+  behavioral_pause/wait_for) → `intent_dispatch_error`; no result on connection-drop → timeout.
+
+### DONE on the API side (all unwired → zero prod change until the bootstrap swap)
+
+| piece                   | file                                       | commit                                   |
+| ----------------------- | ------------------------------------------ | ---------------------------------------- |
+| (a) wire schema         | `schemas/harness-control-protocol.ts`      | `3fa842fa` (+ base64 tighten `8711a319`) |
+| (b) request mapper      | `services/agent-intent-to-dispatch.ts`     | `beb41e23`                               |
+| codec (serialize/parse) | `services/harness-control-codec.ts`        | `8711a319`                               |
+| result mapper           | `services/agent-intent-result.ts`          | `e6e577b2`                               |
+| correlator + timeout    | `services/harness-dispatch-correlator.ts`  | `68b82e41`                               |
+| plan runner (executor)  | `services/agent-executor-control-plane.ts` | `e0006d9c`                               |
+
+The data path is complete + unit-tested end-to-end against a mock transport:
+`agentIntentToDispatch → serializeIntentDispatch → IntentDispatchCorrelator.dispatch → parseIntentResult →
+intentResultToCustomer`, halt-on-failure, in `ControlPlaneAgentExecutor` (implements the existing `AgentExecutor`).
+
+### REMAINING (gated — founder/infra/A3; the go-live steps)
+
+1. **`fleet_nodes` Tier-2 migration** (founder approval) — pubkey registry; design at
+   `docs/internal/fleet-nodes-sql-migration-design.md`. Backs a Drizzle `FleetNodesRepo` (InMemory variant exists).
+2. **Per-node Ed25519 key provisioning** (infra) — private key → harness (`ControlClientConfig.nodeSigningKeyRaw`),
+   public key → `fleet_nodes`.
+3. **`@fastify/websocket`** dep (A2 adds when building the route — withheld now to avoid an unused dep).
+4. **`/v1/fleet/events` WS route** (A2 builds once 1–3 exist):
+   - On upgrade: verify `Authorization: Bearer <jwt>` via `fleetNodeAuth.verify` (inject the Redis `FleetNonceCache`
+     for replay defense — NOT optional in prod) → 401 before the socket opens on failure.
+   - Build a per-connection `DispatchTransport` (`send(d)` → `socket.send(JSON.stringify(d))`); on inbound frame →
+     `correlator.onResultFrame(frame)` for IntentResults and `correlator.onSessionError(sessionId, detail)` for
+     errored SessionStatus; on close → `correlator.failAll(...)`.
+   - **OPEN (resolve with A3 + the migration design): node→session routing** — how the control plane maps a
+     `sessionId` to the connected node that owns its BrowserProcess (session→node assignment is the control
+     plane's own state per planning 133; confirm whether the node also self-registers its sessionIds on connect).
+5. **Bootstrap swap** (founder/launch): `StubAgentExecutor` → `new ControlPlaneAgentExecutor(new IntentDispatchCorrelator(wsTransport))`.
+6. End-to-end execution against the fork still gated on item 9 (harness→fork drive; A1 Option-1, founder-approved).
+
+### Customer-facing schema additions (c) — HOLD until 1–5 wired
+
+`AgentIntentSchema` scroll{direction,distance_px}/back/forward/behavioral_pause + 3 SDKs + decomposer. Shipping
+before the executor can dispatch them = a false affordance. Add as the FIRST post-wiring increment.
