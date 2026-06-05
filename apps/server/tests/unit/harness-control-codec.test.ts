@@ -8,12 +8,14 @@ import {
   encodeWireData,
   decodeWireData,
   serializeIntentDispatch,
+  serializeSessionAssign,
   parseIntentResult,
   HarnessWireCodecError,
 } from '../../src/services/harness-control-codec.js';
 import {
   IntentDispatchSchema,
   IntentResultEnvelopeSchema,
+  SessionAssignSchema,
 } from '../../src/schemas/harness-control-protocol.js';
 import { agentIntentToDispatch } from '../../src/services/agent-intent-to-dispatch.js';
 
@@ -175,5 +177,80 @@ describe('parseIntentResult', () => {
     });
     expect(r.intentId).toBe('int_5');
     expect(r.outputData).toEqual({ url: 'https://x' });
+  });
+});
+
+describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
+  const base = {
+    sessionId: 'ses_1',
+    archetype: 'iphone17_ios18_7_safari26_4',
+    behaviorProfile: 'regular',
+    transportMode: 'h2-and-h3' as const,
+    idleTimeoutSeconds: 300,
+    maxDurationSeconds: 3600,
+  };
+
+  it('emits the required envelope; validates against SessionAssignSchema', () => {
+    const a = serializeSessionAssign(base);
+    expect(SessionAssignSchema.safeParse(a).success).toBe(true);
+    expect(a.type).toBe('sessionAssign');
+    expect(a.transportMode).toBe('h2-and-h3');
+    expect(a.idleTimeoutSeconds).toBe(300);
+    expect(a.inlineProxyConfig).toBeUndefined();
+    expect(a.livekit).toBeUndefined();
+  });
+
+  it('inlineProxyConfig (SocksProxyConfig) → base64 of utf8 JSON (A3 W136 = Data codec, NOT nested object)', () => {
+    const proxy = {
+      host: 'proxy.example.com',
+      port: 1080,
+      username: 'u',
+      password: 'p',
+      udp_associate: true,
+      require_remote_dns: false,
+    };
+    const a = serializeSessionAssign({ ...base, inlineProxyConfig: proxy });
+    expect(typeof a.inlineProxyConfig).toBe('string');
+    // It's base64-of-utf8-JSON: decode → JSON → the original config (round-trip,
+    // key-order-agnostic). Proves the Data-codec encoding without pinning key order.
+    const decodedJson = Buffer.from(a.inlineProxyConfig as string, 'base64').toString('utf8');
+    expect(JSON.parse(decodedJson)).toEqual(proxy);
+    expect(decodeWireData(a.inlineProxyConfig as string)).toEqual(proxy);
+  });
+
+  it('throws HarnessWireCodecError on a malformed SocksProxyConfig (bad port)', () => {
+    expect(() =>
+      serializeSessionAssign({
+        ...base,
+        inlineProxyConfig: {
+          host: 'h',
+          port: 70000,
+          udp_associate: true,
+          require_remote_dns: false,
+        },
+      }),
+    ).toThrow(HarnessWireCodecError);
+  });
+
+  it('maps camelCase livekit → snake_case wire object (the lone snake_case exception)', () => {
+    const a = serializeSessionAssign({
+      ...base,
+      livekit: { room: 'r1', token: 'tk', wsUrl: 'wss://lk', expiresAt: '2026-06-05T20:00:00Z' },
+    });
+    expect(a.livekit).toEqual({
+      room: 'r1',
+      token: 'tk',
+      ws_url: 'wss://lk',
+      expires_at: '2026-06-05T20:00:00Z',
+    });
+  });
+
+  it('initialUrl is http(s)-only — a file:/javascript: initialUrl throws (chokepoint guard, A3 W135)', () => {
+    expect(serializeSessionAssign({ ...base, initialUrl: 'https://ok.example' }).initialUrl).toBe(
+      'https://ok.example',
+    );
+    for (const initialUrl of ['file:///etc/passwd', 'javascript:alert(1)', 'data:text/html,x']) {
+      expect(() => serializeSessionAssign({ ...base, initialUrl })).toThrow();
+    }
   });
 });

@@ -44,6 +44,7 @@ import {
   ExecuteScriptParamsSchema,
   IntentDispatchSchema,
   IntentResultEnvelopeSchema,
+  SessionAssignSchema,
   HarnessErrorCodeSchema,
   HarnessOutboundSchema,
 } from '../../src/schemas/harness-control-protocol.js';
@@ -265,6 +266,57 @@ describe('harness-control-protocol behavioral contract', () => {
       errorMessage: 'navigate.url rejected: non-http(s) scheme',
     };
     expect(IntentResultEnvelopeSchema.safeParse(frame).success).toBe(true);
+  });
+
+  it('EG-API-1.6 SessionAssign (A3 W136): required fields enforced, transportMode enum, initialUrl http(s)-only, livekit snake_case strict', () => {
+    const valid = {
+      type: 'sessionAssign',
+      sessionId: 'ses_1',
+      archetype: 'iphone17_ios18_7_safari26_4',
+      behaviorProfile: 'regular',
+      transportMode: 'h2-and-h3',
+      idleTimeoutSeconds: 300,
+      maxDurationSeconds: 3600,
+    };
+    expect(SessionAssignSchema.safeParse(valid).success).toBe(true);
+    // Each required field absent → reject (harness decode has no struct defaults).
+    for (const k of [
+      'sessionId',
+      'archetype',
+      'behaviorProfile',
+      'transportMode',
+      'idleTimeoutSeconds',
+      'maxDurationSeconds',
+    ]) {
+      const { [k]: _omit, ...rest } = valid as Record<string, unknown>;
+      expect(SessionAssignSchema.safeParse(rest).success, k).toBe(false);
+    }
+    // transportMode is a closed enum (dash-cased, W118).
+    expect(SessionAssignSchema.safeParse({ ...valid, transportMode: 'h2Only' }).success).toBe(
+      false,
+    );
+    // initialUrl http(s)-only (chokepoint guard; A3 W135).
+    expect(SessionAssignSchema.safeParse({ ...valid, initialUrl: 'https://ok' }).success).toBe(
+      true,
+    );
+    expect(
+      SessionAssignSchema.safeParse({ ...valid, initialUrl: 'file:///etc/passwd' }).success,
+    ).toBe(false);
+    // livekit is the lone snake_case wire object + strict (rejects camelCase ws_url).
+    expect(
+      SessionAssignSchema.safeParse({
+        ...valid,
+        livekit: { room: 'r', token: 't', ws_url: 'wss://x', expires_at: '2026-06-05T20:00:00Z' },
+      }).success,
+    ).toBe(true);
+    expect(
+      SessionAssignSchema.safeParse({
+        ...valid,
+        livekit: { room: 'r', token: 't', wsUrl: 'wss://x', expiresAt: 'z' },
+      }).success,
+    ).toBe(false);
+    // strict envelope: unknown top-level key rejected.
+    expect(SessionAssignSchema.safeParse({ ...valid, bogus: 1 }).success).toBe(false);
   });
 
   it('reserved JSBridge intents are NOT in the dispatchable enum', () => {

@@ -19,12 +19,16 @@
 import {
   IntentDispatchSchema,
   IntentResultEnvelopeSchema,
+  SessionAssignSchema,
   HARNESS_INTENT_PARAM_SCHEMAS,
   type IntentDispatch,
   type IntentResultEnvelope,
+  type SessionAssign,
+  type SessionAssignTransportMode,
   type HarnessIntentName,
   type HarnessErrorCode,
 } from '../schemas/harness-control-protocol.js';
+import { SocksProxyConfigSchema, type SocksProxyConfig } from '@driftstack/api-types';
 
 /** Thrown when an inbound envelope's base64/JSON `Data` field is malformed —
  *  a harness↔server protocol violation, surfaced rather than silently dropped. */
@@ -87,6 +91,69 @@ export function serializeIntentDispatch(args: {
   };
   // Re-validate the envelope so a malformed dispatch never leaves the server.
   return IntentDispatchSchema.parse(dispatch);
+}
+
+/**
+ * Build a wire-ready ControlInbound.sessionAssign (EG-API-1.6). Mirrors
+ * serializeIntentDispatch: validates the logical SocksProxyConfig against its
+ * canonical schema and base64-encodes it into `inlineProxyConfig` (A3 W136:
+ * `Data` field → base64 of utf8 JSON, NOT a nested object / raw JSON string),
+ * maps the camelCase `livekit` input to its lone-snake_case wire shape, then
+ * re-validates the whole envelope (required fields + the initialUrl http(s) guard)
+ * so a malformed assign never leaves the server.
+ *
+ * @throws HarnessWireCodecError if `inlineProxyConfig` fails SocksProxyConfig validation.
+ * @throws ZodError if the assembled envelope is invalid (missing required field /
+ *   bad transportMode / non-http(s) initialUrl).
+ */
+export function serializeSessionAssign(args: {
+  sessionId: string;
+  archetype: string;
+  behaviorProfile: string;
+  transportMode: SessionAssignTransportMode;
+  idleTimeoutSeconds: number;
+  maxDurationSeconds: number;
+  proxyConfigId?: string;
+  /** Logical SocksProxyConfig; base64-encoded into the wire `inlineProxyConfig`. */
+  inlineProxyConfig?: SocksProxyConfig;
+  initialUrl?: string;
+  /** camelCase in; emitted as the snake_case wire object (room/token/ws_url/expires_at). */
+  livekit?: { room: string; token: string; wsUrl: string; expiresAt: string };
+}): SessionAssign {
+  let inlineProxyConfig: string | undefined;
+  if (args.inlineProxyConfig !== undefined) {
+    const parsed = SocksProxyConfigSchema.safeParse(args.inlineProxyConfig);
+    if (!parsed.success) {
+      throw new HarnessWireCodecError(
+        `inlineProxyConfig failed the SocksProxyConfig contract before assign: ${parsed.error.message}`,
+      );
+    }
+    // base64( utf8( JSON.stringify(config) ) ) — same Data encoding as inputParams.
+    inlineProxyConfig = encodeWireData(parsed.data);
+  }
+  const assign = {
+    type: 'sessionAssign' as const,
+    sessionId: args.sessionId,
+    archetype: args.archetype,
+    behaviorProfile: args.behaviorProfile,
+    transportMode: args.transportMode,
+    idleTimeoutSeconds: args.idleTimeoutSeconds,
+    maxDurationSeconds: args.maxDurationSeconds,
+    ...(args.proxyConfigId !== undefined ? { proxyConfigId: args.proxyConfigId } : {}),
+    ...(inlineProxyConfig !== undefined ? { inlineProxyConfig } : {}),
+    ...(args.initialUrl !== undefined ? { initialUrl: args.initialUrl } : {}),
+    ...(args.livekit !== undefined
+      ? {
+          livekit: {
+            room: args.livekit.room,
+            token: args.livekit.token,
+            ws_url: args.livekit.wsUrl,
+            expires_at: args.livekit.expiresAt,
+          },
+        }
+      : {}),
+  };
+  return SessionAssignSchema.parse(assign);
 }
 
 /** The logical (decoded) result the executor consumes. */

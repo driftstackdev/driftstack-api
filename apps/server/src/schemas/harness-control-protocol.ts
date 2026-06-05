@@ -203,6 +203,56 @@ export const IntentDispatchSchema = z.object({
 });
 export type IntentDispatch = z.infer<typeof IntentDispatchSchema>;
 
+// ── ControlInbound.sessionAssign (server → harness) ───────────────────
+// EG-API-1.6 — assigns a session (+ its egress + persona + transport + caps) to
+// the connected fleet node. Shape empirically pinned by A3's round-trip decode
+// test (bus W136, harness commit dc9e0a49). Build it with serializeSessionAssign()
+// in harness-control-codec.ts. Wire notes the harness decode REQUIRES exactly:
+//   - sessionId / archetype / behaviorProfile / transportMode /
+//     idleTimeoutSeconds / maxDurationSeconds — all REQUIRED (no struct defaults;
+//     an absent field throws harness-side). transportMode is dash-cased (W118).
+//   - inlineProxyConfig is a BASE64 string of the UTF-8 JSON SocksProxyConfig
+//     (Swift `Data` default codec — same encoding as inputParams/outputData), NOT
+//     a nested object or a raw JSON string. serializeSessionAssign base64-encodes it.
+//   - initialUrl is http(s)-only (reuses the navigate scheme guard; the harness
+//     W135 backstop drops a bad scheme, but we reject at the chokepoint too).
+//   - livekit is the LONE snake_case wire object (GUI-streaming sessions only).
+export const SessionAssignLivekitSchema = z
+  .object({
+    room: z.string().min(1),
+    token: z.string().min(1),
+    ws_url: z.string().min(1),
+    expires_at: z.string().min(1),
+  })
+  .strict();
+
+export const SessionAssignSchema = z
+  .object({
+    type: z.literal('sessionAssign'),
+    sessionId: z.string().min(1),
+    archetype: z.string().min(1),
+    behaviorProfile: z.string().min(1),
+    transportMode: z.enum(['h2-only', 'h2-and-h3']),
+    idleTimeoutSeconds: z.number().int().positive(),
+    maxDurationSeconds: z.number().int().positive(),
+    proxyConfigId: z.string().min(1).optional(),
+    /** BASE64 of utf8(JSON.stringify(SocksProxyConfig)) — see serializeSessionAssign. */
+    inlineProxyConfig: z.string().min(1).optional(),
+    initialUrl: z
+      .string()
+      .min(1)
+      .refine(isHttpOrHttpsUrl, {
+        message:
+          'initialUrl must be an absolute http(s) URL; file:, javascript:, data:, etc. are rejected',
+      })
+      .optional(),
+    livekit: SessionAssignLivekitSchema.optional(),
+  })
+  .strict();
+export type SessionAssign = z.infer<typeof SessionAssignSchema>;
+export const SESSION_ASSIGN_TRANSPORT_MODES = ['h2-only', 'h2-and-h3'] as const;
+export type SessionAssignTransportMode = (typeof SESSION_ASSIGN_TRANSPORT_MODES)[number];
+
 export const HARNESS_ERROR_CODES = [
   'intent_session_not_established',
   'intent_not_implemented',
