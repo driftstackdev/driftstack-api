@@ -523,6 +523,15 @@ export interface AppDeps {
   /** When true, register a permissive CORS policy. Production locks this down. */
   permissiveCors?: boolean;
   /**
+   * Fastify `trustProxy` (from `config.trustProxy` ← `TRUST_PROXY` env). Drives
+   * `req.ip` / `X-Forwarded-For` resolution. Prod = `1` (Cloudflare→nginx→
+   * Fastify; nginx appends the real client, ufw blocks :7780 so nginx is the
+   * only peer). Omitted/undefined → false (dev/test: req.ip = socket peer).
+   * Without this, `req.ip` is the loopback peer behind nginx → per-IP rate
+   * limiting collapses to one bucket + audit IPs record 127.0.0.1.
+   */
+  trustProxy?: boolean | number | string;
+  /**
    * V-278.B follow-up — explicit allow-list of origins for production
    * CORS. Set via env `CORS_ALLOWED_ORIGINS=https://app.driftstack.dev,https://staging.driftstack.dev`.
    * When set + `permissiveCors=false`, the app accepts requests from
@@ -597,6 +606,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app: FastifyInstance = Fastify({
     loggerInstance: deps.logger as unknown as FastifyBaseLogger,
     disableRequestLogging: false,
+    // req.ip / X-Forwarded-For resolution. Default false (dev/test = socket
+    // peer); prod injects deps.trustProxy=1 so req.ip is the real client behind
+    // Cloudflare→nginx (per-IP rate-limit + audit-IP correctness).
+    trustProxy: deps.trustProxy ?? false,
     genReqId: (req) => {
       const inbound = req.headers['x-request-id'];
       if (typeof inbound === 'string' && inbound.length > 0 && inbound.length <= 128) {

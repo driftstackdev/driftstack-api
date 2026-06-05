@@ -1419,6 +1419,10 @@ export async function createProductionDeps(
     // mode spec without us guessing every variant. Stays opt-in
     // because it widens the CSRF surface.
     permissiveCors,
+    // req.ip / X-Forwarded-For resolution behind Cloudflare→nginx (prod
+    // TRUST_PROXY=1). Without this req.ip is the loopback peer → broken per-IP
+    // rate-limiting + 127.0.0.1 audit IPs.
+    trustProxy: config.trustProxy,
     corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS ?? '')
       .split(',')
       .map((s) => s.trim())

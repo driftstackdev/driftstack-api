@@ -4,6 +4,17 @@ const ConfigSchema = z.object({
   nodeEnv: z.enum(['development', 'test', 'production']).default('development'),
   port: z.coerce.number().int().positive().default(3000),
   host: z.string().default('0.0.0.0'),
+  // Fastify trustProxy. Drives `req.ip` / `X-Forwarded-For` resolution: prod is
+  // Cloudflare→nginx(127.0.0.1)→Fastify, so without this `req.ip` is the
+  // loopback peer (breaks per-IP rate-limiting + records 127.0.0.1 as the audit
+  // IP). Set via `TRUST_PROXY` env (coerced in loadConfig): a number = trust N
+  // hops (prod uses `1`, safe because ufw default-denies :7780 so nginx is the
+  // only peer + nginx appends the real client via $proxy_add_x_forwarded_for); a
+  // string = an IP/CIDR/'loopback' trust list; `true`/`false` as-is. Default
+  // false (dev/test have no proxy → req.ip is the socket peer).
+  trustProxy: z
+    .union([z.boolean(), z.number().int().nonnegative(), z.string().min(1)])
+    .default(false),
   logLevel: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   databaseUrl: z.string().url(),
   redisUrl: z.string().url(),
@@ -485,11 +496,26 @@ function readSentryConfig(env: NodeJS.ProcessEnv): SentryConfig | null {
   };
 }
 
+/**
+ * Coerce the `TRUST_PROXY` env string into Fastify's trustProxy value.
+ * Unset/empty → false (no proxy). `'true'`/`'false'` → boolean. A bare integer
+ * (`'1'`) → number of trusted hops. Anything else → the raw string (an IP /
+ * CIDR / 'loopback' trust list). Mirrors the repo's explicit env-coercion style.
+ */
+function coerceTrustProxy(raw: string | undefined): boolean | number | string {
+  if (raw === undefined || raw.length === 0) return false;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  if (/^\d+$/.test(raw)) return Number(raw);
+  return raw;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return ConfigSchema.parse({
     nodeEnv: env.NODE_ENV,
     port: env.PORT,
     host: env.HOST,
+    trustProxy: coerceTrustProxy(env.TRUST_PROXY),
     logLevel: env.LOG_LEVEL,
     databaseUrl: env.DATABASE_URL ?? 'postgres://driftstack:driftstack@localhost:5432/driftstack',
     redisUrl: env.REDIS_URL ?? 'redis://localhost:6379',
