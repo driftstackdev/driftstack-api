@@ -1,11 +1,13 @@
-// AI-B2.b increment 1 — unit tests for RealAgentExecutor.
+// AI-B2.b/c — unit tests for RealAgentExecutor.
 //
 // Covers:
-// - cleanly-mapping intents dispatch against the SessionsService port
-//   (navigate / interact:tap / interact:type / capture) → success
-// - the vocab-gap intents (wait / interact:scroll / interact:swipe) →
-//   typed failure "pending vocabulary reconciliation (AI-B2.c)"
-// - tap/type missing selector/value → typed failure
+// - dispatch against the SessionsService port for navigate / interact:tap /
+//   interact:type / interact:scroll / wait / capture → success
+// - AI-B2.c vocab reconciliation: wait selector_visible→{kind:selector},
+//   idle→{kind:time}; scroll→one-viewport vertical (down/up via value)
+// - interact:swipe → typed failure (no driver gesture)
+// - tap/type missing selector/value + wait:selector_visible missing selector
+//   → typed failure
 // - halt-on-first-failure (later intents not dispatched)
 // - missing account context → typed failure (never throws)
 // - a throwing SessionsService surfaces as a failure result (never throws)
