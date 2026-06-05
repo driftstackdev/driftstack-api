@@ -534,6 +534,42 @@
               }
             },
             "required": ["kind", "capture"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["scroll"]
+              },
+              "direction": {
+                "type": "string",
+                "enum": ["up", "down"]
+              },
+              "amount_px": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": ["kind", "direction"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["behavioral_pause"]
+              },
+              "duration_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "reading_word_count": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["kind"]
           }
         ]
       },
@@ -614,6 +650,42 @@
                       }
                     },
                     "required": ["kind", "capture"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["scroll"]
+                      },
+                      "direction": {
+                        "type": "string",
+                        "enum": ["up", "down"]
+                      },
+                      "amount_px": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": ["kind", "direction"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["behavioral_pause"]
+                      },
+                      "duration_ms": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "reading_word_count": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": ["kind"]
                   }
                 ]
               },
@@ -701,6 +773,42 @@
                       }
                     },
                     "required": ["kind", "capture"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["scroll"]
+                      },
+                      "direction": {
+                        "type": "string",
+                        "enum": ["up", "down"]
+                      },
+                      "amount_px": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": ["kind", "direction"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["behavioral_pause"]
+                      },
+                      "duration_ms": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "reading_word_count": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": ["kind"]
                   }
                 ]
               },
@@ -848,6 +956,42 @@
                     }
                   },
                   "required": ["kind", "capture"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["scroll"]
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": ["up", "down"]
+                    },
+                    "amount_px": {
+                      "type": "integer",
+                      "exclusiveMinimum": 0
+                    }
+                  },
+                  "required": ["kind", "direction"]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["behavioral_pause"]
+                    },
+                    "duration_ms": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "reading_word_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": ["kind"]
                 }
               ]
             }
@@ -15557,6 +15701,42 @@
                                   }
                                 },
                                 "required": ["kind", "capture"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["scroll"]
+                                  },
+                                  "direction": {
+                                    "type": "string",
+                                    "enum": ["up", "down"]
+                                  },
+                                  "amount_px": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0
+                                  }
+                                },
+                                "required": ["kind", "direction"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["behavioral_pause"]
+                                  },
+                                  "duration_ms": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "reading_word_count": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  }
+                                },
+                                "required": ["kind"]
                               }
                             ]
                           }
@@ -15640,6 +15820,42 @@
                                           }
                                         },
                                         "required": ["kind", "capture"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["scroll"]
+                                          },
+                                          "direction": {
+                                            "type": "string",
+                                            "enum": ["up", "down"]
+                                          },
+                                          "amount_px": {
+                                            "type": "integer",
+                                            "exclusiveMinimum": 0
+                                          }
+                                        },
+                                        "required": ["kind", "direction"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["behavioral_pause"]
+                                          },
+                                          "duration_ms": {
+                                            "type": "integer",
+                                            "minimum": 0
+                                          },
+                                          "reading_word_count": {
+                                            "type": "integer",
+                                            "minimum": 0
+                                          }
+                                        },
+                                        "required": ["kind"]
                                       }
                                     ]
                                   },
@@ -15727,6 +15943,42 @@
                                           }
                                         },
                                         "required": ["kind", "capture"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["scroll"]
+                                          },
+                                          "direction": {
+                                            "type": "string",
+                                            "enum": ["up", "down"]
+                                          },
+                                          "amount_px": {
+                                            "type": "integer",
+                                            "exclusiveMinimum": 0
+                                          }
+                                        },
+                                        "required": ["kind", "direction"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["behavioral_pause"]
+                                          },
+                                          "duration_ms": {
+                                            "type": "integer",
+                                            "minimum": 0
+                                          },
+                                          "reading_word_count": {
+                                            "type": "integer",
+                                            "minimum": 0
+                                          }
+                                        },
+                                        "required": ["kind"]
                                       }
                                     ]
                                   },
@@ -17041,6 +17293,42 @@
                               }
                             },
                             "required": ["kind", "capture"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["scroll"]
+                              },
+                              "direction": {
+                                "type": "string",
+                                "enum": ["up", "down"]
+                              },
+                              "amount_px": {
+                                "type": "integer",
+                                "exclusiveMinimum": 0
+                              }
+                            },
+                            "required": ["kind", "direction"]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "enum": ["behavioral_pause"]
+                              },
+                              "duration_ms": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "reading_word_count": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            },
+                            "required": ["kind"]
                           }
                         ]
                       }

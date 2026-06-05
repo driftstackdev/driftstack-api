@@ -2,8 +2,9 @@
 //  - openapi.json: 14973-line frozen OpenAPI 3.1 spec snapshot used by
 //    datamodel-codegen to regenerate Pydantic models.
 //  - _generated/__init__.py: codegen-output marker docstring.
-//  - _generated/models.py: 719-line Pydantic v2 BaseModel set with 47
-//    classes derived from the spec.
+//  - _generated/models.py: Pydantic v2 BaseModel set derived from the spec
+//    (W140 added AgentIntent5/AgentIntent6 for the scroll + behavioral_pause
+//    decomposer intents).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -148,6 +149,13 @@ describe('W622 sdk-python generated + openapi content parity', () => {
     expect(body).toMatch(/^class TeamAcceptRequest\(BaseModel\):$/m);
     expect(body).toMatch(/token: constr\(min_length=20\)/);
     expect(body).toMatch(/^class TeamOwner\(BaseModel\):$/m);
+    // W140 — the AgentIntent discriminated union exposes scroll + behavioral_pause
+    // in the python SDK (AgentIntent5/AgentIntent6 generated from the openapi spec).
+    expect(body).toMatch(/^\s+kind: Literal\["scroll"\]$/m);
+    expect(body).toMatch(/^\s+direction: Literal\["up", "down"\]$/m);
+    expect(body).toMatch(/^\s+amount_px: PositiveInt \| None = None$/m);
+    expect(body).toMatch(/^\s+kind: Literal\["behavioral_pause"\]$/m);
+    expect(body).toMatch(/^\s+reading_word_count: conint\(ge=0\) \| None = None$/m);
     expect(
       existsSync(resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/_generated/models.py')),
     ).toBe(true);
