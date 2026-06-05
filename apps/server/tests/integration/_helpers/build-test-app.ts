@@ -355,6 +355,12 @@ export interface TestAppOptions {
    * (inspect live connections / drive a dispatch). Default `false`.
    */
   enableFleetControlPlane?: boolean;
+  /**
+   * V-278.C — exercise the STRICT CORS posture (permissiveCors=false). Supply
+   * the canonical `dashboardOrigin` (auto-allowed) and/or an explicit
+   * `allowedOrigins` list (CORS_ALLOWED_ORIGINS). Omitted → permissive (default).
+   */
+  corsStrict?: { dashboardOrigin?: string; allowedOrigins?: string[] };
 }
 
 export interface SeedAdditionalOpts {
@@ -1375,7 +1381,16 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // exercised in integration tests without touching real Cloudflare.
     r2Public: r2PublicFake,
     driver,
-    permissiveCors: true,
+    // V-278.C — default permissive (most route tests don't care). Tests that
+    // exercise the STRICT posture pass `corsStrict` to flip it + supply the
+    // dashboard origin / explicit allow-list.
+    permissiveCors: opts.corsStrict === undefined,
+    ...(opts.corsStrict?.dashboardOrigin !== undefined
+      ? { dashboardOrigin: opts.corsStrict.dashboardOrigin }
+      : {}),
+    ...(opts.corsStrict?.allowedOrigins !== undefined
+      ? { corsAllowedOrigins: opts.corsStrict.allowedOrigins }
+      : {}),
     ...(opts.livekit !== undefined ? { livekit: opts.livekit } : {}),
     ...(opts.nowpaymentsIpnSecret !== undefined
       ? { nowpaymentsIpnSecret: opts.nowpaymentsIpnSecret }

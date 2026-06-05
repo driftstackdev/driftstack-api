@@ -150,3 +150,54 @@ describe('V-664.B CORS — every customer-facing header is allowlisted', () => {
     });
   }
 });
+
+describe('V-278.C CORS — strict posture (permissiveCors=false) auto-allows the dashboard origin', () => {
+  it('the canonical dashboardOrigin is allowed even when CORS_ALLOWED_ORIGINS omits it', async () => {
+    fx = await buildTestApp({ corsStrict: { dashboardOrigin: 'https://app.driftstack.dev' } });
+    const res = await fx.app.inject({
+      method: 'OPTIONS',
+      url: '/v1/whoami',
+      headers: {
+        origin: 'https://app.driftstack.dev',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'authorization',
+      },
+    });
+    expect(res.statusCode).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe('https://app.driftstack.dev');
+    expect(res.headers['access-control-allow-credentials']).toBe('true');
+  });
+
+  it('an unlisted cross-origin is NOT echoed under the strict posture (the security win)', async () => {
+    fx = await buildTestApp({ corsStrict: { dashboardOrigin: 'https://app.driftstack.dev' } });
+    const res = await fx.app.inject({
+      method: 'OPTIONS',
+      url: '/v1/whoami',
+      headers: {
+        origin: 'https://evil.example.com',
+        'access-control-request-method': 'GET',
+      },
+    });
+    // Not echoed back as an allowed origin (permissive would have echoed it).
+    expect(res.headers['access-control-allow-origin']).not.toBe('https://evil.example.com');
+  });
+
+  it('explicit CORS_ALLOWED_ORIGINS entries are still honored alongside the dashboard origin', async () => {
+    fx = await buildTestApp({
+      corsStrict: {
+        dashboardOrigin: 'https://app.driftstack.dev',
+        allowedOrigins: ['https://admin.driftstack.dev'],
+      },
+    });
+    const res = await fx.app.inject({
+      method: 'OPTIONS',
+      url: '/v1/whoami',
+      headers: {
+        origin: 'https://admin.driftstack.dev',
+        'access-control-request-method': 'GET',
+      },
+    });
+    expect(res.statusCode).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe('https://admin.driftstack.dev');
+  });
+});

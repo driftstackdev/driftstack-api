@@ -549,6 +549,16 @@ export interface AppDeps {
    */
   corsAllowedOrigins?: string[];
   /**
+   * V-278.C — the canonical customer dashboard origin (config.dashboardOrigin,
+   * which prod REQUIRES to be a real non-localhost origin). Auto-added to the
+   * strict CORS allow-list so flipping `permissiveCors=false` (the security
+   * hardening) can never lock out the primary dashboard even if an operator
+   * forgets to list it in CORS_ALLOWED_ORIGINS. No effect while permissiveCors
+   * is true (origin:* echo). Harmless in dev (the localhost regex already
+   * covers the localhost default).
+   */
+  dashboardOrigin?: string;
+  /**
    * V-117: optional Sentry client. When provided, the app installs:
    *   - `wireSentryErrorHandler` (V-094) — onError hook captures
    *     exceptions with request context.
@@ -681,6 +691,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             // preflight + the customer sees a useless "Load failed".
             /^tauri:\/\/localhost$/,
             /^https?:\/\/tauri\.localhost$/,
+            // V-278.C — the canonical dashboard origin is always allowed so the
+            // strict posture can't lock out the primary customer surface.
+            ...(deps.dashboardOrigin !== undefined ? [deps.dashboardOrigin] : []),
             ...(deps.corsAllowedOrigins ?? []),
           ],
     credentials: true,

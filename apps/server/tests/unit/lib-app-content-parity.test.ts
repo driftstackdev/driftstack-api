@@ -89,6 +89,11 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/\/\^tauri:\\\/\\\/localhost\$\//);
     expect(body).toMatch(/\/\^https\?:\\\/\\\/tauri\\\.localhost\$\//);
     expect(body).toMatch(/\.\.\.\(deps\.corsAllowedOrigins \?\? \[\]\),/);
+    // V-278.C — the canonical dashboard origin is auto-added to the strict
+    // allow-list so a permissiveCors=false flip can't lock out the dashboard.
+    expect(body).toMatch(
+      /\.\.\.\(deps\.dashboardOrigin !== undefined \? \[deps\.dashboardOrigin\] : \[\]\),/,
+    );
     expect(body).toMatch(/credentials: true,/);
     expect(body).toMatch(/methods: \['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'\],/);
     // 2026-05-22 — allowedHeaders expanded to include idempotency-key,
