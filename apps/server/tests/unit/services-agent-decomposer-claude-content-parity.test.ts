@@ -1,7 +1,8 @@
 // Drift guard for apps/server/src/services/agent-decomposer-claude.ts.
 // Pins the AI-B1.b real Claude-wired AgentDecomposer — pre-API AUP
-// filter, budget pre-check, locked system prompt + locked 4-verb
-// constraint, single-retry on 5xx, BYOK Anthropic key threading,
+// filter, budget pre-check, locked system prompt + locked 6-verb
+// constraint (W140 added scroll + behavioral_pause), single-retry on
+// 5xx, BYOK Anthropic key threading,
 // per-model pricing rate-table for usage_records.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -90,9 +91,11 @@ describe('services/agent-decomposer-claude content parity', () => {
     );
   });
 
-  it("SYSTEM_PROMPT 4-verb constraint pinned: 'CONSTRAINT: you can only emit four intent verbs. You CANNOT invent new verbs.' + 4-verb shape list (navigate / interact / wait / capture). Drift to dropping the can-only-emit-4-verbs constraint would let the model invent verbs the executor can't dispatch", () => {
-    expect(body).toMatch(/'CONSTRAINT: you can only emit four intent verbs\. You CANNOT invent',/);
-    expect(body).toMatch(/'new verbs\.',/);
+  it("SYSTEM_PROMPT 6-verb constraint pinned: 'CONSTRAINT: you can only emit the six intent verbs below. You CANNOT invent new verbs.' + 6-verb shape list (navigate / interact / wait / capture / scroll / behavioral_pause, W140). Drift to dropping the can-only-emit-the-listed-verbs constraint would let the model invent verbs the executor can't dispatch", () => {
+    expect(body).toMatch(
+      /'CONSTRAINT: you can only emit the six intent verbs below\. You CANNOT',/,
+    );
+    expect(body).toMatch(/'invent new verbs\.',/);
     expect(body).toMatch(/' {2}- navigate \{ url: string \}',/);
     expect(body).toMatch(
       /' {2}- interact \{ action: "tap"\|"type"\|"scroll"\|"swipe", selector\?: string, value\?: string \}',/,
@@ -101,6 +104,11 @@ describe('services/agent-decomposer-claude content parity', () => {
       /' {2}- wait \{ condition: "idle"\|"selector_visible", selector\?: string, timeoutMs\?: number \}',/,
     );
     expect(body).toMatch(/' {2}- capture \{ capture: "screenshot"\|"dom_snapshot"\|"pdf" \}',/);
+    // W140 behavioural verbs.
+    expect(body).toMatch(/' {2}- scroll \{ direction: "up"\|"down", amount_px\?: number \}',/);
+    expect(body).toMatch(
+      /' {2}- behavioral_pause \{ duration_ms\?: number, reading_word_count\?: number \}',/,
+    );
   });
 
   it("SYSTEM_PROMPT OUTPUT FORMAT framing pinned: 'respond with EXACTLY ONE JSON object, no prose, no markdown fences. The object MUST be one of these three shapes' + 3-shape catalog (plan/clarify/refuse). Drift to allowing prose-or-fences would break the JSON.parse path + force the route into refuse-on-malformed", () => {

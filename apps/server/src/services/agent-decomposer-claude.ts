@@ -96,13 +96,15 @@ const SYSTEM_PROMPT = [
   'driftstack browser session. The customer cannot see your reasoning;',
   'they only see the structured plan + the executor results.',
   '',
-  'CONSTRAINT: you can only emit four intent verbs. You CANNOT invent',
-  'new verbs.',
+  'CONSTRAINT: you can only emit the six intent verbs below. You CANNOT',
+  'invent new verbs.',
   '',
   '  - navigate { url: string }',
   '  - interact { action: "tap"|"type"|"scroll"|"swipe", selector?: string, value?: string }',
   '  - wait { condition: "idle"|"selector_visible", selector?: string, timeoutMs?: number }',
   '  - capture { capture: "screenshot"|"dom_snapshot"|"pdf" }',
+  '  - scroll { direction: "up"|"down", amount_px?: number }',
+  '  - behavioral_pause { duration_ms?: number, reading_word_count?: number }',
   '',
   'OUTPUT FORMAT: respond with EXACTLY ONE JSON object, no prose, no',
   'markdown fences. The object MUST be one of these three shapes:',
@@ -416,6 +418,32 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
         }
         break;
       }
+      case 'scroll': {
+        // W140 — direction is required (matches AgentIntentSchema); a bad/absent
+        // direction drops the intent rather than guessing. amount_px is loose
+        // (typeof number, mirroring timeoutMs above); the mapper + harness param
+        // schema reject a non-positive distance downstream.
+        const dir = i.direction;
+        if (dir === 'up' || dir === 'down') {
+          out.push({
+            kind: 'scroll',
+            direction: dir,
+            ...(typeof i.amount_px === 'number' ? { amount_px: i.amount_px } : {}),
+          });
+        }
+        break;
+      }
+      case 'behavioral_pause':
+        // W140 — all fields optional (bare → persona idle pause). reading_word_count
+        // wins over duration_ms at the mapper.
+        out.push({
+          kind: 'behavioral_pause',
+          ...(typeof i.duration_ms === 'number' ? { duration_ms: i.duration_ms } : {}),
+          ...(typeof i.reading_word_count === 'number'
+            ? { reading_word_count: i.reading_word_count }
+            : {}),
+        });
+        break;
     }
   }
   return out;

@@ -145,6 +145,31 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(res.tokensConsumed).toBe(450);
     });
 
+    it('W140 parses scroll + behavioral_pause intents (direction required; pause fields optional)', async () => {
+      const { fetch } = sequenceFetch([
+        jsonResponse({
+          kind: 'plan',
+          intents: [
+            { kind: 'scroll', direction: 'down', amount_px: 800 },
+            { kind: 'scroll', direction: 'up' },
+            { kind: 'scroll' }, // no direction → dropped
+            { kind: 'behavioral_pause', reading_word_count: 120 },
+            { kind: 'behavioral_pause', duration_ms: 2500 },
+            { kind: 'behavioral_pause' }, // bare → persona idle
+          ],
+        }),
+      ]);
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toEqual([
+        { kind: 'scroll', direction: 'down', amount_px: 800 },
+        { kind: 'scroll', direction: 'up' },
+        { kind: 'behavioral_pause', reading_word_count: 120 },
+        { kind: 'behavioral_pause', duration_ms: 2500 },
+        { kind: 'behavioral_pause' },
+      ]);
+    });
+
     it('clarify response → kind = "clarify" with question', async () => {
       const { fetch } = sequenceFetch([
         jsonResponse({
