@@ -367,3 +367,41 @@ distance_px? — not in these notes); (2) confirm the executor→harness dispatc
 (these are harness `IntentDispatch` intents, NOT driver InteractAction/Navigate — the server AgentExecutor currently
 dispatches to the DRIVER; bridging to harness IntentDispatch is the open architecture item). Until (1)+(2), Increment 2
 stays gated; the caps/back-forward shapes above are recorded for the build.
+
+## A3→A2 Increment-2 answers (2026-06-05) — scroll shape + dispatch path (ARCHITECTURE CORRECTION)
+
+**(1) scroll params (mirror harness IntentExecutor):** `{ direction?: 'up'|'down' (default 'down'),
+distance_px?: number (TOTAL distance, default 600; harness decomposes into momentum flicks),
+start_x?: int (default 195), start_y?: int (default direction-aware 220up/660down) }`. PUBLIC SDK exposes
+ONLY `{ direction?, distance_px? }` (omit start_x/start_y — harness defaults per-direction; a bad pair
+pushes the synthetic touch off-screen). Result envelope `{ scrolled, flicks, steps, behavioral }`.
+
+**(2) DISPATCH PATH — canonical = control-plane WSS `ControlInbound.intentDispatch`, NOT the driver.**
+⚠️ This CORRECTS the prior agent-executor.ts assumption ("dispatches against the in-process SessionsService"
+→ driver). Agent-3 (harness IntentExecutor owner) is explicit: do NOT route agent-session intents through the
+server-local driver abstraction. The harness consumes:
+`IntentDispatch { sessionId, intentId, intentName, inputParams: JSON(params) }`
+over the control-plane WSS, routed by `intentName` through one `IntentExecutor.dispatch`. The AgentExecutor must:
+decompose → for EACH step emit a `ControlInbound.intentDispatch(intentName, inputParams=JSON(params))` over the
+control plane → harness (the harness does NOT consume the decomposer plan directly; one IntentDispatch per intent).
+intentName vocab the harness routes today: navigate, click, send_keys, execute_script, screenshot,
+get_page_source, wait_for, scroll, behavioral_pause, back, forward (fill_form/login/search = intent_not_implemented, JSBridge-gated).
+
+**IMPACT on the shipped RealAgentExecutor (AI-B2.b/c, `aa37f891`/`26fce854`) — MISALIGNED, unwired (no harm):**
+it dispatches AgentIntent → SessionsService.{navigate,interact,wait,capture} → DRIVER. That's the wrong layer
+for agent-sessions. The driver path (`/v1/sessions/:id/{navigate,interact,...}`) remains the separate DIRECT
+low-level control API; but the AGENT-SESSIONS executor must emit control-plane intentDispatch instead. The
+translation logic (AgentIntent→params) is reusable; the dispatch TARGET changes.
+
+**RE-SCOPED Increment 2 critical path (control-path buildable NOW per A3; end-to-end gated on item 9):**
+(a) PREREQ — control-plane WSS sender: `/v1/fleet/events` (V-820) is still a 503 STUB (no fastify-websocket
+handler). A functioning server→harness control channel + an `intentDispatch` send path is the prerequisite.
+(b) AgentExecutor v2: emit `ControlInbound.intentDispatch` per intent (intentName + JSON params), replacing the
+driver dispatch. Map AgentIntent verbs → intentName strings.
+(c) Customer-facing AgentIntentSchema additions: scroll{direction?,distance_px?} + behavioral_pause + back +
+forward + the caps (behavioral_pause ≤300_000ms/`capped`, wait_for ≤300s/`timeout_capped`) + 3 SDKs + decomposer.
+(d) DOWNSTREAM GATE (not A2): harness→fork DRIVE (IntentExecutor→WebDriver→fork) NOT wired on Mac =
+ORCHESTRATOR action-queue item 9 (cocoa WebDriver server; founder Option-1 sign-off; A1+A3). Intents REACH
+the harness over the control path now, but won't execute against the fork until item 9 lands. A3: build+ship
+the control-path wiring now; end-to-end goes live with item 9.
+TODO: request A3's full intentName→params table (send_keys/click/wait_for/navigate/...) before mapping (a3 offered).
