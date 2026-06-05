@@ -100,6 +100,7 @@ describe('serializeIntentDispatch', () => {
 describe('parseIntentResult', () => {
   it('decodes a success frame with base64 outputData', () => {
     const frame = {
+      type: 'intentResult' as const,
       sessionId: 'ses_x',
       intentId: 'int_1',
       success: true,
@@ -116,6 +117,7 @@ describe('parseIntentResult', () => {
 
   it('decodes a failure frame (no outputData, errorCode + errorMessage preserved)', () => {
     const r = parseIntentResult({
+      type: 'intentResult',
       sessionId: 'ses_x',
       intentId: 'int_2',
       success: false,
@@ -132,6 +134,7 @@ describe('parseIntentResult', () => {
   it('throws on a frame that is not a valid IntentResultEnvelope (unknown errorCode)', () => {
     expect(() =>
       parseIntentResult({
+        type: 'intentResult',
         sessionId: 'ses_x',
         intentId: 'int_3',
         success: false,
@@ -144,6 +147,7 @@ describe('parseIntentResult', () => {
   it('throws HarnessWireCodecError when outputData is malformed base64/JSON', () => {
     expect(() =>
       parseIntentResult({
+        type: 'intentResult',
         sessionId: 'ses_x',
         intentId: 'int_4',
         success: true,
@@ -162,6 +166,7 @@ describe('parseIntentResult', () => {
       params: { url: 'https://x' },
     });
     const r = parseIntentResult({
+      type: 'intentResult',
       sessionId: d.sessionId,
       intentId: d.intentId,
       success: true,

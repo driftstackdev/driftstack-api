@@ -154,12 +154,22 @@ export const HARNESS_INTENT_PARAM_SCHEMAS: Record<HarnessIntentName, z.ZodTypeAn
   get_page_source: GetPageSourceParamsSchema,
 };
 
-// ── Dispatch envelope (ControlInbound.intentDispatch) ─────────────────
-// Mirrors the Swift IntentDispatch struct. `inputParams` is the BASE64 string
-// of the UTF-8 JSON params object (A3-confirmed wire codec). Build it with
-// serializeIntentDispatch() in harness-control-codec.ts, which validates the
-// logical params against HARNESS_INTENT_PARAM_SCHEMAS[intentName] first.
+// ── Wire envelope (A3 bus W122, commit 2a5639dc) ──────────────────────
+// Both directions are a FLAT discriminated union keyed on `type` (camelCase =
+// the Swift enum case names): `{ "type": "<variant>", <payload fields flat…> }`.
+// NO `_0` nesting (the prior Swift synthesized-Codable artifact — killed). Maps
+// 1:1 to a Zod discriminatedUnion('type', …). `inputParams`/`outputData` are the
+// BASE64 string of the UTF-8 JSON payload (A3-confirmed).
+//   ControlInbound (server ENCODES → harness): sessionAssign / intentDispatch /
+//     sessionEnd / ping.
+//   HarnessOutbound (server DECODES ← harness): heartbeat / sessionStatus /
+//     intentResult / capabilityReport / errorEvent.
+
+// ── ControlInbound.intentDispatch (server → harness) ──────────────────
+// Build it with serializeIntentDispatch() in harness-control-codec.ts (validates
+// the logical params against HARNESS_INTENT_PARAM_SCHEMAS[intentName] first).
 export const IntentDispatchSchema = z.object({
+  type: z.literal('intentDispatch'),
   sessionId: z.string().min(1),
   intentId: z.string().min(1),
   intentName: HarnessIntentNameSchema,
@@ -167,7 +177,6 @@ export const IntentDispatchSchema = z.object({
 });
 export type IntentDispatch = z.infer<typeof IntentDispatchSchema>;
 
-// ── Result envelope (HarnessOutbound.IntentResult) ────────────────────
 export const HARNESS_ERROR_CODES = [
   'intent_session_not_established',
   'intent_not_implemented',
@@ -179,10 +188,11 @@ export const HARNESS_ERROR_CODES = [
 export const HarnessErrorCodeSchema = z.enum(HARNESS_ERROR_CODES);
 export type HarnessErrorCode = z.infer<typeof HarnessErrorCodeSchema>;
 
-// Mirrors the Swift IntentResult struct. `outputData` is the BASE64 string of
-// the per-intent result JSON (same A3-confirmed codec as inputParams); decode
-// it with parseIntentResult() in harness-control-codec.ts.
+// ── HarnessOutbound.intentResult (harness → server) ───────────────────
+// `outputData` is the BASE64 string of the per-intent result JSON; decode it
+// with parseIntentResult() in harness-control-codec.ts.
 export const IntentResultEnvelopeSchema = z.object({
+  type: z.literal('intentResult'),
   sessionId: z.string().min(1),
   intentId: z.string().min(1),
   success: z.boolean(),
@@ -192,3 +202,28 @@ export const IntentResultEnvelopeSchema = z.object({
   errorMessage: z.string().optional(),
 });
 export type IntentResultEnvelope = z.infer<typeof IntentResultEnvelopeSchema>;
+
+// ── HarnessOutbound.sessionStatus (harness → server) ──────────────────
+// The router fast-fails an in-flight dispatch on the errored variant whose
+// `detail` is `intent_dispatch_no_session: <intentName>` (A3 W106).
+export const SessionStatusSchema = z.object({
+  type: z.literal('sessionStatus'),
+  sessionId: z.string().min(1),
+  status: z.string().min(1),
+  timestamp: z.string(),
+  detail: z.string().optional(),
+});
+export type SessionStatus = z.infer<typeof SessionStatusSchema>;
+
+// ── HarnessOutbound union (server DECODES) ────────────────────────────
+// intentResult + sessionStatus are consumed precisely; heartbeat /
+// capabilityReport / errorEvent are accepted (passthrough) but their payload
+// shapes aren't pinned here yet (not yet consumed; A3 owns them).
+export const HarnessOutboundSchema = z.discriminatedUnion('type', [
+  IntentResultEnvelopeSchema,
+  SessionStatusSchema,
+  z.object({ type: z.literal('heartbeat') }).passthrough(),
+  z.object({ type: z.literal('capabilityReport') }).passthrough(),
+  z.object({ type: z.literal('errorEvent') }).passthrough(),
+]);
+export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;

@@ -22,7 +22,13 @@ function dispatch(
   params: Record<string, unknown> = {},
   sessionId = 'ses_x',
 ): IntentDispatch {
-  return { sessionId, intentId, intentName, inputParams: encodeWireData(params) };
+  return {
+    type: 'intentDispatch',
+    sessionId,
+    intentId,
+    intentName,
+    inputParams: encodeWireData(params),
+  };
 }
 
 function recorder(): { transport: DispatchTransport; sent: IntentDispatch[] } {
@@ -60,6 +66,7 @@ describe('IntentDispatchCorrelator', () => {
     expect(sent).toEqual([d]);
     expect(c.inFlight()).toBe(1);
     c.onResultFrame({
+      type: 'intentResult',
       sessionId: 'ses_x',
       intentId: 'int_1',
       success: true,
@@ -78,8 +85,20 @@ describe('IntentDispatchCorrelator', () => {
     const p1 = c.dispatch(dispatch('a', 'navigate', { url: 'https://1' }));
     const p2 = c.dispatch(dispatch('b', 'screenshot'));
     // Resolve out of order.
-    c.onResultFrame({ sessionId: 'ses_x', intentId: 'b', success: true, durationMs: 1 });
-    c.onResultFrame({ sessionId: 'ses_x', intentId: 'a', success: true, durationMs: 1 });
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'b',
+      success: true,
+      durationMs: 1,
+    });
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'a',
+      success: true,
+      durationMs: 1,
+    });
     expect((await p1).intentId).toBe('a');
     expect((await p2).intentId).toBe('b');
   });
@@ -103,6 +122,7 @@ describe('IntentDispatchCorrelator', () => {
     await vi.advanceTimersByTimeAsync(300_000); // past 30s, before 315s
     expect(c.inFlight()).toBe(1);
     c.onResultFrame({
+      type: 'intentResult',
       sessionId: 'ses_x',
       intentId: 'int_1',
       success: true,
@@ -131,7 +151,13 @@ describe('IntentDispatchCorrelator', () => {
     c.onSessionError('ses_OTHER', 'intent_dispatch_no_session: navigate'); // different session
     c.onSessionError('ses_x', 'some_other_error'); // not a no-session error
     expect(c.inFlight()).toBe(1);
-    c.onResultFrame({ sessionId: 'ses_x', intentId: 'int_1', success: true, durationMs: 1 });
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'int_1',
+      success: true,
+      durationMs: 1,
+    });
     expect((await p).success).toBe(true);
   });
 
@@ -141,6 +167,7 @@ describe('IntentDispatchCorrelator', () => {
     const p = c.dispatch(dispatch('int_1', 'navigate', { url: 'https://x' }));
     expect(() =>
       c.onResultFrame({
+        type: 'intentResult',
         sessionId: 'ses_x',
         intentId: 'int_1',
         success: true,
@@ -159,13 +186,31 @@ describe('IntentDispatchCorrelator', () => {
     const c = new IntentDispatchCorrelator(transport);
     const p = c.dispatch(dispatch('int_1', 'navigate', { url: 'https://x' }));
     c.onResultFrame({ totally: 'not a result' }); // ignored
-    c.onResultFrame({ sessionId: 'ses_x', intentId: 'UNKNOWN', success: true, durationMs: 1 }); // no pending
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'UNKNOWN',
+      success: true,
+      durationMs: 1,
+    }); // no pending
     expect(c.inFlight()).toBe(1);
-    c.onResultFrame({ sessionId: 'ses_x', intentId: 'int_1', success: true, durationMs: 1 });
+    c.onResultFrame({
+      type: 'intentResult',
+      sessionId: 'ses_x',
+      intentId: 'int_1',
+      success: true,
+      durationMs: 1,
+    });
     await p;
     // A duplicate result for the now-settled id is a harmless no-op.
     expect(() =>
-      c.onResultFrame({ sessionId: 'ses_x', intentId: 'int_1', success: true, durationMs: 1 }),
+      c.onResultFrame({
+        type: 'intentResult',
+        sessionId: 'ses_x',
+        intentId: 'int_1',
+        success: true,
+        durationMs: 1,
+      }),
     ).not.toThrow();
     expect(c.inFlight()).toBe(0);
   });

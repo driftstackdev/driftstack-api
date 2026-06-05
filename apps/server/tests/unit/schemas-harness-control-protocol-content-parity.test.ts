@@ -169,15 +169,26 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     }
   });
 
-  it('IntentDispatch envelope pinned: sessionId, intentId, intentName (enum), inputParams (base64 string)', () => {
+  it('IntentDispatch envelope pinned: type:intentDispatch discriminator + sessionId, intentId, intentName (enum), inputParams (base64 string)', () => {
     expect(body).toMatch(
-      /export const IntentDispatchSchema = z\.object\(\{\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*intentId: z\.string\(\)\.min\(1\),\s*\n?\s*intentName: HarnessIntentNameSchema,\s*\n?\s*inputParams: z\.string\(\),\s*\n?\s*\}\);/,
+      /export const IntentDispatchSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('intentDispatch'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*intentId: z\.string\(\)\.min\(1\),\s*\n?\s*intentName: HarnessIntentNameSchema,\s*\n?\s*inputParams: z\.string\(\),\s*\n?\s*\}\);/,
     );
   });
 
-  it('IntentResult envelope pinned: sessionId, intentId, success, durationMs, outputData? (base64 string), errorCode?, errorMessage?', () => {
+  it('IntentResult envelope pinned: type:intentResult discriminator + sessionId, intentId, success, durationMs, outputData? (base64 string), errorCode?, errorMessage?', () => {
     expect(body).toMatch(
-      /export const IntentResultEnvelopeSchema = z\.object\(\{\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*intentId: z\.string\(\)\.min\(1\),\s*\n?\s*success: z\.boolean\(\),\s*\n?\s*durationMs: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*outputData: z\.string\(\)\.optional\(\),\s*\n?\s*errorCode: HarnessErrorCodeSchema\.optional\(\),\s*\n?\s*errorMessage: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const IntentResultEnvelopeSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('intentResult'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*intentId: z\.string\(\)\.min\(1\),\s*\n?\s*success: z\.boolean\(\),\s*\n?\s*durationMs: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*outputData: z\.string\(\)\.optional\(\),\s*\n?\s*errorCode: HarnessErrorCodeSchema\.optional\(\),\s*\n?\s*errorMessage: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('flat {type,…} wire envelope (no _0) pinned + SessionStatus + HarnessOutbound discriminated union (A3 W122 / 2a5639dc)', () => {
+    expect(body).toMatch(/FLAT discriminated union keyed on `type`/);
+    expect(body).toMatch(/NO `_0` nesting/);
+    expect(body).toMatch(
+      /export const SessionStatusSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('sessionStatus'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*status: z\.string\(\)\.min\(1\),\s*\n?\s*timestamp: z\.string\(\),\s*\n?\s*detail: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*z\.object\(\{ type: z\.literal\('heartbeat'\) \}\)\.passthrough\(\),\s*\n?\s*z\.object\(\{ type: z\.literal\('capabilityReport'\) \}\)\.passthrough\(\),\s*\n?\s*z\.object\(\{ type: z\.literal\('errorEvent'\) \}\)\.passthrough\(\),\s*\n?\s*\]\);/,
     );
   });
 
@@ -272,6 +283,7 @@ describe('harness-control-protocol behavioral contract', () => {
   it('IntentDispatch envelope validates the 4 fields + intentName enum + base64-string inputParams', () => {
     expect(
       IntentDispatchSchema.safeParse({
+        type: 'intentDispatch',
         sessionId: 'ses_x',
         intentId: 'int_1',
         intentName: 'navigate',
@@ -281,6 +293,7 @@ describe('harness-control-protocol behavioral contract', () => {
     // inputParams must be a string (the base64 wire form), not a raw object.
     expect(
       IntentDispatchSchema.safeParse({
+        type: 'intentDispatch',
         sessionId: 'ses_x',
         intentId: 'int_1',
         intentName: 'navigate',
@@ -290,6 +303,7 @@ describe('harness-control-protocol behavioral contract', () => {
     // Unknown intentName rejected.
     expect(
       IntentDispatchSchema.safeParse({
+        type: 'intentDispatch',
         sessionId: 'ses_x',
         intentId: 'int_1',
         intentName: 'teleport',
@@ -301,6 +315,7 @@ describe('harness-control-protocol behavioral contract', () => {
   it('IntentResult envelope: success + error variants', () => {
     expect(
       IntentResultEnvelopeSchema.safeParse({
+        type: 'intentResult',
         sessionId: 'ses_x',
         intentId: 'int_1',
         success: true,
@@ -309,6 +324,7 @@ describe('harness-control-protocol behavioral contract', () => {
       }).success,
     ).toBe(true);
     const err = IntentResultEnvelopeSchema.safeParse({
+      type: 'intentResult',
       sessionId: 'ses_x',
       intentId: 'int_1',
       success: false,

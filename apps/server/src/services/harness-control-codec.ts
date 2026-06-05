@@ -79,6 +79,7 @@ export function serializeIntentDispatch(args: {
     );
   }
   const dispatch = {
+    type: 'intentDispatch' as const,
     sessionId: args.sessionId,
     intentId: args.intentId,
     intentName: args.intentName,
