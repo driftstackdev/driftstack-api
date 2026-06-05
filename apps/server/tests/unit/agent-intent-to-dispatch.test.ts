@@ -15,6 +15,14 @@ describe('agentIntentToDispatch — clean 1:1 mappings', () => {
     expect(r).toEqual({ ok: true, intentName: 'navigate', params: { url: 'https://example.com' } });
   });
 
+  it('V-820.sec navigate with a non-http(s) url → ok:false (harness-contract validation rejects file:/javascript:/data:)', () => {
+    for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'data:text/html,x']) {
+      const r = agentIntentToDispatch({ kind: 'navigate', url });
+      expect(r.ok, url).toBe(false);
+      if (!r.ok) expect(r.reason).toMatch(/navigate params failed harness-contract validation/);
+    }
+  });
+
   it('interact:tap → click { strategy: css, value: selector }', () => {
     const r = agentIntentToDispatch({ kind: 'interact', action: 'tap', selector: '#submit' });
     expect(r).toEqual({

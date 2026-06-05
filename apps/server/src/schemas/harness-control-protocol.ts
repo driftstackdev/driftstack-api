@@ -75,7 +75,33 @@ export const HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS = 30;
 
 const NoParamsSchema = z.object({}).strict();
 
-export const NavigateParamsSchema = z.object({ url: z.string().min(1) }).strict();
+/**
+ * V-820.sec — http(s) only. Rejects file:, javascript:, data:, chrome:, about:,
+ * ftp:, etc. (and relative/non-absolute URLs). This is the chokepoint every
+ * navigate dispatch passes through (serializeIntentDispatch + the (b) mapper
+ * both validate params against NavigateParamsSchema before a dispatch leaves the
+ * server), so a navigate URL — whether customer-supplied, model-hallucinated, or
+ * prompt-injected via page content the decomposer reads — can't make the harness
+ * browser read local files (file:) or execute script (javascript:/data:).
+ */
+function isHttpOrHttpsUrl(raw: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return false; // not an absolute URL
+  }
+  return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+}
+
+export const NavigateParamsSchema = z
+  .object({
+    url: z.string().min(1).refine(isHttpOrHttpsUrl, {
+      message:
+        'navigate.url must be an absolute http(s) URL; file:, javascript:, data:, etc. are rejected',
+    }),
+  })
+  .strict();
 
 // back / forward take no params.
 export const HistoryNavParamsSchema = NoParamsSchema;

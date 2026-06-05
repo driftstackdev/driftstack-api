@@ -117,10 +117,14 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
   });
 
-  it('navigate params pinned: { url } required (.min(1))', () => {
+  it('navigate params pinned: { url } required (.min(1)) + V-820.sec http(s)-only scheme allow-list (refine isHttpOrHttpsUrl rejecting file:/javascript:/data:)', () => {
     expect(body).toMatch(
-      /export const NavigateParamsSchema = z\.object\(\{ url: z\.string\(\)\.min\(1\) \}\)\.strict\(\);/,
+      /export const NavigateParamsSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*url: z\.string\(\)\.min\(1\)\.refine\(isHttpOrHttpsUrl, \{/,
     );
+    expect(body).toMatch(/\}\)\s*\n?\s*\.strict\(\);/);
+    // The scheme guard itself: http:/https: only (everything else, + relative, rejected).
+    expect(body).toMatch(/function isHttpOrHttpsUrl\(raw: string\): boolean \{/);
+    expect(body).toMatch(/return parsed\.protocol === 'http:' \|\| parsed\.protocol === 'https:';/);
   });
 
   it('click params pinned: { element_id } OR { strategy, value } (union, strict)', () => {
@@ -261,6 +265,26 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(NavigateParamsSchema.safeParse({}).success).toBe(false);
     // strict: rejects extra keys.
     expect(NavigateParamsSchema.safeParse({ url: 'x', extra: 1 }).success).toBe(false);
+  });
+
+  it('V-820.sec navigate url is http(s)-only: file:/javascript:/data:/chrome: + relative URLs are rejected (no local-file read or script exec via a navigate the model/customer emits)', () => {
+    expect(NavigateParamsSchema.safeParse({ url: 'http://example.com' }).success).toBe(true);
+    expect(NavigateParamsSchema.safeParse({ url: 'https://example.com/path?q=1' }).success).toBe(
+      true,
+    );
+    for (const url of [
+      'file:///etc/passwd',
+      'javascript:alert(document.cookie)',
+      'data:text/html,<script>1</script>',
+      'chrome://settings',
+      'about:blank',
+      'ftp://host/f',
+      '//example.com', // protocol-relative → no scheme → rejected
+      '/relative/path', // relative → rejected
+      'example.com', // bare host, no scheme → rejected
+    ]) {
+      expect(NavigateParamsSchema.safeParse({ url }).success, url).toBe(false);
+    }
   });
 
   it('click accepts element_id OR strategy+value, rejects mixing/neither', () => {
