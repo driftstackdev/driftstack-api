@@ -113,7 +113,7 @@ describe('FleetControlRegistry', () => {
     const conn = reg.register('node-1', () => {});
     expect(reg.get('node-1')).toBe(conn);
     expect(reg.size()).toBe(1);
-    reg.unregister('node-1', 'closed');
+    reg.unregister('node-1', conn, 'closed');
     expect(reg.get('node-1')).toBeUndefined();
     expect(reg.size()).toBe(0);
   });
@@ -132,9 +132,28 @@ describe('FleetControlRegistry', () => {
 
   it('unregister is idempotent (double-close is a no-op)', () => {
     const reg = new FleetControlRegistry();
-    reg.register('node-1', () => {});
-    reg.unregister('node-1', 'closed');
-    expect(() => reg.unregister('node-1', 'closed again')).not.toThrow();
+    const conn = reg.register('node-1', () => {});
+    reg.unregister('node-1', conn, 'closed');
+    expect(() => reg.unregister('node-1', conn, 'closed again')).not.toThrow();
+    expect(reg.size()).toBe(0);
+  });
+
+  it('identity-checked unregister: the OLD connection closing AFTER a reconnect does NOT tear down the live new connection (reconnect/replace race)', async () => {
+    const reg = new FleetControlRegistry();
+    const first = reg.register('node-1', () => {});
+    const p = first.correlator.dispatch(dispatch('int_1')); // first has an in-flight
+    const second = reg.register('node-1', () => {}); // reconnect → replaces first
+    // The OLD socket's lagging close fires now and unregisters with the OLD conn.
+    reg.unregister('node-1', first, 'old fleet node socket closed');
+    // The live (new) connection must still be registered + routable.
+    expect(reg.get('node-1')).toBe(second);
+    expect(reg.size()).toBe(1);
+    // (the replace already failed first's in-flight dispatch — drain it)
+    const r = await p;
+    expect(r.success).toBe(false);
+    // And unregistering the CURRENT connection still works.
+    reg.unregister('node-1', second, 'closed');
+    expect(reg.get('node-1')).toBeUndefined();
     expect(reg.size()).toBe(0);
   });
 });

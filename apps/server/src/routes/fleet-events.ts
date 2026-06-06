@@ -93,8 +93,11 @@ export async function registerFleetEventsRoutes(
       }
       const conn = deps.registry.register(nodeId, (data) => socket.send(data));
       socket.on('message', (data: WsMessageData) => conn.handleInbound(messageToString(data)));
-      socket.on('close', () => deps.registry.unregister(nodeId, 'fleet node socket closed'));
-      socket.on('error', () => deps.registry.unregister(nodeId, 'fleet node socket error'));
+      // Pass `conn` so unregister is identity-checked: a reconnect that already
+      // replaced this connection must not be torn down by this socket's lagging
+      // close/error event (see FleetControlRegistry.unregister).
+      socket.on('close', () => deps.registry.unregister(nodeId, conn, 'fleet node socket closed'));
+      socket.on('error', () => deps.registry.unregister(nodeId, conn, 'fleet node socket error'));
     },
   );
 }

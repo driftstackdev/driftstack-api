@@ -101,10 +101,21 @@ export class FleetControlRegistry {
     return this.connections.get(nodeId);
   }
 
-  /** Remove + fail the node's connection (called on socket close). Idempotent. */
-  unregister(nodeId: string, reason: string): void {
-    const conn = this.connections.get(nodeId);
-    if (conn === undefined) return;
+  /**
+   * Remove + fail the node's connection (called on socket close/error).
+   * Idempotent AND identity-checked: only removes the entry if `conn` is STILL
+   * the mapped connection for `nodeId`. This defends the reconnect/replace race
+   * — when a node reconnects, `register` swaps in conn2 (failing conn1) before
+   * the OLD socket's lagging `close` event fires; that close calls
+   * `unregister(nodeId, conn1, …)`, which must be a no-op so it doesn't tear
+   * down the live conn2 and strand a connected-but-unroutable node. Pass the
+   * connection returned by `register` (the route closes over it).
+   */
+  unregister(nodeId: string, conn: FleetControlConnection, reason: string): void {
+    const current = this.connections.get(nodeId);
+    // A newer connection already replaced this one (and register() already
+    // closed it) — leave the live entry alone.
+    if (current === undefined || current !== conn) return;
     this.connections.delete(nodeId);
     conn.close(reason);
   }
