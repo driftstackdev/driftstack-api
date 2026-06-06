@@ -527,3 +527,38 @@ intentResultToCustomer`, halt-on-failure, in `ControlPlaneAgentExecutor` (implem
 
 `AgentIntentSchema` scroll{direction,distance_px}/back/forward/behavioral_pause + 3 SDKs + decomposer. Shipping
 before the executor can dispatch them = a false affordance. Add as the FIRST post-wiring increment.
+
+## sessionId WIRE-SHAPE contract (2026-06-06, A2 — verified compatible with harness W157)
+
+A3 W157 (A2-A3 bus, harness commit `a9d26305`): the harness interpolates
+`SessionAssign.sessionId` into per-session FILE PATHS (gost log, WD port-file, RTP
+ndjson, JS-bridge socket), so `handleSessionAssign` now REJECTS (`invalid_session_id`,
+no spawn) any sessionId that isn't **non-empty, ≤128 chars, `[A-Za-z0-9_-]` only** —
+a defense-in-depth path-traversal guard (same principle as the W135 navigate-scheme
+guard). Flagged "likely no-op for you."
+
+**A2 verified it IS a no-op — our control-plane `sessionId` is a _prefixed_ id (not a
+bare UUID), and it passes the W157 guard cleanly.** The value on every
+`ControlInbound.sessionAssign` / `intentDispatch` and `HarnessOutbound.*` envelope is:
+
+- **`agt_<uuid>`** — agent sessions. THE canonical control-plane session id.
+  Minted in `db/agent-sessions-repo.ts` as `` `agt_${randomUUID()}` `` and pinned
+  by `AGENT_SESSION_ID_RE = /^agt_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/`.
+- **`ses_<uuid>`** — legacy driftstack sessions (the separate DIRECT `/v1/sessions`
+  path). `SESSION_ID_RE = /^ses_.../`. Same body shape, different prefix.
+
+Both invariants are locked by `tests/unit/session-id-prefix-cross-source-invariant.test.ts`
+(prefixes must never cross). Wire-shape facts (all WITHIN the W157 guard):
+
+- **Charset:** `agt_`/`ses_` + lowercase hex + `-` — every char ∈ `[A-Za-z0-9_-]` ✓.
+- **Length 40** (4-char prefix + 36-char UUID-with-dashes) ≤ 128 ✓; non-empty ✓.
+- **Path-traversal-safe:** no `/`, `.`, `..`, `%`, `:`, or whitespace — safe to embed
+  in a capture/session directory path as-is (which is exactly why W157 accepts it).
+
+**CONCLUSION: no action either side — verified compatible.** Recorded here because
+the contract previously left the wire `sessionId` shape unspecified; this pins it so
+any future id-format change (e.g. a new prefix, or dropping the dashes) is checked
+against the harness's `[A-Za-z0-9_-]`/≤128 path-safety guard before it ships. The API
+will NOT strip the prefix before sending — the prefix is the cross-type safety
+boundary (keeps a `ses_` id out of an `agt_` mint flow), so it must travel on the wire,
+and it is path-safe by construction.
