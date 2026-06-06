@@ -1032,3 +1032,26 @@ boundary item still open is the `errors.driftstack.dev` 401-`type:` URI (NXDOMAI
 founder/infra DNS). So of the §2 gated infra items, CORS is now done; trustProxy was
 done earlier; remaining = metrics enablement, webhook-worker wiring, errors DNS,
 agent_sessions FK (founder design), iphone17 cutover (canvas/Agent-1).
+
+### 2026-06-06 — fetch-body-read-timeout bug-class FULLY CLOSED (`09695741`)
+
+Closed the last instance of the body-read-timeout class (a hand-rolled fetch
+client clearing its AbortController timer in a `finally` that wraps only the
+`await fetch`, leaving the subsequent `res.text()`/`res.json()` body read bounded
+only by undici's ~300s default instead of the intended per-request timeout): the
+legacy `services/webhook-worker.ts` (`WebhookDeliveryWorker`) read the non-2xx
+failure excerpt in `handleOutcome`, after the timer was cleared. Moved the read
+into `deliver()`'s try (`if (!response.ok) responseExcerpt = await readExcerpt(...)`,
+bounded by the live abort signal) and pass it into `handleOutcome`. `readExcerpt`
+swallows the AbortError → null excerpt, the non-2xx is still recorded as a
+failure, and 2xx never reads the body so the happy path is unchanged — mirroring
+`DurableWebhookWorker`, which already reads inside its timer scope. Regression
+test: a body that only settles on abort resolves to a normal retry under a 30ms
+timeout (pre-fix it hung). Earlier instances were stripe-api (`bc72ff48`) and
+oauth-client-exchange + agent-decomposer-claude (`7d4e1761`); **no instances
+remain.** This was the highest-severity instance (webhook targets are untrusted
+customer endpoints that could deliberately stall the body) but is latent — BOTH
+webhook workers remain unwired in prod (neither `new WebhookDeliveryWorker` nor
+`createDurableWebhookDelivery` is instantiated in `src`), so webhook-worker
+wiring stays the activation gate (which must also add the undici decompression
+cap per the 2026-06-05 CVE triage).
