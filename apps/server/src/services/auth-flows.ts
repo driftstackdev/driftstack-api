@@ -703,10 +703,22 @@ export class AuthFlowsService {
       );
     }
 
-    // Success — consume the token, issue the session with the user-
-    // agent recorded at /login time (so the resulting session row
-    // looks like the original login attempt, not the challenge POST).
-    await this.mfaChallenges.consume(mfaChallengeKey(args.challengeToken));
+    // Success — atomically CLAIM the single-use token before issuing the
+    // session. consume() is an atomic GETDEL, so if two requests race the
+    // same valid code (or recovery code) on the same challenge token, exactly
+    // ONE gets the payload back; the loser must NOT mint a second session —
+    // that would violate the stated single-use contract ("success consumes
+    // the token"). Sequential reuse is already caught by the peek above; this
+    // closes the concurrent window (both peek before either consumes). Issue
+    // the session with the user-agent recorded at /login time so the row
+    // looks like the original login attempt, not the challenge POST.
+    const consumed = await this.mfaChallenges.consume(mfaChallengeKey(args.challengeToken));
+    if (consumed === null) {
+      throw new AuthFlowError(
+        'invalid_auth_token',
+        'Challenge token was already used. Sign in again.',
+      );
+    }
 
     const account = await this.repo.findAccountById(payload.account_id);
     if (account === null) {

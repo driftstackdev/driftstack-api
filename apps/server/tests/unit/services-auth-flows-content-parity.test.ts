@@ -182,6 +182,15 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
+  it('V-353d completeMfaChallenge: atomic single-use — consume()=GETDEL return is checked; a concurrent race-loser (consumed===null) throws instead of minting a second session', () => {
+    // Regression guard for the concurrent double-submit window: two requests
+    // racing the same valid code both pass peek+verify, but consume() (atomic
+    // GETDEL) returns the payload to exactly one — the loser must be rejected.
+    expect(body).toMatch(
+      /const consumed = await this\.mfaChallenges\.consume\(mfaChallengeKey\(args\.challengeToken\)\);\s*\n?\s*if \(consumed === null\) \{\s*\n?\s*throw new AuthFlowError\(\s*\n?\s*'invalid_auth_token',\s*\n?\s*'Challenge token was already used\. Sign in again\.',/,
+    );
+  });
+
   it('V-353e stepUpReauth: distinct from completeMfaChallenge (login-path hand-off); refreshes mfa_satisfied_at + invalidateAccount cache', () => {
     expect(body).toMatch(
       /V-353e — step-up reauth WITHOUT re-logging-in\. Caller is already\s*\n?\s*\*\s*authenticated via web session;[\s\S]+?Distinct from\s*\n?\s*\*\s*`completeMfaChallenge` which is the LOGIN-PATH hand-off \(no\s*\n?\s*\*\s*pre-existing session\)\./,
