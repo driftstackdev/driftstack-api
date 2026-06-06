@@ -128,11 +128,14 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     return Promise.resolve(null);
   }
 
-  consumeAuthToken(args: { kind: AuthFlowKind; id: string; at: Date }): Promise<void> {
+  consumeAuthToken(args: { kind: AuthFlowKind; id: string; at: Date }): Promise<boolean> {
     const row = this.tokensByKind[args.kind].get(args.id);
-    if (!row || row.consumedAt !== null) return Promise.resolve();
+    // Mirror the drizzle conditional UPDATE: only the first consume of an
+    // unconsumed token "claims" it (returns true); a later attempt on an
+    // already-consumed row returns false.
+    if (!row || row.consumedAt !== null) return Promise.resolve(false);
     this.tokensByKind[args.kind].set(args.id, { ...row, consumedAt: args.at });
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
   deleteStaleAuthTokens(args: {

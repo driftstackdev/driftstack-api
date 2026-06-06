@@ -171,12 +171,16 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
     return row ? toTokenRow(row) : null;
   }
 
-  async consumeAuthToken(args: { kind: AuthFlowKind; id: string; at: Date }): Promise<void> {
+  async consumeAuthToken(args: { kind: AuthFlowKind; id: string; at: Date }): Promise<boolean> {
     const t = tableForKind(args.kind);
-    await this.database.db
+    const rows = await this.database.db
       .update(t)
       .set({ consumedAt: args.at })
-      .where(and(eq(t.id, args.id), isNull(t.consumedAt)));
+      .where(and(eq(t.id, args.id), isNull(t.consumedAt)))
+      .returning({ id: t.id });
+    // rows.length === 1 → this call claimed the token; 0 → already consumed
+    // (a concurrent winner), so the caller must reject rather than double-run.
+    return rows.length > 0;
   }
 
   async deleteStaleAuthTokens(args: {

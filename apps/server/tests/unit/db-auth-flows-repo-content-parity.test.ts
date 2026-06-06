@@ -108,9 +108,9 @@ describe('W449.B apps/server/src/db/auth-flows-repo.ts content parity', () => {
     );
   });
 
-  it('consumeAuthToken: where and(eq(id), isNull(consumedAt)) — first-consume-wins replay protection (subsequent attempts no-op)', () => {
+  it('consumeAuthToken: where and(eq(id), isNull(consumedAt)) + returning → rows.length>0 — first-consume-wins replay protection, returns whether THIS call claimed the token (single-use under concurrency)', () => {
     expect(body).toMatch(
-      /async consumeAuthToken\(args: \{ kind: AuthFlowKind; id: string; at: Date \}\): Promise<void> \{[\s\S]*?\.set\(\{ consumedAt: args\.at \}\)\s*\n?\s*\.where\(and\(eq\(t\.id, args\.id\), isNull\(t\.consumedAt\)\)\);/,
+      /async consumeAuthToken\(args: \{ kind: AuthFlowKind; id: string; at: Date \}\): Promise<boolean> \{[\s\S]*?\.set\(\{ consumedAt: args\.at \}\)\s*\n?\s*\.where\(and\(eq\(t\.id, args\.id\), isNull\(t\.consumedAt\)\)\)\s*\n?\s*\.returning\(\{ id: t\.id \}\);[\s\S]*?return rows\.length > 0;/,
     );
   });
 

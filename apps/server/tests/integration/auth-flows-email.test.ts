@@ -8,7 +8,11 @@
 
 import { describe, expect, it } from 'vitest';
 import { createTestLogger } from '../../src/lib/logger.js';
-import { AuthFlowsService, type AuthFlowsRepo } from '../../src/services/auth-flows.js';
+import {
+  AuthFlowsService,
+  AuthFlowError,
+  type AuthFlowsRepo,
+} from '../../src/services/auth-flows.js';
 import { createEmailService, type PostmarkSendApi } from '../../src/services/email.js';
 import { InMemoryAuthFlowsRepo } from './_helpers/in-memory-auth-flows-repo.js';
 
@@ -106,6 +110,40 @@ describe('AuthFlowsService → Postmark integration (V-085)', () => {
     // template diverges, this assertion gets updated.
     expect(calls[0]?.to).toBe('returning@driftstack.local');
     expect(calls[0]?.text).toContain('https://app.driftstack.local/auth/magic-link?token=');
+  });
+
+  it('magic-link single-use under concurrency: two simultaneous consumes of the same token → exactly one session, one InvalidAuthToken', async () => {
+    // Regression for the find-then-consume race: both requests pass
+    // findActiveAuthToken (token still active), but the atomic conditional
+    // consume (returns whether THIS call claimed it) must let only one proceed
+    // — otherwise one magic link mints two web sessions. Deterministic with the
+    // in-memory repo: both finds resolve, then the first consume claims the row
+    // and the second sees it already consumed.
+    const repo = new InMemoryAuthFlowsRepo();
+    const { client } = makeStubPostmark();
+    const service = makeService(repo, client);
+
+    await service.signup({
+      email: 'race@driftstack.local',
+      password: 'correct horse battery staple',
+      requestedFromIp: null,
+    });
+    const req = await service.requestMagicLink({
+      email: 'race@driftstack.local',
+      requestedFromIp: null,
+    });
+    const token = req.debugToken;
+    expect(token).not.toBeNull();
+
+    const results = await Promise.allSettled([
+      service.consumeMagicLink({ token: token!, issuedFromIp: null, userAgent: null }),
+      service.consumeMagicLink({ token: token!, issuedFromIp: null, userAgent: null }),
+    ]);
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(AuthFlowError);
   });
 
   it('magic-link request silently no-ops when email is unknown', async () => {

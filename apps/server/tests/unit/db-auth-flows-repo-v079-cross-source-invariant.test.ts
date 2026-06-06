@@ -129,10 +129,14 @@ describe('W1004 db/auth-flows-repo V-079 cross-source invariant', () => {
 
   // ─── consumeAuthToken isNull double-check ────────────────────
 
-  it('CRITICAL consumeAuthToken isNull(consumedAt) double-check — and(eq(id), isNull(consumedAt)). The IS-NULL guard makes consume idempotent + replay-safe (second consume is a no-op).', () => {
+  it('CRITICAL consumeAuthToken isNull(consumedAt) double-check — and(eq(id), isNull(consumedAt)) + returning({id})→rows.length. The IS-NULL guard makes consume idempotent + replay-safe (a concurrent/second consume claims 0 rows → returns false → caller rejects).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/auth-flows-repo.ts'));
     expect(p).toMatch(/\.set\(\{ consumedAt: args\.at \}\)/);
-    expect(p).toMatch(/\.where\(and\(eq\(t\.id, args\.id\), isNull\(t\.consumedAt\)\)\);/);
+    // .where(...) now chains to .returning({ id }) (no trailing ;) so the call
+    // reports whether it claimed the row — single-use under concurrency.
+    expect(p).toMatch(
+      /\.where\(and\(eq\(t\.id, args\.id\), isNull\(t\.consumedAt\)\)\)\s*\n?\s*\.returning\(\{ id: t\.id \}\);[\s\S]*?return rows\.length > 0;/,
+    );
   });
 
   // ─── findActiveWebSession 3-cond ─────────────────────────────

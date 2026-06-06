@@ -118,8 +118,15 @@ export interface AuthFlowsRepo {
     tokenHash: string;
     now: Date;
   }): Promise<AuthFlowTokenRow | null>;
-  /** Mark a token consumed. Idempotent — caller checks the find first. */
-  consumeAuthToken(args: { kind: AuthFlowKind; id: string; at: Date }): Promise<void>;
+  /**
+   * Atomically mark a token consumed (UPDATE … WHERE id AND consumed_at IS
+   * NULL). Returns true iff THIS call claimed it (one row updated); false if it
+   * was already consumed — letting the caller reject a concurrent race-loser
+   * instead of running the consume's side effects twice (single-use under
+   * concurrency; the find-then-consume gap would otherwise let two simultaneous
+   * requests both pass the find and both proceed).
+   */
+  consumeAuthToken(args: { kind: AuthFlowKind; id: string; at: Date }): Promise<boolean>;
   /**
    * 2026-05-20 — sweeper-driven bulk delete of stale token rows.
    * `consumedBefore` deletes rows whose `consumedAt` is non-null
@@ -541,7 +548,15 @@ export class AuthFlowsService {
     });
     if (row === null) throw new AuthFlowError('invalid_auth_token');
 
-    await this.repo.consumeAuthToken({ kind: 'email_verify', id: row.id, at: now });
+    // Single-use under concurrency: only the request that actually claims the
+    // token proceeds. A concurrent loser (consume returned false) is rejected
+    // rather than issuing a second session + re-firing the welcome email.
+    const consumed = await this.repo.consumeAuthToken({
+      kind: 'email_verify',
+      id: row.id,
+      at: now,
+    });
+    if (!consumed) throw new AuthFlowError('invalid_auth_token');
     await this.repo.markEmailVerified(row.accountId, now);
 
     const account = await this.requireAccount(row.accountId);
@@ -798,7 +813,10 @@ export class AuthFlowsService {
     });
     if (row === null) throw new AuthFlowError('invalid_auth_token');
 
-    await this.repo.consumeAuthToken({ kind: 'magic_link', id: row.id, at: now });
+    // Single-use under concurrency: reject a concurrent loser so the same
+    // magic link can't mint two web sessions.
+    const consumed = await this.repo.consumeAuthToken({ kind: 'magic_link', id: row.id, at: now });
+    if (!consumed) throw new AuthFlowError('invalid_auth_token');
     const account = await this.requireAccount(row.accountId);
     if (account.status !== 'active') throw new AuthFlowError('account_suspended');
 
@@ -855,7 +873,16 @@ export class AuthFlowsService {
     });
     if (row === null) throw new AuthFlowError('invalid_auth_token');
 
-    await this.repo.consumeAuthToken({ kind: 'password_reset', id: row.id, at: now });
+    // Single-use under concurrency: critical here — two concurrent confirms on
+    // the same token would each issue a session AND each call
+    // revokeAllWebSessionsExceptCurrent, mutually revoking each other (lockout).
+    // Reject the loser so exactly one reset+session survives.
+    const consumed = await this.repo.consumeAuthToken({
+      kind: 'password_reset',
+      id: row.id,
+      at: now,
+    });
+    if (!consumed) throw new AuthFlowError('invalid_auth_token');
     const account = await this.requireAccount(row.accountId);
     const newHash = await hashPassword(args.newPassword);
     await this.repo.setPassword(account.id, newHash);

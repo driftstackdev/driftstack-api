@@ -108,10 +108,10 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
-  it('verifyEmail: 4-step (find unconsumed token → consume → markEmailVerified → issueWebSession); V-202 sendSignupWelcome fire-and-forget after', () => {
+  it('verifyEmail: 4-step (find unconsumed token → consume → markEmailVerified → issueWebSession); consume single-use checked (race-loser rejected); V-202 sendSignupWelcome fire-and-forget after', () => {
     expect(body).toMatch(/if \(row === null\) throw new AuthFlowError\('invalid_auth_token'\);/);
     expect(body).toMatch(
-      /await this\.repo\.consumeAuthToken\(\{ kind: 'email_verify', id: row\.id, at: now \}\);\s*\n?\s*await this\.repo\.markEmailVerified\(row\.accountId, now\);/,
+      /const consumed = await this\.repo\.consumeAuthToken\(\{\s*\n?\s*kind: 'email_verify',\s*\n?\s*id: row\.id,\s*\n?\s*at: now,\s*\n?\s*\}\);\s*\n?\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);\s*\n?\s*await this\.repo\.markEmailVerified\(row\.accountId, now\);/,
     );
     expect(body).toMatch(
       /\/\/ V-202 — fire signup-welcome email after the verify lands\. Derive\s*\n?\s*\/\/ the dashboard origin from `verifyEmailUrl`/,
