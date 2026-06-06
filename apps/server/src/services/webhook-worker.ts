@@ -157,6 +157,7 @@ export class WebhookDeliveryWorker {
     const fetchStartMs = Date.now();
     let response: Response | null = null;
     let networkError: Error | null = null;
+    let responseExcerpt: string | null = null;
     try {
       response = await fetchImpl(endpoint.url, {
         method: 'POST',
@@ -176,6 +177,19 @@ export class WebhookDeliveryWorker {
         // docs/internal/2026-05-31-webhook-ssrf-outbound-target.md.
         redirect: 'error',
       });
+      // Read the failure-response excerpt HERE, before the finally clears the
+      // abort timer — `response.text()` streams the body, and a malicious /
+      // misbehaving endpoint can send headers then stall the body indefinitely.
+      // Done in handleOutcome (post-clearTimeout) the read was bounded only by
+      // undici's ~300s default, not our `timeout`, tying up a delivery slot.
+      // Inside the try the same AbortController.signal that bounds the fetch
+      // also bounds the body read; readExcerpt swallows the resulting AbortError
+      // → null excerpt, and the non-2xx response is still recorded as a failure.
+      // 2xx responses never read the body (status is enough), so the happy path
+      // is unchanged. See the fetch-body-read-timeout class fix (stripe/oauth).
+      if (!response.ok) {
+        responseExcerpt = await readExcerpt(response);
+      }
     } catch (err) {
       networkError = err instanceof Error ? err : new Error(String(err));
     } finally {
@@ -183,13 +197,21 @@ export class WebhookDeliveryWorker {
     }
     const durationMs = Date.now() - fetchStartMs;
 
-    return this.handleOutcome(delivery, endpoint, response, networkError, durationMs);
+    return this.handleOutcome(
+      delivery,
+      endpoint,
+      response,
+      responseExcerpt,
+      networkError,
+      durationMs,
+    );
   }
 
   private async handleOutcome(
     delivery: WebhookDeliveryRow,
     endpoint: WebhookEndpointRow,
     response: Response | null,
+    responseExcerpt: string | null,
     networkError: Error | null,
     durationMs: number,
   ): Promise<DeliveryOutcome> {
@@ -214,7 +236,6 @@ export class WebhookDeliveryWorker {
     }
 
     const responseStatus = response?.status ?? null;
-    const responseExcerpt = response ? await readExcerpt(response) : null;
     const lastError = networkError
       ? networkError.name === 'AbortError'
         ? 'timeout'

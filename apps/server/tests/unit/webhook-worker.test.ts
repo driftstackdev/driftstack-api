@@ -116,6 +116,50 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(repo.getAllDeliveries()[0]?.lastError).toBe('timeout');
   });
 
+  it('stalled response body is bounded by the delivery abort timer (fetch-body-read-timeout class)', async () => {
+    // A misbehaving / malicious endpoint can return response HEADERS (non-2xx)
+    // then stall the BODY indefinitely. The failure-excerpt read must be bounded
+    // by the same AbortController that bounds the fetch — when the read happened
+    // in handleOutcome (after the finally cleared the timer) it was bounded only
+    // by undici's ~300s default, hanging a delivery slot. Regression guard: the
+    // read now happens inside the try, while the abort timer is still live.
+    const { repo } = await setupRepoWithEndpoint();
+    let textCalled = false;
+    const fetchImpl = vi.fn((_url: string, init: RequestInit) => {
+      const signal = init.signal;
+      return Promise.resolve({
+        ok: false,
+        status: 500,
+        // Body only ever settles via abort — never resolves on its own.
+        text: () =>
+          new Promise<string>((_resolve, reject) => {
+            textCalled = true;
+            const onAbort = (): void =>
+              reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+            if (signal?.aborted) onAbort();
+            else signal?.addEventListener('abort', onAbort, { once: true });
+          }),
+      } as unknown as Response);
+    }) as unknown as typeof fetch;
+
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fetchImpl,
+      now: constNow,
+      deliveryTimeoutMs: 30, // aborts well within vitest's default 5s timeout
+    });
+    // Pre-fix this hangs forever (timer already cleared → abort never fires)
+    // and the test times out; post-fix it resolves to a normal retry.
+    const { outcomes } = await worker.tickOnce();
+    expect(textCalled).toBe(true);
+    expect(outcomes[0]?.kind).toBe('retry');
+    // The aborted read yields a null excerpt; the delivery is still recorded.
+    const d = repo.getAllDeliveries()[0];
+    expect(d?.status).toBe('pending');
+    expect(d?.attempts).toBe(1);
+  });
+
   it('after MAX attempts, transitions to DLQ', async () => {
     const { repo, endpoint } = await setupRepoWithEndpoint();
     // Fast-forward attempts to 5 (next failure → 6, which is >= MAX_ATTEMPTS = 6).
