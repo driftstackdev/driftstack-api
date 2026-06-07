@@ -291,3 +291,76 @@ describe('HttpClient.request', () => {
     expect(captured?.body).toBe('{"a":1}');
   });
 });
+
+// Security invariant: a thrown error must NEVER carry the API key. Errors are
+// built from the response (problem body / status) or the transport failure
+// message — never from the request init (which holds `authorization: Bearer
+// <apiKey>`). If a refactor ever stashed the request/headers on an error, the
+// customer's key would leak into THEIR logs / Sentry. These guard both error
+// paths (problem response + network failure) by asserting the key string is
+// absent from the message, String(err), and the JSON-serialized error.
+describe('HttpClient — API key never leaks into thrown errors', () => {
+  const SECRET = 'ds_live_DO_NOT_LEAK_abc123';
+
+  function assertNoKey(err: unknown): void {
+    expect(err).toBeInstanceOf(Error);
+    const e = err as Error;
+    expect(e.message).not.toContain(SECRET);
+    expect(String(e)).not.toContain(SECRET);
+    expect(JSON.stringify(e)).not.toContain(SECRET);
+    // Walk the cause chain too — TransportError keeps the underlying fetch
+    // error as `cause`; it must not surface the key either.
+    let cause: unknown = (e as { cause?: unknown }).cause;
+    let depth = 0;
+    while (cause !== undefined && cause !== null && depth < 5) {
+      if (cause instanceof Error) expect(cause.message).not.toContain(SECRET);
+      expect(JSON.stringify(cause)).not.toContain(SECRET);
+      cause = (cause as { cause?: unknown }).cause;
+      depth += 1;
+    }
+  }
+
+  it('does not leak the key on a problem (4xx) response', async () => {
+    const http = new HttpClient({
+      apiKey: SECRET,
+      baseUrl: 'http://api.test',
+      fetch: fakeFetch({
+        status: 404,
+        body: { type: PROBLEM_TYPES.NotFound, title: 'Not Found', status: 404 },
+      }),
+      retry: NEVER_RETRY,
+    });
+    await expect(http.request({ method: 'GET', path: '/v1/x' })).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+    const err = await http.request({ method: 'GET', path: '/v1/x' }).catch((e: unknown) => e);
+    assertNoKey(err);
+  });
+
+  it('does not leak the key on a network failure', async () => {
+    const http = new HttpClient({
+      apiKey: SECRET,
+      baseUrl: 'http://api.test',
+      fetch: vi.fn(async () => {
+        await Promise.resolve();
+        throw new Error('network down');
+      }),
+      retry: NEVER_RETRY,
+    });
+    const err = await http.request({ method: 'GET', path: '/v1/x' }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TransportError);
+    assertNoKey(err);
+  });
+
+  it('does not leak the key on a non-problem 5xx body', async () => {
+    const http = new HttpClient({
+      apiKey: SECRET,
+      baseUrl: 'http://api.test',
+      fetch: fakeFetch({ status: 500, body: '<html>internal error</html>' }),
+      retry: NEVER_RETRY,
+    });
+    const err = await http.request({ method: 'GET', path: '/v1/x' }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TransportError);
+    assertNoKey(err);
+  });
+});
