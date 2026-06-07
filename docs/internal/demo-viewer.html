@@ -1,0 +1,107 @@
+<!doctype html>
+<!--
+  Passive streaming demo viewer — A2-provided, 2026-06-07.
+
+  Lets the founder WATCH A3's capture→publish smoke (a real spawned WebKit fork
+  streamed over the local LiveKit `--dev` server) without the full session flow.
+  The gui-client's AgentSessionPanel is coupled to a real CP session
+  (LiveKitInfo from session-create), and hosted LiveKit Meet (https) cannot reach
+  ws://localhost — so this single self-contained page is the fastest watch path
+  for the local dev server.
+
+  USE: open this file in a browser (file:// is fine — localhost ws:// is a secure
+  context, no mixed-content block). It's prefilled with the demo room + the
+  SUBSCRIBER token A2 minted (bus W152, room "demo", 6h TTL). Click Connect once
+  A3's smoke is publishing. If the token has expired, ask A2 to mint a fresh one.
+
+  Order: founder grants Screen Recording → A3 runs the smoke (publisher) → open
+  this → Connect → watch.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Driftstack — passive streaming demo viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.19.0/dist/livekit-client.umd.min.js"></script>
+    <style>
+      body {
+        font-family: -apple-system, system-ui, sans-serif;
+        margin: 0;
+        background: #111;
+        color: #eee;
+      }
+      header {
+        padding: 12px 16px;
+        background: #1c1c1c;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      input {
+        background: #000;
+        color: #0f0;
+        border: 1px solid #333;
+        padding: 6px;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      #ws {
+        width: 220px;
+      }
+      #token {
+        width: 320px;
+      }
+      button {
+        padding: 6px 14px;
+        cursor: pointer;
+      }
+      #status {
+        margin-left: auto;
+        font-size: 13px;
+      }
+      video {
+        display: block;
+        max-width: 100%;
+        margin: 0 auto;
+        background: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <label>ws <input id="ws" value="ws://localhost:7880" /></label>
+      <label>token <input id="token" value="" placeholder="subscriber JWT" /></label>
+      <button id="connect">Connect</button>
+      <span id="status">idle</span>
+    </header>
+    <video id="video" autoplay playsinline></video>
+    <script>
+      // Prefilled SUBSCRIBER token for room "demo" (A2 bus W152). Re-mint if expired.
+      document.getElementById('token').value =
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3ODA4NzczMzUsImlzcyI6ImRldmtleSIsIm5iZiI6MTc4MDg1NTczNSwic3ViIjoiZ3VpLXZpZXdlciIsImp0aSI6IjE5OTczNjE2MWY2MTIwN2QyYzU5ZTBhMThiM2Y1NWZiIiwidmlkZW8iOnsicm9vbSI6ImRlbW8iLCJyb29tSm9pbiI6dHJ1ZSwiY2FuUHVibGlzaCI6ZmFsc2UsImNhblN1YnNjcmliZSI6dHJ1ZX19.azF4TAs2WVly7wQ6hHCdlNaXWb-7vqJzhJYZf1fTY1k';
+      const { Room, RoomEvent } = window.LivekitClient;
+      const statusEl = document.getElementById('status');
+      const videoEl = document.getElementById('video');
+      document.getElementById('connect').addEventListener('click', async () => {
+        const room = new Room();
+        room.on(RoomEvent.TrackSubscribed, (track) => {
+          if (track.kind === 'video') track.attach(videoEl);
+          statusEl.textContent = 'subscribed: ' + track.kind;
+        });
+        room.on(RoomEvent.Disconnected, () => {
+          statusEl.textContent = 'disconnected';
+        });
+        statusEl.textContent = 'connecting…';
+        try {
+          await room.connect(
+            document.getElementById('ws').value,
+            document.getElementById('token').value,
+          );
+          statusEl.textContent = 'connected — waiting for publisher track…';
+        } catch (e) {
+          statusEl.textContent = 'connect failed: ' + (e && e.message ? e.message : e);
+        }
+      });
+    </script>
+  </body>
+</html>
