@@ -117,9 +117,9 @@ describe('W593.C packages/sdk-go/profile_snapshots.go content parity', () => {
     expect(body).toMatch(
       /cont, err := fn\(&page\.Data\[i\]\)\s*\n\s*if err != nil \{\s*\n\s*return err\s*\n\s*\}\s*\n\s*if !cont \{\s*\n\s*return nil\s*\n\s*\}/,
     );
-    expect(body).toMatch(
-      /if page\.NextCursor == nil \|\| \*page\.NextCursor == "" \{\s*\n\s*return nil\s*\n\s*\}/,
-    );
+    // Terminator + non-advance guard via the shared advanceCursor helper.
+    expect(body).toMatch(/next, done, err := advanceCursor\(cursor, page\.NextCursor\)/);
+    expect(body).toMatch(/if done \{\s*\n\s*return nil\s*\n\s*\}\s*\n\s*cursor = next/);
   });
 
   it('Get — GET /v1/profile-snapshots/{id} with PathEscape, returns a single ProfileSnapshot', () => {

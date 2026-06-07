@@ -127,10 +127,14 @@ func (r *RecipesResource) Iterate(ctx context.Context, query *ListRecipesQuery, 
 				return nil
 			}
 		}
-		if page.NextCursor == nil || *page.NextCursor == "" {
+		next, done, err := advanceCursor(cursor, page.NextCursor)
+		if err != nil {
+			return err
+		}
+		if done {
 			return nil
 		}
-		cursor = *page.NextCursor
+		cursor = next
 	}
 }
 

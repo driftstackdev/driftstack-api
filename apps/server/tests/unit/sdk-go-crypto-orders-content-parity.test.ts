@@ -168,12 +168,13 @@ describe('W593.B packages/sdk-go/crypto_orders.go content parity', () => {
     expect(body).toMatch(
       /\/\/ Defensive copy so we can mutate Cursor between pages without\s*\n\s*\/\/ surprising the caller's options struct\.\s*\n\s*var page ListCryptoOrdersOptions\s*\n\s*if opts != nil \{\s*\n\s*page = \*opts\s*\n\s*page\.Cursor = nil\s*\n\s*\}/,
     );
-    // visit-returns-false stops + nil-or-empty-NextCursor terminates the
-    // outer loop (empty-string guard matches the audit-log / profiles /
-    // profile-snapshots iterators).
+    // visit-returns-false stops early; termination + non-advance guard go
+    // through the shared advanceCursor helper (matches the audit-log / profiles
+    // / profile-snapshots iterators: empty NextCursor → done, repeated → error).
     expect(body).toMatch(
-      /for _, o := range resp\.Orders \{\s*\n\s*if !visit\(o\) \{\s*\n\s*return nil\s*\n\s*\}\s*\n\s*\}\s*\n\s*if resp\.NextCursor == nil \|\| \*resp\.NextCursor == "" \{\s*\n\s*return nil\s*\n\s*\}/,
+      /for _, o := range resp\.Orders \{\s*\n\s*if !visit\(o\) \{\s*\n\s*return nil\s*\n\s*\}\s*\n\s*\}/,
     );
+    expect(body).toMatch(/next, done, err := advanceCursor\(current, resp\.NextCursor\)/);
   });
 
   it('Get — V-666.G GET /v1/billing/crypto-orders/{id} reads a single order envelope. URL-escapes the orderID so a malformed id cannot inject path traversal.', () => {

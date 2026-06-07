@@ -140,9 +140,8 @@ describe('W591.C packages/sdk-go/audit_log.go content parity', () => {
     expect(body).toMatch(
       /cont, err := fn\(&page\.Data\[i\]\)\s*\n\s*if err != nil \{\s*\n\s*return err\s*\n\s*\}\s*\n\s*if !cont \{\s*\n\s*return nil\s*\n\s*\}/,
     );
-    // Outer loop terminator.
-    expect(body).toMatch(
-      /if page\.NextCursor == nil \|\| \*page\.NextCursor == "" \{\s*\n\s*return nil\s*\n\s*\}/,
-    );
+    // Outer loop terminator + non-advance guard via the shared advanceCursor.
+    expect(body).toMatch(/next, done, err := advanceCursor\(cursor, page\.NextCursor\)/);
+    expect(body).toMatch(/if done \{\s*\n\s*return nil\s*\n\s*\}\s*\n\s*cursor = next/);
   });
 });
