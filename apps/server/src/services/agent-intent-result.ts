@@ -48,12 +48,14 @@ function summarize(intent: AgentIntent, outputData: unknown): string {
       return summarizeCapture(intent);
     case 'scroll': {
       // W173 — surface the harness's distance clamp, mirroring the existing
-      // `capped`/`timeout_capped` flags. The harness clamps scroll distance to
-      // [0, 15000] and reports `distance_capped: true` in outputData when the
-      // requested distance_px actually hit that clamp (A3 bus W218). Read it
-      // defensively (absent/non-bool → not capped) so this is forward-compatible
-      // with the harness adding the field; the value is appended, never the cap
-      // magnitude (that constant lives harness-side — don't duplicate it).
+      // `capped`/`timeout_capped` flags. The harness emits `distance_capped` in
+      // outputData (always present, A3 bus W219 / harness 84b85529): `true` ONLY
+      // when the requested distance_px exceeded the 15000px UPPER clamp and was
+      // capped to 15000 — i.e. the customer asked to scroll FARTHER than allowed.
+      // A negative/non-finite request clamps to 0 with `distance_capped:false`
+      // (a no-op, not a "cap"), so " (capped)" fires only on the genuinely-useful
+      // over-distance signal. Read defensively (absent/non-bool → not capped); the
+      // cap magnitude is never duplicated here (that constant lives harness-side).
       const capped = readBool(outputData, 'distance_capped') ? ' (capped)' : '';
       return intent.amount_px !== undefined
         ? `scrolled ${intent.direction} ${intent.amount_px}px${capped}`
