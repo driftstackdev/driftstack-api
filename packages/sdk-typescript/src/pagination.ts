@@ -12,6 +12,8 @@
 // Resources expose a thin `.iterate(opts)` method that calls
 // `iteratePaginated` with the resource's own `list` as `fetchPage`.
 
+import { TransportError } from './errors.js';
+
 /** Shape of a Driftstack list endpoint response. */
 export interface CursorPage<T> {
   data: readonly T[];
@@ -44,6 +46,16 @@ export async function* iteratePaginated<T>(
     }
     if (page.next_cursor === null) {
       return;
+    }
+    // Guard against a non-advancing cursor. Keyset pagination always returns a
+    // strictly-new next_cursor, so the SAME cursor coming back means a server /
+    // proxy / cache bug. Without this the loop would spin forever and hang the
+    // caller's process; surface a clear error instead of an undiagnosable hang.
+    if (page.next_cursor === cursor) {
+      throw new TransportError(
+        'pagination did not advance: the server returned the same cursor twice',
+        0,
+      );
     }
     cursor = page.next_cursor;
   }

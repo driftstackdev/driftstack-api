@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { iteratePaginated, type CursorPage } from '../../src/pagination.js';
+import { TransportError } from '../../src/errors.js';
 
 describe('iteratePaginated', () => {
   it('walks a single full page and stops on null next_cursor', async () => {
@@ -95,5 +96,23 @@ describe('iteratePaginated', () => {
     }
     // We never advanced past the first page — second fetch never fires.
     expect(fetchPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws TransportError (does not hang) when the cursor does not advance', async () => {
+    // A buggy server / proxy returns the SAME non-null cursor forever. Without
+    // the non-advance guard this would loop infinitely and hang the caller.
+    const fetchPage = vi.fn(
+      (_cursor: string | null): Promise<CursorPage<number>> =>
+        Promise.resolve({ data: [1], next_cursor: 'stuck' }),
+    );
+    const collected: number[] = [];
+    await expect(
+      (async () => {
+        for await (const n of iteratePaginated(fetchPage)) collected.push(n);
+      })(),
+    ).rejects.toBeInstanceOf(TransportError);
+    // First page yielded, second fetch saw the same cursor and bailed — not ∞.
+    expect(fetchPage).toHaveBeenCalledTimes(2);
+    expect(collected).toEqual([1, 1]);
   });
 });

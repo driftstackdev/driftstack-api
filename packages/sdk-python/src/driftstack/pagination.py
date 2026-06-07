@@ -26,7 +26,15 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from typing import Any, TypeVar
 
+from .errors import TransportError
+
 T = TypeVar("T")
+
+# Guard message for a non-advancing cursor. Keyset pagination always returns a
+# strictly-new next_cursor, so the SAME cursor coming back means a server /
+# proxy / cache bug. Without the guard the loop would spin forever and hang the
+# caller; we raise a clear error instead of an undiagnosable hang.
+_CURSOR_STALL_MSG = "pagination did not advance: the server returned the same cursor twice"
 
 
 def _extract_data(page: Any) -> list[Any]:
@@ -60,6 +68,8 @@ def iterate_paginated(
         next_cursor = _extract_next_cursor(page)
         if next_cursor is None:
             return
+        if next_cursor == cursor:
+            raise TransportError(_CURSOR_STALL_MSG, status=0)
         cursor = next_cursor
 
 
@@ -75,6 +85,8 @@ async def aiterate_paginated(
         next_cursor = _extract_next_cursor(page)
         if next_cursor is None:
             return
+        if next_cursor == cursor:
+            raise TransportError(_CURSOR_STALL_MSG, status=0)
         cursor = next_cursor
 
 

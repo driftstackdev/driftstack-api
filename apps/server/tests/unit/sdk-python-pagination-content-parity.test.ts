@@ -69,7 +69,11 @@ describe('W586.B packages/sdk-python/src/driftstack/pagination.py content parity
     expect(body).toMatch(/Page object can be a pydantic ``BaseModel`` \(attributes\) or a raw/);
     expect(body).toMatch(/``dict`` \(keys\); both are duck-typed\./);
     expect(body).toMatch(
-      /cursor: str \| None = None\s*\n\s*while True:\s*\n\s*page = fetch_page\(cursor\)\s*\n\s*yield from _extract_data\(page\)\s*\n\s*next_cursor = _extract_next_cursor\(page\)\s*\n\s*if next_cursor is None:\s*\n\s*return\s*\n\s*cursor = next_cursor/,
+      /cursor: str \| None = None\s*\n\s*while True:\s*\n\s*page = fetch_page\(cursor\)\s*\n\s*yield from _extract_data\(page\)\s*\n\s*next_cursor = _extract_next_cursor\(page\)\s*\n\s*if next_cursor is None:\s*\n\s*return/,
+    );
+    // Non-advance guard then advance (a repeated cursor would otherwise hang).
+    expect(body).toMatch(
+      /if next_cursor == cursor:\s*\n\s*raise TransportError\(_CURSOR_STALL_MSG, status=0\)\s*\n\s*cursor = next_cursor/,
     );
   });
 
@@ -78,7 +82,11 @@ describe('W586.B packages/sdk-python/src/driftstack/pagination.py content parity
       /^async def aiterate_paginated\(\s*\n\s*fetch_page: Callable\[\[str \| None\], Awaitable\[Any\]\],\s*\n\) -> AsyncIterator\[T\]:\s*\n\s*"""Async variant of :func:`iterate_paginated`\. Same semantics\."""/m,
     );
     expect(body).toMatch(
-      /cursor: str \| None = None\s*\n\s*while True:\s*\n\s*page = await fetch_page\(cursor\)\s*\n\s*for item in _extract_data\(page\):\s*\n\s*yield item\s*\n\s*next_cursor = _extract_next_cursor\(page\)\s*\n\s*if next_cursor is None:\s*\n\s*return\s*\n\s*cursor = next_cursor/,
+      /cursor: str \| None = None\s*\n\s*while True:\s*\n\s*page = await fetch_page\(cursor\)\s*\n\s*for item in _extract_data\(page\):\s*\n\s*yield item\s*\n\s*next_cursor = _extract_next_cursor\(page\)\s*\n\s*if next_cursor is None:\s*\n\s*return/,
+    );
+    // Async path has the same non-advance guard before the cursor advance.
+    expect(body).toMatch(
+      /if next_cursor == cursor:\s*\n\s*raise TransportError\(_CURSOR_STALL_MSG, status=0\)\s*\n\s*cursor = next_cursor/,
     );
   });
 

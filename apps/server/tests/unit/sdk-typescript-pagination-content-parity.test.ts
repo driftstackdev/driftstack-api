@@ -99,19 +99,25 @@ describe('W422.A packages/sdk-typescript/src/pagination.ts content parity', () =
     expect(body).toMatch(/let cursor: string \| null = null;/);
   });
 
-  it("CRITICAL loop body — `while (true) { const page = await fetchPage(cursor); for (const item of page.data) { yield item; } if (page.next_cursor === null) { return; } cursor = page.next_cursor; }`. Order is load-bearing: fetch → yield → check-stop → advance. Drift to checking stop BEFORE yielding would skip the last page's items; drift to advancing BEFORE the stop-check would fetch an extra null-cursor page on the last iteration.", () => {
+  it("CRITICAL loop body — `while (true) { const page = await fetchPage(cursor); for (const item of page.data) { yield item; } if (page.next_cursor === null) { return; } ... }`. Order is load-bearing: fetch → yield → check-stop. Drift to checking stop BEFORE yielding would skip the last page's items. (The non-advance guard + cursor advance are pinned separately below.)", () => {
     expect(body).toMatch(
-      /while \(true\) \{\s*\n?\s*const page = await fetchPage\(cursor\);\s*\n?\s*for \(const item of page\.data\) \{\s*\n?\s*yield item;\s*\n?\s*\}\s*\n?\s*if \(page\.next_cursor === null\) \{\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*cursor = page\.next_cursor;/,
+      /while \(true\) \{\s*\n?\s*const page = await fetchPage\(cursor\);\s*\n?\s*for \(const item of page\.data\) \{\s*\n?\s*yield item;\s*\n?\s*\}\s*\n?\s*if \(page\.next_cursor === null\) \{\s*\n?\s*return;\s*\n?\s*\}/,
     );
+  });
+
+  it('CRITICAL non-advance guard — `if (page.next_cursor === cursor) { throw new TransportError(...) }` BETWEEN the stop-check and the cursor advance. A keyset cursor always advances, so the same cursor coming back means a buggy server/proxy; without this the loop hangs the caller forever. Drift to dropping it reintroduces the infinite-hang failure mode.', () => {
+    expect(body).toMatch(/if \(page\.next_cursor === cursor\) \{/);
+    expect(body).toMatch(/throw new TransportError\(/);
+    expect(body).toMatch(/pagination did not advance/);
   });
 
   it('Stop condition — `page.next_cursor === null` STRICT equality. Drift to `=== undefined` would let undefined cursors loop forever; drift to `!page.next_cursor` would stop on empty string (which the server might legitimately return for a still-paginating-but-temporarily-empty page) AND on 0 / false (impossible types but still a footgun).', () => {
     expect(body).toMatch(/if \(page\.next_cursor === null\) \{\s*\n?\s*return;\s*\n?\s*\}/);
   });
 
-  it('Cursor advance — `cursor = page.next_cursor;` AFTER the stop-check. This is the load-bearing ordering: if the stop-check passes (next_cursor is null), we return BEFORE assigning. Drift to assigning before stop-check would let an extra page-fetch happen with a null cursor on the last iteration.', () => {
+  it('Cursor advance — `cursor = page.next_cursor;` is the loop tail, reached only after BOTH the stop-check (return on null) and the non-advance guard (throw on a repeated cursor) pass. Drift to advancing before the stop-check would fetch an extra null-cursor page on the last iteration.', () => {
     expect(body).toMatch(
-      /if \(page\.next_cursor === null\) \{\s*\n?\s*return;\s*\n?\s*\}\s*\n?\s*cursor = page\.next_cursor;/,
+      /if \(page\.next_cursor === cursor\) \{\s*\n?\s*throw new TransportError\([\s\S]{0,160}?\);\s*\n?\s*\}\s*\n?\s*cursor = page\.next_cursor;/,
     );
   });
 
