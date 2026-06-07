@@ -263,6 +263,37 @@ describe('V-553.B-28 ValidationHarnessService.processTick', () => {
     expect(state.marks).toHaveLength(2);
   });
 
+  it('re-entrancy guard: an overlapping tick is skipped (no double-dispatch of the same due schedule)', async () => {
+    const { repo, state } = makeRepo([makeDueRow('arc_a')]);
+    // Blocking bridge: triggerRecapture holds until released, keeping tick 1
+    // in flight (ticking=true, set synchronously before the first await) while
+    // we fire an overlapping tick.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let calls = 0;
+    const bridge: ValidationHarnessRecaptureBridge = {
+      triggerRecapture: async () => {
+        calls += 1;
+        await gate;
+        return { id: 'run_1' };
+      },
+    };
+    const svc = new ValidationHarnessService(repo, bridge, LOCKED);
+    const p1 = svc.processTick({ now: new Date() });
+    const out2 = await svc.processTick({ now: new Date() });
+    expect(out2.skipped).toBe(true);
+    expect(out2.duePicked).toBe(0);
+    expect(out2.dispatched).toBe(0);
+    release();
+    const out1 = await p1;
+    expect(out1.skipped).toBeUndefined();
+    expect(out1.dispatched).toBe(1);
+    expect(calls).toBe(1); // only ONE dispatch — the overlapping tick didn't double-fire
+    expect(state.marks).toHaveLength(1);
+  });
+
   it('records errors per archetype without aborting the batch', async () => {
     const { repo, state } = makeRepo([makeDueRow('arc_ok'), makeDueRow('arc_bad')]);
     const { bridge } = makeBridge({ fail: new Set(['arc_bad']) });

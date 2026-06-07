@@ -74,6 +74,9 @@ export interface ProcessTickResult {
   duePicked: number;
   dispatched: number;
   errors: { archetypeId: string; message: string }[];
+  /** True when this fire was skipped because a prior tick was still running
+   *  (re-entrancy guard) — see processTick. */
+  skipped?: boolean;
 }
 
 export class ValidationHarnessService {
@@ -134,7 +137,31 @@ export class ValidationHarnessService {
 
   // ─── Worker tick (called from bootstrap setInterval) ────────────────
 
+  // Re-entrancy guard for processTick (see its doc comment).
+  private ticking = false;
+
+  /**
+   * Worker tick. Re-entrancy-guarded: the bootstrap poller is a naive
+   * `setInterval` that does NOT await the prior tick, so a tick slower than the
+   * interval would overlap the next fire. Overlap would DOUBLE-DISPATCH — two
+   * overlapping `findDue` calls both pick the same not-yet-`markRun` schedules,
+   * firing duplicate (expensive) recapture runs for one archetype. Skip the
+   * overlapping fire (`skipped: true`) — strictly safer; the next interval
+   * re-picks anything still due. Delegates the real work to `runTick`.
+   */
   async processTick(opts?: { now?: Date; batchSize?: number }): Promise<ProcessTickResult> {
+    if (this.ticking) {
+      return { duePicked: 0, dispatched: 0, errors: [], skipped: true };
+    }
+    this.ticking = true;
+    try {
+      return await this.runTick(opts);
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async runTick(opts?: { now?: Date; batchSize?: number }): Promise<ProcessTickResult> {
     const now = opts?.now ?? new Date();
     const batchSize = opts?.batchSize ?? 10;
     const due = await this.repo.findDue(now, batchSize);

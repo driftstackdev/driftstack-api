@@ -144,9 +144,14 @@ describe('W409.C apps/server/src/services/validation-harness.ts content parity',
     expect(body).toMatch(/return \{ runId: run\.id \};/);
   });
 
-  it('processTick: default batchSize=10 + baseline_drift_detected trigger + per-archetype error collection (no throw)', () => {
+  it('processTick: re-entrancy guard (skip overlapping fire) delegating to runTick with default batchSize=10 + baseline_drift_detected trigger + per-archetype error collection (no throw)', () => {
+    // Guard wrapper: skip if a prior tick is still running, else delegate to runTick.
     expect(body).toMatch(
-      /async processTick\(opts\?: \{ now\?: Date; batchSize\?: number \}\): Promise<ProcessTickResult> \{\s*\n?\s*const now = opts\?\.now \?\? new Date\(\);\s*\n?\s*const batchSize = opts\?\.batchSize \?\? 10;\s*\n?\s*const due = await this\.repo\.findDue\(now, batchSize\);/,
+      /async processTick\(opts\?: \{ now\?: Date; batchSize\?: number \}\): Promise<ProcessTickResult> \{\s*\n?\s*if \(this\.ticking\) \{\s*\n?\s*return \{ duePicked: 0, dispatched: 0, errors: \[\], skipped: true \};\s*\n?\s*\}\s*\n?\s*this\.ticking = true;\s*\n?\s*try \{\s*\n?\s*return await this\.runTick\(opts\);\s*\n?\s*\} finally \{\s*\n?\s*this\.ticking = false;\s*\n?\s*\}\s*\n?\s*\}/,
+    );
+    // Real work in runTick: batchSize default + findDue.
+    expect(body).toMatch(
+      /private async runTick\(opts\?: \{ now\?: Date; batchSize\?: number \}\): Promise<ProcessTickResult> \{\s*\n?\s*const now = opts\?\.now \?\? new Date\(\);\s*\n?\s*const batchSize = opts\?\.batchSize \?\? 10;\s*\n?\s*const due = await this\.repo\.findDue\(now, batchSize\);/,
     );
     expect(body).toMatch(/trigger: 'baseline_drift_detected',/);
     expect(body).toMatch(
