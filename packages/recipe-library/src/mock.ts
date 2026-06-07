@@ -7,6 +7,7 @@
 
 import type { RecipeRegistry, RecipeRunner } from './interfaces.js';
 import type { Recipe, RecipeContext, RecipeResult, RecipeStep, RecipeStepResult } from './types.js';
+import { redactStepForResult } from './redact.js';
 
 /** Built-in mock recipes — minimal but realistic enough for tests. */
 const DEFAULT_RECIPES: readonly Recipe[] = [
@@ -78,5 +79,5 @@ export class MockRecipeRunner implements RecipeRunner {
 }
 
 function stepResultFor(step: RecipeStep): RecipeStepResult {
-  return { step, status: 'ok', durationMs: MOCK_STEP_DURATION_MS };
+  return { step: redactStepForResult(step), status: 'ok', durationMs: MOCK_STEP_DURATION_MS };
 }

@@ -54,6 +54,8 @@ describe('W455.C packages/recipe-library/src/index.ts content parity', () => {
       /export type \{ RecipeRegistry, RecipeRunner \} from '\.\/interfaces\.js';/,
     );
     expect(body).toMatch(/export \{ MockRecipeRegistry, MockRecipeRunner \} from '\.\/mock\.js';/);
+    // Credential redaction helper (forward credential-leak guard).
+    expect(body).toMatch(/export \{ redactStepForResult, REDACTED \} from '\.\/redact\.js';/);
   });
 
   it("V-532.A framing pinned 'navigation flow recipes + builder helpers' + 8 value exports from ./recipes/navigation.js (buildPaginatedListingRecipe + buildSearchFlowRecipe + navigateAndWait + PAGINATED_LISTING_GENERIC + SEARCH_FLOW_GENERIC + tapAndWait + typeInto + V532A_NAVIGATION_RECIPES)", () => {

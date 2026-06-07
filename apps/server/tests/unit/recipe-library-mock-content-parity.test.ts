@@ -102,10 +102,12 @@ describe('W457.A packages/recipe-library/src/mock.ts content parity', () => {
     );
   });
 
-  it("stepResultFor: returns { step, status: 'ok', durationMs: MOCK_STEP_DURATION_MS }", () => {
+  it("stepResultFor: returns { step: redactStepForResult(step), status: 'ok', durationMs: MOCK_STEP_DURATION_MS } (credential redaction)", () => {
     expect(body).toMatch(
-      /function stepResultFor\(step: RecipeStep\): RecipeStepResult \{\s*\n?\s*return \{ step, status: 'ok', durationMs: MOCK_STEP_DURATION_MS \};\s*\n?\s*\}/,
+      /function stepResultFor\(step: RecipeStep\): RecipeStepResult \{\s*\n?\s*return \{ step: redactStepForResult\(step\), status: 'ok', durationMs: MOCK_STEP_DURATION_MS \};\s*\n?\s*\}/,
     );
+    // the redaction helper must be imported (forward credential-leak guard).
+    expect(body).toMatch(/import \{ redactStepForResult \} from '\.\/redact\.js';/);
   });
 
   it('file exists at canonical path', () => {
