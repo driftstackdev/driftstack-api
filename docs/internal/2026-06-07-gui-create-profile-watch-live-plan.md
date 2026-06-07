@@ -58,6 +58,37 @@ product flow, not the `demo-viewer.html` workaround or a manual `--demo-session`
 - Blocked on the A3 W158 answer (harness WSS consumer status) before A2 wires the
   dispatch end (so the frame contract is agreed).
 
+## Architecture trace (2026-06-07, wave after A3 W294)
+
+- **Dispatch transport:** `FleetControlRegistry` keys one `FleetControlConnection`
+  per nodeId; each connection owns an `IntentDispatchCorrelator` but has **no
+  `sendSessionAssign`** yet (the raw `send` is captured only in the correlator's
+  transport closure). Step A needs to expose a frame-send for the assign.
+- **De-risking finding:** the **passive watch needs ONLY the `sessionAssign`
+  dispatch.** The `StubAgentExecutor → ControlPlaneAgentExecutor` swap (intent
+  dispatch over WSS) is explicitly **"a founder/launch call"** (see
+  `agent-executor-control-plane.ts` header) and is for **interactive** control
+  (clicks/types) — which is separately item-9-gated. So we do NOT touch the
+  executor swap for "create a profile + watch it browse `initialUrl`".
+- **No session→node assignment exists** (no `assignedNodeId` column; no live
+  `serializeSessionAssign`/`registry.get` caller). For the LOCAL single-node demo,
+  "dispatch to the one connected node" is sufficient; the general fleet scheduler
+  is separate, founder/launch-gated CP work — do NOT build it here.
+
+## Two design decisions for step A (proposed defaults — proceeding unless founder objects)
+
+1. **Node selection:** dispatch the assign to the single connected fleet node
+   (add `registry.getOnlyConnected()` / first-of-one). Local-demo-correct;
+   general scheduler is out of scope (founder/launch-gated).
+2. **Proxy sourcing:** the assign requires `inlineProxyConfig` (harness refuses a
+   no-proxy session). For the local demo, when the session/profile specifies no
+   proxy, inject the local gost (`{host:127.0.0.1, port:1080, udp_associate:true}`)
+   from a `DEMO_LOCAL_SOCKS_PROXY`-style local config — NOT hardcoded in the hot
+   path, and never applied when `FLEET_CONTROL_PLANE_ENABLED=false` (prod).
+
+All of step A stays behind `FLEET_CONTROL_PLANE_ENABLED` (OFF in prod) → zero prod
+behavior change; it only activates on the local demo stack.
+
 ## Interim (works today)
 
 The coordinated watch-run (A3 W290 + A2 W157): A3 runs the session, founder
