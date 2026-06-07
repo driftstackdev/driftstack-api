@@ -181,6 +181,15 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/scheduledJobsTimer\.unref\(\);/);
   });
 
+  it('Webhook delivery worker IS wired (drift-guard against the original unwired-in-prod gap): constructed with the webhooks repo + logger, driven by a 60s tickOnce poller, .unref()-ed, and clearInterval-ed in teardown — without this the worker would never run and configured webhooks would never deliver', () => {
+    expect(body).toMatch(
+      /const webhookDeliveryWorker = new WebhookDeliveryWorker\(\{ repo: webhooksRepo, logger \}\);/,
+    );
+    expect(body).toMatch(/await webhookDeliveryWorker\.tickOnce\(\);/);
+    expect(body).toMatch(/webhookDeliveryTimer\.unref\(\);/);
+    expect(body).toMatch(/clearInterval\(webhookDeliveryTimer\);/);
+  });
+
   it("V-541.H framing pinned: real UsageAggregator over V-073 usage_records ledger; fills sessionMinutes from real data; other dimensions (storage/egress/email/llm) zero placeholders until per-account meters land (V-541.I/J/K follow-ups); CostMonitoring resolveTier reads from billingRepo.getAccount.tier — same source billingService uses → can't drift", () => {
     expect(body).toMatch(
       /\/\/ V-541\.H — real UsageAggregator over the V-073 usage_records\s*\n?\s*\/\/ ledger\. Fills `sessionMinutes` from real data; other dimensions\s*\n?\s*\/\/ \(storage, egress, email, llm\) are zero placeholders until their\s*\n?\s*\/\/ per-account meters land \(V-541\.I\/J\/K follow-ups\)\./,

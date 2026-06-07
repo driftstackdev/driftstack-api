@@ -89,6 +89,7 @@ import { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import { RedisMfaChallengeStore } from '../services/mfa-challenge-store.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
+import { WebhookDeliveryWorker } from '../services/webhook-worker.js';
 import { AdminAuditService } from '../services/admin-audit.js';
 import { AccountsAdminService } from '../services/admin-accounts.js';
 import { AdminBillingService } from '../services/admin-billing.js';
@@ -1726,6 +1727,34 @@ export async function createProductionDeps(
   }, PAIR_MODE_HEARTBEAT_SWEEP_INTERVAL_MS);
   pairModeHeartbeatSweepTimer.unref();
 
+  // Webhook delivery worker — claims due deliveries (FOR UPDATE SKIP LOCKED,
+  // multi-instance-safe) and POSTs the signed payload to the customer endpoint,
+  // recording delivered / retry / DLQ. 60s tickOnce, mirroring the other
+  // pollers. Outbound is SSRF-pinned at connect time (lib/ssrf-guarded-fetch)
+  // and the failure-response read is size-capped. Without this poller, every
+  // configured webhook enqueues but is never delivered (and replay routes that
+  // re-set 'pending' never re-fire).
+  const webhookDeliveryWorker = new WebhookDeliveryWorker({ repo: webhooksRepo, logger });
+  const webhookDeliveryTimer = setInterval(() => {
+    void (async () => {
+      try {
+        await webhookDeliveryWorker.tickOnce();
+      } catch (err) {
+        logger.warn(
+          {
+            component: 'webhook-delivery-poller',
+            err:
+              err instanceof Error
+                ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                : { value: err },
+          },
+          'webhook-delivery tickOnce threw unexpectedly (interval continues)',
+        );
+      }
+    })();
+  }, POLLER_INTERVAL_MS);
+  webhookDeliveryTimer.unref();
+
   // Arc 3 sub-slice 28.2 (v2-#28) — daily 91-day force-rotation sweep.
   const webhookSecretForceRotationTimer = rotationRemindersDisabled
     ? null
@@ -1807,6 +1836,7 @@ export async function createProductionDeps(
     if (webhookSecretForceRotationTimer) clearInterval(webhookSecretForceRotationTimer);
     if (webhookSecretPrevCleanupTimer) clearInterval(webhookSecretPrevCleanupTimer);
     clearInterval(pairModeHeartbeatSweepTimer);
+    clearInterval(webhookDeliveryTimer);
     try {
       await sentry.flush(2000);
       await sentry.close(2000);
