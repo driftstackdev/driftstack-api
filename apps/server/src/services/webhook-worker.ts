@@ -15,6 +15,7 @@
 
 import type { Logger } from '../lib/logger.js';
 import { signWebhookPayload } from '../lib/webhook-signing.js';
+import { ssrfGuardedFetch } from '../lib/ssrf-guarded-fetch.js';
 import type { WebhookDeliveryRow, WebhookEndpointRow, WebhooksRepo } from './webhooks.js';
 
 export interface WebhookWorkerConfig {
@@ -111,7 +112,11 @@ export class WebhookDeliveryWorker {
   }
 
   private async deliver(delivery: WebhookDeliveryRow): Promise<DeliveryOutcome> {
-    const fetchImpl = this.config.fetch ?? fetch;
+    // Default to the SSRF-guarded fetch: outbound deliveries connect only to
+    // public IPs (connection-time DNS pin via undici lookup, rejecting a
+    // hostname that resolves to a private/internal target). Tests inject
+    // config.fetch and bypass the dispatcher.
+    const fetchImpl = this.config.fetch ?? ssrfGuardedFetch;
     const timeout = this.config.deliveryTimeoutMs ?? DEFAULT_TIMEOUT_MS;
 
     // Look up the endpoint to get the current secret + active flag.
