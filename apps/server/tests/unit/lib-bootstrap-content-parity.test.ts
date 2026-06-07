@@ -319,6 +319,18 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
       /fleetNodeAuth: new FleetNodeAuthImpl\(drizzleFleetNodesRepo, fleetNonceCache\),/,
     );
     expect(body).toMatch(/fleetControlRegistry: new FleetControlRegistry\(\),/);
+    // Local fleet-demo session-dispatch config (only assembled behind the flag).
+    // Discrete pins (no long \s*\n? chain — backtracking rule). Locks the demo
+    // archetype (current-code iphone16pro, NOT the canvas-gated iphone17 cutover)
+    // + the local gost proxy w/ h3 (udp_associate) on.
+    expect(body).toMatch(/sessionDispatch: \{/);
+    expect(body).toMatch(/archetype: 'iphone16pro_ios18_6_safari18_6',/);
+    expect(body).toMatch(/behaviorProfile: 'default',/);
+    expect(body).toMatch(/initialUrl: 'https:\/\/example\.com',/);
+    expect(body).toMatch(/host: '127\.0\.0\.1',/);
+    expect(body).toMatch(/port: 1080,/);
+    expect(body).toMatch(/udp_associate: true,/);
+    expect(body).toMatch(/require_remote_dns: false,/);
     // Spread into AppDeps (empty object when the flag is off → 503 stub).
     expect(body).toMatch(/\.\.\.fleetControlPlaneDeps,/);
   });
