@@ -34,7 +34,7 @@ describe('W610 scripts bootstrap quartet content parity', () => {
       /^#\s+4\. POST \/v1\/legal\/accept ×4 \(tos, privacy, dpa, aup\) with version \+ content_hash$/m,
     );
     expect(body).toMatch(
-      /^#\s+5\. POST \/v1\/api-keys with name \+ scopes:\["account_owner"\] → emit the plaintext key$/m,
+      /^#\s+5\. POST \/v1\/api-keys with name \+ scopes:\["read","write","account_owner"\] → emit the plaintext key$/m,
     );
     expect(body).toMatch(/^#\s+API_BASE\s+— default http:\/\/localhost:3000$/m);
     expect(body).toMatch(

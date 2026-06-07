@@ -6,7 +6,7 @@
 #   2. POST /v1/auth/verify-email with that token → get a web session token
 #   3. GET /v1/legal/documents → fetch the four current document hashes
 #   4. POST /v1/legal/accept ×4 (tos, privacy, dpa, aup) with version + content_hash
-#   5. POST /v1/api-keys with name + scopes:["account_owner"] → emit the plaintext key
+#   5. POST /v1/api-keys with name + scopes:["read","write","account_owner"] → emit the plaintext key
 #
 # Prints the resulting API key, account_id, and the base URL to use in the
 # GUI client wizard / SDK.
@@ -84,7 +84,7 @@ echo "▸ create api key"
 KEY=$(curl -sf -X POST "$API_BASE/v1/api-keys" \
   -H "authorization: Bearer $SESSION_TOKEN" \
   -H 'content-type: application/json' \
-  -d "{\"name\":\"$KEY_NAME\",\"scopes\":[\"account_owner\"]}")
+  -d "{\"name\":\"$KEY_NAME\",\"scopes\":[\"read\",\"write\",\"account_owner\"]}")
 
 PLAINTEXT=$(echo "$KEY" | jq -r '.plaintext')
 

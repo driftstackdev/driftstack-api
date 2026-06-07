@@ -166,10 +166,10 @@ describe('W809 changelog pipeline + dev-bootstrap parity', () => {
     expect(p).toMatch(/Spins through the same flow V-261 walked the founder through manually/);
   });
 
-  it('CRITICAL dev-bootstrap.sh 5-step flow framing pinned — signup → verify-email → fetch legal docs → accept 4 (tos/privacy/dpa/aup) → create API key with scopes:["account_owner"]. Drift would skip a step and break the canonical dev-account-ready state.', () => {
+  it('CRITICAL dev-bootstrap.sh 5-step flow framing pinned — signup → verify-email → fetch legal docs → accept 4 (tos/privacy/dpa/aup) → create API key with scopes:["read","write","account_owner"]. Drift would skip a step and break the canonical dev-account-ready state.', () => {
     const p = read(DEV_BOOT);
     expect(p).toMatch(
-      /1\. POST \/v1\/auth\/signup → get debug_token \(requires AUTH_EXPOSE_DEBUG_TOKEN=true\)\s*\n#\s+2\. POST \/v1\/auth\/verify-email with that token → get a web session token\s*\n#\s+3\. GET \/v1\/legal\/documents → fetch the four current document hashes\s*\n#\s+4\. POST \/v1\/legal\/accept ×4 \(tos, privacy, dpa, aup\) with version \+ content_hash\s*\n#\s+5\. POST \/v1\/api-keys with name \+ scopes:\["account_owner"\] → emit the plaintext key/,
+      /1\. POST \/v1\/auth\/signup → get debug_token \(requires AUTH_EXPOSE_DEBUG_TOKEN=true\)\s*\n#\s+2\. POST \/v1\/auth\/verify-email with that token → get a web session token\s*\n#\s+3\. GET \/v1\/legal\/documents → fetch the four current document hashes\s*\n#\s+4\. POST \/v1\/legal\/accept ×4 \(tos, privacy, dpa, aup\) with version \+ content_hash\s*\n#\s+5\. POST \/v1\/api-keys with name \+ scopes:\["read","write","account_owner"\] → emit the plaintext key/,
     );
   });
 
