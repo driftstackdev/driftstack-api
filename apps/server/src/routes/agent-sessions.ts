@@ -46,6 +46,9 @@ import type { PairModeHeartbeatTracker } from '../services/agent-pair-mode-heart
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { mintLivekitToken } from '../lib/livekit-token.js';
 import { decryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
+import { serializeSessionAssign } from '../services/harness-control-codec.js';
+import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import type { SocksProxyConfig } from '@driftstack/api-types';
 import {
   decryptGuiControlKey,
   encryptGuiControlKey,
@@ -284,6 +287,127 @@ export interface AgentSessionsRoutesDeps {
    */
   fleetNodesRepo?: DrizzleFleetNodesRepo;
   livekitSecretEncryptionKey?: string;
+  /**
+   * Fleet control-plane connection registry. When wired together with
+   * `sessionDispatch` (and the fleet repo + encryption key above), a
+   * session-create dispatches a `sessionAssign` to the connected fleet
+   * node so the harness spawns + captures + publishes that session. Only
+   * present when FLEET_CONTROL_PLANE_ENABLED (bootstrap constructs the
+   * registry behind that flag) — absent in prod → dispatch is a no-op.
+   */
+  fleetControlRegistry?: FleetControlRegistry;
+  /**
+   * Local fleet-demo dispatch config: the archetype / behavior profile /
+   * landing URL / SOCKS5 proxy the dispatched session browses with. Wired
+   * (with the registry) only on the local demo stack. Absent → no dispatch.
+   */
+  sessionDispatch?: SessionDispatchConfig;
+}
+
+/** Config for the session-create → harness `sessionAssign` dispatch (see
+ *  AgentSessionsRoutesDeps.sessionDispatch). */
+export interface SessionDispatchConfig {
+  archetype: string;
+  behaviorProfile: string;
+  initialUrl: string;
+  proxy: SocksProxyConfig;
+}
+
+/**
+ * Dispatch a `sessionAssign` to the LiveKit-owning fleet node on
+ * session-create, so the harness spawns the browser + captures + publishes.
+ *
+ * No-op (returns early) unless the full local fleet-demo wiring is present
+ * (registry + sessionDispatch + fleet repo + encryption key) — so this is
+ * inert in production (FLEET_CONTROL_PLANE_ENABLED off → no registry). Best-
+ * effort: any failure is logged, never thrown, so a dispatch problem can't
+ * break session-create.
+ *
+ * v0 semantics (A3 W298 contract): dispatch-on-create only if the node is
+ * connected NOW; if not, log + skip (no queue). LIVE re-delivery is idempotent
+ * harness-side; TERMINAL re-delivery re-provisions — so this never replays.
+ *
+ * The assign's `livekit.token` is a PUBLISHER token (canPublish:true) for the
+ * harness — distinct from the SUBSCRIBER token `maybeMintLivekit` gives the
+ * customer's viewer.
+ */
+export async function dispatchSessionAssignOnCreate(args: {
+  sessionId: string;
+  fleetControlRegistry: FleetControlRegistry | undefined;
+  fleetNodesRepo: DrizzleFleetNodesRepo | undefined;
+  livekitSecretEncryptionKey: string | undefined;
+  sessionDispatch: SessionDispatchConfig | undefined;
+  logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void };
+}): Promise<void> {
+  const {
+    sessionId,
+    fleetControlRegistry,
+    fleetNodesRepo,
+    livekitSecretEncryptionKey,
+    sessionDispatch,
+    logger,
+  } = args;
+  if (
+    fleetControlRegistry === undefined ||
+    fleetNodesRepo === undefined ||
+    livekitSecretEncryptionKey === undefined ||
+    sessionDispatch === undefined
+  ) {
+    return;
+  }
+  try {
+    const mac = await fleetNodesRepo.findAnyWithLivekit();
+    if (mac === null || mac.livekit === null) return;
+    const conn = fleetControlRegistry.get(mac.id);
+    if (conn === undefined) {
+      logger?.info(
+        { component: 'fleet-session-dispatch', sessionId, nodeId: mac.id },
+        'fleet node not connected; session created but sessionAssign not dispatched',
+      );
+      return;
+    }
+    const apiSecret = decryptLivekitSecret(
+      mac.livekit.apiSecretCiphertextBase64,
+      livekitSecretEncryptionKey,
+    );
+    const nowMs = Date.now();
+    const ttlSeconds = 6 * 60 * 60;
+    const token = mintLivekitToken({
+      apiKey: mac.livekit.apiKey,
+      apiSecret,
+      identity: `harness-${mac.id}`,
+      ttlSeconds,
+      nowMs,
+      video: { room: sessionId, roomJoin: true, canPublish: true, canSubscribe: true },
+    });
+    const assign = serializeSessionAssign({
+      sessionId,
+      archetype: sessionDispatch.archetype,
+      behaviorProfile: sessionDispatch.behaviorProfile,
+      initialUrl: sessionDispatch.initialUrl,
+      inlineProxyConfig: sessionDispatch.proxy,
+      livekit: {
+        room: sessionId,
+        token,
+        wsUrl: mac.livekit.wsUrl,
+        expiresAt: new Date(nowMs + ttlSeconds * 1000).toISOString(),
+      },
+    });
+    conn.sendSessionAssign(assign);
+    logger?.info(
+      { component: 'fleet-session-dispatch', sessionId, nodeId: mac.id },
+      'dispatched sessionAssign to fleet node',
+    );
+  } catch (err) {
+    logger?.warn(
+      {
+        component: 'fleet-session-dispatch',
+        sessionId,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      'sessionAssign dispatch failed (session create unaffected)',
+    );
+  }
 }
 
 export function registerAgentSessionsRoutes(
@@ -310,6 +434,8 @@ export function registerAgentSessionsRoutes(
     pairModeHeartbeatTracker,
     fleetNodesRepo,
     livekitSecretEncryptionKey,
+    fleetControlRegistry,
+    sessionDispatch,
   } = deps;
 
   /** LK.4 — auto-mint a LiveKit token for the just-created (or
@@ -468,6 +594,17 @@ export function registerAgentSessionsRoutes(
         }
       }
       const livekit = await maybeMintLivekit(created.id, ctx.account.id);
+      // Fleet-CP session dispatch — hand the new session to a connected
+      // harness node (local fleet-demo). No-op in prod (no registry); best-
+      // effort (never throws) so it can't break session-create.
+      await dispatchSessionAssignOnCreate({
+        sessionId: created.id,
+        fleetControlRegistry,
+        fleetNodesRepo,
+        livekitSecretEncryptionKey,
+        sessionDispatch,
+        logger: req.log,
+      });
       // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
       // effort emit; audit failures don't break the create. Distinct
       // action from session.created (which audits the underlying driver
