@@ -120,9 +120,9 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
     expect(body).toMatch(/export const PROFILE_EXPORT_ENVELOPE_VERSION = 1 as const;/);
   });
 
-  it('ProfileExportEnvelope: version literal(1) + exported_at + source_profile_id + source_account_id (transfer between accounts permitted) + profile payload (name/archetype/description nullable)', () => {
+  it('ProfileExportEnvelope: version literal(1) + exported_at + source_profile_id + source_account_id (transfer between accounts permitted) + profile payload bounded same as create (ProfileNameSchema / archetype ≤120 / description ≤2048 — import must not bypass create bounds)', () => {
     expect(body).toMatch(
-      /const ProfileExportPayloadSchema = z\.object\(\{\s*\n?\s*name: z\.string\(\),\s*\n?\s*archetype: z\.string\(\),\s*\n?\s*description: z\.string\(\)\.nullable\(\),\s*\n?\s*\}\);/,
+      /const ProfileExportPayloadSchema = z\.object\(\{\s*\n?\s*name: ProfileNameSchema,\s*\n?\s*archetype: z\.string\(\)\.min\(1\)\.max\(120\),\s*\n?\s*description: z\.string\(\)\.max\(2048\)\.nullable\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /export const ProfileExportEnvelopeSchema = z\.object\(\{\s*\n?\s*version: z\.literal\(PROFILE_EXPORT_ENVELOPE_VERSION\),\s*\n?\s*exported_at: Iso8601Schema,/,

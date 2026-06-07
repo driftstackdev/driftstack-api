@@ -110,10 +110,15 @@ export type ListProfilesResponse = z.infer<typeof ListProfilesResponseSchema>;
 
 export const PROFILE_EXPORT_ENVELOPE_VERSION = 1 as const;
 
+// Import re-validates these with the SAME bounds the create path enforces
+// (ProfileNameSchema, archetype <=120, description <=2048) — a hand-crafted
+// import envelope must not store name/archetype/description that POST /v1/profiles
+// would reject. Round-trip-safe: an exported payload came from the bounded create
+// path, so it always re-validates on import.
 const ProfileExportPayloadSchema = z.object({
-  name: z.string(),
-  archetype: z.string(),
-  description: z.string().nullable(),
+  name: ProfileNameSchema,
+  archetype: z.string().min(1).max(120),
+  description: z.string().max(2048).nullable(),
 });
 export type ProfileExportPayload = z.infer<typeof ProfileExportPayloadSchema>;
 

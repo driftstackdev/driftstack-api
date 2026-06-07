@@ -117,6 +117,46 @@ describe('POST /v1/profiles/import', () => {
     expect(body.description).toBe('transferred from teammate');
   });
 
+  it('400 ValidationError when the envelope payload exceeds the create bounds (import must not bypass them)', async () => {
+    fx = await buildTestApp();
+    const base = {
+      version: 1 as const,
+      exported_at: new Date().toISOString(),
+      source_profile_id: 'prof_11111111-1111-4111-8111-111111111111',
+      source_account_id: 'acc_22222222-2222-4222-8222-222222222222',
+    };
+    // archetype over the 120-char create bound
+    const overArchetype = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles/import',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        envelope: {
+          ...base,
+          profile: { name: 'ok-name', archetype: 'a'.repeat(200), description: null },
+        },
+      },
+    });
+    expect(overArchetype.statusCode).toBe(400);
+    // description over the 2048-char create bound
+    const overDescription = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles/import',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {
+        envelope: {
+          ...base,
+          profile: {
+            name: 'ok-name',
+            archetype: 'iphone16pro_ios18_7_safari26_4',
+            description: 'd'.repeat(2049),
+          },
+        },
+      },
+    });
+    expect(overDescription.statusCode).toBe(400);
+  });
+
   it('200 with name_override renames on import', async () => {
     fx = await buildTestApp();
     const envelope = {
