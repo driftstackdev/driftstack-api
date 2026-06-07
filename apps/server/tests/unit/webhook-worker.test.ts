@@ -160,6 +160,44 @@ describe('WebhookDeliveryWorker.tickOnce', () => {
     expect(d?.attempts).toBe(1);
   });
 
+  it('caps the failure-response read by SIZE (huge body / decompression-bomb defense) — reads ≤ a bounded prefix, cancels the stream, excerpt ≤ 4096 chars', async () => {
+    // A misbehaving / malicious endpoint returns a non-2xx then streams an
+    // enormous body. readExcerpt must read only a bounded prefix and cancel —
+    // NOT buffer the whole thing (the undici decompression-bomb / unbounded-read
+    // risk on the untrusted outbound path). We assert via a tracked stream.
+    const { repo } = await setupRepoWithEndpoint();
+    let bytesPulled = 0;
+    let cancelled = false;
+    const hugeStream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        bytesPulled += 8192;
+        controller.enqueue(new Uint8Array(8192).fill(120)); // 'x'
+        // Safety valve so a regression (reading everything) can't truly hang.
+        if (bytesPulled > 5 * 1024 * 1024) controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const fetchImpl = vi.fn(() =>
+      Promise.resolve(new Response(hugeStream, { status: 500 })),
+    ) as unknown as typeof fetch;
+
+    const worker = new WebhookDeliveryWorker({
+      repo,
+      logger: createTestLogger(),
+      fetch: fetchImpl,
+      now: constNow,
+    });
+    const { outcomes } = await worker.tickOnce();
+
+    expect(outcomes[0]?.kind).toBe('retry');
+    expect(cancelled).toBe(true); // stream stopped early, not drained
+    expect(bytesPulled).toBeLessThan(256 * 1024); // bounded read, NOT the 5 MiB
+    const d = repo.getAllDeliveries()[0];
+    expect((d?.lastResponseExcerpt ?? '').length).toBeLessThanOrEqual(4096);
+  });
+
   it('after MAX attempts, transitions to DLQ', async () => {
     const { repo, endpoint } = await setupRepoWithEndpoint();
     // Fast-forward attempts to 5 (next failure → 6, which is >= MAX_ATTEMPTS = 6).

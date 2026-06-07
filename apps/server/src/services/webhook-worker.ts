@@ -60,6 +60,16 @@ const AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES = 50;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_IDLE_SLEEP_MS = 2_000;
 const DEFAULT_BATCH_SIZE = 25;
+// Cap how much of a non-2xx response body we buffer for the failure excerpt.
+// `response.text()` buffers the ENTIRE body before slicing — a misbehaving or
+// malicious customer endpoint can stream a huge body, or a Content-Encoding
+// decompression bomb (the undici advisory), exhausting memory within the
+// delivery timeout. readExcerpt reads at most this many bytes off the decoded
+// body stream then cancels, bounding memory by SIZE (the AbortController already
+// bounds it by TIME). Outbound deliveries POST to UNTRUSTED customer endpoints,
+// so this is a required defense for the wired worker.
+const MAX_RESPONSE_READ_BYTES = 64 * 1024;
+const EXCERPT_MAX_CHARS = 4096;
 
 export class WebhookDeliveryWorker {
   private running = false;
@@ -305,8 +315,35 @@ export type DeliveryOutcome =
 
 async function readExcerpt(response: Response): Promise<string | null> {
   try {
-    const text = await response.text();
-    return text.slice(0, 4096);
+    const body = response.body;
+    // Some non-undici Response shapes (e.g. test doubles) expose only text();
+    // fall back to it — still abort-bounded in TIME. Production undici responses
+    // always carry a ReadableStream body, so the SIZE cap below applies in prod.
+    if (!body) {
+      const text = await response.text();
+      return text.slice(0, EXCERPT_MAX_CHARS);
+    }
+    const reader = body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      while (total < MAX_RESPONSE_READ_BYTES) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value && value.length > 0) {
+          chunks.push(value);
+          total += value.length;
+        }
+      }
+    } finally {
+      // Stop downloading the rest — releases the connection and halts a huge
+      // body / decompression bomb early instead of buffering it all.
+      await reader.cancel().catch(() => undefined);
+    }
+    return Buffer.concat(chunks)
+      .subarray(0, MAX_RESPONSE_READ_BYTES)
+      .toString('utf8')
+      .slice(0, EXCERPT_MAX_CHARS);
   } catch {
     return null;
   }

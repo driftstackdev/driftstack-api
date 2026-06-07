@@ -25,8 +25,10 @@
 //     lastError='timeout'; jitter = floor(random*backoff*0.15) on
 //     retry.
 //   • DeliveryOutcome 3-kind union (delivered | retry | dlq).
-//   • readExcerpt: response.text() sliced to 4096 chars; try/catch
-//     null fallback.
+//   • readExcerpt: SIZE-capped bounded body-stream read
+//     (MAX_RESPONSE_READ_BYTES) + cancel (undici decompression-bomb /
+//     huge-body defense), EXCERPT_MAX_CHARS=4096 slice; text() fallback
+//     when no body stream; try/catch null fallback.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -138,10 +140,23 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     );
   });
 
-  it('readExcerpt: response.text() sliced to 4096 chars; try/catch null fallback', () => {
+  it('readExcerpt: SIZE-capped bounded read (MAX_RESPONSE_READ_BYTES) off the body stream + cancel — undici decompression-bomb / huge-body defense for the untrusted outbound path; EXCERPT_MAX_CHARS=4096; text() fallback only when no body stream; try/catch null fallback', () => {
+    expect(body).toMatch(/const MAX_RESPONSE_READ_BYTES = 64 \* 1024;/);
+    expect(body).toMatch(/const EXCERPT_MAX_CHARS = 4096;/);
     expect(body).toMatch(
-      /async function readExcerpt\(response: Response\): Promise<string \| null> \{\s*\n?\s*try \{\s*\n?\s*const text = await response\.text\(\);\s*\n?\s*return text\.slice\(0, 4096\);\s*\n?\s*\} catch \{\s*\n?\s*return null;\s*\n?\s*\}/,
+      /async function readExcerpt\(response: Response\): Promise<string \| null> \{/,
     );
+    // Bounded stream read + cancel — the load-bearing size cap.
+    expect(body).toMatch(/while \(total < MAX_RESPONSE_READ_BYTES\) \{/);
+    expect(body).toMatch(/await reader\.cancel\(\)\.catch\(\(\) => undefined\);/);
+    expect(body).toMatch(
+      /Buffer\.concat\(chunks\)\s*\n?\s*\.subarray\(0, MAX_RESPONSE_READ_BYTES\)\s*\n?\s*\.toString\('utf8'\)\s*\n?\s*\.slice\(0, EXCERPT_MAX_CHARS\);/,
+    );
+    // text() fallback only for bodyless test-double responses; null on throw.
+    expect(body).toMatch(
+      /if \(!body\) \{\s*\n?\s*const text = await response\.text\(\);\s*\n?\s*return text\.slice\(0, EXCERPT_MAX_CHARS\);/,
+    );
+    expect(body).toMatch(/\} catch \{\s*\n?\s*return null;\s*\n?\s*\}/);
   });
 
   it('run(): while-loop on this.running; empty claim → sleep idleSleepMs; deliver batch via Promise.all', () => {
