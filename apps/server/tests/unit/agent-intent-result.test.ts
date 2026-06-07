@@ -104,6 +104,28 @@ describe('intentResultToCustomer — success summaries', () => {
     expect(s({ kind: 'behavioral_pause' })).toBe('paused');
   });
 
+  it('W173 scroll surfaces distance_capped from outputData (mirrors capped/timeout_capped)', () => {
+    const sum = (intent: Parameters<typeof intentResultToCustomer>[0], out: unknown): string =>
+      (intentResultToCustomer(intent, ok(out)) as { summary: string }).summary;
+    // clamp engaged → "(capped)" appended (with + without amount_px)
+    expect(
+      sum({ kind: 'scroll', direction: 'down', amount_px: 99999 }, { distance_capped: true }),
+    ).toBe('scrolled down 99999px (capped)');
+    expect(sum({ kind: 'scroll', direction: 'up' }, { distance_capped: true })).toBe(
+      'scrolled up (capped)',
+    );
+    // not capped / absent / non-bool → no suffix (forward-compatible default)
+    expect(
+      sum({ kind: 'scroll', direction: 'down', amount_px: 800 }, { distance_capped: false }),
+    ).toBe('scrolled down 800px');
+    expect(sum({ kind: 'scroll', direction: 'down', amount_px: 800 }, {})).toBe(
+      'scrolled down 800px',
+    );
+    expect(sum({ kind: 'scroll', direction: 'up' }, { distance_capped: 'yes' })).toBe(
+      'scrolled up',
+    );
+  });
+
   it('never sets captureId (capture storage is a separate concern)', () => {
     const r = intentResultToCustomer(
       { kind: 'capture', capture: 'screenshot' },

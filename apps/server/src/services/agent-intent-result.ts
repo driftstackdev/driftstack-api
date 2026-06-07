@@ -46,10 +46,19 @@ function summarize(intent: AgentIntent, outputData: unknown): string {
         : 'wait condition met';
     case 'capture':
       return summarizeCapture(intent);
-    case 'scroll':
+    case 'scroll': {
+      // W173 — surface the harness's distance clamp, mirroring the existing
+      // `capped`/`timeout_capped` flags. The harness clamps scroll distance to
+      // [0, 15000] and reports `distance_capped: true` in outputData when the
+      // requested distance_px actually hit that clamp (A3 bus W218). Read it
+      // defensively (absent/non-bool → not capped) so this is forward-compatible
+      // with the harness adding the field; the value is appended, never the cap
+      // magnitude (that constant lives harness-side — don't duplicate it).
+      const capped = readBool(outputData, 'distance_capped') ? ' (capped)' : '';
       return intent.amount_px !== undefined
-        ? `scrolled ${intent.direction} ${intent.amount_px}px`
-        : `scrolled ${intent.direction}`;
+        ? `scrolled ${intent.direction} ${intent.amount_px}px${capped}`
+        : `scrolled ${intent.direction}${capped}`;
+    }
     case 'behavioral_pause':
       return intent.reading_word_count !== undefined
         ? `paused to read ~${intent.reading_word_count} words`
@@ -116,4 +125,14 @@ function readString(obj: unknown, key: string): string | null {
     if (typeof v === 'string') return v;
   }
   return null;
+}
+
+/** Read a boolean field from an unknown decoded outputData object; false when
+ *  absent or non-boolean (forward-compatible with optional harness flags). */
+function readBool(obj: unknown, key: string): boolean {
+  if (typeof obj === 'object' && obj !== null && key in obj) {
+    const v = (obj as Record<string, unknown>)[key];
+    if (typeof v === 'boolean') return v;
+  }
+  return false;
 }
