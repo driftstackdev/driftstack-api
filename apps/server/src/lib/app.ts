@@ -136,6 +136,7 @@ import {
 import {
   registerAgentSessionsDisabledRoutes,
   registerAgentSessionsRoutes,
+  type SessionDispatchConfig,
 } from '../routes/agent-sessions.js';
 import { registerRecipesDisabledRoutes, registerRecipesRoutes } from '../routes/recipes.js';
 import {
@@ -446,6 +447,14 @@ export interface AppDeps {
    * the 503 stub.
    */
   fleetControlRegistry?: FleetControlRegistry;
+  /**
+   * Local fleet-demo session-dispatch config. Present only when the fleet
+   * control plane is enabled (bootstrap assembles it alongside the registry);
+   * when wired, agent-session create dispatches a sessionAssign to the
+   * connected harness node so the new session browses + publishes. Absent in
+   * prod → dispatch is a no-op.
+   */
+  sessionDispatch?: SessionDispatchConfig;
   /**
    * LK.2 — POST /v1/mac-nodes/register depends on a Drizzle-backed
    * fleet_nodes repo (so the LiveKit credentials can persist) plus
@@ -1235,6 +1244,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.livekitSecretEncryptionKey !== undefined
         ? { livekitSecretEncryptionKey: deps.livekitSecretEncryptionKey }
         : {}),
+      // Fleet-CP session dispatch (local fleet-demo). When the registry +
+      // dispatch config are wired (FLEET_CONTROL_PLANE_ENABLED), session-create
+      // hands the new session to the connected harness node. No-op otherwise.
+      ...(deps.fleetControlRegistry !== undefined
+        ? { fleetControlRegistry: deps.fleetControlRegistry }
+        : {}),
+      ...(deps.sessionDispatch !== undefined ? { sessionDispatch: deps.sessionDispatch } : {}),
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);

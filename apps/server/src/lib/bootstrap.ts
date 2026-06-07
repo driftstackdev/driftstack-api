@@ -1184,6 +1184,23 @@ export async function createProductionDeps(
           fleetNodeAuth: new FleetNodeAuthImpl(drizzleFleetNodesRepo, fleetNonceCache),
           fleetNonceCache,
           fleetControlRegistry: new FleetControlRegistry(),
+          // Local fleet-demo: the config a dispatched session browses with. Only
+          // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The
+          // archetype is the canonical current-code iPhone (NOT the canvas-gated
+          // iphone17 cutover); the SOCKS5 proxy is the local gost (udp_associate
+          // on for h3/QUIC = iPhone-coherent). Edit here to point a demo session
+          // at a different landing URL / proxy.
+          sessionDispatch: {
+            archetype: 'iphone16pro_ios18_6_safari18_6',
+            behaviorProfile: 'default',
+            initialUrl: 'https://example.com',
+            proxy: {
+              host: '127.0.0.1',
+              port: 1080,
+              udp_associate: true,
+              require_remote_dns: false,
+            },
+          },
         };
       })()
     : {};
