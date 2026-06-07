@@ -18,7 +18,7 @@
 // (detail "intent_dispatch_no_session: …") → onSessionError (fast-fail) — and
 // accept-but-ignore heartbeat / capabilityReport / errorEvent for now.
 
-import { HarnessOutboundSchema } from '../schemas/harness-control-protocol.js';
+import { HarnessOutboundSchema, type SessionAssign } from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
 
 /** What the WS route hands in: a function that writes a string frame to the
@@ -32,13 +32,28 @@ export type FleetNodeSocketSend = (data: string) => void;
  */
 export class FleetControlConnection {
   readonly correlator: IntentDispatchCorrelator;
+  private readonly send: FleetNodeSocketSend;
 
   constructor(
     readonly nodeId: string,
     send: FleetNodeSocketSend,
   ) {
+    this.send = send;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
     this.correlator = new IntentDispatchCorrelator(transport);
+  }
+
+  /**
+   * Push a serialized `sessionAssign` frame to this node (fleet-CP session
+   * dispatch). Unlike IntentDispatch (correlated request→result via the
+   * correlator), a sessionAssign is fire-and-forget on this channel: the harness
+   * acts on it (spawn + capture + publish) and later reports progress via
+   * `sessionStatus` frames up the same socket. JSON-stringified over the node's
+   * socket — identical framing to the correlator's transport. Caller builds the
+   * envelope with `serializeSessionAssign`.
+   */
+  sendSessionAssign(assign: SessionAssign): void {
+    this.send(JSON.stringify(assign));
   }
 
   /**

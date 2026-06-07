@@ -10,7 +10,10 @@ import {
   FleetControlConnection,
   FleetControlRegistry,
 } from '../../src/services/fleet-control-registry.js';
-import { encodeWireData } from '../../src/services/harness-control-codec.js';
+import {
+  encodeWireData,
+  serializeSessionAssign,
+} from '../../src/services/harness-control-codec.js';
 import type { IntentDispatch } from '../../src/schemas/harness-control-protocol.js';
 
 function dispatch(intentId: string, sessionId = 'ses_x'): IntentDispatch {
@@ -47,6 +50,33 @@ describe('FleetControlConnection', () => {
     // resolve so no timer lingers
     conn.handleInbound(intentResultFrame('int_1'));
     expect((await p).success).toBe(true);
+  });
+
+  it('sends a serialized sessionAssign frame to the node socket (fire-and-forget)', () => {
+    const sent: string[] = [];
+    const conn = new FleetControlConnection('node-1', (d) => sent.push(d));
+    const assign = serializeSessionAssign({
+      sessionId: 'ses_assign',
+      archetype: 'iphone16pro_ios18_6_safari18_6',
+      behaviorProfile: 'default',
+      initialUrl: 'https://example.com',
+      inlineProxyConfig: {
+        host: '127.0.0.1',
+        port: 1080,
+        udp_associate: true,
+        require_remote_dns: false,
+      },
+    });
+    conn.sendSessionAssign(assign);
+    expect(sent).toHaveLength(1);
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame).toMatchObject({
+      type: 'sessionAssign',
+      sessionId: 'ses_assign',
+      archetype: 'iphone16pro_ios18_6_safari18_6',
+    });
+    // inlineProxyConfig rides as the base64 wire string (not the raw object)
+    expect(typeof frame.inlineProxyConfig).toBe('string');
   });
 
   it('routes an inbound intentResult frame → resolves the matching dispatch', async () => {
