@@ -102,6 +102,8 @@ export class HealthProbeService {
   private readonly recoveryThreshold: number;
   private readonly retentionMs: number;
   private lastPruneAt: Date | null = null;
+  // Re-entrancy guard for processTick (see its doc comment).
+  private ticking = false;
 
   constructor(
     private readonly probes: ProbesRepo,
@@ -115,8 +117,36 @@ export class HealthProbeService {
     this.retentionMs = config.retentionMs ?? 30 * 24 * 60 * 60 * 1000;
   }
 
-  /** One full tick across all configured targets. */
+  /** One full tick across all configured targets. Re-entrancy-guarded: the
+   *  bootstrap poller is a naive `setInterval` that does NOT await the prior
+   *  tick, so a tick slower than the interval would overlap the next fire.
+   *  Overlap would double the probe load AND double-create incidents (the
+   *  findOpen→create threshold path has no DB uniqueness guard). Skip the
+   *  overlapping fire (`skipped: true`) — strictly safer than racing; the next
+   *  interval re-probes. */
   async processTick(now: Date): Promise<{
+    probed: number;
+    autoCreated: number;
+    autoResolved: number;
+    /** True when this fire was skipped because a prior tick was still running. */
+    skipped?: boolean;
+  }> {
+    if (this.ticking) {
+      this.logger.warn(
+        { component: 'health-probe' },
+        'processTick skipped — previous tick still in progress (>interval)',
+      );
+      return { probed: 0, autoCreated: 0, autoResolved: 0, skipped: true };
+    }
+    this.ticking = true;
+    try {
+      return await this.runTick(now);
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  private async runTick(now: Date): Promise<{
     probed: number;
     autoCreated: number;
     autoResolved: number;

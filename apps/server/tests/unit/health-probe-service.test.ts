@@ -67,6 +67,24 @@ class ThrowingProber implements Prober {
   }
 }
 
+/** Holds inside probe() until unblock() — lets a test keep one tick in
+ *  flight while it fires an overlapping tick (re-entrancy guard test). */
+class BlockingProber implements Prober {
+  public calls = 0;
+  private release!: () => void;
+  private readonly gate = new Promise<void>((r) => {
+    this.release = r;
+  });
+  async probe(): Promise<ProbeResult> {
+    this.calls += 1;
+    await this.gate;
+    return { ok: true, latencyMs: 1, httpStatus: 200, errorMessage: null };
+  }
+  unblock(): void {
+    this.release();
+  }
+}
+
 class FakeProbesRepo implements ProbesRepo {
   public rows: ProbeRecordRow[] = [];
   public pruneCalls: Date[] = [];
@@ -200,6 +218,31 @@ describe('V-553.B-31 HealthProbeService.processTick — basics', () => {
     await svc.processTick(NOW);
     expect(probes.rows).toHaveLength(0);
     expect(warns.some((m) => m.includes('health probe tick failed'))).toBe(true);
+  });
+
+  it('re-entrancy guard: an overlapping tick is skipped (no double-probe / double-record)', async () => {
+    const { logger, warns } = makeLogger();
+    const probes = new FakeProbesRepo();
+    const { service } = makeIncidents();
+    const blocker = new BlockingProber();
+    const svc = new HealthProbeService(probes, service, blocker, logger, { targets: [TARGET] });
+    // Start tick 1 — it blocks inside probe() with `ticking` already set
+    // (set synchronously before the first await), then fire an overlapping tick.
+    const p1 = svc.processTick(NOW);
+    const out2 = await svc.processTick(NOW);
+    expect(out2.skipped).toBe(true);
+    expect(out2.probed).toBe(0);
+    expect(warns.some((m) => m.includes('processTick skipped'))).toBe(true);
+    // Let tick 1 finish — only ONE tick actually probed/recorded.
+    blocker.unblock();
+    const out1 = await p1;
+    expect(out1.skipped).toBeUndefined();
+    expect(out1.probed).toBe(1);
+    expect(blocker.calls).toBe(1);
+    expect(probes.rows).toHaveLength(1);
+    // The guard clears — a subsequent tick runs normally.
+    const out3 = await svc.processTick(NOW);
+    expect(out3.skipped).toBeUndefined();
   });
 });
 
