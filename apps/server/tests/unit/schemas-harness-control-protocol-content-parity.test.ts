@@ -239,6 +239,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       'intent_invalid_parameter',
       'intent_webdriver_failed',
       'intent_dispatch_error',
+      'result_too_large',
     ]);
   });
 });
@@ -247,7 +248,7 @@ describe('harness-control-protocol behavioral contract', () => {
   it('intent vocab + reserved set + error codes match the canonical counts', () => {
     expect(HARNESS_INTENT_NAMES).toHaveLength(11);
     expect(HARNESS_RESERVED_INTENT_NAMES).toEqual(['fill_form', 'login', 'search']);
-    expect(HARNESS_ERROR_CODES).toHaveLength(6);
+    expect(HARNESS_ERROR_CODES).toHaveLength(7);
     // The param-schema map covers exactly the dispatchable vocab.
     expect(Object.keys(HARNESS_INTENT_PARAM_SCHEMAS).sort()).toEqual(
       [...HARNESS_INTENT_NAMES].sort(),

@@ -107,6 +107,9 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
   intent_invalid_parameter: 'a parameter was invalid',
   intent_webdriver_failed: 'the browser failed to perform this action',
   intent_dispatch_error: 'the action could not be dispatched',
+  // A3 W227 — the harness caps inline result output at 8 MiB; an over-cap
+  // result is a terminal client error (narrow the selector / paginate).
+  result_too_large: 'the result was too large to return — narrow the selector or paginate',
 };
 const MAX_MESSAGE_LEN = 200;
 

@@ -70,7 +70,14 @@ export async function registerFleetEventsRoutes(
   deps: FleetEventsRoutesDeps,
 ): Promise<void> {
   // The plugin must be registered before the websocket:true route is defined.
-  await app.register(websocketPlugin);
+  // maxPayload bounds INBOUND frames (handleInbound JSON.parses each raw frame,
+  // so an oversized frame = a huge string + parse = memory DoS from a buggy/
+  // compromised fleet node). The largest legit frame is an intentResult whose
+  // inline outputData the harness caps at 8 MiB (A3 W227 / harness f711840f) —
+  // base64-encoded on the wire (~×1.33 → ~10.7 MiB) + a small JSON envelope.
+  // 16 MiB clears that with headroom while cutting the ws default (100 MiB) ~6×.
+  const FLEET_WS_MAX_PAYLOAD_BYTES = 16 * 1024 * 1024;
+  await app.register(websocketPlugin, { options: { maxPayload: FLEET_WS_MAX_PAYLOAD_BYTES } });
 
   app.get(
     '/v1/fleet/events',

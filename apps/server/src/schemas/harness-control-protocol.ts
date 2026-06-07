@@ -280,6 +280,12 @@ export const HARNESS_ERROR_CODES = [
   'intent_invalid_parameter',
   'intent_webdriver_failed',
   'intent_dispatch_error',
+  // A3 W227 (harness f711840f) — inline outputData is capped at 8 MiB harness-side;
+  // an over-cap result FAILS with this code (no outputData) rather than returning a
+  // corrupt/truncated DOM/base64. Must be in the decode enum or the carrying
+  // intentResult fails IntentResultEnvelopeSchema → the correlator drops the frame →
+  // the dispatch hangs to its timeout (same reasoning as intent_invalid_parameter).
+  'result_too_large',
 ] as const;
 
 export const HarnessErrorCodeSchema = z.enum(HARNESS_ERROR_CODES);
