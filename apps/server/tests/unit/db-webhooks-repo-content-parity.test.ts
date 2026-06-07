@@ -179,6 +179,15 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     );
   });
 
+  it("deleteDelivery: STATUS-MATCHED hard-delete — WHERE and(id, status='dlq') so a concurrent requeue (row flipped to 'pending' between the service check and this delete) matches 0 rows instead of nuking an active delivery; returns result.length > 0", () => {
+    // The `AND status='dlq'` clause IS the race-safety mechanism the
+    // admin discard path relies on (WebhooksAdminService.discardFromDlq).
+    // Dropping it would silently allow hard-deleting a now-active row.
+    expect(body).toMatch(
+      /\.delete\(webhookDeliveries\)\s*\n?\s*\.where\(and\(eq\(webhookDeliveries\.id, deliveryId\), eq\(webhookDeliveries\.status, 'dlq'\)\)\)\s*\n?\s*\.returning\(\{ id: webhookDeliveries\.id \}\);\s*\n?\s*return result\.length > 0;/,
+    );
+  });
+
   it("rawToDeliveryRow framing pinned: 'Raw postgres-js rows returned from the CTE come as snake_case strings.' + snake_case→camelCase mapping incl. attempts→Number/timestamps→new Date()", () => {
     expect(body).toMatch(
       /\/\*\* Raw postgres-js rows returned from the CTE come as snake_case strings\. \*\//,

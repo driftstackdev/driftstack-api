@@ -123,7 +123,7 @@ function makeRepo(initial: WebhookEndpointRow[] = []): {
     resetDeliveryToPending: () => Promise.resolve(null),
     // 2026-05-22 — DLQ hard-delete (admin discard). No-op stub for the
     // create/update suite; the dedicated discardFromDlq tests in
-    // services-webhooks-discard cover the contract.
+    // webhooks-admin-service.test.ts cover the contract (incl. race-safety).
     deleteDelivery: () => Promise.resolve(false),
     // Arc 3 sub-slice 28.x (v2-#28) — server-initiated force-rotation
     // surface. Not exercised by the V-553.B-14 create/update suite;
