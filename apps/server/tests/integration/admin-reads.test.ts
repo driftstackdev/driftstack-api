@@ -144,6 +144,16 @@ describe('GET /v1/admin/audit-log', () => {
     expect(body.data[0]?.admin_account_id).toBe(`acc_${fx.accountId}`);
   });
 
+  it('400 on a malformed cursor (not a uuid) rather than a 500 from the uuid keyset lookup', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/admin/audit-log?cursor=not-a-uuid',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('filters by action', async () => {
     fx = await buildTestApp();
     await seedThreeAuditRows(fx);

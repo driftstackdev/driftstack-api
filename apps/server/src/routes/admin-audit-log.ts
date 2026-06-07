@@ -12,6 +12,12 @@ import { BadRequestError } from '../lib/errors.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
+// The cursor is the opaque bare-uuid id of the prior page's last row,
+// keyset-looked-up via `eq(adminAuditLog.id, cursor)` against a Postgres uuid
+// column → a malformed/tampered cursor would hit PG as an invalid uuid cast
+// (500). Validate at the boundary so a bad cursor is a clean 400.
+const CURSOR_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Accept either a raw UUID or a prefixed id; return the UUID. */
 function maybeUuidFromInput(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
@@ -61,6 +67,9 @@ export function registerAdminAuditLogRoutes(
 
       const rawQuery = (request.query ?? {}) as ListAuditLogQueryInput;
       const query = ListAuditLogQuerySchema.parse(rawQuery);
+      if (query.cursor !== undefined && !CURSOR_UUID_RE.test(query.cursor)) {
+        throw new BadRequestError('Invalid cursor.');
+      }
 
       const adminUuid = maybeUuidFromInput(query.admin_id);
       const targetUuid = maybeUuidFromInput(query.target_id);

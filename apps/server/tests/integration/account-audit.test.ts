@@ -42,6 +42,16 @@ describe('GET /v1/account/audit-log', () => {
     expect(body.next_cursor).toBeNull();
   });
 
+  it('400 on a malformed cursor (not a uuid) rather than a 500 from the uuid keyset lookup', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/audit-log?cursor=not-a-uuid',
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('records an api_key.minted entry when a customer mints a key', async () => {
     fx = await buildTestApp();
     const create = await fx.app.inject({

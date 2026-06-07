@@ -18,6 +18,12 @@ import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { z } from 'zod';
 
+// The list cursor is the opaque bare-uuid id of the prior page's last row,
+// keyset-looked-up via `eq(accountAuditLog.id, cursor)` against a Postgres
+// uuid column → a malformed/tampered cursor would hit PG as an invalid uuid
+// cast (500). Validate at the boundary so a bad cursor is a clean 400.
+const CURSOR_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function publicEntry(row: AccountAuditEntryRow): Record<string, unknown> {
   return {
     id: row.id,
@@ -52,6 +58,9 @@ export function registerAccountAuditRoutes(
       if (!ctx) throw new Error('account context missing after requireAuth');
       const parsed = ListAccountAuditLogQuerySchema.safeParse(request.query ?? {});
       if (!parsed.success) throw new BadRequestError('Invalid query parameters.');
+      if (parsed.data.cursor !== undefined && !CURSOR_UUID_RE.test(parsed.data.cursor)) {
+        throw new BadRequestError('Invalid cursor.');
+      }
 
       // V-330b — honor X-Driftstack-Account: a team member with a
       // valid membership reads the owner's audit log. Read-only;
