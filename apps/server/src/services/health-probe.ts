@@ -24,6 +24,25 @@
 import type { Logger } from '../lib/logger.js';
 import type { IncidentRow, IncidentsService } from './incidents.js';
 
+/**
+ * Sanitize a probe error for a PUBLIC incident description (V-295b hardening).
+ *
+ * A probe's `errorMessage` is either a benign `HTTP <status>` (the probe's own
+ * result — safe to surface on the public status page) or a raw network-layer
+ * error from `fetch`, which can embed internal infrastructure detail
+ * (`connect ECONNREFUSED 10.0.0.5:8443`, `getaddrinfo ENOTFOUND internal-host`).
+ * Only the `HTTP <status>` shape is echoed publicly; any other error collapses
+ * to a generic phrase so a network failure can never disclose an internal
+ * IP/host on a `public: true` incident. The raw error is still retained
+ * verbatim in `system_health_probes.errorMessage` for internal/admin diagnosis.
+ */
+export function sanitizePublicProbeError(errorMessage: string | null): string {
+  if (errorMessage !== null && /^HTTP \d{3}$/.test(errorMessage)) {
+    return errorMessage;
+  }
+  return 'a connectivity error';
+}
+
 export interface ProbeRecordRow {
   id: string;
   target: string;
@@ -230,10 +249,10 @@ export class HealthProbeService {
       recent.length >= this.failureThreshold &&
       recent.slice(0, this.failureThreshold).every((p) => !p.ok)
     ) {
-      const lastErr = recent[0]?.errorMessage ?? 'unknown error';
+      const lastErr = recent[0]?.errorMessage ?? null;
       const created = await this.incidents.create({
         title: `${target.label} health check failing`,
-        description: `Auto-detected: ${this.failureThreshold} consecutive failed probes against ${target.url}. Latest error: ${lastErr}.`,
+        description: `Auto-detected: ${this.failureThreshold} consecutive failed probes against ${target.url}. Latest error: ${sanitizePublicProbeError(lastErr)}.`,
         severity: 'major',
         affectedComponents: [target.id],
         public: true,

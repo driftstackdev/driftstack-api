@@ -14,6 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   HealthProbeService,
+  sanitizePublicProbeError,
   type HealthProbeTarget,
   type Prober,
   type ProbeRecordRow,
@@ -379,5 +380,33 @@ describe('V-553.B-31 HealthProbeService — hourly prune', () => {
     await svc.processTick(t2);
     // 65 min later — fresh prune.
     expect(probes.pruneCalls).toHaveLength(2);
+  });
+});
+
+describe('sanitizePublicProbeError — public incident must not leak internal infra (V-295b)', () => {
+  it('passes through the benign HTTP <status> shape verbatim', () => {
+    expect(sanitizePublicProbeError('HTTP 503')).toBe('HTTP 503');
+    expect(sanitizePublicProbeError('HTTP 200')).toBe('HTTP 200');
+  });
+
+  it('collapses raw network errors that embed an internal IP/host to a generic phrase', () => {
+    expect(sanitizePublicProbeError('connect ECONNREFUSED 10.0.0.5:8443')).toBe(
+      'a connectivity error',
+    );
+    expect(sanitizePublicProbeError('getaddrinfo ENOTFOUND internal-db.driftstack.internal')).toBe(
+      'a connectivity error',
+    );
+    expect(sanitizePublicProbeError('connect ETIMEDOUT 172.16.4.9:5432')).toBe(
+      'a connectivity error',
+    );
+  });
+
+  it('collapses null / unknown to the generic phrase (never undefined-y)', () => {
+    expect(sanitizePublicProbeError(null)).toBe('a connectivity error');
+    expect(sanitizePublicProbeError('unknown error')).toBe('a connectivity error');
+  });
+
+  it('does not pass through a malformed HTTP-prefixed string that carries extra detail', () => {
+    expect(sanitizePublicProbeError('HTTP 503 from 10.0.0.5')).toBe('a connectivity error');
   });
 });
