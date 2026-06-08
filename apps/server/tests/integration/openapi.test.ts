@@ -1,6 +1,9 @@
 // Verifies the OpenAPI 3.1 spec is valid, served, and contains every
 // expected route.
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { generateOpenApiSpec, _clearSpecCache } from '../../src/lib/openapi.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
@@ -20,6 +23,27 @@ describe('OpenAPI spec generation', () => {
     expect(spec.info.title).toBe('Driftstack API');
     expect(spec.info.version).toBe('0.0.1');
     expect(spec.servers).toBeDefined();
+  });
+
+  // Drift guard: the committed packages/sdk-python/openapi.json is the codegen
+  // input for the Python + Go SDKs. It must stay in sync with the live
+  // generator. Compares PARSED content (not text) so the committed file's
+  // prettier formatting is tolerated, but any CONTENT drift — a route/schema/
+  // enum added without regenerating — fails CI instead of silently
+  // accumulating (it had drifted ~3.5k lines of un-regenerated enrichment
+  // before this guard). Regenerate with: npm run sdk:python:dump-spec
+  it('committed packages/sdk-python/openapi.json matches the generator (no codegen-output drift)', () => {
+    _clearSpecCache();
+    const HERE = dirname(fileURLToPath(import.meta.url));
+    const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+    const committed = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, 'packages/sdk-python/openapi.json'), 'utf8'),
+    );
+    const fresh = JSON.parse(JSON.stringify(generateOpenApiSpec()));
+    expect(
+      fresh,
+      'committed openapi.json is stale — run `npm run sdk:python:dump-spec` and commit the result',
+    ).toEqual(committed);
   });
 
   it('registers every expected path', () => {
