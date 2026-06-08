@@ -41,6 +41,22 @@ describe('gui-client lib/log-buffer content parity', () => {
     expect(body).toMatch(/window\.addEventListener\('unhandledrejection',/);
   });
 
+  it('Best-effort file mirror (the release-paint diagnostic): writes the buffer to the IN-SCOPE recordings/dev-log.txt under AppData, debounced ≤1/s, wrapped so a missing fs scope / non-Tauri context can never break logging — pinned so the on-disk copy stays available when the WKWebView runs but does not composite (b)', () => {
+    expect(body).toMatch(
+      /import \{ BaseDirectory, mkdir, writeTextFile \} from '@tauri-apps\/plugin-fs';/,
+    );
+    // Path must stay inside the granted fs:scope ($APPDATA/recordings/**).
+    expect(body).toMatch(/const LOG_FILE = 'recordings\/dev-log\.txt';/);
+    expect(body).toMatch(
+      /await writeTextFile\(LOG_FILE, formatLogEntries\(\) \+ '\\n', \{ baseDir: BaseDirectory\.AppData \}\);/,
+    );
+    // Best-effort: persistNow must swallow all errors (no throw can escape).
+    expect(body).toMatch(/async function persistNow\(\): Promise<void> \{\s*\n?\s*try \{/);
+    // Debounced: at most one write per second.
+    expect(body).toMatch(/if \(persistTimer !== null\) return;/);
+    expect(body).toMatch(/\}, 1000\);/);
+  });
+
   it('Public surface pinned: record / getLogEntries / clearLogEntries / subscribeLogs / formatLogEntries / installLogCapture', () => {
     for (const fn of [
       'export function record',

@@ -10,6 +10,8 @@
 // real dev console still prints). Anything that subscribes (the DevLogPanel)
 // re-renders on each new entry.
 
+import { BaseDirectory, mkdir, writeTextFile } from '@tauri-apps/plugin-fs';
+
 export type LogLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
 
 export interface LogEntry {
@@ -24,10 +26,43 @@ export interface LogEntry {
 
 const MAX_ENTRIES = 500;
 
+// Mirror the buffer to a file under $APPDATA/recordings/ (the only fs:scope the
+// app grants — reused here, no capabilities change). This is the diagnostic for
+// the release-paint case: when the WKWebView runs but doesn't composite, the
+// in-app panel can't be seen, but the operator can still read this file. The
+// path is the proven recordings fs pattern. Best-effort throughout.
+const LOG_DIR = 'recordings';
+const LOG_FILE = 'recordings/dev-log.txt';
+
 const entries: LogEntry[] = [];
 let nextId = 1;
 const listeners = new Set<() => void>();
 let installed = false;
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let dirEnsured = false;
+
+async function persistNow(): Promise<void> {
+  try {
+    if (!dirEnsured) {
+      await mkdir(LOG_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
+      dirEnsured = true;
+    }
+    await writeTextFile(LOG_FILE, formatLogEntries() + '\n', { baseDir: BaseDirectory.AppData });
+  } catch {
+    // Best-effort: a missing fs permission / scope, or a non-Tauri context,
+    // must NEVER break logging or the app. The in-memory buffer + panel still
+    // work; only the on-disk copy is skipped.
+  }
+}
+
+// Debounced: coalesce bursts into at most one write per second.
+function schedulePersist(): void {
+  if (persistTimer !== null) return;
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    void persistNow();
+  }, 1000);
+}
 
 function formatArg(arg: unknown): string {
   if (typeof arg === 'string') return arg;
@@ -47,6 +82,7 @@ export function record(level: LogLevel, args: readonly unknown[]): void {
   entries.push({ id: nextId++, ts: Date.now(), level, text });
   if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES);
   for (const fn of listeners) fn();
+  schedulePersist();
 }
 
 /** Snapshot of the current entries (oldest → newest). */
@@ -57,6 +93,7 @@ export function getLogEntries(): readonly LogEntry[] {
 export function clearLogEntries(): void {
   entries.length = 0;
   for (const fn of listeners) fn();
+  schedulePersist();
 }
 
 /** Subscribe to buffer changes; returns an unsubscribe fn. */
