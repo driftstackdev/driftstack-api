@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Sessions
-description: Create + drive iPhone Safari sessions — navigate, interact, wait, capture, extract, search, get-state, destroy. Tier-gated concurrency.
+description: Create + drive iPhone Safari sessions — navigate, interact, wait, capture, extract, search, login, get-state, destroy. Tier-gated concurrency.
 ---
 
 # Sessions
@@ -293,6 +293,34 @@ appeared (a timeout is `results_visible: false`, not an error). The response:
 { "submitted": true, "results_visible": true }
 ```
 
+## Login
+
+`POST /v1/sessions/:id/login`
+
+```json
+{
+  "username": "user@example.com",
+  "password": "••••••••",
+  "success_selector": ".dashboard"
+}
+```
+
+Heuristic credential login: types `username` then `password` realistically
+and submits. The `password` is sent to the harness but **never logged**.
+`username_selector` / `password_selector` / `submit_selector` are optional —
+omit them and the fields are detected heuristically (submit falls back to
+Return on the password field). `logged_in` is the post-submit assessment and
+is **never a false positive** — a captcha / 2FA / login-required landing
+yields `false`. Give `success_selector` for a robust signal on known or
+multi-step logins (its post-submit presence means success); omit it and the
+password-field-gone + URL heuristic is used. `post_login_url` lets you drive a
+challenge/pause flow when login didn't complete. Recipe-based login for a known
+site is the separate `execute_recipe` surface, not this intent. The response:
+
+```json
+{ "logged_in": true, "post_login_url": "https://example.com/account" }
+```
+
 ## Destroy
 
 `DELETE /v1/sessions/:id`
@@ -305,7 +333,7 @@ flips to `destroyed`.
 ## Auth + scoping
 
 Read endpoints (GET) accept any valid bearer with `read` scope.
-Write endpoints (POST navigate / interact / wait / capture / extract / search; DELETE)
+Write endpoints (POST navigate / interact / wait / capture / extract / search / login; DELETE)
 require the `write:sessions` scope (a broad `write` key also satisfies
 it). Team RBAC: `X-Driftstack-Account` is honored — a `member` can read
 the owner's sessions, but writes require the `admin` role (a `member`
