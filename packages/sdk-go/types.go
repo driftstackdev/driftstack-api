@@ -458,6 +458,34 @@ type CaptureResponse struct {
 	DurationMS int         `json:"duration_ms"`
 }
 
+// ListFieldExtraction — per-field sub-extraction for a type:"list" extraction
+// (runs against each matched element). Type is text|attribute only (no nested lists).
+type ListFieldExtraction struct {
+	Type      string `json:"type"`                // text | attribute
+	Attribute string `json:"attribute,omitempty"` // required when Type=="attribute"
+	Selector  string `json:"selector,omitempty"`  // optional sub-selector relative to the element
+}
+
+// Extraction — one named extraction in an ExtractRequest.
+type Extraction struct {
+	Name      string                         `json:"name"`
+	Selector  string                         `json:"selector"`
+	Type      string                         `json:"type"`                // text | attribute | list
+	Attribute string                         `json:"attribute,omitempty"` // required when Type=="attribute"
+	Transform string                         `json:"transform,omitempty"` // "number" parses the text as numeric
+	Extract   map[string]ListFieldExtraction `json:"extract,omitempty"`   // per-field sub-extraction for Type=="list"
+}
+
+type ExtractRequest struct {
+	Extractions []Extraction `json:"extractions"` // 1..100
+}
+
+type ExtractResponse struct {
+	// Extracted values keyed by each extraction's Name (heterogeneous:
+	// string | number | array per the extraction type — the page data).
+	Value map[string]any `json:"value"`
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Usage
 // ──────────────────────────────────────────────────────────────────

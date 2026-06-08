@@ -49,9 +49,9 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
     );
   });
 
-  it('Imports — 12 api-types verb shapes (sorted alphabetical block; Request/Response pairs for every per-id action + Session/SessionState models + PaginationQueryInput) + HttpClient + iteratePaginated. Drift to hand-rolling any shape would diverge from @driftstack/api-types Zod single-source-of-truth.', () => {
+  it('Imports — 14 api-types verb shapes (sorted alphabetical block; Request/Response pairs for every per-id action + Session/SessionState models + PaginationQueryInput) + HttpClient + iteratePaginated. Drift to hand-rolling any shape would diverge from @driftstack/api-types Zod single-source-of-truth.', () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*CaptureRequestInput,\s*\n?\s*CaptureResponse,\s*\n?\s*CreateSessionRequest,\s*\n?\s*InteractRequest,\s*\n?\s*InteractResponse,\s*\n?\s*NavigateRequestInput,\s*\n?\s*NavigateResponse,\s*\n?\s*PaginationQueryInput,\s*\n?\s*Session,\s*\n?\s*SessionState,\s*\n?\s*WaitRequest,\s*\n?\s*WaitResponse,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*\n?\s*CaptureRequestInput,\s*\n?\s*CaptureResponse,\s*\n?\s*ExtractRequest,\s*\n?\s*ExtractResponse,\s*\n?\s*CreateSessionRequest,\s*\n?\s*InteractRequest,\s*\n?\s*InteractResponse,\s*\n?\s*NavigateRequestInput,\s*\n?\s*NavigateResponse,\s*\n?\s*PaginationQueryInput,\s*\n?\s*Session,\s*\n?\s*SessionState,\s*\n?\s*WaitRequest,\s*\n?\s*WaitResponse,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
     expect(body).toMatch(/import \{ iteratePaginated \} from '\.\.\/pagination\.js';/);
@@ -146,16 +146,16 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
     );
   });
 
-  it("encodeURIComponent on :sessionId — EXACTLY 7 escape call sites (get + navigate + interact + wait + getState + capture + destroy). iterate doesn't escape directly (delegates via this.list() which doesn't use :sessionId). create doesn't escape (no :sessionId in the create path). Drift to dropping any escape would let \"abc/../..\" traverse.", () => {
+  it("encodeURIComponent on :sessionId — EXACTLY 8 escape call sites (get + navigate + interact + wait + getState + capture + extract + destroy). iterate doesn't escape directly (delegates via this.list() which doesn't use :sessionId). create doesn't escape (no :sessionId in the create path). Drift to dropping any escape would let \"abc/../..\" traverse.", () => {
     const matches = body.match(/encodeURIComponent\(sessionId\)/g) ?? [];
-    expect(matches.length, 'expected encodeURIComponent(sessionId) 7 times').toBe(7);
+    expect(matches.length, 'expected encodeURIComponent(sessionId) 8 times').toBe(8);
   });
 
-  it('10-verb inventory + verb-mix invariants — exactly 10 method declarations (create + list + iterate + get + navigate + interact + wait + getState + capture + destroy). Verb mix: 5 POSTs (create + navigate + interact + wait + capture) + 3 GETs (list + get + getState) + 1 DELETE (destroy) = 9 wire-call verbs (iterate is delegation). ZERO PATCH/PUT — sessions are atomic; no partial-update.', () => {
+  it('11-verb inventory + verb-mix invariants — exactly 11 method declarations (create + list + iterate + get + navigate + interact + wait + getState + capture + extract + destroy). Verb mix: 6 POSTs (create + navigate + interact + wait + capture + extract) + 3 GETs (list + get + getState) + 1 DELETE (destroy) = 10 wire-call verbs (iterate is delegation). ZERO PATCH/PUT — sessions are atomic; no partial-update.', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 10 verb declarations').toBe(10);
+    expect(methods.length, 'expected 11 verb declarations').toBe(11);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
-    expect(posts, 'expected 5 POSTs').toBe(5);
+    expect(posts, 'expected 6 POSTs').toBe(6);
     const gets = (body.match(/method: 'GET'/g) ?? []).length;
     expect(gets, 'expected 3 GETs (list + get + getState)').toBe(3);
     const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;

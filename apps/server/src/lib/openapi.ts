@@ -89,6 +89,8 @@ import {
   CliAuthorizeInitiateRequestSchema,
   CliAuthorizeInitiateResponseSchema,
   CaptureResponseSchema,
+  ExtractRequestSchema,
+  ExtractResponseSchema,
   ChangeTierRequestSchema,
   CreateApiKeyRequestSchema,
   CreateApiKeyResponseSchema,
@@ -214,6 +216,8 @@ function buildRegistry(): OpenAPIRegistry {
   r.register('WaitResponse', WaitResponseSchema);
   r.register('CaptureRequest', CaptureRequestSchema);
   r.register('CaptureResponse', CaptureResponseSchema);
+  r.register('ExtractRequest', ExtractRequestSchema);
+  r.register('ExtractResponse', ExtractResponseSchema);
   // API keys resource
   r.register('CreateApiKeyRequest', CreateApiKeyRequestSchema);
   r.register('CreateApiKeyResponse', CreateApiKeyResponseSchema);
@@ -468,6 +472,48 @@ function buildRegistry(): OpenAPIRegistry {
               byte_size: 68,
               duration_ms: 320,
             },
+          },
+        },
+      },
+      404: {
+        description: 'Session not found (or owned by another account).',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/sessions/{id}/extract',
+    operationId: 'extractSession',
+    summary: 'Read structured data from the page (a batch of named extractions)',
+    tags: ['sessions'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        content: {
+          'application/json': {
+            schema: ExtractRequestSchema,
+            example: {
+              extractions: [
+                { name: 'title', selector: 'h1', type: 'text' },
+                { name: 'price', selector: '.price', type: 'text', transform: 'number' },
+                { name: 'links', selector: 'a.product', type: 'list' },
+              ],
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Extraction produced.',
+        content: {
+          'application/json': {
+            schema: ExtractResponseSchema,
+            example: { value: { title: 'Example', price: 19.99, links: ['/a', '/b'] } },
           },
         },
       },

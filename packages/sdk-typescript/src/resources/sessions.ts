@@ -3,6 +3,8 @@
 import type {
   CaptureRequestInput,
   CaptureResponse,
+  ExtractRequest,
+  ExtractResponse,
   CreateSessionRequest,
   InteractRequest,
   InteractResponse,
@@ -113,6 +115,16 @@ export class SessionsResource {
     return this.http.request<CaptureResponse>({
       method: 'POST',
       path: `/v1/sessions/${encodeURIComponent(sessionId)}/capture`,
+      body,
+    });
+  }
+
+  /** Read structured data from the page — a batch of named extractions
+   *  (text / attribute / list). Returns the values keyed by each name. */
+  extract(sessionId: string, body: ExtractRequest): Promise<ExtractResponse> {
+    return this.http.request<ExtractResponse>({
+      method: 'POST',
+      path: `/v1/sessions/${encodeURIComponent(sessionId)}/extract`,
       body,
     });
   }

@@ -18,6 +18,8 @@ from driftstack._generated.models import (
     CaptureResponse,
     CreateSessionRequest,
     CreateSessionResponse,
+    ExtractRequest,
+    ExtractResponse,
     InteractRequest,
     InteractResponse,
     NavigateRequest,
@@ -114,6 +116,12 @@ class SessionsResource:
         )
         return CaptureResponse.model_validate(data)
 
+    def extract(self, session_id: str, body: ExtractRequest | dict[str, Any]) -> ExtractResponse:
+        data = self._http.request(
+            "POST", _session_path(session_id, "/extract"), json_body=coerce_body(body)
+        )
+        return ExtractResponse.model_validate(data)
+
     def destroy(self, session_id: str) -> None:
         """Destroy the session. Idempotent (safe to call twice)."""
         self._http.request("DELETE", _session_path(session_id))
@@ -188,6 +196,14 @@ class AsyncSessionsResource:
             "POST", _session_path(session_id, "/capture"), json_body=coerce_body(body)
         )
         return CaptureResponse.model_validate(data)
+
+    async def extract(
+        self, session_id: str, body: ExtractRequest | dict[str, Any]
+    ) -> ExtractResponse:
+        data = await self._http.request(
+            "POST", _session_path(session_id, "/extract"), json_body=coerce_body(body)
+        )
+        return ExtractResponse.model_validate(data)
 
     async def destroy(self, session_id: str) -> None:
         await self._http.request("DELETE", _session_path(session_id))

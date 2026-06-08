@@ -135,6 +135,21 @@ func (r *SessionsResource) Capture(ctx context.Context, sessionID string, body *
 	return &out, nil
 }
 
+// Extract reads structured data from the page — a batch of named extractions
+// (text / attribute / list). Returns the values keyed by each name.
+func (r *SessionsResource) Extract(ctx context.Context, sessionID string, body *ExtractRequest) (*ExtractResponse, error) {
+	var out ExtractResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/sessions/" + url.PathEscape(sessionID) + "/extract",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Destroy ends the session. Idempotent — calling it twice is safe.
 func (r *SessionsResource) Destroy(ctx context.Context, sessionID string) error {
 	return r.client.do(ctx, requestOptions{
