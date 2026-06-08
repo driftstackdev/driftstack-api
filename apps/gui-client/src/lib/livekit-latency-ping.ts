@@ -40,10 +40,18 @@ export interface LatencyState {
 }
 
 export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
+  // Destructure to primitives so the effect depends on the actual room / enabled
+  // VALUES, not the opts OBJECT. A caller passing an inline `{ room, enabled }`
+  // (the natural usage) makes `opts` a fresh reference every render; with a
+  // `[opts]` dep the effect would tear down + re-arm the ping loop AND fire an
+  // immediate ping on EVERY parent re-render — and the session panel re-renders
+  // frequently while streaming, so that's a DataChannel ping flood (exactly what
+  // the 2s interval is meant to avoid). Depending on the primitives re-runs the
+  // effect only on a real room/enabled change.
+  const { room, enabled } = opts;
   const [state, setState] = useState<LatencyState>({ rttMs: null, lastSeenAt: null });
 
   useEffect(() => {
-    const { room, enabled } = opts;
     if (room === null || !enabled) return;
 
     let cancelled = false;
@@ -100,7 +108,7 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
       clearInterval(handle);
       (room as any).off?.(RoomEvent.DataReceived, onData);
     };
-  }, [opts]);
+  }, [room, enabled]);
 
   return state;
 }

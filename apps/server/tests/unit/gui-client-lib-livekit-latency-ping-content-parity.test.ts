@@ -72,4 +72,11 @@ describe('gui-client/lib/livekit-latency-ping content parity', () => {
       /export function formatRtt\(state: LatencyState\): string \{\s*\n?\s*if \(state\.rttMs === null\) return '— ms';\s*\n?\s*return `\$\{state\.rttMs\.toString\(\)\} ms`;\s*\n?\s*\}/,
     );
   });
+
+  it('Effect deps are the PRIMITIVE room + enabled, NOT the opts object — pinned so an inline `{ room, enabled }` caller (the natural usage) cannot make `opts` a fresh ref every render and thrash the ping loop (re-arm + immediate ping per re-render = DataChannel flood). opts is destructured at the top; the effect depends on [room, enabled]', () => {
+    expect(body).toMatch(/const \{ room, enabled \} = opts;/);
+    // The effect closes over the primitives + depends on them — never on [opts].
+    expect(body).toMatch(/\}, \[room, enabled\]\);/);
+    expect(body).not.toMatch(/\}, \[opts\]\);/);
+  });
 });
