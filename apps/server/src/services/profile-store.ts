@@ -83,20 +83,42 @@ export interface AssignProfileBlock {
  * mint/wrap (KMS → TMK → DEK, file 57) is the founder-gated step (c) the caller
  * supplies. A fresh profile (no prior store) gets a PUT URL but no GET URL, so
  * the harness starts stateless and seals its first store on end.
+ *
+ * `urlTtlSeconds` MUST outlive the session: the save-back PUT URL is minted now
+ * (at assign) but used by the harness at session END. R2/S3 presigned URLs
+ * default to 900s (15 min), but a session's max duration defaults to 1800s
+ * (30 min) and can be configured longer — so the default TTL would expire the
+ * save-back URL mid-session and the customer's profile updates would be silently
+ * lost. The caller passes the session's maxDurationSeconds plus a teardown
+ * margin; the default here (3600s) safely covers the 1800s default max. Clamped
+ * to R2's 7-day presign ceiling.
  */
+const PRESIGN_MAX_TTL_SECONDS = 7 * 24 * 60 * 60; // R2/S3 SigV4 ceiling
+const DEFAULT_PROFILE_URL_TTL_SECONDS = 3600; // covers the 1800s default max session + margin
+
 export async function buildAssignProfileBlock(
   r2: R2,
   profileId: string,
   dek: string,
+  opts: { urlTtlSeconds?: number } = {},
 ): Promise<AssignProfileBlock> {
+  const expiresIn = Math.min(
+    Math.max(opts.urlTtlSeconds ?? DEFAULT_PROFILE_URL_TTL_SECONDS, 1),
+    PRESIGN_MAX_TTL_SECONDS,
+  );
   const key = profileSealedBlobKey(profileId);
-  // PUT URL always (every profile-backed session must be able to save back).
-  const sealedBlobPutUrl = await r2.presignPut({ key, contentType: 'application/octet-stream' });
+  // PUT URL always (every profile-backed session must be able to save back). TTL
+  // covers the full session lifetime — it's used at END, not now.
+  const sealedBlobPutUrl = await r2.presignPut({
+    key,
+    contentType: 'application/octet-stream',
+    expiresIn,
+  });
   // GET URL only when a prior sealed store exists (else the harness is stateless
   // for this profile until its first save-back).
   const { exists } = await r2.headObject(key);
   if (exists) {
-    const sealedBlobUrl = await r2.presignGet({ key });
+    const sealedBlobUrl = await r2.presignGet({ key, expiresIn });
     return { profileId, dek, sealedBlobUrl, sealedBlobPutUrl };
   }
   return { profileId, dek, sealedBlobPutUrl };

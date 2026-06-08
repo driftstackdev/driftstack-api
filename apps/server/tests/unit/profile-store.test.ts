@@ -163,6 +163,29 @@ describe('buildAssignProfileBlock (step (e) restore side — crypto-free R2 half
     expect(presignGet).not.toHaveBeenCalled();
   });
 
+  it('save-back PUT URL TTL outlives the session: default ≥1800s session max; caller TTL honored + clamped to the 7-day ceiling', async () => {
+    // default TTL must exceed the 1800s default max session (else the save-back
+    // URL minted at assign expires mid-session → silent profile-data loss).
+    const d = r2For(true);
+    await buildAssignProfileBlock(d.r2, 'prof_abc', 'ZGVr');
+    const defaultTtl = (d.presignPut.mock.calls[0]![0] as { expiresIn: number }).expiresIn;
+    expect(defaultTtl).toBeGreaterThanOrEqual(1800);
+    // both PUT + GET share the TTL
+    expect((d.presignGet.mock.calls[0]![0] as { expiresIn: number }).expiresIn).toBe(defaultTtl);
+
+    // caller override honored
+    const c = r2For(true);
+    await buildAssignProfileBlock(c.r2, 'prof_abc', 'ZGVr', { urlTtlSeconds: 5400 });
+    expect((c.presignPut.mock.calls[0]![0] as { expiresIn: number }).expiresIn).toBe(5400);
+
+    // clamped to the R2 7-day presign ceiling
+    const big = r2For(false);
+    await buildAssignProfileBlock(big.r2, 'prof_abc', 'ZGVr', { urlTtlSeconds: 99_999_999 });
+    expect((big.presignPut.mock.calls[0]![0] as { expiresIn: number }).expiresIn).toBe(
+      7 * 24 * 60 * 60,
+    );
+  });
+
   it('the block feeds serializeSessionAssign.profile → valid snake_case wire (sealed_blob_url + sealed_blob_put_url)', async () => {
     const { r2 } = r2For(true);
     const block = await buildAssignProfileBlock(r2, 'prof_abc', 'ZGVr');
