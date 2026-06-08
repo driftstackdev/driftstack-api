@@ -568,7 +568,15 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                       type="button"
                       className="btn-primary text-xs"
                       onClick={() => void handleLaunch(profile)}
-                      disabled={busy || atProfileCap}
+                      // Launch gates on `busy` only. NOT atProfileCap: the
+                      // profile cap limits how many profiles you can CREATE, not
+                      // whether you can launch an existing one (launching consumes
+                      // a session slot, not a profile slot). Gating Launch on
+                      // atProfileCap meant a free-tier user (profile_cap 1) could
+                      // never launch their one allowed profile. The server
+                      // enforces the concurrent-session cap and handleLaunch
+                      // surfaces that error.
+                      disabled={busy}
                     >
                       {busy ? 'Launching…' : 'Launch'}
                     </button>

@@ -146,7 +146,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(existsSync(T('src/lib.rs'))).toBe(true);
   });
 
-  it('capabilities/default.json: identifier=default + windows=[main] + 8 core/store permissions + fs:scope $APPDATA/recordings/** + 6 fs allow-* + updater:default + shell:allow-open 3-URL allow-list (localhost:5173 + app + app-staging) pinned', () => {
+  it('capabilities/default.json: identifier=default + windows=[main] + 9 core/store permissions (incl. core:window:allow-start-dragging for the custom title-bar drag region) + fs:scope $APPDATA/recordings/** + 6 fs allow-* + updater:default + shell:allow-open 3-URL allow-list (localhost:5173 + app + app-staging) pinned', () => {
     const body = read(T('capabilities/default.json'));
     expect(body).toMatch(/"\$schema": "\.\.\/gen\/schemas\/desktop-schema\.json"/);
     expect(body).toMatch(/"identifier": "default"/);
@@ -156,6 +156,10 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/"windows": \["main"\]/);
     expect(body).toMatch(/"core:default"/);
     expect(body).toMatch(/"core:window:default"/);
+    // start-dragging: the TitleBar uses data-tauri-drag-region, which invokes the
+    // window|start_dragging command — absent this permission the call is rejected
+    // by the ACL (surfaced as a fatal UNHANDLED_REJECTION at runtime).
+    expect(body).toMatch(/"core:window:allow-start-dragging"/);
     expect(body).toMatch(/"core:webview:default"/);
     expect(body).toMatch(/"core:event:default"/);
     expect(body).toMatch(/"core:app:default"/);
