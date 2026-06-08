@@ -2,7 +2,13 @@ import { Component, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { ConfirmProvider } from './components/ConfirmProvider';
+import { DevLogPanel } from './components/DevLogPanel';
+import { installLogCapture } from './lib/log-buffer';
 import './styles/index.css';
+
+// GUI W232 item (d) — capture console.* + uncaught errors into the in-app dev
+// log buffer from the very first line, so startup logs are retained. Idempotent.
+installLogCapture();
 
 // ── Fail-visible bootstrap (architectural: the app must NEVER silently
 // fail to open). Any startup, render, or async error renders a VISIBLE,
@@ -94,6 +100,9 @@ try {
           <App />
         </ConfirmProvider>
       </RootErrorBoundary>
+      {/* Outside the error boundary: the dev-log panel stays available even if
+          the App tree throws (so you can read what failed). */}
+      <DevLogPanel />
     </StrictMode>,
   );
 } catch (err) {
