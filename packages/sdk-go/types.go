@@ -501,6 +501,23 @@ type SearchResponse struct {
 	ResultsVisible *bool `json:"results_visible,omitempty"`
 }
 
+// SessionLoginRequest drives the in-browser credential-login op. Named
+// SessionLogin* (not Login*) to avoid colliding with the account-login types.
+type SessionLoginRequest struct {
+	Username string `json:"username"`
+	// Password is SENSITIVE — typed via the behavioural send-keys path; never logged.
+	Password         string `json:"password"`
+	UsernameSelector string `json:"username_selector,omitempty"`
+	PasswordSelector string `json:"password_selector,omitempty"`
+	SubmitSelector   string `json:"submit_selector,omitempty"`
+	SuccessSelector  string `json:"success_selector,omitempty"`
+}
+
+type SessionLoginResponse struct {
+	LoggedIn     bool   `json:"logged_in"`
+	PostLoginURL string `json:"post_login_url,omitempty"`
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Usage
 // ──────────────────────────────────────────────────────────────────

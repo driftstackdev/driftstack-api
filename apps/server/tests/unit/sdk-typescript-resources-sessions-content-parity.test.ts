@@ -49,9 +49,9 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
     );
   });
 
-  it('Imports — 16 api-types verb shapes (sorted alphabetical block; Request/Response pairs for every per-id action + Session/SessionState models + PaginationQueryInput) + HttpClient + iteratePaginated. Drift to hand-rolling any shape would diverge from @driftstack/api-types Zod single-source-of-truth.', () => {
+  it('Imports — 18 api-types verb shapes (sorted alphabetical block; Request/Response pairs for every per-id action + Session/SessionState models + PaginationQueryInput) + HttpClient + iteratePaginated. Drift to hand-rolling any shape would diverge from @driftstack/api-types Zod single-source-of-truth.', () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*CaptureRequestInput,\s*\n?\s*CaptureResponse,\s*\n?\s*ExtractRequest,\s*\n?\s*ExtractResponse,\s*\n?\s*SearchRequestInput,\s*\n?\s*SearchResponse,\s*\n?\s*CreateSessionRequest,\s*\n?\s*InteractRequest,\s*\n?\s*InteractResponse,\s*\n?\s*NavigateRequestInput,\s*\n?\s*NavigateResponse,\s*\n?\s*PaginationQueryInput,\s*\n?\s*Session,\s*\n?\s*SessionState,\s*\n?\s*WaitRequest,\s*\n?\s*WaitResponse,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*\n?\s*CaptureRequestInput,\s*\n?\s*CaptureResponse,\s*\n?\s*ExtractRequest,\s*\n?\s*ExtractResponse,\s*\n?\s*SearchRequestInput,\s*\n?\s*SearchResponse,\s*\n?\s*SessionLoginRequest,\s*\n?\s*SessionLoginResponse,\s*\n?\s*CreateSessionRequest,\s*\n?\s*InteractRequest,\s*\n?\s*InteractResponse,\s*\n?\s*NavigateRequestInput,\s*\n?\s*NavigateResponse,\s*\n?\s*PaginationQueryInput,\s*\n?\s*Session,\s*\n?\s*SessionState,\s*\n?\s*WaitRequest,\s*\n?\s*WaitResponse,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
     expect(body).toMatch(/import \{ iteratePaginated \} from '\.\.\/pagination\.js';/);
@@ -146,16 +146,16 @@ describe('W424.C packages/sdk-typescript/src/resources/sessions.ts content parit
     );
   });
 
-  it("encodeURIComponent on :sessionId — EXACTLY 9 escape call sites (get + navigate + interact + wait + getState + capture + extract + search + destroy). iterate doesn't escape directly (delegates via this.list() which doesn't use :sessionId). create doesn't escape (no :sessionId in the create path). Drift to dropping any escape would let \"abc/../..\" traverse.", () => {
+  it("encodeURIComponent on :sessionId — EXACTLY 10 escape call sites (get + navigate + interact + wait + getState + capture + extract + search + login + destroy). iterate doesn't escape directly (delegates via this.list() which doesn't use :sessionId). create doesn't escape (no :sessionId in the create path). Drift to dropping any escape would let \"abc/../..\" traverse.", () => {
     const matches = body.match(/encodeURIComponent\(sessionId\)/g) ?? [];
-    expect(matches.length, 'expected encodeURIComponent(sessionId) 9 times').toBe(9);
+    expect(matches.length, 'expected encodeURIComponent(sessionId) 10 times').toBe(10);
   });
 
-  it('12-verb inventory + verb-mix invariants — exactly 12 method declarations (create + list + iterate + get + navigate + interact + wait + getState + capture + extract + search + destroy). Verb mix: 7 POSTs (create + navigate + interact + wait + capture + extract + search) + 3 GETs (list + get + getState) + 1 DELETE (destroy) = 11 wire-call verbs (iterate is delegation). ZERO PATCH/PUT — sessions are atomic; no partial-update.', () => {
+  it('13-verb inventory + verb-mix invariants — exactly 13 method declarations (create + list + iterate + get + navigate + interact + wait + getState + capture + extract + search + login + destroy). Verb mix: 8 POSTs (create + navigate + interact + wait + capture + extract + search + login) + 3 GETs (list + get + getState) + 1 DELETE (destroy) = 12 wire-call verbs (iterate is delegation). ZERO PATCH/PUT — sessions are atomic; no partial-update.', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 12 verb declarations').toBe(12);
+    expect(methods.length, 'expected 13 verb declarations').toBe(13);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
-    expect(posts, 'expected 7 POSTs').toBe(7);
+    expect(posts, 'expected 8 POSTs').toBe(8);
     const gets = (body.match(/method: 'GET'/g) ?? []).length;
     expect(gets, 'expected 3 GETs (list + get + getState)').toBe(3);
     const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;

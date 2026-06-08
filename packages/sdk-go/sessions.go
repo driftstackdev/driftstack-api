@@ -166,6 +166,22 @@ func (r *SessionsResource) Search(ctx context.Context, sessionID string, body *S
 	return &out, nil
 }
 
+// Login performs a heuristic credential login (types username + password and
+// submits). LoggedIn is the post-submit assessment (a captcha / 2FA /
+// login-required landing yields false, never a false positive).
+func (r *SessionsResource) Login(ctx context.Context, sessionID string, body *SessionLoginRequest) (*SessionLoginResponse, error) {
+	var out SessionLoginResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/sessions/" + url.PathEscape(sessionID) + "/login",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Destroy ends the session. Idempotent — calling it twice is safe.
 func (r *SessionsResource) Destroy(ctx context.Context, sessionID string) error {
 	return r.client.do(ctx, requestOptions{

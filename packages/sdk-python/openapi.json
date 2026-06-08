@@ -1669,6 +1669,44 @@
         },
         "required": ["submitted"]
       },
+      "SessionLoginRequest": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1
+          },
+          "username_selector": {
+            "type": "string"
+          },
+          "password_selector": {
+            "type": "string"
+          },
+          "submit_selector": {
+            "type": "string"
+          },
+          "success_selector": {
+            "type": "string"
+          }
+        },
+        "required": ["username", "password"]
+      },
+      "SessionLoginResponse": {
+        "type": "object",
+        "properties": {
+          "logged_in": {
+            "type": "boolean"
+          },
+          "post_login_url": {
+            "type": "string"
+          }
+        },
+        "required": ["logged_in"]
+      },
       "CreateApiKeyRequest": {
         "type": "object",
         "properties": {
@@ -4751,6 +4789,140 @@
                 "example": {
                   "submitted": true,
                   "results_visible": true
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{id}/login": {
+      "post": {
+        "operationId": "loginSession",
+        "summary": "Heuristic credential login (type username + password, submit)",
+        "tags": ["sessions"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "username_selector": {
+                    "type": "string"
+                  },
+                  "password_selector": {
+                    "type": "string"
+                  },
+                  "submit_selector": {
+                    "type": "string"
+                  },
+                  "success_selector": {
+                    "type": "string"
+                  }
+                },
+                "required": ["username", "password"]
+              },
+              "example": {
+                "username": "user@example.com",
+                "password": "••••••••",
+                "success_selector": ".dashboard"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Credentials typed and submitted; logged_in is the post-submit assessment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "logged_in": {
+                      "type": "boolean"
+                    },
+                    "post_login_url": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["logged_in"]
+                },
+                "example": {
+                  "logged_in": true,
+                  "post_login_url": "https://example.com/account"
                 }
               }
             }

@@ -105,7 +105,7 @@ describe('W705 cross-SDK sessions browser-session lifecycle parity', () => {
     }
   });
 
-  it('CRITICAL method-verb mix on sessions in TS + Go — 7× POST (create + navigate + interact + wait + capture + extract + search) + 2× GET (list + getState; per-id get = 3rd GET) + DELETE (destroy). The POST count is what threads the request-mutation semantics.', () => {
+  it('CRITICAL method-verb mix on sessions in TS + Go — 8× POST (create + navigate + interact + wait + capture + extract + search + login) + 2× GET (list + getState; per-id get = 3rd GET) + DELETE (destroy). The POST count is what threads the request-mutation semantics.', () => {
     const ts = read(TS_SESS);
     const go = read(GO_SESS);
 
@@ -113,7 +113,7 @@ describe('W705 cross-SDK sessions browser-session lifecycle parity', () => {
     const tsGet = (ts.match(/method: 'GET'/g) ?? []).length;
     const tsDelete = (ts.match(/method: 'DELETE'/g) ?? []).length;
 
-    expect(tsPost, 'sdk-typescript POST count').toBe(7);
+    expect(tsPost, 'sdk-typescript POST count').toBe(8);
     expect(tsGet, 'sdk-typescript GET count').toBeGreaterThanOrEqual(2);
     expect(tsDelete, 'sdk-typescript DELETE count').toBe(1);
 
@@ -121,7 +121,7 @@ describe('W705 cross-SDK sessions browser-session lifecycle parity', () => {
     const goGet = (go.match(/method: "GET"/g) ?? []).length;
     const goDelete = (go.match(/method: "DELETE"/g) ?? []).length;
 
-    expect(goPost, 'sdk-go POST count').toBe(7);
+    expect(goPost, 'sdk-go POST count').toBe(8);
     expect(goGet, 'sdk-go GET count').toBeGreaterThanOrEqual(2);
     expect(goDelete, 'sdk-go DELETE count').toBe(1);
   });

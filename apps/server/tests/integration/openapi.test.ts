@@ -196,6 +196,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/sessions/{id}/capture',
         '/v1/sessions/{id}/extract',
         '/v1/sessions/{id}/interact',
+        '/v1/sessions/{id}/login',
         '/v1/sessions/{id}/navigate',
         '/v1/sessions/{id}/proxy',
         '/v1/sessions/{id}/search',

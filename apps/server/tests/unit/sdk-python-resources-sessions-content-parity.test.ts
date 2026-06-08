@@ -56,14 +56,14 @@ describe('W583.B packages/sdk-python/src/driftstack/resources/sessions.py conten
     );
   });
 
-  it("Imports — 15 generated models (sorted alphabetical block) covering every verb's request/response shape. CRITICAL: drift to hand-rolled types in this file would diverge from @driftstack/api-types Zod single-source-of-truth and silently fragment the cross-language wire contract.", () => {
+  it("Imports — 17 generated models (sorted alphabetical block) covering every verb's request/response shape. CRITICAL: drift to hand-rolled types in this file would diverge from @driftstack/api-types Zod single-source-of-truth and silently fragment the cross-language wire contract.", () => {
     expect(body).toMatch(/^from __future__ import annotations$/m);
     expect(body).toMatch(/^from collections\.abc import AsyncIterator, Iterator$/m);
     expect(body).toMatch(/^from typing import Any$/m);
     expect(body).toMatch(/^from urllib\.parse import quote$/m);
     expect(body).toMatch(/^from pydantic import BaseModel$/m);
     expect(body).toMatch(
-      /^from driftstack\._generated\.models import \(\s*\n\s*CaptureRequest,\s*\n\s*CaptureResponse,\s*\n\s*CreateSessionRequest,\s*\n\s*CreateSessionResponse,\s*\n\s*ExtractRequest,\s*\n\s*ExtractResponse,\s*\n\s*InteractRequest,\s*\n\s*InteractResponse,\s*\n\s*NavigateRequest,\s*\n\s*NavigateResponse,\s*\n\s*PaginationQuery,\s*\n\s*SearchRequest,\s*\n\s*SearchResponse,\s*\n\s*Session,\s*\n\s*SessionState,\s*\n\s*WaitRequest,\s*\n\s*WaitResponse,\s*\n\)$/m,
+      /^from driftstack\._generated\.models import \(\s*\n\s*CaptureRequest,\s*\n\s*CaptureResponse,\s*\n\s*CreateSessionRequest,\s*\n\s*CreateSessionResponse,\s*\n\s*ExtractRequest,\s*\n\s*ExtractResponse,\s*\n\s*InteractRequest,\s*\n\s*InteractResponse,\s*\n\s*NavigateRequest,\s*\n\s*NavigateResponse,\s*\n\s*PaginationQuery,\s*\n\s*SearchRequest,\s*\n\s*SearchResponse,\s*\n\s*Session,\s*\n\s*SessionLoginRequest,\s*\n\s*SessionLoginResponse,\s*\n\s*SessionState,\s*\n\s*WaitRequest,\s*\n\s*WaitResponse,\s*\n\)$/m,
     );
     expect(body).toMatch(
       /^from driftstack\.pagination import aiterate_paginated, iterate_paginated$/m,
@@ -171,7 +171,7 @@ describe('W583.B packages/sdk-python/src/driftstack/resources/sessions.py conten
     );
   });
 
-  it('12-verb inventory drift guard — sync defines exactly 13 method defs (12 verbs + __init__); async defines the same 13. Drift to a 13th verb (e.g. a "freeze" or "clone" action) without doubling test coverage would let an untested code path ship; drift to dropping a verb would silently break a documented workhorse flow.', () => {
+  it('13-verb inventory drift guard — sync defines exactly 14 method defs (13 verbs + __init__); async defines the same 14. Drift to a 14th verb (e.g. a "freeze" or "clone" action) without doubling test coverage would let an untested code path ship; drift to dropping a verb would silently break a documented workhorse flow.', () => {
     const syncStart = body.indexOf('class SessionsResource:');
     const asyncStart = body.indexOf('class AsyncSessionsResource:');
     expect(syncStart, 'expected sync class to come first').toBeGreaterThan(0);
@@ -179,13 +179,13 @@ describe('W583.B packages/sdk-python/src/driftstack/resources/sessions.py conten
     const syncBody = body.slice(syncStart, asyncStart);
     const asyncBody = body.slice(asyncStart);
     const syncDefs = (syncBody.match(/^ {4}(?:async )?def [a-z_]+\(/gm) ?? []).length;
-    expect(syncDefs, 'expected 13 sync method defs (12 verbs + __init__)').toBe(13);
+    expect(syncDefs, 'expected 14 sync method defs (13 verbs + __init__)').toBe(14);
     const asyncDefs = (asyncBody.match(/^ {4}(?:async )?def [a-z_]+\(/gm) ?? []).length;
-    expect(asyncDefs, 'expected 13 async method defs (12 verbs + __init__)').toBe(13);
-    // POST verb count: create + navigate + interact + wait + capture + extract + search = 7
-    // POST per class × 2 classes = 14.
+    expect(asyncDefs, 'expected 14 async method defs (13 verbs + __init__)').toBe(14);
+    // POST verb count: create + navigate + interact + wait + capture + extract + search + login = 8
+    // POST per class × 2 classes = 16.
     const posts = (body.match(/"POST", /g) ?? []).length;
-    expect(posts, 'expected 14 POSTs (7 verbs × sync+async)').toBe(14);
+    expect(posts, 'expected 16 POSTs (8 verbs × sync+async)').toBe(16);
     // GET verb count: list + get + get_state = 3 GET per class × 2 = 6.
     const gets = (body.match(/"GET", /g) ?? []).length;
     expect(gets, 'expected 6 GETs (3 verbs × sync+async)').toBe(6);

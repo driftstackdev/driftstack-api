@@ -93,6 +93,8 @@ import {
   ExtractResponseSchema,
   SearchRequestSchema,
   SearchResponseSchema,
+  SessionLoginRequestSchema,
+  SessionLoginResponseSchema,
   ChangeTierRequestSchema,
   CreateApiKeyRequestSchema,
   CreateApiKeyResponseSchema,
@@ -222,6 +224,8 @@ function buildRegistry(): OpenAPIRegistry {
   r.register('ExtractResponse', ExtractResponseSchema);
   r.register('SearchRequest', SearchRequestSchema);
   r.register('SearchResponse', SearchResponseSchema);
+  r.register('SessionLoginRequest', SessionLoginRequestSchema);
+  r.register('SessionLoginResponse', SessionLoginResponseSchema);
   // API keys resource
   r.register('CreateApiKeyRequest', CreateApiKeyRequestSchema);
   r.register('CreateApiKeyResponse', CreateApiKeyResponseSchema);
@@ -554,6 +558,46 @@ function buildRegistry(): OpenAPIRegistry {
           'application/json': {
             schema: SearchResponseSchema,
             example: { submitted: true, results_visible: true },
+          },
+        },
+      },
+      404: {
+        description: 'Session not found (or owned by another account).',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/sessions/{id}/login',
+    operationId: 'loginSession',
+    summary: 'Heuristic credential login (type username + password, submit)',
+    tags: ['sessions'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        content: {
+          'application/json': {
+            schema: SessionLoginRequestSchema,
+            example: {
+              username: 'user@example.com',
+              password: '••••••••',
+              success_selector: '.dashboard',
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Credentials typed and submitted; logged_in is the post-submit assessment.',
+        content: {
+          'application/json': {
+            schema: SessionLoginResponseSchema,
+            example: { logged_in: true, post_login_url: 'https://example.com/account' },
           },
         },
       },

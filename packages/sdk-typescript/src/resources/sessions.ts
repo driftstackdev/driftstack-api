@@ -7,6 +7,8 @@ import type {
   ExtractResponse,
   SearchRequestInput,
   SearchResponse,
+  SessionLoginRequest,
+  SessionLoginResponse,
   CreateSessionRequest,
   InteractRequest,
   InteractResponse,
@@ -138,6 +140,17 @@ export class SessionsResource {
     return this.http.request<SearchResponse>({
       method: 'POST',
       path: `/v1/sessions/${encodeURIComponent(sessionId)}/search`,
+      body,
+    });
+  }
+
+  /** Heuristic credential login — types the username + password and submits.
+   *  `logged_in` is the post-submit assessment (a captcha / 2FA / login-required
+   *  landing yields false, never a false positive). */
+  login(sessionId: string, body: SessionLoginRequest): Promise<SessionLoginResponse> {
+    return this.http.request<SessionLoginResponse>({
+      method: 'POST',
+      path: `/v1/sessions/${encodeURIComponent(sessionId)}/login`,
       body,
     });
   }
