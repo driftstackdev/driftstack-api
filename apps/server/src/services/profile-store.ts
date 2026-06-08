@@ -56,3 +56,48 @@ export function makeProfileSavedPersister(r2: R2, logger: Logger): (frame: Profi
       });
   };
 }
+
+/**
+ * The camelCase `profile` argument for serializeSessionAssign — the restore side
+ * of a profile-backed session (step (e)). Built by buildAssignProfileBlock.
+ */
+export interface AssignProfileBlock {
+  profileId: string;
+  dek: string;
+  /** Presigned GET for the existing sealed store; omitted for a fresh profile. */
+  sealedBlobUrl?: string;
+  /** Presigned PUT the harness uses to save the sealed store back on session end. */
+  sealedBlobPutUrl: string;
+}
+
+/**
+ * Build the assign `profile` block for a profile-backed session (A3 W420 restore
+ * + save-back contract). Mints presigned R2 URLs rather than streaming the blob
+ * through the server: the opaque sealed store (LZFSE + AES-GCM-256) flows R2 ↔
+ * harness directly via `URLSession`, so the control plane never holds it. We
+ * always use the presigned-GET path (never inline `sealed_blob`) — A3's decoder
+ * fetches `sealed_blob_url` (W420, tested), and this keeps an arbitrarily large
+ * blob off the server with no size-probe needed.
+ *
+ * `dek` is forwarded verbatim — this helper is crypto-free; the per-profile DEK
+ * mint/wrap (KMS → TMK → DEK, file 57) is the founder-gated step (c) the caller
+ * supplies. A fresh profile (no prior store) gets a PUT URL but no GET URL, so
+ * the harness starts stateless and seals its first store on end.
+ */
+export async function buildAssignProfileBlock(
+  r2: R2,
+  profileId: string,
+  dek: string,
+): Promise<AssignProfileBlock> {
+  const key = profileSealedBlobKey(profileId);
+  // PUT URL always (every profile-backed session must be able to save back).
+  const sealedBlobPutUrl = await r2.presignPut({ key, contentType: 'application/octet-stream' });
+  // GET URL only when a prior sealed store exists (else the harness is stateless
+  // for this profile until its first save-back).
+  const { exists } = await r2.headObject(key);
+  if (exists) {
+    const sealedBlobUrl = await r2.presignGet({ key });
+    return { profileId, dek, sealedBlobUrl, sealedBlobPutUrl };
+  }
+  return { profileId, dek, sealedBlobPutUrl };
+}

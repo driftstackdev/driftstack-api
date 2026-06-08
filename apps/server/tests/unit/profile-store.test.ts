@@ -5,10 +5,15 @@
 // not crash).
 
 import { describe, expect, it, vi } from 'vitest';
-import { makeProfileSavedPersister } from '../../src/services/profile-store.js';
+import {
+  makeProfileSavedPersister,
+  buildAssignProfileBlock,
+} from '../../src/services/profile-store.js';
 import { profileSealedBlobKey, type R2 } from '../../src/lib/r2.js';
+import { serializeSessionAssign } from '../../src/services/harness-control-codec.js';
 import {
   HarnessOutboundSchema,
+  SessionAssignSchema,
   type ProfileSaved,
 } from '../../src/schemas/harness-control-protocol.js';
 
@@ -111,5 +116,68 @@ describe('makeProfileSavedPersister', () => {
     const errSpy = (logger as unknown as { error: ReturnType<typeof vi.fn> }).error;
     await vi.waitFor(() => expect(errSpy).toHaveBeenCalledTimes(1));
     expect(errSpy.mock.calls[0]![1]).toMatch(/failed to persist profile sealed-blob/);
+  });
+});
+
+describe('buildAssignProfileBlock (step (e) restore side — crypto-free R2 half)', () => {
+  function r2For(exists: boolean) {
+    const headObject = vi.fn().mockResolvedValue({ exists });
+    const presignPut = vi.fn().mockResolvedValue('https://r2/put?sig=PUT');
+    const presignGet = vi.fn().mockResolvedValue('https://r2/get?sig=GET');
+    const r2 = {
+      bucket: 'test-bucket',
+      putObject: vi.fn(),
+      headObject,
+      presignPut,
+      presignGet,
+    } as unknown as R2;
+    return { r2, headObject, presignPut, presignGet };
+  }
+
+  it('existing profile: mints both a GET (restore) and a PUT (save-back) URL keyed by profileSealedBlobKey', async () => {
+    const { r2, presignPut, presignGet } = r2For(true);
+    const block = await buildAssignProfileBlock(r2, 'prof_abc', 'ZGVr');
+    expect(block).toEqual({
+      profileId: 'prof_abc',
+      dek: 'ZGVr',
+      sealedBlobUrl: 'https://r2/get?sig=GET',
+      sealedBlobPutUrl: 'https://r2/put?sig=PUT',
+    });
+    const key = profileSealedBlobKey('prof_abc');
+    expect(presignGet.mock.calls[0]![0]).toMatchObject({ key });
+    expect(presignPut.mock.calls[0]![0]).toMatchObject({
+      key,
+      contentType: 'application/octet-stream',
+    });
+  });
+
+  it('fresh profile (no prior store): mints only a PUT URL — no restore GET (harness starts stateless)', async () => {
+    const { r2, presignGet } = r2For(false);
+    const block = await buildAssignProfileBlock(r2, 'prof_new', 'ZGVr');
+    expect(block).toEqual({
+      profileId: 'prof_new',
+      dek: 'ZGVr',
+      sealedBlobPutUrl: 'https://r2/put?sig=PUT',
+    });
+    expect(block.sealedBlobUrl).toBeUndefined();
+    expect(presignGet).not.toHaveBeenCalled();
+  });
+
+  it('the block feeds serializeSessionAssign.profile → valid snake_case wire (sealed_blob_url + sealed_blob_put_url)', async () => {
+    const { r2 } = r2For(true);
+    const block = await buildAssignProfileBlock(r2, 'prof_abc', 'ZGVr');
+    const assign = serializeSessionAssign({
+      sessionId: 'ses_1',
+      archetype: 'iphone17_ios18_7_safari26_4',
+      behaviorProfile: 'regular',
+      profile: block,
+    });
+    expect(SessionAssignSchema.safeParse(assign).success).toBe(true);
+    expect(assign.profile).toEqual({
+      profile_id: 'prof_abc',
+      dek: 'ZGVr',
+      sealed_blob_url: 'https://r2/get?sig=GET',
+      sealed_blob_put_url: 'https://r2/put?sig=PUT',
+    });
   });
 });
