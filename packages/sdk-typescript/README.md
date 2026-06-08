@@ -163,6 +163,8 @@ By default the SDK retries automatically on:
 
 It does **not** retry 4xx responses other than 429. Backoff is exponential with full jitter, capped at `maxDelayMs`. Set `retry: { maxAttempts: 0 }` to disable retries entirely.
 
+> **Idempotency on retried writes.** Because the SDK retries network failures **and** 5xx, and a request can reach the server, be processed, and then have its response lost (or a 500 fire after the write commits), an automatically-retried create or charge can execute twice. Pass an `idempotencyKey` on non-idempotent calls — e.g. `client.agentSessions.create(body, { idempotencyKey })` or `client.cryptoOrders.createCheckout(body, { idempotencyKey })` — and the server collapses the retry onto the first request.
+
 ## Webhook signature verification
 
 When you wire up Driftstack webhooks, verify each delivery before processing:

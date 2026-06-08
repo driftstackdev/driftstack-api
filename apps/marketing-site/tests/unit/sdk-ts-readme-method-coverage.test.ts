@@ -32,6 +32,7 @@ const RESOURCE_FILE: Record<string, string> = {
   account: 'account.ts',
   emailPreferences: 'email-preferences.ts',
   cryptoOrders: 'crypto-orders.ts',
+  agentSessions: 'agent-sessions.ts',
   billing: 'billing.ts',
   usage: 'usage.ts',
   auditLog: 'audit-log.ts',
