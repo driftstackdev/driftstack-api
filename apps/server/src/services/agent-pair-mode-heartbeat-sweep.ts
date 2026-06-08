@@ -43,6 +43,8 @@ export interface SweepTickResult {
 export class PairModeHeartbeatSweep {
   private readonly ttlMs: number;
   private readonly maxPerTick: number;
+  /** Re-entrancy guard for the fixed-interval (5s) bootstrap wiring. */
+  private running = false;
 
   constructor(private readonly deps: PairModeHeartbeatSweepDeps) {
     this.ttlMs = deps.ttlMs ?? PAIR_MODE_HEARTBEAT_TTL_MS;
@@ -62,6 +64,23 @@ export class PairModeHeartbeatSweep {
    *      keep firing for an already-handled timeout)
    */
   async tickOnce(now: Date): Promise<SweepTickResult> {
+    // Re-entrancy guard. bootstrap wires this on a fixed 5s setInterval that does
+    // NOT await the previous tick (fire-and-forget). A slow tick (a large stale
+    // set × per-session DB round-trips under load) would otherwise overlap the
+    // next, and since `forget` runs only AFTER the persist, both ticks would
+    // process the SAME stale session → duplicate agent_session.pair_mode.timeout
+    // audit rows + a raced read-then-write of pair_mode_state. Skip the
+    // overlapping invocation; the next interval picks up any remainder.
+    if (this.running) return { inspected: 0, transitioned: 0, truncated: false };
+    this.running = true;
+    try {
+      return await this.sweepOnce(now);
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async sweepOnce(now: Date): Promise<SweepTickResult> {
     const stale = this.deps.tracker.findStaleSessions({ now, ttlMs: this.ttlMs });
     const truncated = stale.length > this.maxPerTick;
     const handled = truncated ? stale.slice(0, this.maxPerTick) : stale;

@@ -180,6 +180,34 @@ describe('Arc 4 Wave 2.B sub-slice 8.13c PairModeHeartbeatSweep', () => {
     expect(tracker.getLastHeartbeatAt(sessionId)).toBeNull();
   });
 
+  // Re-entrancy guard: bootstrap fires tickOnce on a fixed 5s setInterval that
+  // does NOT await the previous tick, so a slow tick can overlap the next. Since
+  // `forget` runs only AFTER the persist, an unguarded overlap would process the
+  // SAME stale session twice → a DUPLICATE pair_mode.timeout audit row. The guard
+  // makes an overlapping invocation a clean no-op.
+  it('re-entrancy guard: overlapping tickOnce is a no-op — a stale session is handled once, no duplicate timeout audit', async () => {
+    const tracker = new InMemoryPairModeHeartbeatTracker();
+    const { sessions, sessionId } = await setupPairSession({ state: 'human-driving' });
+    tracker.recordHeartbeat({ sessionId, at: T0 });
+    const auditRepo = new InMemoryAccountAuditRepo();
+    const accountAudit = new AccountAuditService(auditRepo);
+    const sweep = new PairModeHeartbeatSweep({ tracker, sessions, accountAudit });
+
+    // Fire two ticks without awaiting the first — the second overlaps while the
+    // first is mid-flight (the guard is set synchronously at entry).
+    const p1 = sweep.tickOnce(T_PLUS_31S);
+    const p2 = sweep.tickOnce(T_PLUS_31S);
+    const [r1, r2] = await Promise.all([p1, p2]);
+
+    // Exactly one tick did the work; the overlapping one was a clean no-op.
+    expect(r1.transitioned).toBe(1);
+    expect(r2).toEqual({ inspected: 0, transitioned: 0, truncated: false });
+    // Critically: a single timeout audit row — no duplicate from the overlap.
+    expect(
+      auditRepo.getAll().filter((r) => r.action === 'agent_session.pair_mode.timeout'),
+    ).toHaveLength(1);
+  });
+
   it('custom ttlMs overrides the 30s default', async () => {
     const tracker = new InMemoryPairModeHeartbeatTracker();
     const { sessions, sessionId } = await setupPairSession({ state: 'human-driving' });
