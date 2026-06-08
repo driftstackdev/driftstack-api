@@ -123,3 +123,52 @@ component holding the creds. Re-run if the chained gost dies.
   the daemon `DRIFTSTACK_ARCHETYPE_DIR` above + a prod-safe GUI launch path.
 - **Profile-backed persistent state** (cookie restore/save): founder DEK decision
   (host-key-envelope-now vs KMS-later; A2 recommends host-key-now — server side built).
+
+## GUI finish-line status (updated 2026-06-08, founder away)
+
+After the reboot (which cleared the LaunchServices corruption — see below), the
+desktop GUI **works in dev mode** (`npm run tauri:dev`): renders, authenticates,
+polls `/v1/profiles` + `/v1/sessions`, and launches sessions. Tracking the four
+items the founder flagged (W232):
+
+- **(a) Stretched stream view — ✅ FIXED + drift-guarded** (`24b3eac4`, guard
+  `b2ff0acf`). `AgentSessionPanel` container was `w-full` + portrait aspect →
+  height = width × 2.17 on a wide window. Now `h-full max-h-full max-w-full` +
+  aspectRatio → fills height, narrow portrait width, centered; `object-contain`
+  video. Visual confirmation still pending a founder session-watch.
+- **(b) Release `.app` webview-paint bug — OPEN, dev-mode is the workaround.**
+  The installed `.app` runs perfectly (process alive, polls data — server log
+  proves it) but the window doesn't composite (black, no error). Dev mode paints
+  fine → release-bundle-specific. NEXT (needs eyes-on, hence deferred while away):
+  build current `main` (the `base:'./'` experiment is reverted) as a release
+  `.app`, reinstall, **delete the keychain item** (so the setup screen shows with
+  no prompt), launch, screenshot — if the setup screen paints, the paint bug is
+  resolved; if still black it's a deeper WKWebView compositing issue.
+- **(c) Keychain re-prompt per build → store local key in settings.json.**
+  CONFIRMED this needs Rust: the key is stored via the `keyring` crate
+  (`src-tauri/src/lib.rs` `secret_save`/`secret_load`/`secret_delete`), invoked
+  from `src/lib/settings.ts`. PLAN (founder-go gated — security-model change +
+  needs a launch to verify, so not auto-shipped while away): make storage
+  conditional on deployment — for **self-hosted/localhost** baseUrls store the key
+  in the tauri-plugin-store `settings.json` (plaintext; acceptable for a local dev
+  key, ends the per-build prompt); for **cloud** (`api.driftstack.dev`, `ds_live_`
+  keys) KEEP the `keyring` path (encrypted). Touch points: a
+  `useKeychainForBaseUrl(baseUrl): boolean` predicate in settings.ts; branch
+  `loadSettings`/`saveSettings`/the migration on it; the Rust `secret_*` commands
+  stay for the cloud path. Tradeoff to confirm: plaintext local key in
+  `~/Library/Application Support/dev.driftstack.gui/settings.json` vs the recurring
+  prompt. (The prompts were largely amplified by repeated rebuild churn — with a
+  stable build it's one "Always Allow" per build.)
+- **(d) In-app dev logs / stability.** The release build is silent (no logger).
+  Options: (1) `tauri-plugin-log` + `@tauri-apps/plugin-log` `attachConsole()` →
+  webview console to a logfile + stdout (robust, but Rust dep + capabilities +
+  launch-verify); (2) a pure-JS console/error ring-buffer in a toggleable in-app
+  panel (no Rust; unit-testable; needs UI + launch-verify). Either is a
+  founder-present build wave.
+
+**Root cause of the whole GUI saga (for the record):** repeated local rebuilds
+each got a fresh ad-hoc code signature → keychain ACL re-prompts + `ditto`/
+`lsregister` polluted LaunchServices (~20 duplicate `Driftstack.app` registrations
+incl. dangling `/Volumes/dmg.*`) → `-600` won't-activate / black window. A reboot
+rebuilds LaunchServices clean. PREVENTION: build with `tauri build --bundles app`
+(no DMG mount→register→dangle cycle), reinstall ONCE, don't churn rebuilds.
