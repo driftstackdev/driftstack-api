@@ -66,3 +66,60 @@ LOCAL DEV ONLY — never run against prod. The dispatch path is gated by
 - Interactive control (click/type) is still item-9-gated — this is passive watch.
 - To tear down: stop the daemon + server; the node row can stay (idempotent
   re-runs would create duplicates, so seed once).
+
+---
+
+## Current state (2026-06-08) — STREAMING GREEN + ops notes
+
+Streaming is verified working end-to-end: a dispatched agent-session spawns the
+fork → loads its page through the proxy → captures → publishes a LiveKit video
+track (`num_publishers=1`), egressing through the founder's upstream SOCKS5. Both
+A2 (dispatch + sessionEnd + viewer) and A3 (W428 publish-ordering fix + W435
+capture warm-up) verified it; A3 W450 conceded the earlier "blank page" theory
+was a non-authoritative standalone-probe artifact (real daemon sessions load
+pages — proven via the gost egress log: `example.com:443`, `webkit.org` 851 KB).
+
+### Watch it (self-serve)
+
+```sh
+bash scripts/watch-live.sh --open
+```
+
+Creates a fresh agent-session, waits for the track, writes + opens
+`/tmp/watch-live.html`. Re-run anytime (sessions idle-reap ~5 min). Needs
+`DRIFTSTACK_DEMO_API_KEY` (a read+write key) in the gitignored repo-root `.env`.
+
+### Egress proxy (the founder's upstream SOCKS5)
+
+`scripts/demo-egress-gost.sh` runs `gost -L socks5://:1080 -F socks5://<upstream>`
+(chained to the founder's working SOCKS5; creds only in gitignored `.env`
+`DRIFTSTACK_DEMO_SOCKS5_*`). The server's session dispatch + the daemon both use
+`127.0.0.1:1080`, so all egress routes through the real upstream with no
+component holding the creds. Re-run if the chained gost dies.
+
+### ⚠️ Gotchas (learned the hard way)
+
+- **A `:3000` server restart KILLS the harness daemon** — its WSS drops and it
+  exits (no auto-reconnect). After ANY server restart you MUST relaunch the
+  daemon. **Do not restart the server casually while the demo is live.**
+- **Daemon relaunch recipe** (harness domain; founder-authorized for A2):
+  ```sh
+  cd harness
+  set -a; source ../operations/scripts/production-env/launch-env-v1.sh; set +a   # fork __XPC_ vars + hooks
+  export DRIFTSTACK_SOCKS5_PROXY=127.0.0.1:1080                                    # local gost (NOT the dead external)
+  unset DRIFTSTACK_SOCKS5_USER DRIFTSTACK_SOCKS5_PASS                              # gost has no upstream auth
+  nohup bash scripts/run-self-serve-daemon.sh a74c2abf-c4fd-4562-9975-87e875d26db9 >/tmp/daemon.log 2>&1 &
+  ```
+  (binary is already the fixed build `d85d6b2a`; node id `a74c2abf-…`.)
+- **Archetype is pinned to `iphone16pro_ios18_6_safari18_6`** — the daemon runs
+  BUNDLED static archetypes only (`DRIFTSTACK_ARCHETYPE_DIR` unset), so 18.7 /
+  iphone17 do NOT load (dispatch reaches the node but the session never starts).
+  Exposing more archetypes needs the daemon launched with `DRIFTSTACK_ARCHETYPE_DIR`
+  pointed at `reference/` (or 18.7/17 bundled) — harness config, not server config.
+
+### Remaining (not demo blockers)
+
+- **GUI archetype expansion** (A1-cleared iphone16pro_18.7 + iphone17): blocked on
+  the daemon `DRIFTSTACK_ARCHETYPE_DIR` above + a prod-safe GUI launch path.
+- **Profile-backed persistent state** (cookie restore/save): founder DEK decision
+  (host-key-envelope-now vs KMS-later; A2 recommends host-key-now — server side built).
