@@ -396,15 +396,34 @@ export const CapabilityReportSchema = z.object({
   webkitForkBuild: z.string().optional(),
 });
 
+// ── HarnessOutbound.profileSaved (harness → server; A3 W417) ──────────
+// Emitted on session end for PROFILE-BACKED sessions only. Two shapes:
+//   inline (small): { type, sessionId, profile_id, sealed_blob }
+//   large (presigned-PUT): { type, sessionId, profile_id, stored: true }
+//     — the harness already PUT the blob to the server-supplied
+//       sealed_blob_put_url; `stored:true` is the ack.
+// sessionId is camelCase (every outbound message); profile_id + sealed_blob
+// snake_case (mirrors the inbound profile block). MUST-DELIVER on the harness
+// side (queued across disconnects) — a dropped profileSaved loses the
+// customer's saved storage. Consumed by the step-(d) consumer (persist).
+export const ProfileSavedSchema = z.object({
+  type: z.literal('profileSaved'),
+  sessionId: z.string(),
+  profile_id: z.string(),
+  sealed_blob: z.string().optional(),
+  stored: z.boolean().optional(),
+});
+
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
-// All 5 variants pinned. intentResult + sessionStatus are consumed precisely;
-// heartbeat / capabilityReport / errorEvent are accepted (typed) + ignored
-// until a consumer wires them.
+// All 6 variants pinned. intentResult + sessionStatus are consumed precisely;
+// heartbeat / capabilityReport / errorEvent / profileSaved are accepted (typed)
+// + ignored until a consumer wires them (profileSaved consumer = step (d)).
 export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
   HeartbeatSchema,
   CapabilityReportSchema,
   ErrorEventSchema,
+  ProfileSavedSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;

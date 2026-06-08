@@ -136,6 +136,12 @@ describe('W389.C apps/server/src/lib/r2.ts content parity', () => {
     );
   });
 
+  it('profile-backed: profileSealedBlobKey shape "profiles/<profile_id>.sealed" (keyed by profile_id uuid; opaque blob)', () => {
+    expect(body).toMatch(
+      /export function profileSealedBlobKey\(profileId: string\): string \{\s*\n?\s*return `profiles\/\$\{profileId\}\.sealed`;\s*\n?\s*\}/,
+    );
+  });
+
   it('V-352b avatarKey: png/jpg/webp → matching ext, else "bin"; shape "avatars/<account_id>.<ext>"', () => {
     expect(body).toMatch(
       /V-352b — avatar object key for a given account on the public-snapshot\s*\n?\s*\*\s*bucket\. Extension matches the uploaded content-type so the presigned\s*\n?\s*\*\s*GET surfaces a sensible Content-Type header\./,

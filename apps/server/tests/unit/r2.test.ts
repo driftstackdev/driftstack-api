@@ -28,6 +28,7 @@ import {
   createR2Client,
   r2ReadinessCheck,
   recordingKey,
+  profileSealedBlobKey,
   R2_SENTINEL_KEY,
 } from '../../src/lib/r2.js';
 
@@ -130,5 +131,13 @@ describe('r2ReadinessCheck', () => {
 describe('recordingKey', () => {
   it('returns the canonical key shape', () => {
     expect(recordingKey('acc_123', 'sess_abc')).toBe('recordings/acc_123/sess_abc.ndjson');
+  });
+});
+
+describe('profileSealedBlobKey', () => {
+  it('returns the canonical profile sealed-blob key shape (keyed by profile_id)', () => {
+    expect(profileSealedBlobKey('a74c2abf-0000-4000-8000-000000000001')).toBe(
+      'profiles/a74c2abf-0000-4000-8000-000000000001.sealed',
+    );
   });
 });

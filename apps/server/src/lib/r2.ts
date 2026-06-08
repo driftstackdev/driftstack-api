@@ -163,6 +163,18 @@ export function recordingKey(accountId: string, sessionId: string): string {
 }
 
 /**
+ * Profile-backed sessions (A3 W177/W417) — R2 object key for a profile's
+ * encrypted sealed-blob store. Keyed by profile_id alone (a uuid, globally
+ * unique): the dispatch loads it as `sealed_blob`/`sealed_blob_url` on assign,
+ * and the profileSaved consumer overwrites it on session end. The blob is
+ * opaque (LZFSE+AES-GCM-256, per-profile DEK) so the key needn't account-scope
+ * for confidentiality — the DEK is the gate; re-save replaces (same key).
+ */
+export function profileSealedBlobKey(profileId: string): string {
+  return `profiles/${profileId}.sealed`;
+}
+
+/**
  * V-352b — avatar object key for a given account on the public-snapshot
  * bucket. Extension matches the uploaded content-type so the presigned
  * GET surfaces a sensible Content-Type header.

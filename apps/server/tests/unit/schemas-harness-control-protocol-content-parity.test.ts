@@ -194,11 +194,37 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const SessionStatusSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('sessionStatus'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*status: z\.string\(\)\.min\(1\),\s*\n?\s*timestamp: z\.string\(\),\s*\n?\s*detail: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*\]\);/,
+      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*\]\);/,
     );
   });
 
-  it('all 5 HarnessOutbound payloads pinned to A3 W124 field-sets (heartbeat/errorEvent/capabilityReport typed, not passthrough)', () => {
+  it('profileSaved (A3 W417) pinned to the outbound union + shape (sessionId camelCase + profile_id/sealed_blob snake_case + stored)', () => {
+    expect(body).toMatch(
+      /export const ProfileSavedSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('profileSaved'\),\s*\n?\s*sessionId: z\.string\(\),\s*\n?\s*profile_id: z\.string\(\),\s*\n?\s*sealed_blob: z\.string\(\)\.optional\(\),\s*\n?\s*stored: z\.boolean\(\)\.optional\(\),\s*\n?\s*\}\);/,
+    );
+    // inline + large shapes both parse via the union; sessionId required.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'profileSaved',
+        sessionId: 's1',
+        profile_id: 'p1',
+        sealed_blob: 'YmxvYg==',
+      }).success,
+    ).toBe(true);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'profileSaved',
+        sessionId: 's1',
+        profile_id: 'p1',
+        stored: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      HarnessOutboundSchema.safeParse({ type: 'profileSaved', profile_id: 'p1' }).success,
+    ).toBe(false);
+  });
+
+  it('all 6 HarnessOutbound payloads pinned to A3 W124 field-sets (heartbeat/errorEvent/capabilityReport typed, not passthrough)', () => {
     // heartbeat
     expect(body).toMatch(
       /export const HeartbeatSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('heartbeat'\),\s*\n?\s*macNodeId: z\.string\(\),\s*\n?\s*timestamp: z\.string\(\),\s*\n?\s*cpuPercent: z\.number\(\),\s*\n?\s*memoryPercent: z\.number\(\),\s*\n?\s*activeSessionCount: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*\}\);/,
