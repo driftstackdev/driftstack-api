@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Sessions
-description: Create + drive iPhone Safari sessions — navigate, interact, wait, capture, extract, get-state, destroy. Tier-gated concurrency.
+description: Create + drive iPhone Safari sessions — navigate, interact, wait, capture, extract, search, get-state, destroy. Tier-gated concurrency.
 ---
 
 # Sessions
@@ -271,6 +271,28 @@ keyed by each extraction's `name`:
 { "value": { "title": "Example", "price": 19.99, "products": [{ "name": "A", "href": "/a" }] } }
 ```
 
+## Search
+
+`POST /v1/sessions/:id/search`
+
+```json
+{
+  "query": "wireless headphones",
+  "wait_for_results_selector": ".results"
+}
+```
+
+Finds the search field, types `query` realistically (the behavioural
+send-keys path), and submits. `search_selector` is optional — omit it and
+the field is detected heuristically. `submit` defaults to `true` (set it
+`false` to type without submitting). When `wait_for_results_selector` is
+given, the call waits for that selector after submit and reports whether it
+appeared (a timeout is `results_visible: false`, not an error). The response:
+
+```json
+{ "submitted": true, "results_visible": true }
+```
+
 ## Destroy
 
 `DELETE /v1/sessions/:id`
@@ -283,7 +305,7 @@ flips to `destroyed`.
 ## Auth + scoping
 
 Read endpoints (GET) accept any valid bearer with `read` scope.
-Write endpoints (POST navigate / interact / wait / capture / extract; DELETE)
+Write endpoints (POST navigate / interact / wait / capture / extract / search; DELETE)
 require the `write:sessions` scope (a broad `write` key also satisfies
 it). Team RBAC: `X-Driftstack-Account` is honored — a `member` can read
 the owner's sessions, but writes require the `admin` role (a `member`
