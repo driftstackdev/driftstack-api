@@ -88,27 +88,41 @@ export class FleetControlConnection {
     const parsed = HarnessOutboundSchema.safeParse(json);
     if (!parsed.success) return; // unknown/malformed HarnessOutbound → ignore
     const frame = parsed.data;
-    switch (frame.type) {
-      case 'intentResult':
-        this.correlator.onResultFrame(frame);
-        break;
-      case 'sessionStatus':
-        // Fast-fail the in-flight dispatch when the harness reports the session
-        // isn't established (A3 W106). onSessionError itself filters on the
-        // intent_dispatch_no_session detail prefix.
-        if (frame.status === 'errored' && frame.detail !== undefined) {
-          this.correlator.onSessionError(frame.sessionId, frame.detail);
-        }
-        break;
-      case 'profileSaved':
-        // Profile-backed session ended (A3 W417): persist the customer's saved
-        // sealed store. Fire-and-forget off the receive loop (the handler does
-        // the R2 write + error-logs internally); absent handler (no R2 / stateless
-        // deploy) → ignored. MUST-DELIVER on the harness side, so a dropped frame
-        // is a harness-queue concern, not a server-receive one.
-        this.onProfileSaved?.(frame);
-        break;
-      // heartbeat / capabilityReport / errorEvent: accepted, not yet consumed.
+    // Enforce the documented contract (above) at the DISPATCH layer too, not just
+    // the parse layer: a handler throwing on an otherwise-valid frame must NOT
+    // escape into the route's `socket.on('message')` listener — an uncaught throw
+    // there surfaces as an uncaughtException (process-level), so one frame could
+    // take down far more than this node's receive loop. The handlers are each
+    // individually guarded today; this is defence-in-depth so a future handler
+    // change can't silently regress the "a junk frame must not crash the receive
+    // loop" guarantee. Silent-swallow matches the parse guards' style above.
+    try {
+      switch (frame.type) {
+        case 'intentResult':
+          this.correlator.onResultFrame(frame);
+          break;
+        case 'sessionStatus':
+          // Fast-fail the in-flight dispatch when the harness reports the session
+          // isn't established (A3 W106). onSessionError itself filters on the
+          // intent_dispatch_no_session detail prefix.
+          if (frame.status === 'errored' && frame.detail !== undefined) {
+            this.correlator.onSessionError(frame.sessionId, frame.detail);
+          }
+          break;
+        case 'profileSaved':
+          // Profile-backed session ended (A3 W417): persist the customer's saved
+          // sealed store. Fire-and-forget off the receive loop (the handler does
+          // the R2 write + error-logs internally); absent handler (no R2 / stateless
+          // deploy) → ignored. MUST-DELIVER on the harness side, so a dropped frame
+          // is a harness-queue concern, not a server-receive one.
+          this.onProfileSaved?.(frame);
+          break;
+        // heartbeat / capabilityReport / errorEvent: accepted, not yet consumed.
+      }
+    } catch {
+      // A handler threw on a valid frame — swallow so the node's receive loop (and
+      // the process) survives. Handlers are independently tested; this is the
+      // last-resort backstop for the documented no-crash guarantee.
     }
   }
 

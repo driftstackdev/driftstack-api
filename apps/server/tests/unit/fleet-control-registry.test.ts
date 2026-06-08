@@ -168,6 +168,25 @@ describe('FleetControlConnection', () => {
     ).not.toThrow();
   });
 
+  it('a throwing handler on a VALID frame does NOT escape handleInbound (receive-loop + process survive — defence-in-depth)', () => {
+    // The route feeds handleInbound from a `socket.on('message')` listener, where
+    // an uncaught synchronous throw surfaces as a process-level uncaughtException.
+    // A handler blowing up on an otherwise-valid frame must be swallowed so one
+    // frame can't take down the node's receive loop (let alone the process).
+    const conn = new FleetControlConnection(
+      'node-1',
+      () => {},
+      () => {
+        throw new Error('handler blew up');
+      },
+    );
+    expect(() =>
+      conn.handleInbound(
+        JSON.stringify({ type: 'profileSaved', sessionId: 's', profile_id: 'p', stored: true }),
+      ),
+    ).not.toThrow();
+  });
+
   it('close() fails every in-flight dispatch', async () => {
     const conn = new FleetControlConnection('node-1', () => {});
     const p = conn.correlator.dispatch(dispatch('int_1'));
