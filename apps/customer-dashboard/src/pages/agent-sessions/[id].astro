@@ -650,6 +650,16 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
     function viewportCoords(ev, target) {
       // pointerToViewport — translate clientX/clientY relative to the
       // target element's bounding rect (origin top-left).
+      //
+      // SLICE-4-TODO (wire-time, not a live bug — input forwarding 503s until
+      // the harness path lands + the stream is still a placeholder): this
+      // returns RAW overlay px. The shared InputEventSchema (packages/api-types/
+      // src/agent-input-event.ts) is SCREEN-SPACE — "the harness clamps to the
+      // actual viewport at dispatch" — and the gui-client surface on the SAME
+      // contract projects to device px: round((clientX-rect.left)/rect.width *
+      // naturalWidth). When the LiveKit <video> is wired here, project the same
+      // way off video.videoWidth/videoHeight; otherwise dashboard manual-control
+      // taps land scaled into the top-left corner (overlay px ≠ device px).
       const rect = target.getBoundingClientRect();
       return {
         x: Math.round(ev.clientX - rect.left),
