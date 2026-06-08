@@ -17,6 +17,7 @@ import {
   type CaptureKind,
   type CaptureRequest,
   type ExtractRequest,
+  type SearchRequest,
   type CreateSessionRequest,
   type InteractRequest,
   type NavigateRequest,
@@ -536,6 +537,27 @@ export class SessionsService {
     const session = await this.requireOwned(ctx, sessionId, opts);
     return this.runWithFailureCapture(ctx, session, 'extract', () =>
       this.deps.driver.extract(session.driverSessionId, { extractions: body.extractions }),
+    );
+  }
+
+  /** Find the search field, type the query realistically, submit (harness
+   *  `search` intent, A3). A driver write-op; no session event recorded. */
+  async search(
+    ctx: AccountContext,
+    sessionId: string,
+    body: SearchRequest,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<{ submitted: boolean; resultsVisible?: boolean; durationMs: number }> {
+    const session = await this.requireOwned(ctx, sessionId, opts);
+    return this.runWithFailureCapture(ctx, session, 'search', () =>
+      this.deps.driver.search(session.driverSessionId, {
+        query: body.query,
+        ...(body.search_selector !== undefined ? { searchSelector: body.search_selector } : {}),
+        submit: body.submit,
+        ...(body.wait_for_results_selector !== undefined
+          ? { waitForResultsSelector: body.wait_for_results_selector }
+          : {}),
+      }),
     );
   }
 

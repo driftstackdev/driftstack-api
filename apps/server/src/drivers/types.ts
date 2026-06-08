@@ -137,6 +137,20 @@ export interface ExtractResult {
   durationMs: number;
 }
 
+export interface SearchInput {
+  query: string;
+  searchSelector?: string;
+  submit: boolean;
+  waitForResultsSelector?: string;
+}
+
+export interface SearchResult {
+  submitted: boolean;
+  /** Present only when waitForResultsSelector was given (timeout → false). */
+  resultsVisible?: boolean;
+  durationMs: number;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Driver interface
 // ───────────────────────────────────────────────────────────────────────────
@@ -151,5 +165,6 @@ export interface Driver {
   getState(sessionId: DriverSessionId): Promise<SessionStateResult>;
   capture(sessionId: DriverSessionId, input: CaptureInput): Promise<CaptureResult>;
   extract(sessionId: DriverSessionId, input: ExtractInput): Promise<ExtractResult>;
+  search(sessionId: DriverSessionId, input: SearchInput): Promise<SearchResult>;
   destroy(sessionId: DriverSessionId): Promise<void>;
 }

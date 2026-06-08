@@ -38,7 +38,7 @@ describe('W431.B apps/server/src/drivers/webkit.ts content parity', () => {
   it('imports: DriverNotIntegratedError from lib/errors + full Driver type roster from ./types.js', () => {
     expect(body).toMatch(/import \{ DriverNotIntegratedError \} from '\.\.\/lib\/errors\.js';/);
     expect(body).toMatch(
-      /import type \{\s*\n?\s*CaptureInput,\s*\n?\s*CaptureResult,\s*\n?\s*ExtractInput,\s*\n?\s*ExtractResult,\s*\n?\s*CreateSessionInput,\s*\n?\s*CreateSessionResult,\s*\n?\s*Driver,\s*\n?\s*DriverSessionId,\s*\n?\s*GUIInputInput,\s*\n?\s*GUIInputResult,\s*\n?\s*InteractInput,\s*\n?\s*InteractResult,\s*\n?\s*NavigateInput,\s*\n?\s*NavigateResult,\s*\n?\s*SessionStateResult,\s*\n?\s*WaitInput,\s*\n?\s*WaitResult,\s*\n?\s*\} from '\.\/types\.js';/,
+      /import type \{\s*\n?\s*CaptureInput,\s*\n?\s*CaptureResult,\s*\n?\s*ExtractInput,\s*\n?\s*ExtractResult,\s*\n?\s*SearchInput,\s*\n?\s*SearchResult,\s*\n?\s*CreateSessionInput,\s*\n?\s*CreateSessionResult,\s*\n?\s*Driver,\s*\n?\s*DriverSessionId,\s*\n?\s*GUIInputInput,\s*\n?\s*GUIInputResult,\s*\n?\s*InteractInput,\s*\n?\s*InteractResult,\s*\n?\s*NavigateInput,\s*\n?\s*NavigateResult,\s*\n?\s*SessionStateResult,\s*\n?\s*WaitInput,\s*\n?\s*WaitResult,\s*\n?\s*\} from '\.\/types\.js';/,
     );
   });
 
@@ -71,10 +71,10 @@ describe('W431.B apps/server/src/drivers/webkit.ts content parity', () => {
   it('Every method body: `await Promise.resolve()` then `throw new DriverNotIntegratedError()` — fail-loudly invariant', () => {
     const throwCount = body.match(/throw new DriverNotIntegratedError\(\);/g);
     expect(throwCount).not.toBeNull();
-    expect((throwCount ?? []).length).toBe(9);
+    expect((throwCount ?? []).length).toBe(10);
     const awaitResolveCount = body.match(/await Promise\.resolve\(\);/g);
     expect(awaitResolveCount).not.toBeNull();
-    expect((awaitResolveCount ?? []).length).toBe(9);
+    expect((awaitResolveCount ?? []).length).toBe(10);
   });
 
   it('No constructor, no fields, no state — pure stub class', () => {

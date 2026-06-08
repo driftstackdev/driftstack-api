@@ -36,6 +36,8 @@ import type {
   CaptureResult,
   ExtractInput,
   ExtractResult,
+  SearchInput,
+  SearchResult,
   CreateSessionInput,
   CreateSessionResult,
   Driver,
@@ -199,6 +201,13 @@ export class PlaywrightDriver implements Driver {
     // it needs in-page page.evaluate DOM logic (DOM lib not in the server
     // tsconfig). The production path is the WebKit driver (harness `extract`
     // intent, A3 W456) + the mock driver covers the default + tests.
+    await Promise.resolve();
+    throw new DriverNotIntegratedError();
+  }
+
+  async search(_sessionId: DriverSessionId, _input: SearchInput): Promise<SearchResult> {
+    // Like extract: the real query-type+submit+wait flow is the WebKit driver's
+    // harness `search` intent; the Playwright local-dev impl is a follow-up.
     await Promise.resolve();
     throw new DriverNotIntegratedError();
   }

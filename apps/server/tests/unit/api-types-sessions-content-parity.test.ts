@@ -203,6 +203,15 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
   });
 
+  it('Search contract pinned (harness intent A3 W244/W245): SearchRequest {query min1, search_selector?, submit default true, wait_for_results_selector?} + SearchResponse {submitted, results_visible?}. Drift breaks the cross-package contract the /v1/sessions/:id/search route + 3 SDK search methods import', () => {
+    expect(body).toMatch(
+      /export const SearchRequestSchema = z\.object\(\{[\s\S]*?query: z\.string\(\)\.min\(1\),[\s\S]*?search_selector: z\.string\(\)\.optional\(\),[\s\S]*?submit: z\.boolean\(\)\.default\(true\),[\s\S]*?wait_for_results_selector: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+    );
+    expect(body).toMatch(
+      /export const SearchResponseSchema = z\.object\(\{[\s\S]*?submitted: z\.boolean\(\),[\s\S]*?results_visible: z\.boolean\(\)\.optional\(\),\s*\n?\s*\}\);/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

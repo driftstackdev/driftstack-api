@@ -24,6 +24,8 @@ import type {
   CaptureResult,
   ExtractInput,
   ExtractResult,
+  SearchInput,
+  SearchResult,
   CreateSessionInput,
   CreateSessionResult,
   Driver,
@@ -287,6 +289,20 @@ export class MockDriver implements Driver {
       }
     }
     return { value, durationMs: Date.now() - start };
+  }
+
+  async search(sessionId: DriverSessionId, input: SearchInput): Promise<SearchResult> {
+    this.requireSession(sessionId);
+    const start = Date.now();
+    await this.sleep(this.interactLatencyMs);
+    // The real search (type query + submit + optional wait) runs in the WebKit
+    // driver. The mock reports submit per the input and, when a results
+    // selector was given, a synthetic visible result.
+    return {
+      submitted: input.submit,
+      ...(input.waitForResultsSelector !== undefined ? { resultsVisible: true } : {}),
+      durationMs: Date.now() - start,
+    };
   }
 
   async destroy(sessionId: DriverSessionId): Promise<void> {

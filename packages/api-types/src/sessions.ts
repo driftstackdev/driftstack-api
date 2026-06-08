@@ -333,6 +333,36 @@ export const ExtractResponseSchema = z.object({
 export type ExtractResponse = z.infer<typeof ExtractResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
+// Search (find the search field, type the query realistically, submit) —
+// harness intent, A3 (bus W244/W245). POST /v1/sessions/:id/search.
+// ───────────────────────────────────────────────────────────────────────────
+
+export const SearchRequestSchema = z.object({
+  /** The search text, typed via the behavioural send-keys path. */
+  query: z.string().min(1),
+  /** Explicit search-input selector; omit → harness heuristic detection. */
+  search_selector: z.string().optional(),
+  /** Submit (Return) after typing. Defaults to true. */
+  submit: z.boolean().default(true),
+  /** Optional selector to wait for after submit (results loaded); omit → a
+   *  brief idle settle. When present, drives `results_visible` in the response. */
+  wait_for_results_selector: z.string().optional(),
+});
+export type SearchRequest = z.infer<typeof SearchRequestSchema>;
+/** Caller-side shape: fields with server-side defaults are optional. */
+export type SearchRequestInput = z.input<typeof SearchRequestSchema>;
+
+export const SearchResponseSchema = z.object({
+  /** Whether the query was submitted (Return pressed / submit control clicked). */
+  submitted: z.boolean(),
+  /** Present only when `wait_for_results_selector` was given: whether that
+   *  selector became visible before the wait timed out (timeout → false, not
+   *  an error). */
+  results_visible: z.boolean().optional(),
+});
+export type SearchResponse = z.infer<typeof SearchResponseSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
 // Session events (for audit / debugging)
 // ───────────────────────────────────────────────────────────────────────────
 

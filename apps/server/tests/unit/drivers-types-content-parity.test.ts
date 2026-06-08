@@ -127,9 +127,9 @@ describe('W430.B apps/server/src/drivers/types.ts content parity', () => {
     );
   });
 
-  it('Driver interface: 9 methods (createSession + navigate + interact + guiInput L-001 + wait + getState + capture + extract + destroy)', () => {
+  it('Driver interface: 10 methods (createSession + navigate + interact + guiInput L-001 + wait + getState + capture + extract + search + destroy)', () => {
     expect(body).toMatch(
-      /export interface Driver \{\s*\n?\s*createSession\(input: CreateSessionInput\): Promise<CreateSessionResult>;\s*\n?\s*navigate\(sessionId: DriverSessionId, input: NavigateInput\): Promise<NavigateResult>;\s*\n?\s*interact\(sessionId: DriverSessionId, input: InteractInput\): Promise<InteractResult>;\s*\n?\s*\/\*\* GUI-control plane \(L-001\) — coordinate-level input\. \*\/\s*\n?\s*guiInput\(sessionId: DriverSessionId, input: GUIInputInput\): Promise<GUIInputResult>;\s*\n?\s*wait\(sessionId: DriverSessionId, input: WaitInput\): Promise<WaitResult>;\s*\n?\s*getState\(sessionId: DriverSessionId\): Promise<SessionStateResult>;\s*\n?\s*capture\(sessionId: DriverSessionId, input: CaptureInput\): Promise<CaptureResult>;\s*\n?\s*extract\(sessionId: DriverSessionId, input: ExtractInput\): Promise<ExtractResult>;\s*\n?\s*destroy\(sessionId: DriverSessionId\): Promise<void>;\s*\n?\s*\}/,
+      /export interface Driver \{\s*\n?\s*createSession\(input: CreateSessionInput\): Promise<CreateSessionResult>;\s*\n?\s*navigate\(sessionId: DriverSessionId, input: NavigateInput\): Promise<NavigateResult>;\s*\n?\s*interact\(sessionId: DriverSessionId, input: InteractInput\): Promise<InteractResult>;\s*\n?\s*\/\*\* GUI-control plane \(L-001\) — coordinate-level input\. \*\/\s*\n?\s*guiInput\(sessionId: DriverSessionId, input: GUIInputInput\): Promise<GUIInputResult>;\s*\n?\s*wait\(sessionId: DriverSessionId, input: WaitInput\): Promise<WaitResult>;\s*\n?\s*getState\(sessionId: DriverSessionId\): Promise<SessionStateResult>;\s*\n?\s*capture\(sessionId: DriverSessionId, input: CaptureInput\): Promise<CaptureResult>;\s*\n?\s*extract\(sessionId: DriverSessionId, input: ExtractInput\): Promise<ExtractResult>;\s*\n?\s*search\(sessionId: DriverSessionId, input: SearchInput\): Promise<SearchResult>;\s*\n?\s*destroy\(sessionId: DriverSessionId\): Promise<void>;\s*\n?\s*\}/,
     );
   });
 

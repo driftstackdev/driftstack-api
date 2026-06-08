@@ -16,6 +16,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   CaptureRequestSchema,
   ExtractRequestSchema,
+  SearchRequestSchema,
   CreateSessionRequestSchema,
   InteractRequestSchema,
   NavigateRequestSchema,
@@ -556,6 +557,33 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         eff !== undefined ? { effectiveAccountId: eff } : {},
       );
       return { value: result.value, duration_ms: result.durationMs };
+    },
+  );
+
+  // ── POST /v1/sessions/:id/search ───────────────────────────────────────
+  // Find the search field, type the query, submit (harness `search` intent).
+  // A driver write-op; same admin-only write-scope gate.
+  app.post<{ Params: { id: string } }>(
+    '/v1/sessions/:id/search',
+    {
+      preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = requireCtx(request);
+      const id = uuidFromPrefixedId(request.params.id, 'ses');
+      const body = SearchRequestSchema.parse(request.body ?? {});
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const result = await service.search(
+        ctx,
+        id,
+        body,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
+      return {
+        submitted: result.submitted,
+        ...(result.resultsVisible !== undefined ? { results_visible: result.resultsVisible } : {}),
+        duration_ms: result.durationMs,
+      };
     },
   );
 
