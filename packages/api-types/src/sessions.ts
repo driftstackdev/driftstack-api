@@ -280,6 +280,59 @@ export const CaptureResponseSchema = z.object({
 export type CaptureResponse = z.infer<typeof CaptureResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
+// Extract (read structured data from the page) — harness intent, A3 W456.
+// POST /v1/sessions/:id/extract: a batch of named extractions, each a
+// selector + how to read it. The harness selects injection-safely (selectors
+// pass as a script arg, never interpolated) and returns the values keyed by
+// `name`; the API layer unwraps the WebDriver `{value:…}` envelope.
+// ───────────────────────────────────────────────────────────────────────────
+
+export const ExtractionTypeSchema = z.enum(['text', 'attribute', 'list']);
+export type ExtractionType = z.infer<typeof ExtractionTypeSchema>;
+
+/** Per-field sub-extraction for a `type: 'list'` extraction — runs against
+ *  each matched element. Nested lists are not supported (one level), so the
+ *  sub-type is text | attribute only. */
+export const ListFieldExtractionSchema = z.object({
+  type: z.enum(['text', 'attribute']),
+  /** Required when `type: 'attribute'` — which attribute to read. */
+  attribute: z.string().optional(),
+  /** Optional sub-selector relative to the matched list element. */
+  selector: z.string().optional(),
+});
+export type ListFieldExtraction = z.infer<typeof ListFieldExtractionSchema>;
+
+export const ExtractionSpecSchema = z.object({
+  /** Result key in the response `value` map. */
+  name: z.string().min(1),
+  selector: z.string().min(1),
+  type: ExtractionTypeSchema,
+  /** Required when `type: 'attribute'` — which attribute to read. */
+  attribute: z.string().optional(),
+  /** `'number'` parses the extracted text as numeric. */
+  transform: z.literal('number').optional(),
+  /** For `type: 'list'`: per-field sub-extraction against each matched element. */
+  extract: z.record(z.string(), ListFieldExtractionSchema).optional(),
+});
+export type ExtractionSpec = z.infer<typeof ExtractionSpecSchema>;
+
+export const ExtractRequestSchema = z.object({
+  /** Batch of named extractions (harness bound: ≤100). */
+  extractions: z.array(ExtractionSpecSchema).min(1).max(100),
+});
+export type ExtractRequest = z.infer<typeof ExtractRequestSchema>;
+
+export const ExtractResponseSchema = z.object({
+  /** Extracted values keyed by each extraction's `name`. Heterogeneous by
+   *  design: a `text` extraction yields a string (number when
+   *  `transform: 'number'`), `attribute` a string, `list` an array (of strings
+   *  or, with `extract`, per-element field objects). This is the customer's own
+   *  page data, returned opaque. */
+  value: z.record(z.string(), z.unknown()),
+});
+export type ExtractResponse = z.infer<typeof ExtractResponseSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
 // Session events (for audit / debugging)
 // ───────────────────────────────────────────────────────────────────────────
 

@@ -179,6 +179,30 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
   });
 
+  it('Extract contract pinned (harness intent A3 W456): ExtractionType text|attribute|list + ExtractionSpec {name,selector,type,attribute?,transform:number?,extract?} + ExtractRequest {extractions: 1..100} + ExtractResponse {value: record}. Drift here breaks the cross-package contract the /v1/sessions/:id/extract route + all 3 SDK extract methods import', () => {
+    expect(body).toMatch(
+      /export const ExtractionTypeSchema = z\.enum\(\['text', 'attribute', 'list'\]\);/,
+    );
+    // List sub-extraction is one level only (sub-type is text|attribute, no nested list).
+    expect(body).toMatch(
+      /export const ListFieldExtractionSchema = z\.object\(\{\s*\n?\s*type: z\.enum\(\['text', 'attribute'\]\),/,
+    );
+    expect(body).toMatch(/export const ExtractionSpecSchema = z\.object\(\{/);
+    expect(body).toMatch(/name: z\.string\(\)\.min\(1\),/);
+    expect(body).toMatch(/type: ExtractionTypeSchema,/);
+    expect(body).toMatch(/transform: z\.literal\('number'\)\.optional\(\),/);
+    expect(body).toMatch(
+      /extract: z\.record\(z\.string\(\), ListFieldExtractionSchema\)\.optional\(\),/,
+    );
+    // Harness ≤100 bound + ≥1.
+    expect(body).toMatch(
+      /export const ExtractRequestSchema = z\.object\(\{[\s\S]*?extractions: z\.array\(ExtractionSpecSchema\)\.min\(1\)\.max\(100\),/,
+    );
+    expect(body).toMatch(
+      /export const ExtractResponseSchema = z\.object\(\{[\s\S]*?value: z\.record\(z\.string\(\), z\.unknown\(\)\),/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
