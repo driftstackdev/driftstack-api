@@ -150,6 +150,14 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     expect(body).toMatch(/return \(\(timestamps\.length - 1\) \* 1000\) \/ elapsedMs;/);
   });
 
+  it('Overlap guard: the fixed-interval poll skips a capture while one is in flight (fetchInFlightRef) + releases it in finally — pinned so a screenshot slower than FRAME_INTERVAL_MS cannot stack concurrent captures (server load + out-of-order frames)', () => {
+    expect(body).toMatch(/const fetchInFlightRef = useRef\(false\);/);
+    expect(body).toMatch(
+      /if \(fetchInFlightRef\.current\) return;\s*\n?\s*fetchInFlightRef\.current = true;/,
+    );
+    expect(body).toMatch(/\} finally \{\s*\n?\s*fetchInFlightRef\.current = false;\s*\n?\s*\}/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

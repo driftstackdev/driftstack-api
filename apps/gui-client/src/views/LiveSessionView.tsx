@@ -102,6 +102,11 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
   // Refs avoid restarting the interval every state mutation.
   const pausedRef = useRef(false);
   const intervalIdRef = useRef<number | null>(null);
+  // Skip overlapping captures: the poll runs on a FIXED setInterval, but a
+  // screenshot capture can outlast FRAME_INTERVAL_MS. Without this guard a slow
+  // endpoint stacks concurrent captures every tick (server load + out-of-order
+  // frames). Mirrors createPollingFrameStream's fetchInFlight guard.
+  const fetchInFlightRef = useRef(false);
   const frameTimestampsRef = useRef<number[]>([]);
   const manualControlRef = useRef(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -109,6 +114,8 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
   const fetchFrame = useCallback(async (): Promise<void> => {
     if (!client) return;
     if (pausedRef.current) return;
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
 
     setState((s) => ({ ...s, loading: true }));
     try {
@@ -146,6 +153,8 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
         loading: false,
         error: friendlyError(err, settings.baseUrl),
       }));
+    } finally {
+      fetchInFlightRef.current = false;
     }
   }, [client, sessionId, addFrame]);
 
