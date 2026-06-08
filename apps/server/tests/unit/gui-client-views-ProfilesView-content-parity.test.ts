@@ -117,6 +117,16 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     );
   });
 
+  it('Launch button gates on `busy` ONLY, not atProfileCap (free-tier fix 0ccff415): the profile cap limits CREATING profiles, not launching an existing one (launch consumes a session slot). A regression to `disabled={busy || atProfileCap}` re-greys Launch on a free-tier account (profile_cap 1) so the one allowed profile can never launch — the exact bug a self-hosted user hit', () => {
+    expect(body).toMatch(/onClick=\{\(\) => void handleLaunch\(profile\)\}/);
+    // The fix's rationale comment must stay (explains why Launch is busy-only).
+    expect(body).toMatch(/NOT atProfileCap: the/);
+    // The specific regression guard: the Launch button must never re-gate on the
+    // profile cap. (`state.loading || atProfileCap` on the New-profile button is
+    // correct + separately pinned above; this targets the `busy || atProfileCap` form.)
+    expect(body).not.toMatch(/disabled=\{busy\s*\|\|\s*atProfileCap\}/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
