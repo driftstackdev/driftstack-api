@@ -51,6 +51,12 @@ const MAX_COORD = 100_000;
  *  accepts int32 but the realistic range is much narrower. */
 const MAX_WHEEL_DELTA = 100_000;
 
+/** Max touch identifier — 10-finger cap for multi-touch (pinch etc.). */
+const MAX_TOUCH_ID = 9;
+
+/** Max swipe duration. A gesture longer than a minute is malformed. */
+const MAX_SWIPE_DURATION_MS = 60_000;
+
 export const InputEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('mouseMove'),
@@ -85,6 +91,44 @@ export const InputEventSchema = z.discriminatedUnion('type', [
     y: z.number().int().min(-MAX_COORD).max(MAX_COORD),
     deltaX: z.number().int().min(-MAX_WHEEL_DELTA).max(MAX_WHEEL_DELTA),
     deltaY: z.number().int().min(-MAX_WHEEL_DELTA).max(MAX_WHEEL_DELTA),
+  }),
+  // Touch vocabulary (2026-06-08 product directive "real iPhone tap not macbook mouse";
+  // 04-harness §226-228 + 05-behavioral-library). Coordinates are DEVICE-CSS px
+  // (iPhone viewport space) — the GUI/dashboard projects stream-px → device-CSS
+  // upstream; the harness injects via W3C Actions `pointerType:touch` and owns
+  // the micro-settle / interpolation / momentum (A3 W551/W553). `tap` and
+  // `swipe` are single events the harness expands; touchStart/Move/End carry a
+  // `touchId` for multi-touch (concurrent ids = pinch).
+  z.object({
+    type: z.literal('tap'),
+    x: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+    y: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+  }),
+  z.object({
+    type: z.literal('touchStart'),
+    x: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+    y: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+    touchId: z.number().int().min(0).max(MAX_TOUCH_ID),
+  }),
+  z.object({
+    type: z.literal('touchMove'),
+    x: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+    y: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+    touchId: z.number().int().min(0).max(MAX_TOUCH_ID),
+  }),
+  z.object({
+    type: z.literal('touchEnd'),
+    x: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+    y: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+    touchId: z.number().int().min(0).max(MAX_TOUCH_ID),
+  }),
+  z.object({
+    type: z.literal('swipe'),
+    x1: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+    y1: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+    x2: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+    y2: z.number().int().min(-MAX_COORD).max(MAX_COORD),
+    durationMs: z.number().int().min(0).max(MAX_SWIPE_DURATION_MS),
   }),
   z.object({
     type: z.literal('ping'),

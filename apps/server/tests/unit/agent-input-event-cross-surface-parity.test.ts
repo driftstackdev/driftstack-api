@@ -40,7 +40,7 @@ describe('Slice 4 — InputEvent cross-surface parity', () => {
     expect(existsSync(API_TYPES)).toBe(true);
   });
 
-  it('api-types InputEventSchema discriminator pinned to type field with 7 variants', () => {
+  it('api-types InputEventSchema discriminator pinned to type field with 12 variants (7 mouse/key/wheel/ping + 5 touch)', () => {
     const body = read(API_TYPES);
     expect(body).toMatch(/InputEventSchema = z\.discriminatedUnion\('type', \[/);
     for (const variant of [
@@ -51,12 +51,17 @@ describe('Slice 4 — InputEvent cross-surface parity', () => {
       'keyUp',
       'wheel',
       'ping',
+      'tap',
+      'touchStart',
+      'touchMove',
+      'touchEnd',
+      'swipe',
     ]) {
       expect(body, `missing variant: ${variant}`).toContain(`z.literal('${variant}')`);
     }
   });
 
-  it('gui-client local InputEvent type union pins the same 7 variants in lock-step', () => {
+  it('gui-client local InputEvent type union pins the same 12 variants in lock-step', () => {
     const body = read(GUI_CLIENT);
     expect(body).toMatch(/export type InputEvent =/);
     for (const variant of [
@@ -67,12 +72,17 @@ describe('Slice 4 — InputEvent cross-surface parity', () => {
       "type: 'keyUp'",
       "type: 'wheel'",
       "type: 'ping'",
+      "type: 'tap'",
+      "type: 'touchStart'",
+      "type: 'touchMove'",
+      "type: 'touchEnd'",
+      "type: 'swipe'",
     ]) {
       expect(body, `gui-client missing: ${variant}`).toContain(variant);
     }
   });
 
-  it('sdk-typescript exports InputEvent type alias pinned to the same 7 variants', () => {
+  it('sdk-typescript exports InputEvent type alias pinned to the same 12 variants', () => {
     const body = read(SDK_TS);
     expect(body).toMatch(/export type InputEvent =/);
     for (const variant of [
@@ -83,6 +93,11 @@ describe('Slice 4 — InputEvent cross-surface parity', () => {
       "type: 'keyUp'",
       "type: 'wheel'",
       "type: 'ping'",
+      "type: 'tap'",
+      "type: 'touchStart'",
+      "type: 'touchMove'",
+      "type: 'touchEnd'",
+      "type: 'swipe'",
     ]) {
       expect(body).toContain(variant);
     }

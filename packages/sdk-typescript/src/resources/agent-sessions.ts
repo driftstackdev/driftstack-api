@@ -26,6 +26,13 @@ export type InputEvent =
   | { type: 'keyDown'; key: string; modifiers?: readonly string[] }
   | { type: 'keyUp'; key: string; modifiers?: readonly string[] }
   | { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
+  // Touch vocab (2026-06-08 product directive; device-CSS px; harness owns dynamics).
+  // Lock-step with packages/api-types InputEventSchema + the gui-client copy.
+  | { type: 'tap'; x: number; y: number }
+  | { type: 'touchStart'; x: number; y: number; touchId: number }
+  | { type: 'touchMove'; x: number; y: number; touchId: number }
+  | { type: 'touchEnd'; x: number; y: number; touchId: number }
+  | { type: 'swipe'; x1: number; y1: number; x2: number; y2: number; durationMs: number }
   | { type: 'ping'; timestamp: number };
 
 /** Slice 4 + Slice 5 response envelope for POST /v1/agent-sessions/

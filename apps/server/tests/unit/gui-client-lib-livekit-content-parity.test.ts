@@ -31,10 +31,29 @@ describe('gui-client/lib/livekit content parity', () => {
     );
   });
 
-  it("LK.6.d InputEvent 7-variant tagged union pinned: mouseMove + mouseDown(button:0|1|2) + mouseUp(button:0|1|2) + keyDown(modifiers?: readonly string[]) + keyUp + wheel(deltaX+deltaY) + ping(timestamp). + 'the input-event schema the Mac side decodes. Must stay in lock-step with Agent 1's Swift InputEvent enum.' — pinned so the cross-agent Swift-side enum + 7-variant contract all stay documented (drift would break customer manual control input)", () => {
+  it("LK.6.d InputEvent 12-variant tagged union pinned: 7 mouse/key/wheel/ping + 5 touch (tap / touchStart / touchMove / touchEnd / swipe). + 'the input-event schema the Mac side decodes. Must stay in lock-step with Agent 1's Swift InputEvent enum.' — pinned so the cross-agent Swift-side enum + the touch contract (founder 2026-06-08) all stay documented (drift would break customer manual control input). Per-variant toContain (NOT one mega-regex) to avoid the long-chain backtracking hazard.", () => {
+    // Framing comment + the union declaration.
     expect(body).toMatch(
-      /\/\*\* LK\.6\.d — the input-event schema the Mac side decodes\. Must\s*\n?\s*\*\s+stay in lock-step with Agent 1's Swift `InputEvent` enum\. \*\/\s*\n?\s*export type InputEvent =\s*\n?\s*\| \{ type: 'mouseMove'; x: number; y: number \}\s*\n?\s*\| \{ type: 'mouseDown'; x: number; y: number; button: 0 \| 1 \| 2 \}\s*\n?\s*\| \{ type: 'mouseUp'; x: number; y: number; button: 0 \| 1 \| 2 \}\s*\n?\s*\| \{ type: 'keyDown'; key: string; modifiers\?: readonly string\[\] \}\s*\n?\s*\| \{ type: 'keyUp'; key: string; modifiers\?: readonly string\[\] \}\s*\n?\s*\| \{ type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number \}\s*\n?\s*\| \{ type: 'ping'; timestamp: number \};/,
+      /\/\*\* LK\.6\.d — the input-event schema the Mac side decodes\. Must\s*\n?\s*\*\s+stay in lock-step with Agent 1's Swift `InputEvent` enum\. \*\//,
     );
+    expect(body).toMatch(/export type InputEvent =/);
+    // Each variant pinned individually (mouse/key/wheel/ping + the 5 touch).
+    for (const variant of [
+      "| { type: 'mouseMove'; x: number; y: number }",
+      "| { type: 'mouseDown'; x: number; y: number; button: 0 | 1 | 2 }",
+      "| { type: 'mouseUp'; x: number; y: number; button: 0 | 1 | 2 }",
+      "| { type: 'keyDown'; key: string; modifiers?: readonly string[] }",
+      "| { type: 'keyUp'; key: string; modifiers?: readonly string[] }",
+      "| { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }",
+      "| { type: 'tap'; x: number; y: number }",
+      "| { type: 'touchStart'; x: number; y: number; touchId: number }",
+      "| { type: 'touchMove'; x: number; y: number; touchId: number }",
+      "| { type: 'touchEnd'; x: number; y: number; touchId: number }",
+      "| { type: 'swipe'; x1: number; y1: number; x2: number; y2: number; durationMs: number }",
+      "| { type: 'ping'; timestamp: number };",
+    ]) {
+      expect(body, `livekit.ts missing variant: ${variant}`).toContain(variant);
+    }
   });
 
   it('LK.6.c LivekitConnectionState 6-variant tagged union pinned: idle / connecting / connected / reconnecting / disconnected / error(message). Drift to a different state-machine shape would mismatch the badge-rendering logic in LivekitConnectionBadge.tsx', () => {

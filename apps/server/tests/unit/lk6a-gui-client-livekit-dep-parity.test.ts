@@ -40,7 +40,9 @@ describe('LK.6.a — gui-client livekit-client dep + wrapper', () => {
   });
 
   it('wrapper exports the InputEvent discriminated-union (Mac-side decoder contract)', () => {
-    // All 7 variants Agent 1's Swift InputEvent enum decodes.
+    // The mouse/key/wheel/ping variants Agent 1's Swift InputEvent enum decodes
+    // (the 5 touch variants — tap/touchStart/touchMove/touchEnd/swipe — are also
+    // in the union; this check pins the original set's presence, not the count).
     expect(body).toMatch(/type: 'mouseMove'/);
     expect(body).toMatch(/type: 'mouseDown'/);
     expect(body).toMatch(/type: 'mouseUp'/);
