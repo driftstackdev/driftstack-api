@@ -97,7 +97,14 @@ export function AgentSessionPanel({
   return (
     <div
       data-component="agent-session-panel"
-      className="relative w-full overflow-hidden rounded-lg border border-white/10 bg-black"
+      // Scale-to-fit the iPhone screen, NOT fill the window. The aspect ratio is
+      // portrait (~0.46), so `w-full` made height = width × 2.17 → an enormous
+      // tall box on a wide desktop window (the "stretched, unrealistic large"
+      // view). Fill the available HEIGHT instead and let width derive from the
+      // aspect ratio (narrow portrait), capped at the container width; the parent
+      // (items-center justify-center) centers the result. object-contain on the
+      // <video> then fills this iPhone-aspect box exactly.
+      className="relative h-full max-h-full max-w-full overflow-hidden rounded-lg border border-white/10 bg-black"
       style={{ aspectRatio: aspectRatio.toString() }}
     >
       <video
