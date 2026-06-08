@@ -8,7 +8,7 @@
 // Mirrors SessionsView shape: 5-second poll, inline error banner, busy
 // state per row.
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import {
   ProfilesActionBar,
@@ -17,7 +17,6 @@ import {
 } from '../components/ProfilesActionBar';
 import { ProxyChip } from '../components/ProxyChip';
 import { RelativeTime } from '../components/RelativeTime';
-import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type Session } from '../lib/client';
@@ -37,6 +36,16 @@ import {
   type ProxyConfig as LocalProxyConfig,
   type ProxyTestResult,
 } from '../lib/proxies';
+
+// LAZY-LOADED: AgentSessionPanel pulls in livekit-client (a heavy WebRTC
+// dependency). Loading it at the top level dragged livekit-client into the
+// main bundle, which broke the minified production mount (the whole app failed
+// to render → flicker). Deferring it behind React.lazy keeps the dashboard
+// mount free of livekit-client; the panel + its deps load only when a session
+// is actually being watched (watchInfo set).
+const AgentSessionPanel = lazy(() =>
+  import('../components/AgentSessionPanel').then((m) => ({ default: m.AgentSessionPanel })),
+);
 
 // 2026-05-20 — match SessionsView: slow background poll + skip the
 // visible loading flicker on tick refreshes so the panel doesn't
@@ -321,7 +330,9 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           </button>
         </div>
         <div className="flex flex-1 items-center justify-center overflow-hidden">
-          <AgentSessionPanel info={watchInfo} />
+          <Suspense fallback={<div className="text-sm text-ink-secondary">Loading viewer…</div>}>
+            <AgentSessionPanel info={watchInfo} />
+          </Suspense>
         </div>
       </div>
     );
