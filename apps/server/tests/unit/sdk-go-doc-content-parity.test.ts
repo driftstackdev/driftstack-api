@@ -59,6 +59,16 @@ describe('W534.C packages/sdk-go/doc.go content parity', () => {
       /\/\/ Errors are typed: every server problem-type maps to a concrete error\s*\n?\s*\/\/ type customers can switch on with errors\.As\. The retry policy is\s*\n?\s*\/\/ applied automatically \(configurable via \[WithRetry\]\) and honours\s*\n?\s*\/\/ Retry-After\./,
     );
     expect(body).toMatch(/\/\/ Webhook signature verification is in \[VerifyWebhookSignature\]\./);
+    // Retry-safety guidance: transport+429 retried (not 4xx/5xx bodies) + the
+    // duplicate-POST warning tied to IdempotencyKey. Pinned so a customer is
+    // never silently left to discover that a retried create/charge can double-
+    // execute — dropping this re-exposes the duplicate-side-effect footgun.
+    expect(body).toMatch(
+      /Retries fire on transport errors and 429 rate limits[\s\S]*?not on 4xx or 5xx response bodies[\s\S]*?terminal in the Go/,
+    );
+    expect(body).toMatch(
+      /an automatically-retried create\s*\n?\s*\/\/ or charge can execute twice — pass an IdempotencyKey[\s\S]*?collapses the retry/,
+    );
   });
 
   it("Module path + package-name framing pinned: 'Module path: github.com/driftstackdev/driftstack-api/packages/sdk-go' + 'package driftstack' (NOT package sdk_go — Go consumers import as `driftstack`, matching sdk-python's import-as-driftstack convention) — pinned so the GitHub-monorepo-subdir module-path + bare-driftstack-package-name commitment survives (drift to a different module path would break `go get`; drift to package sdk_go would break the cross-SDK import-as-driftstack convention)", () => {
