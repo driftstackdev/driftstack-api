@@ -30,7 +30,7 @@ describe('W761 docs /api/sessions content parity', () => {
 
     expect(p).toMatch(/^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: Sessions\n/);
     expect(p).toMatch(
-      /description: Create \+ drive iPhone Safari sessions — navigate, interact, wait, capture, get-state, destroy\. Tier-gated concurrency\./,
+      /description: Create \+ drive iPhone Safari sessions — navigate, interact, wait, capture, extract, get-state, destroy\. Tier-gated concurrency\./,
     );
   });
 
@@ -194,7 +194,7 @@ describe('W761 docs /api/sessions content parity', () => {
 
     expect(p).toMatch(/Read endpoints \(GET\) accept any valid bearer with `read` scope\./);
     expect(p).toMatch(
-      /Write endpoints \(POST navigate \/ interact \/ wait \/ capture; DELETE\)\s*\n?require the `write:sessions` scope \(a broad `write` key also satisfies\s*\n?it\)\./,
+      /Write endpoints \(POST navigate \/ interact \/ wait \/ capture \/ extract; DELETE\)\s*\n?require the `write:sessions` scope \(a broad `write` key also satisfies\s*\n?it\)\./,
     );
   });
 

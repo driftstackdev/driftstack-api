@@ -55,6 +55,7 @@ client.sessions.interact(id, body)
 client.sessions.wait(id, body)
 client.sessions.getState(id)
 client.sessions.capture(id, body)
+client.sessions.extract(id, body)
 client.sessions.destroy(id)
 
 client.profiles.create(body)

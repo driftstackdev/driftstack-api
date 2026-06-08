@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Sessions
-description: Create + drive iPhone Safari sessions — navigate, interact, wait, capture, get-state, destroy. Tier-gated concurrency.
+description: Create + drive iPhone Safari sessions — navigate, interact, wait, capture, extract, get-state, destroy. Tier-gated concurrency.
 ---
 
 # Sessions
@@ -236,6 +236,41 @@ response), `'dom_snapshot'` (the serialised DOM as raw text), or
 carries `encoding`: `'base64'` for screenshot+pdf, `'utf8'` for
 `dom_snapshot`.
 
+## Extract
+
+`POST /v1/sessions/:id/extract`
+
+```json
+{
+  "extractions": [
+    { "name": "title", "selector": "h1", "type": "text" },
+    { "name": "price", "selector": ".price", "type": "text", "transform": "number" },
+    {
+      "name": "products",
+      "selector": "li.product",
+      "type": "list",
+      "extract": {
+        "name": { "type": "text", "selector": ".name" },
+        "href": { "type": "attribute", "attribute": "href", "selector": "a" }
+      }
+    }
+  ]
+}
+```
+
+Reads structured data from the page in one round trip: a batch of up to
+100 named extractions, each a `selector` plus how to read it. `type` is
+`'text'` (trimmed text content; add `"transform": "number"` to parse the
+numeric part), `'attribute'` (reads the named `attribute`), or `'list'`
+(every matched element — with an optional per-field `extract` map to pull
+sub-fields from each one). Selectors are passed safely (never interpolated
+into a script), so they can't inject. The response is `{ "value": { … } }`
+keyed by each extraction's `name`:
+
+```json
+{ "value": { "title": "Example", "price": 19.99, "products": [{ "name": "A", "href": "/a" }] } }
+```
+
 ## Destroy
 
 `DELETE /v1/sessions/:id`
@@ -248,7 +283,7 @@ flips to `destroyed`.
 ## Auth + scoping
 
 Read endpoints (GET) accept any valid bearer with `read` scope.
-Write endpoints (POST navigate / interact / wait / capture; DELETE)
+Write endpoints (POST navigate / interact / wait / capture / extract; DELETE)
 require the `write:sessions` scope (a broad `write` key also satisfies
 it). Team RBAC: `X-Driftstack-Account` is honored — a `member` can read
 the owner's sessions, but writes require the `admin` role (a `member`

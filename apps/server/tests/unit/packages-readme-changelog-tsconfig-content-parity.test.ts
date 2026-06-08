@@ -110,7 +110,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
       /Every public API endpoint is a typed method on a resource accessor\. All take `context\.Context` first\./,
     );
     expect(body).toMatch(
-      /`client\.Sessions`\s+\| `Create`, `List`, `Get`, `Navigate`, `Interact`, `Wait`, `GetState`, `Capture`, `Destroy`/,
+      /`client\.Sessions`\s+\| `Create`, `List`, `Get`, `Navigate`, `Interact`, `Wait`, `GetState`, `Capture`, `Extract`, `Destroy`/,
     );
     expect(body).toMatch(
       /`client\.Profiles`\s+\| `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`, `Clone` \(V-313\)/,
@@ -143,7 +143,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(/async with AsyncDriftstack\(api_key="ds_live_…"\) as client:/);
     expect(body).toMatch(/^## Resources$/m);
     expect(body).toMatch(
-      /`client\.sessions`\s+\| `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `destroy`/,
+      /`client\.sessions`\s+\| `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `destroy`/,
     );
     expect(body).toMatch(
       /`client\.profile_snapshots` \| `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` \(V-312 — immutable point-in-time copies\)/,
