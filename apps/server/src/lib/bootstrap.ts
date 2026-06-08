@@ -27,6 +27,7 @@ import { DrizzleAccountAuthRepo } from '../db/auth-repo.js';
 import { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { FleetNodeAuthImpl } from '../services/fleet-node-auth.js';
 import { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import { makeProfileSavedPersister } from '../services/profile-store.js';
 import { RedisFleetNonceCache } from '../lib/redis-fleet-nonce-cache.js';
 import { DrizzleAtlasPriorityEventsRepo } from '../db/atlas-priority-events-repo.js';
 import { InternalFleetAuth } from './internal-fleet-auth.js';
@@ -1183,7 +1184,12 @@ export async function createProductionDeps(
         return {
           fleetNodeAuth: new FleetNodeAuthImpl(drizzleFleetNodesRepo, fleetNonceCache),
           fleetNonceCache,
-          fleetControlRegistry: new FleetControlRegistry(),
+          // Profile-backed session persistence (A3 W417): when R2 is configured,
+          // a `profileSaved` frame from a node writes the customer's sealed store
+          // to R2; without R2 the frame is accepted + ignored (stateless).
+          fleetControlRegistry: new FleetControlRegistry(
+            r2 !== null ? makeProfileSavedPersister(r2, logger) : undefined,
+          ),
           // Local fleet-demo: the config a dispatched session browses with. Only
           // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The
           // archetype is the canonical current-code iPhone (NOT the canvas-gated

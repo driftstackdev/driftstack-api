@@ -124,6 +124,41 @@ describe('FleetControlConnection', () => {
     expect((await p).success).toBe(true);
   });
 
+  it('routes an inbound profileSaved frame → invokes the onProfileSaved handler (inline + large shapes)', () => {
+    const seen: unknown[] = [];
+    const conn = new FleetControlConnection(
+      'node-1',
+      () => {},
+      (f) => seen.push(f),
+    );
+    // inline (small) shape
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'profileSaved',
+        sessionId: 'ses_x',
+        profile_id: 'p1',
+        sealed_blob: 'YmxvYg==',
+      }),
+    );
+    // large (presigned-PUT ack) shape
+    conn.handleInbound(
+      JSON.stringify({ type: 'profileSaved', sessionId: 'ses_y', profile_id: 'p2', stored: true }),
+    );
+    expect(seen).toEqual([
+      { type: 'profileSaved', sessionId: 'ses_x', profile_id: 'p1', sealed_blob: 'YmxvYg==' },
+      { type: 'profileSaved', sessionId: 'ses_y', profile_id: 'p2', stored: true },
+    ]);
+  });
+
+  it('a profileSaved frame with no handler wired is accepted + ignored (no crash — stateless deploy)', () => {
+    const conn = new FleetControlConnection('node-1', () => {});
+    expect(() =>
+      conn.handleInbound(
+        JSON.stringify({ type: 'profileSaved', sessionId: 's', profile_id: 'p', stored: true }),
+      ),
+    ).not.toThrow();
+  });
+
   it('close() fails every in-flight dispatch', async () => {
     const conn = new FleetControlConnection('node-1', () => {});
     const p = conn.correlator.dispatch(dispatch('int_1'));
@@ -158,6 +193,16 @@ describe('FleetControlRegistry', () => {
     const r = await p; // the prior connection's dispatch was failed by the replace
     expect(r.success).toBe(false);
     expect(r.errorMessage).toMatch(/replaced by a new connection/);
+  });
+
+  it('threads the onProfileSaved handler into the connections it creates', () => {
+    const seen: unknown[] = [];
+    const reg = new FleetControlRegistry((f) => seen.push(f));
+    const conn = reg.register('node-1', () => {});
+    conn.handleInbound(
+      JSON.stringify({ type: 'profileSaved', sessionId: 's', profile_id: 'p', stored: true }),
+    );
+    expect(seen).toEqual([{ type: 'profileSaved', sessionId: 's', profile_id: 'p', stored: true }]);
   });
 
   it('unregister is idempotent (double-close is a no-op)', () => {

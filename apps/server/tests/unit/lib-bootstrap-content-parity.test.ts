@@ -318,7 +318,12 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(
       /fleetNodeAuth: new FleetNodeAuthImpl\(drizzleFleetNodesRepo, fleetNonceCache\),/,
     );
-    expect(body).toMatch(/fleetControlRegistry: new FleetControlRegistry\(\),/);
+    // Registry takes the profileSaved→R2 persister when R2 is configured, else
+    // undefined (frame accepted + ignored). Pinned so the persistence wiring
+    // can't be silently dropped (a profile-backed session would lose its store).
+    expect(body).toMatch(
+      /fleetControlRegistry: new FleetControlRegistry\(\s*\n?\s*r2 !== null \? makeProfileSavedPersister\(r2, logger\) : undefined,\s*\n?\s*\),/,
+    );
     // Local fleet-demo session-dispatch config (only assembled behind the flag).
     // Discrete pins (no long \s*\n? chain — backtracking rule). Locks the demo
     // archetype (current-code iphone16pro, NOT the canvas-gated iphone17 cutover)

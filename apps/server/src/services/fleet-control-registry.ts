@@ -18,7 +18,11 @@
 // (detail "intent_dispatch_no_session: …") → onSessionError (fast-fail) — and
 // accept-but-ignore heartbeat / capabilityReport / errorEvent for now.
 
-import { HarnessOutboundSchema, type SessionAssign } from '../schemas/harness-control-protocol.js';
+import {
+  HarnessOutboundSchema,
+  type SessionAssign,
+  type ProfileSaved,
+} from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
 
 /** What the WS route hands in: a function that writes a string frame to the
@@ -33,12 +37,15 @@ export type FleetNodeSocketSend = (data: string) => void;
 export class FleetControlConnection {
   readonly correlator: IntentDispatchCorrelator;
   private readonly send: FleetNodeSocketSend;
+  private readonly onProfileSaved?: (frame: ProfileSaved) => void;
 
   constructor(
     readonly nodeId: string,
     send: FleetNodeSocketSend,
+    onProfileSaved?: (frame: ProfileSaved) => void,
   ) {
     this.send = send;
+    this.onProfileSaved = onProfileSaved;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
     this.correlator = new IntentDispatchCorrelator(transport);
   }
@@ -83,6 +90,14 @@ export class FleetControlConnection {
           this.correlator.onSessionError(frame.sessionId, frame.detail);
         }
         break;
+      case 'profileSaved':
+        // Profile-backed session ended (A3 W417): persist the customer's saved
+        // sealed store. Fire-and-forget off the receive loop (the handler does
+        // the R2 write + error-logs internally); absent handler (no R2 / stateless
+        // deploy) → ignored. MUST-DELIVER on the harness side, so a dropped frame
+        // is a harness-queue concern, not a server-receive one.
+        this.onProfileSaved?.(frame);
+        break;
       // heartbeat / capabilityReport / errorEvent: accepted, not yet consumed.
     }
   }
@@ -102,12 +117,20 @@ export class FleetControlConnection {
 export class FleetControlRegistry {
   private readonly connections = new Map<string, FleetControlConnection>();
 
+  /**
+   * @param onProfileSaved optional handler invoked when any node reports a
+   *   `profileSaved` frame (profile-backed session ended). Threaded into every
+   *   connection this registry creates. Omitted (no R2 configured) → the frame
+   *   is accepted + ignored, identical to today's stateless behaviour.
+   */
+  constructor(private readonly onProfileSaved?: (frame: ProfileSaved) => void) {}
+
   register(nodeId: string, send: FleetNodeSocketSend): FleetControlConnection {
     const existing = this.connections.get(nodeId);
     if (existing !== undefined) {
       existing.close(`replaced by a new connection for node ${nodeId}`);
     }
-    const conn = new FleetControlConnection(nodeId, send);
+    const conn = new FleetControlConnection(nodeId, send, this.onProfileSaved);
     this.connections.set(nodeId, conn);
     return conn;
   }

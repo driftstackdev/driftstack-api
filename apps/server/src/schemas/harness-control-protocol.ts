@@ -427,3 +427,4 @@ export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   ProfileSavedSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;
+export type ProfileSaved = z.infer<typeof ProfileSavedSchema>;
