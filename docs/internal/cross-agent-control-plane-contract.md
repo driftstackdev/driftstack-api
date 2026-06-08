@@ -615,12 +615,26 @@ discriminator:
    inline) ⇒ server-controlled key, node-keyed write dead; **+(A)** server records
    `session→profile` at dispatch and the consumer rejects a `profile_id` mismatch.
 
-### REMAINING (all gated)
+### REMAINING
 
-- **(c) DEK mint/wrap** KMS→TMK→DEK (file 57) — **founder-gated crypto decision.**
+- **(c) DEK mint/wrap — REFRAMED 2026-06-08: NOT KMS-gated.** file 57 specifies a
+  KMS→TMK→DEK design, but the SHIPPED codebase reality is a single host-resident
+  `MFA_ENCRYPTION_KEY` AES-256-GCM envelope used by **4 secret classes already**
+  (BYOK-anthropic, gui-control-key, MFA-TOTP, livekit-secret — see
+  `livekit-secret-encryption.ts`); **no secret class uses KMS yet.** So profiles can
+  reuse that exact pattern with **no new infra**: per-profile `DEK = randomBytes(32)`,
+  wrap with `MFA_ENCRYPTION_KEY` (mirror `encryptLivekitSecret`), store `encrypted_dek`
+  in the profiles table, decrypt JIT on assign → the plaintext `dek` rides the assign to
+  the harness (A3 W420 — the dek deliberately DOES cross to the harness, unlike the 4
+  server-only classes). **Only open decision (founder ack): ship on the host-key envelope
+  NOW (same trust boundary as the other 4 classes) vs wait for a file-57 KMS migration
+  (a separate cross-cutting future arc nothing uses yet). Recommend host-key-now for v1.0.**
 - **session→profile linkage** — how an agent-session selects a profile (e.g. a
-  `profile_id` on the create body) — **product decision.**
-- **(e) dispatch wiring** — call `buildAssignProfileBlock` in `dispatchSessionAssignOnCreate`
-  for profile-backed sessions (set `profile`, pass maxDuration as the TTL), + close
-  finding #2. Crypto-free R2/presign half already built + tested; blocked only on (c)
-  - the linkage decision.
+  `profile_id` on the create body) — **product decision** (Tier-2; propose, don't auto-add).
+- **(e) dispatch wiring** — once (c) is ack'd: mint/unwrap the dek, call
+  `buildAssignProfileBlock(r2, profileId, dek, {urlTtlSeconds: maxDuration+margin})` in
+  `dispatchSessionAssignOnCreate` for profile-backed sessions, + close the W185 inline-path
+  authz finding (option B: harness always uses the server-minted PUT, never inline; +A:
+  record session→profile + reject mismatch). The crypto-free R2/presign half is already
+  built + tested (`buildAssignProfileBlock`); (e) is unblocked the moment (c) is ack'd +
+  the linkage is chosen.
