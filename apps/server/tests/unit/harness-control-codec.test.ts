@@ -232,6 +232,37 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     expect(decodeWireData(a.inlineProxyConfig as string)).toEqual(proxy);
   });
 
+  it('profile-backed (A3 W417): camelCase in → snake_case wire; omits absent blob fields', () => {
+    // inline (≤256KB) shape
+    const inline = serializeSessionAssign({
+      ...base,
+      profile: { profileId: 'p1', dek: 'ZGVr', sealedBlob: 'YmxvYg==' },
+    });
+    expect(SessionAssignSchema.safeParse(inline).success).toBe(true);
+    expect(inline.profile).toEqual({ profile_id: 'p1', dek: 'ZGVr', sealed_blob: 'YmxvYg==' });
+    // large shape (presigned GET + PUT, no inline blob)
+    const large = serializeSessionAssign({
+      ...base,
+      profile: {
+        profileId: 'p1',
+        dek: 'ZGVr',
+        sealedBlobUrl: 'https://r2/get',
+        sealedBlobPutUrl: 'https://r2/put',
+      },
+    });
+    expect(large.profile).toEqual({
+      profile_id: 'p1',
+      dek: 'ZGVr',
+      sealed_blob_url: 'https://r2/get',
+      sealed_blob_put_url: 'https://r2/put',
+    });
+    // fresh profile (no prior state) → only the two required keys
+    const fresh = serializeSessionAssign({ ...base, profile: { profileId: 'p1', dek: 'ZGVr' } });
+    expect(fresh.profile).toEqual({ profile_id: 'p1', dek: 'ZGVr' });
+    // absent → omitted (stateless path unchanged)
+    expect(serializeSessionAssign(base).profile).toBeUndefined();
+  });
+
   it('throws HarnessWireCodecError on a malformed SocksProxyConfig (bad port)', () => {
     expect(() =>
       serializeSessionAssign({

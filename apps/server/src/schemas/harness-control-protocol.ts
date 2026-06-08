@@ -230,6 +230,25 @@ export const SessionAssignLivekitSchema = z
   })
   .strict();
 
+// Profile-backed sessions (A3 W177/W417): an optional `profile` block restores
+// an encrypted per-profile store into the fork on assign + saves it on end.
+// snake_case wire keys mirror the livekit block convention (A3's ProfileInfo
+// CodingKeys: profile_id/dek/sealed_blob/sealed_blob_url/sealed_blob_put_url).
+// `dek` rides JIT like the livekit token (KMS->TMK->DEK server-side, harness
+// never stores it). `sealed_blob` inline (<=256KB) OR `sealed_blob_url` presigned
+// GET (large); `sealed_blob_put_url` is the presigned PUT for the save-back path.
+// Only profile_id + dek are required: a fresh profile (no prior state) ships
+// neither blob + just saves on end. Absent block => today's stateless path.
+export const SessionAssignProfileSchema = z
+  .object({
+    profile_id: z.string().min(1),
+    dek: z.string().min(1),
+    sealed_blob: z.string().min(1).optional(),
+    sealed_blob_url: z.string().min(1).optional(),
+    sealed_blob_put_url: z.string().min(1).optional(),
+  })
+  .strict();
+
 export const SessionAssignSchema = z
   .object({
     type: z.literal('sessionAssign'),
@@ -261,6 +280,8 @@ export const SessionAssignSchema = z
       })
       .optional(),
     livekit: SessionAssignLivekitSchema.optional(),
+    // Profile-backed session restore/save (optional; absent ⇒ stateless).
+    profile: SessionAssignProfileSchema.optional(),
   })
   .strict();
 export type SessionAssign = z.infer<typeof SessionAssignSchema>;

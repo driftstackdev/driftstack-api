@@ -120,6 +120,16 @@ export function serializeSessionAssign(args: {
   initialUrl?: string;
   /** camelCase in; emitted as the snake_case wire object (room/token/ws_url/expires_at). */
   livekit?: { room: string; token: string; wsUrl: string; expiresAt: string };
+  /** Profile-backed session (A3 W417). camelCase in; emitted snake_case
+   *  (profile_id/dek/sealed_blob/sealed_blob_url/sealed_blob_put_url). Only
+   *  profileId + dek required; blob fields optional (fresh profile ships none). */
+  profile?: {
+    profileId: string;
+    dek: string;
+    sealedBlob?: string;
+    sealedBlobUrl?: string;
+    sealedBlobPutUrl?: string;
+  };
 }): SessionAssign {
   let inlineProxyConfig: string | undefined;
   if (args.inlineProxyConfig !== undefined) {
@@ -156,6 +166,23 @@ export function serializeSessionAssign(args: {
             token: args.livekit.token,
             ws_url: args.livekit.wsUrl,
             expires_at: args.livekit.expiresAt,
+          },
+        }
+      : {}),
+    ...(args.profile !== undefined
+      ? {
+          profile: {
+            profile_id: args.profile.profileId,
+            dek: args.profile.dek,
+            ...(args.profile.sealedBlob !== undefined
+              ? { sealed_blob: args.profile.sealedBlob }
+              : {}),
+            ...(args.profile.sealedBlobUrl !== undefined
+              ? { sealed_blob_url: args.profile.sealedBlobUrl }
+              : {}),
+            ...(args.profile.sealedBlobPutUrl !== undefined
+              ? { sealed_blob_put_url: args.profile.sealedBlobPutUrl }
+              : {}),
           },
         }
       : {}),

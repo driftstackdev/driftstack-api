@@ -329,6 +329,56 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(SessionAssignSchema.safeParse({ ...valid, bogus: 1 }).success).toBe(false);
   });
 
+  it('profile-backed sessions (A3 W417): optional snake_case profile block; profile_id+dek required; blob fields optional; strict', () => {
+    const base = {
+      type: 'sessionAssign',
+      sessionId: 'ses_1',
+      archetype: 'iphone16pro_ios18_6_safari18_6',
+      behaviorProfile: 'regular',
+    };
+    // absent profile ⇒ stateless path still valid.
+    expect(SessionAssignSchema.safeParse(base).success).toBe(true);
+    // inline (≤256KB) shape.
+    expect(
+      SessionAssignSchema.safeParse({
+        ...base,
+        profile: { profile_id: 'p1', dek: 'ZGVr', sealed_blob: 'YmxvYg==' },
+      }).success,
+    ).toBe(true);
+    // large shape (presigned GET + PUT).
+    expect(
+      SessionAssignSchema.safeParse({
+        ...base,
+        profile: {
+          profile_id: 'p1',
+          dek: 'ZGVr',
+          sealed_blob_url: 'https://r2/get',
+          sealed_blob_put_url: 'https://r2/put',
+        },
+      }).success,
+    ).toBe(true);
+    // fresh profile (no prior state) ⇒ profile_id + dek only is valid.
+    expect(
+      SessionAssignSchema.safeParse({ ...base, profile: { profile_id: 'p1', dek: 'ZGVr' } })
+        .success,
+    ).toBe(true);
+    // profile_id + dek REQUIRED.
+    for (const k of ['profile_id', 'dek']) {
+      const profile: Record<string, unknown> = { profile_id: 'p1', dek: 'ZGVr' };
+      delete profile[k];
+      expect(SessionAssignSchema.safeParse({ ...base, profile }).success, `${k} required`).toBe(
+        false,
+      );
+    }
+    // snake_case only — camelCase key rejected (strict; the silent-nil drift A3 W417 guards).
+    expect(
+      SessionAssignSchema.safeParse({
+        ...base,
+        profile: { profile_id: 'p1', dek: 'ZGVr', sealedBlob: 'x' },
+      }).success,
+    ).toBe(false);
+  });
+
   it('reserved JSBridge intents are NOT in the dispatchable enum', () => {
     for (const reserved of HARNESS_RESERVED_INTENT_NAMES) {
       expect(HarnessIntentNameSchema.safeParse(reserved).success).toBe(false);
