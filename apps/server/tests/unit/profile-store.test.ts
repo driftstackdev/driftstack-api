@@ -7,7 +7,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { makeProfileSavedPersister } from '../../src/services/profile-store.js';
 import { profileSealedBlobKey, type R2 } from '../../src/lib/r2.js';
-import type { ProfileSaved } from '../../src/schemas/harness-control-protocol.js';
+import {
+  HarnessOutboundSchema,
+  type ProfileSaved,
+} from '../../src/schemas/harness-control-protocol.js';
 
 function fakeR2(putObject: R2['putObject']): R2 {
   return {
@@ -51,6 +54,43 @@ describe('makeProfileSavedPersister', () => {
     const putObject = vi.fn().mockResolvedValue(undefined);
     const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger());
     persist({ type: 'profileSaved', sessionId: 'ses_y', profile_id: 'p2', stored: true });
+    expect(putObject).not.toHaveBeenCalled();
+  });
+
+  // A3 W421 — the daemon's EXACT emitted profileSaved frames (verified, not
+  // hand-written; pinned harness-side by testProfileSavedEmittedFrameForA2Consumer).
+  // Bind the FULL decode→persist path against these verbatim so the cross-service
+  // contract can't silently drift (the ws_url silent-nil lesson). Critical
+  // property: nil optionals are OMITTED, not null — absence is the discriminator.
+  const A3_INLINE_FRAME =
+    '{"profile_id":"prof_abc","sealed_blob":"c2VhbGVk","sessionId":"sess_42","type":"profileSaved"}';
+  const A3_LARGE_ACK_FRAME =
+    '{"profile_id":"prof_xyz","sessionId":"sess_99","stored":true,"type":"profileSaved"}';
+
+  it("A3 W421 verbatim inline frame: decodes via HarnessOutbound union → persister writes to R2 (no 'stored' key present)", async () => {
+    const decoded = HarnessOutboundSchema.parse(JSON.parse(A3_INLINE_FRAME));
+    expect(decoded.type).toBe('profileSaved');
+    const frame = decoded as ProfileSaved;
+    expect(frame.stored).toBeUndefined(); // omitted, not null
+    expect(frame.sealed_blob).toBe('c2VhbGVk');
+
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    makeProfileSavedPersister(fakeR2(putObject), fakeLogger())(frame);
+    await vi.waitFor(() => expect(putObject).toHaveBeenCalledTimes(1));
+    const arg = putObject.mock.calls[0]![0] as { key: string; body: Buffer };
+    expect(arg.key).toBe(profileSealedBlobKey('prof_abc'));
+    expect(arg.body.toString('utf8')).toBe('sealed'); // base64 'c2VhbGVk' → 'sealed'
+  });
+
+  it("A3 W421 verbatim large-ack frame: decodes via HarnessOutbound union → persister no-ops (no 'sealed_blob' key present)", () => {
+    const decoded = HarnessOutboundSchema.parse(JSON.parse(A3_LARGE_ACK_FRAME));
+    expect(decoded.type).toBe('profileSaved');
+    const frame = decoded as ProfileSaved;
+    expect(frame.sealed_blob).toBeUndefined(); // omitted, not null
+    expect(frame.stored).toBe(true);
+
+    const putObject = vi.fn().mockResolvedValue(undefined);
+    makeProfileSavedPersister(fakeR2(putObject), fakeLogger())(frame);
     expect(putObject).not.toHaveBeenCalled();
   });
 
