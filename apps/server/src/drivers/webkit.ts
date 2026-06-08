@@ -14,6 +14,8 @@ import type {
   ExtractResult,
   SearchInput,
   SearchResult,
+  LoginInput,
+  LoginResult,
   CreateSessionInput,
   CreateSessionResult,
   Driver,
@@ -63,6 +65,10 @@ export class WebKitDriver implements Driver {
     throw new DriverNotIntegratedError();
   }
   async search(_sessionId: DriverSessionId, _input: SearchInput): Promise<SearchResult> {
+    await Promise.resolve();
+    throw new DriverNotIntegratedError();
+  }
+  async login(_sessionId: DriverSessionId, _input: LoginInput): Promise<LoginResult> {
     await Promise.resolve();
     throw new DriverNotIntegratedError();
   }

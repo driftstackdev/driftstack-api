@@ -89,7 +89,7 @@ describe('W454.C apps/server/src/drivers/playwright.ts content parity', () => {
     );
   });
 
-  it('imports: chromium/firefox/webkit + Browser/BrowserContext/Page types from @playwright/test; BadRequestError + DriverNotIntegratedError from ../lib/errors; 16 driver types', () => {
+  it('imports: chromium/firefox/webkit + Browser/BrowserContext/Page types from @playwright/test; BadRequestError + DriverNotIntegratedError from ../lib/errors; 18 driver types', () => {
     expect(body).toMatch(/import \{ chromium, firefox, webkit \} from '@playwright\/test';/);
     expect(body).toMatch(
       /import type \{ Browser, BrowserContext, Page \} from '@playwright\/test';/,
@@ -98,7 +98,7 @@ describe('W454.C apps/server/src/drivers/playwright.ts content parity', () => {
       /import \{ BadRequestError, DriverNotIntegratedError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
-      /import type \{\s*\n?\s*CaptureInput,\s*\n?\s*CaptureResult,\s*\n?\s*ExtractInput,\s*\n?\s*ExtractResult,\s*\n?\s*SearchInput,\s*\n?\s*SearchResult,\s*\n?\s*CreateSessionInput,\s*\n?\s*CreateSessionResult,\s*\n?\s*Driver,\s*\n?\s*DriverSessionId,\s*\n?\s*GUIInputInput,\s*\n?\s*GUIInputResult,\s*\n?\s*InteractInput,\s*\n?\s*InteractResult,\s*\n?\s*NavigateInput,\s*\n?\s*NavigateResult,\s*\n?\s*SessionStateResult,\s*\n?\s*WaitInput,\s*\n?\s*WaitResult,\s*\n?\s*\} from '\.\/types\.js';/,
+      /import type \{\s*\n?\s*CaptureInput,\s*\n?\s*CaptureResult,\s*\n?\s*ExtractInput,\s*\n?\s*ExtractResult,\s*\n?\s*SearchInput,\s*\n?\s*SearchResult,\s*\n?\s*LoginInput,\s*\n?\s*LoginResult,\s*\n?\s*CreateSessionInput,\s*\n?\s*CreateSessionResult,\s*\n?\s*Driver,\s*\n?\s*DriverSessionId,\s*\n?\s*GUIInputInput,\s*\n?\s*GUIInputResult,\s*\n?\s*InteractInput,\s*\n?\s*InteractResult,\s*\n?\s*NavigateInput,\s*\n?\s*NavigateResult,\s*\n?\s*SessionStateResult,\s*\n?\s*WaitInput,\s*\n?\s*WaitResult,\s*\n?\s*\} from '\.\/types\.js';/,
     );
   });
 

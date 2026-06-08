@@ -239,6 +239,10 @@ class ThrowingDriver implements Driver {
     this.throwIfArmed();
     return Promise.resolve({ submitted: true, durationMs: 1 });
   }
+  login(): Promise<{ loggedIn: boolean; postLoginUrl?: string; durationMs: number }> {
+    this.throwIfArmed();
+    return Promise.resolve({ loggedIn: true, durationMs: 1 });
+  }
   destroy(driverSessionId: string): Promise<void> {
     this.destroyedIds.push(driverSessionId);
     return Promise.resolve();
@@ -326,7 +330,15 @@ describe('SessionsService — V-090 driver-failure capture', () => {
   });
 
   it('interact / wait / capture / state — each produces session.failed on driver throw', async () => {
-    for (const op of ['interact', 'wait', 'capture', 'state', 'extract', 'search'] as const) {
+    for (const op of [
+      'interact',
+      'wait',
+      'capture',
+      'state',
+      'extract',
+      'search',
+      'login',
+    ] as const) {
       const { service, repo, driver, webhookEvents } = buildService();
       const ctx = buildCtx();
       const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
@@ -347,6 +359,8 @@ describe('SessionsService — V-090 driver-failure capture', () => {
           });
         } else if (op === 'search') {
           await service.search(ctx, session.id, { query: 'q', submit: true });
+        } else if (op === 'login') {
+          await service.login(ctx, session.id, { username: 'u', password: 'p' });
         } else {
           await service.getState(ctx, session.id);
         }

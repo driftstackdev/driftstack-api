@@ -45,9 +45,9 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
   });
 
-  it('imports: 8 Zod schemas from @driftstack/api-types + SessionRecord/SessionsService + GUIInputRequestSchema + BadRequest/Forbidden errors + AccountAuthRepo + resolveEffectiveAccount', () => {
+  it('imports: 9 Zod schemas from @driftstack/api-types + SessionRecord/SessionsService + GUIInputRequestSchema + BadRequest/Forbidden errors + AccountAuthRepo + resolveEffectiveAccount', () => {
     expect(body).toMatch(
-      /import \{\s*\n?\s*CaptureRequestSchema,\s*\n?\s*ExtractRequestSchema,\s*\n?\s*SearchRequestSchema,\s*\n?\s*CreateSessionRequestSchema,\s*\n?\s*InteractRequestSchema,\s*\n?\s*NavigateRequestSchema,\s*\n?\s*PaginationQuerySchema,\s*\n?\s*WaitRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*\n?\s*CaptureRequestSchema,\s*\n?\s*ExtractRequestSchema,\s*\n?\s*SearchRequestSchema,\s*\n?\s*SessionLoginRequestSchema,\s*\n?\s*CreateSessionRequestSchema,\s*\n?\s*InteractRequestSchema,\s*\n?\s*NavigateRequestSchema,\s*\n?\s*PaginationQuerySchema,\s*\n?\s*WaitRequestSchema,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /import type \{ SessionRecord, SessionsService \} from '\.\.\/services\/sessions\.js';/,

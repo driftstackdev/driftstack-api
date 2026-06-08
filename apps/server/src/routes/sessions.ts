@@ -17,6 +17,7 @@ import {
   CaptureRequestSchema,
   ExtractRequestSchema,
   SearchRequestSchema,
+  SessionLoginRequestSchema,
   CreateSessionRequestSchema,
   InteractRequestSchema,
   NavigateRequestSchema,
@@ -582,6 +583,33 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       return {
         submitted: result.submitted,
         ...(result.resultsVisible !== undefined ? { results_visible: result.resultsVisible } : {}),
+        duration_ms: result.durationMs,
+      };
+    },
+  );
+
+  // ── POST /v1/sessions/:id/login ────────────────────────────────────────
+  // Heuristic credential login (harness `login` intent). A driver write-op;
+  // same admin-only write-scope gate. The password is never logged.
+  app.post<{ Params: { id: string } }>(
+    '/v1/sessions/:id/login',
+    {
+      preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = requireCtx(request);
+      const id = uuidFromPrefixedId(request.params.id, 'ses');
+      const body = SessionLoginRequestSchema.parse(request.body ?? {});
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const result = await service.login(
+        ctx,
+        id,
+        body,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
+      return {
+        logged_in: result.loggedIn,
+        ...(result.postLoginUrl !== undefined ? { post_login_url: result.postLoginUrl } : {}),
         duration_ms: result.durationMs,
       };
     },

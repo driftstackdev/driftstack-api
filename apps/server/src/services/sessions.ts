@@ -18,6 +18,7 @@ import {
   type CaptureRequest,
   type ExtractRequest,
   type SearchRequest,
+  type SessionLoginRequest,
   type CreateSessionRequest,
   type InteractRequest,
   type NavigateRequest,
@@ -557,6 +558,32 @@ export class SessionsService {
         ...(body.wait_for_results_selector !== undefined
           ? { waitForResultsSelector: body.wait_for_results_selector }
           : {}),
+      }),
+    );
+  }
+
+  /** Heuristic credential login (harness `login` intent, A3). A driver
+   *  write-op; no session event recorded. The password flows to the driver but
+   *  is never logged (failure capture records only the operation label). */
+  async login(
+    ctx: AccountContext,
+    sessionId: string,
+    body: SessionLoginRequest,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<{ loggedIn: boolean; postLoginUrl?: string; durationMs: number }> {
+    const session = await this.requireOwned(ctx, sessionId, opts);
+    return this.runWithFailureCapture(ctx, session, 'login', () =>
+      this.deps.driver.login(session.driverSessionId, {
+        username: body.username,
+        password: body.password,
+        ...(body.username_selector !== undefined
+          ? { usernameSelector: body.username_selector }
+          : {}),
+        ...(body.password_selector !== undefined
+          ? { passwordSelector: body.password_selector }
+          : {}),
+        ...(body.submit_selector !== undefined ? { submitSelector: body.submit_selector } : {}),
+        ...(body.success_selector !== undefined ? { successSelector: body.success_selector } : {}),
       }),
     );
   }

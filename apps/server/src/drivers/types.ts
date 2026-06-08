@@ -151,6 +151,22 @@ export interface SearchResult {
   durationMs: number;
 }
 
+export interface LoginInput {
+  username: string;
+  /** SENSITIVE — never logged. */
+  password: string;
+  usernameSelector?: string;
+  passwordSelector?: string;
+  submitSelector?: string;
+  successSelector?: string;
+}
+
+export interface LoginResult {
+  loggedIn: boolean;
+  postLoginUrl?: string;
+  durationMs: number;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Driver interface
 // ───────────────────────────────────────────────────────────────────────────
@@ -166,5 +182,6 @@ export interface Driver {
   capture(sessionId: DriverSessionId, input: CaptureInput): Promise<CaptureResult>;
   extract(sessionId: DriverSessionId, input: ExtractInput): Promise<ExtractResult>;
   search(sessionId: DriverSessionId, input: SearchInput): Promise<SearchResult>;
+  login(sessionId: DriverSessionId, input: LoginInput): Promise<LoginResult>;
   destroy(sessionId: DriverSessionId): Promise<void>;
 }

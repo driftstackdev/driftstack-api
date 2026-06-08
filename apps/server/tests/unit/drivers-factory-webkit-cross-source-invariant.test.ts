@@ -135,13 +135,13 @@ describe('W985 drivers factory + WebKit cross-source invariant', () => {
 
   // ─── WebKitDriver 8 throw methods ────────────────────────────
 
-  it("CRITICAL WebKitDriver implements Driver + all 10 methods throw DriverNotIntegratedError after no-op await Promise.resolve(). The require-await + throw pattern keeps ESLint happy + signals 'every method is stubbed'.", () => {
+  it("CRITICAL WebKitDriver implements Driver + all 11 methods throw DriverNotIntegratedError after no-op await Promise.resolve(). The require-await + throw pattern keeps ESLint happy + signals 'every method is stubbed'.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/drivers/webkit.ts'));
     expect(p).toMatch(/export class WebKitDriver implements Driver \{/);
     // Count throw DriverNotIntegratedError occurrences.
     const matches = p.match(/throw new DriverNotIntegratedError\(\);/g) ?? [];
-    expect(matches.length).toBe(10);
-    // Verify all 10 method names.
+    expect(matches.length).toBe(11);
+    // Verify all 11 method names.
     expect(p).toMatch(/async createSession\(/);
     expect(p).toMatch(/async navigate\(/);
     expect(p).toMatch(/async interact\(/);
@@ -151,6 +151,7 @@ describe('W985 drivers factory + WebKit cross-source invariant', () => {
     expect(p).toMatch(/async capture\(/);
     expect(p).toMatch(/async extract\(/);
     expect(p).toMatch(/async search\(/);
+    expect(p).toMatch(/async login\(/);
     expect(p).toMatch(/async destroy\(/);
   });
 

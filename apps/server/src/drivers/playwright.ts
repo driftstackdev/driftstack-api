@@ -38,6 +38,8 @@ import type {
   ExtractResult,
   SearchInput,
   SearchResult,
+  LoginInput,
+  LoginResult,
   CreateSessionInput,
   CreateSessionResult,
   Driver,
@@ -208,6 +210,13 @@ export class PlaywrightDriver implements Driver {
   async search(_sessionId: DriverSessionId, _input: SearchInput): Promise<SearchResult> {
     // Like extract: the real query-type+submit+wait flow is the WebKit driver's
     // harness `search` intent; the Playwright local-dev impl is a follow-up.
+    await Promise.resolve();
+    throw new DriverNotIntegratedError();
+  }
+
+  async login(_sessionId: DriverSessionId, _input: LoginInput): Promise<LoginResult> {
+    // Real heuristic credential login is the WebKit driver's harness `login`
+    // intent; the Playwright local-dev impl is a follow-up.
     await Promise.resolve();
     throw new DriverNotIntegratedError();
   }

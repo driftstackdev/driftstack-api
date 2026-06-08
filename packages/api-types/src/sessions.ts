@@ -363,6 +363,42 @@ export const SearchResponseSchema = z.object({
 export type SearchResponse = z.infer<typeof SearchResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────
+// Login (heuristic credential login) — harness intent, A3 (bus W244/W245).
+// POST /v1/sessions/:id/login. The password is SENSITIVE: it flows to the
+// harness send-keys path but is never logged (the service records only the
+// operation label on failure). Recipe-based login is the separate
+// execute_recipe surface, not this intent.
+// ───────────────────────────────────────────────────────────────────────────
+
+// Named SessionLogin* (not Login*) — the auth module already owns
+// LoginRequest/LoginResponse for the account-login (email+password → session
+// token); this is the distinct in-browser credential-login driver op.
+export const SessionLoginRequestSchema = z.object({
+  username: z.string().min(1),
+  /** SENSITIVE — typed via the behavioural send-keys path; never logged. */
+  password: z.string().min(1),
+  /** Explicit username/email field selector; omit → harness heuristic detection. */
+  username_selector: z.string().optional(),
+  /** Explicit password field selector; omit → heuristic. */
+  password_selector: z.string().optional(),
+  /** Explicit submit control; omit → Return on the password field. */
+  submit_selector: z.string().optional(),
+  /** Optional selector whose post-submit presence means success; omit → the
+   *  password-field-gone + URL heuristic. Robust for known / multi-step logins. */
+  success_selector: z.string().optional(),
+});
+export type SessionLoginRequest = z.infer<typeof SessionLoginRequestSchema>;
+
+export const SessionLoginResponseSchema = z.object({
+  /** Post-submit assessment: true only when login is judged successful (never a
+   *  false positive — a captcha / 2FA / login-required landing yields false). */
+  logged_in: z.boolean(),
+  /** The URL after the submit settled (lets the caller drive challenge/pause). */
+  post_login_url: z.string().optional(),
+});
+export type SessionLoginResponse = z.infer<typeof SessionLoginResponseSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
 // Session events (for audit / debugging)
 // ───────────────────────────────────────────────────────────────────────────
 

@@ -26,6 +26,8 @@ import type {
   ExtractResult,
   SearchInput,
   SearchResult,
+  LoginInput,
+  LoginResult,
   CreateSessionInput,
   CreateSessionResult,
   Driver,
@@ -301,6 +303,20 @@ export class MockDriver implements Driver {
     return {
       submitted: input.submit,
       ...(input.waitForResultsSelector !== undefined ? { resultsVisible: true } : {}),
+      durationMs: Date.now() - start,
+    };
+  }
+
+  async login(sessionId: DriverSessionId, _input: LoginInput): Promise<LoginResult> {
+    this.requireSession(sessionId);
+    const start = Date.now();
+    await this.sleep(this.interactLatencyMs);
+    // The real heuristic login (type credentials + submit + assess) runs in the
+    // WebKit driver. The mock reports a successful login (never echoes the
+    // password — _input is unused).
+    return {
+      loggedIn: true,
+      postLoginUrl: 'https://example.com/account',
       durationMs: Date.now() - start,
     };
   }
