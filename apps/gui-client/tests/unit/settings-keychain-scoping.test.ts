@@ -11,7 +11,7 @@
 // against the source via vitest's standard project config.
 
 import { describe, expect, it } from 'vitest';
-import { keychainNameFor } from '../../src/lib/settings';
+import { keychainNameFor, useKeychainForBaseUrl } from '../../src/lib/settings';
 
 describe('keychainNameFor — per-baseUrl scoping', () => {
   it('cloud URL produces a distinct name', () => {
@@ -47,5 +47,27 @@ describe('keychainNameFor — per-baseUrl scoping', () => {
   it('empty / garbage baseUrl gets a stable fallback name', () => {
     expect(keychainNameFor('')).toBe('api_key:unknown');
     expect(keychainNameFor('   ')).toBe('api_key:unknown');
+  });
+});
+
+// GUI W232 (c) — keychain only for the official cloud; self-hosted / localhost
+// keys go to settings.json so the per-rebuild keychain ACL prompt stops firing.
+describe('useKeychainForBaseUrl — cloud-only keychain gate', () => {
+  it('cloud hosts → keychain (sensitive ds_live_ key)', () => {
+    expect(useKeychainForBaseUrl('https://api.driftstack.dev')).toBe(true);
+    expect(useKeychainForBaseUrl('https://staging.driftstack.dev')).toBe(true);
+    expect(useKeychainForBaseUrl('https://driftstack.dev')).toBe(true);
+    expect(useKeychainForBaseUrl('https://api.driftstack.dev/')).toBe(true);
+  });
+
+  it('localhost / self-hosted / IP → settings.json (no keychain prompt)', () => {
+    expect(useKeychainForBaseUrl('http://localhost:3000')).toBe(false);
+    expect(useKeychainForBaseUrl('http://127.0.0.1:7780')).toBe(false);
+    expect(useKeychainForBaseUrl('https://driftstack.internal.acme.com')).toBe(false);
+    expect(useKeychainForBaseUrl('')).toBe(false);
+  });
+
+  it('a look-alike host does NOT match the cloud suffix (no driftstack.dev.evil.com bypass)', () => {
+    expect(useKeychainForBaseUrl('https://driftstack.dev.evil.com')).toBe(false);
   });
 });

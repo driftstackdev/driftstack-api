@@ -59,6 +59,24 @@ export function keychainNameFor(baseUrl: string): string {
   return 'api_key:' + (normalised.length > 0 ? normalised : 'unknown');
 }
 
+// GUI W232 (c) — keychain ONLY for the official cloud (`*.driftstack.dev`,
+// where the key is a sensitive `ds_live_…` value worth OS-encrypting). For
+// self-hosted / localhost the key is a local dev value, and the macOS Keychain
+// ACL prompt re-fires on every ad-hoc rebuild (fresh code signature) — so we
+// store it in `settings.json` instead (plaintext in the per-app config dir;
+// acceptable for a local key, and it ENDS the per-build re-prompt). Switching
+// baseUrl re-evaluates this, and loadSettings one-time-migrates a self-hosted
+// key out of the keychain into settings.json on the first load after upgrade.
+export function useKeychainForBaseUrl(baseUrl: string): boolean {
+  const host = baseUrl
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/:\d+$/, '');
+  return host === 'driftstack.dev' || host.endsWith('.driftstack.dev');
+}
+
 interface PersistedSettings {
   apiKey?: unknown;
   baseUrl?: unknown;
@@ -106,6 +124,32 @@ export async function loadSettings(): Promise<DriftstackSettings> {
       : DEFAULT_SETTINGS.baseUrl;
   const telemetryOptIn =
     persisted && typeof persisted.telemetryOptIn === 'boolean' ? persisted.telemetryOptIn : null;
+
+  // GUI W232 (c) — self-hosted / localhost: the API key lives in settings.json
+  // (no keychain → no per-rebuild ACL prompt). Read it straight from the store.
+  if (!useKeychainForBaseUrl(baseUrl)) {
+    let apiKey =
+      persisted && typeof persisted.apiKey === 'string' && persisted.apiKey.length > 0
+        ? persisted.apiKey
+        : null;
+    // One-time migration: a pre-W232 self-hosted install kept the key in the
+    // keychain. Pull it into settings.json + clear the keychain (one last
+    // prompt, then never again).
+    if (apiKey === null) {
+      const scoped = keychainNameFor(baseUrl);
+      const fromKeychain =
+        (await keychainLoad(scoped)) ?? (await keychainLoad(LEGACY_KEYCHAIN_NAME));
+      if (fromKeychain !== null) {
+        apiKey = fromKeychain;
+        await getStore().set(SETTINGS_KEY, { apiKey, baseUrl, telemetryOptIn });
+        await getStore().save();
+        await keychainDelete(scoped);
+        await keychainDelete(LEGACY_KEYCHAIN_NAME);
+      }
+    }
+    return { apiKey, baseUrl, telemetryOptIn };
+  }
+
   const scopedName = keychainNameFor(baseUrl);
 
   // Pre-V-241 customers may have apiKey in settings.json. Migrate
@@ -157,20 +201,27 @@ export async function loadSettings(): Promise<DriftstackSettings> {
 }
 
 export async function saveSettings(s: DriftstackSettings): Promise<void> {
+  const useKeychain = useKeychainForBaseUrl(s.baseUrl);
+  const hasKey = s.apiKey !== null && s.apiKey.length > 0;
+  // GUI W232 (c) — self-hosted keys are persisted IN settings.json; cloud keys
+  // NEVER are (they stay in the OS keychain). On self-hosted sign-out the
+  // apiKey is simply omitted from the store shape.
   await getStore().set(SETTINGS_KEY, {
     baseUrl: s.baseUrl,
     telemetryOptIn: s.telemetryOptIn,
+    ...(!useKeychain && hasKey ? { apiKey: s.apiKey } : {}),
   });
   await getStore().save();
+
   const scopedName = keychainNameFor(s.baseUrl);
-  if (s.apiKey === null || s.apiKey.length === 0) {
-    // 2026-05-20 — also wipe the legacy single-entry name on sign-out
-    // so customers don't get re-pulled into a stale key on next launch
-    // (customer reported "logout doesn't work, keychain keeps pulling
-    // from self-hosted"). Idempotent — delete-when-absent is fine.
-    await keychainDelete(scopedName);
-    await keychainDelete(LEGACY_KEYCHAIN_NAME);
-  } else {
+  if (useKeychain && s.apiKey !== null && s.apiKey.length > 0) {
     await keychainSave(scopedName, s.apiKey);
+    return;
   }
+  // Cloud sign-out OR any self-hosted save: ensure no keychain copy lingers —
+  // so a self-hosted key never re-prompts, and a cloud sign-out wipes the
+  // secret + the legacy single-entry name (2026-05-20: "logout keeps pulling
+  // from self-hosted"). Idempotent; delete-when-absent is fine.
+  await keychainDelete(scopedName);
+  await keychainDelete(LEGACY_KEYCHAIN_NAME);
 }

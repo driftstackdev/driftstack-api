@@ -131,7 +131,7 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
       /export async function saveSettings\(s: DriftstackSettings\): Promise<void>/,
     );
     expect(body).toMatch(
-      /await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*\}\);/,
+      /await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*\.\.\.\(!useKeychain && hasKey \? \{ apiKey: s\.apiKey \} : \{\}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(/const scopedName = keychainNameFor\(s\.baseUrl\);/);
     // Sign-out path: dual-delete (scoped + legacy) closes the cross-env
@@ -141,6 +141,31 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
       /await keychainDelete\(scopedName\);\s*\n?\s*await keychainDelete\(LEGACY_KEYCHAIN_NAME\);/,
     );
     expect(body).toMatch(/await keychainSave\(scopedName, s\.apiKey\);/);
+  });
+
+  it('GUI W232 (c) useKeychainForBaseUrl pinned: keychain ONLY for *.driftstack.dev (cloud, sensitive ds_live_ key); self-hosted / localhost → settings.json (ends the per-rebuild keychain ACL re-prompt). Drift to keychaining localhost would re-introduce the prompt-every-build pain; drift to NOT keychaining cloud would plaintext a live key', () => {
+    expect(body).toMatch(/export function useKeychainForBaseUrl\(baseUrl: string\): boolean \{/);
+    expect(body).toMatch(
+      /return host === 'driftstack\.dev' \|\| host\.endsWith\('\.driftstack\.dev'\);/,
+    );
+  });
+
+  it('GUI W232 (c) loadSettings self-hosted branch pinned: when !useKeychainForBaseUrl, the apiKey is read straight from settings.json (no keychain call → no prompt) + a one-time keychain→settings.json migration for pre-W232 self-hosted installs, then early-return', () => {
+    expect(body).toMatch(/if \(!useKeychainForBaseUrl\(baseUrl\)\) \{/);
+    // The one-time migration pulls a pre-W232 key out of the keychain + clears it.
+    expect(body).toMatch(
+      /const fromKeychain =\s*\n?\s*\(await keychainLoad\(scoped\)\) \?\? \(await keychainLoad\(LEGACY_KEYCHAIN_NAME\)\);/,
+    );
+    expect(body).toMatch(
+      /await keychainDelete\(scoped\);\s*\n?\s*await keychainDelete\(LEGACY_KEYCHAIN_NAME\);/,
+    );
+  });
+
+  it('GUI W232 (c) saveSettings branches on useKeychain: cloud key → keychainSave + return; self-hosted → key persisted in the store shape + keychain cleared (never re-prompts)', () => {
+    expect(body).toMatch(/const useKeychain = useKeychainForBaseUrl\(s\.baseUrl\);/);
+    expect(body).toMatch(
+      /if \(useKeychain && s\.apiKey !== null && s\.apiKey\.length > 0\) \{\s*\n?\s*await keychainSave\(scopedName, s\.apiKey\);\s*\n?\s*return;\s*\n?\s*\}/,
+    );
   });
 
   it('file exists at canonical path', () => {
