@@ -562,3 +562,65 @@ against the harness's `[A-Za-z0-9_-]`/≤128 path-safety guard before it ships. 
 will NOT strip the prefix before sending — the prefix is the cross-type safety
 boundary (keeps a `ses_` id out of an `agt_` mint flow), so it must travel on the wire,
 and it is path-safe by construction.
+
+## Profile-backed sessions — restore + save-back contract (2026-06-08, A2 W181–W186 ⇄ A3 W417–W421)
+
+A profile-backed session restores an encrypted per-profile store into the fork on
+assign and seals it back on session end. The sealed blob (LZFSE + AES-GCM-256 under
+a per-profile DEK) is **opaque to the control plane** — A2 only moves bytes + mints
+presigned URLs; it never decrypts. Stored in R2 at `profiles/<profile_id>.sealed`
+(`profileSealedBlobKey`, an object-storage key — flat, no path traversal).
+
+### Wire contract (snake_case nested, mirrors the `livekit` block convention)
+
+**INBOUND — `ControlInbound.sessionAssign.profile`** (optional; absent ⇒ today's
+stateless path, unchanged). `SessionAssignProfileSchema`: `profile_id` + `dek`
+required; `sealed_blob` (inline ≤256KB) OR `sealed_blob_url` (presigned GET) +
+`sealed_blob_put_url` (presigned PUT for save-back) optional. Built by
+`buildAssignProfileBlock(r2, profileId, dek, {urlTtlSeconds})` (camelCase in →
+serializeSessionAssign emits snake_case). A2 chose **always-presigned-URL, never
+inline** on the restore side (A3's decoder fetches `sealed_blob_url`, W420 tested) —
+keeps an arbitrarily large blob off the server with no size-probe.
+
+**OUTBOUND — `HarnessOutbound.profileSaved`** (A3 W421, exact emitted frames, pinned
+both sides byte-for-byte). nil optionals are **OMITTED, not null** — absence is the
+discriminator:
+
+- inline (small): `{"type":"profileSaved","sessionId":"…","profile_id":"…","sealed_blob":"<b64>"}` → server `putObject`s under `profileSealedBlobKey`.
+- large-ack (after the harness PUT to `sealed_blob_put_url`): `{"type":"profileSaved","sessionId":"…","profile_id":"…","stored":true}` → server no-op.
+
+### Status
+
+- **A3 (W420): COMPLETE + live** — lifecycle wired end-to-end (decode→openProfile→
+  populate on assign; serialize→seal→profileSaved on end), graceful-degrade to
+  stateless on any restore failure, must-deliver queue across teardown. 239 green.
+- **A2: DONE (gated/inert in prod until wiring + flag)** — wire contract (`65d77c59`),
+  profileSaved consumer + R2 persist (`4eccdd65`), verbatim-frame drift-guard
+  (`3b836cab`), `buildAssignProfileBlock` restore builder (`7214a6aa`), presign-TTL
+  data-loss fix (`c0d4234d`).
+
+### Audit findings (A2 W185–W186)
+
+1. **FIXED (`c0d4234d`):** the save-back PUT URL is minted at assign but used at
+   session END; R2's default 900s TTL < the 1800s default max session ⇒ a >15-min
+   session's save-back would 403 → silent profile-data loss. `buildAssignProfileBlock`
+   now takes `urlTtlSeconds` (default 3600, clamped to R2's 7-day ceiling); the step-(e)
+   caller passes `maxDurationSeconds` + margin.
+2. **OPEN — authorization, close at wiring:** the profileSaved consumer's INLINE path
+   writes `profiles/<frame.profile_id>.sealed` using the NODE-supplied `profile_id`
+   with no ownership check ⇒ a compromised/buggy authenticated node could overwrite an
+   arbitrary profile's blob. Isolated (the only inbound frame writing a cross-session
+   resource keyed by untrusted input; intentResult/sessionStatus are correlation-scoped).
+   Close via **(B)** harness always uses the server-minted `sealed_blob_put_url` (never
+   inline) ⇒ server-controlled key, node-keyed write dead; **+(A)** server records
+   `session→profile` at dispatch and the consumer rejects a `profile_id` mismatch.
+
+### REMAINING (all gated)
+
+- **(c) DEK mint/wrap** KMS→TMK→DEK (file 57) — **founder-gated crypto decision.**
+- **session→profile linkage** — how an agent-session selects a profile (e.g. a
+  `profile_id` on the create body) — **product decision.**
+- **(e) dispatch wiring** — call `buildAssignProfileBlock` in `dispatchSessionAssignOnCreate`
+  for profile-backed sessions (set `profile`, pass maxDuration as the TTL), + close
+  finding #2. Crypto-free R2/presign half already built + tested; blocked only on (c)
+  - the linkage decision.
