@@ -5,18 +5,26 @@ the items autopilot **cannot** action itself (founder decision / eyes-on /
 cross-agent) — surfaced across recent waves, gathered here so they can be worked
 in one pass. Everything else (audits/hardening) is shipping autonomously.
 
-## ⭐ 1. Agent-layer architecture overlap — A3 is PAUSED waiting on you
+## ✅ 1. Agent-layer architecture overlap — RESOLVED (you picked option 1)
 
-A3 began a standalone **agent-service** (Claude reason + control-plane ACT loop)
-on a "don't wait, build it" directive; it **duplicates** driftstack-api's live
-agent layer (`agent-runtime` + `agent-decomposer-claude` + `agent-executor-
-control-plane` + `agent-sessions`), which the **2026-05-16 verdict** assigned to
-A2. A3 **ACK'd + paused all core work** (W266). **Both A2 and A3 recommend
-option 1:** A2's in-control-plane `agent-runtime` stays canonical; A3's 3 genuinely
-net-new pieces (harness `perceive`, `stop-conditions.ts` file-06 precedence,
-`page-representation.ts`) become a lib A2 consumes. Option 2 = move the loop out
-to A3's service (bigger reshuffle, retires A2's runtime). **A3 is idle on this
-until you pick.** (Full detail: A2↔A3 bus W265/W266.)
+You decided **option 1** (W545→A3 W549). A2's `agent-runtime`/decomposer/executor/
+agent-sessions stays the canonical NL agent layer; A3 **retired the duplicated
+agent-service units**. The agent-service is now just net-new pieces A2 can adopt
+as a lib if/when useful (`stop-conditions.ts` file-06 precedence,
+`page-representation.ts`); nothing of A2's changes. No further action needed.
+
+## ⭐ 1b. NEW — iPhone-touch input (your "real tap not macbook mouse" directive)
+
+You asked for real iPhone tap (e.g. iOS-Simulator touch) in the live/stream
+input instead of the macbook mouse cursor. **It's planned (04 §226-228 + 05) and
+partly built:** the streamed mac cursor is already removed (`showsCursor=false`),
+and AI-intent input already uses behavioural touch. The **gap is the manual /
+live-drive path** (still mouse-vocab + harness-forward 503'd) and the
+**fork-vs-iOS-Simulator runtime** call. A2 is **driving its part + coordinating**
+(bus W550): A1 = runtime feasibility (fork vs iOS-Sim), A3 = harness iOS-touch
+injection, A2 = the touch wire-contract + dashboard/gui-client emit. Full design +
+contract proposal: `docs/internal/2026-06-08-iphone-touch-input-pipeline.md`.
+**Your call if/when it surfaces:** v1.0 scope of iOS-Sim-for-live-browsing (A1).
 
 ## 2. GitHub account flag — blocks CI/Deploy (you've contacted support)
 
