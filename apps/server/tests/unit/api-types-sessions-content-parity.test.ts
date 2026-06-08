@@ -203,18 +203,18 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     );
   });
 
-  it('Search contract pinned (harness intent A3 W244/W245): SearchRequest {query min1, search_selector?, submit default true, wait_for_results_selector?} + SearchResponse {submitted, results_visible?}. Drift breaks the cross-package contract the /v1/sessions/:id/search route + 3 SDK search methods import', () => {
+  it('Search contract pinned (harness intent A3 W244/W245): SearchRequest {query min1, search_selector?, submit default true, wait_for_results_selector?, timeout_seconds 1..120?} + SearchResponse {submitted, results_visible?}. Drift breaks the cross-package contract the /v1/sessions/:id/search route + 3 SDK search methods import', () => {
     expect(body).toMatch(
-      /export const SearchRequestSchema = z\.object\(\{[\s\S]*?query: z\.string\(\)\.min\(1\),[\s\S]*?search_selector: z\.string\(\)\.optional\(\),[\s\S]*?submit: z\.boolean\(\)\.default\(true\),[\s\S]*?wait_for_results_selector: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const SearchRequestSchema = z\.object\(\{[\s\S]*?query: z\.string\(\)\.min\(1\),[\s\S]*?search_selector: z\.string\(\)\.optional\(\),[\s\S]*?submit: z\.boolean\(\)\.default\(true\),[\s\S]*?wait_for_results_selector: z\.string\(\)\.optional\(\),[\s\S]*?timeout_seconds: z\.number\(\)\.int\(\)\.min\(1\)\.max\(120\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /export const SearchResponseSchema = z\.object\(\{[\s\S]*?submitted: z\.boolean\(\),[\s\S]*?results_visible: z\.boolean\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
   });
 
-  it('SessionLogin contract pinned (harness intent A3 W244/W245): SessionLoginRequest {username min1, password min1 SENSITIVE, username_selector?, password_selector?, submit_selector?, success_selector?} + SessionLoginResponse {logged_in, post_login_url?}. Named SessionLogin* to avoid colliding with auth LoginRequest. Drift breaks the cross-package contract the /v1/sessions/:id/login route + 3 SDK login methods import', () => {
+  it('SessionLogin contract pinned (harness intent A3 W244/W245): SessionLoginRequest {username min1, password min1 SENSITIVE, username_selector?, password_selector?, submit_selector?, success_selector?, timeout_seconds 1..120?} + SessionLoginResponse {logged_in, post_login_url?}. Named SessionLogin* to avoid colliding with auth LoginRequest. Drift breaks the cross-package contract the /v1/sessions/:id/login route + 3 SDK login methods import', () => {
     expect(body).toMatch(
-      /export const SessionLoginRequestSchema = z\.object\(\{[\s\S]*?username: z\.string\(\)\.min\(1\),[\s\S]*?password: z\.string\(\)\.min\(1\),[\s\S]*?username_selector: z\.string\(\)\.optional\(\),[\s\S]*?password_selector: z\.string\(\)\.optional\(\),[\s\S]*?submit_selector: z\.string\(\)\.optional\(\),[\s\S]*?success_selector: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
+      /export const SessionLoginRequestSchema = z\.object\(\{[\s\S]*?username: z\.string\(\)\.min\(1\),[\s\S]*?password: z\.string\(\)\.min\(1\),[\s\S]*?username_selector: z\.string\(\)\.optional\(\),[\s\S]*?password_selector: z\.string\(\)\.optional\(\),[\s\S]*?submit_selector: z\.string\(\)\.optional\(\),[\s\S]*?success_selector: z\.string\(\)\.optional\(\),[\s\S]*?timeout_seconds: z\.number\(\)\.int\(\)\.min\(1\)\.max\(120\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
       /export const SessionLoginResponseSchema = z\.object\(\{[\s\S]*?logged_in: z\.boolean\(\),[\s\S]*?post_login_url: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,

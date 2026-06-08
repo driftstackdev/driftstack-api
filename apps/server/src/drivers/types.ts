@@ -142,6 +142,7 @@ export interface SearchInput {
   searchSelector?: string;
   submit: boolean;
   waitForResultsSelector?: string;
+  timeoutSeconds?: number;
 }
 
 export interface SearchResult {
@@ -159,6 +160,7 @@ export interface LoginInput {
   passwordSelector?: string;
   submitSelector?: string;
   successSelector?: string;
+  timeoutSeconds?: number;
 }
 
 export interface LoginResult {

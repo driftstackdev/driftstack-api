@@ -1653,6 +1653,11 @@
           },
           "wait_for_results_selector": {
             "type": "string"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120
           }
         },
         "required": ["query"]
@@ -1691,6 +1696,11 @@
           },
           "success_selector": {
             "type": "string"
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120
           }
         },
         "required": ["username", "password"]
@@ -4758,6 +4768,11 @@
                   },
                   "wait_for_results_selector": {
                     "type": "string"
+                  },
+                  "timeout_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 120
                   }
                 },
                 "required": ["query"]
@@ -4891,6 +4906,11 @@
                   },
                   "success_selector": {
                     "type": "string"
+                  },
+                  "timeout_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 120
                   }
                 },
                 "required": ["username", "password"]

@@ -493,6 +493,8 @@ type SearchRequest struct {
 	// caller can send an explicit false (a plain bool's zero value can't).
 	Submit                 *bool  `json:"submit,omitempty"`
 	WaitForResultsSelector string `json:"wait_for_results_selector,omitempty"`
+	// Caps the wait_for_results_selector wait (seconds; 1..120). Omit → harness default (10s).
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
 type SearchResponse struct {
@@ -511,6 +513,8 @@ type SessionLoginRequest struct {
 	PasswordSelector string `json:"password_selector,omitempty"`
 	SubmitSelector   string `json:"submit_selector,omitempty"`
 	SuccessSelector  string `json:"success_selector,omitempty"`
+	// Caps the post-submit success wait (seconds; 1..120). Omit → harness default (10s).
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
 type SessionLoginResponse struct {

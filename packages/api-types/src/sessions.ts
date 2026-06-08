@@ -347,6 +347,9 @@ export const SearchRequestSchema = z.object({
   /** Optional selector to wait for after submit (results loaded); omit → a
    *  brief idle settle. When present, drives `results_visible` in the response. */
   wait_for_results_selector: z.string().optional(),
+  /** Caps the `wait_for_results_selector` wait (seconds). Omit → harness
+   *  default (10s). A timeout is `results_visible: false`, not an error. */
+  timeout_seconds: z.number().int().min(1).max(120).optional(),
 });
 export type SearchRequest = z.infer<typeof SearchRequestSchema>;
 /** Caller-side shape: fields with server-side defaults are optional. */
@@ -386,6 +389,8 @@ export const SessionLoginRequestSchema = z.object({
   /** Optional selector whose post-submit presence means success; omit → the
    *  password-field-gone + URL heuristic. Robust for known / multi-step logins. */
   success_selector: z.string().optional(),
+  /** Caps the post-submit success wait (seconds). Omit → harness default (10s). */
+  timeout_seconds: z.number().int().min(1).max(120).optional(),
 });
 export type SessionLoginRequest = z.infer<typeof SessionLoginRequestSchema>;
 

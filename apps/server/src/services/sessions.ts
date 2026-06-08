@@ -558,6 +558,7 @@ export class SessionsService {
         ...(body.wait_for_results_selector !== undefined
           ? { waitForResultsSelector: body.wait_for_results_selector }
           : {}),
+        ...(body.timeout_seconds !== undefined ? { timeoutSeconds: body.timeout_seconds } : {}),
       }),
     );
   }
@@ -584,6 +585,7 @@ export class SessionsService {
           : {}),
         ...(body.submit_selector !== undefined ? { submitSelector: body.submit_selector } : {}),
         ...(body.success_selector !== undefined ? { successSelector: body.success_selector } : {}),
+        ...(body.timeout_seconds !== undefined ? { timeoutSeconds: body.timeout_seconds } : {}),
       }),
     );
   }

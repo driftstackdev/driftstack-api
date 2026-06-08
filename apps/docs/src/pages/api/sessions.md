@@ -287,7 +287,8 @@ send-keys path), and submits. `search_selector` is optional — omit it and
 the field is detected heuristically. `submit` defaults to `true` (set it
 `false` to type without submitting). When `wait_for_results_selector` is
 given, the call waits for that selector after submit and reports whether it
-appeared (a timeout is `results_visible: false`, not an error). The response:
+appeared (a timeout is `results_visible: false`, not an error). `timeout_seconds`
+(1–120, default 10) caps that wait. The response:
 
 ```json
 { "submitted": true, "results_visible": true }
@@ -313,7 +314,7 @@ Return on the password field). `logged_in` is the post-submit assessment and
 is **never a false positive** — a captcha / 2FA / login-required landing
 yields `false`. Give `success_selector` for a robust signal on known or
 multi-step logins (its post-submit presence means success); omit it and the
-password-field-gone + URL heuristic is used. `post_login_url` lets you drive a
+password-field-gone + URL heuristic is used. `timeout_seconds` (1–120, default 10) caps the post-submit success wait. `post_login_url` lets you drive a
 challenge/pause flow when login didn't complete. Recipe-based login for a known
 site is the separate `execute_recipe` surface, not this intent. The response:
 
