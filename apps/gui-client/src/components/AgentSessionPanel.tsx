@@ -49,12 +49,24 @@ export function AgentSessionPanel({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
 
+  // Keep the latest onStateChange in a ref so the connect effect does NOT
+  // depend on the callback's identity. onStateChange exists for consumers (the
+  // LK.6.c badge) to hook connection state, and the natural usage is an inline
+  // `onStateChange={...}` arrow — a fresh ref every render. If the connect
+  // effect depended on it, every parent re-render would disconnect + re-create
+  // + reconnect the LiveKit room (streaming reconnect-thrash). The ref decouples
+  // the callback identity from the effect lifecycle.
+  const onStateChangeRef = useRef(onStateChange);
+  useEffect(() => {
+    onStateChangeRef.current = onStateChange;
+  }, [onStateChange]);
+
   useEffect(() => {
     let cancelled = false;
     const room = createLivekitRoom();
     const setS = (next: LivekitConnectionState): void => {
       setState(next);
-      onStateChange?.(next);
+      onStateChangeRef.current?.(next);
     };
 
     // RoomEvent wire-up. `as any` casts are scoped to the
@@ -92,7 +104,11 @@ export function AgentSessionPanel({
       cancelled = true;
       void (room as any).disconnect();
     };
-  }, [info, onStateChange]);
+    // Reconnect only when the connection identity (ws_url + token) changes, NOT
+    // on every new `info` object ref — info is stable per session, and a fresh
+    // ref with the same ws_url/token must not churn the room. connectToAgentSession
+    // only reads ws_url + token, so the captured `info` staying put is safe.
+  }, [info.ws_url, info.token]);
 
   return (
     <div
