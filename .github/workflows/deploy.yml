@@ -156,11 +156,25 @@ jobs:
           chmod 700 ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          # Prime known_hosts so the deploy-bridge ssh calls don't fail
-          # on the StrictHostKeyChecking prompt. We accept the staging
-          # host key on first contact; future rotations require the
-          # operator to update this fingerprint via gh workflow runs.
-          ssh-keyscan -t ed25519 116.203.22.197 >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Prime known_hosts so the deploy-bridge ssh calls don't fail on the
+          # StrictHostKeyChecking prompt. TOFU (not a pinned fingerprint) is
+          # intentional — the box can be reprovisioned; we just need its CURRENT
+          # key reliably. ssh-keyscan can transiently return nothing (runner->
+          # Hetzner network blip / momentarily slow sshd); a bare `|| true` would
+          # swallow that, leave known_hosts empty, and the later deploy-bridge
+          # ssh would fail with the cryptic "Host key verification failed"
+          # (exit 255). Retry a few times and fail CLEAR if the key never lands.
+          host=116.203.22.197
+          for attempt in 1 2 3 4 5; do
+            ssh-keyscan -t ed25519 "$host" >> ~/.ssh/known_hosts 2>/dev/null || true
+            if grep -qF "$host" ~/.ssh/known_hosts; then break; fi
+            echo "ssh-keyscan attempt $attempt for $host returned no key; retrying in 3s..."
+            sleep 3
+          done
+          if ! grep -qF "$host" ~/.ssh/known_hosts; then
+            echo "::error::could not obtain SSH host key for $host after 5 attempts (staging sshd unreachable?)"
+            exit 1
+          fi
 
       - name: Run scripts/deploy-bridge.sh staging
         if: steps.gate.outputs.ready == 'true'
@@ -219,7 +233,20 @@ jobs:
           chmod 700 ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -t ed25519 128.140.37.74 >> ~/.ssh/known_hosts 2>/dev/null || true
+          # Robust TOFU keyscan with retry + fail-clear (same rationale as the
+          # staging step — a swallowed transient keyscan miss → empty known_hosts
+          # → cryptic "Host key verification failed" mid-deploy).
+          host=128.140.37.74
+          for attempt in 1 2 3 4 5; do
+            ssh-keyscan -t ed25519 "$host" >> ~/.ssh/known_hosts 2>/dev/null || true
+            if grep -qF "$host" ~/.ssh/known_hosts; then break; fi
+            echo "ssh-keyscan attempt $attempt for $host returned no key; retrying in 3s..."
+            sleep 3
+          done
+          if ! grep -qF "$host" ~/.ssh/known_hosts; then
+            echo "::error::could not obtain SSH host key for $host after 5 attempts (prod sshd unreachable?)"
+            exit 1
+          fi
 
       - name: Run scripts/deploy-bridge.sh prod
         if: steps.gate.outputs.ready == 'true'

@@ -114,10 +114,18 @@ describe('W542.A /.github/workflows/deploy.yml content parity (Option B)', () =>
     expect(sshDirs).toBe(2);
     const chmod600 = (body.match(/chmod 600 ~\/\.ssh\/id_ed25519/g) ?? []).length;
     expect(chmod600).toBe(2);
-    const keyscanStaging = body.match(/ssh-keyscan -t ed25519 116\.203\.22\.197/);
+    // Host IPs pinned as the `host=` var the robust keyscan loop reads.
+    const keyscanStaging = body.match(/host=116\.203\.22\.197/);
     expect(keyscanStaging).not.toBeNull();
-    const keyscanProd = body.match(/ssh-keyscan -t ed25519 128\.140\.37\.74/);
+    const keyscanProd = body.match(/host=128\.140\.37\.74/);
     expect(keyscanProd).not.toBeNull();
+    // Robust TOFU keyscan (retry + fail-clear, replacing the `|| true` swallow that
+    // caused the eadc737 transient "Host key verification failed"): the var-based
+    // scan + the clear-error guard must each appear once per env (staging + prod).
+    const keyscanCmd = (body.match(/ssh-keyscan -t ed25519 "\$host"/g) ?? []).length;
+    expect(keyscanCmd).toBe(2);
+    const failClear = (body.match(/could not obtain SSH host key for \$host/g) ?? []).length;
+    expect(failClear).toBe(2);
   });
 
   it('Production GitHub-environment approval gate framing pinned', () => {
