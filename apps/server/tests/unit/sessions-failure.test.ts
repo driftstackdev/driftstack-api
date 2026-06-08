@@ -231,6 +231,10 @@ class ThrowingDriver implements Driver {
       durationMs: 1,
     });
   }
+  extract(): Promise<{ value: Record<string, unknown>; durationMs: number }> {
+    this.throwIfArmed();
+    return Promise.resolve({ value: { x: 'mock' }, durationMs: 1 });
+  }
   destroy(driverSessionId: string): Promise<void> {
     this.destroyedIds.push(driverSessionId);
     return Promise.resolve();
@@ -318,7 +322,7 @@ describe('SessionsService — V-090 driver-failure capture', () => {
   });
 
   it('interact / wait / capture / state — each produces session.failed on driver throw', async () => {
-    for (const op of ['interact', 'wait', 'capture', 'state'] as const) {
+    for (const op of ['interact', 'wait', 'capture', 'state', 'extract'] as const) {
       const { service, repo, driver, webhookEvents } = buildService();
       const ctx = buildCtx();
       const session = await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
@@ -333,6 +337,10 @@ describe('SessionsService — V-090 driver-failure capture', () => {
           });
         } else if (op === 'capture') {
           await service.capture(ctx, session.id, { kind: 'screenshot', full_page: false });
+        } else if (op === 'extract') {
+          await service.extract(ctx, session.id, {
+            extractions: [{ name: 'x', selector: '.x', type: 'text' }],
+          });
         } else {
           await service.getState(ctx, session.id);
         }

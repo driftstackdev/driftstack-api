@@ -10,6 +10,8 @@ import { DriverNotIntegratedError } from '../lib/errors.js';
 import type {
   CaptureInput,
   CaptureResult,
+  ExtractInput,
+  ExtractResult,
   CreateSessionInput,
   CreateSessionResult,
   Driver,
@@ -51,6 +53,10 @@ export class WebKitDriver implements Driver {
     throw new DriverNotIntegratedError();
   }
   async capture(_sessionId: DriverSessionId, _input: CaptureInput): Promise<CaptureResult> {
+    await Promise.resolve();
+    throw new DriverNotIntegratedError();
+  }
+  async extract(_sessionId: DriverSessionId, _input: ExtractInput): Promise<ExtractResult> {
     await Promise.resolve();
     throw new DriverNotIntegratedError();
   }

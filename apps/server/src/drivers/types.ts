@@ -13,6 +13,7 @@
 import type {
   BehavioralProfile,
   CaptureKind,
+  ExtractionSpec,
   InteractAction,
   WaitCondition,
 } from '@driftstack/api-types';
@@ -124,6 +125,18 @@ export interface CaptureResult {
   durationMs: number;
 }
 
+export interface ExtractInput {
+  extractions: ExtractionSpec[];
+}
+
+export interface ExtractResult {
+  /** Extracted values keyed by each extraction's `name` (heterogeneous:
+   *  string | number | array, per the extraction type). The customer's own
+   *  page data. */
+  value: Record<string, unknown>;
+  durationMs: number;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Driver interface
 // ───────────────────────────────────────────────────────────────────────────
@@ -137,5 +150,6 @@ export interface Driver {
   wait(sessionId: DriverSessionId, input: WaitInput): Promise<WaitResult>;
   getState(sessionId: DriverSessionId): Promise<SessionStateResult>;
   capture(sessionId: DriverSessionId, input: CaptureInput): Promise<CaptureResult>;
+  extract(sessionId: DriverSessionId, input: ExtractInput): Promise<ExtractResult>;
   destroy(sessionId: DriverSessionId): Promise<void>;
 }

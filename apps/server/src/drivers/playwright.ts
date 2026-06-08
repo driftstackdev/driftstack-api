@@ -34,6 +34,8 @@ import { BadRequestError, DriverNotIntegratedError } from '../lib/errors.js';
 import type {
   CaptureInput,
   CaptureResult,
+  ExtractInput,
+  ExtractResult,
   CreateSessionInput,
   CreateSessionResult,
   Driver,
@@ -189,6 +191,15 @@ export class PlaywrightDriver implements Driver {
       };
     }
     // 'state' / 'pdf' fall through; not yet wired.
+    throw new DriverNotIntegratedError();
+  }
+
+  async extract(_sessionId: DriverSessionId, _input: ExtractInput): Promise<ExtractResult> {
+    // Real DOM extraction in the Playwright (local-dev) driver is a follow-up —
+    // it needs in-page page.evaluate DOM logic (DOM lib not in the server
+    // tsconfig). The production path is the WebKit driver (harness `extract`
+    // intent, A3 W456) + the mock driver covers the default + tests.
+    await Promise.resolve();
     throw new DriverNotIntegratedError();
   }
 

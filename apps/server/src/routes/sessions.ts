@@ -15,6 +15,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   CaptureRequestSchema,
+  ExtractRequestSchema,
   CreateSessionRequestSchema,
   InteractRequestSchema,
   NavigateRequestSchema,
@@ -531,6 +532,30 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         byte_size: result.byteSize,
         duration_ms: result.durationMs,
       };
+    },
+  );
+
+  // ── POST /v1/sessions/:id/extract ──────────────────────────────────────
+  // Read structured page data (harness `extract` intent, A3 W456). A driver
+  // read-op like capture; same admin-only write-scope gate (it drives the
+  // session). Returns the extracted `value` map keyed by each extraction name.
+  app.post<{ Params: { id: string } }>(
+    '/v1/sessions/:id/extract',
+    {
+      preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
+    },
+    async (request) => {
+      const ctx = requireCtx(request);
+      const id = uuidFromPrefixedId(request.params.id, 'ses');
+      const body = ExtractRequestSchema.parse(request.body ?? {});
+      const eff = effectiveAccountIdForWrite(request, ctx);
+      const result = await service.extract(
+        ctx,
+        id,
+        body,
+        eff !== undefined ? { effectiveAccountId: eff } : {},
+      );
+      return { value: result.value, duration_ms: result.durationMs };
     },
   );
 

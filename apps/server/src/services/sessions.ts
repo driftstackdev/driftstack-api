@@ -16,6 +16,7 @@ import {
   type AccountTier,
   type CaptureKind,
   type CaptureRequest,
+  type ExtractRequest,
   type CreateSessionRequest,
   type InteractRequest,
   type NavigateRequest,
@@ -521,6 +522,21 @@ export class SessionsService {
       durationMs: result.durationMs,
     });
     return result;
+  }
+
+  /** Read structured data from the page (harness `extract` intent, A3 W456).
+   *  A read-op like capture but returns the extracted value map; no session
+   *  event is recorded (it's a non-mutating read). */
+  async extract(
+    ctx: AccountContext,
+    sessionId: string,
+    body: ExtractRequest,
+    opts: { effectiveAccountId?: string } = {},
+  ): Promise<{ value: Record<string, unknown>; durationMs: number }> {
+    const session = await this.requireOwned(ctx, sessionId, opts);
+    return this.runWithFailureCapture(ctx, session, 'extract', () =>
+      this.deps.driver.extract(session.driverSessionId, { extractions: body.extractions }),
+    );
   }
 
   async destroy(

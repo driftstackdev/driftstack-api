@@ -22,6 +22,8 @@ import type { BehavioralProfile } from '@driftstack/api-types';
 import type {
   CaptureInput,
   CaptureResult,
+  ExtractInput,
+  ExtractResult,
   CreateSessionInput,
   CreateSessionResult,
   Driver,
@@ -262,6 +264,29 @@ export class MockDriver implements Driver {
       byteSize: Math.floor((pdfStub.length * 3) / 4),
       durationMs: Date.now() - start,
     };
+  }
+
+  async extract(sessionId: DriverSessionId, input: ExtractInput): Promise<ExtractResult> {
+    this.requireSession(sessionId);
+    const start = Date.now();
+    await this.sleep(this.interactLatencyMs);
+    // Synthetic, type-faithful values per extraction (the real extraction runs
+    // in the WebKit driver against the page). Shapes match the contract: text →
+    // string (number when transform:'number'), attribute → string, list →
+    // array (of sub-objects when `extract` given, else strings).
+    const value: Record<string, unknown> = {};
+    for (const e of input.extractions) {
+      if (e.type === 'list') {
+        value[e.name] = e.extract
+          ? [Object.fromEntries(Object.keys(e.extract).map((f) => [f, `mock-${f}`]))]
+          : [`mock-${e.name}-0`, `mock-${e.name}-1`];
+      } else if (e.type === 'attribute') {
+        value[e.name] = `mock-${e.attribute ?? 'attr'}`;
+      } else {
+        value[e.name] = e.transform === 'number' ? 0 : `mock-${e.name}`;
+      }
+    }
+    return { value, durationMs: Date.now() - start };
   }
 
   async destroy(sessionId: DriverSessionId): Promise<void> {

@@ -49,9 +49,9 @@ describe('W430.B apps/server/src/drivers/types.ts content parity', () => {
     );
   });
 
-  it('imports: BehavioralProfile + CaptureKind + InteractAction + WaitCondition (api-types) + GUIInputAction (schemas/gui-input)', () => {
+  it('imports: BehavioralProfile + CaptureKind + ExtractionSpec + InteractAction + WaitCondition (api-types) + GUIInputAction (schemas/gui-input)', () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*BehavioralProfile,\s*\n?\s*CaptureKind,\s*\n?\s*InteractAction,\s*\n?\s*WaitCondition,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*\n?\s*BehavioralProfile,\s*\n?\s*CaptureKind,\s*\n?\s*ExtractionSpec,\s*\n?\s*InteractAction,\s*\n?\s*WaitCondition,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ GUIInputAction \} from '\.\.\/schemas\/gui-input\.js';/);
   });
@@ -127,9 +127,9 @@ describe('W430.B apps/server/src/drivers/types.ts content parity', () => {
     );
   });
 
-  it('Driver interface: 8 methods (createSession + navigate + interact + guiInput L-001 + wait + getState + capture + destroy)', () => {
+  it('Driver interface: 9 methods (createSession + navigate + interact + guiInput L-001 + wait + getState + capture + extract + destroy)', () => {
     expect(body).toMatch(
-      /export interface Driver \{\s*\n?\s*createSession\(input: CreateSessionInput\): Promise<CreateSessionResult>;\s*\n?\s*navigate\(sessionId: DriverSessionId, input: NavigateInput\): Promise<NavigateResult>;\s*\n?\s*interact\(sessionId: DriverSessionId, input: InteractInput\): Promise<InteractResult>;\s*\n?\s*\/\*\* GUI-control plane \(L-001\) — coordinate-level input\. \*\/\s*\n?\s*guiInput\(sessionId: DriverSessionId, input: GUIInputInput\): Promise<GUIInputResult>;\s*\n?\s*wait\(sessionId: DriverSessionId, input: WaitInput\): Promise<WaitResult>;\s*\n?\s*getState\(sessionId: DriverSessionId\): Promise<SessionStateResult>;\s*\n?\s*capture\(sessionId: DriverSessionId, input: CaptureInput\): Promise<CaptureResult>;\s*\n?\s*destroy\(sessionId: DriverSessionId\): Promise<void>;\s*\n?\s*\}/,
+      /export interface Driver \{\s*\n?\s*createSession\(input: CreateSessionInput\): Promise<CreateSessionResult>;\s*\n?\s*navigate\(sessionId: DriverSessionId, input: NavigateInput\): Promise<NavigateResult>;\s*\n?\s*interact\(sessionId: DriverSessionId, input: InteractInput\): Promise<InteractResult>;\s*\n?\s*\/\*\* GUI-control plane \(L-001\) — coordinate-level input\. \*\/\s*\n?\s*guiInput\(sessionId: DriverSessionId, input: GUIInputInput\): Promise<GUIInputResult>;\s*\n?\s*wait\(sessionId: DriverSessionId, input: WaitInput\): Promise<WaitResult>;\s*\n?\s*getState\(sessionId: DriverSessionId\): Promise<SessionStateResult>;\s*\n?\s*capture\(sessionId: DriverSessionId, input: CaptureInput\): Promise<CaptureResult>;\s*\n?\s*extract\(sessionId: DriverSessionId, input: ExtractInput\): Promise<ExtractResult>;\s*\n?\s*destroy\(sessionId: DriverSessionId\): Promise<void>;\s*\n?\s*\}/,
     );
   });
 
