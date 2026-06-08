@@ -119,6 +119,12 @@ export function createPollingFrameStream(
 
   function schedule(): void {
     if (stopped || paused) return;
+    // Clear any pending timer before re-arming. Both the in-flight-skip path
+    // and the fetch `finally` call schedule(), and a resume() during an
+    // in-flight fetch makes both fire — without this, the second setTimeout
+    // orphans the first handle, giving two concurrent timer chains (the stream
+    // polls at 2× the interval + leaks a timer). Keep exactly one pending tick.
+    if (handle !== null) clearTimeout(handle);
     handle = setTimeout(() => {
       void tick();
     }, intervalMs);

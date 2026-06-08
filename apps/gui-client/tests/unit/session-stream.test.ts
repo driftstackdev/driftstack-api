@@ -92,6 +92,50 @@ describe('V-534.E createPollingFrameStream — pause / resume', () => {
   });
 });
 
+describe('createPollingFrameStream — single-timer invariant (resume during in-flight fetch)', () => {
+  it('keeps exactly ONE pending timer when resume() races an in-flight fetch (no double chain / leak)', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveFirst!: (f: Frame) => void;
+      let calls = 0;
+      const fetchFrame = vi.fn(() => {
+        calls++;
+        if (calls === 1) {
+          return new Promise<Frame>((res) => {
+            resolveFirst = res;
+          });
+        }
+        return Promise.resolve(fakeFrame(calls * 100));
+      });
+      // Big interval so no real cadence interferes; we assert the timer COUNT.
+      const stream = createPollingFrameStream(fetchFrame, { intervalMs: 1_000_000 });
+      // tick A started synchronously and is now awaiting the deferred fetch —
+      // it has NOT scheduled a timer yet.
+      expect(fetchFrame).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+
+      // resume() during the in-flight fetch → tick B hits the skip path and
+      // schedules timer #1.
+      stream.pause();
+      stream.resume();
+      expect(vi.getTimerCount()).toBe(1);
+
+      // Resolve the in-flight fetch → tick A's finally calls schedule() again.
+      // The fix clears timer #1 before arming timer #2, so the count stays 1.
+      // Without the fix, timer #1 leaks and the count is 2 (two timer chains →
+      // frame-rate doubling).
+      resolveFirst(fakeFrame(50));
+      for (let i = 0; i < 6; i++) await Promise.resolve();
+      expect(vi.getTimerCount()).toBe(1);
+
+      stream.stop();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('V-534.E createPollingFrameStream — errors', () => {
   it('emits an error event when fetchFrame rejects; continues polling', async () => {
     const err = new Error('capture failed');

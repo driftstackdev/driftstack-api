@@ -110,7 +110,7 @@ describe('W468.A apps/gui-client/src/lib/session-stream.ts content parity', () =
     );
   });
 
-  it('tick: stopped + paused early returns; try fetchFrame + stopped-after-fetch guard; catch !stopped → emit error; finally fetchInFlight = false + schedule(); schedule: stopped + paused guard + setTimeout(intervalMs)', () => {
+  it('tick: stopped + paused early returns; try fetchFrame + stopped-after-fetch guard; catch !stopped → emit error; finally fetchInFlight = false + schedule(); schedule: stopped + paused guard + clear-existing-handle-before-rearm (single-timer invariant) + setTimeout(intervalMs)', () => {
     expect(body).toMatch(
       /async function tick\(\): Promise<void> \{\s*\n?\s*if \(stopped \|\| paused\) return;/,
     );
@@ -118,7 +118,7 @@ describe('W468.A apps/gui-client/src/lib/session-stream.ts content parity', () =
       /\} catch \(err\) \{\s*\n?\s*if \(!stopped\) emit\(\{ kind: 'error', error: err \}\);\s*\n?\s*\} finally \{\s*\n?\s*fetchInFlight = false;\s*\n?\s*schedule\(\);\s*\n?\s*\}/,
     );
     expect(body).toMatch(
-      /function schedule\(\): void \{\s*\n?\s*if \(stopped \|\| paused\) return;\s*\n?\s*handle = setTimeout\(\(\) => \{\s*\n?\s*void tick\(\);\s*\n?\s*\}, intervalMs\);\s*\n?\s*\}/,
+      /function schedule\(\): void \{\s*\n?\s*if \(stopped \|\| paused\) return;[\s\S]*?if \(handle !== null\) clearTimeout\(handle\);\s*\n?\s*handle = setTimeout\(\(\) => \{\s*\n?\s*void tick\(\);\s*\n?\s*\}, intervalMs\);\s*\n?\s*\}/,
     );
   });
 
