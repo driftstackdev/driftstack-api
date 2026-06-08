@@ -45,6 +45,7 @@ import {
   IntentDispatchSchema,
   IntentResultEnvelopeSchema,
   SessionAssignSchema,
+  SessionEndSchema,
   HarnessErrorCodeSchema,
   HarnessOutboundSchema,
 } from '../../src/schemas/harness-control-protocol.js';
@@ -195,6 +196,10 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
     expect(body).toMatch(
       /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*\]\);/,
+    );
+    // ControlInbound.sessionEnd — the trivial W122 teardown envelope (source-pinned).
+    expect(body).toMatch(
+      /export const SessionEndSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('sessionEnd'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
     );
   });
 
@@ -353,6 +358,18 @@ describe('harness-control-protocol behavioral contract', () => {
     ).toBe(false);
     // strict envelope: unknown top-level key rejected.
     expect(SessionAssignSchema.safeParse({ ...valid, bogus: 1 }).success).toBe(false);
+  });
+
+  it('sessionEnd (ControlInbound teardown): trivial {type,sessionId} envelope, strict', () => {
+    expect(SessionEndSchema.safeParse({ type: 'sessionEnd', sessionId: 'agt_1' }).success).toBe(
+      true,
+    );
+    expect(SessionEndSchema.safeParse({ type: 'sessionEnd', sessionId: '' }).success).toBe(false);
+    expect(SessionEndSchema.safeParse({ type: 'sessionEnd' }).success).toBe(false);
+    // strict: no stray fields (would silently diverge from the harness decoder).
+    expect(
+      SessionEndSchema.safeParse({ type: 'sessionEnd', sessionId: 'agt_1', reason: 'x' }).success,
+    ).toBe(false);
   });
 
   it('profile-backed sessions (A3 W417): optional snake_case profile block; profile_id+dek required; blob fields optional; strict', () => {

@@ -13,6 +13,7 @@ import {
 import {
   encodeWireData,
   serializeSessionAssign,
+  serializeSessionEnd,
 } from '../../src/services/harness-control-codec.js';
 import type { IntentDispatch } from '../../src/schemas/harness-control-protocol.js';
 
@@ -77,6 +78,14 @@ describe('FleetControlConnection', () => {
     });
     // inlineProxyConfig rides as the base64 wire string (not the raw object)
     expect(typeof frame.inlineProxyConfig).toBe('string');
+  });
+
+  it('sends a serialized sessionEnd frame to the node socket (fire-and-forget teardown)', () => {
+    const sent: string[] = [];
+    const conn = new FleetControlConnection('node-1', (d) => sent.push(d));
+    conn.sendSessionEnd(serializeSessionEnd('agt_end'));
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0]!)).toEqual({ type: 'sessionEnd', sessionId: 'agt_end' });
   });
 
   it('routes an inbound intentResult frame → resolves the matching dispatch', async () => {

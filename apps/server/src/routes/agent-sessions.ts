@@ -46,7 +46,7 @@ import type { PairModeHeartbeatTracker } from '../services/agent-pair-mode-heart
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { mintLivekitToken } from '../lib/livekit-token.js';
 import { decryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
-import { serializeSessionAssign } from '../services/harness-control-codec.js';
+import { serializeSessionAssign, serializeSessionEnd } from '../services/harness-control-codec.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import type { SocksProxyConfig } from '@driftstack/api-types';
 import {
@@ -406,6 +406,50 @@ export async function dispatchSessionAssignOnCreate(args: {
         err: err instanceof Error ? err.message : String(err),
       },
       'sessionAssign dispatch failed (session create unaffected)',
+    );
+  }
+}
+
+/**
+ * Best-effort `sessionEnd` dispatch when an agent-session closes — tells the
+ * harness to tear the session down (fork + proxy + capture) and free its
+ * concurrency slot (A3 W420 sessionEnd teardown site). Without it, a closed
+ * session leaks a harness slot until the harness's own idle sweep reclaims it
+ * (maxConcurrent is small, so leaked slots → at_capacity refusals).
+ *
+ * Mirrors dispatchSessionAssignOnCreate: no-op unless the fleet control plane is
+ * wired (inert in prod), best-effort (never throws — close must not fail on a
+ * dispatch hiccup), at-most-once. v0 routes to findAnyWithLivekit (the same
+ * single-node assumption the create-side dispatch uses); the harness ignores a
+ * sessionEnd for a session it doesn't hold, so a stray send is a harmless no-op.
+ * A session→node map (multi-node) is a later enhancement.
+ */
+export async function dispatchSessionEndOnClose(args: {
+  sessionId: string;
+  fleetControlRegistry: FleetControlRegistry | undefined;
+  fleetNodesRepo: DrizzleFleetNodesRepo | undefined;
+  logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void };
+}): Promise<void> {
+  const { sessionId, fleetControlRegistry, fleetNodesRepo, logger } = args;
+  if (fleetControlRegistry === undefined || fleetNodesRepo === undefined) return;
+  try {
+    const mac = await fleetNodesRepo.findAnyWithLivekit();
+    if (mac === null) return;
+    const conn = fleetControlRegistry.get(mac.id);
+    if (conn === undefined) return; // node not connected → nothing to tear down server-side
+    conn.sendSessionEnd(serializeSessionEnd(sessionId));
+    logger?.info(
+      { component: 'fleet-session-dispatch', sessionId, nodeId: mac.id },
+      'dispatched sessionEnd to fleet node',
+    );
+  } catch (err) {
+    logger?.warn(
+      {
+        component: 'fleet-session-dispatch',
+        sessionId,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      'sessionEnd dispatch failed (session close unaffected)',
     );
   }
 }
@@ -1492,6 +1536,15 @@ export function registerAgentSessionsRoutes(
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
       await sessions.closeWithReason(req.params.id, 'customer-closed');
+      // Free the harness slot for a profile/fleet-backed session: tell the node
+      // to tear the session down. Best-effort + gated (inert when the fleet
+      // control plane isn't wired); never blocks the close.
+      await dispatchSessionEndOnClose({
+        sessionId: req.params.id,
+        fleetControlRegistry,
+        fleetNodesRepo,
+        logger: req.log,
+      });
       // Q.1.c — clear the cached plaintext on customer close. The
       // delete is idempotent so concurrent budget-exhausted close
       // from the runtime is safe.

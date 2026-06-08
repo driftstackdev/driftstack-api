@@ -285,6 +285,21 @@ export const SessionAssignSchema = z
   })
   .strict();
 export type SessionAssign = z.infer<typeof SessionAssignSchema>;
+
+// ── ControlInbound.sessionEnd (server → harness) ──────────────────────
+// The trivial teardown envelope (W122 ControlInbound set: sessionAssign /
+// intentDispatch / sessionEnd / ping). Sent when an agent-session is closed so
+// the harness tears the session down (fork + proxy + capture) and frees its
+// concurrency slot — A3 W420 confirms the harness drains/teardowns at the
+// `sessionEnd` site. Keyed by sessionId alone (the universal envelope field the
+// harness already decodes); no other field — a teardown needs only which session.
+export const SessionEndSchema = z
+  .object({
+    type: z.literal('sessionEnd'),
+    sessionId: z.string().min(1),
+  })
+  .strict();
+export type SessionEnd = z.infer<typeof SessionEndSchema>;
 export const SESSION_ASSIGN_TRANSPORT_MODES = ['h2-only', 'h2-and-h3'] as const;
 export type SessionAssignTransportMode = (typeof SESSION_ASSIGN_TRANSPORT_MODES)[number];
 

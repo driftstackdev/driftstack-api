@@ -20,10 +20,12 @@ import {
   IntentDispatchSchema,
   IntentResultEnvelopeSchema,
   SessionAssignSchema,
+  SessionEndSchema,
   HARNESS_INTENT_PARAM_SCHEMAS,
   type IntentDispatch,
   type IntentResultEnvelope,
   type SessionAssign,
+  type SessionEnd,
   type SessionAssignTransportMode,
   type HarnessIntentName,
   type HarnessErrorCode,
@@ -188,6 +190,16 @@ export function serializeSessionAssign(args: {
       : {}),
   };
   return SessionAssignSchema.parse(assign);
+}
+
+/**
+ * Build a wire-ready ControlInbound.sessionEnd — the trivial teardown envelope
+ * sent when an agent-session closes so the harness frees the session (fork +
+ * proxy + capture) and its concurrency slot (A3 W420 sessionEnd teardown site).
+ * Re-validated so a malformed envelope never leaves the server.
+ */
+export function serializeSessionEnd(sessionId: string): SessionEnd {
+  return SessionEndSchema.parse({ type: 'sessionEnd', sessionId });
 }
 
 /** The logical (decoded) result the executor consumes. */

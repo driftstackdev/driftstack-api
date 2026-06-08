@@ -21,6 +21,7 @@
 import {
   HarnessOutboundSchema,
   type SessionAssign,
+  type SessionEnd,
   type ProfileSaved,
 } from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
@@ -61,6 +62,15 @@ export class FleetControlConnection {
    */
   sendSessionAssign(assign: SessionAssign): void {
     this.send(JSON.stringify(assign));
+  }
+
+  /**
+   * Push a serialized `sessionEnd` frame to this node (fire-and-forget) so the
+   * harness tears down the session + frees its concurrency slot on close. Same
+   * framing as sendSessionAssign; caller builds the envelope with serializeSessionEnd.
+   */
+  sendSessionEnd(end: SessionEnd): void {
+    this.send(JSON.stringify(end));
   }
 
   /**

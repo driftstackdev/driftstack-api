@@ -8,6 +8,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   dispatchSessionAssignOnCreate,
+  dispatchSessionEndOnClose,
   type SessionDispatchConfig,
 } from '../../src/routes/agent-sessions.js';
 import { FleetControlRegistry } from '../../src/services/fleet-control-registry.js';
@@ -152,6 +153,67 @@ describe('dispatchSessionAssignOnCreate', () => {
       }),
     ).resolves.toBeUndefined();
     expect(sent).toHaveLength(0);
+    expect(log.warn).toHaveBeenCalled();
+  });
+});
+
+describe('dispatchSessionEndOnClose', () => {
+  it('sends a sessionEnd to the connected node (frees the harness slot)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const log = logger();
+    await dispatchSessionEndOnClose({
+      sessionId: 'agt_close1',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      logger: log,
+    });
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0]!)).toEqual({ type: 'sessionEnd', sessionId: 'agt_close1' });
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('no-op when the fleet control plane is not wired (prod) — registry/repo undefined', async () => {
+    const log = logger();
+    await expect(
+      dispatchSessionEndOnClose({
+        sessionId: 'agt_close2',
+        fleetControlRegistry: undefined,
+        fleetNodesRepo: undefined,
+        logger: log,
+      }),
+    ).resolves.toBeUndefined();
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('skips when the node is not connected (nothing to tear down server-side)', async () => {
+    const registry = new FleetControlRegistry(); // node never registered
+    const log = logger();
+    await dispatchSessionEndOnClose({
+      sessionId: 'agt_close3',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      logger: log,
+    });
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('best-effort: a repo failure is swallowed (close must not fail)', async () => {
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, () => {});
+    const log = logger();
+    const throwingRepo = {
+      findAnyWithLivekit: () => Promise.reject(new Error('db down')),
+    } as unknown as DrizzleFleetNodesRepo;
+    await expect(
+      dispatchSessionEndOnClose({
+        sessionId: 'agt_close4',
+        fleetControlRegistry: registry,
+        fleetNodesRepo: throwingRepo,
+        logger: log,
+      }),
+    ).resolves.toBeUndefined();
     expect(log.warn).toHaveBeenCalled();
   });
 });

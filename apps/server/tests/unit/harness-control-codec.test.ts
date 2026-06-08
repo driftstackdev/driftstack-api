@@ -9,6 +9,7 @@ import {
   decodeWireData,
   serializeIntentDispatch,
   serializeSessionAssign,
+  serializeSessionEnd,
   parseIntentResult,
   HarnessWireCodecError,
 } from '../../src/services/harness-control-codec.js';
@@ -16,6 +17,7 @@ import {
   IntentDispatchSchema,
   IntentResultEnvelopeSchema,
   SessionAssignSchema,
+  SessionEndSchema,
 } from '../../src/schemas/harness-control-protocol.js';
 import { agentIntentToDispatch } from '../../src/services/agent-intent-to-dispatch.js';
 
@@ -297,5 +299,17 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     for (const initialUrl of ['file:///etc/passwd', 'javascript:alert(1)', 'data:text/html,x']) {
       expect(() => serializeSessionAssign({ ...base, initialUrl })).toThrow();
     }
+  });
+});
+
+describe('serializeSessionEnd (ControlInbound teardown)', () => {
+  it('builds the trivial {type,sessionId} envelope; validates against SessionEndSchema', () => {
+    const e = serializeSessionEnd('agt_123');
+    expect(SessionEndSchema.safeParse(e).success).toBe(true);
+    expect(e).toEqual({ type: 'sessionEnd', sessionId: 'agt_123' });
+  });
+
+  it('rejects an empty sessionId (would be a malformed teardown)', () => {
+    expect(() => serializeSessionEnd('')).toThrow();
   });
 });
