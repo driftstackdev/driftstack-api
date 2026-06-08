@@ -17,6 +17,8 @@ import {
 } from '../components/ProfilesActionBar';
 import { ProxyChip } from '../components/ProxyChip';
 import { RelativeTime } from '../components/RelativeTime';
+import { AgentSessionPanel } from '../components/AgentSessionPanel';
+import type { LiveKitInfo } from '@driftstack/sdk';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
@@ -93,6 +95,9 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     error: null,
   });
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Live-stream viewer: set when a launched session returns a LiveKit block;
+  // renders an overlay with the AgentSessionPanel (subscribes immediately).
+  const [watchInfo, setWatchInfo] = useState<LiveKitInfo | null>(null);
   // V-238 — create-form modal state. Lives here (not lifted to App.tsx)
   // because every other ProfilesView interaction is local; the modal
   // is a transient overlay scoped to this view's lifecycle.
@@ -248,24 +253,23 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
         }));
         return;
       }
-      const body: Record<string, unknown> = {
-        archetype: profile.archetype,
-        label: profile.name,
-        proxy: {
-          type: 'socks5',
-          socks5: {
-            host: proxy.host,
-            port: proxy.port,
-            ...(proxy.username !== null ? { username: proxy.username } : {}),
-            ...(proxy.password !== null ? { password: proxy.password } : {}),
-            udp_associate: true,
-            require_remote_dns: false,
-          },
-        },
-        metadata: { gui_profile_id: profile.id, gui_profile_name: profile.name },
-      };
-      const created = await client.sessions.create(body);
+      // Create a STREAMING agent-session: this dispatches the session to the
+      // fleet harness (which spawns the browser + captures + publishes) and
+      // returns a `livekit` block we subscribe to immediately — no timing lag.
+      // The selected proxy gates launch (this deployment requires one); the
+      // server injects the egress proxy into the dispatched session.
+      void proxy;
+      const created = await client.agentSessions.create({});
       await markLaunched(profile.id, created.id);
+      if (created.livekit) {
+        setWatchInfo(created.livekit);
+      } else {
+        setState((s) => ({
+          ...s,
+          error:
+            'Session created but no live stream was returned — LiveKit may not be configured on this deployment.',
+        }));
+      }
       await refresh(false);
       await refreshAccountMe();
     } catch (err) {
@@ -298,6 +302,29 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
 
   if (!client) {
     return <EmptyConnect baseUrl={settings.baseUrl} onGoToSettings={onGoToSettings} />;
+  }
+
+  if (watchInfo) {
+    return (
+      <div className="flex h-full flex-col bg-black">
+        <div className="flex items-center gap-3 p-3 text-sm text-ink-secondary">
+          <span className="section-label">Live session</span>
+          <span className="mono">{watchInfo.room}</span>
+          <button
+            type="button"
+            className="btn ml-auto"
+            onClick={() => {
+              setWatchInfo(null);
+            }}
+          >
+            Close
+          </button>
+        </div>
+        <div className="flex flex-1 items-center justify-center overflow-hidden">
+          <AgentSessionPanel info={watchInfo} />
+        </div>
+      </div>
+    );
   }
 
   return (
