@@ -58,6 +58,17 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/\(iphone16pro_ios18_7_safari26_4\) for v1\.0 per the orchestrator brief/);
   });
 
+  it('Scale-to-fit container sizing pinned: the panel box is `h-full max-h-full max-w-full` + aspectRatio style (fills available HEIGHT, derives width from the iPhone aspect, centered by the parent), NOT `w-full`. Drift back to w-full re-introduces the stretched-giant view (height = width × 2.17 on a wide window); the <video> object-contain fills the box exactly', () => {
+    expect(body).toMatch(
+      /className="relative h-full max-h-full max-w-full overflow-hidden rounded-lg border border-white\/10 bg-black"/,
+    );
+    expect(body).toMatch(/style=\{\{ aspectRatio: aspectRatio\.toString\(\) \}\}/);
+    // The video fills its (now correctly-sized) box and letterboxes via object-contain.
+    expect(body).toMatch(/className="h-full w-full object-contain"/);
+    // Guard the specific regression: the container must not revert to w-full.
+    expect(body).not.toMatch(/className="relative w-full overflow-hidden/);
+  });
+
   it('LiveKitInfo import from @driftstack/sdk pinned: drift to a local-only type would break the cross-package single-source-of-truth for the LiveKit join-info wire shape', () => {
     expect(body).toMatch(/import type \{ LiveKitInfo \} from '@driftstack\/sdk';/);
   });
