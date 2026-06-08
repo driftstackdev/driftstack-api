@@ -5,6 +5,8 @@ import type {
   CaptureResponse,
   ExtractRequest,
   ExtractResponse,
+  SearchRequestInput,
+  SearchResponse,
   CreateSessionRequest,
   InteractRequest,
   InteractResponse,
@@ -125,6 +127,17 @@ export class SessionsResource {
     return this.http.request<ExtractResponse>({
       method: 'POST',
       path: `/v1/sessions/${encodeURIComponent(sessionId)}/extract`,
+      body,
+    });
+  }
+
+  /** Find the search field, type the query realistically, and submit
+   *  (defaults to submitting). Returns whether it submitted + optionally
+   *  whether results became visible. */
+  search(sessionId: string, body: SearchRequestInput): Promise<SearchResponse> {
+    return this.http.request<SearchResponse>({
+      method: 'POST',
+      path: `/v1/sessions/${encodeURIComponent(sessionId)}/search`,
       body,
     });
   }

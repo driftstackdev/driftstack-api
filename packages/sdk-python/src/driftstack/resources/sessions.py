@@ -25,6 +25,8 @@ from driftstack._generated.models import (
     NavigateRequest,
     NavigateResponse,
     PaginationQuery,
+    SearchRequest,
+    SearchResponse,
     Session,
     SessionState,
     WaitRequest,
@@ -122,6 +124,12 @@ class SessionsResource:
         )
         return ExtractResponse.model_validate(data)
 
+    def search(self, session_id: str, body: SearchRequest | dict[str, Any]) -> SearchResponse:
+        data = self._http.request(
+            "POST", _session_path(session_id, "/search"), json_body=coerce_body(body)
+        )
+        return SearchResponse.model_validate(data)
+
     def destroy(self, session_id: str) -> None:
         """Destroy the session. Idempotent (safe to call twice)."""
         self._http.request("DELETE", _session_path(session_id))
@@ -204,6 +212,12 @@ class AsyncSessionsResource:
             "POST", _session_path(session_id, "/extract"), json_body=coerce_body(body)
         )
         return ExtractResponse.model_validate(data)
+
+    async def search(self, session_id: str, body: SearchRequest | dict[str, Any]) -> SearchResponse:
+        data = await self._http.request(
+            "POST", _session_path(session_id, "/search"), json_body=coerce_body(body)
+        )
+        return SearchResponse.model_validate(data)
 
     async def destroy(self, session_id: str) -> None:
         await self._http.request("DELETE", _session_path(session_id))

@@ -1637,6 +1637,38 @@
         },
         "required": ["value"]
       },
+      "SearchRequest": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1
+          },
+          "search_selector": {
+            "type": "string"
+          },
+          "submit": {
+            "type": "boolean",
+            "default": true
+          },
+          "wait_for_results_selector": {
+            "type": "string"
+          }
+        },
+        "required": ["query"]
+      },
+      "SearchResponse": {
+        "type": "object",
+        "properties": {
+          "submitted": {
+            "type": "boolean"
+          },
+          "results_visible": {
+            "type": "boolean"
+          }
+        },
+        "required": ["submitted"]
+      },
       "CreateApiKeyRequest": {
         "type": "object",
         "properties": {
@@ -4592,6 +4624,133 @@
                     "price": 19.99,
                     "links": ["/a", "/b"]
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found (or owned by another account).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{id}/search": {
+      "post": {
+        "operationId": "searchSession",
+        "summary": "Find the search field, type the query, and submit",
+        "tags": ["sessions"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "search_selector": {
+                    "type": "string"
+                  },
+                  "submit": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "wait_for_results_selector": {
+                    "type": "string"
+                  }
+                },
+                "required": ["query"]
+              },
+              "example": {
+                "query": "wireless headphones",
+                "wait_for_results_selector": ".results"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Query typed and (optionally) submitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "submitted": {
+                      "type": "boolean"
+                    },
+                    "results_visible": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["submitted"]
+                },
+                "example": {
+                  "submitted": true,
+                  "results_visible": true
                 }
               }
             }

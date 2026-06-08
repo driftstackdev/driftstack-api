@@ -150,6 +150,22 @@ func (r *SessionsResource) Extract(ctx context.Context, sessionID string, body *
 	return &out, nil
 }
 
+// Search finds the search field, types the query realistically, and submits
+// (submitting by default). Returns whether it submitted + optionally whether
+// results became visible.
+func (r *SessionsResource) Search(ctx context.Context, sessionID string, body *SearchRequest) (*SearchResponse, error) {
+	var out SearchResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "POST",
+		path:   "/v1/sessions/" + url.PathEscape(sessionID) + "/search",
+		body:   body,
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Destroy ends the session. Idempotent — calling it twice is safe.
 func (r *SessionsResource) Destroy(ctx context.Context, sessionID string) error {
 	return r.client.do(ctx, requestOptions{

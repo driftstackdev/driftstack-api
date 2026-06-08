@@ -486,6 +486,21 @@ type ExtractResponse struct {
 	Value map[string]any `json:"value"`
 }
 
+type SearchRequest struct {
+	Query          string `json:"query"`
+	SearchSelector string `json:"search_selector,omitempty"`
+	// Submit (Return) after typing. Defaults to true server-side; *bool so a
+	// caller can send an explicit false (a plain bool's zero value can't).
+	Submit                 *bool  `json:"submit,omitempty"`
+	WaitForResultsSelector string `json:"wait_for_results_selector,omitempty"`
+}
+
+type SearchResponse struct {
+	Submitted bool `json:"submitted"`
+	// Present only when WaitForResultsSelector was given (timeout → false).
+	ResultsVisible *bool `json:"results_visible,omitempty"`
+}
+
 // ──────────────────────────────────────────────────────────────────
 // Usage
 // ──────────────────────────────────────────────────────────────────

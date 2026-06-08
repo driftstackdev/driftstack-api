@@ -91,6 +91,8 @@ import {
   CaptureResponseSchema,
   ExtractRequestSchema,
   ExtractResponseSchema,
+  SearchRequestSchema,
+  SearchResponseSchema,
   ChangeTierRequestSchema,
   CreateApiKeyRequestSchema,
   CreateApiKeyResponseSchema,
@@ -218,6 +220,8 @@ function buildRegistry(): OpenAPIRegistry {
   r.register('CaptureResponse', CaptureResponseSchema);
   r.register('ExtractRequest', ExtractRequestSchema);
   r.register('ExtractResponse', ExtractResponseSchema);
+  r.register('SearchRequest', SearchRequestSchema);
+  r.register('SearchResponse', SearchResponseSchema);
   // API keys resource
   r.register('CreateApiKeyRequest', CreateApiKeyRequestSchema);
   r.register('CreateApiKeyResponse', CreateApiKeyResponseSchema);
@@ -514,6 +518,42 @@ function buildRegistry(): OpenAPIRegistry {
           'application/json': {
             schema: ExtractResponseSchema,
             example: { value: { title: 'Example', price: 19.99, links: ['/a', '/b'] } },
+          },
+        },
+      },
+      404: {
+        description: 'Session not found (or owned by another account).',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/sessions/{id}/search',
+    operationId: 'searchSession',
+    summary: 'Find the search field, type the query, and submit',
+    tags: ['sessions'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        content: {
+          'application/json': {
+            schema: SearchRequestSchema,
+            example: { query: 'wireless headphones', wait_for_results_selector: '.results' },
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description: 'Query typed and (optionally) submitted.',
+        content: {
+          'application/json': {
+            schema: SearchResponseSchema,
+            example: { submitted: true, results_visible: true },
           },
         },
       },
