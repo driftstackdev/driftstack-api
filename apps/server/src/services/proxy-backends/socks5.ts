@@ -48,10 +48,29 @@ export interface SocksProxyBackendDeps {
   probeTimeoutMs?: number;
 }
 
-function defaultTcpProbe(host: string, port: number, timeoutMs: number): Promise<void> {
+export function defaultTcpProbe(host: string, port: number, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const socket: Socket = connect({ host, port }, () => {
       clearTimeout(timer);
+      // §4.17 SSRF — connection-time DNS-rebind layer. The literal-host guard
+      // (classifyUnsafeHost in createForSession) only rejects literal internal
+      // IPs / numeric encodings; a customer host that is a DOMAIN resolving to a
+      // private / loopback / link-local / metadata IP slips past it. The connected
+      // socket's peer address is the ACTUAL resolved IP — reject it here so a
+      // domain→internal-IP host fails session-create cleanly, instead of the
+      // probe (and the fork's later dial) reaching Driftstack's internal network.
+      // (The fork re-resolves the hostname independently; pinning the validated IP
+      // into the fork's dial is the remaining defense-in-depth layer — A1/go-live.)
+      const peer = socket.remoteAddress;
+      if (peer !== undefined && classifyUnsafeHost(peer) !== null) {
+        socket.destroy();
+        reject(
+          new Error(
+            `egress-proxy-host-not-allowed: socks5.host '${host}' resolved to internal address ${peer} — the egress proxy must be a public host (SSRF guard).`,
+          ),
+        );
+        return;
+      }
       socket.end();
       resolve();
     });

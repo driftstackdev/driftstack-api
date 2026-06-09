@@ -64,15 +64,23 @@ describe('services/proxy-backends/socks5 content parity', () => {
     expect(body).toMatch(/probeTimeoutMs\?: number;/);
   });
 
-  it('defaultTcpProbe Promise-resolve-on-connect + reject-on-timeout + reject-on-socket-error framing pinned: connect() → end() on success + setTimeout reject with "egress-tunnel-unreachable: timed out connecting to ${host}:${port}" + socket.on(error) reject with "egress-tunnel-unreachable: ${err.message}". Drift to swallowing the host:port from the error message would lose actionable customer-facing detail', () => {
+  it('defaultTcpProbe (exported for tests) Promise-resolve-on-connect + reject-on-timeout + reject-on-socket-error framing pinned: connect() → [W372 connection-time SSRF peer-IP check] → end() on success + setTimeout reject with "egress-tunnel-unreachable: timed out connecting to ${host}:${port}" + socket.on(error) reject with "egress-tunnel-unreachable: ${err.message}". Drift to swallowing the host:port from the error message would lose actionable customer-facing detail', () => {
     expect(body).toMatch(
-      /function defaultTcpProbe\(host: string, port: number, timeoutMs: number\): Promise<void> \{\s*\n?\s*return new Promise\(\(resolve, reject\) => \{\s*\n?\s*const socket: Socket = connect\(\{ host, port \}, \(\) => \{\s*\n?\s*clearTimeout\(timer\);\s*\n?\s*socket\.end\(\);\s*\n?\s*resolve\(\);/,
+      /export function defaultTcpProbe\(host: string, port: number, timeoutMs: number\): Promise<void> \{\s*\n?\s*return new Promise\(\(resolve, reject\) => \{\s*\n?\s*const socket: Socket = connect\(\{ host, port \}, \(\) => \{\s*\n?\s*clearTimeout\(timer\);[\s\S]*?socket\.end\(\);\s*\n?\s*resolve\(\);/,
     );
     expect(body).toMatch(
       /reject\(new Error\(`egress-tunnel-unreachable: timed out connecting to \$\{host\}:\$\{port\}`\)\);/,
     );
     expect(body).toMatch(
       /socket\.on\('error', \(err\) => \{\s*\n?\s*clearTimeout\(timer\);\s*\n?\s*reject\(new Error\(`egress-tunnel-unreachable: \$\{err\.message\}`\)\);/,
+    );
+  });
+
+  it('W372 connection-time SSRF DNS-rebind layer pinned: the probe checks socket.remoteAddress (the ACTUAL resolved peer IP) via classifyUnsafeHost and rejects egress-proxy-host-not-allowed when it resolves to an internal address. Drift to dropping it would let a customer socks5.host that is a DOMAIN resolving to 169.254.169.254 / 10.x / loopback slip past the literal-host guard and reach the internal network', () => {
+    expect(body).toMatch(/const peer = socket\.remoteAddress;/);
+    expect(body).toMatch(/if \(peer !== undefined && classifyUnsafeHost\(peer\) !== null\) \{/);
+    expect(body).toMatch(
+      /egress-proxy-host-not-allowed: socks5\.host '\$\{host\}' resolved to internal address \$\{peer\}/,
     );
   });
 

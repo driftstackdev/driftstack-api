@@ -15,8 +15,9 @@
 //     ships them.
 //   - releaseFromSession is a no-op (returns resolved void).
 
+import { createServer, type Server } from 'node:net';
 import { describe, expect, it, vi } from 'vitest';
-import { SocksProxyBackend } from '../../src/services/proxy-backends/socks5.js';
+import { SocksProxyBackend, defaultTcpProbe } from '../../src/services/proxy-backends/socks5.js';
 import type { SessionEgressConfig } from '../../src/services/session-egress.js';
 
 // All tests inject a tcpProbe stub so we never open real sockets
@@ -277,6 +278,27 @@ describe('EG-API-1.6 SocksProxyBackend', () => {
       const backend = new SocksProxyBackend({ tcpProbe: probe });
       await backend.applyToSession({ config: socks5Config() });
       expect(observedTimeout).toBe(3000);
+    });
+  });
+
+  // §4.17 SSRF — connection-time DNS-rebind layer in the REAL probe.
+  // The literal-host guard can't see a DOMAIN that resolves to an internal IP;
+  // the probe checks the actual connected peer address. Loopback (127.0.0.1) is
+  // an internal address, so probing a local server must be rejected — proving the
+  // guard fires on a host that resolved to an internal IP.
+  describe('defaultTcpProbe — connection-time internal-IP SSRF guard', () => {
+    it('rejects when the host resolves/connects to an internal (loopback) IP', async () => {
+      const server: Server = createServer();
+      await new Promise<void>((res) => server.listen(0, '127.0.0.1', res));
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr !== null ? addr.port : 0;
+      try {
+        await expect(defaultTcpProbe('127.0.0.1', port, 3000)).rejects.toThrow(
+          /egress-proxy-host-not-allowed.*resolved to internal address.*SSRF guard/,
+        );
+      } finally {
+        await new Promise<void>((res) => server.close(() => res()));
+      }
     });
   });
 });
