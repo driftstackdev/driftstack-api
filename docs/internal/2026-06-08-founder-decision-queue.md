@@ -100,6 +100,21 @@ can't do it (eyes-on + changes window UX). GUI (a)/(c)/(d) are **done**.
      cast to uuid. Caught in design, nothing shipped.)
 - **iphone16pro → iphone17 launch-archetype cutover** — canvas-gated (Agent 1);
   surfaced, not flipped.
+- **LiveKit old-route over-grant (W351)** — the older `POST /v1/sessions/:id/livekit-token`
+  lets the body pick `role:'publisher'` → `canPublish:true` (a customer could publish to
+  their own capture room, disrupting the Mac-side stream); the canonical
+  `/v1/agent-sessions/:id/livekit-token` is correctly subscriber-only. Both are gated on
+  `config.livekit` (absent in prod → **not live, not exploitable today**). **Your call on
+  the route's fate:** force the old route subscriber-only, OR delete it now that
+  agent-sessions is canonical. Pre-launch, low-urgency; it's a route-architecture decision
+  so I surfaced rather than flipped.
+- **astro-6 dependency migration** — the only fix for the 2 HIGH `npm audit` advisories
+  (devalue DoS, undici via `@astrojs/cloudflare`). NOT a clean bump: `@astrojs/tailwind`
+  has no astro-6 support → astro 6 forces a **Tailwind v3→v4 migration** across all 5 sites
+  (visual-regression risk on every page; correctness is visual, not autopilot-verifiable).
+  **Not urgent** — both HIGH vulns are build-time/static-site (the server runtime's `undici`
+  is 8.x, safe). **Your call** to schedule it as a focused window (I'll migrate site-by-site,
+  you spot-check renders). See `docs/internal/2026-06-09-dependency-security-audit.md`.
 
 ## 5. Surfaced edges (lower priority — fix-when-wired / your call)
 
@@ -119,12 +134,24 @@ can't do it (eyes-on + changes window UX). GUI (a)/(c)/(d) are **done**.
 
 ---
 
-_Autopilot status: iPhone-touch contract shipped end-to-end (A2+A3 lockstep);
-cross-SDK retry-safety docs done; a recurring gui-jsdom push-gate flake fixed.
-Audited-clean (sound, don't re-audit): GUI live-flow (4 bugs fixed earlier), Go
-SDK core, webhook-signature verification, the agent ACT layer (executor +
-intent-dispatch), the webhook-delivery worker, account-lifecycle, and the
-server/SDK/crypto surfaces. Safe non-gated ship-work is largely exhausted — the
-high-value remainder is the gated/eyes-on items above; fresh-audit waves continue
-(clean results = soundness confidence), and the dashboard LiveKit slice ships the
-moment a live session is reachable. Churn is not manufactured._
+_Autopilot status (refreshed 2026-06-09, ~W360): the **profile-backed-session feature
+is complete + deployed** end-to-end (DEK crypto → mint → validate → dispatch with
+restore/save-back URLs → docs + all 3 SDKs + OpenAPI), and the A2↔A3 restore contract
+is **locked** (omit-for-new + fail-closed; A3 wires in lockstep — bus W356). The
+\*\*`prof_<uuid>` footgun is closed platform-wide** (both session routes accept the
+canonical id; GUI passes it). Prod is current at **`7be48a97`\*\*.\_
+
+_A 4-wave **secret-egress** hardening arc shipped + deployed (credential tokens are now
+redacted from free-text in all 4 channels: gui telemetry, server Sentry, server logs,
+404/error responses; shared `redactText`/`scrubText`), plus a **rate-limiter fail-safe**
+(Redis token-bucket no longer 500s on a partial hash). A friendlier **streaming overlay**
+(spinner + Reconnect) shipped to the GUI._
+
+_Since then ~18 distinct subsystems have been audited **clean + test-guarded** (secret-egress,
+concurrency [rate-limiter + pair-mode lock], billing [quantity-agg + flat-tier pricing],
+schema unique-constraints, discriminated-union exhaustiveness, pagination cursor-decode,
+config fail-safety, public-incident sanitization, mock driver, GUI recordings memory ring-
+buffer, deep-link parsing, SDK pagination stall-guard). **The autonomous non-gated bug-surface
+is comprehensively exhausted + verified robust.** The loop now runs as a **watch** (A3 bus /
+git / dep-vuln / prod deltas — it caught the A3 restore-contract unblock) + light fresh-audits;
+real value now requires a founder decision on the gated items above. Churn is not manufactured._
