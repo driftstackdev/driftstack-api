@@ -116,7 +116,7 @@ describe('W981 rate-limit middleware W199 + V-092 cross-source invariant', () =>
 
   it('CRITICAL rateLimitConsume invocation — passes 5 fields: accountId + tier + bucketKey + cost + overrides. The 5-field input is the V-216 rate-limit-service contract.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/middleware/rate-limit.ts'));
-    expect(p).toMatch(/const result = await rateLimitConsume\(opts\.store, \{/);
+    expect(p).toMatch(/result = await rateLimitConsume\(opts\.store, \{/);
     expect(p).toMatch(/accountId: ctx\.account\.id,/);
     expect(p).toMatch(/tier: ctx\.account\.tier,/);
     expect(p).toMatch(/bucketKey,/);

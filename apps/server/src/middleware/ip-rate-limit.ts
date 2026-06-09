@@ -18,7 +18,7 @@
 
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { RateLimitedError } from '../lib/errors.js';
-import type { RateLimitStore } from '../services/rate-limit.js';
+import type { ConsumeResult, RateLimitStore } from '../services/rate-limit.js';
 
 export interface IpRateLimitConfig {
   /** Bucket-key prefix; final key is `${prefix}:${ip}`. */
@@ -58,13 +58,27 @@ export function ipRateLimit(
       return;
     }
 
-    const result = await store.consume({
-      key: `${cfg.bucketPrefix}:${ip}`,
-      capacity: cfg.capacity,
-      refillPerSecond: cfg.refillPerSecond,
-      cost: 1,
-      now: Date.now(),
-    });
+    let result: ConsumeResult;
+    try {
+      result = await store.consume({
+        key: `${cfg.bucketPrefix}:${ip}`,
+        capacity: cfg.capacity,
+        refillPerSecond: cfg.refillPerSecond,
+        cost: 1,
+        now: Date.now(),
+      });
+    } catch (err) {
+      // W384 — fail OPEN on a store error (e.g. Redis down). The IP gate is
+      // defense-in-depth on top of the auth-flow's account-keyed protections; a
+      // backing-store outage must not 500 every auth request and lock out
+      // legitimate customers (same availability bias as the null-IP soft-fail
+      // above). The warn log makes the bounded bypass observable for ops.
+      req.log.warn(
+        { component: 'ip-rate-limit', bucket_prefix: cfg.bucketPrefix, err },
+        'ip rate-limit store error — failing open (request allowed)',
+      );
+      return;
+    }
 
     // W200 — full RateLimit-header set documented at /docs/rate-limits.
     // Mirrors the account-keyed middleware (W199). `bucket` here is the

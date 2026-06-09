@@ -5,7 +5,11 @@
 
 import fp from 'fastify-plugin';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { rateLimitConsume, type RateLimitStore } from '../services/rate-limit.js';
+import {
+  rateLimitConsume,
+  type ConsumeResultWithBucket,
+  type RateLimitStore,
+} from '../services/rate-limit.js';
 import { RateLimitedError, UnauthorizedError } from '../lib/errors.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 
@@ -40,13 +44,27 @@ function rateLimitPlugin(
         throw new UnauthorizedError('Rate limit requires an authenticated request.');
       }
 
-      const result = await rateLimitConsume(opts.store, {
-        accountId: ctx.account.id,
-        tier: ctx.account.tier,
-        bucketKey,
-        cost,
-        overrides: ctx.rateLimitOverrides,
-      });
+      let result: ConsumeResultWithBucket;
+      try {
+        result = await rateLimitConsume(opts.store, {
+          accountId: ctx.account.id,
+          tier: ctx.account.tier,
+          bucketKey,
+          cost,
+          overrides: ctx.rateLimitOverrides,
+        });
+      } catch (err) {
+        // W384 — fail OPEN on a store error (e.g. Redis down). A rate-limiter
+        // must not be a SPOF that 500s the whole API when its backing store is
+        // down; graceful degradation = allow + warn (limiting resumes when the
+        // store recovers). Only the store call is wrapped, so a legitimate
+        // limit-hit RateLimitedError below still propagates normally.
+        request.log.warn(
+          { component: 'rate-limit', bucket: bucketKey, err },
+          'rate-limit store error — failing open (request allowed)',
+        );
+        return;
+      }
 
       // W199 — full RateLimit-header set as documented at
       // `/docs/rate-limits`. `bucket` lets clients distinguish which

@@ -84,9 +84,15 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
     expect(body).toMatch(/if \(ip === null\) \{[\s\S]+?return;\s*\n?\s*\}/);
   });
 
-  it('store.consume: bucketKey = `${prefix}:${ip}`, cost=1, now=Date.now()', () => {
+  it('store.consume: bucketKey = `${prefix}:${ip}`, cost=1, now=Date.now() (W384 — wrapped in try/catch, fails open on store error)', () => {
     expect(body).toMatch(
-      /const result = await store\.consume\(\{\s*\n?\s*key: `\$\{cfg\.bucketPrefix\}:\$\{ip\}`,\s*\n?\s*capacity: cfg\.capacity,\s*\n?\s*refillPerSecond: cfg\.refillPerSecond,\s*\n?\s*cost: 1,\s*\n?\s*now: Date\.now\(\),\s*\n?\s*\}\);/,
+      /result = await store\.consume\(\{\s*\n?\s*key: `\$\{cfg\.bucketPrefix\}:\$\{ip\}`,\s*\n?\s*capacity: cfg\.capacity,\s*\n?\s*refillPerSecond: cfg\.refillPerSecond,\s*\n?\s*cost: 1,\s*\n?\s*now: Date\.now\(\),\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('W384 store-error fail-open: consume wrapped in try/catch; on error → warn log + return (request allowed, not 500)', () => {
+    expect(body).toMatch(
+      /\} catch \(err\) \{[\s\S]*?'ip rate-limit store error — failing open \(request allowed\)',\s*\n?\s*\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
   });
 
@@ -152,7 +158,9 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
 
   it('imports: RateLimitedError + RateLimitStore type', () => {
     expect(body).toMatch(/import \{ RateLimitedError \} from '\.\.\/lib\/errors\.js';/);
-    expect(body).toMatch(/import type \{ RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/);
+    expect(body).toMatch(
+      /import type \{ ConsumeResult, RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/,
+    );
   });
 
   it('file exists at canonical path', () => {

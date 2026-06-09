@@ -65,9 +65,15 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
     );
   });
 
-  it('rateLimitConsume args: accountId + tier + bucketKey + cost + overrides=ctx.rateLimitOverrides', () => {
+  it('rateLimitConsume args: accountId + tier + bucketKey + cost + overrides=ctx.rateLimitOverrides (W384 — wrapped in try/catch, fails open on store error)', () => {
     expect(body).toMatch(
-      /const result = await rateLimitConsume\(opts\.store, \{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*tier: ctx\.account\.tier,\s*\n?\s*bucketKey,\s*\n?\s*cost,\s*\n?\s*overrides: ctx\.rateLimitOverrides,\s*\n?\s*\}\);/,
+      /result = await rateLimitConsume\(opts\.store, \{\s*\n?\s*accountId: ctx\.account\.id,\s*\n?\s*tier: ctx\.account\.tier,\s*\n?\s*bucketKey,\s*\n?\s*cost,\s*\n?\s*overrides: ctx\.rateLimitOverrides,\s*\n?\s*\}\);/,
+    );
+  });
+
+  it('W384 store-error fail-open: rateLimitConsume wrapped in try/catch; on error → warn log + return (request allowed, not a 500 that takes down the whole API). Only the store call is wrapped so a legit limit-hit RateLimitedError still propagates', () => {
+    expect(body).toMatch(
+      /\} catch \(err\) \{[\s\S]*?'rate-limit store error — failing open \(request allowed\)',\s*\n?\s*\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
   });
 
@@ -128,9 +134,9 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
   });
 
   it('imports: rateLimitConsume + RateLimitStore type + RateLimitedError + UnauthorizedError', () => {
-    expect(body).toMatch(
-      /import \{ rateLimitConsume, type RateLimitStore \} from '\.\.\/services\/rate-limit\.js';/,
-    );
+    expect(body).toMatch(/import \{[\s\S]*?rateLimitConsume,/);
+    expect(body).toMatch(/type ConsumeResultWithBucket,/);
+    expect(body).toMatch(/type RateLimitStore,?\s*\n?\s*\} from '\.\.\/services\/rate-limit\.js';/);
     expect(body).toMatch(
       /import \{ RateLimitedError, UnauthorizedError \} from '\.\.\/lib\/errors\.js';/,
     );
