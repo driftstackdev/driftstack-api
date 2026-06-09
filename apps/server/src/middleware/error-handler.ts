@@ -11,6 +11,7 @@ import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from
 import { ZodError } from 'zod';
 import type { Problem } from '@driftstack/api-types';
 import { ApiError, InternalError, ValidationError } from '../lib/errors.js';
+import { redactUrlQueryTokens } from '../lib/redact-url.js';
 
 export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler(handleError);
@@ -21,7 +22,11 @@ export function registerErrorHandler(app: FastifyInstance): void {
       type: 'https://errors.driftstack.dev/not-found',
       title: 'Not Found',
       status: 404,
-      detail: `No route for ${request.method} ${request.url}.`,
+      // Redact credential query tokens (the SSE `?ds_token=`, OAuth `?code=`)
+      // from the echoed URL — a 404 on a token-bearing path must not reflect
+      // the token back in the response body (V-494 posture; same as the log +
+      // Sentry url redaction).
+      detail: `No route for ${request.method} ${redactUrlQueryTokens(request.url)}.`,
       instance: request.id,
     });
   });

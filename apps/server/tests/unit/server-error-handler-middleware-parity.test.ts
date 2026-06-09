@@ -66,7 +66,9 @@ describe('W711 server-side error-handler middleware parity', () => {
     expect(src).toMatch(/type: 'https:\/\/errors\.driftstack\.dev\/not-found'/);
     expect(src).toMatch(/title: 'Not Found'/);
     expect(src).toMatch(/status: 404/);
-    expect(src).toMatch(/detail: `No route for \$\{request\.method\} \$\{request\.url\}\.`/);
+    expect(src).toMatch(
+      /detail: `No route for \$\{request\.method\} \$\{redactUrlQueryTokens\(request\.url\)\}\.`/,
+    );
     expect(src).toMatch(/instance: request\.id/);
   });
 

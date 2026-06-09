@@ -133,4 +133,21 @@ describe('error-handler — unexpected 5xx never leaks internals to the client (
       await app.close();
     }
   });
+
+  it('404 on a token-bearing path REDACTS the credential in the echoed detail (V-494 — no token reflected to the client/proxies)', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/no-such-route?ds_token=ds_live_SECRET&keep=1',
+    });
+    try {
+      expect(res.statusCode).toBe(404);
+      const detail = res.json<Record<string, unknown>>().detail as string;
+      expect(detail).not.toContain('ds_live_SECRET');
+      expect(detail).toContain('ds_token=%5Bredacted%5D'); // URL-encoded [redacted]
+      expect(detail).toContain('keep=1'); // benign param preserved
+    } finally {
+      await app.close();
+    }
+  });
 });

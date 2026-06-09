@@ -87,7 +87,9 @@ describe('W979 error-handler RFC 7807 cross-source invariant', () => {
     expect(p).toMatch(/type: 'https:\/\/errors\.driftstack\.dev\/not-found',/);
     expect(p).toMatch(/title: 'Not Found',/);
     expect(p).toMatch(/status: 404,/);
-    expect(p).toMatch(/detail: `No route for \$\{request\.method\} \$\{request\.url\}\.`,/);
+    expect(p).toMatch(
+      /detail: `No route for \$\{request\.method\} \$\{redactUrlQueryTokens\(request\.url\)\}\.`,/,
+    );
     expect(p).toMatch(/instance: request\.id,/);
   });
 

@@ -61,7 +61,7 @@ describe('W394.A apps/server/src/middleware/error-handler.ts content parity', ()
 
   it('setNotFoundHandler: type=errors.driftstack.dev/not-found, status 404, detail="No route for METHOD URL"', () => {
     expect(body).toMatch(
-      /app\.setNotFoundHandler\(\(request, reply\) => \{\s*\n?\s*void replyWithProblem\(reply, \{\s*\n?\s*type: 'https:\/\/errors\.driftstack\.dev\/not-found',\s*\n?\s*title: 'Not Found',\s*\n?\s*status: 404,\s*\n?\s*detail: `No route for \$\{request\.method\} \$\{request\.url\}\.`,\s*\n?\s*instance: request\.id,\s*\n?\s*\}\);/,
+      /app\.setNotFoundHandler\(\(request, reply\) => \{\s*\n?\s*void replyWithProblem\(reply, \{\s*\n?\s*type: 'https:\/\/errors\.driftstack\.dev\/not-found',\s*\n?\s*title: 'Not Found',\s*\n?\s*status: 404,[\s\S]*?detail: `No route for \$\{request\.method\} \$\{redactUrlQueryTokens\(request\.url\)\}\.`,\s*\n?\s*instance: request\.id,\s*\n?\s*\}\);/,
     );
   });
 
