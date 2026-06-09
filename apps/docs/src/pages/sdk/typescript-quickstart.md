@@ -152,7 +152,8 @@ await client.agentSessions.setMode(session.id, 'pair');
 // takeover-request transition — no explicit /takeover call needed:
 await client.agentSessions.sendInputEvent(
   session.id,
-  { type: 'mouseDown', x: 200, y: 150, button: 0 },
+  // Touch is the iPhone-native input (preferred over the mouse variants).
+  { type: 'tap', x: 200, y: 430 },
   { clientId: 'dashboard-tab-a' },
 );
 // Response is a discriminated union — branch on `kind`:

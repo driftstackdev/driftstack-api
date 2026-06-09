@@ -26,7 +26,7 @@ Every authenticated request consumes from one or more buckets:
   global cap (v2-#8 sub-slice 8.20).
 - **`agent_sessions:input_event`** —
   `POST /v1/agent-sessions/:id/input-event` only. Sized for
-  high-frequency live input (≤120Hz `mouseMove`); isolated so an
+  high-frequency live input (≤120Hz `mouseMove` / `touchMove`); isolated so an
   input stream can't drain the `global` cap.
 
 A `POST /v1/sessions` consumes from BOTH `global` and

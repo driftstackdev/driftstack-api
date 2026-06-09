@@ -190,7 +190,8 @@ if err != nil { return err }
 // ai-driving fires the takeover-request transition. Pass a
 // ClientID to scope the pair-mode lock to your tab / bot.
 result, err := client.AgentSessions.SendInputEvent(ctx, session.ID,
-    map[string]any{"type": "mouseDown", "x": 200, "y": 150, "button": 0},
+    // Touch is the iPhone-native input (preferred over the mouse variants).
+    map[string]any{"type": "tap", "x": 200, "y": 430},
     &driftstack.SendInputEventOptions{ClientID: "ops-dashboard-tab-a"},
 )
 if err != nil { return err }
