@@ -1251,6 +1251,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         ? { fleetControlRegistry: deps.fleetControlRegistry }
         : {}),
       ...(deps.sessionDispatch !== undefined ? { sessionDispatch: deps.sessionDispatch } : {}),
+      // Profile-backed sessions (file 57): validate an owned profile_id on
+      // create + ship its DEK in the dispatch. Wired unconditionally (the
+      // validation runs even without the fleet CP).
+      ...(deps.profilesService !== undefined ? { profilesService: deps.profilesService } : {}),
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);

@@ -87,6 +87,10 @@ const CreateAgentSessionRequestSchema = z.object({
   // 6.c / #15 — Claude 4.x model the AI agent runs (defaults to
   // DEFAULT_AGENT_MODEL server-side when omitted).
   model: AgentModelSchema.optional(),
+  // Profile-backed sessions (file 57): attach a saved profile so the harness
+  // restores/persists its encrypted store. Validated to be an owned profile
+  // before dispatch; its DEK rides the SessionAssign.profile block.
+  profile_id: z.string().uuid().optional(),
 });
 
 const RunTurnRequestSchema = z.object({
@@ -303,6 +307,13 @@ export interface AgentSessionsRoutesDeps {
    * (with the registry) only on the local demo stack. Absent → no dispatch.
    */
   sessionDispatch?: SessionDispatchConfig;
+  /**
+   * Profile-backed sessions (file 57). When wired + a create carries an owned
+   * `profile_id`, the route validates ownership and the dispatch ships the
+   * profile's DEK in SessionAssign.profile. Absent → profile_id is rejected as
+   * unsupported (no profiles service to validate against).
+   */
+  profilesService?: ProfilesService;
 }
 
 /** Config for the session-create → harness `sessionAssign` dispatch (see
@@ -504,6 +515,7 @@ export function registerAgentSessionsRoutes(
     livekitSecretEncryptionKey,
     fleetControlRegistry,
     sessionDispatch,
+    profilesService,
   } = deps;
 
   /** LK.4 — auto-mint a LiveKit token for the just-created (or
@@ -579,6 +591,17 @@ export function registerAgentSessionsRoutes(
           fieldErrors: {},
         });
       }
+      // Profile-backed (file 57): a supplied profile_id MUST reference an owned
+      // profile — validate before create/dispatch so an unknown/foreign id is a
+      // clean 404, not a silent best-effort skip in the dispatch. (404 also when
+      // profiles aren't wired; the customer can't distinguish, which is fine.)
+      if (parsed.data.profile_id !== undefined) {
+        if (profilesService === undefined) {
+          throw new NotFoundError(`Profile ${parsed.data.profile_id} not found.`);
+        }
+        await profilesService.get({ id: parsed.data.profile_id, accountId: ctx.account.id });
+      }
+
       const idempotencyKey = idempotency.kind === 'valid' ? idempotency.key : null;
       if (idempotencyKey !== null) {
         const existing = await sessions.findByIdempotencyKey(ctx.account.id, idempotencyKey);
@@ -672,6 +695,11 @@ export function registerAgentSessionsRoutes(
         livekitSecretEncryptionKey,
         sessionDispatch,
         logger: req.log,
+        // Profile-backed (file 57): thread the validated profile_id so the
+        // dispatch ships its DEK in SessionAssign.profile.
+        accountId: ctx.account.id,
+        ...(parsed.data.profile_id !== undefined ? { profileId: parsed.data.profile_id } : {}),
+        profilesService,
       });
       // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
       // effort emit; audit failures don't break the create. Distinct
