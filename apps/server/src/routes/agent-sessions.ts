@@ -846,6 +846,14 @@ export function registerAgentSessionsRoutes(
         }
 
         const liveSent = new Set<number>();
+        // W383 — backpressure guard. A stalled client (TCP window full) would
+        // otherwise let live transcript events buffer unboundedly in the socket
+        // (reply.raw.writableLength grows without bound → server OOM). Past a
+        // generous high-water mark we close the stream; the client's EventSource
+        // auto-reconnects with Last-Event-ID and the replay loop above resumes
+        // it, so no transcript entry is lost. A healthy client drains
+        // immediately (writableLength ≈ 0) and never trips this.
+        const MAX_SSE_BUFFER_BYTES = 4_000_000;
         const unsubscribe = transcriptEventBus.subscribe(req.params.id, (event) => {
           if (event.index <= resumeFrom) return;
           if (liveSent.has(event.index)) return;
@@ -860,13 +868,20 @@ export function registerAgentSessionsRoutes(
           reply.raw.write(
             `data: ${JSON.stringify({ index: event.index, entry: event.entry })}\n\n`,
           );
+          if (reply.raw.writableLength > MAX_SSE_BUFFER_BYTES) cleanup();
         });
         const heartbeat = setInterval(() => {
           reply.raw.write(`: heartbeat ${new Date().toISOString()}\n\n`);
         }, transcriptHeartbeatMs);
         heartbeat.unref();
 
+        let closed = false;
         const cleanup = (): void => {
+          // Idempotent — invoked from the backpressure guard above AND the
+          // close/error handlers below; double-end() / double-unsubscribe is
+          // avoided so the paths can't race.
+          if (closed) return;
+          closed = true;
           clearInterval(heartbeat);
           unsubscribe();
           reply.raw.end();
