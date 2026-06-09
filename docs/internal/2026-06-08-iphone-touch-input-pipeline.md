@@ -34,10 +34,14 @@ model the founder wants gone**, and the runtime (fork vs iOS-Sim) is A1's call.
   mouse-vocab → **touch vocab**; emit it from the dashboard + gui-client; the AI
   path already routes through behavioural-simulation.
 
-## A2 contract proposal (for A3/A1 review — not yet built)
+## A2 contract proposal (SUPERSEDED — shipped; see Sequencing step 2/3 for the final shapes)
 
-Replace/augment the mouse-vocab `InputEventSchema` with a touch vocabulary for
-the manual-control path:
+> Historical draft. The shipped contract used **camelCase** (`touchStart` not
+> `touch_start`, `durationMs` not `duration_ms`) per A3's W553 review — see the
+> Sequencing section below for what actually landed.
+
+Original draft — augment the mouse-vocab `InputEventSchema` with a touch
+vocabulary for the manual-control path:
 
 - `tap { x, y }` — single touchstart→touchend at device px.
 - `touch_start | touch_move | touch_end { x, y, touch_id }` — for drags/holds.
@@ -50,14 +54,30 @@ dashboard coordinate-projection gap (project overlay-px → device-px) and the
 mouse-vs-touch coherence latents in one cut. Bounds/redaction mirror the current
 schema. The harness maps these to native iOS touch.
 
-## Sequencing (no-rework)
+## Sequencing — status as of 2026-06-08
 
 1. **[done]** Surface + cross-agent coordinate (bus W550).
-2. **[blocked on A1/A3 reply]** Pin the touch wire-contract with A3's harness
-   shape + A1's runtime feasibility.
-3. A2: land the touch vocab in `packages/api-types` (SSoT) → dashboard + gui-client
-   emit it → drivers/route → docs + parity, each slice gate-green.
-4. A3: harness injects as iOS touch; A1: iOS-Sim runtime if chosen.
+2. **[done]** Touch wire-contract pinned (A3 ✓ W553). Final shapes: `tap{x,y}` ·
+   `touchStart/touchMove/touchEnd{x,y,touchId}` · `swipe{x1,y1,x2,y2,durationMs}`,
+   **camelCase**, device-CSS px, `touchId` 0–9, `durationMs` ≤60s, ADDED
+   alongside the mouse variants. **No iOS-Sim needed for v1.0** — the fork already
+   does genuine WebKit `pointerType:touch` (A1/A3 runtime call).
+3. **[done]** api-types touch vocab (SSoT) shipped `53e91907` — propagated to the
+   gui-client `livekit.ts` copy + sdk-typescript `InputEvent` alias + openapi
+   description + cross-surface/schema parity (sdk-go is `map[string]any`, untyped).
+   Docs shipped `05d49c7a` (guides/live-video touch section) + `0cc47971` (W3C
+   input model). The input-event **route is touch-ready** (type-agnostic: validates
+   via the schema, treats any event as the takeover trigger, no per-type branch).
+4. **[done — A3]** Harness `DataChannelInputReceiver` decodes the touch vocab →
+   genuine WebKit touch (W561), + the manual-keyboard W3C-key injector (W568).
+   CGEvent only as the legacy fallback. No mouse fallback for touch (no W198 tell).
+5. **[REMAINING — A2, gated]** Wire the **dashboard** LiveKit-video subscription
+   (currently a placeholder) → then switch its manual overlay from mouse → the
+   touch vocab + project stream-px → device-CSS off `video.videoWidth/Height`
+   (closes W267). **Gated on a live publishing session + A3's drive-bridge
+   `ManualTouchInjecting` for end-to-end verification** — not shipped blind.
+6. **[later]** Remove the mouse variants once the dashboard overlay has migrated.
 
-A2 does **not** build step 3 until step 2 is confirmed (the lockstep rule —
-building the schema before the harness shape risks rework).
+**Net:** the touch contract is live end-to-end on the API + harness + docs; the
+gui-client capture path already emits `tap_at` (touch). The one open A2 piece is
+the dashboard live-stream-view + its overlay, gated on live verifiability.
