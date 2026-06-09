@@ -15,7 +15,7 @@ import { ConflictError, NotFoundError, TierLimitError } from '../lib/errors.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { profileLimitFor } from './sessions.js';
 import type { AccountAuditService } from './account-audit.js';
-import { mintWrappedProfileDek } from '../lib/profile-key-hierarchy.js';
+import { mintWrappedProfileDek, unwrapProfileDek } from '../lib/profile-key-hierarchy.js';
 
 export interface ProfileRecord {
   id: string;
@@ -83,6 +83,15 @@ export interface ProfilesRepo {
   delete(args: { id: string; accountId: string }): Promise<boolean>;
   /** Mark `last_used_at` — fire-and-forget from sessions service. */
   touch(args: { id: string; accountId: string; at: Date }): Promise<void>;
+  /**
+   * Read ONLY the wrapped DEK for a profile (file 57). Deliberately NOT on
+   * ProfileRecord — the wrapped DEK is a secret that must never ride a record
+   * returned to the customer; this account-scoped read is the only path to it,
+   * used at session-assign to unwrap + ship the DEK to the harness. Returns null
+   * when the profile has no DEK (created without PROFILE_MASTER_KEY) or isn't
+   * found / wrong account.
+   */
+  getWrappedDek(args: { id: string; accountId: string }): Promise<string | null>;
 }
 
 const DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID;
@@ -235,6 +244,24 @@ export class ProfilesService {
       archetype: row.archetype,
     });
     return row;
+  }
+
+  /**
+   * Recover a profile's plaintext DEK (file 57) for session-assign — reads the
+   * account-scoped wrapped DEK and unwraps it under the account's TMK. Returns
+   * null when the master key isn't configured or the profile has no stored DEK.
+   * The plaintext DEK never persists; the caller ships it to the harness over
+   * the authed WSS and discards it. Throws only if a stored DEK is corrupt /
+   * wrapped under a different key (the best-effort dispatch caller catches).
+   */
+  async getProfileDek(args: { profileId: string; accountId: string }): Promise<Buffer | null> {
+    if (this.profileMasterKey === null) return null;
+    const wrappedDek = await this.repo.getWrappedDek({
+      id: args.profileId,
+      accountId: args.accountId,
+    });
+    if (wrappedDek === null) return null;
+    return unwrapProfileDek(this.profileMasterKey, args.accountId, wrappedDek);
   }
 
   async list(args: ListProfilesArgs): Promise<ListProfilesPage> {

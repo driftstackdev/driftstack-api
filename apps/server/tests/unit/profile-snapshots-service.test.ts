@@ -152,6 +152,7 @@ function makeRepos(
     update: ({ id }) => Promise.resolve(profiles.find((p) => p.id === id) as ProfileRecord),
     delete: () => Promise.resolve(true),
     touch: () => Promise.resolve(),
+    getWrappedDek: () => Promise.resolve(null),
   };
   return { snapshotsRepo, profilesRepo, state: { profiles, snapshots } };
 }

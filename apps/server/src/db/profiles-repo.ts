@@ -109,6 +109,17 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     return row ? toRecord(row) : null;
   }
 
+  // file 57: account-scoped read of ONLY the wrapped DEK (kept off ProfileRecord
+  // so the secret never rides a customer-facing record).
+  async getWrappedDek(args: { id: string; accountId: string }): Promise<string | null> {
+    const [row] = await this.database.db
+      .select({ wrappedDek: profiles.wrappedDek })
+      .from(profiles)
+      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId)))
+      .limit(1);
+    return row?.wrappedDek ?? null;
+  }
+
   async findByAccountAndName(args: {
     accountId: string;
     name: string;

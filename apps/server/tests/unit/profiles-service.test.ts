@@ -25,7 +25,7 @@ import {
 } from '../../src/services/profiles.js';
 import type { AccountAuditService } from '../../src/services/account-audit.js';
 import { ConflictError, NotFoundError, TierLimitError } from '../../src/lib/errors.js';
-import { unwrapProfileDek } from '../../src/lib/profile-key-hierarchy.js';
+import { mintWrappedProfileDek, unwrapProfileDek } from '../../src/lib/profile-key-hierarchy.js';
 
 function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
   return {
@@ -121,6 +121,7 @@ function makeRepo(
       return Promise.resolve(true);
     },
     touch: () => Promise.resolve(),
+    getWrappedDek: () => Promise.resolve(null),
   };
   return { repo, state: { rows } };
 }
@@ -201,6 +202,30 @@ describe('V-553.B-21 ProfilesService.create', () => {
     const svc = new ProfilesService(repo); // no master key
     await svc.create({ accountId: 'acc_nodek', tier: SOLO, name: 'p' });
     expect(captured?.wrappedDek).toBeUndefined();
+  });
+
+  it('getProfileDek: unwraps the stored wrapped DEK under the account TMK when the key is set', async () => {
+    const master = Buffer.alloc(32, 8);
+    const { wrappedDek, dek } = mintWrappedProfileDek(master, 'acc_g');
+    const { repo } = makeRepo();
+    repo.getWrappedDek = () => Promise.resolve(wrappedDek);
+    const svc = new ProfilesService(repo, null, master);
+    const got = await svc.getProfileDek({ profileId: 'p1', accountId: 'acc_g' });
+    expect(got?.equals(dek)).toBe(true);
+  });
+
+  it('getProfileDek: null when the master key is absent', async () => {
+    const { repo } = makeRepo();
+    repo.getWrappedDek = () => Promise.resolve('whatever');
+    const svc = new ProfilesService(repo); // no master key
+    expect(await svc.getProfileDek({ profileId: 'p1', accountId: 'acc_g' })).toBeNull();
+  });
+
+  it('getProfileDek: null when the profile has no stored DEK', async () => {
+    const { repo } = makeRepo();
+    repo.getWrappedDek = () => Promise.resolve(null);
+    const svc = new ProfilesService(repo, null, Buffer.alloc(32, 8));
+    expect(await svc.getProfileDek({ profileId: 'p1', accountId: 'acc_g' })).toBeNull();
   });
 
   it('translates a concurrent same-name 23505 (race loser) into ConflictError, not a 500', async () => {

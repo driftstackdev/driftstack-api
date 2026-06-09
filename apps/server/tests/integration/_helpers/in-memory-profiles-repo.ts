@@ -71,6 +71,12 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     return Promise.resolve(r);
   }
 
+  // In-memory repo doesn't track per-profile DEKs (DEK dispatch is exercised by
+  // the unit test's dedicated mock); null keeps the interface satisfied.
+  getWrappedDek(_args: { id: string; accountId: string }): Promise<string | null> {
+    return Promise.resolve(null);
+  }
+
   findByAccountAndName(args: { accountId: string; name: string }): Promise<ProfileRecord | null> {
     for (const r of this.rows.values()) {
       if (r.accountId === args.accountId && r.name === args.name) return Promise.resolve(r);
