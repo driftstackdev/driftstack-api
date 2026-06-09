@@ -87,6 +87,10 @@ type CreateAgentSessionRequest struct {
 	// field so the server applies its default ('claude-opus-4-7').
 	// Valid: "claude-opus-4-7" | "claude-sonnet-4-6" | "claude-haiku-4-5".
 	Model string `json:"model,omitempty"`
+	// Attach a saved profile (persistent browser identity) so the session
+	// resumes its stored state + saves back on end. Must be an owned profile id
+	// (unknown/not-owned → 404). Empty string omits it (stateless session).
+	ProfileID string `json:"profile_id,omitempty"`
 }
 
 // AgentMessageResponse is the discriminated turn-result. Branch on

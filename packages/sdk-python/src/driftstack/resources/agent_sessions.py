@@ -75,9 +75,13 @@ class AgentSessionsResource:
 
         Body shape (all fields optional): ``{"driftstack_session_id"?: ...,
         "token_budget"?: int, "mode"?: "manual"|"ai"|"pair",
-        "model"?: "claude-opus-4-7"|"claude-sonnet-4-6"|"claude-haiku-4-5"}``.
+        "model"?: "claude-opus-4-7"|"claude-sonnet-4-6"|"claude-haiku-4-5",
+        "profile_id"?: str}``.
         ``model`` (6.c) picks the Claude 4.x model the AI agent runs;
-        defaults server-side to ``"claude-opus-4-7"``.
+        defaults server-side to ``"claude-opus-4-7"``. ``profile_id`` attaches a
+        saved profile (persistent browser identity) so the session resumes its
+        stored state + saves back on end; must be an owned profile id (unknown
+        or not-owned → 404).
 
         ``idempotency_key`` (optional, v2-#19) is forwarded as the
         ``Idempotency-Key`` request header — Stripe-pattern dedupe. The

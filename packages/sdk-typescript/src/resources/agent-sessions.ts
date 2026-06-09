@@ -144,6 +144,13 @@ export interface CreateAgentSessionRequest {
    * cheaper model (Sonnet 4.6 / Haiku 4.5) lowers cost-to-serve.
    */
   model?: 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
+  /**
+   * Attach a saved profile (a persistent browser identity — cookies,
+   * localStorage, etc.) so the session resumes that profile's stored state and
+   * saves changes back when it ends. Must reference a profile your account owns
+   * (an unknown or not-owned id returns 404). Omit for a stateless session.
+   */
+  profile_id?: string;
 }
 
 export type AgentIntent =

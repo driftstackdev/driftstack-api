@@ -72,6 +72,10 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     );
   });
 
+  it('CreateAgentSessionRequest exposes optional profile_id (file 57 — attach a saved profile to the session). Drift to dropping it strands the live server-side profile-backed-session feature with no SDK surface for customers.', () => {
+    expect(body).toMatch(/profile_id\?: string;/);
+  });
+
   it('AgentIntent 4-kind union: navigate / interact / wait / capture. Drift to dropping a kind would break the executor contract; drift to adding an undeclared kind would render as TS error in callers using exhaustive switch', () => {
     expect(body).toMatch(/\{ kind: 'navigate'; url: string \}/);
     expect(body).toMatch(

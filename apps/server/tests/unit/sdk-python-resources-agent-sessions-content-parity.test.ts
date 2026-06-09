@@ -78,6 +78,10 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     // 6.c — create() docstring documents the per-session model body field
     // (Python is loose-dict, so the docstring is the typed surface).
     expect(body).toMatch(/"model"\?: "claude-opus-4-7"\|"claude-sonnet-4-6"\|"claude-haiku-4-5"/);
+    // file 57 — create() docstring documents the optional profile_id body field
+    // (attach a saved profile). Drift to dropping it strands the live
+    // profile-backed-session feature with no documented Python surface.
+    expect(body).toMatch(/"profile_id"\?: str/);
   });
 
   it('Async AsyncAgentSessionsResource 9-method mirror pinned. Drift would break asyncio + FastAPI consumers OR break the sync/async parity contract', () => {

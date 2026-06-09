@@ -69,6 +69,10 @@ describe('sdk-go agent_sessions content parity', () => {
     expect(body).toMatch(/Mode string `json:"mode,omitempty"`/);
     // 6.c — model picker field on the request shape (omitempty → server default).
     expect(body).toMatch(/Model string `json:"model,omitempty"`/);
+    // file 57 — attach a saved profile to the session (omitempty → stateless).
+    // Drift to dropping it strands the live profile-backed-session feature
+    // with no Go SDK surface.
+    expect(body).toMatch(/ProfileID string `json:"profile_id,omitempty"`/);
   });
 
   it('AgentMessageResponse discriminated union: \'Branch on Kind: "plan-executed" (Intents + Results + OK populated), "clarify" (ClarifyingQuestion populated), or "refuse" (RefuseReason populated).\' — pinned so the 3-variant discriminator framing stays documented (note: logged-manual is implicit via Kind="logged-manual" + only Session populated; drift to dropping discriminator framing would force Go callers to guess which fields to read)', () => {
