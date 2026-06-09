@@ -59,15 +59,17 @@ earlier "manual deploy bypasses the flag" was wrong.
 **Fixed — deploy is now GitHub-independent (`DEPLOY_VIA_BUNDLE=1`).** deploy-bridge
 now ships the repo to the host as a **git bundle over scp** instead of pulling
 from GitHub; the host clones from the bundle file, so build/swap/rollback are
-byte-identical. **Staging is deployed via this path → `7b97a5d0`** (was
-`d4e1778`; all post-deploy checks green, 42s). **Prod follows after the V-507
-60-min staging-green window** (staging went green ~07:07 UTC → prod-eligible
-~08:07) via `DEPLOY_VIA_BUNDLE=1 scripts/deploy-bridge.sh prod`. The backlog is
-migration-free + additive (extract/search/login ops + iPhone-touch
-api-types/SDK/openapi + docs; mock/stub drivers, pre-launch), so it's low-risk.
-CI (PR gate) is still GitHub-bound, but the **full gate runs locally on every
-push**, so verification isn't blocked — only the GitHub-hosted run is paused.
-**No action needed from you** — we're no longer gated on the flag for shipping.
+byte-identical. **✅ DONE — both staging (`7b97a5d0`) AND prod (`e64cd4e9`) are
+now deployed via this path.** Prod went current 2026-06-09 08:13 UTC (was
+`d4e1778`, ~31 commits behind; 38s, all 15 post-deploy checks green) after the
+V-507 staging-green window — and V-507 was satisfied exactly: the commits between
+the staging-green SHA and prod touch zero `apps/server` runtime + zero migrations.
+The backlog was migration-free + additive (extract/search/login ops + iPhone-touch
+api-types/SDK/openapi + docs; mock/stub drivers, pre-launch). **The deploy gap is
+closed.** CI (PR gate) is still GitHub-bound, but the **full gate runs locally on
+every push**, so verification isn't blocked — only the GitHub-hosted run is paused.
+Future deploys: `DEPLOY_VIA_BUNDLE=1 scripts/deploy-bridge.sh <staging|prod>` while
+the flag persists (reverts to a plain clone once it clears). **No action needed.**
 
 ## 3. GUI (b) release `.app` paint bug — needs your build + launch
 
