@@ -22,10 +22,9 @@ describe('docs styles/base content parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('Tailwind 3-directive header pinned', () => {
-    expect(body).toMatch(/@tailwind base;/);
-    expect(body).toMatch(/@tailwind components;/);
-    expect(body).toMatch(/@tailwind utilities;/);
+  it('Tailwind v4 @import + typography @plugin header pinned (W368 — replaces the v3 3-directive header)', () => {
+    expect(body).toMatch(/@import 'tailwindcss';/);
+    expect(body).toMatch(/@plugin '@tailwindcss\/typography';/);
   });
 
   it("R11 dark-mode-synced-with-marketing posture pinned: 'Synced with the marketing-site + customer-dashboard graphite palette so the product reads as one site, not three.' Drift to a different palette would break cross-app brand consistency", () => {
@@ -54,10 +53,10 @@ describe('docs styles/base content parity', () => {
     expect(body).toMatch(/background-attachment: fixed;/);
   });
 
-  it('3 components-layer utility classes pinned: .btn-primary + .btn-secondary + .nav-link. Drift to dropping any would break the docs-site button/nav rendering', () => {
-    expect(body).toMatch(/\.btn-primary \{/);
-    expect(body).toMatch(/\.btn-secondary \{/);
-    expect(body).toMatch(/\.nav-link \{/);
+  it('3 component utility classes pinned: btn-primary + btn-secondary + nav-link (W368 — v4 @utility, was @layer components). Drift to dropping any would break the docs-site button/nav rendering', () => {
+    expect(body).toMatch(/@utility btn-primary \{/);
+    expect(body).toMatch(/@utility btn-secondary \{/);
+    expect(body).toMatch(/@utility nav-link \{/);
   });
 
   it('btn-primary hover lift pattern pinned: -translate-y-0.5 + active:translate-y-0 + shadow-glow-red-lg. Drift would lose the load-bearing tactile-feedback on the docs CTAs', () => {

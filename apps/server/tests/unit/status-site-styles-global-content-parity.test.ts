@@ -21,10 +21,8 @@ describe('status-site styles/global content parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('Tailwind 3-directive header pinned', () => {
-    expect(body).toMatch(/@tailwind base;/);
-    expect(body).toMatch(/@tailwind components;/);
-    expect(body).toMatch(/@tailwind utilities;/);
+  it('Tailwind v4 @import header pinned (W368 — replaces the v3 3-directive header)', () => {
+    expect(body).toMatch(/@import 'tailwindcss';/);
   });
 
   it("R13 dark-mode-synced framing pinned: 'Customers checking status during an incident shouldn't experience a brand-jarring light theme when the rest of the product is dark.' Drift to a different theme would create a brand-jarring mid-incident UX", () => {

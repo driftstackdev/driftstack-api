@@ -45,12 +45,12 @@ describe('W537.C apps/status-site/package.json content parity', () => {
     expect(pkg.scripts.typecheck).toBe('astro check');
   });
 
-  it('Minimal 5-dep set framing pinned: @astrojs/check + @astrojs/tailwind + astro + tailwindcss + typescript (exactly 5 deps, ZERO others) + NO @astrojs/sitemap (status incidents intentionally not indexed by crawlers — status URLs change frequently with each incident) + NO @tailwindcss/typography (no prose surface — status-site renders dynamic incident JSON, not long-form) + NO @sentry/astro (parity with docs site — public read-only surface, no customer-error telemetry) — pinned so the minimal-5-dep + 3-intentional-omission (sitemap + typography + Sentry) commitment survives (drift to adding any of these would bloat the lightest Astro app in the monorepo without behavioral need)', () => {
+  it('Minimal 5-dep set framing pinned (W368 — Tailwind v4): @astrojs/check + @tailwindcss/postcss (v4 engine via PostCSS, replaced the v3 @astrojs/tailwind integration) + astro 6 + tailwindcss 4 + typescript (exactly 5 deps, ZERO others) + NO @astrojs/sitemap (status incidents intentionally not indexed by crawlers) + NO @tailwindcss/typography (no prose surface — status-site renders dynamic incident JSON) + NO @sentry/astro (public read-only surface, no customer-error telemetry) — pinned so the minimal-5-dep + 3-intentional-omission commitment survives', () => {
     expect(pkg.dependencies).toEqual({
       '@astrojs/check': '^0.9.4',
-      '@astrojs/tailwind': '^5.1.0',
-      astro: '^5.0.0',
-      tailwindcss: '^3.4.0',
+      '@tailwindcss/postcss': '^4.3.0',
+      astro: '^6.0.0',
+      tailwindcss: '^4.3.0',
       typescript: '^5.7.0',
     });
   });

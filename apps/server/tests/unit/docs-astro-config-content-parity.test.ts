@@ -41,11 +41,12 @@ describe('W536.C apps/docs/astro.config.mjs content parity', () => {
     expect(body).toMatch(/output: 'static',/);
   });
 
-  it("Tailwind + sitemap + 404-filter framing pinned: 'import tailwind from \"@astrojs/tailwind\"' + 'import sitemap from \"@astrojs/sitemap\"' + 'tailwind({ applyBaseStyles: false })' + 'sitemap({ filter: (page) => !page.includes(\"/404\") })' — pinned so the Tailwind-no-base-styles (docs site uses its own src/styles) + sitemap-with-404-filter (parity with marketing-site V-106 pattern) commitment survives", () => {
-    expect(body).toMatch(/import tailwind from '@astrojs\/tailwind';/);
+  it('Sitemap + 404-filter framing pinned + Tailwind-via-PostCSS (W368): sitemap import + \'filter: (page) => !page.includes("/404")\' kept; the @astrojs/tailwind integration was REMOVED (Tailwind v4 now runs via postcss.config.mjs — see status-site; @tailwindcss/vite breaks while astro 5+6 coexist) — pinned so the sitemap-with-404-filter (parity with marketing-site V-106) survives and the integration stays gone', () => {
     expect(body).toMatch(/import sitemap from '@astrojs\/sitemap';/);
-    expect(body).toMatch(/tailwind\(\{ applyBaseStyles: false \}\),/);
     expect(body).toMatch(/filter: \(page\) => !page\.includes\('\/404'\),/);
+    // Tailwind v4 via PostCSS — the integration must NOT come back.
+    expect(body).not.toMatch(/@astrojs\/tailwind/);
+    expect(body).not.toMatch(/tailwind\(\{/);
   });
 
   it('inlineStylesheets + no-Sentry framing pinned: \'inlineStylesheets: "auto"\' build option + intentional absence of @sentry/astro (docs site has no customer-error-telemetry surface worth Sentry overhead — drift to adding sentry would route docs-static-render errors through customer-facing telemetry) — pinned so the build-optimization + no-Sentry-on-docs-site commitment survives', () => {

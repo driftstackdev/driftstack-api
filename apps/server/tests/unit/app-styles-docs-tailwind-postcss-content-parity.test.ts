@@ -85,56 +85,43 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
 
   it('R11 docs/src/styles/base.css: Tailwind base + dark color-scheme + bg-surface-base graphite body + Geist+Berkeley font stack + 3 brand atoms (btn-primary + btn-secondary + nav-link). The earlier light-theme baseline (color-scheme: light + bg-slate-50) was migrated to dark so the docs read as one product with driftstack.dev rather than the prior context switch', () => {
     const body = read('apps/docs/src/styles/base.css');
-    expect(body).toMatch(/^@tailwind base;$/m);
-    expect(body).toMatch(/^@tailwind components;$/m);
-    expect(body).toMatch(/^@tailwind utilities;$/m);
+    // W368 — Tailwind v4: @import + typography @plugin (was the 3-directive header);
+    // component atoms are now @utility (was @layer components).
+    expect(body).toMatch(/@import 'tailwindcss';/);
+    expect(body).toMatch(/@plugin '@tailwindcss\/typography';/);
     expect(body).toMatch(/^@layer base \{$/m);
     expect(body).toMatch(/color-scheme: dark;/);
     expect(body).toMatch(/@apply bg-surface-base text-ink-primary;/);
     expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
     expect(body).toMatch(/font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;/);
     expect(body).toMatch(/@apply bg-oxblood-700 text-white;/);
-    expect(body).toMatch(/^@layer components \{$/m);
-    expect(body).toMatch(/\.btn-primary \{/);
-    expect(body).toMatch(/\.btn-secondary \{/);
-    expect(body).toMatch(/\.nav-link \{/);
+    expect(body).toMatch(/@utility btn-primary \{/);
+    expect(body).toMatch(/@utility btn-secondary \{/);
+    expect(body).toMatch(/@utility nav-link \{/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/docs/src/styles/base.css'))).toBe(true);
   });
 
-  it('apps/docs/tailwind.config.mjs: V-254 typography plugin + sync default export + content {astro/html/js/jsx/md/mdx/ts/tsx} + locked oxblood palette (11-shade w/ #722F37 base at 700) + slate scale + Geist/Berkeley fontFamily + prose 65ch maxWidth + DocLayout.astro V-254 prose rationale pinned', () => {
-    const body = read('apps/docs/tailwind.config.mjs');
-    expect(body).toMatch(/^\/\/ V-254 — typography plugin imported at top-level so the config$/m);
-    expect(body).toMatch(/itself stays synchronous \(Tailwind's config loader expects a sync/);
-    expect(body).toMatch(/default export\)\./);
-    expect(body).toMatch(/^import typography from '@tailwindcss\/typography';$/m);
-    expect(body).toMatch(/^\/\*\* @type \{import\('tailwindcss'\)\.Config\} \*\/$/m);
-    expect(body).toMatch(/content: \['\.\/src\/\*\*\/\*\.\{astro,html,js,jsx,md,mdx,ts,tsx\}'\],/);
-    expect(body).toMatch(/\/\/ Oxblood — locked accent per founder direction \(#722F37\)\./);
-    expect(body).toMatch(/oxblood: \{/);
-    expect(body).toMatch(/50: '#fbf3f4',/);
-    expect(body).toMatch(/100: '#f5e1e3',/);
-    expect(body).toMatch(/200: '#ebbfc4',/);
-    expect(body).toMatch(/300: '#dc939c',/);
-    expect(body).toMatch(/400: '#c8606e',/);
-    expect(body).toMatch(/500: '#a83b4d',/);
-    expect(body).toMatch(/600: '#8d2c3e',/);
-    expect(body).toMatch(/700: '#722F37', \/\/ base — primary accent, locked/);
-    expect(body).toMatch(/800: '#5e2730',/);
-    expect(body).toMatch(/900: '#4f242b',/);
-    expect(body).toMatch(/950: '#2b0f15',/);
-    expect(body).toMatch(/\/\/ Slate base — body text \+ surfaces\./);
-    expect(body).toMatch(/slate: \{/);
-    expect(body).toMatch(/50: '#f8fafc',/);
-    expect(body).toMatch(/950: '#020617',/);
-    expect(body).toMatch(/sans: \['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'\],/);
-    expect(body).toMatch(
-      /mono: \['Berkeley Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'\],/,
-    );
-    expect(body).toMatch(/prose: '65ch',/);
-    expect(body).toMatch(/\/\/ V-254 — typography plugin enables `prose` classes for markdown/);
-    expect(body).toMatch(/\/\/ content rendering in DocLayout\.astro\./);
-    expect(body).toMatch(/plugins: \[typography\],/);
-    expect(existsSync(resolve(REPO_ROOT, 'apps/docs/tailwind.config.mjs'))).toBe(true);
+  it('apps/docs/src/styles/base.css @theme (W368 — was tailwind.config.mjs, migrated to Tailwind v4 CSS-first): V-254 typography @plugin + locked oxblood palette (11-shade w/ #722f37 base at 700) + slate scale + Geist/Berkeley font vars + prose 65ch container. The v3 JS config (content glob, JS palette, plugins:[typography]) became @plugin + @theme --color-*/--font-*/--container-* tokens; values unchanged', () => {
+    const body = read('apps/docs/src/styles/base.css');
+    expect(body).toMatch(/@plugin '@tailwindcss\/typography';/);
+    // oxblood 11-shade palette (v4 @theme --color-* vars, lowercase hex)
+    expect(body).toMatch(/--color-oxblood-50: #fbf3f4;/);
+    expect(body).toMatch(/--color-oxblood-100: #f5e1e3;/);
+    expect(body).toMatch(/--color-oxblood-200: #ebbfc4;/);
+    expect(body).toMatch(/--color-oxblood-300: #dc939c;/);
+    expect(body).toMatch(/--color-oxblood-400: #c8606e;/);
+    expect(body).toMatch(/--color-oxblood-500: #a83b4d;/);
+    expect(body).toMatch(/--color-oxblood-600: #8d2c3e;/);
+    expect(body).toMatch(/--color-oxblood-700: #722f37;/); // base — primary accent, locked
+    expect(body).toMatch(/--color-oxblood-800: #5e2730;/);
+    expect(body).toMatch(/--color-oxblood-900: #4f242b;/);
+    expect(body).toMatch(/--color-oxblood-950: #2b0f15;/);
+    expect(body).toMatch(/--color-slate-50: #f8fafc;/);
+    expect(body).toMatch(/--color-slate-950: #020617;/);
+    expect(body).toMatch(/--font-sans: Geist, ui-sans-serif, system-ui, sans-serif;/);
+    expect(body).toMatch(/--font-mono: Berkeley Mono, ui-monospace, SFMono-Regular, monospace;/);
+    expect(body).toMatch(/--container-prose: 65ch;/);
+    expect(existsSync(resolve(REPO_ROOT, 'apps/docs/src/styles/base.css'))).toBe(true);
   });
 
   it('apps/gui-client/postcss.config.js: minimal pass-through (tailwindcss + autoprefixer plugins) pinned', () => {
