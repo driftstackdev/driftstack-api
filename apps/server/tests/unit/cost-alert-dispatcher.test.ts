@@ -171,10 +171,12 @@ describe('V-541.C dispatcher — transitions across evaluations', () => {
       return Promise.resolve();
     };
     const dispatcher = new CostAlertDispatcher({ service, sendAlert: sink });
-    // First eval: the send rejects and the error bubbles out (fail-loud).
-    await expect(
-      dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' }),
-    ).rejects.toThrow('postmark down');
+    // First eval (W378): the send rejects but is caught per-account — evaluate
+    // RESOLVES with alertsErrored=1 (no throw), and lastState is NOT advanced.
+    const r1 = await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(r1.alertsFired).toBe(0);
+    expect(r1.alertsErrored).toBe(1);
+    expect(r1.errors[0]?.message).toContain('postmark down');
     expect(captured).toHaveLength(0);
     // Second eval (channel recovered): the same transition is re-detected
     // because its state was never advanced → the critical alert is delivered.
@@ -204,7 +206,7 @@ describe('V-541.C dispatcher — payload shape', () => {
     expect(alert?.billing_cycle).toBe('2026-05');
   });
 
-  it('sendAlert is awaited (rejection bubbles out of evaluate)', async () => {
+  it('sendAlert is awaited; a send rejection is caught per-account (W378 — isolated, no longer bubbles out of evaluate)', async () => {
     const rows = new Map([['a', { ...EMPTY, sessionMinutes: 1_000 }]]);
     const aggregator: UsageAggregator = {
       aggregateForAccount: ({ accountId }) => Promise.resolve(rows.get(accountId) ?? null),
@@ -217,9 +219,15 @@ describe('V-541.C dispatcher — payload shape', () => {
     });
     const sink: AlertSink = vi.fn(() => Promise.reject(new Error('postmark down')));
     const dispatcher = new CostAlertDispatcher({ service, sendAlert: sink });
-    await expect(
-      dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' }),
-    ).rejects.toThrow('postmark down');
+    // The send IS awaited (the rejection is observed → counted), but it is
+    // caught per-account: evaluate RESOLVES (does not reject), so one failing
+    // sink can't abort later accounts or — since the nightly job re-arms after
+    // evaluate returns — kill the recompute chain.
+    const r = await dispatcher.evaluate({ accountIds: ['a'], billingCycle: '2026-05' });
+    expect(sink).toHaveBeenCalledOnce();
+    expect(r.alertsFired).toBe(0);
+    expect(r.alertsErrored).toBe(1);
+    expect(r.errors[0]?.accountId).toBe('a');
   });
 });
 

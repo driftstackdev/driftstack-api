@@ -79,11 +79,13 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
     expect(body).toMatch(/threshold_hard_cents: number;/);
   });
 
-  it('AlertSink + DispatchResult types: callback shape + alertsFired/alertsSkipped counters', () => {
+  it('AlertSink + DispatchResult types: callback shape + alertsFired/alertsSkipped/alertsErrored counters + errors[] (W378 per-account isolation)', () => {
     expect(body).toMatch(/export type AlertSink = \(alert: CostAlertPayload\) => Promise<void>;/);
-    expect(body).toMatch(
-      /export interface DispatchResult \{\s*\n?\s*alertsFired: number;\s*\n?\s*alertsSkipped: number;\s*\n?\s*\}/,
-    );
+    expect(body).toMatch(/export interface DispatchResult \{/);
+    expect(body).toMatch(/alertsFired: number;/);
+    expect(body).toMatch(/alertsSkipped: number;/);
+    expect(body).toMatch(/alertsErrored: number;/);
+    expect(body).toMatch(/errors: ReadonlyArray<\{ accountId: string; message: string \}>;/);
   });
 
   it('CostAlertDispatcher: private lastState Map<accountId, ThresholdState> for prior-state recall', () => {
@@ -116,19 +118,20 @@ describe('W396.C apps/server/src/services/cost-alert-dispatcher.ts content parit
     );
   });
 
-  it('evaluate: classifyTransition returns null → record state + skip; non-null → sendAlert THEN advance lastState (only on success) + alertsFired++', () => {
+  it('evaluate: classifyTransition returns null → record state + skip; non-null → (W378) sendAlert THEN advance lastState (only on success) + alertsFired++, wrapped in a per-account try/catch that counts alertsErrored + continues (no throw)', () => {
     expect(body).toMatch(/const severity = classifyTransition\(prior, current\);/);
     // null-severity (first-run under-soft) still records state before skipping.
     expect(body).toMatch(
       /if \(severity === null\) \{[\s\S]*?this\.lastState\.set\(summary\.account_id, current\);\s*\n?\s*alertsSkipped \+= 1;\s*\n?\s*continue;\s*\n?\s*\}/,
     );
-    // The send is awaited FIRST, and lastState is advanced AFTER it resolves —
-    // so a rejecting sink leaves prior state intact for next-run retry rather
-    // than recording a never-delivered alert as sent.
+    // W378 — the send is awaited FIRST inside a try; lastState advances AFTER it
+    // resolves (only on success → a rejecting sink leaves prior state intact for
+    // next-run retry); the catch counts alertsErrored + records the error +
+    // continues, so one failing send neither aborts later accounts nor throws.
     expect(body).toMatch(
-      /await this\.opts\.sendAlert\(buildAlertPayload\(summary, prior, current, severity\)\);\s*\n?\s*this\.lastState\.set\(summary\.account_id, current\);\s*\n?\s*alertsFired \+= 1;/,
+      /try \{[\s\S]*?await this\.opts\.sendAlert\(buildAlertPayload\(summary, prior, current, severity\)\);[\s\S]*?this\.lastState\.set\(summary\.account_id, current\);[\s\S]*?alertsFired \+= 1;[\s\S]*?\} catch \(err\) \{[\s\S]*?alertsErrored \+= 1;/,
     );
-    expect(body).toMatch(/return \{ alertsFired, alertsSkipped \};/);
+    expect(body).toMatch(/return \{ alertsFired, alertsSkipped, alertsErrored, errors \};/);
   });
 
   it('reset(): test seam — production never resets (deploys do)', () => {

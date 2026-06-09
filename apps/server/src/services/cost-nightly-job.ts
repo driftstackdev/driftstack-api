@@ -66,6 +66,11 @@ export function registerCostNightlyJob(opts: RegisterCostNightlyJobOpts): void {
         accounts: ids.length,
         alerts_fired: result.alertsFired,
         alerts_skipped: result.alertsSkipped,
+        // W378 — alert sends now fail per-account-isolated (evaluate no longer
+        // throws on a send error), so a channel outage surfaces here instead of
+        // killing the re-arm chain below. Non-zero → an alert sink is degraded.
+        alerts_errored: result.alertsErrored,
+        ...(result.alertsErrored > 0 ? { alert_errors: result.errors } : {}),
       },
       'cost nightly recompute complete',
     );

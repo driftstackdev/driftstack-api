@@ -91,8 +91,10 @@ describe('W397.A apps/server/src/services/cost-nightly-job.ts content parity', (
     expect(body).toMatch(
       /const result = await opts\.dispatcher\.evaluate\(\{\s*\n?\s*accountIds: ids,\s*\n?\s*billingCycle: billingCycleFromDate\(tickStart\),\s*\n?\s*\}\);/,
     );
+    // W378 — log now also carries alerts_errored (+ alert_errors when >0) so a
+    // per-account-isolated send failure surfaces here instead of killing the chain.
     expect(body).toMatch(
-      /opts\.logger\.info\?\.\(\s*\n?\s*\{\s*\n?\s*component: 'cost-nightly',\s*\n?\s*accounts: ids\.length,\s*\n?\s*alerts_fired: result\.alertsFired,\s*\n?\s*alerts_skipped: result\.alertsSkipped,\s*\n?\s*\},\s*\n?\s*'cost nightly recompute complete',\s*\n?\s*\);/,
+      /opts\.logger\.info\?\.\(\s*\n?\s*\{\s*\n?\s*component: 'cost-nightly',\s*\n?\s*accounts: ids\.length,\s*\n?\s*alerts_fired: result\.alertsFired,\s*\n?\s*alerts_skipped: result\.alertsSkipped,[\s\S]*?alerts_errored: result\.alertsErrored,[\s\S]*?\},\s*\n?\s*'cost nightly recompute complete',\s*\n?\s*\);/,
     );
     // Re-arm path enqueues with dedup OFF — the in-flight, still-locked
     // current job would otherwise trip the dedup check and kill the chain.

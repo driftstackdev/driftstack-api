@@ -37,6 +37,18 @@ export type AlertSink = (alert: CostAlertPayload) => Promise<void>;
 export interface DispatchResult {
   alertsFired: number;
   alertsSkipped: number;
+  /**
+   * Accounts whose alert send threw. Per-account isolation (W378): a single
+   * failing send no longer aborts the run or bubbles out of evaluate — the
+   * account's remembered state is left at `prior` so the next run retries it,
+   * and the loop continues. This keeps a transient alert-channel outage from
+   * (a) skipping every later account in the same run, or (b) — since the
+   * nightly job re-arms only AFTER evaluate returns — killing the recompute
+   * chain entirely when the poller exhausts its retries on a persistent outage.
+   */
+  alertsErrored: number;
+  /** Per-failed-account detail for the caller to log (accountId + message). */
+  errors: ReadonlyArray<{ accountId: string; message: string }>;
 }
 
 export interface CostAlertDispatcherOpts {
@@ -84,6 +96,8 @@ export class CostAlertDispatcher {
 
     let alertsFired = 0;
     let alertsSkipped = 0;
+    let alertsErrored = 0;
+    const errors: { accountId: string; message: string }[] = [];
 
     for (const summary of summaries) {
       const prior = this.lastState.get(summary.account_id) ?? null;
@@ -106,20 +120,36 @@ export class CostAlertDispatcher {
         continue;
       }
       // Deliver first, THEN advance the remembered state — only on a
-      // successful send. If the (real Postmark / Slack) sink rejects, the
-      // error bubbles out of evaluate (fail-loud — sendAlert is awaited) and
-      // `lastState` stays at `prior`, so the next run re-detects this
-      // transition and retries the alert instead of silently dropping a
-      // threshold page. Advancing BEFORE the await would record the alert as
-      // delivered even when the send failed, turning a transient channel
-      // outage into a permanently-missed page — the design biases toward a
-      // duplicate over a drop.
-      await this.opts.sendAlert(buildAlertPayload(summary, prior, current, severity));
-      this.lastState.set(summary.account_id, current);
-      alertsFired += 1;
+      // successful send. If the (real Postmark / Slack) sink rejects, we leave
+      // `lastState` at `prior` so the next run re-detects this transition and
+      // retries the alert instead of silently dropping a threshold page.
+      // Advancing BEFORE the await would record the alert as delivered even
+      // when the send failed, turning a transient channel outage into a
+      // permanently-missed page — the design biases toward a duplicate over a
+      // drop.
+      //
+      // W378 — per-account isolation: the send failure is CAUGHT here (not
+      // bubbled out of evaluate). A single failing send used to abort every
+      // later account in this run AND, because the nightly job re-arms only
+      // after evaluate returns, a persistent outage that exhausted the poller's
+      // retries would kill the recompute chain. Catch + count + continue keeps
+      // the prior-state-preserved retry semantics while isolating the blast
+      // radius to the one account.
+      try {
+        await this.opts.sendAlert(buildAlertPayload(summary, prior, current, severity));
+        this.lastState.set(summary.account_id, current);
+        alertsFired += 1;
+      } catch (err) {
+        // Do NOT advance lastState — the unsent transition is retried next run.
+        alertsErrored += 1;
+        errors.push({
+          accountId: summary.account_id,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
-    return { alertsFired, alertsSkipped };
+    return { alertsFired, alertsSkipped, alertsErrored, errors };
   }
 
   /**
