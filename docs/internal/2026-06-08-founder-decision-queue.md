@@ -48,18 +48,26 @@ the LiveKit part needs one of:
    W267 device-CSS projection ride on whichever option above. Design/status:
    `docs/internal/2026-06-08-iphone-touch-input-pipeline.md`.
 
-## 2. GitHub account flag — blocks CI/Deploy (you've contacted support)
+## 2. GitHub account flag — CI/Deploy now ROUTED AROUND (you've contacted support)
 
-The account flag ("ineligible for transactions") is what stalled GitHub Actions
-(CI + auto-deploy). git **push** still works; the **GUI is a local build**
-(unaffected); prod can be **manually SSH-deployed** (`scripts/deploy-bridge.sh`)
-if it must be current before the flag clears. **As of 2026-06-08 prod + staging
-are both at `d4e1778`, 29 commits behind origin — VERIFIED safe to auto-deploy:
-ZERO DB migrations in the backlog + all changes additive** (the extract/search/
-login session ops + the iPhone-touch api-types/SDK/openapi + docs; mock/stub
-drivers, pre-launch). So when the flag clears the 29 commits auto-deploy cleanly
-(no migration risk), or a manual `scripts/deploy-bridge.sh` run is safe anytime.
-No action needed — it's deploy-ready, just gated on the flag.
+The account flag ("ineligible for transactions") stalled GitHub Actions (CI +
+auto-deploy). **2026-06-09 finding:** it ALSO blocks the _manual_ deploy-bridge —
+the script had the host `git clone` from github.com (a read/pull), which the flag
+denies the same way (git **push** still works; that's the asymmetry). So my
+earlier "manual deploy bypasses the flag" was wrong.
+
+**Fixed — deploy is now GitHub-independent (`DEPLOY_VIA_BUNDLE=1`).** deploy-bridge
+now ships the repo to the host as a **git bundle over scp** instead of pulling
+from GitHub; the host clones from the bundle file, so build/swap/rollback are
+byte-identical. **Staging is deployed via this path → `7b97a5d0`** (was
+`d4e1778`; all post-deploy checks green, 42s). **Prod follows after the V-507
+60-min staging-green window** (staging went green ~07:07 UTC → prod-eligible
+~08:07) via `DEPLOY_VIA_BUNDLE=1 scripts/deploy-bridge.sh prod`. The backlog is
+migration-free + additive (extract/search/login ops + iPhone-touch
+api-types/SDK/openapi + docs; mock/stub drivers, pre-launch), so it's low-risk.
+CI (PR gate) is still GitHub-bound, but the **full gate runs locally on every
+push**, so verification isn't blocked — only the GitHub-hosted run is paused.
+**No action needed from you** — we're no longer gated on the flag for shipping.
 
 ## 3. GUI (b) release `.app` paint bug — needs your build + launch
 

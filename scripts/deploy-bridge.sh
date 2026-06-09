@@ -107,6 +107,34 @@ DEPLOY_STARTED_AT=$(date +%s)
 # separate SSH. Empty if no .last-good-sha existed yet (fresh server).
 PREVIOUS_SHA=$(ssh "root@${HOST}" "cat /opt/driftstack/api/.last-good-sha 2>/dev/null || echo ''" 2>/dev/null || echo "")
 
+# GitHub-independent deploy path (2026-06-09): when DEPLOY_VIA_BUNDLE=1 we ship
+# the repo to the host as a git bundle over scp instead of having the host
+# `git clone` from github.com. Needed because the GitHub account flag
+# ("ineligible for transactions") blocks the host's clone (a read/pull) the same
+# way it stalls Actions — so neither the auto-deploy NOR a plain deploy-bridge
+# run can pull from GitHub until the flag clears (git PUSH still works, which is
+# why this scp-the-bundle path does). The bundle is a full clone of origin/main
+# (all history -> every rollback target intact), so the host ends up with a real
+# git repo and the build/swap/rollback below are byte-identical to the GitHub
+# path. Default (flag unset) still clones from GitHub.
+if [ "${DEPLOY_VIA_BUNDLE:-0}" = "1" ]; then
+  SHA=$(git rev-parse origin/main)
+  echo "[bridge] GitHub-independent mode: bundling origin/main ($SHA) -> $HOST" >&2
+  git branch -f __deploy_bundle_tmp origin/main >/dev/null 2>&1
+  BUNDLE=$(mktemp -t ds-deploy.bundle)
+  if ! git bundle create "$BUNDLE" __deploy_bundle_tmp >/dev/null 2>&1; then
+    echo "[bridge] bundle create failed" >&2; git branch -D __deploy_bundle_tmp >/dev/null 2>&1; rm -f "$BUNDLE"; exit 1
+  fi
+  git branch -D __deploy_bundle_tmp >/dev/null 2>&1
+  if ! scp -q "$BUNDLE" "root@${HOST}:/tmp/ds-deploy.bundle"; then
+    echo "[bridge] scp bundle failed" >&2; rm -f "$BUNDLE"; exit 1
+  fi
+  rm -f "$BUNDLE"
+  REMOTE_CLONE="git clone /tmp/ds-deploy.bundle . > /dev/null 2>&1"
+else
+  REMOTE_CLONE="git clone --depth 400 https://github.com/driftstackdev/driftstack-api.git . > /dev/null 2>&1"
+fi
+
 # All work happens in /tmp/driftstack-deploy-<unix> on the host so we
 # can atomic-swap at the end.
 ssh "root@${HOST}" "set -euo pipefail; \
@@ -115,12 +143,13 @@ ssh "root@${HOST}" "set -euo pipefail; \
   mkdir -p \$BUILD_DIR; \
   cd \$BUILD_DIR; \
   echo '[bridge] cloning…' >&2; \
-  # --depth=400 covers any rollback target the .last-good-sha file
-  # might point at (typical revert windows). 2026-05-19 staging-deploy
-  # auto-revert failed because --depth=50 couldn't reach the 4-day-back
-  # b48f557 (last-good-sha). 400 commits is ~1-2 weeks of activity for
-  # this repo; cheap to clone, generous enough for any practical rollback.
-  git clone --depth 400 https://github.com/driftstackdev/driftstack-api.git . > /dev/null 2>&1; \
+  # Source = GitHub clone (default) OR the scp'd bundle (DEPLOY_VIA_BUNDLE=1);
+  # both leave a real git repo so checkout + rollback work identically. The
+  # GitHub path uses --depth=400 to cover rollback targets the .last-good-sha
+  # may point at (2026-05-19: --depth=50 couldn't reach a 4-day-back
+  # last-good-sha; 400 commits ~= 1-2 weeks, cheap + generous). The bundle path
+  # carries full origin/main history, so its rollback reach is unbounded.
+  ${REMOTE_CLONE}; \
   git checkout '$SHA'; \
   GIT_SHA=\$(git rev-parse --short HEAD); \
   echo \"[bridge] HEAD=\$GIT_SHA\" >&2; \
