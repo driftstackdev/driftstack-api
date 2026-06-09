@@ -1,6 +1,21 @@
 import pino, { type Logger as PinoLogger } from 'pino';
 import type { Config } from './config.js';
-import { redactUrlQueryTokens } from './redact-url.js';
+import { redactUrlQueryTokens, redactText } from './redact-url.js';
+
+/**
+ * V-494 follow-up — err serializer. Pino's default `err` serializer logs
+ * `message` + `stack` VERBATIM, and `redact.paths` (key-based) can't reach a
+ * credential embedded inside that free text — so a caught error citing an
+ * upstream/SSE `...?ds_token=` / OAuth `?code=` / `Bearer <token>` would land in
+ * the logs in plaintext (the log-channel sibling of the lib/sentry.ts exception
+ * scrub). Wrap pino's std err serializer + run redactText over message + stack.
+ */
+export function redactErrSerializer(err: unknown): Record<string, unknown> {
+  const base = pino.stdSerializers.err(err as Error) as Record<string, unknown>;
+  if (typeof base.message === 'string') base.message = redactText(base.message);
+  if (typeof base.stack === 'string') base.stack = redactText(base.stack);
+  return base;
+}
 
 // We re-export pino's Logger as our `Logger` type. Fastify's FastifyBaseLogger
 // is structurally a subset of pino's Logger, so passing a pino instance to
@@ -108,6 +123,10 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
           remotePort: req.socket?.remotePort,
         };
       },
+      // V-494 follow-up — scrub credential tokens embedded in a caught error's
+      // message/stack before they reach the logs (free-text vector redact.paths
+      // can't cover). See redactErrSerializer.
+      err: redactErrSerializer,
     },
     formatters: {
       level: (label) => ({ level: label }),

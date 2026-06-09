@@ -116,9 +116,23 @@ describe('W391.A apps/server/src/lib/logger.ts content parity', () => {
     );
   });
 
-  it('imports: pino default + type Logger as PinoLogger + Config type', () => {
+  it('imports: pino default + type Logger as PinoLogger + Config type + redactText', () => {
     expect(body).toMatch(/import pino, \{ type Logger as PinoLogger \} from 'pino';/);
     expect(body).toMatch(/import type \{ Config \} from '\.\/config\.js';/);
+    expect(body).toMatch(
+      /import \{ redactUrlQueryTokens, redactText \} from '\.\/redact-url\.js';/,
+    );
+  });
+
+  it('V-494 err serializer: redactErrSerializer scrubs message+stack and is WIRED into serializers.err (free-text token leak in a caught error)', () => {
+    // The function exists + scrubs both free-text fields...
+    expect(body).toMatch(/export function redactErrSerializer\(/);
+    expect(body).toMatch(/base\.message = redactText\(base\.message\)/);
+    expect(body).toMatch(/base\.stack = redactText\(base\.stack\)/);
+    // ...AND is actually wired into the pino serializers (else the leak returns
+    // even though the function exists — the behavioral test wouldn't catch an
+    // un-wiring since it calls the function directly).
+    expect(body).toMatch(/err: redactErrSerializer,/);
   });
 
   it('file exists at canonical path', () => {
