@@ -78,8 +78,25 @@ can't do it (eyes-on + changes window UX). GUI (a)/(c)/(d) are **done**.
 
 ## 4. Breaking / gated changes (your design call — autopilot will NOT flip)
 
-- **agent_sessions strict FK** (task #5) — a breaking migration; needs your
-  design decision (cascade vs restrict vs nullable).
+- **agent_sessions strict FK** (task #5) — **W303 finding: the "strict FK" isn't
+  cleanly achievable as-is, and that's the real reason it was flagged "not
+  clean."** You picked ON DELETE SET NULL (correct), but the deeper blocker is:
+  `agent_sessions.driftstack_session_id` stores the **prefixed PUBLIC id**
+  (`ses_<uuid>`, what the API hands customers via `prefixId('ses', …)`), not the
+  raw `uuid` that `sessions.id` is. So a DB FK can't be added without changing
+  storage semantics. Two options — **your call:**
+  1. **Deprefix-on-write / reprefix-on-read** + store the raw uuid + real FK
+     (ON DELETE SET NULL). True referential integrity + auto-null when a session
+     is destroyed; cost = prefix plumbing on the agent-session create + read
+     paths + a migration that strips `ses_` from existing values and nulls
+     orphans/non-uuids.
+  2. **Keep the loose `text` link (no DB FK)** — the prefixed-public-id pattern
+     is arguably intentional loose coupling; add app-level validation on write
+     instead. **Recommended for pre-launch** (the FK's value is modest and the
+     column is usually null; revisit if integrity becomes important).
+     (I designed + then reverted the uuid-FK migration once I found the prefix —
+     shipping it would have nulled every existing link, since `ses_<uuid>` can't
+     cast to uuid. Caught in design, nothing shipped.)
 - **iphone16pro → iphone17 launch-archetype cutover** — canvas-gated (Agent 1);
   surfaced, not flipped.
 

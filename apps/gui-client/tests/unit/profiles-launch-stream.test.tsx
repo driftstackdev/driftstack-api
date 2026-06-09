@@ -91,7 +91,10 @@ describe('ProfilesView launch → stream', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
     // The overlay shows "Live session" + the room id once watchInfo is set.
     expect(await screen.findByText('agt_demo_room')).toBeTruthy();
-    expect(screen.getByTestId('agent-session-panel')).toBeTruthy();
+    // AgentSessionPanel is lazy()-loaded (Suspense), so it resolves a microtask
+    // after the room-id text — use findByTestId (async) not getByTestId, else
+    // this races the lazy mount + flakes under full-suite load.
+    expect(await screen.findByTestId('agent-session-panel')).toBeTruthy();
     expect(agentCreate).toHaveBeenCalledTimes(1);
   });
 
