@@ -84,7 +84,8 @@ Request body (all fields optional):
   "mode": "ai | manual | pair",
   "model": "claude-opus-4-7 | claude-sonnet-4-6 | claude-haiku-4-5",
   "driftstack_session_id": "ses_<uuid>",
-  "token_budget": 100000
+  "token_budget": 100000,
+  "profile_id": "<uuid>"
 }
 ```
 
@@ -103,6 +104,12 @@ mode. `token_budget` defaults to the deployment-configured value
 (typically 100,000 tokens). The optional `driftstack_session_id` ties the agent
 session to a pre-existing driver session; without it the runtime
 spawns one on the first executed intent.
+
+The optional `profile_id` attaches one of your saved **profiles** (a
+persistent browser identity — cookies, localStorage, etc.) to the session,
+so the run resumes that profile's stored state and saves changes back when it
+ends. It must reference a profile your account owns; an unknown or
+not-owned id returns `404`. Omit it for a stateless (fresh) session.
 
 ## Get
 
