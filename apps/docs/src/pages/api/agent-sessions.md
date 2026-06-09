@@ -85,7 +85,7 @@ Request body (all fields optional):
   "model": "claude-opus-4-7 | claude-sonnet-4-6 | claude-haiku-4-5",
   "driftstack_session_id": "ses_<uuid>",
   "token_budget": 100000,
-  "profile_id": "<uuid>"
+  "profile_id": "prof_<uuid>"
 }
 ```
 
@@ -108,7 +108,8 @@ spawns one on the first executed intent.
 The optional `profile_id` attaches one of your saved **profiles** (a
 persistent browser identity — cookies, localStorage, etc.) to the session,
 so the run resumes that profile's stored state and saves changes back when it
-ends. It must reference a profile your account owns; an unknown or
+ends. Pass the `prof_<uuid>` id from the profiles API (a bare uuid is also
+accepted). It must reference a profile your account owns; an unknown or
 not-owned id returns `404`. Omit it for a stateless (fresh) session.
 
 ## Get

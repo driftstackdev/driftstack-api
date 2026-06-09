@@ -30,6 +30,7 @@ import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-se
 import type { ProfilesService } from '../services/profiles.js';
 import { buildAssignProfileBlock } from '../services/profile-store.js';
 import type { R2 } from '../lib/r2.js';
+import { parseProfileId } from '../lib/profile-id.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
@@ -90,9 +91,11 @@ const CreateAgentSessionRequestSchema = z.object({
   // DEFAULT_AGENT_MODEL server-side when omitted).
   model: AgentModelSchema.optional(),
   // Profile-backed sessions (file 57): attach a saved profile so the harness
-  // restores/persists its encrypted store. Validated to be an owned profile
-  // before dispatch; its DEK rides the SessionAssign.profile block.
-  profile_id: z.string().uuid().optional(),
+  // restores/persists its encrypted store. Accepts the canonical `prof_<uuid>`
+  // id the API returns OR a bare uuid (parseProfileId normalizes + 400s on bad);
+  // validated to be an owned profile before dispatch; its DEK rides the
+  // SessionAssign.profile block.
+  profile_id: z.string().optional(),
 });
 
 const RunTurnRequestSchema = z.object({
@@ -630,11 +633,15 @@ export function registerAgentSessionsRoutes(
       // profile — validate before create/dispatch so an unknown/foreign id is a
       // clean 404, not a silent best-effort skip in the dispatch. (404 also when
       // profiles aren't wired; the customer can't distinguish, which is fine.)
+      // parseProfileId accepts the canonical prof_<uuid> OR a bare uuid (400 on
+      // bad) and yields the bare uuid used internally (DEK lookup + R2 keys).
+      let profileBareId: string | undefined;
       if (parsed.data.profile_id !== undefined) {
+        profileBareId = parseProfileId(parsed.data.profile_id);
         if (profilesService === undefined) {
           throw new NotFoundError(`Profile ${parsed.data.profile_id} not found.`);
         }
-        await profilesService.get({ id: parsed.data.profile_id, accountId: ctx.account.id });
+        await profilesService.get({ id: profileBareId, accountId: ctx.account.id });
       }
 
       const idempotencyKey = idempotency.kind === 'valid' ? idempotency.key : null;
@@ -733,7 +740,7 @@ export function registerAgentSessionsRoutes(
         // Profile-backed (file 57): thread the validated profile_id so the
         // dispatch ships its DEK in SessionAssign.profile.
         accountId: ctx.account.id,
-        ...(parsed.data.profile_id !== undefined ? { profileId: parsed.data.profile_id } : {}),
+        ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
         profilesService,
         ...(r2 !== undefined ? { r2 } : {}),
       });

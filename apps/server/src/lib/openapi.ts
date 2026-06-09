@@ -3025,9 +3025,10 @@ function buildRegistry(): OpenAPIRegistry {
               mode: z.enum(['manual', 'ai', 'pair']).optional(),
               model: AgentModelSchema.optional(),
               // file 57 — attach a saved profile (persistent browser identity).
-              // Must be an owned profile id (unknown/not-owned → 404); omit for
-              // a stateless session. Server + docs + 3 SDKs already carry it.
-              profile_id: z.string().uuid().optional(),
+              // Pass the profile id from the profiles API (prof_<uuid>); a bare
+              // uuid is also accepted. Must be owned (unknown/not-owned → 404);
+              // omit for a stateless session.
+              profile_id: z.string().optional(),
             }),
           },
         },
