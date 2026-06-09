@@ -28,16 +28,25 @@ the contract + harness + docs side**, cross-agent in lockstep:
 - **No iOS-Simulator needed for v1.0** — the fork already does genuine WebKit
   touch (A3's runtime read; A1 confirms if/when relevant).
 
-**The one remaining piece (A2, gated):** wire the **customer-dashboard**
-LiveKit-video subscription (currently a placeholder) + switch its manual overlay
-to emit touch + project stream-px→device-CSS. It's **gated on end-to-end
-verifiability** — needs a live publishing session + A3's drive-bridge
-`ManualTouchInjecting` up (touch events are safely dropped harness-side until
-then). Not shipped blind (the dashboard is is:inline → hard to unit-test). The
-gui-client capture path already emits `tap_at` (touch), so that path is done.
-Design/status: `docs/internal/2026-06-08-iphone-touch-input-pipeline.md`.
-**Nothing needs you here** unless you want the dashboard live-stream view
-prioritized — say so + I'll build it for you to verify on a live session.
+**The one remaining piece — the customer-dashboard live-stream view — needs a
+small ARCHITECTURE call from you (W294 finding):** wiring the dashboard
+LiveKit-video subscription requires the `livekit-client` library, which **cannot
+run in an `is:inline` script** (no bundling/imports). But the dashboard pages are
+deliberately **is:inline** (you reverted the admin bundled-module migration). So
+the LiveKit part needs one of:
+
+1. **A scoped bundled `<script>`** on just the agent-session detail page (Astro
+   bundles it → can import `livekit-client` + a unit-testable
+   `livekit-preview.ts` helper). Cleanest; one exception to is:inline.
+2. **CDN/global `livekit-client`** loaded via a plain `<script src>`, consumed
+   by the existing is:inline script (keeps is:inline; adds a CDN dep).
+3. **Defer** the dashboard live-view (the gui-client already shows the stream).
+   **Your pick.** Once chosen, the build is ready + testable (correcting my earlier
+   "verifiability-gated" framing — the wiring helper IS unit-testable via mocks; the
+   live stream you verify on a session). The gui-client capture path already emits
+   `tap_at` (touch), so that path is done; the dashboard input-overlay→touch +
+   W267 device-CSS projection ride on whichever option above. Design/status:
+   `docs/internal/2026-06-08-iphone-touch-input-pipeline.md`.
 
 ## 2. GitHub account flag — blocks CI/Deploy (you've contacted support)
 
