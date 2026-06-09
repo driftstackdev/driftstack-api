@@ -121,8 +121,39 @@ type InputEvent =
   | { type: 'keyDown'; key: string; modifiers?: string[] }
   | { type: 'keyUp'; key: string; modifiers?: string[] }
   | { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
+  // Touch vocabulary — the iPhone-native input model (preferred).
+  | { type: 'tap'; x: number; y: number }
+  | { type: 'touchStart'; x: number; y: number; touchId: number }
+  | { type: 'touchMove'; x: number; y: number; touchId: number }
+  | { type: 'touchEnd'; x: number; y: number; touchId: number }
+  | { type: 'swipe'; x1: number; y1: number; x2: number; y2: number; durationMs: number }
   | { type: 'ping'; timestamp: number };
 ```
+
+### Touch input (iPhone-native — preferred)
+
+The session is a real iPhone Safari surface, so prefer the **touch**
+vocabulary over mouse events. The harness injects touch via WebKit W3C
+Actions (`pointerType: touch`) — genuine `touchstart` / `touchmove` /
+`touchend` below the page's JS, with no mouse cursor — and owns the
+realistic touch dynamics (a `tap` expands to a micro-settled
+touchstart→touchend; a `swipe` is interpolated into an eased
+touch-move path). You send the high-level intent:
+
+```ts
+await sendInput({ type: 'tap', x: 200, y: 430 });
+await sendInput({ type: 'swipe', x1: 200, y1: 700, x2: 200, y2: 200, durationMs: 350 });
+```
+
+- Coordinates are **device-CSS pixels** (iPhone viewport space) — scale
+  your on-screen click to device space before sending (the GUI does this
+  off the rendered stream's natural dimensions).
+- `touchId` (0–9) lets you drive concurrent fingers for multi-touch
+  (e.g. pinch); single taps/swipes don't need it.
+- `durationMs` on `swipe` is capped at 60000.
+
+The `mouse*` variants remain for desktop-style tooling but the iPhone
+target has no cursor; the touch vocabulary is the canonical path.
 
 Coordinates are viewport-space logical pixels (the locked iPhone 16 Pro
 archetype is 402×874 logical points / 1206×2622 physical pixels by
