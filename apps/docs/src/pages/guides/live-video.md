@@ -105,11 +105,17 @@ bandwidth is constrained.
 
 ## 3. Send input back (optional)
 
-The same room supports a DataChannel for input forwarding. Mouse
+The same room carries a DataChannel for input forwarding. The Mac
+harness applies events as **genuine native input** on the session,
+session-scoped via WebKit W3C Actions:
 
-- keyboard events publish to the Mac harness, which dispatches
-  them as macOS Quartz CGEvents (browsers see them as native
-  input).
+- **Touch** — the iPhone-native, preferred path (`pointerType: touch`;
+  see below). Real `touchstart` / `touchmove` / `touchend`, no cursor.
+- **Keyboard** — W3C key actions (genuine WebKit key events).
+- **Mouse** variants remain for desktop-style tooling.
+
+(Off the WebDriver drive-bridge the harness falls back to a legacy
+macOS Quartz CGEvent path.)
 
 InputEvent JSON schema:
 
@@ -174,8 +180,9 @@ async function sendInput(event: InputEvent, reliable = true): Promise<void> {
 ### Modifier vocabulary
 
 `keyDown` / `keyUp` `modifiers` arrays use the canonical 4-name
-set `'cmd' | 'ctrl' | 'shift' | 'option'`. These map 1:1 onto
-Quartz `CGEventFlags` on the macOS harness side:
+set `'cmd' | 'ctrl' | 'shift' | 'option'`. These map onto the macOS
+harness's native modifier handling — W3C key-action modifiers (Quartz
+`CGEventFlags` on the legacy fallback path):
 
 ```ts
 await sendInput({

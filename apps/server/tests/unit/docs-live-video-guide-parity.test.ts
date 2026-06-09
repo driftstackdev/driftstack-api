@@ -64,7 +64,10 @@ describe('Arc 6 docs.live-video — guides/live-video.md parity', () => {
   it('Slice 6 — documents the canonical modifier vocabulary + the harness-drops-DOM-names warning + the 3-SDK constant export locations', () => {
     expect(body).toMatch(/### Modifier vocabulary/);
     expect(body).toMatch(/`'cmd' \| 'ctrl' \| 'shift' \| 'option'`/);
-    expect(body).toMatch(/Quartz `CGEventFlags`/);
+    // W3C key-action modifiers is the primary mapping (genuine WebKit key
+    // events); Quartz CGEventFlags is the legacy fallback. Wrap-tolerant.
+    expect(body).toMatch(/W3C key-action modifiers/);
+    expect(body).toMatch(/Quartz\s*\n?\s*`CGEventFlags`/);
     expect(body).toMatch(
       /DOM-standard names \(`Shift \/ Control \/ Alt \/ Meta`\) round-trip\s*\n?through the schema unchanged but the harness decoder drops them\./,
     );
