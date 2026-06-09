@@ -118,7 +118,9 @@ client = Driftstack(
 client = Driftstack(api_key="…", retry=RetryConfig(enabled=False))
 ```
 
-Retryable errors by default: `TransportError` (network / timeout / parse) + `RateLimitError`. Other typed errors (auth, validation, quota, concurrency) propagate immediately.
+Retryable errors by default: `TransportError` (network / timeout / parse) + `RateLimitError`. Other typed errors (auth, validation, quota, concurrency) propagate immediately. 5xx responses are terminal (not retried).
+
+> **Idempotency on retried writes.** A `TransportError` can mean a request the server already processed but whose response was lost, so an automatically-retried create or charge can execute twice. Pass an `idempotency_key` on non-idempotent calls — e.g. `client.agent_sessions.create(body, idempotency_key="…")` — and the server dedupes the retry onto the first request (Stripe-pattern `(account_id, idempotency_key)` uniqueness).
 
 ## Webhook signature verification
 
