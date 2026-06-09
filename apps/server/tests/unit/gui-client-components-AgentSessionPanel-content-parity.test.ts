@@ -80,8 +80,10 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
   });
 
   it('Connect effect reconnects ONLY on the connection identity (deps [info.ws_url, info.token]) and routes onStateChange through a ref — pinned so a consumer passing an inline onStateChange (the LK.6.c badge usage) cannot make the effect re-run every render and disconnect+reconnect the LiveKit room (streaming reconnect-thrash). A regression to [info, onStateChange] re-introduces that.', () => {
-    // Connection-identity deps, not the whole info object / callback identity.
-    expect(body).toMatch(/\}, \[info\.ws_url, info\.token\]\);/);
+    // Connection-identity deps (+ retryNonce for the manual Reconnect), not the
+    // whole info object / callback identity. retryNonce only changes on the
+    // Reconnect button click, so it can't cause render-driven reconnect-thrash.
+    expect(body).toMatch(/\}, \[info\.ws_url, info\.token, retryNonce\]\);/);
     expect(body).not.toMatch(/\}, \[info, onStateChange\]\);/);
     // onStateChange flows through a latest-value ref, decoupled from the effect.
     expect(body).toMatch(/const onStateChangeRef = useRef\(onStateChange\);/);

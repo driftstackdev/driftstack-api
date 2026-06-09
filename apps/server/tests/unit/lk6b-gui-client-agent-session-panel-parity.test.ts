@@ -71,10 +71,14 @@ describe('LK.6.b — AgentSessionPanel React component', () => {
     expect(body).toMatch(/\bmuted\b/);
   });
 
-  it('renders an overlay with status text when not connected', () => {
+  it('renders an overlay with status text + a spinner + a Reconnect affordance when not connected', () => {
     expect(body).toMatch(/data-overlay="connection-state"/);
-    expect(body).toMatch(/Connecting…/);
-    expect(body).toMatch(/Reconnecting…/);
-    expect(body).toMatch(/Disconnected\./);
+    expect(body).toMatch(/Connecting to the live stream…/);
+    expect(body).toMatch(/reconnecting…/);
+    expect(body).toMatch(/disconnected\./);
+    // user-friendly UX: a spinner while connecting + a Reconnect button to
+    // recover from an error/disconnect without reloading.
+    expect(body).toMatch(/animate-spin/);
+    expect(body).toMatch(/data-action="reconnect-stream"/);
   });
 });

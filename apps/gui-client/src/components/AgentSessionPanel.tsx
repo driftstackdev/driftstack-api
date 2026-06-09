@@ -48,6 +48,11 @@ export function AgentSessionPanel({
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
+  // Manual reconnect: bumping this re-runs the connect effect (new Room +
+  // reconnect). Lets the customer recover from an error/disconnect without
+  // reloading the whole app. Only bumped on the Reconnect button — not a
+  // render-driven dep, so it can't cause reconnect-thrash.
+  const [retryNonce, setRetryNonce] = useState(0);
 
   // Keep the latest onStateChange in a ref so the connect effect does NOT
   // depend on the callback's identity. onStateChange exists for consumers (the
@@ -108,7 +113,9 @@ export function AgentSessionPanel({
     // on every new `info` object ref — info is stable per session, and a fresh
     // ref with the same ws_url/token must not churn the room. connectToAgentSession
     // only reads ws_url + token, so the captured `info` staying put is safe.
-  }, [info.ws_url, info.token]);
+    // `retryNonce` re-runs the effect on a manual Reconnect (intentional, not a
+    // render-thrash — it changes only on the button click).
+  }, [info.ws_url, info.token, retryNonce]);
 
   return (
     <div
@@ -134,13 +141,53 @@ export function AgentSessionPanel({
       {state.kind !== 'connected' && (
         <div
           data-overlay="connection-state"
-          className="absolute inset-0 flex items-center justify-center bg-black/60 text-sm text-ink-primary"
+          data-state={state.kind}
+          className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 px-6 text-center text-sm text-ink-primary"
         >
-          {state.kind === 'connecting' && 'Connecting…'}
-          {state.kind === 'reconnecting' && 'Reconnecting…'}
-          {state.kind === 'disconnected' && 'Disconnected.'}
-          {state.kind === 'error' && `Error: ${state.message}`}
-          {state.kind === 'idle' && ' '}
+          {(state.kind === 'connecting' ||
+            state.kind === 'reconnecting' ||
+            state.kind === 'idle') && (
+            <span
+              className="h-7 w-7 animate-spin rounded-full border-2 border-white/25 border-t-white/90"
+              aria-hidden="true"
+            />
+          )}
+          {(state.kind === 'disconnected' || state.kind === 'error') && (
+            <svg
+              viewBox="0 0 24 24"
+              width="28"
+              height="28"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-glow-red"
+              aria-hidden="true"
+            >
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <path d="M8 21h8M12 17v4M4 5l16 12" />
+            </svg>
+          )}
+          <span>
+            {state.kind === 'idle' && 'Waiting for the session…'}
+            {state.kind === 'connecting' && 'Connecting to the live stream…'}
+            {state.kind === 'reconnecting' && 'Connection dropped — reconnecting…'}
+            {state.kind === 'disconnected' && 'The live stream disconnected.'}
+            {state.kind === 'error' && `Couldn’t connect: ${state.message}`}
+          </span>
+          {(state.kind === 'disconnected' || state.kind === 'error') && (
+            <button
+              type="button"
+              data-action="reconnect-stream"
+              onClick={() => {
+                setRetryNonce((n) => n + 1);
+              }}
+              className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
+            >
+              Reconnect
+            </button>
+          )}
         </div>
       )}
     </div>
