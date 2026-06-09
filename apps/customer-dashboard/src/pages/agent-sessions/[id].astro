@@ -500,6 +500,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
     const composerTextarea = composerForm?.querySelector('textarea');
     const composerSubmit = composerForm?.querySelector('button[type="submit"]');
     const overlay = root.querySelector('[data-component="ManualControlOverlay"]');
+    const livekitVideo = root.querySelector('[data-livekit-video]');
 
     /** @type {'manual'|'ai'|'pair'} */
     let mode = 'ai';
@@ -658,31 +659,27 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
     let lastMouseMoveAt = 0;
     let harnessOffline = false;
 
-    function viewportCoords(ev, target) {
-      // pointerToViewport — translate clientX/clientY relative to the
-      // target element's bounding rect (origin top-left).
-      //
-      // SLICE-4-TODO (wire-time, not a live bug — input forwarding 503s until
-      // the harness path lands + the stream is still a placeholder): this
-      // returns RAW overlay px. The shared InputEventSchema (packages/api-types/
-      // src/agent-input-event.ts) is SCREEN-SPACE — "the harness clamps to the
-      // actual viewport at dispatch" — and the gui-client surface on the SAME
-      // contract projects to device px: round((clientX-rect.left)/rect.width *
-      // naturalWidth). When the LiveKit <video> is wired here, project the same
-      // way off video.videoWidth/videoHeight; otherwise dashboard manual-control
-      // taps land scaled into the top-left corner (overlay px ≠ device px).
-      const rect = target.getBoundingClientRect();
-      return {
-        x: Math.round(ev.clientX - rect.left),
-        y: Math.round(ev.clientY - rect.top),
-      };
-    }
-
-    function mouseButton(raw) {
-      // Browser MouseEvent.button: 0=left, 1=middle, 2=right. LK.6
-      // InputEvent.button uses the same enum. Anything else → null
-      // (back/forward buttons not supported by Quartz CGEventCreateMouseEvent).
-      return raw === 0 || raw === 1 || raw === 2 ? raw : null;
+    function viewportCoords(ev) {
+      // W267 — project the overlay pointer (browser CSS px) → DEVICE-CSS px
+      // (the iPhone viewport), undoing the <video> `object-contain` scale +
+      // letterbox. Mirrors the unit-tested src/lib/overlay-coords.ts
+      // (projectToDeviceCoords) — keep the two in lockstep. Returns null when
+      // the point is in the letterbox (the black bars) or there's no stream
+      // yet; the caller drops the event (a tap on the bars isn't a tap on the
+      // phone). This is what makes a dashboard tap land where the human tapped.
+      const v = livekitVideo;
+      if (!(v instanceof HTMLVideoElement) || !v.videoWidth || !v.videoHeight) return null;
+      const rect = v.getBoundingClientRect();
+      const scale = Math.min(rect.width / v.videoWidth, rect.height / v.videoHeight);
+      if (scale <= 0) return null;
+      const displayedW = v.videoWidth * scale;
+      const displayedH = v.videoHeight * scale;
+      const offsetX = rect.left + (rect.width - displayedW) / 2;
+      const offsetY = rect.top + (rect.height - displayedH) / 2;
+      const deviceX = (ev.clientX - offsetX) / scale;
+      const deviceY = (ev.clientY - offsetY) / scale;
+      if (deviceX < 0 || deviceY < 0 || deviceX > v.videoWidth || deviceY > v.videoHeight) return null;
+      return { x: Math.round(deviceX), y: Math.round(deviceY) };
     }
 
     function modifiersFromEvent(ev) {
@@ -749,35 +746,54 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
     }
 
     if (overlay) {
+      // Manual control emits genuine iOS TOUCH (not mouse): a press+release
+      // without drag = `tap`; a press+drag = touchStart → touchMove(s) →
+      // touchEnd (touchId 0). The harness (A3 W553/W561) expands `tap` to a
+      // micro-settled touch and injects the touchStart/Move/End stream
+      // incrementally as genuine WebKit pointerType:touch — no mouse cursor, no
+      // W198 tell. Coords are device-CSS (viewportCoords/W267). Touch has no
+      // hover, so moves only stream while pressed; wheel is dropped (scroll is
+      // a finger drag on the phone).
+      let touchActive = false;
+      let movedSincePress = false;
+      let pressCoord = null;
+
+      overlay.addEventListener('mousedown', (ev) => {
+        if (ev.button !== 0) return; // touch is single-finger / primary only
+        const c = viewportCoords(ev);
+        if (!c) return; // in the letterbox — ignore
+        touchActive = true;
+        movedSincePress = false;
+        pressCoord = c;
+      });
       overlay.addEventListener('mousemove', (ev) => {
+        if (!touchActive) return; // touch only streams while pressed (a drag)
         const now = Date.now();
         if (now - lastMouseMoveAt < MOUSE_MOVE_THROTTLE_MS) return;
         lastMouseMoveAt = now;
-        const { x, y } = viewportCoords(ev, overlay);
-        void sendInputEvent({ type: 'mouseMove', x, y });
+        const c = viewportCoords(ev);
+        if (!c) return;
+        if (!movedSincePress) {
+          movedSincePress = true;
+          if (pressCoord) {
+            void sendInputEvent({ type: 'touchStart', x: pressCoord.x, y: pressCoord.y, touchId: 0 });
+          }
+        }
+        void sendInputEvent({ type: 'touchMove', x: c.x, y: c.y, touchId: 0 });
       });
-      overlay.addEventListener('mousedown', (ev) => {
-        const button = mouseButton(ev.button);
-        if (button === null) return;
-        const { x, y } = viewportCoords(ev, overlay);
-        void sendInputEvent({ type: 'mouseDown', x, y, button });
-      });
-      overlay.addEventListener('mouseup', (ev) => {
-        const button = mouseButton(ev.button);
-        if (button === null) return;
-        const { x, y } = viewportCoords(ev, overlay);
-        void sendInputEvent({ type: 'mouseUp', x, y, button });
-      });
-      overlay.addEventListener('wheel', (ev) => {
-        const { x, y } = viewportCoords(ev, overlay);
-        void sendInputEvent({
-          type: 'wheel',
-          x,
-          y,
-          deltaX: Math.round(ev.deltaX),
-          deltaY: Math.round(ev.deltaY),
-        });
-      });
+      const endTouch = (ev) => {
+        if (!touchActive) return;
+        touchActive = false;
+        const c = viewportCoords(ev) ?? pressCoord;
+        if (movedSincePress) {
+          if (c) void sendInputEvent({ type: 'touchEnd', x: c.x, y: c.y, touchId: 0 });
+        } else if (pressCoord) {
+          void sendInputEvent({ type: 'tap', x: pressCoord.x, y: pressCoord.y });
+        }
+        pressCoord = null;
+      };
+      overlay.addEventListener('mouseup', endTouch);
+      overlay.addEventListener('mouseleave', endTouch); // dragging off the frame ends the touch
     }
 
     // Keyboard targets the document, NOT the overlay (focus is usually
