@@ -72,6 +72,31 @@ status-site doesn't carry the original 2 HIGH (`@astrojs/cloudflare` undici/deva
 astro 5.18.1** — migrating all sites to 6.4.5 CLEARS them (6.4.5 is patched). All build-time/
 static-site (server runtime undici is 8.x/safe). So: finish all 5 sites to actually reduce the count.
 
+## ⚠️⚠️ CORRECTED vuln-remediation picture (W370) — the migrations done so far DON'T fix the vulns
+
+The 2 HIGH advisories (undici + devalue, via `@astrojs/cloudflare`) live in \*\*customer-dashboard
+
+- admin-panel** (both `output:'static'` + the Cloudflare adapter, currently `@astrojs/cloudflare@^12.6.13`)
+  — **NOT\*\* in status-site/docs/marketing (those have no adapter). So:
+
+* **status-site + docs (W365/W367, done):** pure modernization — ZERO vuln impact.
+* **marketing-site:** static, no adapter, no vulns → migrating it is **pure modernization, 71 `.astro`
+  files + Sentry integration + ~10 parity/doc tests. Low ROI. DEPRIORITIZE** (skip unless the founder
+  wants all sites on astro 6 for consistency).
+* **customer-dashboard + admin-panel (the actual vuln target):** the fix is `@astrojs/cloudflare@13.7.0`,
+  whose peer is **`astro: ^6.3.0`** — so clearing the vulns REQUIRES a full astro-6 migration of BOTH
+  auth/SSR-adapter dashboard apps. These are the **highest-risk** migrations (customer login + internal
+  admin, the adapter runtime, the biggest visual+functional surface).
+
+**The vulns are build-time/adapter-tooling** (the dashboards serve static output; undici/devalue aren't in
+the served runtime) → **low REAL risk** (matches W328). **npm-override path is NOT clean**: patched undici
+is 8.x (a major bump from the adapter's 7.x → likely breaks `@astrojs/cloudflare@12`).
+
+**RECOMMENDATION (founder decision):** DEFER the dashboard migrations — migrating the auth-bearing customer
+dashboard to astro 6 to clear _build-time, low-real-risk_ vulns is a poor risk trade. Either accept the
+advisories (they don't touch served runtime) until a planned dashboard-modernization, or schedule that as a
+focused, carefully-verified effort (NOT autopilot fallback). Marketing = optional modernization, skip.
+
 ## Status
 
 - 2026-06-09 W364: plan + status-site breaking-utility audit (this doc).
