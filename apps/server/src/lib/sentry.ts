@@ -20,7 +20,7 @@ import * as Sentry from '@sentry/node';
 import type { FastifyInstance } from 'fastify';
 import type { SentryConfig } from './config.js';
 import type { Logger } from './logger.js';
-import { redactUrlQueryTokens, redactQueryString } from './redact-url.js';
+import { redactUrlQueryTokens, redactQueryString, redactText } from './redact-url.js';
 
 // V-494 — sensitive-key denylist for Sentry event scrubbing. Keep in
 // sync with `lib/logger.ts::redact.paths`. Match is case-insensitive
@@ -122,11 +122,26 @@ function scrubSentryEvent(event: Sentry.ErrorEvent): Sentry.ErrorEvent {
   scrubInPlace(event.extra);
   scrubInPlace(event.contexts);
   scrubInPlace(event.breadcrumbs);
+  // A token can also ride inside the EXCEPTION MESSAGE / captureMessage as free
+  // text (e.g. a thrown error citing an upstream URL `...?ds_token=` /
+  // `?code=`, or a `Bearer <token>` fragment). scrubInPlace only redacts VALUES
+  // by sensitive KEY name, and the url-parsers only touch request.url /
+  // query_string — neither catches a credential embedded in the message string.
+  if (event.exception?.values) {
+    for (const ex of event.exception.values) {
+      if (typeof ex.value === 'string') ex.value = redactText(ex.value);
+    }
+  }
+  if (typeof event.message === 'string') event.message = redactText(event.message);
   return event;
 }
 
 function scrubSentryBreadcrumb(crumb: Sentry.Breadcrumb): Sentry.Breadcrumb {
   scrubInPlace(crumb.data);
+  // The breadcrumb message is free text — redact any embedded credential token
+  // (same vector as the exception message; scrubInPlace only redacts data
+  // values by key name).
+  if (typeof crumb.message === 'string') crumb.message = redactText(crumb.message);
   return crumb;
 }
 

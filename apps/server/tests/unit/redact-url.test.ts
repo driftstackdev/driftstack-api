@@ -4,7 +4,7 @@
 // while preserving the path + benign params. See lib/redact-url.ts.
 
 import { describe, expect, it } from 'vitest';
-import { redactUrlQueryTokens, redactQueryString } from '../../src/lib/redact-url.js';
+import { redactUrlQueryTokens, redactQueryString, redactText } from '../../src/lib/redact-url.js';
 
 describe('redactUrlQueryTokens', () => {
   it('redacts the SSE ds_token while keeping the path', () => {
@@ -57,5 +57,41 @@ describe('redactQueryString (bare query, no leading ?)', () => {
 
   it('leaves a token-free bare query unchanged', () => {
     expect(redactQueryString('limit=20&cursor=abc')).toBe('limit=20&cursor=abc');
+  });
+});
+
+describe('redactText — free-text (exception/breadcrumb/message) credential redaction', () => {
+  it('redacts a credential query param embedded mid-sentence, preserving surrounding prose', () => {
+    const out = redactText(
+      'Failed to fetch https://api.driftstack.dev/v1/account/me/notifications?ds_token=ds_live_SECRET retrying',
+    );
+    expect(out).not.toContain('ds_live_SECRET');
+    expect(out).toContain('ds_token=[redacted]');
+    expect(out).toContain('Failed to fetch'); // prose intact
+    expect(out).toContain('retrying'); // trailing prose intact (url-parser would have eaten it)
+  });
+
+  it('redacts a Bearer token in free text', () => {
+    const out = redactText('upstream rejected: Authorization: Bearer sk-live-DEADBEEF (401)');
+    expect(out).not.toContain('sk-live-DEADBEEF');
+    expect(out).toContain('Bearer [redacted]');
+    expect(out).toContain('(401)');
+  });
+
+  it('redacts the OAuth ?code= and multiple params', () => {
+    const out = redactText('cb https://x/y?code=AUTHCODE&state=ok&access_token=TT done');
+    expect(out).not.toContain('AUTHCODE');
+    expect(out).not.toContain('TT');
+    expect(out).toContain('code=[redacted]');
+    expect(out).toContain('access_token=[redacted]');
+    expect(out).toContain('state=ok'); // benign param kept
+    expect(out).toContain('done');
+  });
+
+  it('leaves token-free text unchanged', () => {
+    expect(redactText('connection reset by peer (ECONNRESET)')).toBe(
+      'connection reset by peer (ECONNRESET)',
+    );
+    expect(redactText('')).toBe('');
   });
 });

@@ -68,3 +68,19 @@ export function redactUrlQueryTokens(url: string): string {
   const redacted = redactQueryString(url.slice(qIdx + 1));
   return redacted.length > 0 ? `${path}?${redacted}` : path;
 }
+
+// Surgical credential redaction for FREE TEXT — exception messages, breadcrumb
+// messages, captureMessage — where a token rides inside a string, not a
+// structured url/query_string field (which redactUrlQueryTokens handles) and
+// not a sensitive-keyed value (which scrubInPlace handles). The url-parsers
+// above would MANGLE free text (they split on the first `?` and absorb trailing
+// prose into the redacted param), so this is a precise per-match regex pass:
+// only the credential token is rewritten, surrounding diagnostics stay intact.
+const FREE_TEXT_TOKEN_RE =
+  /([?&](?:ds_token|access_token|refresh_token|id_token|api_key|apikey|client_secret|token|secret|password|signature|code)=)[^&\s"'`]+/gi;
+const FREE_TEXT_BEARER_RE = /(bearer\s+)[A-Za-z0-9._-]+/gi;
+
+export function redactText(s: string): string {
+  if (typeof s !== 'string' || s.length === 0) return s;
+  return s.replace(FREE_TEXT_TOKEN_RE, '$1[redacted]').replace(FREE_TEXT_BEARER_RE, '$1[redacted]');
+}

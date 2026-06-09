@@ -188,3 +188,30 @@ describe('V-494 follow-up — Sentry scrub: credential params in request URL', (
     expect(String(event.request?.url)).toBe('/v1/sessions?limit=20');
   });
 });
+
+describe('Sentry scrub: credential tokens in exception message / event.message (free-text vector)', () => {
+  it('redacts a token embedded in the EXCEPTION MESSAGE (not request.url — the W341 gap)', () => {
+    const event = {
+      exception: {
+        values: [
+          {
+            type: 'FetchError',
+            value: 'request failed: GET https://up/x?ds_token=sk-live-SECRET (502)',
+          },
+        ],
+      },
+    } as unknown as SentryErrorEvent;
+    scrubSentryEvent(event);
+    const v = event.exception!.values![0]!.value!;
+    expect(v).not.toContain('sk-live-SECRET');
+    expect(v).toContain('ds_token=[redacted]');
+    expect(v).toContain('(502)'); // diagnostic context preserved
+  });
+
+  it('redacts a token in a top-level captureMessage event.message', () => {
+    const event = { message: 'oauth cb ?code=AUTHCODE failed' } as unknown as SentryErrorEvent;
+    scrubSentryEvent(event);
+    expect(String(event.message)).not.toContain('AUTHCODE');
+    expect(String(event.message)).toContain('code=[redacted]');
+  });
+});
