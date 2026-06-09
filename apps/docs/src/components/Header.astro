@@ -76,7 +76,7 @@ function isActive(href: string): boolean {
               <a
                 href={item.href}
                 class:list={[
-                  'rounded px-3 py-2 text-sm text-ink-secondary hover:bg-white/10',
+                  'rounded-sm px-3 py-2 text-sm text-ink-secondary hover:bg-white/10',
                   isActive(item.href) && 'text-glow-red font-medium',
                 ]}
                 target={item.external ? '_blank' : undefined}

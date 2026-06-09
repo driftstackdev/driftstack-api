@@ -1,6 +1,5 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
-import tailwind from '@astrojs/tailwind';
 import sitemap from '@astrojs/sitemap';
 
 // V-250 — Driftstack docs site (docs.driftstack.dev). Static Astro
@@ -9,8 +8,9 @@ import sitemap from '@astrojs/sitemap';
 export default defineConfig({
   site: 'https://docs.driftstack.dev',
   output: 'static',
+  // Tailwind v4 via PostCSS (postcss.config.mjs) — see status-site; the
+  // @tailwindcss/vite plugin breaks while astro 5 + 6 coexist in the monorepo.
   integrations: [
-    tailwind({ applyBaseStyles: false }),
     sitemap({
       filter: (page) => !page.includes('/404'),
     }),

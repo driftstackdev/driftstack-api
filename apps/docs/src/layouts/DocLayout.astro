@@ -106,7 +106,7 @@ function isActive(href: string): boolean {
                         // keeps text width constant across active /
                         // inactive; otherwise clicking shifted other
                         // items (same fix as DashboardLayout 50b0dd7a).
-                        'block rounded px-2 py-1 text-sm font-medium transition-colors',
+                        'block rounded-sm px-2 py-1 text-sm font-medium transition-colors',
                         isActive(item.href)
                           ? 'bg-glow-red/15 text-glow-red'
                           : 'text-ink-secondary hover:bg-white/5 hover:text-ink-primary',
@@ -145,8 +145,8 @@ function isActive(href: string): boolean {
              prose-headings:font-semibold prose-headings:text-ink-primary
              prose-p:text-ink-secondary prose-li:text-ink-secondary
              prose-strong:text-ink-primary
-             prose-a:text-glow-red prose-a:no-underline hover:prose-a:underline
-             prose-code:font-mono prose-code:text-[0.875em] prose-code:rounded
+             prose-a:text-glow-red prose-a:no-underline prose-a:hover:underline
+             prose-code:font-mono prose-code:text-[0.875em] prose-code:rounded-sm
              prose-code:bg-white/10 prose-code:px-1.5 prose-code:py-0.5
              prose-code:text-ink-primary prose-code:before:content-none
              prose-code:after:content-none
@@ -213,7 +213,7 @@ function isActive(href: string): boolean {
         btn.setAttribute('aria-label', 'Copy code to clipboard');
         btn.textContent = 'Copy';
         btn.className =
-          'absolute right-2 top-2 rounded border border-white/15 bg-surface-raised ' +
+          'absolute right-2 top-2 rounded-sm border border-white/15 bg-surface-raised ' +
           'px-2 py-1 text-xs font-medium text-ink-muted opacity-70 transition ' +
           'hover:text-ink-primary hover:opacity-100 focus-visible:opacity-100';
         btn.addEventListener('click', function () {
