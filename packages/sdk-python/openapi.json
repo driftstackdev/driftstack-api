@@ -1192,8 +1192,7 @@
             "additionalProperties": {}
           },
           "profile_id": {
-            "type": "string",
-            "format": "uuid"
+            "type": "string"
           },
           "behavioral_profile": {
             "type": "string",
@@ -3101,8 +3100,7 @@
                     "additionalProperties": {}
                   },
                   "profile_id": {
-                    "type": "string",
-                    "format": "uuid"
+                    "type": "string"
                   },
                   "behavioral_profile": {
                     "type": "string",

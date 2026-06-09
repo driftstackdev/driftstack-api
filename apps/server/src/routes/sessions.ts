@@ -31,6 +31,7 @@ import { BadRequestError, ForbiddenError, NotFoundError } from '../lib/errors.js
 import type { AccountAuthRepo } from '../services/auth.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
+import { parseProfileId } from '../lib/profile-id.js';
 
 /**
  * V-326e3 — resolves the effective account for a write-type session
@@ -211,9 +212,14 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       // atomically. The bump-last-used happens AFTER create so a
       // create-failed path doesn't leave the profile reading "used".
       const ownerAccountId = effective.kind === 'team' ? effective.accountId : ctx.account.id;
+      // Accept the canonical prof_<uuid> the profiles API returns OR a bare uuid
+      // (parseProfileId normalizes + 400s on bad) → the bare uuid used by the
+      // repo/touch. Matches /v1/agent-sessions (W335); resolves the divergence.
+      const profileBareId =
+        body.profile_id !== undefined ? parseProfileId(body.profile_id) : undefined;
       const profileBinding =
-        body.profile_id !== undefined
-          ? await resolveProfileBinding(body.profile_id, ownerAccountId)
+        profileBareId !== undefined
+          ? await resolveProfileBinding(profileBareId, ownerAccountId)
           : null;
       const bodyWithProfile =
         profileBinding !== null
@@ -243,10 +249,9 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
       }
       // Fire-and-forget touch on the profile — if it fails the customer
       // still gets their session (the binding is recorded in metadata).
-      if (profileBinding !== null && profilesService && body.profile_id !== undefined) {
-        const profileId = body.profile_id;
+      if (profileBinding !== null && profilesService && profileBareId !== undefined) {
         void profilesService
-          .touch({ id: profileId, accountId: ownerAccountId, at: new Date() })
+          .touch({ id: profileBareId, accountId: ownerAccountId, at: new Date() })
           .catch(() => undefined);
       }
       return reply.code(201).send(publicSession(created));

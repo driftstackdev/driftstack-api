@@ -118,9 +118,11 @@ export const CreateSessionRequestSchema = z.object({
    * profile's `last_used_at`. Server validates that the profile
    * belongs to the calling account; cross-account profile_id returns
    * 404 to avoid leaking existence. Optional so ephemeral sessions
-   * (no persistent state) still work as before.
+   * (no persistent state) still work as before. Accepts the canonical
+   * `prof_<uuid>` id the profiles API returns OR a bare uuid (the server
+   * normalizes); kept loose here so the prefixed form validates client-side too.
    */
-  profile_id: z.string().uuid().optional(),
+  profile_id: z.string().optional(),
   /**
    * 2026-06-05 — behavioural persona for this session. When supplied, the
    * harness drives touch/scroll/typing with the selected persona's profile;

@@ -22,11 +22,11 @@ function read(p: string): string {
 }
 
 describe('Slice 1-2 — profile_id + POST /v1/profiles/:id/launch cross-source invariant', () => {
-  it('api-types/src/sessions.ts CreateSessionRequestSchema includes profile_id as optional UUID with the antidetect rationale comment', () => {
+  it('api-types/src/sessions.ts CreateSessionRequestSchema includes profile_id as optional (prof_<uuid> or bare uuid; server normalizes) with the antidetect rationale comment', () => {
     const lib = resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts');
     expect(existsSync(lib)).toBe(true);
     const body = read(lib);
-    expect(body).toMatch(/profile_id: z\.string\(\)\.uuid\(\)\.optional\(\),/);
+    expect(body).toMatch(/profile_id: z\.string\(\)\.optional\(\),/);
     expect(body).toMatch(/2026-05-20 — profile binding\. When supplied/);
     expect(body).toMatch(/cross-account profile_id returns/);
   });
