@@ -427,10 +427,25 @@ export async function dispatchSessionAssignOnCreate(args: {
       const dek = await profilesService.getProfileDek({ profileId, accountId });
       if (dek !== null) {
         const dekBase64 = dek.toString('base64');
-        profile =
-          r2 !== undefined
-            ? await buildAssignProfileBlock(r2, profileId, dekBase64)
-            : { profileId, dek: dekBase64 };
+        if (r2 !== undefined) {
+          try {
+            profile = await buildAssignProfileBlock(r2, profileId, dekBase64);
+          } catch (err) {
+            // An R2 hiccup minting the restore/save-back URLs must NOT abort the
+            // whole dispatch (which would leave the session created-but-never-
+            // dispatched). Degrade to a DEK-only (stateless) assign so the
+            // session still runs; it just won't restore/persist profile state
+            // this run. Distinct from the outer best-effort catch, which would
+            // drop the dispatch entirely.
+            logger?.warn(
+              { component: 'agent-session-dispatch', sessionId, profileId, err },
+              'profile R2 url-mint failed; dispatching DEK-only (stateless this run)',
+            );
+            profile = { profileId, dek: dekBase64 };
+          }
+        } else {
+          profile = { profileId, dek: dekBase64 };
+        }
       }
     }
     const assign = serializeSessionAssign({

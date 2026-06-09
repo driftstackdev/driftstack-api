@@ -153,6 +153,40 @@ describe('dispatchSessionAssignOnCreate', () => {
     });
   });
 
+  it('R2 url-mint failure degrades to a DEK-only dispatch (session still runs) — does NOT abort the dispatch', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const dek = Buffer.alloc(32, 1);
+    const profilesService = {
+      getProfileDek: () => Promise.resolve(dek),
+    } as unknown as ProfilesService;
+    const r2 = {
+      bucket: 'b',
+      putObject: vi.fn(),
+      headObject: vi.fn().mockRejectedValue(new Error('r2 down')),
+      presignGet: vi.fn().mockResolvedValue('https://r2/get'),
+      presignPut: vi.fn().mockRejectedValue(new Error('r2 down')),
+    } as unknown as R2;
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_p4',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountId: 'acc_1',
+      profileId: 'prof_1',
+      profilesService,
+      r2,
+      logger: logger(),
+    });
+    // The dispatch STILL fired (session runs), with a DEK-only profile — no
+    // sealed URLs (toEqual, not toMatchObject, asserts the degradation).
+    expect(sent).toHaveLength(1);
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.profile).toEqual({ profile_id: 'prof_1', dek: dek.toString('base64') });
+  });
+
   it('omits the profile block when getProfileDek returns null (no DEK) — stateless assign', async () => {
     const sent: string[] = [];
     const registry = new FleetControlRegistry();
