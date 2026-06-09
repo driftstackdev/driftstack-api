@@ -103,14 +103,19 @@ can't do it (eyes-on + changes window UX). GUI (a)/(c)/(d) are **done**.
 
 ## 5. Surfaced edges (lower priority — fix-when-wired / your call)
 
-- **Dashboard manual-control coordinate projection** — `viewportCoords` sends raw
-  overlay px; must project to device px when Slice-4 wires the `<video>` + harness
-  forwarding (TODO marked at the call site; latent today — forwarding 503s).
+- ✅ ~~Dashboard manual-control coordinate projection~~ — **DONE (`fb393b25`):**
+  `viewportCoords` now projects overlay px → device-CSS px off the wired `<video>`
+  (W267 closed; unit-tested `overlay-coords.ts`).
+- ✅ ~~Staging→prod deploy of the undeployed commits~~ — **DONE (`e64cd4e9`):**
+  both current via the bundle path (see item 2).
 - **Recordings flush-on-close** — fire-and-forget on unmount; an abrupt app-close
   can lose an in-progress recording. Proper fix = Tauri `onCloseRequested` + await
-  (Rust + launch-verify).
-- **Staging→prod deploy** of the undeployed commits (V-507 staging-first;
-  low-urgency — mock/pre-launch surfaces).
+  (Rust + launch-verify). _Still open._
+- **Remove the mouse InputEvent variants** — touch is now emitted by both surfaces
+  (dashboard `fb393b25` + gui-client `tap_at`); the mouse variants
+  (`mouseMove/Down/Up/wheel`) can be retired from the InputEvent contract once A3
+  confirms the harness no longer needs them (cross-agent; non-urgent, they're
+  unused/503 today). _Surfaced, not flipped._
 
 ---
 
