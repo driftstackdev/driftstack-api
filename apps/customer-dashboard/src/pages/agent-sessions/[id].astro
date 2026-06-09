@@ -166,15 +166,26 @@ const apiBaseUrl = resolveApiBaseUrl();
             data-preview-state="connecting"
             class="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide text-amber-300"
           >
-            <span class="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-            Connecting
+            <span data-preview-dot class="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+            <span data-preview-label>Connecting</span>
           </span>
         </div>
         <div
           class="flex-1 relative flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 overflow-hidden"
           data-component="LiveKitPreview"
           data-session-id={id}
+          data-api-base-url={apiBaseUrl}
         >
+          {/* LK.6 — the agent's iPhone Safari stream. `object-contain`
+              preserves the iPhone aspect ratio (scale-to-fit, never stretched).
+              Hidden until the LiveKit video track lands; the bundled script
+              below removes `hidden` + hides the placeholder on 'streaming'. */}
+          <video
+            data-livekit-video
+            class="absolute inset-0 h-full w-full object-contain hidden bg-black"
+            autoplay
+            playsinline
+            muted></video>
           {/* 2026-05-23 — actual scan-line animation behind the
               placeholder: a thin glow-red horizontal line that
               sweeps top→bottom on a 6s loop, signalling "live but
@@ -206,7 +217,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           {/* Placeholder layout: branded screen-icon + subtle scan-line
               animation + dynamic status text. Replaced by the LiveKit
               video element when the harness lands. */}
-          <div class="text-center px-6">
+          <div class="text-center px-6" data-preview-placeholder>
             <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-xl bg-glow-red/10 ring-1 ring-glow-red/30">
               <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
                 <rect x="2" y="3" width="20" height="14" rx="2" />
@@ -1326,5 +1337,78 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         }
       });
     })();
+  </script>
+
+  <script>
+    // LK.6 — dashboard live-stream wiring. Bundled (NOT is:inline) because it
+    // imports `livekit-client`, which can't run in an is:inline script. Thin
+    // glue over the unit-tested startLivekitPreview connector: supplies the real
+    // Room + RoomEvent + track.attach, reads the session id / API base from the
+    // LiveKitPreview DOM, replicates the is:inline auth (ds_web_session_token),
+    // and drives the connection pill + <video>. The live stream is verified on a
+    // session; the connector logic is unit-tested in livekit-preview.test.ts.
+    import { Room, RoomEvent } from 'livekit-client';
+    import { startLivekitPreview, type PreviewState } from '../../lib/livekit-preview';
+
+    const preview = document.querySelector('[data-component="LiveKitPreview"]');
+    const video = preview?.querySelector('[data-livekit-video]');
+    const pill = document.querySelector('[data-preview-state]');
+    const label = pill?.querySelector('[data-preview-label]');
+    const dot = pill?.querySelector('[data-preview-dot]');
+    const placeholder = preview?.querySelector('[data-preview-placeholder]');
+    const sessionId = preview?.getAttribute('data-session-id') ?? '';
+    const apiBaseUrl = preview?.getAttribute('data-api-base-url') ?? '';
+
+    const PILL = {
+      connecting: { label: 'Connecting', pill: 'bg-amber-500/10 text-amber-300', dot: 'bg-amber-400 animate-pulse' },
+      streaming: { label: 'Streaming', pill: 'bg-emerald-500/10 text-emerald-300', dot: 'bg-emerald-400' },
+      reconnecting: { label: 'Reconnecting', pill: 'bg-amber-500/10 text-amber-300', dot: 'bg-amber-400 animate-pulse' },
+      offline: { label: 'Offline', pill: 'bg-slate-500/10 text-slate-300', dot: 'bg-slate-400' },
+      error: { label: 'Preview error', pill: 'bg-rose-500/10 text-rose-300', dot: 'bg-rose-400' },
+    };
+    const PILL_BASE =
+      'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide ';
+    const DOT_BASE = 'h-1.5 w-1.5 rounded-full ';
+
+    function setPreviewState(state: PreviewState) {
+      const cfg = PILL[state] ?? PILL.offline;
+      if (pill) {
+        pill.setAttribute('data-preview-state', state);
+        pill.className = PILL_BASE + cfg.pill;
+      }
+      if (label) label.textContent = cfg.label;
+      if (dot) dot.className = DOT_BASE + cfg.dot;
+      const streaming = state === 'streaming';
+      if (video) video.classList.toggle('hidden', !streaming);
+      if (placeholder) placeholder.classList.toggle('hidden', streaming);
+    }
+
+    if (video instanceof HTMLVideoElement && sessionId && apiBaseUrl) {
+      const token = localStorage.getItem('ds_web_session_token');
+      const teardown = startLivekitPreview({
+        apiBaseUrl,
+        sessionId,
+        authHeaders: token ? { Authorization: 'Bearer ' + token } : {},
+        videoEl: video,
+        onState: setPreviewState,
+        createRoom: () => new Room({ adaptiveStream: true, dynacast: true }),
+        events: {
+          trackSubscribed: RoomEvent.TrackSubscribed,
+          disconnected: RoomEvent.Disconnected,
+          reconnecting: RoomEvent.Reconnecting,
+          reconnected: RoomEvent.Reconnected,
+        },
+        attachVideoTrack: (track, el) => {
+          (track as { attach(element: HTMLVideoElement): void }).attach(el);
+        },
+      });
+      const cleanup = () => {
+        void teardown.then((fn) => {
+          fn();
+        });
+      };
+      window.addEventListener('beforeunload', cleanup);
+      document.addEventListener('astro:before-swap', cleanup);
+    }
   </script>
 </DashboardLayout>
