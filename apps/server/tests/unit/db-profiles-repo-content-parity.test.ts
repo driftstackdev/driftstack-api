@@ -8,7 +8,7 @@
 //   • V-081 framing pinned.
 //   • DEFAULT_PAGE 50; MAX_PAGE 100 constants.
 //   • toRecord: 8-field ProfileRecord.
-//   • insert: 4-field values; returning(); throws on no-row.
+//   • insert: 5-field values (+ wrappedDek); returning(); throws on no-row.
 //   • countByAccount: count() helper aggregate; row?.n ?? 0.
 //   • findById + findByAccountAndName: account-scoped + limit 1.
 //   • list cursor framing: cursor row lookup IS account-scoped
@@ -58,10 +58,17 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     );
   });
 
-  it("insert: 4-field values (accountId + name + archetype + description); returning(); throws 'insert profile: no row returned'", () => {
-    expect(body).toMatch(
-      /\.values\(\{\s*\n?\s*accountId: input\.accountId,\s*\n?\s*name: input\.name,\s*\n?\s*archetype: input\.archetype,\s*\n?\s*description: input\.description,\s*\n?\s*\}\)\s*\n?\s*\.returning\(\);\s*\n?\s*if \(!row\) throw new Error\('insert profile: no row returned'\);/,
-    );
+  it("insert: 5-field values (accountId + name + archetype + description + wrappedDek); returning(); throws 'insert profile: no row returned'", () => {
+    // Per-field toContain rather than one long \s*\n?\s*-chained regex (the
+    // chain backtracks pathologically past ~5 groups; the wrapped_dek field
+    // pushed it over — see feedback_no_long_chain_parity_regex).
+    expect(body).toContain('accountId: input.accountId,');
+    expect(body).toContain('name: input.name,');
+    expect(body).toContain('archetype: input.archetype,');
+    expect(body).toContain('description: input.description,');
+    expect(body).toContain('wrappedDek: input.wrappedDek ?? null,');
+    expect(body).toContain('.returning();');
+    expect(body).toContain("if (!row) throw new Error('insert profile: no row returned');");
   });
 
   it('countByAccount: select count() helper aggregate where accountId; row?.n ?? 0', () => {

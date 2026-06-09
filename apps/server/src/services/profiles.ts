@@ -15,6 +15,7 @@ import { ConflictError, NotFoundError, TierLimitError } from '../lib/errors.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 import { profileLimitFor } from './sessions.js';
 import type { AccountAuditService } from './account-audit.js';
+import { mintWrappedProfileDek } from '../lib/profile-key-hierarchy.js';
 
 export interface ProfileRecord {
   id: string;
@@ -32,6 +33,13 @@ export interface NewProfileInput {
   name: string;
   archetype: string;
   description: string | null;
+  /**
+   * Profile-backed sessions (file 57): the per-profile DEK wrapped under the
+   * account TMK (base64[iv|tag|ct]). Optional — absent/undefined → stored NULL
+   * (profiles created without PROFILE_MASTER_KEY set, or via paths that don't
+   * mint a DEK). Never exposed back to the customer.
+   */
+  wrappedDek?: string | null;
 }
 
 export interface ProfileUpdates {
@@ -115,6 +123,14 @@ export class ProfilesService {
      * exercise the audit log pass null.
      */
     private readonly accountAudit: AccountAuditService | null = null,
+    /**
+     * Profile-backed sessions master key (file 57; decoded 32-byte AES-256).
+     * When non-null, a fresh per-profile DEK is minted + wrapped under the
+     * account TMK at create time and stored on the row. Null (the v1.0 default,
+     * PROFILE_MASTER_KEY unset) → profiles are created without a DEK (feature
+     * inert).
+     */
+    private readonly profileMasterKey: Buffer | null = null,
   ) {}
 
   private async emitAuditBestEffort(
@@ -172,6 +188,15 @@ export class ProfilesService {
     // count + inserts atomically under an account-row lock, so a concurrent
     // create that passed the pre-check still can't push the account past its
     // per-tier cap (was a count-then-insert TOCTOU).
+    // Profile-backed sessions (file 57): mint + wrap a per-profile DEK under the
+    // account's TMK when the master key is configured. The plaintext DEK is
+    // discarded here (re-derived by unwrapping at session-assign time); only the
+    // wrapped form is stored. Absent key → undefined → stored NULL (inert).
+    const wrappedDek =
+      this.profileMasterKey !== null
+        ? mintWrappedProfileDek(this.profileMasterKey, args.accountId).wrappedDek
+        : undefined;
+
     let result: Awaited<ReturnType<typeof this.repo.insertWithLimit>>;
     try {
       result = await this.repo.insertWithLimit(
@@ -180,6 +205,7 @@ export class ProfilesService {
           name: args.name,
           archetype: args.archetype ?? DEFAULT_ARCHETYPE,
           description: args.description ?? null,
+          wrappedDek,
         },
         limit,
       );

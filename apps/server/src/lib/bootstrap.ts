@@ -153,6 +153,7 @@ import { createEmailService, type EmailService } from '../services/email.js';
 import { initSentry, type SentryClient } from './sentry.js';
 import type { AppDeps, ReadinessCheck } from './app.js';
 import type { Config } from './config.js';
+import { decodeMasterKey } from './profile-key-hierarchy.js';
 import type { Logger } from './logger.js';
 import { corsPostureWarning } from './cors-posture.js';
 
@@ -925,7 +926,15 @@ export async function createProductionDeps(
   // V-081: Profiles service.
   // V-225 — accountAudit wired for profile.{created,deleted}.
   const profilesRepo = new DrizzleProfilesRepo(dbHandle);
-  const profilesService = new ProfilesService(profilesRepo, accountAuditService);
+  // Profile-backed sessions (file 57): decode the master key once at boot (null
+  // when PROFILE_MASTER_KEY unset → profiles created without a DEK; feature inert).
+  const profileMasterKeyBuf =
+    config.profileMasterKey !== undefined ? decodeMasterKey(config.profileMasterKey) : null;
+  const profilesService = new ProfilesService(
+    profilesRepo,
+    accountAuditService,
+    profileMasterKeyBuf,
+  );
   // V-312 — profile snapshots service shares the profiles repo for
   // tier-cap + name-conflict enforcement on restore.
   const profileSnapshotsService = new ProfileSnapshotsService(

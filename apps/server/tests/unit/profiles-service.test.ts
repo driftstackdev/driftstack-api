@@ -25,6 +25,7 @@ import {
 } from '../../src/services/profiles.js';
 import type { AccountAuditService } from '../../src/services/account-audit.js';
 import { ConflictError, NotFoundError, TierLimitError } from '../../src/lib/errors.js';
+import { unwrapProfileDek } from '../../src/lib/profile-key-hierarchy.js';
 
 function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
   return {
@@ -170,6 +171,36 @@ describe('V-553.B-21 ProfilesService.create', () => {
     await expect(svc.create({ accountId: 'acc_1', tier: SOLO, name: 'taken' })).rejects.toThrow(
       ConflictError,
     );
+  });
+
+  it('mints + stores a wrapped DEK on create when PROFILE_MASTER_KEY is set (file 57)', async () => {
+    const { repo } = makeRepo();
+    const orig = repo.insertWithLimit.bind(repo);
+    let captured: NewProfileInput | undefined;
+    repo.insertWithLimit = (input, limit) => {
+      captured = input;
+      return orig(input, limit);
+    };
+    const master = Buffer.alloc(32, 4);
+    const svc = new ProfilesService(repo, null, master);
+    await svc.create({ accountId: 'acc_dek', tier: SOLO, name: 'p' });
+    expect(typeof captured?.wrappedDek).toBe('string');
+    // round-trips: unwraps back to a 32-byte DEK under the SAME account's TMK.
+    const dek = unwrapProfileDek(master, 'acc_dek', captured?.wrappedDek ?? '');
+    expect(dek.length).toBe(32);
+  });
+
+  it('stores no DEK on create when the master key is absent (feature inert)', async () => {
+    const { repo } = makeRepo();
+    const orig = repo.insertWithLimit.bind(repo);
+    let captured: NewProfileInput | undefined;
+    repo.insertWithLimit = (input, limit) => {
+      captured = input;
+      return orig(input, limit);
+    };
+    const svc = new ProfilesService(repo); // no master key
+    await svc.create({ accountId: 'acc_nodek', tier: SOLO, name: 'p' });
+    expect(captured?.wrappedDek).toBeUndefined();
   });
 
   it('translates a concurrent same-name 23505 (race loser) into ConflictError, not a 500', async () => {

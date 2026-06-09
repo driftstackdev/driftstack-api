@@ -39,6 +39,7 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
         name: input.name,
         archetype: input.archetype,
         description: input.description,
+        wrappedDek: input.wrappedDek ?? null,
       })
       .returning();
     if (!row) throw new Error('insert profile: no row returned');
@@ -91,6 +92,7 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
           name: input.name,
           archetype: input.archetype,
           description: input.description,
+          wrappedDek: input.wrappedDek ?? null,
         })
         .returning();
       if (!row) throw new Error('insertWithLimit profile: no row returned');
