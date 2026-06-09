@@ -294,6 +294,34 @@ describe('loadConfig', () => {
     ).toThrow(/32 bytes/);
   });
 
+  it('PROFILE_MASTER_KEY accepts a valid base64 32-byte AES-256 key (profile DEK hierarchy, file 57)', () => {
+    const key = Buffer.alloc(32, 3).toString('base64');
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+      PROFILE_MASTER_KEY: key,
+    });
+    expect(cfg.profileMasterKey).toBe(key);
+  });
+
+  it('PROFILE_MASTER_KEY undefined when unset (profile-backed sessions inert)', () => {
+    const cfg = loadConfig({
+      DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+      REDIS_URL: 'redis://localhost:6379',
+    });
+    expect(cfg.profileMasterKey).toBeUndefined();
+  });
+
+  it('PROFILE_MASTER_KEY that base64-decodes to != 32 bytes is rejected EAGERLY at config-parse', () => {
+    expect(() =>
+      loadConfig({
+        DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+        REDIS_URL: 'redis://localhost:6379',
+        PROFILE_MASTER_KEY: Buffer.alloc(16, 3).toString('base64'),
+      }),
+    ).toThrow(/32 bytes/);
+  });
+
   it('V-156 DB_STATEMENT_TIMEOUT_MS coerces to dbStatementTimeoutMs (opt-in pool statement_timeout)', () => {
     const cfg = loadConfig({
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',

@@ -502,6 +502,13 @@ export const profiles = pgTable(
     description: text('description'),
     /** Last time a session was created against this profile. Updated by SessionsService at create-time. */
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    // Profile-backed sessions (file 57 key hierarchy): the per-profile DEK,
+    // wrapped under the account's TMK — base64([iv|tag|ct]), see
+    // lib/profile-key-hierarchy.ts. Nullable: NULL when PROFILE_MASTER_KEY is
+    // unset (profiles feature inert) or for rows created before this column.
+    // The plaintext DEK is NEVER stored; it's re-derived (unwrapped) at
+    // session-assign time to ship to the harness.
+    wrappedDek: text('wrapped_dek'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

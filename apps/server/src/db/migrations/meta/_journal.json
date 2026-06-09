@@ -484,6 +484,13 @@
       "when": 1779835200000,
       "tag": "0068_pricing_updated_audit_action",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1779921600000,
+      "tag": "0069_profiles_wrapped_dek",
+      "breakpoints": true
     }
   ]
 }

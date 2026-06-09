@@ -223,6 +223,22 @@ const ConfigSchema = z.object({
     })
     .optional(),
   /**
+   * Profile-backed sessions master key (file 57 key hierarchy). Optional —
+   * when unset, the profile DEK mint/unwrap is unavailable and profile-backed
+   * sessions stay inert (the feature is v1.5). When set, must be a 32-byte
+   * (AES-256) base64 key; it's the root from which per-account TMKs + per-profile
+   * DEKs derive (lib/profile-key-hierarchy.ts). Same host-env trust boundary as
+   * MFA_ENCRYPTION_KEY; a distinct key keeps the profile hierarchy isolated.
+   */
+  profileMasterKey: z
+    .string()
+    .refine((v) => Buffer.from(v, 'base64').length === 32, {
+      message:
+        'PROFILE_MASTER_KEY must base64-decode to exactly 32 bytes (AES-256). ' +
+        "Generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\"",
+    })
+    .optional(),
+  /**
    * Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus /metrics
    * scrape bearer token. Required for the /metrics endpoint to
    * activate; without it the route returns 503 + the registry is
@@ -600,6 +616,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     authFlowUrls: deriveAuthFlowUrls(env),
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,
+    profileMasterKey: env.PROFILE_MASTER_KEY,
     metricsScrapeToken: env.METRICS_SCRAPE_TOKEN,
     fleetInternalToken: env.DRIFTSTACK_FLEET_INTERNAL_TOKEN,
     // V-820 — fleet control-plane activation. Boolean via `=== 'true'`
