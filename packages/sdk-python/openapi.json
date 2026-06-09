@@ -15391,6 +15391,10 @@
                   "model": {
                     "type": "string",
                     "enum": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"]
+                  },
+                  "profile_id": {
+                    "type": "string",
+                    "format": "uuid"
                   }
                 }
               }
