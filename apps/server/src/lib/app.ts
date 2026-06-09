@@ -497,6 +497,13 @@ export interface AppDeps {
    */
   r2Public?: R2 | null;
   /**
+   * Private R2 client (the sealed-profile-blob bucket). Threaded to the
+   * agent-session dispatch so a profile-backed session's SessionAssign carries
+   * the restore + save-back URLs (buildAssignProfileBlock). Distinct from
+   * r2Public (public-asset bucket / presigned GUI reads).
+   */
+  r2?: R2 | null;
+  /**
    * V-353b — MFA service. When omitted, /v1/account/mfa/* routes are
    * not registered. Tests that don't exercise MFA pass null. The
    * service holds the AES-256-GCM env-key encryption + TOTP verifier;
@@ -1255,6 +1262,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // create + ship its DEK in the dispatch. Wired unconditionally (the
       // validation runs even without the fleet CP).
       ...(deps.profilesService !== undefined ? { profilesService: deps.profilesService } : {}),
+      // Private R2 → profile-backed dispatch ships restore/save-back URLs.
+      ...(deps.r2 ? { r2: deps.r2 } : {}),
     });
   } else {
     registerAgentSessionsDisabledRoutes(app);

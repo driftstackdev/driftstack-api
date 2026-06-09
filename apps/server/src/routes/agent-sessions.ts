@@ -28,6 +28,8 @@ import type { AgentRuntime } from '../services/agent-runtime.js';
 import type { DecomposeUsage } from '../services/agent-decomposer.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { ProfilesService } from '../services/profiles.js';
+import { buildAssignProfileBlock } from '../services/profile-store.js';
+import type { R2 } from '../lib/r2.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
@@ -314,6 +316,13 @@ export interface AgentSessionsRoutesDeps {
    * unsupported (no profiles service to validate against).
    */
   profilesService?: ProfilesService;
+  /**
+   * Private R2 (sealed-profile-blob bucket). When wired alongside a profile-
+   * backed create, the dispatch builds the full profile block via
+   * buildAssignProfileBlock (restore GET when a blob exists + save-back PUT).
+   * Absent → the dispatch falls back to a DEK-only block (no restore/persist).
+   */
+  r2?: R2;
 }
 
 /** Config for the session-create → harness `sessionAssign` dispatch (see
@@ -357,6 +366,8 @@ export async function dispatchSessionAssignOnCreate(args: {
   accountId?: string;
   profileId?: string;
   profilesService?: ProfilesService;
+  /** Private R2 — when present, the profile block carries restore/save-back URLs. */
+  r2?: R2;
 }): Promise<void> {
   const {
     sessionId,
@@ -368,6 +379,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     accountId,
     profileId,
     profilesService,
+    r2,
   } = args;
   if (
     fleetControlRegistry === undefined ||
@@ -402,16 +414,23 @@ export async function dispatchSessionAssignOnCreate(args: {
       nowMs,
       video: { room: sessionId, roomJoin: true, canPublish: true, canSubscribe: true },
     });
-    // Profile-backed (file 57): when a profile is attached + has a DEK, ship
-    // the per-profile DEK so the harness can open/seal the encrypted store.
-    // Fresh profiles ship the DEK only (no sealedBlob); the sealed-blob restore
-    // (presigned sealed_blob_url) is a follow-up. getProfileDek is null when the
-    // master key is unset or the profile has no DEK → stateless assign.
-    let profile: { profileId: string; dek: string } | undefined;
+    // Profile-backed (file 57): when a profile is attached + has a DEK, ship the
+    // per-profile DEK so the harness can open/seal the encrypted store. With R2
+    // wired, buildAssignProfileBlock adds the restore URL (presigned GET, ONLY
+    // when a sealed blob already exists — fail-closed per A3) + the save-back PUT
+    // URL. Without R2 → DEK-only (fresh, no restore/persist). getProfileDek is
+    // null when the master key is unset or the profile has no DEK → stateless.
+    let profile:
+      | { profileId: string; dek: string; sealedBlobUrl?: string; sealedBlobPutUrl?: string }
+      | undefined;
     if (profileId !== undefined && accountId !== undefined && profilesService !== undefined) {
       const dek = await profilesService.getProfileDek({ profileId, accountId });
       if (dek !== null) {
-        profile = { profileId, dek: dek.toString('base64') };
+        const dekBase64 = dek.toString('base64');
+        profile =
+          r2 !== undefined
+            ? await buildAssignProfileBlock(r2, profileId, dekBase64)
+            : { profileId, dek: dekBase64 };
       }
     }
     const assign = serializeSessionAssign({
@@ -516,6 +535,7 @@ export function registerAgentSessionsRoutes(
     fleetControlRegistry,
     sessionDispatch,
     profilesService,
+    r2,
   } = deps;
 
   /** LK.4 — auto-mint a LiveKit token for the just-created (or
@@ -700,6 +720,7 @@ export function registerAgentSessionsRoutes(
         accountId: ctx.account.id,
         ...(parsed.data.profile_id !== undefined ? { profileId: parsed.data.profile_id } : {}),
         profilesService,
+        ...(r2 !== undefined ? { r2 } : {}),
       });
       // Slice 6 follow-up 2026-05-20 — agent-session create audit. Best-
       // effort emit; audit failures don't break the create. Distinct

@@ -15,6 +15,7 @@ import { FleetControlRegistry } from '../../src/services/fleet-control-registry.
 import { encryptLivekitSecret } from '../../src/lib/livekit-secret-encryption.js';
 import type { DrizzleFleetNodesRepo } from '../../src/db/fleet-nodes-repo.js';
 import type { ProfilesService } from '../../src/services/profiles.js';
+import type { R2 } from '../../src/lib/r2.js';
 
 const KEY = Buffer.alloc(32, 7).toString('base64');
 const NODE_ID = 'local-mac-dev-001';
@@ -114,6 +115,42 @@ describe('dispatchSessionAssignOnCreate', () => {
     });
     const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
     expect(frame.profile).toMatchObject({ profile_id: 'prof_1', dek: dek.toString('base64') });
+  });
+
+  it('with R2 wired, the profile block carries restore (GET) + save-back (PUT) URLs (buildAssignProfileBlock)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const dek = Buffer.alloc(32, 1);
+    const profilesService = {
+      getProfileDek: () => Promise.resolve(dek),
+    } as unknown as ProfilesService;
+    const r2 = {
+      bucket: 'b',
+      putObject: vi.fn(),
+      headObject: vi.fn().mockResolvedValue({ exists: true }), // existing profile → restore GET
+      presignGet: vi.fn().mockResolvedValue('https://r2/get'),
+      presignPut: vi.fn().mockResolvedValue('https://r2/put'),
+    } as unknown as R2;
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_p3',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountId: 'acc_1',
+      profileId: 'prof_1',
+      profilesService,
+      r2,
+      logger: logger(),
+    });
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.profile).toMatchObject({
+      profile_id: 'prof_1',
+      dek: dek.toString('base64'),
+      sealed_blob_url: 'https://r2/get',
+      sealed_blob_put_url: 'https://r2/put',
+    });
   });
 
   it('omits the profile block when getProfileDek returns null (no DEK) — stateless assign', async () => {

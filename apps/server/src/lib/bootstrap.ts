@@ -1264,6 +1264,9 @@ export async function createProductionDeps(
     // status-snapshot writer uses; null when R2_BUCKET_PUBLIC isn't
     // configured (avatar endpoints fall back to 503 / null).
     r2Public,
+    // Private R2 (sealed-profile-blob bucket) — threaded to the agent-session
+    // dispatch for profile-backed restore/save-back URLs. null when R2 unset.
+    r2,
     // V-353b — MFA service; null when MFA_ENCRYPTION_KEY isn't set
     // (avoids registering enrollment routes that would write to a
     // table we can't decrypt back from).
