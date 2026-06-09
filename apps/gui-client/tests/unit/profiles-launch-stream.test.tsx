@@ -96,6 +96,9 @@ describe('ProfilesView launch → stream', () => {
     // this races the lazy mount + flakes under full-suite load.
     expect(await screen.findByTestId('agent-session-panel')).toBeTruthy();
     expect(agentCreate).toHaveBeenCalledTimes(1);
+    // Launch attaches THIS profile (file 57) — the prof_ prefix is stripped to
+    // the bare uuid the create API expects.
+    expect(agentCreate).toHaveBeenCalledWith({ profile_id: '1' });
   });
 
   it('no livekit block → clear error, not a black screen (prod-safe fallback)', async () => {
