@@ -41,9 +41,17 @@ It's a **WKWebView layer-compositing** issue, not boot/assets.
    - `tauri.conf.json` window `titleBarStyle: "Overlay"` → `"Visible"` (Overlay
      is the unusual config + a plausible macOS compositing culprit; note this
      changes the custom-TitleBar layout, so it's a diagnostic, not a final fix).
-   - A window nudge after content-ready (Rust `src-tauri/src/lib.rs`): on the
-     webview's load, `window.set_size(+1px)` then back — forces a composite.
+   - A window nudge after content-ready (would be NEW Rust in `src-tauri/src/lib.rs`):
+     on the webview's load, `window.set_size(+1px)` then back — forces a composite.
    - A Tauri / wry version bump (check their changelog for macOS compositing fixes).
+
+**Narrowed 2026-06-09 (W300):** read `src-tauri/src/lib.rs` — it has **NO custom
+window/webview setup** (only keychain commands + a SOCKS5 probe; the run is a plain
+`.run()`). So the compositing config lives ENTIRELY in `tauri.conf.json` (the
+`titleBarStyle:"Overlay"` + `transparent:false` + `decorations:true` block) — there
+is no Rust window code to suspect. → Prioritize the `titleBarStyle` toggle first;
+the "window-nudge" option means ADDING new Rust (a setup hook), not editing
+existing. Rules Rust out as the cause.
 
 I can't do step 1–3 autonomously (eyes-on, and it changes window UX), so it's
 queued for when you're at the machine. Ping me with what the dev-log shows + which
