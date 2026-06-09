@@ -14,6 +14,7 @@ import {
 import { FleetControlRegistry } from '../../src/services/fleet-control-registry.js';
 import { encryptLivekitSecret } from '../../src/lib/livekit-secret-encryption.js';
 import type { DrizzleFleetNodesRepo } from '../../src/db/fleet-nodes-repo.js';
+import type { ProfilesService } from '../../src/services/profiles.js';
 
 const KEY = Buffer.alloc(32, 7).toString('base64');
 const NODE_ID = 'local-mac-dev-001';
@@ -90,6 +91,51 @@ describe('dispatchSessionAssignOnCreate', () => {
     expect(payload.video.canPublish).toBe(true);
     expect(payload.video.room).toBe('agt_demo1');
     expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('attaches the profile block (profile_id + base64 DEK) for a profile-backed dispatch (file 57)', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const dek = Buffer.alloc(32, 1);
+    const profilesService = {
+      getProfileDek: () => Promise.resolve(dek),
+    } as unknown as ProfilesService;
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_p1',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountId: 'acc_1',
+      profileId: 'prof_1',
+      profilesService,
+      logger: logger(),
+    });
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.profile).toMatchObject({ profile_id: 'prof_1', dek: dek.toString('base64') });
+  });
+
+  it('omits the profile block when getProfileDek returns null (no DEK) — stateless assign', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const profilesService = {
+      getProfileDek: () => Promise.resolve(null),
+    } as unknown as ProfilesService;
+    await dispatchSessionAssignOnCreate({
+      sessionId: 'agt_p2',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      accountId: 'acc_1',
+      profileId: 'prof_1',
+      profilesService,
+      logger: logger(),
+    });
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.profile).toBeUndefined();
   });
 
   it('does NOT dispatch when the node is not connected (no queue) — logs + skips', async () => {

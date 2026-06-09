@@ -27,6 +27,7 @@ import {
 import type { AgentRuntime } from '../services/agent-runtime.js';
 import type { DecomposeUsage } from '../services/agent-decomposer.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
+import type { ProfilesService } from '../services/profiles.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
@@ -338,6 +339,13 @@ export async function dispatchSessionAssignOnCreate(args: {
   livekitSecretEncryptionKey: string | undefined;
   sessionDispatch: SessionDispatchConfig | undefined;
   logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void };
+  // Profile-backed sessions (file 57). When all three are present and the
+  // profile has a DEK, the assign carries a `profile` block so the harness
+  // restores/persists the per-profile encrypted store. Absent → stateless
+  // (today's path). The route threads these from the create body's profile_id.
+  accountId?: string;
+  profileId?: string;
+  profilesService?: ProfilesService;
 }): Promise<void> {
   const {
     sessionId,
@@ -346,6 +354,9 @@ export async function dispatchSessionAssignOnCreate(args: {
     livekitSecretEncryptionKey,
     sessionDispatch,
     logger,
+    accountId,
+    profileId,
+    profilesService,
   } = args;
   if (
     fleetControlRegistry === undefined ||
@@ -380,6 +391,18 @@ export async function dispatchSessionAssignOnCreate(args: {
       nowMs,
       video: { room: sessionId, roomJoin: true, canPublish: true, canSubscribe: true },
     });
+    // Profile-backed (file 57): when a profile is attached + has a DEK, ship
+    // the per-profile DEK so the harness can open/seal the encrypted store.
+    // Fresh profiles ship the DEK only (no sealedBlob); the sealed-blob restore
+    // (presigned sealed_blob_url) is a follow-up. getProfileDek is null when the
+    // master key is unset or the profile has no DEK → stateless assign.
+    let profile: { profileId: string; dek: string } | undefined;
+    if (profileId !== undefined && accountId !== undefined && profilesService !== undefined) {
+      const dek = await profilesService.getProfileDek({ profileId, accountId });
+      if (dek !== null) {
+        profile = { profileId, dek: dek.toString('base64') };
+      }
+    }
     const assign = serializeSessionAssign({
       sessionId,
       archetype: sessionDispatch.archetype,
@@ -392,6 +415,7 @@ export async function dispatchSessionAssignOnCreate(args: {
         wsUrl: mac.livekit.wsUrl,
         expiresAt: new Date(nowMs + ttlSeconds * 1000).toISOString(),
       },
+      ...(profile !== undefined ? { profile } : {}),
     });
     conn.sendSessionAssign(assign);
     logger?.info(
