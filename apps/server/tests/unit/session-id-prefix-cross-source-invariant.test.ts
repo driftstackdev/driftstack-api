@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const SESSIONS_LK = resolve(REPO_ROOT, 'apps/server/src/routes/sessions-livekit-token.ts');
+// (W363) the legacy sessions-livekit-token route was deleted (publisher over-grant).
 const AGENT_LK = resolve(REPO_ROOT, 'apps/server/src/routes/agent-sessions-livekit-token.ts');
 const AGENT_REPO = resolve(REPO_ROOT, 'apps/server/src/db/agent-sessions-repo.ts');
 
@@ -21,15 +21,8 @@ function read(p: string): string {
 }
 
 describe('session id prefix (ses_ vs agt_) cross-source invariant', () => {
-  const sessionsLk = read(SESSIONS_LK);
   const agentLk = read(AGENT_LK);
   const agentRepo = read(AGENT_REPO);
-
-  it('routes/sessions-livekit-token SESSION_ID_RE pins the ses_ prefix (NOT sess_) with full UUID-with-dashes body', () => {
-    expect(sessionsLk).toMatch(
-      /const SESSION_ID_RE = \/\^ses_\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\$\/;/,
-    );
-  });
 
   it('routes/agent-sessions-livekit-token AGENT_SESSION_ID_RE pins the agt_ prefix with full UUID-with-dashes body', () => {
     expect(agentLk).toMatch(
@@ -41,16 +34,9 @@ describe('session id prefix (ses_ vs agt_) cross-source invariant', () => {
     expect(agentRepo).toMatch(/const id = `agt_\$\{randomUUID\(\)\}`;/);
   });
 
-  it("routes/sessions-livekit-token comment explicitly differentiates ses_ vs sess_: 'Customer-facing session ids carry the `ses_` prefix (NOT `sess_`) followed by a UUID-with-dashes.' — pinned so the not-sess_ guidance stays documented (drift to sess_ would mismatch the rest of the public-id family)", () => {
-    expect(sessionsLk).toMatch(
-      /Customer-facing session ids carry the `ses_` prefix \(NOT `sess_`\)\s*\n?\s*\/\/ followed by a UUID-with-dashes\./,
-    );
-  });
-
-  it('Both prefix-regexes match the same UUID-with-dashes body shape (8-4-4-4-12 hex pattern). The only differentiator is the prefix — pinned so cross-token-type confusion stays impossible at the validator boundary', () => {
+  it('agent-sessions-livekit-token AGENT_SESSION_ID_RE matches the canonical UUID-with-dashes body shape (8-4-4-4-12 hex) after the agt_ prefix — pinned so the validator stays aligned with the public-id family', () => {
     const bodyShape =
       '\\[0-9a-f\\]\\{8\\}-\\[0-9a-f\\]\\{4\\}-\\[0-9a-f\\]\\{4\\}-\\[0-9a-f\\]\\{4\\}-\\[0-9a-f\\]\\{12\\}';
-    expect(sessionsLk).toMatch(new RegExp(bodyShape));
     expect(agentLk).toMatch(new RegExp(bodyShape));
   });
 });

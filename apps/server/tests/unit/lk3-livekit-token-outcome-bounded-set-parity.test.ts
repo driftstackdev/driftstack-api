@@ -68,8 +68,10 @@ describe('LK.3 livekit-token outcome bounded-set parity', () => {
   it("role label is hardcoded to 'subscriber' (LK.3 mints subscriber-only JWTs)", () => {
     const body = readFileSync(ROUTE, 'utf8');
     expect(body).toMatch(/role:\s*'subscriber'/);
-    // Defensive — the publisher role belongs to the legacy V-531.B
-    // /v1/sessions/:id/livekit-token surface, NOT to LK.3.
+    // Defensive — the customer is always subscriber-only; publisher belongs to
+    // the Mac-side BrowserController (provisioned out-of-band), never a customer
+    // token. (The legacy V-531.B /v1/sessions/:id/livekit-token route that DID
+    // expose a publisher over-grant was deleted W363.)
     expect(body).not.toMatch(/role:\s*'publisher'/);
     expect(body).not.toMatch(/role:\s*'unknown'/);
   });

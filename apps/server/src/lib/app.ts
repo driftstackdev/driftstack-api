@@ -105,7 +105,6 @@ import { registerAuthRoutes } from '../routes/auth.js';
 import { registerAuthCliRoutes } from '../routes/auth-cli.js';
 import { registerStripeWebhookRoutes } from '../routes/webhooks-stripe.js';
 import { registerNowpaymentsWebhookRoutes } from '../routes/webhooks-nowpayments.js';
-import { registerLivekitTokenRoute } from '../routes/sessions-livekit-token.js';
 import { registerOAuthClientRoutes } from '../routes/auth-oauth-client.js';
 import { registerAccountOauthLinksRoutes } from '../routes/account-oauth-links.js';
 import type { OAuthLinksRepo } from '../services/oauth-client.js';
@@ -1063,22 +1062,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
     });
   }
-  // V-531.B — LiveKit token-mint route. Gated on all 3 livekit fields
-  // (apiKey + apiSecret + wsUrl); partial config = unregistered route.
-  // Ownership check uses the sessions-service repo: the route is per-
-  // session and the caller must own the session (cross-account → 404).
-  if (deps.livekit !== undefined) {
-    registerLivekitTokenRoute(app, {
-      apiKey: deps.livekit.apiKey,
-      apiSecret: deps.livekit.apiSecret,
-      wsUrl: deps.livekit.wsUrl,
-      isSessionOwned: async (accountId, sessionId) => {
-        const row = await deps.sessionsService.findOwnedSessionLite(accountId, sessionId);
-        return row !== null;
-      },
-      ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
-    });
-  }
+  // (W363) The legacy V-531.B POST /v1/sessions/:id/livekit-token route was
+  // DELETED — it let the body pick role:'publisher' (canPublish:true), an
+  // over-grant letting a customer publish to their own capture room. The
+  // canonical subscriber-only POST /v1/agent-sessions/:id/livekit-token
+  // (registered below) is the sole token-mint path.
   // V-667.C — OAuth-client routes. Gated on: service wired +
   // signingSecret + callbackUrlBase + at least one provider configured
   // + authFlowsService (2026-05-19 — needed to mint the web session
