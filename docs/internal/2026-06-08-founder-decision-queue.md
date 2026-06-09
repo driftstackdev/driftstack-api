@@ -28,25 +28,24 @@ the contract + harness + docs side**, cross-agent in lockstep:
 - **No iOS-Simulator needed for v1.0** — the fork already does genuine WebKit
   touch (A3's runtime read; A1 confirms if/when relevant).
 
-**The one remaining piece — the customer-dashboard live-stream view — needs a
-small ARCHITECTURE call from you (W294 finding):** wiring the dashboard
-LiveKit-video subscription requires the `livekit-client` library, which **cannot
-run in an `is:inline` script** (no bundling/imports). But the dashboard pages are
-deliberately **is:inline** (you reverted the admin bundled-module migration). So
-the LiveKit part needs one of:
+**✅ A2 EMIT SIDE COMPLETE — the dashboard live-view + touch are shipped (you
+picked the scoped bundled `<script>`).** Both pieces landed:
 
-1. **A scoped bundled `<script>`** on just the agent-session detail page (Astro
-   bundles it → can import `livekit-client` + a unit-testable
-   `livekit-preview.ts` helper). Cleanest; one exception to is:inline.
-2. **CDN/global `livekit-client`** loaded via a plain `<script src>`, consumed
-   by the existing is:inline script (keeps is:inline; adds a CDN dep).
-3. **Defer** the dashboard live-view (the gui-client already shows the stream).
-   **Your pick.** Once chosen, the build is ready + testable (correcting my earlier
-   "verifiability-gated" framing — the wiring helper IS unit-testable via mocks; the
-   live stream you verify on a session). The gui-client capture path already emits
-   `tap_at` (touch), so that path is done; the dashboard input-overlay→touch +
-   W267 device-CSS projection ride on whichever option above. Design/status:
-   `docs/internal/2026-06-08-iphone-touch-input-pipeline.md`.
+- **Live video subscription** (`e64cd4e9`): livekit-client + a bundled `<script>`
+  on the agent-session detail page driving the `<video>` (object-contain, so the
+  stream is aspect-preserved — never stretched) + the connection pill.
+- **Manual overlay → genuine touch + W267 projection** (`fb393b25`): clicks/drags
+  on the dashboard video now emit `tap` / `touchStart|Move|End`, with coords
+  projected to device-CSS (closes W267 — taps used to land in the top-left). The
+  gui-client already emitted `tap_at`, so **all A2 emit surfaces are done**.
+
+**The whole iPhone-tap pipeline is now A2-complete + A3-triggered (bus W308).**
+The only remaining gate is **A1's drive-bridge** (`--enable-webdriver` fork-deploy):
+A3's harness decoder + injector are built and waiting on it; when it's up, the
+manual tap path is end-to-end (you tap the dashboard video → genuine WebKit
+`pointerType:touch` on the phone, no mouse cursor). **Nothing needed from you** —
+just verify the live stream + taps on a running session once A1's drive-bridge
+lands. Design/status: `docs/internal/2026-06-08-iphone-touch-input-pipeline.md`.
 
 ## 2. GitHub account flag — CI/Deploy now ROUTED AROUND (you've contacted support)
 
