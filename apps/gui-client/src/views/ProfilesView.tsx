@@ -269,12 +269,10 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       // server injects the egress proxy into the dispatched session.
       void proxy;
       // Attach THIS profile so the session restores/persists its saved browser
-      // identity (file 57). The profiles list returns prefixed ids (prof_<uuid>)
-      // but the create API takes the bare uuid (same convention as /v1/sessions
-      // profile_id) — strip the prefix.
-      const created = await client.agentSessions.create({
-        profile_id: profile.id.replace(/^prof_/, ''),
-      });
+      // identity (file 57). Pass the canonical prof_<uuid> id as-is — the create
+      // API accepts it (W335/W336 made both session routes normalize prof_<uuid>
+      // or a bare uuid server-side).
+      const created = await client.agentSessions.create({ profile_id: profile.id });
       await markLaunched(profile.id, created.id);
       if (created.livekit) {
         setWatchInfo(created.livekit);
