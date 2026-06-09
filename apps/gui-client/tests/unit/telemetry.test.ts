@@ -167,6 +167,44 @@ describe('scrubEvent — beforeSend PII scrubber', () => {
     expect(app.name).toBe('gui');
   });
 
+  it('scrubs a credential-bearing URL interpolated into the EXCEPTION MESSAGE (fetch/EventSource error citing ?ds_token=<apiKey>)', () => {
+    const ev = {
+      exception: {
+        values: [
+          {
+            type: 'TypeError',
+            value:
+              'Failed to fetch https://api.driftstack.dev/v1/account/me/notifications?ds_token=ds_live_SECRET',
+          },
+        ],
+      },
+    } as unknown as ErrorEvent;
+    const msg = scrubEvent(ev, hint)!.exception!.values![0]!.value!;
+    expect(msg).not.toContain('ds_live_SECRET');
+    expect(msg).toContain('ds_token=[scrubbed]');
+    expect(msg).toContain('Failed to fetch'); // diagnostic context preserved
+  });
+
+  it('scrubs Bearer tokens + credential query params from breadcrumb messages', () => {
+    const ev = {
+      breadcrumbs: [
+        { category: 'console', message: 'retry with Authorization: Bearer ds_live_SECRET' },
+        { category: 'xhr', message: 'GET https://api.driftstack.dev/x?access_token=SECRET2 200' },
+      ],
+    } as unknown as ErrorEvent;
+    const out = scrubEvent(ev, hint)!.breadcrumbs!;
+    expect(String(out[0]!.message)).not.toContain('ds_live_SECRET');
+    expect(String(out[0]!.message)).toContain('Bearer [scrubbed]');
+    expect(String(out[1]!.message)).not.toContain('SECRET2');
+    expect(String(out[1]!.message)).toContain('access_token=[scrubbed]');
+  });
+
+  it('scrubs a top-level captureMessage event.message', () => {
+    const ev = { message: 'stream died: wss://api/x?token=SECRET3' } as unknown as ErrorEvent;
+    expect(scrubEvent(ev, hint)!.message).not.toContain('SECRET3');
+    expect(scrubEvent(ev, hint)!.message).toContain('token=[scrubbed]');
+  });
+
   it('returns the event (never drops) when nothing sensitive is present', () => {
     const ev = { message: 'boom' } as unknown as ErrorEvent;
     expect(scrubEvent(ev, hint)).not.toBeNull();

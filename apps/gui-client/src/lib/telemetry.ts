@@ -158,12 +158,24 @@ export function scrubEvent(event: ErrorEvent, _hint: EventHint): ErrorEvent | nu
   // object — scrub credential-shaped query params + field names.
   if (event.breadcrumbs) {
     event.breadcrumbs = event.breadcrumbs.map((b) => {
-      if (!b.data || typeof b.data !== 'object') return b;
+      const message = typeof b.message === 'string' ? scrubText(b.message) : b.message;
+      if (!b.data || typeof b.data !== 'object') return { ...b, message };
       const data = scrubObject(b.data);
       if (typeof data.url === 'string') data.url = scrubUrl(data.url);
-      return { ...b, data };
+      return { ...b, message, data };
     });
   }
+  // Scrub credential-bearing URLs / bearer tokens that string-interpolated into
+  // a thrown error's message or a captureMessage. `request.url` is scrubbed
+  // above, but the SAME token rides in the exception text when a fetch /
+  // EventSource error cites the notification stream's `...?ds_token=<apiKey>`
+  // URL — without this it would reach Sentry in the error message verbatim.
+  if (event.exception?.values) {
+    for (const ex of event.exception.values) {
+      if (typeof ex.value === 'string') ex.value = scrubText(ex.value);
+    }
+  }
+  if (typeof event.message === 'string') event.message = scrubText(event.message);
   return event;
 }
 
@@ -222,6 +234,23 @@ function scrubUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+/**
+ * Redact credential-shaped substrings from FREE TEXT (exception messages,
+ * captureMessage, breadcrumb messages) — where a token rides inside a string,
+ * not a structured URL/field that scrubUrl/scrubObject would catch. Covers
+ * credential query-params embedded in a cited URL (`...?ds_token=<key>`) and
+ * `Bearer <token>` fragments. Conservative: only rewrites the matched
+ * credential token, leaving the rest of the message diagnostically intact.
+ */
+function scrubText(s: string): string {
+  return s
+    .replace(
+      /([?&](?:ds_token|access_token|refresh_token|api_key|apikey|token|password|secret)=)[^&\s"'`]+/gi,
+      '$1[scrubbed]',
+    )
+    .replace(/(bearer\s+)[A-Za-z0-9._-]+/gi, '$1[scrubbed]');
 }
 
 /**
