@@ -338,7 +338,7 @@ Errors:
 ```
 
 Forwards a raw LK.6 InputEvent to the harness for `mode: 'manual'`
-or `mode: 'pair'` sessions. The 7 valid variants:
+or `mode: 'pair'` sessions. The 12 valid variants:
 
 ```json
 { "type": "mouseMove", "x": 200, "y": 150 }
@@ -347,11 +347,23 @@ or `mode: 'pair'` sessions. The 7 valid variants:
 { "type": "keyDown",   "key": "Enter", "modifiers": ["cmd"] }
 { "type": "keyUp",     "key": "Enter" }
 { "type": "wheel",     "x": 200, "y": 150, "deltaX": 0, "deltaY": 100 }
+{ "type": "tap",        "x": 200, "y": 430 }
+{ "type": "touchStart", "x": 200, "y": 430, "touchId": 0 }
+{ "type": "touchMove",  "x": 210, "y": 435, "touchId": 0 }
+{ "type": "touchEnd",   "x": 212, "y": 436, "touchId": 0 }
+{ "type": "swipe",      "x1": 200, "y1": 700, "x2": 200, "y2": 200, "durationMs": 350 }
 { "type": "ping",      "timestamp": 1747658400000 }
 ```
 
-`button` is `0` (left), `1` (middle), or `2` (right). `modifiers`
-is an optional array of `cmd / ctrl / shift / option` strings.
+**Touch is the iPhone-native, preferred input** — the session is a real
+iPhone Safari surface, so the harness injects touch via genuine WebKit
+events (`pointerType: touch`; no mouse cursor). Coordinates are
+device-CSS pixels; `touchId` (0–9) drives concurrent fingers for
+multi-touch; `swipe` carries endpoints + `durationMs` (≤60000) and the
+harness interpolates the eased path. The `mouse*` variants remain for
+desktop-style tooling. `button` is `0` (left), `1` (middle), or `2`
+(right). `modifiers` is an optional array of `cmd / ctrl / shift / option`
+strings.
 
 Response (200):
 
@@ -364,9 +376,10 @@ the harness. Use a separate `ping` event to measure end-to-end
 latency.
 
 Throttle the client side: the route's rate-limit bucket
-(`agent_sessions:input_event`) is sized for ≤120Hz `mouseMove`
-streams with burst of ~2 seconds; intent events
-(`mouseDown` / `mouseUp` / `wheel`) don't need client throttling.
+(`agent_sessions:input_event`) is sized for ≤120Hz `mouseMove` /
+`touchMove` streams with burst of ~2 seconds; discrete events
+(`tap` / `mouseDown` / `mouseUp` / `wheel` / `swipe`) don't need
+client throttling.
 
 Errors:
 
