@@ -44,8 +44,13 @@ prioritized — say so + I'll build it for you to verify on a live session.
 The account flag ("ineligible for transactions") is what stalled GitHub Actions
 (CI + auto-deploy). git **push** still works; the **GUI is a local build**
 (unaffected); prod can be **manually SSH-deployed** (`scripts/deploy-bridge.sh`)
-if it must be current before the flag clears. ~10 undeployed server commits are
-migration/env-clean — they auto-deploy when the flag lifts, or on a manual run.
+if it must be current before the flag clears. **As of 2026-06-08 prod + staging
+are both at `d4e1778`, 29 commits behind origin — VERIFIED safe to auto-deploy:
+ZERO DB migrations in the backlog + all changes additive** (the extract/search/
+login session ops + the iPhone-touch api-types/SDK/openapi + docs; mock/stub
+drivers, pre-launch). So when the flag clears the 29 commits auto-deploy cleanly
+(no migration risk), or a manual `scripts/deploy-bridge.sh` run is safe anytime.
+No action needed — it's deploy-ready, just gated on the flag.
 
 ## 3. GUI (b) release `.app` paint bug — needs your build + launch
 
