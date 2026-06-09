@@ -1,6 +1,5 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
-import tailwind from '@astrojs/tailwind';
 
 // V-295c — public service status page.
 //
@@ -11,7 +10,9 @@ import tailwind from '@astrojs/tailwind';
 export default defineConfig({
   site: 'https://status.driftstack.dev',
   output: 'static',
-  integrations: [tailwind({ applyBaseStyles: false })],
+  // Tailwind v4 via the PostCSS plugin (postcss.config.mjs) — decoupled from
+  // Astro's bundled Vite version (the @tailwindcss/vite plugin breaks in this
+  // monorepo while astro 5 + 6 coexist: createIdResolver Vite-version conflict).
   build: {
     inlineStylesheets: 'auto',
   },

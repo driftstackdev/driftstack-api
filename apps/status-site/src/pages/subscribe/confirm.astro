@@ -31,7 +31,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     <!-- Default pane: the confirm call fires on load. -->
     <div
       id="confirm-pending"
-      class="rounded-lg border border-white/10 bg-surface-raised p-6 shadow-sm"
+      class="rounded-lg border border-white/10 bg-surface-raised p-6 shadow-xs"
       role="status"
       aria-live="polite"
     >
@@ -41,7 +41,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     <!-- Success pane (200): confirmation recorded. -->
     <div
       id="confirm-success"
-      class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-6 shadow-sm"
+      class="hidden rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-6 shadow-xs"
       role="status"
       aria-live="polite"
     >
@@ -59,7 +59,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     <!-- Error pane (400 / 404 / 429 / network). -->
     <div
       id="confirm-error"
-      class="hidden rounded-lg border border-red-500/30 bg-red-500/5 p-6 shadow-sm"
+      class="hidden rounded-lg border border-red-500/30 bg-red-500/5 p-6 shadow-xs"
       role="alert"
       aria-live="assertive"
     >

@@ -52,8 +52,31 @@ thrashes otherwise). Check `uptime` first.
 - Each site: local `astro build` clean + founder visual spot-check (the codemod preserves
   the look; this is a sanity pass).
 
+## ⚠️ CRITICAL recipe correction (W365 — learned from the status-site pilot)
+
+**Use `@tailwindcss/postcss` (+ a `postcss.config.mjs`), NOT `@tailwindcss/vite`.** The Vite
+plugin breaks while astro 5 + 6 coexist in this monorepo: `q.createIdResolver is not a function`
+(the plugin binds to the wrong deduped Vite version). The PostCSS plugin decouples from Astro's
+bundled Vite → builds clean. Corrected step 3/4:
+
+- `package.json`: `astro@^6`, drop `@astrojs/tailwind`, add `@tailwindcss/postcss@^4` + `tailwindcss@^4`.
+- `astro.config.mjs`: remove the `@astrojs/tailwind` integration AND any `@tailwindcss/vite` plugin (none).
+- add `apps/<site>/postcss.config.mjs`: `export default { plugins: { '@tailwindcss/postcss': {} } }`.
+- the codemod (`npx @tailwindcss/upgrade`) handles config→`@theme`, `@tailwind`→`@import`, utility renames.
+
+## Audit note (W365)
+
+status-site doesn't carry the original 2 HIGH (`@astrojs/cloudflare` undici/devalue — those are
+**marketing-site**'s adapter). The audit count rose to 28 (incl criticals) because adding astro
+6.4.5 surfaces the **astro `<=6.1.9` XSS/server-island advisories against the 4 sites STILL on
+astro 5.18.1** — migrating all sites to 6.4.5 CLEARS them (6.4.5 is patched). All build-time/
+static-site (server runtime undici is 8.x/safe). So: finish all 5 sites to actually reduce the count.
+
 ## Status
 
-- 2026-06-09 W364: plan + status-site breaking-utility audit done (this doc). Execution
-  deferred to a confirmed-sustained-low-load wave (A1's webdriver/fork build was winding
-  down — 5/15-min load ~22). Pilot = status-site.
+- 2026-06-09 W364: plan + status-site breaking-utility audit (this doc).
+- 2026-06-09 W365: **status-site PILOT MIGRATED + builds clean** (astro 6.4.5 + Tailwind v4 via
+  postcss; codemod ran; CSS verified — 21KB, oxblood/surface theme + renamed utilities present).
+  **BANKED, NOT pushed** — pushing auto-deploys to live status.driftstack.dev (Cloudflare Pages)
+  and the founder asked to spot-check renders; I can't verify pixels. Awaiting founder OK to push,
+  OR founder eyeballs the built `apps/status-site/dist`. Recipe proven for the remaining 4 sites.
