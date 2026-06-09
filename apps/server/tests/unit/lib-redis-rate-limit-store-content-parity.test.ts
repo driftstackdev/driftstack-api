@@ -52,9 +52,9 @@ describe('W440.B apps/server/src/lib/redis-rate-limit-store.ts content parity', 
     );
   });
 
-  it('Lua HMGET tokens + last_ms; first-touch initialize to capacity + now_ms when tokens nil', () => {
+  it('Lua HMGET tokens + last_ms; first-touch initialize to capacity + now_ms when EITHER field nil (fail-safe on a partial/corrupt hash)', () => {
     expect(body).toMatch(
-      /local data = redis\.call\('HMGET', key, 'tokens', 'last_ms'\)\s*\n?\s*local tokens = tonumber\(data\[1\]\)\s*\n?\s*local last_ms = tonumber\(data\[2\]\)\s*\n?\s*\n?\s*if tokens == nil then\s*\n?\s*tokens = capacity\s*\n?\s*last_ms = now_ms\s*\n?\s*end/,
+      /local data = redis\.call\('HMGET', key, 'tokens', 'last_ms'\)\s*\n?\s*local tokens = tonumber\(data\[1\]\)\s*\n?\s*local last_ms = tonumber\(data\[2\]\)[\s\S]*?if tokens == nil or last_ms == nil then\s*\n?\s*tokens = capacity\s*\n?\s*last_ms = now_ms\s*\n?\s*end/,
     );
   });
 

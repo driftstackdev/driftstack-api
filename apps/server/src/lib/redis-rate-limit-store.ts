@@ -22,7 +22,14 @@ local data = redis.call('HMGET', key, 'tokens', 'last_ms')
 local tokens = tonumber(data[1])
 local last_ms = tonumber(data[2])
 
-if tokens == nil then
+-- Reset to a full bucket when EITHER field is missing. Normally both are
+-- written together by the HMSET below (so a fresh key has both nil), but
+-- guarding last_ms too makes the script fail SAFE on a partial/corrupt hash
+-- (e.g. an external write or a truncated value): a nil last_ms would otherwise
+-- make \`now_ms - last_ms\` an arithmetic error, EVAL-failing every request to
+-- that key until its TTL self-heals. A limiter must never error a request open
+-- or closed on a malformed key.
+if tokens == nil or last_ms == nil then
   tokens = capacity
   last_ms = now_ms
 end

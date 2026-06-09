@@ -115,7 +115,7 @@ describe('W975 redis-rate-limit-store token-bucket cross-source invariant', () =
 
   it('CRITICAL bootstrap-on-nil-tokens — first-hit branch sets tokens = capacity + last_ms = now_ms (full bucket). The full-bucket-on-first-hit design lets new keys immediately serve traffic.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/redis-rate-limit-store.ts'));
-    expect(p).toMatch(/if tokens == nil then/);
+    expect(p).toMatch(/if tokens == nil or last_ms == nil then/); // fail-safe on partial/corrupt hash
     expect(p).toMatch(/tokens = capacity/);
     expect(p).toMatch(/last_ms = now_ms/);
   });
