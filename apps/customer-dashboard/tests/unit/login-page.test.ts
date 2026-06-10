@@ -130,16 +130,42 @@ describe('login page — local integration', () => {
     expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_THE_TOKEN');
   });
 
-  it('V-353d MFA-required branch: surfaces the MFA banner, stores NO token, does not redirect', async () => {
+  it('V-353d/W528 MFA-required branch: opens the MFA challenge form (login form hides), stores NO token yet, does not redirect', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       fetchPlan: [() => json({ mfa_required: true, challenge_token: 'chal_x' })],
     });
     win = window;
     submitLogin(window, 'mfa@example.com', 'pw');
     await flush();
-    expect(bannerHidden(window)).toBe(false);
-    expect(bannerText(window)).toMatch(/MFA/i);
+    const loginForm = window.document.querySelector('[data-form="login"]');
+    const mfaForm = window.document.querySelector('[data-form="mfa"]');
+    expect(loginForm?.classList.contains('hidden')).toBe(true);
+    expect(mfaForm?.classList.contains('hidden')).toBe(false);
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
+  });
+
+  it('W528 MFA challenge submit: POSTs {challenge_token, code} to /v1/auth/mfa/challenge, stores the session token', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () => json({ mfa_required: true, challenge_token: 'chal_x' }),
+        () => json({ session: { token: 'ds_web_MFA_TOKEN', expires_at: '2027-01-01T00:00:00Z' } }),
+      ],
+    });
+    win = window;
+    submitLogin(window, 'mfa@example.com', 'pw');
+    await flush();
+    const codeInput = window.document.querySelector('#login-mfa-code') as HTMLInputElement;
+    codeInput.value = '123456';
+    const mfaForm = window.document.querySelector('[data-form="mfa"]') as HTMLFormElement;
+    mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    const challengeCall = fetchCalls.find((c) => /\/v1\/auth\/mfa\/challenge$/.test(c.url));
+    expect(challengeCall?.init?.method).toBe('POST');
+    expect(JSON.parse(String(challengeCall?.init?.body))).toEqual({
+      challenge_token: 'chal_x',
+      code: '123456',
+    });
+    expect(window.localStorage.getItem('ds_web_session_token')).toBe('ds_web_MFA_TOKEN');
   });
 
   it('invalid credentials: surfaces the server detail in the banner, stores no token', async () => {

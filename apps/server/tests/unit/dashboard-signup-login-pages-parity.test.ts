@@ -113,7 +113,7 @@ describe('W737 dashboard signup + login pages V-079 parity', () => {
     expect(l).toMatch(/id="login-password"/);
   });
 
-  it('CRITICAL login V-353d MFA-required branch handler pinned. The login response is a discriminated union — `{session}` OR `{mfa_required: true, challenge_token, ...}`. The branch handler surfaces the second variant as a clear banner instead of silently redirecting MFA-users back to /login.', () => {
+  it('CRITICAL login V-353d/W528 MFA-required branch handler pinned. The login response is a discriminated union — `{session}` OR `{mfa_required: true, challenge_token, ...}`. W528: the second variant opens the MFA challenge form (startMfaChallenge) — the pre-W528 dead-end banner locked MFA-enrolled customers out of the dashboard.', () => {
     const l = read(LOGIN);
 
     expect(l).toMatch(/V-353d — \/v1\/auth\/login returns a discriminated union/);
@@ -121,16 +121,16 @@ describe('W737 dashboard signup + login pages V-079 parity', () => {
       /either `\{ session: \.\.\. \}` \(no MFA enrolled\) or\s*\n\s+\/\/ `\{ mfa_required: true, challenge_token, \.\.\. \}`/,
     );
     expect(l).toMatch(/if \(body && body\.mfa_required === true\) \{/);
-    expect(l).toMatch(/This account has MFA enabled\. The web-based MFA challenge/);
-    expect(l).toMatch(/UI is not available yet — please sign in via the API or/);
-    expect(l).toMatch(/temporarily disable MFA from the CLI \(see \/docs\/api-keys\)/);
+    expect(l).toMatch(/startMfaChallenge\(body\.challenge_token\);/);
   });
 
-  it('CRITICAL login V-353d redirect-bounce-loop-avoidance framing pinned. The wording — "so MFA-enrolled users aren\'t silently redirected to / with no session set (which would bounce straight back to /login)" — is what justifies the banner instead of silent-redirect. Drift to dropping would let MFA-users see an infinite-redirect loop.', () => {
+  it('CRITICAL login W528 MFA challenge step pinned: hidden form with one-time-code input + recovery-code toggle, POST /v1/auth/mfa/challenge, shared completeSession path. Drift to dropping would re-lock MFA-enrolled users out of the web dashboard.', () => {
     const l = read(LOGIN);
-    expect(l).toMatch(
-      /surface the second branch\s*\n\s+\/\/ as a clear banner so MFA-enrolled users aren't silently\s*\n\s+\/\/ redirected to \/ with no session set \(which would bounce\s*\n\s+\/\/ straight back to \/login\)/,
-    );
+    expect(l).toMatch(/data-form="mfa"/);
+    expect(l).toMatch(/autocomplete="one-time-code"/);
+    expect(l).toMatch(/data-mfa-toggle-recovery/);
+    expect(l).toMatch(/\/v1\/auth\/mfa\/challenge/);
+    expect(l).toMatch(/function completeSession\(body\)/);
   });
 
   it('CRITICAL login V-269 signup-link ?next= preservation pinned (mirrors signup→login). Drift would break the cross-link deep-link continuity.', () => {

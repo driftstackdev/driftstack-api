@@ -68,6 +68,54 @@ const apiBaseUrl = resolveApiBaseUrl();
         <button type="submit" class="btn-primary w-full">Sign in</button>
       </form>
 
+      <!-- W528 — MFA challenge step. Hidden until /v1/auth/login returns
+           { mfa_required: true, challenge_token }; then the password form
+           hides and this one shows. Submits POST /v1/auth/mfa/challenge
+           with { challenge_token, code } (or { recovery_code } when the
+           recovery toggle is active) → { session } → same redirect path
+           as a plain login. Pre-W528 this branch dead-ended with a banner
+           telling the customer to use the API instead — an MFA-enrolled
+           customer could not sign in to the dashboard at all. -->
+      <form data-form="mfa" class="hidden space-y-5" aria-label="Two-factor verification">
+        <p class="text-sm text-ink-secondary">
+          Enter the 6-digit code from your authenticator app.
+        </p>
+        <div data-mfa-code-row>
+          <label class="form-label" for="login-mfa-code">Authentication code</label>
+          <input
+            id="login-mfa-code"
+            name="mfa-code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            pattern="\d{6}"
+            maxlength="6"
+            class="form-input font-mono tracking-widest"
+            placeholder="123456"
+          />
+        </div>
+        <div data-mfa-recovery-row class="hidden">
+          <label class="form-label" for="login-mfa-recovery">Recovery code</label>
+          <input
+            id="login-mfa-recovery"
+            name="mfa-recovery"
+            type="text"
+            autocomplete="off"
+            class="form-input font-mono"
+            placeholder="xxxx-xxxx-xxxx"
+          />
+        </div>
+        <button type="submit" class="btn-primary w-full">Verify</button>
+        <p class="text-xs text-ink-muted">
+          Lost your device?
+          <button
+            type="button"
+            data-mfa-toggle-recovery
+            class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+          >Use a recovery code instead</button>
+        </p>
+      </form>
+
       <p class="mt-6 text-xs text-ink-muted">
         <a href="/forgot-password" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
           >Forgot your password?</a
@@ -245,32 +293,112 @@ const apiBaseUrl = resolveApiBaseUrl();
           .then((body) => {
             // V-353d — /v1/auth/login returns a discriminated union:
             // either `{ session: ... }` (no MFA enrolled) or
-            // `{ mfa_required: true, challenge_token, ... }`. Until
-            // the MFA challenge UI lands, surface the second branch
-            // as a clear banner so MFA-enrolled users aren't silently
-            // redirected to / with no session set (which would bounce
-            // straight back to /login).
+            // `{ mfa_required: true, challenge_token, ... }`. W528 —
+            // the second branch now opens the MFA challenge step (was a
+            // dead-end use-the-API-instead banner that locked
+            // MFA-enrolled customers out of the dashboard entirely).
             if (body && body.mfa_required === true) {
-              showBanner(
-                'This account has MFA enabled. The web-based MFA challenge ' +
-                  'UI is not available yet — please sign in via the API or ' +
-                  'temporarily disable MFA from the CLI (see /docs/api-keys).',
-              );
+              startMfaChallenge(body.challenge_token);
               return;
             }
-            const session = body.session || {};
-            if (session.token) {
-              localStorage.setItem('ds_web_session_token', session.token);
-            }
-            // Honor ?next= round-trip; fall back to / for the typical
-            // post-login landing.
-            window.location.href = next ? next : '/';
+            completeSession(body);
           })
           .catch((err) => {
             showBanner(err && err.message ? err.message : 'Sign-in failed.');
           })
           .finally(() => setSubmitting(false));
       });
+
+      // Shared session-completion path: plain login + MFA challenge both
+      // land here with { session: { token } }.
+      function completeSession(body) {
+        const session = (body && body.session) || {};
+        if (session.token) {
+          localStorage.setItem('ds_web_session_token', session.token);
+        }
+        // Honor ?next= round-trip; fall back to / for the typical
+        // post-login landing.
+        window.location.href = next ? next : '/';
+      }
+
+      // ── W528 — MFA challenge step ──────────────────────────────────
+      const mfaForm = root.querySelector('[data-form="mfa"]');
+      const mfaCodeRow = root.querySelector('[data-mfa-code-row]');
+      const mfaRecoveryRow = root.querySelector('[data-mfa-recovery-row]');
+      const mfaToggle = root.querySelector('[data-mfa-toggle-recovery]');
+      const mfaCodeInput = root.querySelector('#login-mfa-code');
+      const mfaRecoveryInput = root.querySelector('#login-mfa-recovery');
+      let mfaChallengeToken = null;
+      let mfaUsingRecovery = false;
+
+      function startMfaChallenge(challengeToken) {
+        mfaChallengeToken = challengeToken;
+        form.classList.add('hidden');
+        mfaForm.classList.remove('hidden');
+        if (mfaCodeInput) mfaCodeInput.focus();
+      }
+
+      if (mfaToggle) {
+        mfaToggle.addEventListener('click', () => {
+          mfaUsingRecovery = !mfaUsingRecovery;
+          mfaCodeRow.classList.toggle('hidden', mfaUsingRecovery);
+          mfaRecoveryRow.classList.toggle('hidden', !mfaUsingRecovery);
+          mfaToggle.textContent = mfaUsingRecovery
+            ? 'Use an authenticator code instead'
+            : 'Use a recovery code instead';
+          const active = mfaUsingRecovery ? mfaRecoveryInput : mfaCodeInput;
+          if (active) active.focus();
+        });
+      }
+
+      if (mfaForm) {
+        const mfaSubmit = mfaForm.querySelector('button[type="submit"]');
+        mfaForm.addEventListener('submit', (ev) => {
+          ev.preventDefault();
+          banner.classList.add('hidden');
+          const code = mfaCodeInput ? mfaCodeInput.value.trim() : '';
+          const recovery = mfaRecoveryInput ? mfaRecoveryInput.value.trim() : '';
+          const payload = mfaUsingRecovery
+            ? { challenge_token: mfaChallengeToken, recovery_code: recovery }
+            : { challenge_token: mfaChallengeToken, code: code };
+          if (mfaUsingRecovery ? recovery.length === 0 : !/^\d{6}$/.test(code)) {
+            showBanner(
+              mfaUsingRecovery
+                ? 'Enter one of your recovery codes.'
+                : 'Enter the 6-digit code from your authenticator app.',
+            );
+            return;
+          }
+          if (mfaSubmit) {
+            mfaSubmit.disabled = true;
+            mfaSubmit.setAttribute('aria-busy', 'true');
+          }
+          fetch(apiBaseUrl + '/v1/auth/mfa/challenge', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(payload),
+          })
+            .then((r) =>
+              r.ok
+                ? r.json()
+                : r
+                    .json()
+                    .then((b) =>
+                      Promise.reject(new Error(b.detail || 'HTTP ' + r.status.toString())),
+                    ),
+            )
+            .then((body) => completeSession(body))
+            .catch((err) => {
+              showBanner(err && err.message ? err.message : 'Verification failed. Try again.');
+            })
+            .finally(() => {
+              if (mfaSubmit) {
+                mfaSubmit.disabled = false;
+                mfaSubmit.setAttribute('aria-busy', 'false');
+              }
+            });
+        });
+      }
 
       // V-667.C — bind OAuth provider buttons. On click, POST
       // /v1/auth/oauth-client/start { provider, redirect_to } → take

@@ -61,13 +61,14 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
     );
   });
 
-  it("V-353d MFA-required branch framing pinned: '/v1/auth/login returns a discriminated union: either { session: ... } (no MFA enrolled) or { mfa_required: true, challenge_token, ... }. Until the MFA challenge UI lands, surface the second branch as a clear banner so MFA-enrolled users aren't silently redirected to / with no session set (which would bounce straight back to /login).' — pinned so the temporary 'MFA UI not yet built' banner doesn't disappear before the actual UI lands (drift to dropping would silently regress MFA-enrolled users)", () => {
+  it("V-353d/W528 MFA-required branch pinned: the login union's mfa_required variant opens the MFA challenge step (startMfaChallenge) — W528 replaced the temporary 'UI not available yet' dead-end banner that locked MFA-enrolled customers out of the dashboard", () => {
     expect(body).toMatch(
-      /\/\/ V-353d — \/v1\/auth\/login returns a discriminated union:\s*\n?\s*\/\/ either `\{ session: \.\.\. \}` \(no MFA enrolled\) or\s*\n?\s*\/\/ `\{ mfa_required: true, challenge_token, \.\.\. \}`\. Until\s*\n?\s*\/\/ the MFA challenge UI lands, surface the second branch\s*\n?\s*\/\/ as a clear banner so MFA-enrolled users aren't silently\s*\n?\s*\/\/ redirected to \/ with no session set \(which would bounce\s*\n?\s*\/\/ straight back to \/login\)\./,
+      /if \(body && body\.mfa_required === true\) \{\s*\n?\s*startMfaChallenge\(body\.challenge_token\);\s*\n?\s*return;\s*\n?\s*\}/,
     );
-    expect(body).toMatch(
-      /if \(body && body\.mfa_required === true\) \{\s*\n?\s*showBanner\(\s*\n?\s*'This account has MFA enabled\. The web-based MFA challenge ' \+\s*\n?\s*'UI is not available yet — please sign in via the API or ' \+\s*\n?\s*'temporarily disable MFA from the CLI \(see \/docs\/api-keys\)\.',\s*\n?\s*\);\s*\n?\s*return;\s*\n?\s*\}/,
-    );
+    expect(body).toMatch(/data-form="mfa"/);
+    expect(body).toMatch(/\/v1\/auth\/mfa\/challenge/);
+    expect(body).toMatch(/recovery_code: recovery/);
+    expect(body).not.toMatch(/not available yet/);
   });
 
   it("autocomplete='current-password' on password input (NOT new-password — distinct from signup/reset) — pinned so browsers + password managers correctly auto-fill from the customer's vault on sign-in (drift to new-password would prompt the customer to CREATE a new password instead of using the existing one)", () => {
@@ -82,10 +83,11 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
     );
   });
 
-  it("Success path: session.token → localStorage.setItem('ds_web_session_token', session.token) + window.location.href = next ? next : '/' — pinned so the post-login redirect honors next= but falls back to dashboard root (drift to forcing /welcome would break returning-user flow + drift to dropping localStorage write would not persist the session)", () => {
+  it("Success path (W528: shared completeSession for plain login + MFA challenge): session.token → localStorage.setItem('ds_web_session_token', ...) + window.location.href = next ? next : '/' — pinned so the post-login redirect honors next= but falls back to dashboard root", () => {
     expect(body).toMatch(
-      /const session = body\.session \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);\s*\n?\s*\}\s*\n?\s*\/\/ Honor \?next= round-trip; fall back to \/ for the typical\s*\n?\s*\/\/ post-login landing\.\s*\n?\s*window\.location\.href = next \? next : '\/';/,
+      /function completeSession\(body\) \{\s*\n?\s*const session = \(body && body\.session\) \|\| \{\};\s*\n?\s*if \(session\.token\) \{\s*\n?\s*localStorage\.setItem\('ds_web_session_token', session\.token\);\s*\n?\s*\}/,
     );
+    expect(body).toMatch(/window\.location\.href = next \? next : '\/';/);
   });
 
   it("problem+json error surfacing on login: r.json().then((b) => Promise.reject(new Error(b.detail || 'HTTP N'))) — pinned so server-returned auth-specific error messages (like 'Email or password is incorrect' or rate-limit detail) reach the customer banner (drift to bare 'HTTP 401' would hide whether it was a bad password vs a rate-limit hit)", () => {

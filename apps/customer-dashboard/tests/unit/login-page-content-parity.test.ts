@@ -50,14 +50,16 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(body).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
   });
 
-  it('V-353d MFA-required branch handled (no silent redirect-loop)', () => {
+  it('V-353d/W528 MFA-required branch opens the challenge form (no dead-end banner, no silent redirect-loop)', () => {
     expect(body).toMatch(/V-353d/);
     expect(body).toMatch(/body\.mfa_required === true/);
-    expect(body).toMatch(/This account has MFA enabled/);
-    // Workaround pointer: API or CLI route (copy is split across
-    // multi-line string concatenation, so check the two halves).
-    expect(body).toMatch(/sign in via the API or/);
-    expect(body).toMatch(/temporarily disable MFA from the CLI/);
+    // W528 — the branch now starts the challenge step instead of the old
+    // "UI not available yet" dead-end that locked MFA users out.
+    expect(body).toMatch(/startMfaChallenge\(body\.challenge_token\)/);
+    expect(body).toMatch(/data-form="mfa"/);
+    expect(body).toMatch(/\/v1\/auth\/mfa\/challenge/);
+    expect(body).toMatch(/autocomplete="one-time-code"/);
+    expect(body).not.toMatch(/not available yet/);
   });
 
   it("V-269 ?next= preserved on /signup cross-link (deep-link doesn't leak)", () => {
