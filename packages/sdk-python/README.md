@@ -149,6 +149,13 @@ A complete stdlib-only receiver lives in [`examples/webhook_receiver.py`](exampl
 ## Examples
 
 - [`quickstart.py`](examples/quickstart.py) — minimal create/navigate/capture/destroy.
+- [`agent_chat.py`](examples/agent_chat.py) — AI agent session: create, send a task message, poll status, close.
+- [`profile_management.py`](examples/profile_management.py) — persistent profiles: create, update, clone, iterate, delete.
+- [`pagination.py`](examples/pagination.py) — cursor pagination over list endpoints.
+- [`billing_flow.py`](examples/billing_flow.py) — billing state, checkout session, portal session.
+- [`crypto_checkout.py`](examples/crypto_checkout.py) — crypto checkout + order lifecycle (idempotency-key pattern).
+- [`egress_flow.py`](examples/egress_flow.py) — per-session SOCKS5 proxy config.
+- [`egress_openvpn.py`](examples/egress_openvpn.py) — OpenVPN egress variant.
 - [`error_handling.py`](examples/error_handling.py) — granular catch + custom retry loop.
 - [`webhook_receiver.py`](examples/webhook_receiver.py) — stdlib HTTP receiver with signature verify + dispatch.
 - [`langchain_tool.py`](examples/langchain_tool.py) — LangChain `Tool` adapter for AI-agent QA pipelines.

@@ -202,6 +202,14 @@ The verifier uses HMAC-SHA256 with constant-time comparison and rejects timestam
 See [`examples/`](./examples/) for complete runnable demos:
 
 - `quickstart.ts` — happiest path, end-to-end
+- `agent-chat.ts` — AI agent session: create, send a task message, poll status, close
+- `profile-management.ts` — persistent profiles: create, update, clone, iterate, delete
+- `pagination.ts` — cursor pagination over list endpoints
+- `billing-flow.ts` — billing state, checkout session, portal session
+- `crypto-checkout.ts` — crypto checkout + order lifecycle (idempotency-key pattern)
+- `egress-flow.ts` — per-session SOCKS5 proxy config
+- `egress-openvpn.ts` — OpenVPN egress variant
+- `webhook-receiver.ts` — signature-verified webhook receiver
 - `error-handling.ts` — every documented error class
 - `rate-limit-handling.ts` — explicit retry-after honouring on top of the built-in retry
 

@@ -140,6 +140,13 @@ A complete stdlib-only receiver lives in [`examples/webhook_receiver`](examples/
 ## Examples
 
 - [`quickstart`](examples/quickstart/main.go) — minimal create/navigate/capture/destroy.
+- [`agent_chat`](examples/agent_chat/main.go) — AI agent session: create, send a task message, poll status, close.
+- [`profile_management`](examples/profile_management/main.go) — persistent profiles: create, update, clone, iterate, delete.
+- [`pagination`](examples/pagination/main.go) — cursor pagination over list endpoints.
+- [`billing_flow`](examples/billing_flow/main.go) — billing state, checkout session, portal session.
+- [`crypto_checkout`](examples/crypto_checkout/main.go) — crypto checkout + order lifecycle (idempotency-key pattern).
+- [`egress_flow`](examples/egress_flow/main.go) — per-session SOCKS5 proxy config.
+- [`egress_openvpn`](examples/egress_openvpn/main.go) — OpenVPN egress variant.
 - [`error_handling`](examples/error_handling/main.go) — `errors.As` + `errors.Is` patterns and a custom retry loop.
 - [`webhook_receiver`](examples/webhook_receiver/main.go) — stdlib HTTP receiver verifying signatures + dispatching by event type.
 - [`goroutine_pool`](examples/goroutine_pool/main.go) — fan-out N concurrent session ops with a worker pool.
