@@ -41,6 +41,12 @@ describe('routes/session-proxy content parity', () => {
     );
   });
 
+  it("W495 write-scope gate pinned: POST /v1/sessions/:id/proxy carries app.requireScope('write') — setting a session's egress proxy is a session mutation (write:sessions class). A read-only key is blocked; drift to dropping it lets a read-only key set session egress.", () => {
+    expect(body).toMatch(
+      /'\/v1\/sessions\/:id\/proxy',[\s\S]*?\{ preHandler: \[app\.requireAuth, app\.requireScope\('write'\), app\.rateLimit\('global'\)\] \},/,
+    );
+  });
+
   it("Cross-agent contract body-shape framing pinned: '@driftstack/api-types/egress (EG-API-1.1)' + 3-field body shape (session_id matching URL :id + proxy + optional egress_safeguard defaulting safeguards-on). Drift to dropping the session_id-matches-URL check would let a body carry a different id than the URL and create an audit-log mismatch", () => {
     expect(body).toMatch(
       /\/\/ The route consumes the cross-agent contract schema from\s*\n?\s*\/\/ `@driftstack\/api-types\/egress` \(EG-API-1\.1\)\. Body shape:/,

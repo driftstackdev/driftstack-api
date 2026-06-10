@@ -56,7 +56,9 @@ export function registerSessionProxyRoutes(
 
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/proxy',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // W495 — write-scope: setting a session's egress proxy is a session
+    // mutation, consistent with navigate/interact/capture (write:sessions).
+    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
     (req): never => {
       requireCtx(req);
       const { id } = req.params;
