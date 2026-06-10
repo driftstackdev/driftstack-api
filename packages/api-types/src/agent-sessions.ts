@@ -54,3 +54,17 @@ export const ResumeSessionRequestSchema = z
   })
   .strict();
 export type ResumeSessionRequest = z.infer<typeof ResumeSessionRequestSchema>;
+
+/**
+ * W474 — POST /v1/agent-sessions/:id/resume response. The resume is a
+ * best-effort dispatch to the node running the session (inert unless the fleet
+ * control plane is wired), so the route returns 202 Accepted with the request
+ * acknowledgement rather than the post-resume session state.
+ */
+export const ResumeSessionResponseSchema = z
+  .object({
+    status: z.literal('resume_requested'),
+    session_id: z.string(),
+  })
+  .strict();
+export type ResumeSessionResponse = z.infer<typeof ResumeSessionResponseSchema>;

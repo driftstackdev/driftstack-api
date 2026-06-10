@@ -128,6 +128,8 @@ import {
   SavedProxyConfigSchema,
   AgentModelSchema,
   AgentSessionSchema,
+  ResumeSessionRequestSchema,
+  ResumeSessionResponseSchema,
   AgentIntentSchema,
   IntentResultSchema,
   RecipeSchema,
@@ -3259,6 +3261,37 @@ function buildRegistry(): OpenAPIRegistry {
       409: {
         description:
           'Session not mode=pair, or pair-mode state machine refused the transition (typed problem URI pair-mode-invalid-transition with from + transition extensions).',
+        content: problemContent,
+      },
+      ...errors4xx,
+    },
+  });
+  // W474 — POST /:id/resume. Resume a session the harness auto-paused on a
+  // detected bot-challenge, once the customer has resolved it. Peer to
+  // takeover/handback; previously absent from the spec (route + docs existed).
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions/{id}/resume',
+    summary: 'Resume an agent session the harness auto-paused on a detected bot-challenge',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      body: {
+        required: false,
+        content: {
+          'application/json': { schema: ResumeSessionRequestSchema },
+        },
+      },
+    },
+    responses: {
+      202: {
+        description:
+          'Resume requested. Best-effort dispatch to the node running the session (inert unless the fleet control plane is wired).',
+        content: { 'application/json': { schema: ResumeSessionResponseSchema } },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      409: {
+        description: 'Session is not active; resume requires an active (paused) session.',
         content: problemContent,
       },
       ...errors4xx,
