@@ -81,10 +81,13 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     expect(body).toMatch(/\{\(totalBytes \/ 1024 \/ 1024\)\.toFixed\(1\)\} MB/);
   });
 
-  it("Empty subcomponent: loading branch ('Loading recordings…' + 'Reading the recordings index from disk.') vs no-recordings branch with inline 24×24 svg + 'No recordings yet' h3 + 'Open a live session, click <Record>, and frames stream into memory while the session runs.' helper + persistence-coming-soon footer", () => {
+  it("Empty subcomponent: loading branch → <SkeletonRows> (W466) vs no-recordings branch with inline 24×24 svg + 'No recordings yet' h3 + 'Open a live session, click <Record>, and frames stream into memory while the session runs.' helper + persistence-coming-soon footer", () => {
+    // W466 — loading branch upgraded from a dashed-box text to the shared skeleton.
+    expect(body).toMatch(/import \{ SkeletonRows \} from '\.\.\/components\/Skeleton';/);
     expect(body).toMatch(
-      /function Empty\(\{ loading \}: \{ loading: boolean \}\): JSX\.Element \{\s*\n?\s*if \(loading\) \{\s*\n?\s*return \(\s*\n?\s*<div className="flex flex-1 flex-col items-center justify-center gap-2 rounded border border-dashed border-surface-divider px-8 py-12 text-center">\s*\n?\s*<span className="section-label">Loading recordings…<\/span>/,
+      /function Empty\(\{ loading \}: \{ loading: boolean \}\): JSX\.Element \{\s*\n?\s*if \(loading\) \{\s*\n?\s*return <SkeletonRows rows=\{4\} label="Loading recordings" \/>;/,
     );
+    expect(body).not.toMatch(/<span className="section-label">Loading recordings…<\/span>/);
     expect(body).toMatch(
       /<h3 className="text-base font-medium text-ink-primary">No recordings yet<\/h3>\s*\n?\s*<p className="max-w-md text-sm text-ink-secondary">\s*\n?\s*Recordings capture every frame of a live session for replay \+ audit\. Open a live session,\s*\n?\s*click <span className="mono">Record<\/span>, and frames stream into memory while the\s*\n?\s*session runs\.\s*\n?\s*<\/p>/,
     );

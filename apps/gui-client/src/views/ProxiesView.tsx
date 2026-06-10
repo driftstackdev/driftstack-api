@@ -8,6 +8,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { RelativeTime } from '../components/RelativeTime';
+import { SkeletonRows } from '../components/Skeleton';
 import {
   addProxy,
   listProxies,
@@ -171,12 +172,7 @@ export function ProxiesView(): JSX.Element {
 
 function Empty({ loading }: { loading: boolean }): JSX.Element {
   if (loading) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded border border-dashed border-surface-divider px-8 py-12 text-center">
-        <span className="section-label">Loading…</span>
-        <p className="max-w-md text-sm text-ink-secondary">Reading from local store.</p>
-      </div>
-    );
+    return <SkeletonRows rows={4} label="Loading proxies" />;
   }
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded border border-dashed border-surface-divider px-8 py-16 text-center">

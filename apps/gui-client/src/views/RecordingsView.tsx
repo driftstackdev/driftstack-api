@@ -4,6 +4,7 @@
 // playback view is reached by clicking a row.
 
 import { RelativeTime } from '../components/RelativeTime';
+import { SkeletonRows } from '../components/Skeleton';
 import {
   formatDuration,
   recordingDurationMs,
@@ -123,14 +124,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
 
 function Empty({ loading }: { loading: boolean }): JSX.Element {
   if (loading) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded border border-dashed border-surface-divider px-8 py-12 text-center">
-        <span className="section-label">Loading recordings…</span>
-        <p className="max-w-md text-sm text-ink-secondary">
-          Reading the recordings index from disk.
-        </p>
-      </div>
-    );
+    return <SkeletonRows rows={4} label="Loading recordings" />;
   }
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded border border-dashed border-surface-divider px-8 py-16 text-center">
