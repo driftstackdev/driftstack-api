@@ -60,9 +60,14 @@ describe('W478.B apps/gui-client/src/views/SessionsListView.tsx content parity',
     expect(body).toMatch(/onClick=\{\(\) => void refetch\(\)\}/);
   });
 
-  it("State-machine render: loading 'Loading sessions…' role='status' + error 'Could not load sessions: ${message}' role='alert' status-error tints + ready empty 'No sessions yet.' + ready non-empty <table> with Id/URL/Status/Created columns + SessionStatusBadge size='sm' + fmtTime(s.createdAt) on Created col", () => {
+  it("State-machine render: loading → <SkeletonRows> (W465) + error 'Could not load sessions: ${message}' role='alert' status-error tints + ready empty 'No sessions yet.' + ready non-empty <table> with Id/URL/Status/Created columns + SessionStatusBadge size='sm' + fmtTime(s.createdAt) on Created col", () => {
+    // W465 — loading state upgraded from a bare <p> to the shared <SkeletonRows>.
+    expect(body).toMatch(/import \{ SkeletonRows \} from '\.\.\/components\/Skeleton';/);
     expect(body).toMatch(
-      /\{state\.kind === 'loading' && \(\s*\n?\s*<p className="text-sm text-ink-secondary" role="status">\s*\n?\s*Loading sessions…\s*\n?\s*<\/p>\s*\n?\s*\)\}/,
+      /\{state\.kind === 'loading' && <SkeletonRows rows=\{5\} label="Loading sessions" \/>\}/,
+    );
+    expect(body).not.toMatch(
+      /<p className="text-sm text-ink-secondary" role="status">\s*\n?\s*Loading sessions…/,
     );
     expect(body).toMatch(
       /\{state\.kind === 'error' && \(\s*\n?\s*<div\s*\n?\s*role="alert"\s*\n?\s*className="rounded border border-status-error\/60 bg-status-error\/10 p-3 text-sm text-status-error"\s*\n?\s*>\s*\n?\s*Could not load sessions: \{state\.message\}\s*\n?\s*<\/div>\s*\n?\s*\)\}/,

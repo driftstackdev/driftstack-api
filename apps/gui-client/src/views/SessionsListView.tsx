@@ -9,6 +9,7 @@
 import { useSessionsList } from '../lib/use-sessions-list';
 import { SessionStatusBadge } from '../components/SessionStatusBadge';
 import { EmptyState } from '../components/EmptyState';
+import { SkeletonRows } from '../components/Skeleton';
 
 export interface SessionsListViewProps {
   limit?: number;
@@ -42,11 +43,7 @@ export function SessionsListView(props: SessionsListViewProps): JSX.Element {
         </button>
       </header>
 
-      {state.kind === 'loading' && (
-        <p className="text-sm text-ink-secondary" role="status">
-          Loading sessions…
-        </p>
-      )}
+      {state.kind === 'loading' && <SkeletonRows rows={5} label="Loading sessions" />}
       {state.kind === 'error' && (
         <div
           role="alert"
