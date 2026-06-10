@@ -106,9 +106,9 @@ describe('W417.B apps/server/src/routes/account-web-sessions.ts content parity',
     );
   });
 
-  it("DELETE per-id: requireAuth + rateLimit('global'); 204 on success; NotFoundError 'Session not found.' when service returns false", () => {
+  it("DELETE per-id: requireAuth + requireScope('account_owner') (W492) + rateLimit('global'); 204 on success; NotFoundError 'Session not found.' when service returns false", () => {
     expect(body).toMatch(
-      /app\.delete<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/account\/web-sessions\/:id',\s*\n?\s*\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/,
+      /app\.delete<\{ Params: \{ id: string \} \}>\(\s*\n?\s*'\/v1\/account\/web-sessions\/:id',[\s\S]*?\{ preHandler: \[app\.requireAuth, app\.requireScope\('account_owner'\), app\.rateLimit\('global'\)\] \},/,
     );
     expect(body).toMatch(
       /const ok = await service\.revokeWebSessionForAccount\(ctx\.account\.id, sessionId\);\s*\n?\s*if \(!ok\) throw new NotFoundError\('Session not found\.'\);\s*\n?\s*reply\.code\(204\);/,

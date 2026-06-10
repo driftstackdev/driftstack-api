@@ -125,7 +125,11 @@ export function registerAccountWebSessionsRoutes(
 
   app.delete<{ Params: { id: string } }>(
     '/v1/account/web-sessions/:id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // W492 — account_owner: revoking sign-ins is account-security control
+    // (consistent with api-keys/account-audit). The dashboard's web-session
+    // key carries account_owner; a customer read/write API key cannot revoke
+    // dashboard sign-ins.
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
@@ -139,7 +143,8 @@ export function registerAccountWebSessionsRoutes(
 
   app.delete<{ Querystring: { keep?: string } }>(
     '/v1/account/web-sessions',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // W492 — account_owner: "sign out everywhere" is account-security control.
+    { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
