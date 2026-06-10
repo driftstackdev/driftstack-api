@@ -29,8 +29,10 @@ describe('W330.B /pricing hero baseline', () => {
   });
 
   it('subhead frames Manual vs API audience split', () => {
-    expect(body).toMatch(/Manual for humans clicking the GUI/);
-    expect(body).toMatch(/API for code calling the SDK/);
+    // W499 — assert the on-page hero subhead (stable), not the meta description
+    // (whose jargon was rewritten noob-friendly this wave).
+    expect(body).toMatch(/if a person is driving\s*\n?\s*sessions in our desktop app/);
+    expect(body).toMatch(/if your code is calling\s*\n?\s*the SDK/);
   });
 
   it('free-tier section is anchored at id="free"', () => {
