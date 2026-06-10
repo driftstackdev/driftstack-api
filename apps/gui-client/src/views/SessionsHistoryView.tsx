@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { EmptyState } from '../components/EmptyState';
 import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError, type Session } from '../lib/client';
 
@@ -109,9 +110,27 @@ export function SessionsHistoryView(): JSX.Element {
       )}
 
       {state.sessions.length === 0 && state.error === null && !state.loading && (
-        <div className="rounded border border-surface-divider bg-surface-raised p-8 text-center text-sm text-ink-secondary">
-          No terminated sessions yet. They show up here once destroyed or errored.
-        </div>
+        <EmptyState
+          icon={
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 3v5h5" />
+              <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+              <path d="M12 7v5l4 2" />
+            </svg>
+          }
+          title="No past sessions yet"
+          description="Sessions that have ended — destroyed or errored — show up here."
+        />
       )}
 
       {state.sessions.length > 0 && (

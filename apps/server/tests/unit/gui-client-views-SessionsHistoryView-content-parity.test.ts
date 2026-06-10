@@ -83,7 +83,7 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     );
   });
 
-  it("Render: 'History' section-label + 'Past sessions' h2 + 'Sessions that have ended (destroyed or errored). Active sessions live under \"Active\" in the sidebar.' subline + Refresh button disabled while loading + ErrorBanner with onDismiss=clear error + empty-state 'No terminated sessions yet. They show up here once destroyed or errored.' (when error===null && !loading)", () => {
+  it("Render: 'History' section-label + 'Past sessions' h2 + 'Sessions that have ended (destroyed or errored). Active sessions live under \"Active\" in the sidebar.' subline + Refresh button disabled while loading + ErrorBanner with onDismiss=clear error + empty-state <EmptyState title='No past sessions yet'> (W463 shared primitive, when error===null && !loading)", () => {
     expect(body).toMatch(/<h2[\s\S]*?Past sessions[\s\S]*?<\/h2>/);
     expect(body).toMatch(
       /Sessions that have ended \(destroyed or errored\)\. Active sessions live under "Active" in\s*\n?\s*the sidebar\./,
@@ -91,8 +91,17 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
     expect(body).toMatch(
       /\{state\.error !== null && \(\s*\n?\s*<ErrorBanner\s*\n?\s*message=\{state\.error\}\s*\n?\s*onDismiss=\{\(\) => setState\(\(s\) => \(\{ \.\.\.s, error: null \}\)\)\}\s*\n?\s*\/>\s*\n?\s*\)\}/,
     );
+    // W463 — empty state upgraded to the shared <EmptyState> primitive.
+    expect(body).toMatch(/import \{ EmptyState \} from '\.\.\/components\/EmptyState';/);
     expect(body).toMatch(
-      /\{state\.sessions\.length === 0 && state\.error === null && !state\.loading && \(\s*\n?\s*<div className="rounded border border-surface-divider bg-surface-raised p-8 text-center text-sm text-ink-secondary">\s*\n?\s*No terminated sessions yet\. They show up here once destroyed or errored\.\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
+      /state\.sessions\.length === 0 && state\.error === null && !state\.loading && \(\s*\n?\s*<EmptyState/,
+    );
+    expect(body).toMatch(/title="No past sessions yet"/);
+    expect(body).toMatch(
+      /description="Sessions that have ended — destroyed or errored — show up here\."/,
+    );
+    expect(body).not.toMatch(
+      /No terminated sessions yet\. They show up here once destroyed or errored\./,
     );
   });
 
