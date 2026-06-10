@@ -16233,6 +16233,25 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 8000
+                  },
+                  "approve_consequential_actions": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "category": {
+                          "type": "string",
+                          "enum": ["purchase", "payment", "account_deletion"]
+                        },
+                        "matched_text": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        }
+                      },
+                      "required": ["category", "matched_text"]
+                    },
+                    "maxItems": 20
                   }
                 },
                 "required": ["user_message"]

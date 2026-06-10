@@ -29,6 +29,7 @@ import {
   AccountSchema,
   AccountStatusSchema,
   AccountTierSchema,
+  ConsequentialActionCategorySchema,
   AdminAccountResponseSchema,
   CreateProfileRequestSchema,
   ListProfilesResponseSchema,
@@ -3134,7 +3135,19 @@ function buildRegistry(): OpenAPIRegistry {
       body: {
         content: {
           'application/json': {
-            schema: z.object({ user_message: z.string().min(1).max(8000) }),
+            schema: z.object({
+              user_message: z.string().min(1).max(8000),
+              // W443/W445 — approve consequential actions flagged on a prior turn.
+              approve_consequential_actions: z
+                .array(
+                  z.object({
+                    category: ConsequentialActionCategorySchema,
+                    matched_text: z.string().min(1).max(200),
+                  }),
+                )
+                .max(20)
+                .optional(),
+            }),
             example: { user_message: 'Go to the pricing page and take a screenshot.' },
           },
         },

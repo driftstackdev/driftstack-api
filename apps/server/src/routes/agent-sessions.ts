@@ -21,11 +21,13 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   AgentModelSchema,
+  ConsequentialActionCategorySchema,
   SendInputEventRequestSchema,
   ResumeSessionRequestSchema,
   type AgentModel,
 } from '@driftstack/api-types';
 import type { AgentRuntime } from '../services/agent-runtime.js';
+import { consequentialSignature } from '../services/agent-executor.js';
 import type { DecomposeUsage } from '../services/agent-decomposer.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { ProfilesService } from '../services/profiles.js';
@@ -105,6 +107,21 @@ const CreateAgentSessionRequestSchema = z.object({
 
 const RunTurnRequestSchema = z.object({
   user_message: z.string().min(1).max(8000),
+  // W443/W445 — consequential actions the customer approves for this turn. The
+  // client echoes back the {category, matched_text} from a prior
+  // confirmation_required result; the route maps them to signatures so the
+  // executor dispatches the (re-planned) action instead of halting again.
+  approve_consequential_actions: z
+    .array(
+      z
+        .object({
+          category: ConsequentialActionCategorySchema,
+          matched_text: z.string().min(1).max(200),
+        })
+        .strict(),
+    )
+    .max(20)
+    .optional(),
 });
 
 // Slice 3 (Wave 29-NNN ARC 3) — POST /v1/agent-sessions/:id/mode body.
@@ -1591,10 +1608,22 @@ export function registerAgentSessionsRoutes(
             'or supply x-byok-anthropic-api-key on the request header.',
         );
       }
+      // W443/W445 — map approved {category, matched_text} pairs to executor
+      // signatures so a re-planned consequential action dispatches instead of
+      // re-halting for confirmation.
+      const approvedConsequentialActions =
+        parsed.data.approve_consequential_actions !== undefined
+          ? new Set(
+              parsed.data.approve_consequential_actions.map((a) =>
+                consequentialSignature(a.category, a.matched_text),
+              ),
+            )
+          : undefined;
       const result = await runtime.runTurn({
         agentSessionId: req.params.id,
         userMessage: parsed.data.user_message,
         ...(resolvedByokKey !== undefined ? { byokApiKey: resolvedByokKey } : {}),
+        ...(approvedConsequentialActions !== undefined ? { approvedConsequentialActions } : {}),
         keySource,
       });
       if (result.kind === 'session-closed') {

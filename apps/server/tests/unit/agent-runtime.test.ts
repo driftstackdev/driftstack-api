@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { AgentRuntime, classifyDecomposerError } from '../../src/services/agent-runtime.js';
 import { DeterministicAgentDecomposer } from '../../src/services/agent-decomposer-deterministic.js';
-import { StubAgentExecutor } from '../../src/services/agent-executor.js';
+import { StubAgentExecutor, consequentialSignature } from '../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../src/services/agent-sessions.js';
 import type { DecomposeArgs } from '../../src/services/agent-decomposer.js';
 
@@ -536,5 +536,44 @@ describe('Q.1.b classifyDecomposerError', () => {
     expect(classifyDecomposerError(null)).toBe('fatal');
     expect(classifyDecomposerError(undefined)).toBe('fatal');
     expect(classifyDecomposerError({ random: 'object' })).toBe('fatal');
+  });
+});
+
+describe('AgentRuntime.runTurn — consequential-action confirmation (W443/W445)', () => {
+  it('halts on a consequential plan, then dispatches once the action is approved', async () => {
+    const planDecomposer = {
+      decompose: (_args: DecomposeArgs) =>
+        Promise.resolve({
+          kind: 'plan' as const,
+          intents: [{ kind: 'interact' as const, action: 'tap' as const, selector: 'Buy Now' }],
+          tokensConsumed: 50,
+        }),
+    };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer: planDecomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+    });
+    // (1) no approval → the executor halts awaiting confirmation.
+    const first = await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'buy the thing' });
+    expect(first.kind).toBe('plan-executed');
+    if (first.kind === 'plan-executed') {
+      expect(first.executor.awaitingConfirmation).toBe(true);
+      expect(first.executor.results.at(-1)?.kind).toBe('confirmation_required');
+    }
+    // (2) the customer echoes the approval → the executor dispatches (no halt).
+    const second = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'yes, proceed',
+      approvedConsequentialActions: new Set([consequentialSignature('purchase', 'Buy Now')]),
+    });
+    expect(second.kind).toBe('plan-executed');
+    if (second.kind === 'plan-executed') {
+      expect(second.executor.awaitingConfirmation).toBeUndefined();
+      expect(second.executor.ok).toBe(true);
+    }
   });
 });

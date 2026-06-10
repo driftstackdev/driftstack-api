@@ -46,6 +46,14 @@ export interface RunTurnArgs {
    * generic 'agent_decomposer' record_type.
    */
   keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
+  /**
+   * W443/W445 — consequential-action signatures the customer approved on a
+   * prior turn (the executor halted with `confirmation_required`). Threaded to
+   * the executor so the re-planned consequential action dispatches instead of
+   * halting again. The route maps the request's {category, matched_text} pairs
+   * to signatures via `consequentialSignature`.
+   */
+  approvedConsequentialActions?: ReadonlySet<string>;
 }
 
 export type RunTurnResult =
@@ -336,6 +344,9 @@ export class AgentRuntime {
     const executorResult = await this.deps.executor.execute({
       sessionId: targetSessionId,
       plan: decomposed,
+      ...(args.approvedConsequentialActions !== undefined
+        ? { approvedConsequentialActions: args.approvedConsequentialActions }
+        : {}),
     });
 
     // Q.5.c — persist the plan's structured intents on the
