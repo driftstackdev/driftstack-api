@@ -38,6 +38,8 @@ describe('W250.C SubscribableWebhookEventTypeSchema stability', () => {
       // on pending/confirming/partial → paid|failed terminal transitions.
       'crypto.order.paid',
       'crypto.order.failed',
+      // W393 challenge-handling — subscribable challenge alerts.
+      'session.challenge_detected',
     ]) {
       expect(live.has(evt), `missing event ${evt}`).toBe(true);
     }
@@ -55,9 +57,10 @@ describe('W250.C SubscribableWebhookEventTypeSchema stability', () => {
   });
 
   it('exposes exactly the documented number of live events', () => {
-    // Eight shipped today (5 original + Arc 5 EGRESS eg.7 + V-666
-    // crypto.order.paid/failed). Increment if/when the schema grows;
-    // this is intentionally tight so a silent enum addition fails CI.
-    expect(live.size).toBe(8);
+    // Nine shipped today (5 original + Arc 5 EGRESS eg.7 + V-666
+    // crypto.order.paid/failed + W393 session.challenge_detected).
+    // Increment if/when the schema grows; this is intentionally tight
+    // so a silent enum addition fails CI.
+    expect(live.size).toBe(9);
   });
 });

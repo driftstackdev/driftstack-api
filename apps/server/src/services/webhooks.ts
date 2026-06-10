@@ -36,7 +36,11 @@ export type WebhookEventType =
   // Fired by CryptoOrdersService.applyIpnStatus on the
   // pending/confirming/partial → paid|failed terminal transitions.
   | 'crypto.order.paid'
-  | 'crypto.order.failed';
+  | 'crypto.order.failed'
+  // W393 — challenge-handling. Fired when the harness ChallengeDetector flags a
+  // bot-check + the control plane relays it to the customer (session.challenge_
+  // detected webhook + transcript SSE). Migration 0070 ALTERs the pgEnum.
+  | 'session.challenge_detected';
 
 export type WebhookDeliveryStatus = 'pending' | 'in_flight' | 'delivered' | 'failed' | 'dlq';
 

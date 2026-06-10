@@ -26,7 +26,12 @@ const PAGES_DIR = join(REPO, 'apps', 'marketing-site', 'src', 'pages');
 /** Event types that are DECLARED in the schema but intentionally not
  *  marketed yet (no concrete emitter wired). When they graduate to
  *  LIVE, remove them from this set + update the hub copy. */
-const DECLARED_NOT_LIVE = new Set<string>(['session.egress_capability_changed']);
+const DECLARED_NOT_LIVE = new Set<string>([
+  'session.egress_capability_changed',
+  // W393 — in the enum + subscribable, but the relay emitter wires in a
+  // follow-up slice; not marketed as LIVE in the hub until then.
+  'session.challenge_detected',
+]);
 
 function read(): string {
   return readFileSync(DOC_PATH, 'utf8');

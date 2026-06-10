@@ -124,6 +124,11 @@ const (
 	// so crypto-checkout integrators can react in their own accounting.
 	EventCryptoOrderPaid   WebhookEventType = "crypto.order.paid"
 	EventCryptoOrderFailed WebhookEventType = "crypto.order.failed"
+	// W393 — challenge-handling. Fired when the harness ChallengeDetector flags
+	// a bot-check (DataDome/Arkose/PerimeterX/AWS-WAF/GeeTest/…) and the control
+	// plane relays it. Subscribable so customers wire challenge alerts into their
+	// own ops surface; the harness auto-pauses + the customer resumes.
+	EventSessionChallengeDetected WebhookEventType = "session.challenge_detected"
 )
 
 // WebhookDeliveryStatus.

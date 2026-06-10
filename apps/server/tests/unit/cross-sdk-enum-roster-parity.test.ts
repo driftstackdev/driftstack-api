@@ -121,6 +121,7 @@ describe('v2-#14 cross-SDK enum roster parity', () => {
       'test.ping',
       'crypto.order.paid',
       'crypto.order.failed',
+      'session.challenge_detected',
     ]);
 
     const go = read(SDK_GO_TYPES);
@@ -133,6 +134,7 @@ describe('v2-#14 cross-SDK enum roster parity', () => {
     expect(go).toMatch(/"test\.ping"/);
     expect(go).toMatch(/"crypto\.order\.paid"/);
     expect(go).toMatch(/"crypto\.order\.failed"/);
+    expect(go).toMatch(/"session\.challenge_detected"/);
   });
 
   it('CRITICAL no SDK exports an enum value that api-types does NOT — drift would surface customer-visible values without a source-of-truth pin', () => {

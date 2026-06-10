@@ -142,6 +142,10 @@ export const webhookEventType = pgEnum('webhook_event_type', [
   // as the emitter sink now that the enum carries these values.
   'crypto.order.paid',
   'crypto.order.failed',
+  // W393 — challenge-handling. Fired when the harness ChallengeDetector flags a
+  // bot-check + the control plane relays it. Migration 0070 ALTERs the existing
+  // pgEnum to add this value.
+  'session.challenge_detected',
 ]);
 
 export const webhookDeliveryStatus = pgEnum('webhook_delivery_status', [

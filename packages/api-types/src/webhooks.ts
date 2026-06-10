@@ -31,6 +31,12 @@ export const WebhookEventTypeSchema = z.enum([
   // Subscribable; see SubscribableWebhookEventTypeSchema below.
   'crypto.order.paid',
   'crypto.order.failed',
+  // W393 — challenge-handling. Fired when the harness ChallengeDetector flags a
+  // bot-check (DataDome/Arkose/PerimeterX/AWS-WAF/GeeTest/…) on a session and the
+  // control plane relays it. The harness auto-pauses; the customer resolves the
+  // challenge (e.g. in the live view) then resumes. Payload: { session_id,
+  // challenge_id, challenge: { type, confidence, detail? } }. Subscribable.
+  'session.challenge_detected',
 ]);
 export type WebhookEventType = z.infer<typeof WebhookEventTypeSchema>;
 
@@ -54,6 +60,9 @@ export const SubscribableWebhookEventTypeSchema = z.enum([
   // to terminal state transitions in their own accounting system.
   'crypto.order.paid',
   'crypto.order.failed',
+  // W393 — challenge-handling. Subscribable so customers wire challenge alerts
+  // into their own ops/notification surface (the live view also shows it).
+  'session.challenge_detected',
 ]);
 export type SubscribableWebhookEventType = z.infer<typeof SubscribableWebhookEventTypeSchema>;
 

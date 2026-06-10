@@ -1872,7 +1872,8 @@
                 "session.egress_capability_changed",
                 "test.ping",
                 "crypto.order.paid",
-                "crypto.order.failed"
+                "crypto.order.failed",
+                "session.challenge_detected"
               ]
             }
           },
@@ -1961,7 +1962,8 @@
                 "api_key.revoked",
                 "session.egress_capability_changed",
                 "crypto.order.paid",
-                "crypto.order.failed"
+                "crypto.order.failed",
+                "session.challenge_detected"
               ]
             },
             "minItems": 1,
@@ -2009,7 +2011,8 @@
                 "session.egress_capability_changed",
                 "test.ping",
                 "crypto.order.paid",
-                "crypto.order.failed"
+                "crypto.order.failed",
+                "session.challenge_detected"
               ]
             }
           },
@@ -2110,7 +2113,8 @@
               "session.egress_capability_changed",
               "test.ping",
               "crypto.order.paid",
-              "crypto.order.failed"
+              "crypto.order.failed",
+              "session.challenge_detected"
             ]
           },
           "status": {
@@ -7173,7 +7177,8 @@
                         "session.egress_capability_changed",
                         "test.ping",
                         "crypto.order.paid",
-                        "crypto.order.failed"
+                        "crypto.order.failed",
+                        "session.challenge_detected"
                       ]
                     },
                     "status": {
@@ -7330,7 +7335,8 @@
                         "session.egress_capability_changed",
                         "test.ping",
                         "crypto.order.paid",
-                        "crypto.order.failed"
+                        "crypto.order.failed",
+                        "session.challenge_detected"
                       ]
                     },
                     "status": {
@@ -7513,7 +7519,8 @@
                               "session.egress_capability_changed",
                               "test.ping",
                               "crypto.order.paid",
-                              "crypto.order.failed"
+                              "crypto.order.failed",
+                              "session.challenge_detected"
                             ]
                           },
                           "status": {
@@ -7667,7 +7674,8 @@
                         "session.egress_capability_changed",
                         "test.ping",
                         "crypto.order.paid",
-                        "crypto.order.failed"
+                        "crypto.order.failed",
+                        "session.challenge_detected"
                       ]
                     },
                     "status": {
@@ -7837,7 +7845,8 @@
                         "session.egress_capability_changed",
                         "test.ping",
                         "crypto.order.paid",
-                        "crypto.order.failed"
+                        "crypto.order.failed",
+                        "session.challenge_detected"
                       ]
                     },
                     "status": {
@@ -22852,7 +22861,8 @@
                         "api_key.revoked",
                         "session.egress_capability_changed",
                         "crypto.order.paid",
-                        "crypto.order.failed"
+                        "crypto.order.failed",
+                        "session.challenge_detected"
                       ]
                     },
                     "minItems": 1,
@@ -22912,7 +22922,8 @@
                           "session.egress_capability_changed",
                           "test.ping",
                           "crypto.order.paid",
-                          "crypto.order.failed"
+                          "crypto.order.failed",
+                          "session.challenge_detected"
                         ]
                       }
                     },
@@ -23107,7 +23118,8 @@
                                 "session.egress_capability_changed",
                                 "test.ping",
                                 "crypto.order.paid",
-                                "crypto.order.failed"
+                                "crypto.order.failed",
+                                "session.challenge_detected"
                               ]
                             }
                           },
@@ -23287,7 +23299,8 @@
                           "session.egress_capability_changed",
                           "test.ping",
                           "crypto.order.paid",
-                          "crypto.order.failed"
+                          "crypto.order.failed",
+                          "session.challenge_detected"
                         ]
                       }
                     },
@@ -23473,7 +23486,8 @@
                         "api_key.revoked",
                         "session.egress_capability_changed",
                         "crypto.order.paid",
-                        "crypto.order.failed"
+                        "crypto.order.failed",
+                        "session.challenge_detected"
                       ]
                     },
                     "minItems": 1,
@@ -23534,7 +23548,8 @@
                           "session.egress_capability_changed",
                           "test.ping",
                           "crypto.order.paid",
-                          "crypto.order.failed"
+                          "crypto.order.failed",
+                          "session.challenge_detected"
                         ]
                       }
                     },
@@ -23818,7 +23833,8 @@
                               "session.egress_capability_changed",
                               "test.ping",
                               "crypto.order.paid",
-                              "crypto.order.failed"
+                              "crypto.order.failed",
+                              "session.challenge_detected"
                             ]
                           },
                           "status": {

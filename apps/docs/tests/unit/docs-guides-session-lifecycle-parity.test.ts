@@ -46,8 +46,10 @@ describe('W259.D docs/guides/session-lifecycle ↔ live session surface parity',
     const sessionEvents = SubscribableWebhookEventTypeSchema.options.filter((e) =>
       e.startsWith('session.'),
     );
-    // Arc 5 EGRESS eg.7.e added session.egress_capability_changed.
+    // Arc 5 EGRESS eg.7.e added session.egress_capability_changed;
+    // W393 added session.challenge_detected (challenge-handling).
     expect(sessionEvents.sort()).toEqual([
+      'session.challenge_detected',
       'session.completed',
       'session.egress_capability_changed',
       'session.failed',

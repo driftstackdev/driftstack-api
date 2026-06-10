@@ -18,26 +18,27 @@ site (when it lands as a Tier 3 visual surface).
 
 ## Quick index
 
-| Event                               | Status     | When                                                             |
-| ----------------------------------- | ---------- | ---------------------------------------------------------------- |
-| `session.completed`                 | [LIVE]     | Session is destroyed cleanly                                     |
-| `session.failed`                    | [LIVE]     | Session terminates in `errored` state                            |
-| `api_key.revoked`                   | [LIVE]     | API key revoked (customer or admin)                              |
-| `quota.warning_80pct`               | [DECLARED] | Account hits 80% of tier quota                                   |
-| `quota.exceeded`                    | [DECLARED] | Account hits 100% of tier quota                                  |
-| `test.ping`                         | [LIVE]     | Synthetic test event from POST /v1/webhooks/:id/test             |
-| `session.egress_capability_changed` | [DECLARED] | Harness emitted an egress.capability_report for a SOCKS5 session |
-| `crypto.order.paid`                 | [LIVE]     | NowPayments-backed order transitioned to `paid` (V-666)          |
-| `crypto.order.failed`               | [LIVE]     | Crypto order moved to terminal `failed` (timeout/refund/expired) |
-| `session.created`                   | [PLANNED]  | Session transitions `creating` → `ready`                         |
-| `session.destroyed`                 | [PLANNED]  | Distinct from `session.completed` (no semantic shift)            |
-| `profile.created`                   | [PLANNED]  | New profile created                                              |
-| `profile.deleted`                   | [PLANNED]  | Profile deleted                                                  |
-| `api_key.minted`                    | [PLANNED]  | New API key issued                                               |
-| `subscription.changed`              | [PLANNED]  | Tier changed via Stripe                                          |
-| `subscription.cancelled`            | [PLANNED]  | Subscription cancelled                                           |
-| `webhook_endpoint.created`          | [PLANNED]  | New webhook endpoint registered                                  |
-| `webhook_endpoint.deleted`          | [PLANNED]  | Webhook endpoint deleted                                         |
+| Event                               | Status     | When                                                              |
+| ----------------------------------- | ---------- | ----------------------------------------------------------------- |
+| `session.completed`                 | [LIVE]     | Session is destroyed cleanly                                      |
+| `session.failed`                    | [LIVE]     | Session terminates in `errored` state                             |
+| `api_key.revoked`                   | [LIVE]     | API key revoked (customer or admin)                               |
+| `quota.warning_80pct`               | [DECLARED] | Account hits 80% of tier quota                                    |
+| `quota.exceeded`                    | [DECLARED] | Account hits 100% of tier quota                                   |
+| `test.ping`                         | [LIVE]     | Synthetic test event from POST /v1/webhooks/:id/test              |
+| `session.egress_capability_changed` | [DECLARED] | Harness emitted an egress.capability_report for a SOCKS5 session  |
+| `crypto.order.paid`                 | [LIVE]     | NowPayments-backed order transitioned to `paid` (V-666)           |
+| `crypto.order.failed`               | [LIVE]     | Crypto order moved to terminal `failed` (timeout/refund/expired)  |
+| `session.challenge_detected`        | [DECLARED] | Harness ChallengeDetector flagged a bot-check (DataDome/Arkose/…) |
+| `session.created`                   | [PLANNED]  | Session transitions `creating` → `ready`                          |
+| `session.destroyed`                 | [PLANNED]  | Distinct from `session.completed` (no semantic shift)             |
+| `profile.created`                   | [PLANNED]  | New profile created                                               |
+| `profile.deleted`                   | [PLANNED]  | Profile deleted                                                   |
+| `api_key.minted`                    | [PLANNED]  | New API key issued                                                |
+| `subscription.changed`              | [PLANNED]  | Tier changed via Stripe                                           |
+| `subscription.cancelled`            | [PLANNED]  | Subscription cancelled                                            |
+| `webhook_endpoint.created`          | [PLANNED]  | New webhook endpoint registered                                   |
+| `webhook_endpoint.deleted`          | [PLANNED]  | Webhook endpoint deleted                                          |
 
 ## Common envelope
 
@@ -288,6 +289,32 @@ See [Crypto checkout API](../api/billing-crypto) for the full
 order lifecycle + status state machine. The webhook event mirrors
 the same `events[]` log shape returned by `GET /v1/billing/crypto-
 orders`.
+
+### `session.challenge_detected` [DECLARED]
+
+W393 — fires when the in-session harness ChallengeDetector flags a
+bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / … —
+14 types) on the page the session is navigating. The harness
+auto-pauses the session (no further action intents run) and surfaces
+the challenge; resolve it (e.g. in the live view) and the session
+resumes. Subscribable so you can route challenge alerts into your own
+ops/notification surface. In the enum (migration 0070); the relay
+emitter wires in a follow-up slice.
+
+```json
+{
+  "event_type": "session.challenge_detected",
+  "data": {
+    "session_id": "ses_a1b2c3d4e5f6",
+    "challenge_id": "chl_9f8e7d6c",
+    "challenge": {
+      "type": "datadome",
+      "confidence": 0.94,
+      "detail": "interstitial captcha"
+    }
+  }
+}
+```
 
 ## Planned events (not yet in enum)
 

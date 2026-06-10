@@ -57,7 +57,7 @@ function read(p: string): string {
 describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
   const body = read(LIB);
 
-  it("WebhookEventType: 9-literal union (5 customer events + V-356 test.ping synthetic + Arc 5 EGRESS session.egress_capability_changed + V-666 crypto.order.paid/failed). 2026-05-22 — crypto-order events added (migration 0064) so the WebhooksService can finally land as CryptoOrdersService's emitter sink.", () => {
+  it('WebhookEventType: 10-literal union (5 customer events + V-356 test.ping synthetic + Arc 5 EGRESS session.egress_capability_changed + V-666 crypto.order.paid/failed + W393 session.challenge_detected). 2026-05-22 — crypto-order events added (migration 0064); W393 — challenge-handling event added (migration 0070).', () => {
     expect(body).toMatch(/export type WebhookEventType =/);
     expect(body).toMatch(/\| 'session\.completed'/);
     expect(body).toMatch(/\| 'session\.failed'/);
@@ -70,7 +70,8 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     expect(body).toMatch(/\| 'test\.ping'/);
     expect(body).toMatch(/\| 'session\.egress_capability_changed'/);
     expect(body).toMatch(/\| 'crypto\.order\.paid'/);
-    expect(body).toMatch(/\| 'crypto\.order\.failed';/);
+    expect(body).toMatch(/\| 'crypto\.order\.failed'/);
+    expect(body).toMatch(/\| 'session\.challenge_detected';/);
   });
 
   it('WebhookDeliveryStatus: 5-literal union (pending/in_flight/delivered/failed/dlq)', () => {

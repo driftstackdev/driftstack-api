@@ -491,6 +491,13 @@
       "when": 1779921600000,
       "tag": "0069_profiles_wrapped_dek",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1780008000000,
+      "tag": "0070_session_challenge_detected_webhook_event",
+      "breakpoints": true
     }
   ]
 }
