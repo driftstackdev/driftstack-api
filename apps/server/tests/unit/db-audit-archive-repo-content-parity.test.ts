@@ -52,13 +52,13 @@ describe('W448.A apps/server/src/db/audit-archive-repo.ts content parity', () =>
     );
   });
 
-  it('imports: asc/eq/inArray/lt from drizzle-orm; 3 service types from audit-archive; Database; 5 schema tables (adminAuditLog + auditArchiveRuns + legalAcceptances + processedStripeEvents + webhookDeliveries)', () => {
+  it('imports: asc/eq/inArray/lt from drizzle-orm; 3 service types from audit-archive; Database; 6 schema tables (adminAuditLog + auditArchiveRuns + legalAcceptances + processedStripeEvents + sessionEvents + webhookDeliveries)', () => {
     expect(body).toMatch(/import \{ asc, eq, inArray, lt \} from 'drizzle-orm';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*ArchiveLedgerRepo,\s*\n?\s*ArchiveTableName,\s*\n?\s*ArchiveTableRepo,\s*\n?\s*\} from '\.\.\/services\/audit-archive\.js';/,
     );
     expect(body).toMatch(
-      /import \{\s*\n?\s*adminAuditLog,\s*\n?\s*auditArchiveRuns,\s*\n?\s*legalAcceptances,\s*\n?\s*processedStripeEvents,\s*\n?\s*webhookDeliveries,\s*\n?\s*\} from '\.\/schema\.js';/,
+      /import \{\s*\n?\s*adminAuditLog,\s*\n?\s*auditArchiveRuns,\s*\n?\s*legalAcceptances,\s*\n?\s*processedStripeEvents,\s*\n?\s*sessionEvents,\s*\n?\s*webhookDeliveries,\s*\n?\s*\} from '\.\/schema\.js';/,
     );
   });
 

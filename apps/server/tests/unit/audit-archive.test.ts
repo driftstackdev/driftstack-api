@@ -121,12 +121,13 @@ describe('AuditArchiveService — pure helpers', () => {
     );
   });
 
-  it('AUDIT_TABLES covers the four ADR-006 tables', () => {
+  it('AUDIT_TABLES covers the four ADR-006 tables + session_events (W438)', () => {
     const names = AUDIT_TABLES.map((t) => t.tableName).sort();
     expect(names).toEqual([
       'admin_audit_log',
       'legal_acceptances',
       'processed_stripe_events',
+      'session_events',
       'webhook_deliveries',
     ]);
   });
@@ -273,8 +274,8 @@ describe('AuditArchiveService.archiveTable — R2 upload failure is data-loss-sa
   });
 });
 
-describe('AuditArchiveService.archiveAll — orchestrates four tables', () => {
-  it('runs all four AUDIT_TABLES in sequence', async () => {
+describe('AuditArchiveService.archiveAll — orchestrates five tables', () => {
+  it('runs all five AUDIT_TABLES in sequence', async () => {
     const uploads: UploadedObject[] = [];
     const ledgerRows: LedgerInsert[] = [];
     const deletes: DeleteCall[] = [];
@@ -287,21 +288,23 @@ describe('AuditArchiveService.archiveAll — orchestrates four tables', () => {
           processed_stripe_events: [],
           legal_acceptances: [],
           webhook_deliveries: [],
+          session_events: [],
         },
         deletes,
       }),
       now: () => FIXED_NOW,
     });
     const result = await svc.archiveAll();
-    expect(result.results).toHaveLength(4);
+    expect(result.results).toHaveLength(5);
     expect(result.results.map((r) => r.tableName).sort()).toEqual([
       'admin_audit_log',
       'legal_acceptances',
       'processed_stripe_events',
+      'session_events',
       'webhook_deliveries',
     ]);
-    expect(uploads).toHaveLength(4);
-    expect(ledgerRows).toHaveLength(4);
+    expect(uploads).toHaveLength(5);
+    expect(ledgerRows).toHaveLength(5);
     // Only admin_audit_log had a row to delete; the other 3 windows
     // are empty so deletes list stays empty for them.
     expect(deletes).toEqual([{ tableName: 'admin_audit_log', ids: ['a1'] }]);
@@ -336,22 +339,24 @@ describe('AuditArchiveService.archiveAll — orchestrates four tables', () => {
           processed_stripe_events: [],
           legal_acceptances: [],
           webhook_deliveries: [],
+          session_events: [],
         },
         deletes,
       }),
       now: () => FIXED_NOW,
     });
     const result = await svc.archiveAll();
-    // admin_audit_log failed but the other three still ran.
+    // admin_audit_log failed but the other four still ran.
     expect(result.errors.map((e) => e.tableName)).toEqual(['admin_audit_log']);
     expect(result.errors[0]?.error).toContain('R2 unavailable');
     expect(result.results.map((r) => r.tableName).sort()).toEqual([
       'legal_acceptances',
       'processed_stripe_events',
+      'session_events',
       'webhook_deliveries',
     ]);
-    expect(uploads).toHaveLength(3);
-    expect(ledgerRows).toHaveLength(3);
+    expect(uploads).toHaveLength(4);
+    expect(ledgerRows).toHaveLength(4);
     // admin_audit_log's row was never deleted (no archived copy) — stays in PG.
     expect(deletes).toHaveLength(0);
   });

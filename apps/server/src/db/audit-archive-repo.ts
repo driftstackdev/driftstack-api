@@ -27,6 +27,7 @@ import {
   auditArchiveRuns,
   legalAcceptances,
   processedStripeEvents,
+  sessionEvents,
   webhookDeliveries,
 } from './schema.js';
 
@@ -73,6 +74,14 @@ export class DrizzleArchiveTableRepo implements ArchiveTableRepo {
           .orderBy(asc(webhookDeliveries.createdAt), asc(webhookDeliveries.id));
         return rows;
       }
+      case 'session_events': {
+        const rows = await this.database.db
+          .select()
+          .from(sessionEvents)
+          .where(lt(sessionEvents.createdAt, olderThan))
+          .orderBy(asc(sessionEvents.createdAt), asc(sessionEvents.id));
+        return rows;
+      }
     }
   }
 
@@ -104,6 +113,12 @@ export class DrizzleArchiveTableRepo implements ArchiveTableRepo {
         const result = await this.database.db
           .delete(legalAcceptances)
           .where(inArray(legalAcceptances.id, idArray));
+        return rowsAffected(result);
+      }
+      case 'session_events': {
+        const result = await this.database.db
+          .delete(sessionEvents)
+          .where(inArray(sessionEvents.id, idArray));
         return rowsAffected(result);
       }
       case 'webhook_deliveries': {

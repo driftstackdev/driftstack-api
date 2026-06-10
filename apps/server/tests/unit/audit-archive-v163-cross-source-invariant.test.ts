@@ -74,13 +74,17 @@ describe('W932 V-163 audit-archive cross-source invariant', () => {
 
   // ─── Sweep semantics framing ─────────────────────────────────
 
-  it("CRITICAL sweep framing — 'Sweeps rows older than 90 days from the four audit-shaped Postgres tables (admin_audit_log / processed_stripe_events / legal_acceptances / webhook_deliveries) into Cloudflare R2 as gzip-compressed JSON Lines, partitioned by YYYY/MM/. After successful upload + checksum, DELETEs the archived rows. Records each sweep in audit_archive_runs'. The 4-table + gzip-JSONL + ledger contract is the V-163 central design.", () => {
+  it("CRITICAL sweep framing — 'Sweeps rows older than 90 days from five Postgres tables — the four audit-shaped (admin_audit_log / processed_stripe_events / legal_acceptances / webhook_deliveries) plus session_events — into Cloudflare R2 as gzip-compressed JSON Lines, partitioned by YYYY/MM/. After successful upload + checksum, DELETEs the archived rows. Records each sweep in audit_archive_runs'. The gzip-JSONL + ledger contract is the V-163 central design.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
-    expect(p).toMatch(/Sweeps rows older than 90 days from the four audit-shaped Postgres/);
-    expect(p).toMatch(/tables \(admin_audit_log \/ processed_stripe_events \/ legal_acceptances/);
-    expect(p).toMatch(/\/ webhook_deliveries\) into Cloudflare R2 as gzip-compressed JSON/);
-    expect(p).toMatch(/Lines, partitioned by YYYY\/MM\/\. After successful upload \+ checksum,/);
-    expect(p).toMatch(/DELETEs the archived rows\. Records each sweep in audit_archive_runs/);
+    expect(p).toMatch(/Sweeps rows older than 90 days from five Postgres tables — the four/);
+    expect(p).toMatch(/audit-shaped \(admin_audit_log \/ processed_stripe_events \//);
+    expect(p).toMatch(
+      /\/ webhook_deliveries\) plus the high-volume\s*\n?\s*\/\/ session_events action log/,
+    );
+    expect(p).toMatch(/Lines, partitioned by YYYY\/MM\/\. After successful upload/);
+    expect(p).toMatch(
+      /DELETEs the archived rows\. Records each sweep in\s*\n?\s*\/\/\s*audit_archive_runs/,
+    );
   });
 
   // ─── HOT_RETENTION_MS = 90 days ──────────────────────────────
@@ -104,7 +108,7 @@ describe('W932 V-163 audit-archive cross-source invariant', () => {
 
   // ─── AUDIT_TABLES 4-entry tuple ──────────────────────────────
 
-  it('CRITICAL AUDIT_TABLES is 4-entry as-const tuple — admin_audit_log/timestamp + processed_stripe_events/received_at + legal_acceptances/accepted_at + webhook_deliveries/created_at. The 4-table set + timestamp-column-name pairs are what window queries gate on.', () => {
+  it('CRITICAL AUDIT_TABLES is 5-entry as-const tuple — admin_audit_log/timestamp + processed_stripe_events/received_at + legal_acceptances/accepted_at + webhook_deliveries/created_at + session_events/created_at (W438). The table set + timestamp-column-name pairs are what window queries gate on.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/audit-archive.ts'));
     expect(p).toMatch(/export const AUDIT_TABLES = \[/);
     expect(p).toMatch(/\{ tableName: 'admin_audit_log', timestampColumn: 'timestamp' \},/);
@@ -113,13 +117,15 @@ describe('W932 V-163 audit-archive cross-source invariant', () => {
     );
     expect(p).toMatch(/\{ tableName: 'legal_acceptances', timestampColumn: 'accepted_at' \},/);
     expect(p).toMatch(/\{ tableName: 'webhook_deliveries', timestampColumn: 'created_at' \},/);
+    expect(p).toMatch(/\{ tableName: 'session_events', timestampColumn: 'created_at' \},/);
     expect(p).toMatch(/\] as const;/);
-    expect(AUDIT_TABLES).toHaveLength(4);
+    expect(AUDIT_TABLES).toHaveLength(5);
     expect(AUDIT_TABLES.map((t) => t.tableName)).toEqual([
       'admin_audit_log',
       'processed_stripe_events',
       'legal_acceptances',
       'webhook_deliveries',
+      'session_events',
     ]);
   });
 

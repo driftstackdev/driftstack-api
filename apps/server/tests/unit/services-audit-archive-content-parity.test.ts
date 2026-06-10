@@ -42,9 +42,11 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
 
   it('V-163 + ADR-006 framing pinned + 4 audit-shaped tables + R2 gzip JSONL + monthly cadence', () => {
     expect(body).toMatch(/V-163 — AuditArchiveService per ADR-006\./);
-    expect(body).toMatch(
-      /Sweeps rows older than 90 days from the four audit-shaped Postgres\s*\n?\s*\/\/\s*tables \(admin_audit_log \/ processed_stripe_events \/ legal_acceptances\s*\n?\s*\/\/\s*\/ webhook_deliveries\) into Cloudflare R2 as gzip-compressed JSON\s*\n?\s*\/\/\s*Lines, partitioned by YYYY\/MM\/\./,
-    );
+    expect(body).toMatch(/Sweeps rows older than 90 days from five Postgres tables — the four/);
+    expect(body).toMatch(/audit-shaped \(admin_audit_log \/ processed_stripe_events \//);
+    expect(body).toMatch(/\/ webhook_deliveries\) plus the high-volume/);
+    expect(body).toMatch(/session_events action log/);
+    expect(body).toMatch(/Lines, partitioned by YYYY\/MM\/\./);
     expect(body).toMatch(
       /Cron \/ external scheduler invokes archiveAll\(now\) on the 1st of\s*\n?\s*\/\/\s*each month at 02:00 UTC\. The service does NOT manage scheduling\./,
     );
@@ -154,7 +156,7 @@ describe('W402.A apps/server/src/services/audit-archive.ts content parity', () =
 
   it('archiveAll: sequential per-table; one failure does not abort others (try/catch isolates each table; failures recorded in the errors[] breakdown)', () => {
     expect(body).toMatch(
-      /Archive all four audit-shaped tables in sequence\. Each table\s*\n?\s*\*\s*archives independently — a failure on one does not abort the\s*\n?\s*\*\s*others\. Returns a per-table breakdown\./,
+      /Archive all five tables in sequence\. Each table\s*\n?\s*\*\s*archives independently — a failure on one does not abort the\s*\n?\s*\*\s*others\. Returns a per-table breakdown\./,
     );
     // The independence is implemented: each table's archiveTable is wrapped
     // in try/catch; a thrown table is recorded in errors[] and the loop

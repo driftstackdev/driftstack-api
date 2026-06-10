@@ -206,7 +206,7 @@ describe('V-553.B-26 AuditArchiveService.archiveTable', () => {
 });
 
 describe('V-553.B-26 AuditArchiveService.archiveAll', () => {
-  it('iterates the 4 audit-shaped tables in fixed order', async () => {
+  it('iterates the 5 tables (4 audit-shaped + session_events) in fixed order', async () => {
     const { r2 } = makeR2();
     const { ledger, inserts } = makeLedger();
     const { rows } = makeRows();
@@ -218,6 +218,6 @@ describe('V-553.B-26 AuditArchiveService.archiveAll', () => {
     });
     const out = await svc.archiveAll();
     expect(out.results.map((r) => r.tableName)).toEqual(AUDIT_TABLES.map((t) => t.tableName));
-    expect(inserts).toHaveLength(4);
+    expect(inserts).toHaveLength(5);
   });
 });

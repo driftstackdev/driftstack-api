@@ -14,17 +14,21 @@ audit. Two gaps found (`session_events`, `scheduled_jobs`); the rest are covered
 | crypto-order idempotency dedup                                                          | in-memory 24h TTL prune                                                                |
 | `web_sessions` / auth tokens                                                            | `expires_at` + sweeper                                                                 |
 
-## GAPS — unbounded growth, no retention (SURFACED — retention-policy decision)
+## GAPS — unbounded growth, no retention
 
-1. **`session_events`** (NEW, this audit). Per-session event rows; sessions are
-   marked-destroyed (not deleted), so events are never cascade-removed, and the
-   table is not in AUDIT_TABLES and has no prune/sweep. Potentially the
-   fastest-growing table (every session × N events). Indexed by `session_id` so
-   per-session reads stay fast, but the table grows unbounded → storage +
-   backup/maintenance burden at scale.
-2. **`scheduled_jobs`** finished rows (W415 #2). `completed_at`/`failed_at` set
-   but never deleted/archived → accumulates. (The W416 partial index keeps the
-   _claim_ O(due-unfinished) regardless, but storage still grows.)
+1. ✅ **`session_events` — RESOLVED W438 (founder-delegated decision).** Added to
+   `AUDIT_TABLES` (archive→R2 then delete past the 90-day hot window, keyed on
+   `created_at`). It's an internal action log (created/navigated/…), NOT billing-
+   or customer-read-critical (verified — nothing in billing/usage reads it), so
+   archive (not hard-delete) preserves the forensic history cheaply in R2 while
+   bounding the hot table. Uses the proven audit-archive pattern (repo cases +
+   the monthly scheduler). Dormant pre-launch (no 90-day-old rows yet).
+2. **`scheduled_jobs`** finished rows (W415 #2) — STILL OPEN. `completed_at`/
+   `failed_at` set but never deleted → accumulates. Decision (W438): PRUNE (hard-
+   delete finished rows older than N days) — low value, no archive needed (unlike
+   session*events, scheduled_jobs has no forensic/customer value). Implement next
+   wave (a prune query + a periodic tick). (The W416 partial index keeps the
+   \_claim* O(due-unfinished) regardless.)
 
 ## Recommended fix (founder/A-team decision: period + delete-vs-archive)
 

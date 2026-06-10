@@ -1,10 +1,12 @@
 // V-163 — AuditArchiveService per ADR-006.
 //
-// Sweeps rows older than 90 days from the four audit-shaped Postgres
-// tables (admin_audit_log / processed_stripe_events / legal_acceptances
-// / webhook_deliveries) into Cloudflare R2 as gzip-compressed JSON
-// Lines, partitioned by YYYY/MM/. After successful upload + checksum,
-// DELETEs the archived rows. Records each sweep in audit_archive_runs.
+// Sweeps rows older than 90 days from five Postgres tables — the four
+// audit-shaped (admin_audit_log / processed_stripe_events /
+// legal_acceptances / webhook_deliveries) plus the high-volume
+// session_events action log (W438) — into Cloudflare R2 as gzip-
+// compressed JSON Lines, partitioned by YYYY/MM/. After successful upload
+// + checksum, DELETEs the archived rows. Records each sweep in
+// audit_archive_runs.
 //
 // Failure modes (per ADR §3):
 //   - R2 upload fails → DELETE skipped; ledger row records the
@@ -32,7 +34,7 @@ export const HOT_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
 export const DEFAULT_BATCH_SIZE = 10_000;
 
 /**
- * The four audit-shaped tables this service archives. Each entry
+ * The five tables this service archives (four audit-shaped + session_events). Each entry
  * names the Postgres table + the column on it that carries the
  * row's primary timestamp. Window queries gate on this column.
  */
@@ -41,6 +43,15 @@ export const AUDIT_TABLES = [
   { tableName: 'processed_stripe_events', timestampColumn: 'received_at' },
   { tableName: 'legal_acceptances', timestampColumn: 'accepted_at' },
   { tableName: 'webhook_deliveries', timestampColumn: 'created_at' },
+  // W438 — session_events is the fastest-growing operational table (every
+  // session × N action-log events). Its FK to sessions is onDelete:cascade, but
+  // sessions are marked-destroyed (never row-deleted) so the cascade never fires
+  // → unbounded growth. It's an internal action log (created/navigated/…), NOT
+  // billing- or customer-read-critical, so archive→R2 then delete past the
+  // 90-day hot window preserves the forensic history cheaply. Keyed on
+  // created_at (a live session older than 90d is vanishingly rare; archiving its
+  // old events is harmless — recent events stay hot).
+  { tableName: 'session_events', timestampColumn: 'created_at' },
 ] as const;
 
 export type ArchiveTableName = (typeof AUDIT_TABLES)[number]['tableName'];
@@ -227,7 +238,7 @@ export class AuditArchiveService {
   }
 
   /**
-   * Archive all four audit-shaped tables in sequence. Each table
+   * Archive all five tables in sequence. Each table
    * archives independently — a failure on one does not abort the
    * others. Returns a per-table breakdown.
    */
