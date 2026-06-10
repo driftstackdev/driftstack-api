@@ -18,7 +18,7 @@
 //   • limit default 25 + useSessionsList({limit}) wiring.
 //   • State-machine render: loading 'Loading sessions…' role
 //     status + error 'Could not load sessions: ${message}' role
-//     alert + ready empty 'No sessions yet.' + ready non-empty
+//     alert + ready empty <EmptyState title='No sessions yet'> (W462 shared primitive) + ready non-empty
 //     <table> with Id/URL/Status/Created columns.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -67,9 +67,13 @@ describe('W478.B apps/gui-client/src/views/SessionsListView.tsx content parity',
     expect(body).toMatch(
       /\{state\.kind === 'error' && \(\s*\n?\s*<div\s*\n?\s*role="alert"\s*\n?\s*className="rounded border border-status-error\/60 bg-status-error\/10 p-3 text-sm text-status-error"\s*\n?\s*>\s*\n?\s*Could not load sessions: \{state\.message\}\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
     );
-    expect(body).toMatch(
-      /\{state\.kind === 'ready' && state\.data\.sessions\.length === 0 && \(\s*\n?\s*<p className="text-sm text-ink-secondary">No sessions yet\.<\/p>\s*\n?\s*\)\}/,
-    );
+    // W462 — empty state now uses the shared <EmptyState> primitive (icon +
+    // heading + description) instead of a bare <p>.
+    expect(body).toMatch(/import \{ EmptyState \} from '\.\.\/components\/EmptyState';/);
+    expect(body).toMatch(/state\.data\.sessions\.length === 0 && \(\s*\n?\s*<EmptyState/);
+    expect(body).toMatch(/title="No sessions yet"/);
+    expect(body).toMatch(/description="Sessions you start will appear here/);
+    expect(body).not.toMatch(/<p className="text-sm text-ink-secondary">No sessions yet\.<\/p>/);
     expect(body).toMatch(/<SessionStatusBadge status=\{s\.status\} size="sm" \/>/);
     expect(body).toMatch(
       /<td className="py-1 text-ink-secondary">\{fmtTime\(s\.createdAt\)\}<\/td>/,

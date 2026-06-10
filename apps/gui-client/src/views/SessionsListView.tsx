@@ -8,6 +8,7 @@
 
 import { useSessionsList } from '../lib/use-sessions-list';
 import { SessionStatusBadge } from '../components/SessionStatusBadge';
+import { EmptyState } from '../components/EmptyState';
 
 export interface SessionsListViewProps {
   limit?: number;
@@ -55,7 +56,26 @@ export function SessionsListView(props: SessionsListViewProps): JSX.Element {
         </div>
       )}
       {state.kind === 'ready' && state.data.sessions.length === 0 && (
-        <p className="text-sm text-ink-secondary">No sessions yet.</p>
+        <EmptyState
+          icon={
+            <svg
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.75"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <path d="M8 21h8M12 17v4" />
+            </svg>
+          }
+          title="No sessions yet"
+          description="Sessions you start will appear here — live ones first, then their history."
+        />
       )}
       {state.kind === 'ready' && state.data.sessions.length > 0 && (
         <table className="w-full text-sm" aria-label="Sessions">
