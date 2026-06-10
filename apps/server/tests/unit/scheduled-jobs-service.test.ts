@@ -57,6 +57,7 @@ function makeRepo(initialDue: ScheduledJobRow[] = []): {
       state.failed.push({ id: jobId, lastError: opts.lastError });
       return Promise.resolve();
     },
+    pruneFinished: () => Promise.resolve(0),
   };
   return { repo, state };
 }

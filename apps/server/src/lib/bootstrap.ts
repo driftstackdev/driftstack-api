@@ -123,6 +123,10 @@ import {
   enqueueNextSessionDurationSweep,
   registerSessionDurationSweepJob,
 } from '../services/session-duration-sweeper.js';
+import {
+  enqueueNextScheduledJobsPrune,
+  registerScheduledJobsPruneJob,
+} from '../services/scheduled-jobs-prune-sweeper.js';
 import { CliAuthorizeService } from '../services/cli-authorize.js';
 import { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import { ProfilesService } from '../services/profiles.js';
@@ -885,6 +889,13 @@ export async function createProductionDeps(
     logger,
   });
   await enqueueNextSessionDurationSweep({ scheduledJobs: scheduledJobsService });
+  // W441 — scheduled_jobs retention prune (daily; deletes finished rows > 30d).
+  registerScheduledJobsPruneJob({
+    scheduledJobs: scheduledJobsService,
+    repo: scheduledJobsRepo,
+    logger,
+  });
+  await enqueueNextScheduledJobsPrune({ scheduledJobs: scheduledJobsService });
 
   // V-266: browser-OAuth-style CLI / GUI activation flow. Pure
   // Redis state — no schema migration needed. Always wired (no

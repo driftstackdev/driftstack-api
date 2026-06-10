@@ -50,6 +50,9 @@ class StubScheduledJobsRepo implements ScheduledJobsRepo {
   markFailed(): Promise<void> {
     return Promise.resolve();
   }
+  pruneFinished(): Promise<number> {
+    return Promise.resolve(0);
+  }
 }
 
 function makeLogger(): Logger {

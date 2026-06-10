@@ -53,6 +53,11 @@ export interface ScheduledJobsRepo {
   markComplete(jobId: string, at: Date): Promise<void>;
   markRetry(jobId: string, opts: { lastError: string; nextRunAt: Date }): Promise<void>;
   markFailed(jobId: string, opts: { lastError: string; at: Date }): Promise<void>;
+  /**
+   * W441 retention — hard-delete finished rows (completed OR failed) whose
+   * terminal timestamp is older than `olderThan`. Returns the deleted count.
+   */
+  pruneFinished(olderThan: Date): Promise<number>;
 }
 
 export type ScheduledJobHandler = (job: ScheduledJobRow) => Promise<void>;

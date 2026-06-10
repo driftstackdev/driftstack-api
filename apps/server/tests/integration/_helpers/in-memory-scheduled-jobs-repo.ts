@@ -150,4 +150,20 @@ export class InMemoryScheduledJobsRepo implements ScheduledJobsRepo {
     });
     return Promise.resolve();
   }
+
+  // W441 — mirror DrizzleScheduledJobsRepo.pruneFinished: delete finished rows
+  // (completed OR failed) whose terminal timestamp is older than `olderThan`.
+  pruneFinished(olderThan: Date): Promise<number> {
+    let deleted = 0;
+    for (const r of this.rows.values()) {
+      const terminal =
+        (r.completedAt !== null && r.completedAt < olderThan) ||
+        (r.failedAt !== null && r.failedAt < olderThan);
+      if (terminal) {
+        this.rows.delete(r.id);
+        deleted += 1;
+      }
+    }
+    return Promise.resolve(deleted);
+  }
 }

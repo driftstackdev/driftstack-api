@@ -43,8 +43,10 @@ describe('W445.C apps/server/src/db/scheduled-jobs-repo.ts content parity', () =
     expect(body).toMatch(/\/\/ V-202d — Drizzle implementation of ScheduledJobsRepo\./);
   });
 
-  it('imports: and/eq/isNull/sql from drizzle-orm; Database; scheduledJobs schema; 3 service types (EnqueueScheduledJobInput + ScheduledJobRow + ScheduledJobsRepo)', () => {
-    expect(body).toMatch(/import \{ and, eq, isNull, sql \} from 'drizzle-orm';/);
+  it('imports: and/eq/isNotNull/isNull/lt/or/sql from drizzle-orm; Database; scheduledJobs schema; 3 service types (EnqueueScheduledJobInput + ScheduledJobRow + ScheduledJobsRepo)', () => {
+    expect(body).toMatch(
+      /import \{ and, eq, isNotNull, isNull, lt, or, sql \} from 'drizzle-orm';/,
+    );
     expect(body).toMatch(/import \{ scheduledJobs \} from '\.\/schema\.js';/);
     expect(body).toMatch(
       /import type \{\s*\n?\s*EnqueueScheduledJobInput,\s*\n?\s*ScheduledJobRow,\s*\n?\s*ScheduledJobsRepo,\s*\n?\s*\} from '\.\.\/services\/scheduled-jobs\.js';/,

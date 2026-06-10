@@ -1,6 +1,6 @@
 // V-202d — Drizzle implementation of ScheduledJobsRepo.
 
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { scheduledJobs } from './schema.js';
 import type {
@@ -144,5 +144,23 @@ export class DrizzleScheduledJobsRepo implements ScheduledJobsRepo {
         updatedAt: opts.at,
       })
       .where(eq(scheduledJobs.id, jobId));
+  }
+
+  // W441 — retention prune. Hard-deletes finished rows (completed OR failed)
+  // whose terminal timestamp is older than `olderThan`. Uses the drizzle
+  // builder API (not a raw sql template) so the Date is serialized via the
+  // column-schema metadata — raw `sql\`…${date}…\`` would crash postgres-js's
+  // Bind step (see claimDue's note). RETURNING gives the deleted count.
+  async pruneFinished(olderThan: Date): Promise<number> {
+    const deleted = await this.database.db
+      .delete(scheduledJobs)
+      .where(
+        or(
+          and(isNotNull(scheduledJobs.completedAt), lt(scheduledJobs.completedAt, olderThan)),
+          and(isNotNull(scheduledJobs.failedAt), lt(scheduledJobs.failedAt, olderThan)),
+        ),
+      )
+      .returning({ id: scheduledJobs.id });
+    return deleted.length;
   }
 }

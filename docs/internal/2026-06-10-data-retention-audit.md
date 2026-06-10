@@ -48,3 +48,5 @@ decided before meaningful traffic so the tables don't accumulate from day one.
 
 No code changed here — retention is an irreversible-deletion policy choice, so
 surfaced rather than auto-applied. The mechanisms to implement it both exist.
+
+**W441 update:** `scheduled_jobs` finished-row retention RESOLVED — daily prune job (scheduled-jobs-prune-sweeper.ts) deletes completed/failed rows older than 30 days via repo.pruneFinished. Both retention gaps (session_events archive W438 + scheduled_jobs prune W441) now closed.
