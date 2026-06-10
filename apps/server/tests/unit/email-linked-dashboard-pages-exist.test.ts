@@ -18,28 +18,29 @@ import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
-const PAGES = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages');
-
-// path the email links to (under DASHBOARD_ORIGIN) → the .astro page that serves it.
-const EMAIL_LINKED_PATHS: Array<{ path: string; page: string; source: string }> = [
-  { path: '/verify-email', page: 'verify-email.astro', source: 'auth-flows signup-verification' },
-  { path: '/auth/magic-link', page: 'auth/magic-link.astro', source: 'auth-flows magic-link' },
-  { path: '/reset-password', page: 'reset-password.astro', source: 'auth-flows password-reset' },
-  { path: '/team/accept', page: 'team/accept.astro', source: 'team-members invite' },
-  {
-    path: '/auth/oauth-client/confirm-merge',
-    page: 'auth/oauth-client/confirm-merge.astro',
-    source: 'oauth-client verify-merge',
-  },
+// path the email links to (under the app's origin) → the .astro page that
+// serves it, in app `apps/<app>/src/pages`. W473 — extended to the status-site
+// double-opt-in links (subscribe/confirm + unsubscribe), the same email→page
+// class as team-accept but a different app.
+const EMAIL_LINKED_PATHS: Array<{ path: string; page: string; source: string; app: string }> = [
+  // customer-dashboard (DASHBOARD_ORIGIN)
+  { path: '/verify-email', page: 'verify-email.astro', source: 'auth-flows signup-verification', app: 'customer-dashboard' }, // prettier-ignore
+  { path: '/auth/magic-link', page: 'auth/magic-link.astro', source: 'auth-flows magic-link', app: 'customer-dashboard' }, // prettier-ignore
+  { path: '/reset-password', page: 'reset-password.astro', source: 'auth-flows password-reset', app: 'customer-dashboard' }, // prettier-ignore
+  { path: '/team/accept', page: 'team/accept.astro', source: 'team-members invite', app: 'customer-dashboard' }, // prettier-ignore
+  { path: '/auth/oauth-client/confirm-merge', page: 'auth/oauth-client/confirm-merge.astro', source: 'oauth-client verify-merge', app: 'customer-dashboard' }, // prettier-ignore
+  // status-site (statusPageBaseUrl) — double-opt-in + one-click unsubscribe
+  { path: '/subscribe/confirm', page: 'subscribe/confirm.astro', source: 'status double-opt-in', app: 'status-site' }, // prettier-ignore
+  { path: '/subscribe/unsubscribe', page: 'subscribe/unsubscribe.astro', source: 'status unsubscribe', app: 'status-site' }, // prettier-ignore
 ];
 
-describe('W472 transactional-email dashboard links resolve to real pages', () => {
-  for (const { path, page, source } of EMAIL_LINKED_PATHS) {
-    it(`${source} email → ${path} has a dashboard page (${page})`, () => {
-      const full = resolve(PAGES, page);
+describe('W472/W473 transactional-email links resolve to real pages', () => {
+  for (const { path, page, source, app } of EMAIL_LINKED_PATHS) {
+    it(`${source} email → ${path} has a page (apps/${app}/.../${page})`, () => {
+      const full = resolve(REPO_ROOT, 'apps', app, 'src/pages', page);
       expect(
         existsSync(full),
-        `${source} email links to ${path} but ${page} is missing — invitees/users would 404. Create the page or update the email link.`,
+        `${source} email links to ${path} but ${app}/${page} is missing — users would 404. Create the page or update the email link.`,
       ).toBe(true);
     });
   }
