@@ -33,8 +33,18 @@ function wpmToMeanKeyDelayMs(wpm: number): number {
 export type PersonaId = 'casual' | 'regular' | 'power_user';
 
 /**
- * Canonical persona catalogue. Ordered slowest → fastest typist so the
- * progression (key delay ↓, scroll ↑, pause probability ↓) is readable.
+ * Persona catalogue — the canonical persona ID SET (`casual`/`regular`/
+ * `power_user`, file 05) for selection (dashboard / SDK / session-create).
+ * Ordered slowest → fastest typist so the progression is readable.
+ *
+ * ⚠️ NON-CANONICAL VALUES (W-behavioral-model-ownership decision, 2026-06-10):
+ * the parameter values below are a SIMPLIFIED reference model, NOT the
+ * production behavioral source. The harness executes the rich canonical
+ * `driftstack/shared/behavior/personas.json` (file 05) and is the sole owner of
+ * behavioral execution. Do NOT wire this catalogue's values as the prod
+ * behavioral source — they diverge (e.g. casual base_wpm 38 here vs 28
+ * canonical; 5-param vs the rich shared shape). Tier-2 ML updates the shared
+ * JSON, not this. See docs/internal/2026-06-10-behavioral-model-ownership-decision.md.
  */
 export const PROFILE_CATALOGUE: readonly BehaviouralProfile[] = [
   {
