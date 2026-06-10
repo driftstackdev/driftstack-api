@@ -103,9 +103,15 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
     expect(body).toMatch(/Server validates that the profile/);
   });
 
-  it('NavigateRequest: url + timeout_ms 1000..120000 optional + wait_until enum (load|domcontentloaded|networkidle) default load; NavigateResponse: url + status 100..599 + final_url + duration_ms', () => {
+  it('NavigateRequest: url http/https-only (W487 .refine) + timeout_ms 1000..120000 optional + wait_until enum (load|domcontentloaded|networkidle) default load; NavigateResponse: url + status 100..599 + final_url + duration_ms', () => {
+    // W487 — url is z.string().url().refine(/^https?:/) (http/https only); the
+    // schema spans multiple lines now, so assert the field shape + refine + the
+    // timeout/wait_until fields piecewise rather than as one frozen block.
     expect(body).toMatch(
-      /export const NavigateRequestSchema = z\.object\(\{\s*\n?\s*url: z\.string\(\)\.url\(\),\s*\n?\s*\/\/ Per-call timeout \(ms\); default applied server-side\.\s*\n?\s*timeout_ms: z\.number\(\)\.int\(\)\.min\(1000\)\.max\(120_000\)\.optional\(\),\s*\n?\s*\/\/ Wait policy after navigation completes\.\s*\n?\s*wait_until: z\.enum\(\['load', 'domcontentloaded', 'networkidle'\]\)\.default\('load'\),\s*\n?\s*\}\);/,
+      /export const NavigateRequestSchema = z\.object\(\{[\s\S]*?url: z[\s\S]*?\.string\(\)[\s\S]*?\.url\(\)[\s\S]*?\.refine\(\(u\) => \/\^https\?:\\\/\\\/\/i\.test\(u\)/,
+    );
+    expect(body).toMatch(
+      /timeout_ms: z\.number\(\)\.int\(\)\.min\(1000\)\.max\(120_000\)\.optional\(\),\s*\n?\s*\/\/ Wait policy after navigation completes\.\s*\n?\s*wait_until: z\.enum\(\['load', 'domcontentloaded', 'networkidle'\]\)\.default\('load'\),/,
     );
     expect(body).toMatch(
       /export const NavigateResponseSchema = z\.object\(\{\s*\n?\s*url: z\.string\(\)\.url\(\),\s*\n?\s*status: z\.number\(\)\.int\(\)\.min\(100\)\.max\(599\),\s*\n?\s*\/\/ Final URL \(may differ from request after redirects\)\.\s*\n?\s*final_url: z\.string\(\)\.url\(\),\s*\n?\s*duration_ms: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*\}\);/,

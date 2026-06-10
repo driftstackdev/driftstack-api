@@ -142,7 +142,18 @@ export type CreateSessionResponse = z.infer<typeof CreateSessionResponseSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 export const NavigateRequestSchema = z.object({
-  url: z.string().url(),
+  // W487 — http/https only. A browser-automation navigate has no legitimate
+  // file:// / ftp:// / data: use, in ANY egress architecture — rejecting other
+  // schemes at the schema also shields the AI-agent path from prompt-injected
+  // file:// navigates. (Internal-IP/metadata blocklisting is deliberately NOT
+  // here: under the locked customer-SOCKS5-egress design, private IPs are the
+  // CUSTOMER's own network — a server-side blocklist lands at driver wiring.)
+  url: z
+    .string()
+    .url()
+    .refine((u) => /^https?:\/\//i.test(u), {
+      message: 'Only http:// and https:// URLs can be navigated.',
+    }),
   // Per-call timeout (ms); default applied server-side.
   timeout_ms: z.number().int().min(1000).max(120_000).optional(),
   // Wait policy after navigation completes.

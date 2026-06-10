@@ -195,10 +195,10 @@ describe('W946 V-156 + V-136 + V-169 sessions cross-source invariant', () => {
 
   // ─── 3-error class import ────────────────────────────────────
 
-  it('CRITICAL imports 3 error classes — ConcurrencyLimitError + NotFoundError + SessionDestroyedError. The 3-error palette covers tier-cap / row-missing / 410-after-destroy states.', () => {
+  it('CRITICAL imports 4 error classes — BadRequestError (W487 navigate scheme guard) + ConcurrencyLimitError + NotFoundError + SessionDestroyedError. Covers navigate-scheme-reject / tier-cap / row-missing / 410-after-destroy states.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/sessions.ts'));
     expect(p).toMatch(
-      /import \{ ConcurrencyLimitError, NotFoundError, SessionDestroyedError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{[\s\S]*?BadRequestError,[\s\S]*?ConcurrencyLimitError,[\s\S]*?NotFoundError,[\s\S]*?SessionDestroyedError,[\s\S]*?\} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

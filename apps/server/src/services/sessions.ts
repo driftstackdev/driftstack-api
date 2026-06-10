@@ -28,7 +28,12 @@ import {
 import type { AccountContext } from './auth.js';
 import type { Driver } from '../drivers/types.js';
 import type { GUIInputRequest } from '../schemas/gui-input.js';
-import { ConcurrencyLimitError, NotFoundError, SessionDestroyedError } from '../lib/errors.js';
+import {
+  BadRequestError,
+  ConcurrencyLimitError,
+  NotFoundError,
+  SessionDestroyedError,
+} from '../lib/errors.js';
 import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -385,6 +390,14 @@ export class SessionsService {
     status: number;
     durationMs: number;
   }> {
+    // W487 — service-level scheme guard (defense-in-depth behind the schema
+    // refine): the agent executor calls this service directly, so a prompt-
+    // injected file:///ftp: navigate must be rejected HERE, not only at the
+    // route schema. http/https only; IP blocklisting deliberately deferred to
+    // driver wiring (customer-egress makes private IPs the customer's own).
+    if (!/^https?:\/\//i.test(body.url)) {
+      throw new BadRequestError('Only http:// and https:// URLs can be navigated.');
+    }
     const session = await this.requireOwned(ctx, sessionId, opts);
     const result = await this.runWithFailureCapture(ctx, session, 'navigate', () =>
       this.deps.driver.navigate(session.driverSessionId, {

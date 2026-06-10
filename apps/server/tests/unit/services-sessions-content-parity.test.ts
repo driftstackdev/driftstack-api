@@ -90,6 +90,12 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(/destroyedAt: Date \| null;/);
   });
 
+  it('W487 navigate() service-level scheme guard pinned — http/https only, BEFORE requireOwned/driver dispatch. The agent executor calls this service directly (bypasses the route schema), so a prompt-injected file:///ftp: navigate must be rejected here. Drift to dropping it reopens the agent-path scheme hole.', () => {
+    expect(body).toMatch(
+      /if \(!\/\^https\?:\\\/\\\/\/i\.test\(body\.url\)\) \{\s*\n?\s*throw new BadRequestError\('Only http:\/\/ and https:\/\/ URLs can be navigated\.'\);\s*\n?\s*\}/,
+    );
+  });
+
   it('SessionEventInput.type: 9-literal lifecycle union', () => {
     expect(body).toMatch(/export interface SessionEventInput \{/);
     expect(body).toMatch(
@@ -270,7 +276,7 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(/import type \{ Driver \} from '\.\.\/drivers\/types\.js';/);
     expect(body).toMatch(/import type \{ GUIInputRequest \} from '\.\.\/schemas\/gui-input\.js';/);
     expect(body).toMatch(
-      /import \{ ConcurrencyLimitError, NotFoundError, SessionDestroyedError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{[\s\S]*?BadRequestError,[\s\S]*?ConcurrencyLimitError,[\s\S]*?NotFoundError,[\s\S]*?SessionDestroyedError,[\s\S]*?\} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
       /import \{ requireScope as throwIfMissingScope \} from '\.\.\/lib\/errors-helpers\.js';/,

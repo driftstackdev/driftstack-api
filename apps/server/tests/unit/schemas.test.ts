@@ -134,6 +134,16 @@ describe('NavigateRequestSchema', () => {
     const r = NavigateRequestSchema.safeParse({ url: 'not a url' });
     expect(r.success).toBe(false);
   });
+
+  // W487 — http/https scheme allowlist. file:// (guest-VM FS read), ftp://,
+  // and javascript-ish schemes have no legitimate navigate use; this also
+  // shields the AI-agent path from prompt-injected file:// navigates.
+  it('W487: rejects non-http(s) schemes (file/ftp), accepts http + https', () => {
+    expect(NavigateRequestSchema.safeParse({ url: 'file:///etc/passwd' }).success).toBe(false);
+    expect(NavigateRequestSchema.safeParse({ url: 'ftp://example.com/x' }).success).toBe(false);
+    expect(NavigateRequestSchema.safeParse({ url: 'http://example.com' }).success).toBe(true);
+    expect(NavigateRequestSchema.safeParse({ url: 'HTTPS://example.com' }).success).toBe(true);
+  });
 });
 
 describe('InteractActionSchema (discriminated union)', () => {
