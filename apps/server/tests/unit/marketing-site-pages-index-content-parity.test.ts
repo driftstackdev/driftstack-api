@@ -19,10 +19,13 @@ function read(p: string): string {
 describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () => {
   const body = read(LIB);
 
-  it("F-2 (Issue 4) BaseLayout title='Driftstack' + revised SEO description leads with 'Pixel-identical' outcome (drops 'Real iPhone Safari' implementation-leak claim) and lists API/SDK/GUI access paths", () => {
+  it("W452 noob-friendly SEO description — plain-language outcome (a real iPhone browser every site sees as genuine, never a bot) + access paths, jargon stripped (no 'pixel-identical / bit-identical canvas/WebGL/audio'). Title='Driftstack'.", () => {
+    expect(body).toMatch(/<BaseLayout\s*\n?\s*title="Driftstack"/);
     expect(body).toMatch(
-      /<BaseLayout\s*\n?\s*title="Driftstack"\s*\n?\s*description="Pixel-identical iPhone Safari sessions in the cloud\. Bit-identical canvas, WebGL, audio, and user-agent — no runtime patching, no stealth plugins, nothing for detection to find\. API, SDK, or GUI\. Start free\."/,
+      /description="A real iPhone browser in the cloud that every website sees as a genuine iPhone — never a bot\. Automate iPhone Safari from TypeScript, Python, Go, or a desktop app\. Start free\."/,
     );
+    // Jargon-heavy SEO framing must not return.
+    expect(body).not.toMatch(/Pixel-identical iPhone Safari sessions in the cloud\. Bit-identical/);
   });
 
   it('Hero copy W452 noob-friendly rewrite — plain-language, benefit-led, jargon stripped (Canvas/WebGL-hash + Chromium-stealth-API removed). Two-line H1 kept: "Indistinguishable iPhone Safari." (gradient span) + "Programmable from any language." Sub-paragraph leads with the outcome (every site sees a genuine iPhone, never a bot/emulator) + use-cases (scraping/testing/automation) + the four access paths (desktop app, not "GUI").', () => {
