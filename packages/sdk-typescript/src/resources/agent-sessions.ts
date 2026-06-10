@@ -386,4 +386,27 @@ export class AgentSessionsResource {
       path: `/v1/agent-sessions/${encodeURIComponent(id)}/livekit-token`,
     });
   }
+
+  /**
+   * W474 — resume an agent session the harness auto-paused on a detected
+   * bot-challenge (DataDome / Arkose / PerimeterX / …), once you've resolved
+   * the challenge (e.g. in the live view). Best-effort dispatch to the node
+   * running the session. Pass `challenge_id` (from the
+   * `session.challenge_detected` webhook) to target a specific challenge;
+   * omit it for a manual override resume.
+   *
+   * Returns 202 `{ status: 'resume_requested', session_id }`.
+   *   - 404 — session unknown (or cross-account; existence not leaked)
+   *   - 409 — session not active (terminal sessions can't be resumed)
+   */
+  resume(
+    id: string,
+    body: { challenge_id?: string } = {},
+  ): Promise<{ status: 'resume_requested'; session_id: string }> {
+    return this.http.request({
+      method: 'POST',
+      path: `/v1/agent-sessions/${encodeURIComponent(id)}/resume`,
+      body,
+    });
+  }
 }

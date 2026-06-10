@@ -94,7 +94,7 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/kind: 'logged-manual';/);
   });
 
-  it('AgentSessionsResource 9-method surface: create + get + message + close + setMode + sendInputEvent + takeover + handback + livekitToken. Drift to dropping a method would break dashboard + e2e tests that compile against it; drift to changing signature would silently break the wire contract', () => {
+  it('AgentSessionsResource 10-method surface: create + get + message + close + setMode + sendInputEvent + takeover + handback + livekitToken + resume (W474). Drift to dropping a method would break dashboard + e2e tests that compile against it; drift to changing signature would silently break the wire contract', () => {
     expect(body).toMatch(/export class AgentSessionsResource \{/);
     expect(body).toMatch(/create\(\s*\n?\s*body: CreateAgentSessionRequest = \{\},/);
     expect(body).toMatch(/get\(id: string\): Promise<AgentSession>/);
@@ -111,6 +111,9 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/takeover\(\s*\n?\s*id: string,\s*\n?\s*clientId: string,\s*\n?\s*\)/);
     expect(body).toMatch(/handback\(id: string\)/);
     expect(body).toMatch(/livekitToken\(id: string\): Promise<LiveKitInfo>/);
+    expect(body).toMatch(
+      /resume\(\s*\n?\s*id: string,\s*\n?\s*body: \{ challenge_id\?: string \} = \{\},\s*\n?\s*\): Promise<\{ status: 'resume_requested'; session_id: string \}>/,
+    );
   });
 
   it("Stripe-pattern Idempotency-Key framing on create() pinned: 'Forward as the Idempotency-Key request header so retries collapse onto the server's first 201 response. The server-side partial unique index on (account_id, idempotency_key) is what guarantees the dedupe end-to-end; SDK just plumbs the header.' — pinned so the SDK-plumbs-only-not-the-source-of-dedupe rationale survives (drift to client-side dedupe would mask the load-bearing partial-unique-index contract)", () => {

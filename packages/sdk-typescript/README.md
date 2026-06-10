@@ -68,6 +68,7 @@ client.agentSessions.sendInputEvent(id, body)
 client.agentSessions.takeover(id, body)
 client.agentSessions.handback(id)
 client.agentSessions.livekitToken(id)   // subscriber token for the live view
+client.agentSessions.resume(id, body?)  // resume after a resolved bot-challenge
 client.agentSessions.close(id)
 
 client.profiles.create(body)

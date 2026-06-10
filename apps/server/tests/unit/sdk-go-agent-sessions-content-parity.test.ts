@@ -93,7 +93,7 @@ describe('sdk-go agent_sessions content parity', () => {
     );
   });
 
-  it('AgentSessionsResource 9-method surface: Create + Get + Message + Close + SetMode + SendInputEvent + Takeover + Handback + LivekitToken. Drift to dropping a method would break the cross-SDK uniformity (TS + Python have the same 9); drift to changing signature would break Go consumers using context.Context-first idiom', () => {
+  it('AgentSessionsResource 10-method surface: Create + Get + Message + Close + SetMode + SendInputEvent + Takeover + Handback + LivekitToken + Resume (W474). Drift to dropping a method would break the cross-SDK uniformity (TS + Python have the same 10); drift to changing signature would break Go consumers using context.Context-first idiom', () => {
     expect(body).toMatch(
       /func \(r \*AgentSessionsResource\) Create\(ctx context\.Context, body \*CreateAgentSessionRequest, opts \*CreateOptions\) \(\*AgentSession, error\)/,
     );
@@ -120,6 +120,10 @@ describe('sdk-go agent_sessions content parity', () => {
     );
     expect(body).toMatch(
       /func \(r \*AgentSessionsResource\) LivekitToken\(ctx context\.Context, agentSessionID string\) \(\*LiveKitInfo, error\)/,
+    );
+    // W474 — Resume after a resolved bot-challenge; optional *ResumeAgentSessionRequest body.
+    expect(body).toMatch(
+      /func \(r \*AgentSessionsResource\) Resume\(ctx context\.Context, agentSessionID string, body \*ResumeAgentSessionRequest\) \(\*ResumeAgentSessionResponse, error\)/,
     );
   });
 

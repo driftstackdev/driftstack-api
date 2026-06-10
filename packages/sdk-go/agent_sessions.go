@@ -357,3 +357,42 @@ func (r *AgentSessionsResource) LivekitToken(ctx context.Context, agentSessionID
 	}
 	return &out, nil
 }
+
+// ResumeAgentSessionRequest is the optional body for Resume. ChallengeID
+// (from the session.challenge_detected webhook) targets a specific active
+// challenge; leave it empty for a manual override resume.
+type ResumeAgentSessionRequest struct {
+	ChallengeID string `json:"challenge_id,omitempty"`
+}
+
+// ResumeAgentSessionResponse is the 202 acknowledgement returned by Resume.
+type ResumeAgentSessionResponse struct {
+	Status    string `json:"status"`
+	SessionID string `json:"session_id"`
+}
+
+// Resume resumes an agent session the harness auto-paused on a detected
+// bot-challenge (DataDome / Arkose / PerimeterX / …), once you've resolved
+// the challenge (e.g. in the live view). Best-effort dispatch to the node
+// running the session. Pass a body with ChallengeID to target a specific
+// challenge; pass nil for a manual override resume.
+//
+// Errors (mapped to typed Driftstack errors):
+//   - 404 — session unknown (or cross-account; existence not leaked)
+//   - 409 — session not active (terminal sessions can't be resumed)
+func (r *AgentSessionsResource) Resume(ctx context.Context, agentSessionID string, body *ResumeAgentSessionRequest) (*ResumeAgentSessionResponse, error) {
+	if body == nil {
+		body = &ResumeAgentSessionRequest{}
+	}
+	var out ResumeAgentSessionResponse
+	req := requestOptions{
+		method: "POST",
+		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/resume",
+		body:   body,
+		out:    &out,
+	}
+	if err := r.client.do(ctx, req); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

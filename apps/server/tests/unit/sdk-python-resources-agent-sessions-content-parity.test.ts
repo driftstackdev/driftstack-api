@@ -54,7 +54,7 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     );
   });
 
-  it('Sync AgentSessionsResource 9-method surface: create + get + message + close + set_mode + send_input_event + takeover + handback + livekit_token. Drift would diverge from the TS + Go SDK surfaces', () => {
+  it('Sync AgentSessionsResource 10-method surface: create + get + message + close + set_mode + send_input_event + takeover + handback + livekit_token + resume (W474). Drift would diverge from the TS + Go SDK surfaces', () => {
     expect(body).toMatch(/class AgentSessionsResource:/);
     expect(body).toMatch(
       /def create\(\s*\n?\s*self,\s*\n?\s*body: dict\[str, Any\] \| None = None,\s*\n?\s*\*,\s*\n?\s*idempotency_key: str \| None = None,\s*\n?\s*\) -> dict\[str, Any\]:/,
@@ -75,6 +75,9 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     );
     expect(body).toMatch(/def handback\(self, agent_session_id: str\) -> dict\[str, Any\]:/);
     expect(body).toMatch(/def livekit_token\(self, agent_session_id: str\) -> LiveKitInfo:/);
+    // W474 — resume() after a resolved bot-challenge; keyword-only challenge_id.
+    expect(body).toMatch(/def resume\(\s*\n?\s*self,\s*\n?\s*agent_session_id: str,/);
+    expect(body).toMatch(/challenge_id: str \| None = None,/);
     // 6.c — create() docstring documents the per-session model body field
     // (Python is loose-dict, so the docstring is the typed surface).
     expect(body).toMatch(/"model"\?: "claude-opus-4-7"\|"claude-sonnet-4-6"\|"claude-haiku-4-5"/);
@@ -84,7 +87,7 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     expect(body).toMatch(/"profile_id"\?: str/);
   });
 
-  it('Async AsyncAgentSessionsResource 9-method mirror pinned. Drift would break asyncio + FastAPI consumers OR break the sync/async parity contract', () => {
+  it('Async AsyncAgentSessionsResource 10-method mirror pinned (incl. resume, W474). Drift would break asyncio + FastAPI consumers OR break the sync/async parity contract', () => {
     expect(body).toMatch(/class AsyncAgentSessionsResource:/);
     expect(body).toMatch(/async def create\(/);
     expect(body).toMatch(/async def get\(/);
@@ -95,6 +98,7 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     expect(body).toMatch(/async def takeover\(/);
     expect(body).toMatch(/async def handback\(/);
     expect(body).toMatch(/async def livekit_token\(/);
+    expect(body).toMatch(/async def resume\(/);
   });
 
   it("Idempotency-Key Stripe-pattern framing on create() pinned: 'Stripe-pattern dedupe. The server enforces (account_id, idempotency_key) uniqueness via a partial unique index; retries with the same key replay the original 201 response instead of minting a duplicate row.' — pinned so the partial-unique-index + 201-replay contract stays explicit (matches TS + Go framing)", () => {

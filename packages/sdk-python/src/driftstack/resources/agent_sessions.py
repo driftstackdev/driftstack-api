@@ -276,6 +276,32 @@ class AgentSessionsResource:
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/livekit-token",
         )
 
+    def resume(
+        self,
+        agent_session_id: str,
+        *,
+        challenge_id: str | None = None,
+    ) -> dict[str, Any]:
+        """W474 — resume a session the harness auto-paused on a bot-challenge.
+
+        Call after you've resolved the challenge (e.g. in the live view).
+        Best-effort dispatch to the node running the session. Pass
+        ``challenge_id`` (from the ``session.challenge_detected`` webhook) to
+        target a specific active challenge; omit it for a manual override
+        resume. Returns 202 ``{"status": "resume_requested", "session_id": ...}``.
+
+        Raises ``NotFoundError`` (404) or ``ConflictError`` (409, session not
+        active — terminal sessions can't be resumed).
+        """
+        body: dict[str, Any] = {}
+        if challenge_id is not None:
+            body["challenge_id"] = challenge_id
+        return self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/resume",
+            json_body=coerce_body(body),
+        )
+
 
 class AsyncAgentSessionsResource:
     """Async AI-chat agent-sessions resource."""
@@ -390,4 +416,24 @@ class AsyncAgentSessionsResource:
         return await self._http.request(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/livekit-token",
+        )
+
+    async def resume(
+        self,
+        agent_session_id: str,
+        *,
+        challenge_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Async mirror — same W474 resume semantics as sync.
+
+        See :meth:`AgentSessionsResource.resume` for full semantics. Returns
+        202 ``{"status": "resume_requested", "session_id": ...}``.
+        """
+        body: dict[str, Any] = {}
+        if challenge_id is not None:
+            body["challenge_id"] = challenge_id
+        return await self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/resume",
+            json_body=coerce_body(body),
         )
