@@ -162,7 +162,11 @@ export class IncidentsService {
       postedByAdminKeyId: input.createdByAdminKeyId,
     });
     if (incident.public && this.lifecycle.onPublicCreated) {
-      await this.lifecycle.onPublicCreated(incident, update).catch(() => {
+      // W427 — fire-and-forget: don't block the admin create on the outbound
+      // Slack/webhook fan-out (AbortController-bounded but up to ~5s on a slow/
+      // down channel). The fan-out is already error-isolated; awaiting it gave
+      // no error-signal benefit and delayed prompt status-page incident creation.
+      void this.lifecycle.onPublicCreated(incident, update).catch(() => {
         // Notification failures must never roll back the incident write.
       });
     }
@@ -194,7 +198,9 @@ export class IncidentsService {
       try {
         const incident = await this.repo.get(input.incidentId);
         if (incident && incident.public) {
-          await this.lifecycle.onPublicUpdated(incident, update).catch(() => {
+          // W427 — fire-and-forget (see onPublicCreated): don't block addUpdate
+          // on the outbound fan-out.
+          void this.lifecycle.onPublicUpdated(incident, update).catch(() => {
             // Notification failures must never roll back addUpdate.
           });
         }
@@ -210,7 +216,9 @@ export class IncidentsService {
   ): Promise<{ incident: IncidentRow; update: IncidentUpdateRow }> {
     const result = await this.repo.resolve(input);
     if (result.incident.public && this.lifecycle.onPublicResolved) {
-      await this.lifecycle.onPublicResolved(result.incident, result.update).catch(() => {
+      // W427 — fire-and-forget (see onPublicCreated): don't block the admin
+      // resolve on the outbound fan-out.
+      void this.lifecycle.onPublicResolved(result.incident, result.update).catch(() => {
         // Notification failures must never roll back the resolve write.
       });
     }

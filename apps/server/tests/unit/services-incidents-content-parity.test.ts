@@ -15,7 +15,8 @@
 //     (createdByAdminId / createdByAdminKeyId / autoProbeTarget).
 //   • IncidentUpdateRow 7 fields; postedByAdmin* nullable for poller.
 //   • V-295c3-followup IncidentsLifecycle: onPublicCreated +
-//     onPublicResolved — both await + catch-swallow (never roll back).
+//     onPublicResolved — fire-and-forget (W427: void, not await — don't block
+//     the admin op on the outbound fan-out) + catch-swallow (never roll back).
 //   • create: insert incident + synthetic initial update mirroring
 //     incident.status/description (one transaction).
 //   • get: NotFoundError when missing; lists updates after fetch.
@@ -137,7 +138,7 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
       /\/\/ Synthetic initial update mirroring the incident's first state\.\s*\n?\s*const update = await this\.repo\.addUpdate\(\{\s*\n?\s*incidentId: incident\.id,\s*\n?\s*message: input\.description,\s*\n?\s*status: incident\.status,\s*\n?\s*postedByAdminId: input\.createdByAdminId,\s*\n?\s*postedByAdminKeyId: input\.createdByAdminKeyId,\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /if \(incident\.public && this\.lifecycle\.onPublicCreated\) \{\s*\n?\s*await this\.lifecycle\.onPublicCreated\(incident, update\)\.catch\(\(\) => \{\s*\n?\s*\/\/ Notification failures must never roll back the incident write\./,
+      /if \(incident\.public && this\.lifecycle\.onPublicCreated\) \{[\s\S]*?void this\.lifecycle\.onPublicCreated\(incident, update\)\.catch\(\(\) => \{\s*\n?\s*\/\/ Notification failures must never roll back the incident write\./,
     );
   });
 
@@ -149,7 +150,7 @@ describe('W401.A apps/server/src/services/incidents.ts content parity', () => {
 
   it('resolve: fire onPublicResolved only when public; catch-swallow', () => {
     expect(body).toMatch(
-      /async resolve\(\s*\n?\s*input: ResolveIncidentInput,\s*\n?\s*\): Promise<\{ incident: IncidentRow; update: IncidentUpdateRow \}> \{\s*\n?\s*const result = await this\.repo\.resolve\(input\);\s*\n?\s*if \(result\.incident\.public && this\.lifecycle\.onPublicResolved\) \{\s*\n?\s*await this\.lifecycle\.onPublicResolved\(result\.incident, result\.update\)\.catch\(\(\) => \{\s*\n?\s*\/\/ Notification failures must never roll back the resolve write\./,
+      /async resolve\(\s*\n?\s*input: ResolveIncidentInput,\s*\n?\s*\): Promise<\{ incident: IncidentRow; update: IncidentUpdateRow \}> \{\s*\n?\s*const result = await this\.repo\.resolve\(input\);\s*\n?\s*if \(result\.incident\.public && this\.lifecycle\.onPublicResolved\) \{[\s\S]*?void this\.lifecycle\.onPublicResolved\(result\.incident, result\.update\)\.catch\(\(\) => \{\s*\n?\s*\/\/ Notification failures must never roll back the resolve write\./,
     );
   });
 
