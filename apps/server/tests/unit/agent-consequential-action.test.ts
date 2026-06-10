@@ -94,4 +94,24 @@ describe('W443 classifyConsequentialAction', () => {
       ).toBe(false);
     }
   });
+
+  it('defeats unicode evasion (W808): zero-width split, no-break space, bidi wrap, fullwidth', () => {
+    const zwsp = String.fromCharCode(0x200b);
+    const nbsp = String.fromCharCode(0x00a0);
+    const rlo = String.fromCharCode(0x202e);
+    // zero-width space splitting the keyword
+    expect(classifyConsequentialAction(tap('Dele' + zwsp + 'te Account')).category).toBe(
+      'account_deletion',
+    );
+    // no-break space (NFKC folds → regular space)
+    expect(classifyConsequentialAction(tap('Delete' + nbsp + 'Account')).category).toBe(
+      'account_deletion',
+    );
+    // bidi right-to-left override prefix
+    expect(classifyConsequentialAction(tap(rlo + 'Confirm Payment')).category).toBe('payment');
+    // fullwidth "Buy Now" (NFKC folds → ASCII)
+    const fullwidth = (s: string) =>
+      s.replace(/[!-~]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0)).replace(/ /g, ' ');
+    expect(classifyConsequentialAction(tap(fullwidth('Buy Now'))).category).toBe('purchase');
+  });
 });
