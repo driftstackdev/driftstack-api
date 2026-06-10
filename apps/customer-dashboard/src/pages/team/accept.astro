@@ -1,0 +1,107 @@
+---
+import DashboardLayout from '../../layouts/DashboardLayout.astro';
+
+// W472 — team-invite acceptance landing page.
+//
+// The invite email links here (`${DASHBOARD_ORIGIN}/team/accept?token=...`,
+// built in apps/server/src/services/team-members.ts). Before this page existed
+// that link 404'd — invitees could not complete acceptance (a live break of the
+// team-invite flow; the backend route + email + docs all referenced this page,
+// but the page itself was never created).
+//
+// Flow: read ?token= → POST /v1/team/invites/accept { token } → the server
+// validates the 256-bit single-use, email-bound, 7-day token and joins the
+// invitee to the team. The route is requireAuth, so a 401 means the invitee
+// isn't signed in yet — we surface a sign-in/sign-up prompt (matching the invite
+// email's "you'll be prompted to sign up first" note). Modeled on
+// auth/oauth-client/confirm-merge.astro (same token → POST → navigate pattern).
+
+import { resolveApiBaseUrl } from '../../lib/api-base-url';
+const apiBaseUrl = resolveApiBaseUrl();
+---
+
+<DashboardLayout title="Accept team invite" withSidebar={false}>
+  <div
+    class="mx-auto flex min-h-[calc(100vh-14rem)] w-full max-w-md flex-col justify-center px-6 py-16 animate-fade-up"
+    data-page="team-accept"
+  >
+    <p class="section-label">Team invite</p>
+    <h1
+      class="mt-5 text-4xl font-semibold tracking-tight text-ink-primary"
+      style="letter-spacing: -0.02em;"
+    >
+      Joining the team…
+    </h1>
+    <p class="mt-3 text-sm text-ink-secondary" data-field="intro">
+      Accepting your invite. One moment.
+    </p>
+
+    <div class="auth-card mt-8">
+      <div data-banner class="banner-warn mb-5 hidden" role="status"></div>
+      <p class="mt-6 hidden text-xs text-ink-muted" data-field="signin-hint">
+        Not signed in? <a
+          href="/login"
+          class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft">Sign in</a
+        > or <a
+          href="/signup"
+          class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+          >create your account</a
+        > with the email the invite was sent to, then click the invite link again.
+      </p>
+    </div>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="team-accept"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const intro = root.querySelector('[data-field="intro"]');
+      const signinHint = root.querySelector('[data-field="signin-hint"]');
+
+      function showBanner(text, showSignin) {
+        if (intro) intro.textContent = '';
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+        if (showSignin && signinHint) signinHint.classList.remove('hidden');
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+      if (!token || token.length === 0) {
+        showBanner("Missing 'token' query parameter. Click the link in your team-invite email.", false);
+        return;
+      }
+
+      fetch(apiBaseUrl + '/v1/team/invites/accept', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ token: token }),
+      })
+        .then((r) => {
+          if (r.ok) return r.json();
+          if (r.status === 401) {
+            return Promise.reject(
+              Object.assign(new Error('You need to be signed in to accept this invite.'), {
+                needsSignin: true,
+              }),
+            );
+          }
+          return r
+            .json()
+            .catch(() => ({}))
+            .then((b) => Promise.reject(new Error(b.detail || 'HTTP ' + r.status)));
+        })
+        .then(() => {
+          window.location.href = '/team';
+        })
+        .catch((err) => {
+          showBanner(
+            err && err.message ? err.message : 'Could not accept the invite.',
+            !!(err && err.needsSignin),
+          );
+        });
+    })();
+  </script>
+</DashboardLayout>
