@@ -39,3 +39,18 @@ export const AgentSessionSchema = z.object({
 });
 
 export type AgentSession = z.infer<typeof AgentSessionSchema>;
+
+/**
+ * W393 — POST /v1/agent-sessions/:id/resume body. Resume a session the harness
+ * auto-paused on a detected bot-challenge (after the customer resolves it).
+ * `challenge_id` (optional) correlates to the `session.challenge_detected` the
+ * customer is responding to: present → the harness validates it against the
+ * active challenge (stale id → the session stays paused); absent → a manual
+ * override resume.
+ */
+export const ResumeSessionRequestSchema = z
+  .object({
+    challenge_id: z.string().min(1).optional(),
+  })
+  .strict();
+export type ResumeSessionRequest = z.infer<typeof ResumeSessionRequestSchema>;

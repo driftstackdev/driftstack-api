@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   dispatchSessionAssignOnCreate,
   dispatchSessionEndOnClose,
+  dispatchResumeSession,
   type SessionDispatchConfig,
 } from '../../src/routes/agent-sessions.js';
 import { FleetControlRegistry } from '../../src/services/fleet-control-registry.js';
@@ -271,6 +272,55 @@ describe('dispatchSessionAssignOnCreate', () => {
     ).resolves.toBeUndefined();
     expect(sent).toHaveLength(0);
     expect(log.warn).toHaveBeenCalled();
+  });
+});
+
+describe('dispatchResumeSession (W393)', () => {
+  it('sends a resumeSession (with challengeId) to the connected node', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    const log = logger();
+    await dispatchResumeSession({
+      sessionId: 'agt_r1',
+      challengeId: 'chl_1',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      logger: log,
+    });
+    expect(sent).toHaveLength(1);
+    expect(JSON.parse(sent[0]!)).toEqual({
+      type: 'resumeSession',
+      sessionId: 'agt_r1',
+      challengeId: 'chl_1',
+    });
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  it('omits challengeId for a manual resume', async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    await dispatchResumeSession({
+      sessionId: 'agt_r2',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      logger: logger(),
+    });
+    expect(JSON.parse(sent[0]!)).toEqual({ type: 'resumeSession', sessionId: 'agt_r2' });
+  });
+
+  it('no-op when the fleet control plane is not wired (registry/repo undefined)', async () => {
+    const log = logger();
+    await expect(
+      dispatchResumeSession({
+        sessionId: 'agt_r3',
+        fleetControlRegistry: undefined,
+        fleetNodesRepo: undefined,
+        logger: log,
+      }),
+    ).resolves.toBeUndefined();
+    expect(log.warn).not.toHaveBeenCalled();
   });
 });
 

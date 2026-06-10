@@ -125,6 +125,18 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     expect(res.statusCode).toBe(503);
     expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
   });
+
+  it('W393 POST /v1/agent-sessions/:id/resume → 503 FeatureUnavailable when runtime not wired', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions/agt_xxx/resume',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json<{ type: string }>().type).toBe(PROBLEM_TYPES.FeatureUnavailable);
+  });
 });
 
 describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
@@ -145,6 +157,50 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode).toBe(403);
     const body = res.json<{ detail: string }>();
     expect(body.detail).toContain('write');
+  });
+
+  it('W393 POST /:id/resume → 202 for an owned active session; 404 unknown; 409 terminal', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000 },
+    });
+    const { id } = create.json<{ id: string }>();
+
+    // Owned session → 202 (dispatch is inert without a fleet node, but the route accepts).
+    const ok = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/resume`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { challenge_id: 'chl_1' },
+    });
+    expect(ok.statusCode).toBe(202);
+    expect(ok.json<{ status: string }>().status).toBe('resume_requested');
+
+    // Unknown / not-owned session id → 404 (ownership-scoped repo.get).
+    const missing = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions/agt_inmem_does_not_exist/resume',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(missing.statusCode).toBe(404);
+
+    // Terminal (closed) session → 409 (resume requires an active session).
+    await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/agent-sessions/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    const closed = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/agent-sessions/${id}/resume`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(closed.statusCode).toBe(409);
   });
 
   it('full lifecycle: create → message (plan) → get → close', async () => {

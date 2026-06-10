@@ -22,6 +22,7 @@ import { z } from 'zod';
 import {
   AgentModelSchema,
   SendInputEventRequestSchema,
+  ResumeSessionRequestSchema,
   type AgentModel,
 } from '@driftstack/api-types';
 import type { AgentRuntime } from '../services/agent-runtime.js';
@@ -50,7 +51,11 @@ import type { PairModeHeartbeatTracker } from '../services/agent-pair-mode-heart
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { mintLivekitToken } from '../lib/livekit-token.js';
 import { decryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
-import { serializeSessionAssign, serializeSessionEnd } from '../services/harness-control-codec.js';
+import {
+  serializeSessionAssign,
+  serializeSessionEnd,
+  serializeResumeSession,
+} from '../services/harness-control-codec.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import type { SocksProxyConfig } from '@driftstack/api-types';
 import {
@@ -522,6 +527,53 @@ export async function dispatchSessionEndOnClose(args: {
         err: err instanceof Error ? err.message : String(err),
       },
       'sessionEnd dispatch failed (session close unaffected)',
+    );
+  }
+}
+
+/**
+ * W393 — best-effort `resumeSession` dispatch when the customer resumes a
+ * challenge-paused session. Same gating/best-effort contract as
+ * dispatchSessionEndOnClose: inert unless the fleet control plane is wired,
+ * never throws (a dispatch hiccup must not 500 the route). v0 single-node via
+ * findAnyWithLivekit; the harness validates challengeId against the active
+ * challenge and ignores a resume for a session it doesn't hold (harmless no-op).
+ */
+export async function dispatchResumeSession(args: {
+  sessionId: string;
+  challengeId?: string;
+  fleetControlRegistry: FleetControlRegistry | undefined;
+  fleetNodesRepo: DrizzleFleetNodesRepo | undefined;
+  logger?: {
+    info: (obj: unknown, msg: string) => void;
+    warn: (obj: unknown, msg: string) => void;
+  };
+}): Promise<void> {
+  const { sessionId, challengeId, fleetControlRegistry, fleetNodesRepo, logger } = args;
+  if (fleetControlRegistry === undefined || fleetNodesRepo === undefined) return;
+  try {
+    const mac = await fleetNodesRepo.findAnyWithLivekit();
+    if (mac === null) return;
+    const conn = fleetControlRegistry.get(mac.id);
+    if (conn === undefined) return; // node not connected → nothing to resume server-side
+    conn.sendResumeSession(
+      serializeResumeSession({
+        sessionId,
+        ...(challengeId !== undefined ? { challengeId } : {}),
+      }),
+    );
+    logger?.info(
+      { component: 'fleet-session-dispatch', sessionId, nodeId: mac.id, challengeId },
+      'dispatched resumeSession to fleet node',
+    );
+  } catch (err) {
+    logger?.warn(
+      {
+        component: 'fleet-session-dispatch',
+        sessionId,
+        err: err instanceof Error ? err.message : String(err),
+      },
+      'resumeSession dispatch failed',
     );
   }
 }
@@ -1678,6 +1730,44 @@ export function registerAgentSessionsRoutes(
       return reply.code(204).send();
     },
   );
+
+  // W393 — POST /v1/agent-sessions/:id/resume. Resume a session the harness
+  // auto-paused on a detected bot-challenge, once the customer has resolved it
+  // (e.g. in the live view). Best-effort dispatch to the node (inert unless the
+  // fleet control plane is wired); challenge_id (optional) correlates to the
+  // session.challenge_detected being responded to — the harness validates it
+  // against the active challenge (stale → stays paused), absent → manual resume.
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    '/v1/agent-sessions/:id/resume',
+    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
+    async (req, reply) => {
+      const ctx = requireCtx(req);
+      const parsed = ResumeSessionRequestSchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      const rec = await sessions.get(req.params.id);
+      if (rec === null || rec.accountId !== ctx.account.id) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      // A harness challenge-pause leaves the server status 'active' (the pause is
+      // harness-internal); only a terminal session can't be resumed. Mirrors the
+      // input-event route's active-session guard.
+      if (rec.status !== 'active') {
+        throw new ConflictError(
+          `AgentSession ${req.params.id} is ${rec.status}; resume requires an active session.`,
+        );
+      }
+      await dispatchResumeSession({
+        sessionId: req.params.id,
+        ...(parsed.data.challenge_id !== undefined
+          ? { challengeId: parsed.data.challenge_id }
+          : {}),
+        fleetControlRegistry,
+        fleetNodesRepo,
+        logger: req.log,
+      });
+      return reply.code(202).send({ status: 'resume_requested', session_id: req.params.id });
+    },
+  );
 }
 
 // Disabled stubs — registered when agentRuntime is undefined in
@@ -1721,4 +1811,6 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   app.post('/v1/agent-sessions/:id/mode', stub);
   // Slice 4 (Wave 29-NNN ARC 3) — POST /:id/input-event also gated.
   app.post('/v1/agent-sessions/:id/input-event', stub);
+  // W393 — POST /:id/resume also gated (same activation message).
+  app.post('/v1/agent-sessions/:id/resume', stub);
 }
