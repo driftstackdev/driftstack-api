@@ -31,6 +31,7 @@
     "apps/**/vitest.config.ts",
     "apps/**/tailwind.config.ts",
     "apps/**/postcss.config.js",
+    "apps/errors-site/build.mjs",
     "packages/**/src/**/*.ts",
     "packages/**/tests/**/*.ts",
     "packages/**/examples/**/*.ts",

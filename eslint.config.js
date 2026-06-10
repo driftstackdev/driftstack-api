@@ -16,6 +16,11 @@ export default tseslint.config(
       // lint doesn't trip on the auto-generated `content.d.ts` etc.
       '**/.astro/**',
       '**/src-tauri/**',
+      // W483 — errors-site is a dependency-free static generator script
+      // (plain .mjs, no tsconfig project); the type-aware rules can't
+      // resolve it. Its output is drift-guarded by
+      // apps/server/tests/unit/errors-site-slug-parity.test.ts instead.
+      'apps/errors-site/**',
       // Marketing site is an Astro project — it uses Astro's own
       // type-check pipeline (`astro check` via the workspace's
       // `typecheck` script). Excluding it from the root ESLint
