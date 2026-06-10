@@ -33,15 +33,16 @@ function read(p: string): string {
 describe('W371.A marketing-site /index (homepage) content parity', () => {
   const body = read(PAGE);
 
-  it('Hero positioning (2026-05-16 founder rewrite — strong + fancy, two paragraphs collapsed to one, "pixel-identical" dropped): two-line H1 "Indistinguishable iPhone Safari." (gradient span) + "Programmable from any language." Sub-paragraph names Real WebKit, the canvas+WebGL hash match against millions of real iPhones (vs the unique-per-session leak every Chromium-stealth API surfaces), and the four access paths.', () => {
+  it('Hero positioning W452 noob-friendly rewrite — plain-language, jargon stripped (Canvas/WebGL-hash + Chromium-stealth-API removed). Two-line H1 kept ("Indistinguishable iPhone Safari." gradient span + "Programmable from any language."). Sub-paragraph leads with the outcome (every site sees a genuine iPhone, never a bot/emulator) + use-cases + the four access paths ("desktop app", not "GUI").', () => {
     expect(body).toMatch(/Indistinguishable iPhone Safari\./);
     expect(body).toMatch(/Programmable from any language\./);
-    expect(body).toMatch(/Real WebKit — the engine every iPhone ships/);
-    expect(body).toMatch(
-      /Canvas \+ WebGL\s+hashes match the millions of iPhones in the wild, not the\s+unique-per-session leak every Chromium-stealth API surfaces/,
-    );
-    expect(body).toMatch(/Drive sessions from TypeScript, Python, Go, or the GUI\./);
-    // The pre-rewrite framings must not return.
+    expect(body).toMatch(/Run a real iPhone browser in the cloud that every website treats as/);
+    expect(body).toMatch(/a genuine iPhone — never a bot, never an emulator\. Built for/);
+    expect(body).toMatch(/scraping, testing, and automation that has to pass as a real mobile/);
+    expect(body).toMatch(/user\. Drive it from TypeScript, Python, Go, or the desktop app\./);
+    // Jargon-heavy + pre-rewrite framings must not return.
+    expect(body).not.toMatch(/Canvas \+ WebGL\s+hashes match the millions/);
+    expect(body).not.toMatch(/unique-per-session leak every Chromium-stealth API surfaces/);
     expect(body).not.toMatch(/Pixel-identical iPhone Safari\. Cloud-hosted\. API, SDK, or GUI\./);
     expect(body).not.toMatch(/Spin up a session in seconds\. Drive it from TypeScript, Python,/);
     expect(body).not.toMatch(/Other API browsers patch JavaScript at runtime/);
