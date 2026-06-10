@@ -49,6 +49,7 @@ Every public API endpoint is a typed method on a resource accessor:
 | Accessor                   | Methods                                                                                                                                                |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `search`, `login`, `destroy`                               |
+| `client.agent_sessions`    | `create`, `get`, `message`, `close`, `set_mode`, `send_input_event`, `takeover`, `handback`, `livekit_token` (AI chat — decompose + execute a task)    |
 | `client.profiles`          | `create`, `list`, `iterate`, `get`, `update`, `delete`, `clone` (V-313)                                                                                |
 | `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` (V-312 — immutable point-in-time copies)                                  |
 | `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (AI-B4 — snapshot an agent-session's intent_log; execution stays v1.1)                                    |

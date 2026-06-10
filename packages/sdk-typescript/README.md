@@ -60,6 +60,16 @@ client.sessions.search(id, body)
 client.sessions.login(id, body)
 client.sessions.destroy(id)
 
+client.agentSessions.create(body?)      // AI chat: decompose a task → plan → execute
+client.agentSessions.get(id)
+client.agentSessions.message(id, body)  // send a turn; returns the executed plan
+client.agentSessions.setMode(id, mode)  // 'manual' | 'ai' | 'pair'
+client.agentSessions.sendInputEvent(id, body)
+client.agentSessions.takeover(id, body)
+client.agentSessions.handback(id)
+client.agentSessions.livekitToken(id)   // subscriber token for the live view
+client.agentSessions.close(id)
+
 client.profiles.create(body)
 client.profiles.list(query?)
 client.profiles.iterate(opts?)
