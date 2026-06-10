@@ -21,11 +21,15 @@ import {
   IntentResultEnvelopeSchema,
   SessionAssignSchema,
   SessionEndSchema,
+  PauseSessionSchema,
+  ResumeSessionSchema,
   HARNESS_INTENT_PARAM_SCHEMAS,
   type IntentDispatch,
   type IntentResultEnvelope,
   type SessionAssign,
   type SessionEnd,
+  type PauseSession,
+  type ResumeSession,
   type SessionAssignTransportMode,
   type HarnessIntentName,
   type HarnessErrorCode,
@@ -200,6 +204,32 @@ export function serializeSessionAssign(args: {
  */
 export function serializeSessionEnd(sessionId: string): SessionEnd {
   return SessionEndSchema.parse({ type: 'sessionEnd', sessionId });
+}
+
+/**
+ * W393 challenge-handling — build a `pauseSession` ControlInbound envelope. The
+ * harness halts action-intent execution (pause-gate; observation still flows).
+ * Re-validated so a malformed envelope never leaves the server.
+ */
+export function serializePauseSession(sessionId: string): PauseSession {
+  return PauseSessionSchema.parse({ type: 'pauseSession', sessionId });
+}
+
+/**
+ * W393 challenge-handling — build a `resumeSession` ControlInbound envelope.
+ * `challengeId` (optional) correlates to the session.challenge_detected the
+ * customer is responding to: present → the harness validates it against the
+ * active challenge (stale → stays paused); absent → a manual override resume.
+ */
+export function serializeResumeSession(args: {
+  sessionId: string;
+  challengeId?: string;
+}): ResumeSession {
+  return ResumeSessionSchema.parse({
+    type: 'resumeSession',
+    sessionId: args.sessionId,
+    ...(args.challengeId !== undefined ? { challengeId: args.challengeId } : {}),
+  });
 }
 
 /** The logical (decoded) result the executor consumes. */

@@ -14,6 +14,8 @@ import {
   encodeWireData,
   serializeSessionAssign,
   serializeSessionEnd,
+  serializePauseSession,
+  serializeResumeSession,
 } from '../../src/services/harness-control-codec.js';
 import type { IntentDispatch } from '../../src/schemas/harness-control-protocol.js';
 
@@ -86,6 +88,20 @@ describe('FleetControlConnection', () => {
     conn.sendSessionEnd(serializeSessionEnd('agt_end'));
     expect(sent).toHaveLength(1);
     expect(JSON.parse(sent[0]!)).toEqual({ type: 'sessionEnd', sessionId: 'agt_end' });
+  });
+
+  it('sends serialized pauseSession + resumeSession frames to the node socket (W393)', () => {
+    const sent: string[] = [];
+    const conn = new FleetControlConnection('node-1', (d) => sent.push(d));
+    conn.sendPauseSession(serializePauseSession('agt_p'));
+    conn.sendResumeSession(serializeResumeSession({ sessionId: 'agt_r', challengeId: 'chl_1' }));
+    expect(sent).toHaveLength(2);
+    expect(JSON.parse(sent[0]!)).toEqual({ type: 'pauseSession', sessionId: 'agt_p' });
+    expect(JSON.parse(sent[1]!)).toEqual({
+      type: 'resumeSession',
+      sessionId: 'agt_r',
+      challengeId: 'chl_1',
+    });
   });
 
   it('routes an inbound intentResult frame → resolves the matching dispatch', async () => {

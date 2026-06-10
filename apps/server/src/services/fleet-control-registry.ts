@@ -22,6 +22,8 @@ import {
   HarnessOutboundSchema,
   type SessionAssign,
   type SessionEnd,
+  type PauseSession,
+  type ResumeSession,
   type ProfileSaved,
   type ChallengeDetected,
 } from '../schemas/harness-control-protocol.js';
@@ -75,6 +77,20 @@ export class FleetControlConnection {
    */
   sendSessionEnd(end: SessionEnd): void {
     this.send(JSON.stringify(end));
+  }
+
+  /**
+   * W393 challenge-handling — push a `pauseSession` / `resumeSession` frame to
+   * this node (fire-and-forget, same framing as sendSessionEnd). The harness
+   * pauses/resumes action-intent execution; build the envelope with
+   * serializePauseSession / serializeResumeSession.
+   */
+  sendPauseSession(pause: PauseSession): void {
+    this.send(JSON.stringify(pause));
+  }
+
+  sendResumeSession(resume: ResumeSession): void {
+    this.send(JSON.stringify(resume));
   }
 
   /**

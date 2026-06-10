@@ -10,6 +10,8 @@ import {
   serializeIntentDispatch,
   serializeSessionAssign,
   serializeSessionEnd,
+  serializePauseSession,
+  serializeResumeSession,
   parseIntentResult,
   HarnessWireCodecError,
 } from '../../src/services/harness-control-codec.js';
@@ -311,5 +313,28 @@ describe('serializeSessionEnd (ControlInbound teardown)', () => {
 
   it('rejects an empty sessionId (would be a malformed teardown)', () => {
     expect(() => serializeSessionEnd('')).toThrow();
+  });
+});
+
+describe('serializePauseSession / serializeResumeSession (W393 challenge-handling)', () => {
+  it('serializePauseSession builds the {type,sessionId} envelope', () => {
+    expect(serializePauseSession('agt_1')).toEqual({ type: 'pauseSession', sessionId: 'agt_1' });
+  });
+
+  it('serializeResumeSession includes challengeId when given, omits it when absent', () => {
+    expect(serializeResumeSession({ sessionId: 'agt_1', challengeId: 'chl_9' })).toEqual({
+      type: 'resumeSession',
+      sessionId: 'agt_1',
+      challengeId: 'chl_9',
+    });
+    expect(serializeResumeSession({ sessionId: 'agt_1' })).toEqual({
+      type: 'resumeSession',
+      sessionId: 'agt_1',
+    });
+  });
+
+  it('rejects an empty sessionId (malformed control frame)', () => {
+    expect(() => serializePauseSession('')).toThrow();
+    expect(() => serializeResumeSession({ sessionId: '' })).toThrow();
   });
 });
