@@ -1,0 +1,91 @@
+// Challenge-handling relay (W393) — bridges a harness `challengeDetected`
+// HarnessOutbound frame to the customer-facing `session.challenge_detected`
+// webhook.
+//
+// On a session hitting a bot-check (DataDome / Arkose / PerimeterX / AWS-WAF /
+// GeeTest / …), the harness ChallengeDetector emits a `challengeDetected` frame
+// (routed by FleetControlConnection.handleInbound → the registry's
+// onChallengeDetected consumer). This factory builds that consumer: it resolves
+// the session's owning account and enqueues a `session.challenge_detected`
+// webhook so subscribers can route the alert into their own ops surface (the
+// harness has already auto-paused the session; the customer resolves the
+// challenge then resumes via the resume endpoint).
+//
+// Returns a synchronous void handler (handleInbound is sync): the account
+// lookup + webhook enqueue are fire-and-forget off the receive loop. Failures
+// are logged, never thrown — a crashing receive loop would tear down every
+// session on the node. An unknown session (no row) is dropped with a warn.
+
+import type { ChallengeDetected } from '../schemas/harness-control-protocol.js';
+import type { WebhookEventType } from './webhooks.js';
+import type { Logger } from '../lib/logger.js';
+
+/** Narrow structural deps so the relay is unit-testable without standing up the
+ *  full repo / WebhooksService (the real instances satisfy these). */
+interface ChallengeRelaySessions {
+  get(id: string): Promise<{ accountId: string } | null>;
+}
+interface ChallengeRelayWebhooks {
+  enqueueEvent(
+    accountId: string,
+    eventType: WebhookEventType,
+    data: Record<string, unknown>,
+  ): Promise<number>;
+}
+
+/**
+ * Build the `onChallengeDetected` handler wired into FleetControlRegistry. The
+ * caller passes the real agent-sessions repo + WebhooksService; omitting it (no
+ * fleet control plane) leaves the frame accepted + ignored.
+ */
+export function makeChallengeRelay(
+  sessions: ChallengeRelaySessions,
+  webhooks: ChallengeRelayWebhooks,
+  logger: Logger,
+): (frame: ChallengeDetected) => void {
+  return (frame: ChallengeDetected): void => {
+    void sessions
+      .get(frame.sessionId)
+      .then((session) => {
+        if (session === null) {
+          logger.warn(
+            {
+              component: 'challenge-relay',
+              sessionId: frame.sessionId,
+              challengeId: frame.challengeId,
+            },
+            'challengeDetected for unknown session — dropping relay',
+          );
+          return;
+        }
+        return webhooks
+          .enqueueEvent(session.accountId, 'session.challenge_detected', {
+            session_id: frame.sessionId,
+            challenge_id: frame.challengeId,
+            challenge: frame.challenge,
+          })
+          .then((endpoints) => {
+            logger.info(
+              {
+                component: 'challenge-relay',
+                sessionId: frame.sessionId,
+                challengeId: frame.challengeId,
+                endpoints,
+              },
+              'relayed session.challenge_detected webhook',
+            );
+          });
+      })
+      .catch((err: unknown) => {
+        logger.error(
+          {
+            component: 'challenge-relay',
+            sessionId: frame.sessionId,
+            challengeId: frame.challengeId,
+            err,
+          },
+          'failed to relay session.challenge_detected',
+        );
+      });
+  };
+}

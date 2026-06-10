@@ -299,7 +299,9 @@ auto-pauses the session (no further action intents run) and surfaces
 the challenge; resolve it (e.g. in the live view) and the session
 resumes. Subscribable so you can route challenge alerts into your own
 ops/notification surface. In the enum (migration 0070); the relay
-emitter wires in a follow-up slice.
+emitter is wired (resolves the owning account → enqueues this webhook)
+and fires once the fleet control plane is live (gated behind
+`FLEET_CONTROL_PLANE_ENABLED`).
 
 ```json
 {

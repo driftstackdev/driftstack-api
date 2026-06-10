@@ -273,6 +273,28 @@ describe('FleetControlRegistry', () => {
     expect(seen).toEqual([{ type: 'profileSaved', sessionId: 's', profile_id: 'p', stored: true }]);
   });
 
+  it('threads the onChallengeDetected handler into the connections it creates (W393)', () => {
+    const seen: unknown[] = [];
+    const reg = new FleetControlRegistry(undefined, (f) => seen.push(f));
+    const conn = reg.register('node-1', () => {});
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'challengeDetected',
+        sessionId: 's',
+        challengeId: 'c',
+        challenge: { type: 'datadome', confidence: 0.8 },
+      }),
+    );
+    expect(seen).toEqual([
+      {
+        type: 'challengeDetected',
+        sessionId: 's',
+        challengeId: 'c',
+        challenge: { type: 'datadome', confidence: 0.8 },
+      },
+    ]);
+  });
+
   it('unregister is idempotent (double-close is a no-op)', () => {
     const reg = new FleetControlRegistry();
     const conn = reg.register('node-1', () => {});

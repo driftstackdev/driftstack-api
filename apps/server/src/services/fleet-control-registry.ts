@@ -157,15 +157,28 @@ export class FleetControlRegistry {
    *   `profileSaved` frame (profile-backed session ended). Threaded into every
    *   connection this registry creates. Omitted (no R2 configured) → the frame
    *   is accepted + ignored, identical to today's stateless behaviour.
+   * @param onChallengeDetected optional handler invoked when any node reports a
+   *   `challengeDetected` frame (W393 — harness flagged a bot-check). Threaded
+   *   into every connection. Omitted → accepted + ignored (stateless). Wired in
+   *   bootstrap to relay → the customer-facing `session.challenge_detected`
+   *   webhook (see makeChallengeRelay).
    */
-  constructor(private readonly onProfileSaved?: (frame: ProfileSaved) => void) {}
+  constructor(
+    private readonly onProfileSaved?: (frame: ProfileSaved) => void,
+    private readonly onChallengeDetected?: (frame: ChallengeDetected) => void,
+  ) {}
 
   register(nodeId: string, send: FleetNodeSocketSend): FleetControlConnection {
     const existing = this.connections.get(nodeId);
     if (existing !== undefined) {
       existing.close(`replaced by a new connection for node ${nodeId}`);
     }
-    const conn = new FleetControlConnection(nodeId, send, this.onProfileSaved);
+    const conn = new FleetControlConnection(
+      nodeId,
+      send,
+      this.onProfileSaved,
+      this.onChallengeDetected,
+    );
     this.connections.set(nodeId, conn);
     return conn;
   }
