@@ -215,9 +215,13 @@ describe('W421.C apps/server/src/routes/billing-crypto-orders.ts content parity'
     );
   });
 
-  it("Auth posture: requireAuth + rateLimit('global') on all 7 routes", () => {
-    const matches = body.match(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/g);
-    expect(matches?.length).toBe(7);
+  it("Auth posture (W496): requireAuth + rateLimit('global') on the 5 read/receipt routes; the 2 mutations (PATCH order-note + POST cancel) add requireScope('admin:billing')", () => {
+    const plain = body.match(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/g);
+    expect(plain?.length).toBe(5);
+    const gated = body.match(
+      /preHandler: \[app\.requireAuth, app\.requireScope\('admin:billing'\), app\.rateLimit\('global'\)\] \},/g,
+    );
+    expect(gated?.length).toBe(2);
   });
 
   it('parseOrThrow helper: zod safeParse + BadRequestError(error.message)', () => {

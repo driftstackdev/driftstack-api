@@ -193,7 +193,8 @@ export function registerCustomerCryptoOrdersRoutes(
     Body: { customer_note?: string | null };
   }>(
     '/v1/billing/crypto-orders/:order_id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // W496 — admin:billing on the order-note write (account_owner satisfies, V-481).
+    { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (
       req: FastifyRequest<{
         Params: { order_id: string };
@@ -299,7 +300,8 @@ export function registerCustomerCryptoOrdersRoutes(
   // on-chain funds can be reconciled — those statuses return 409.
   app.post<{ Params: { order_id: string } }>(
     '/v1/billing/crypto-orders/:order_id/cancel',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // W496 — admin:billing: cancelling an order is a subscription-change action.
+    { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req: FastifyRequest<{ Params: { order_id: string } }>, reply) => {
       const ctx = requireCtx(req);
       const params = parseOrThrow(GetParams, req.params);

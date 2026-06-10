@@ -184,8 +184,10 @@ describe('W419.B apps/server/src/routes/billing-crypto.ts content parity', () =>
     expect(body).toMatch(/created_at: new Date\(order\.created_at\)\.toISOString\(\),/);
   });
 
-  it("Auth posture: requireAuth + rateLimit('global')", () => {
-    expect(body).toMatch(/\{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \},/);
+  it("Auth posture (W496): requireAuth + requireScope('admin:billing') + rateLimit('global') — checkout is a subscription-change action; account_owner satisfies admin:billing (V-481) so the dashboard works, a read/write-only key is blocked", () => {
+    expect(body).toMatch(
+      /\{ preHandler: \[app\.requireAuth, app\.requireScope\('admin:billing'\), app\.rateLimit\('global'\)\] \},/,
+    );
   });
 
   it('imports: FastifyInstance/FastifyRequest + zod + randomBytes from node:crypto + CryptoOrdersService + ValidationError', () => {

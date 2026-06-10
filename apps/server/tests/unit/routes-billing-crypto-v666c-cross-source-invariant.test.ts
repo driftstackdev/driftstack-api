@@ -72,10 +72,12 @@ describe('W1040 routes/billing-crypto V-666.C + V-666.AO/AQ/AR cross-source inva
 
   // ─── Route path + handler shape ──────────────────────────────
 
-  it('CRITICAL route path — POST /v1/billing/crypto-checkout, gated by requireAuth + global rate-limit. The fixed path is what the customer-dashboard /checkout/crypto page calls.', () => {
+  it("CRITICAL route path — POST /v1/billing/crypto-checkout, gated by requireAuth + requireScope('admin:billing') (W496) + global rate-limit. account_owner satisfies admin:billing (V-481) so the customer-dashboard /checkout/crypto page (web-session) works; a read/write-only API key is blocked.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing-crypto.ts'));
     expect(p).toMatch(/'\/v1\/billing\/crypto-checkout'/);
-    expect(p).toMatch(/preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\]/);
+    expect(p).toMatch(
+      /preHandler: \[app\.requireAuth, app\.requireScope\('admin:billing'\), app\.rateLimit\('global'\)\]/,
+    );
   });
 
   it("CRITICAL 201 response shape — order_id + product + price_cents + price_currency + status + provider + payment_address + pay_currency + pay_amount + created_at. 2026-05-21 — V-666.D landed: response fields are now dynamic (real `payment_address` when NowPayments client wired; null stub posture otherwise). Cross-source contract still requires the 10-field envelope so the customer-dashboard's checkout page can render both states.", () => {

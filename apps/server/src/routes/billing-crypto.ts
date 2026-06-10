@@ -148,7 +148,10 @@ export function registerCryptoCheckoutRoutes(
 ): void {
   app.post(
     '/v1/billing/crypto-checkout',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // W496 — admin:billing (scopes.md): initiating a crypto checkout is a
+    // subscription-change action. account_owner satisfies it (V-481), so the
+    // dashboard's web-session works; a read/write-only API key is blocked.
+    { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
       const parsed = CreateCryptoCheckoutSchema.safeParse(req.body);
