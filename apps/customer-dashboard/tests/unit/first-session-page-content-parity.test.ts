@@ -118,11 +118,13 @@ describe('W373.B customer-dashboard /first-session page content parity', () => {
     );
   });
 
-  it('iOS Safari instance + "same WebKit, same fingerprint surface" framing pinned (2026-05-16 honesty pass: "a real iOS Safari instance" → "an iOS Safari instance"; 2026-05-22 — EU-fleet phrasing dropped per founder direction: customers care about proxy capabilities, not data-center location).', () => {
+  it('W457 noob-friendly session framing — plain-language, jargon stripped ("an iPhone Safari browser running in the cloud — every website it visits sees a genuine iPhone, not a bot"). Respects the 2026-05-16 honesty pass (no "real" overclaim; frames it as what websites SEE).', () => {
     expect(body).toMatch(
-      /A session is an iOS Safari instance running on Driftstack —\s+same WebKit, same fingerprint surface as a physical iPhone\./,
+      /A session is an iPhone Safari browser running in the cloud —\s+every website it visits sees a genuine iPhone, not a bot\./,
     );
+    // honesty pass preserved + W457 jargon stripped.
     expect(body).not.toMatch(/A session is a real iOS Safari instance/);
+    expect(body).not.toMatch(/same WebKit, same fingerprint surface as a physical iPhone/);
   });
 
   it('credentials:"include" on both fetches (cookie-session post-issuance)', () => {

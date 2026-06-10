@@ -64,9 +64,11 @@ describe('W741 dashboard first-session V-184a + V-501 parity', () => {
   it("'iOS Safari instance' canonical product claim pinned (2026-05-16 honesty pass: 'a real iOS Safari instance' → 'an iOS Safari instance'; 2026-05-22 — EU-fleet phrasing dropped per founder direction). 'same WebKit, same fingerprint surface as a physical iPhone' wording preserved.", () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /A session is an iOS Safari instance running on Driftstack —\s+same WebKit, same fingerprint surface as a physical iPhone/,
+      /A session is an iPhone Safari browser running in the cloud —\s+every website it visits sees a genuine iPhone, not a bot/,
     );
+    // 2026-05-16 honesty pass preserved (no "real" overclaim) + W457 jargon stripped.
     expect(p).not.toMatch(/A session is a real iOS Safari instance/);
+    expect(p).not.toMatch(/same WebKit, same fingerprint surface as a physical iPhone/);
   });
 
   it("Plaintext-once framing pinned for the auto-minted API key (2026-05-16 enhancement-review A3: copy expanded with plain-English 'a secret token your code uses to call the SDK' + safe-storage hints — 1Password / git-ignored .env / similar). 'shown once; copy it somewhere safe' contract preserved + matches W701 + W707 plaintext-once invariant.", () => {

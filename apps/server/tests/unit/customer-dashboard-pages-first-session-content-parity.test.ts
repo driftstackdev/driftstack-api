@@ -93,9 +93,12 @@ describe('W492.C apps/customer-dashboard/src/pages/first-session.astro content p
       /We'll create your first <strong>API key<\/strong> in the background —\s*\n?\s*a secret token your code uses to call the SDK\. It's shown once on\s*\n?\s*the next page; copy it somewhere safe \(1Password, a git-ignored/,
     );
     expect(body).toMatch(
-      /A session is an iOS Safari instance running on Driftstack —\s+same WebKit, same fingerprint surface as a physical iPhone\./,
+      /A session is an iPhone Safari browser running in the cloud —\s+every website it visits sees a genuine iPhone, not a bot\./,
     );
+    // 2026-05-16 honesty pass preserved (no "real" overclaim) + W457 jargon
+    // stripped (no WebKit / fingerprint-surface in the onboarding copy).
     expect(body).not.toMatch(/A session is a real iOS Safari instance/);
+    expect(body).not.toMatch(/same WebKit, same fingerprint surface as a physical iPhone/);
   });
 
   it("Error-detail surfacing on both phases: errBody.detail || 'mint key HTTP N' / errBody.detail || 'create session HTTP N' — pinned so each phase's failure surfaces its own problem+json detail (drift to merging the two error paths would obscure which phase failed and lose the diagnostic context)", () => {
