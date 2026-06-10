@@ -817,6 +817,130 @@
               }
             },
             "required": ["kind", "intent", "reason"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["confirmation_required"]
+              },
+              "intent": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["navigate"]
+                      },
+                      "url": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "url"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["interact"]
+                      },
+                      "action": {
+                        "type": "string",
+                        "enum": ["tap", "type", "scroll", "swipe"]
+                      },
+                      "selector": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind", "action"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["wait"]
+                      },
+                      "condition": {
+                        "type": "string",
+                        "enum": ["idle", "selector_visible"]
+                      },
+                      "selector": {
+                        "type": "string"
+                      },
+                      "timeoutMs": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": ["kind", "condition"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["capture"]
+                      },
+                      "capture": {
+                        "type": "string",
+                        "enum": ["screenshot", "dom_snapshot", "pdf"]
+                      }
+                    },
+                    "required": ["kind", "capture"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["scroll"]
+                      },
+                      "direction": {
+                        "type": "string",
+                        "enum": ["up", "down"]
+                      },
+                      "amount_px": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": ["kind", "direction"]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": ["behavioral_pause"]
+                      },
+                      "duration_ms": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "reading_word_count": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "required": ["kind"]
+                  }
+                ]
+              },
+              "category": {
+                "type": "string",
+                "enum": ["purchase", "payment", "account_deletion"]
+              },
+              "matchedText": {
+                "type": "string"
+              }
+            },
+            "required": ["kind", "intent", "category", "matchedText"]
           }
         ]
       },
@@ -16592,6 +16716,130 @@
                                   }
                                 },
                                 "required": ["kind", "intent", "reason"]
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": ["confirmation_required"]
+                                  },
+                                  "intent": {
+                                    "oneOf": [
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["navigate"]
+                                          },
+                                          "url": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["kind", "url"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["interact"]
+                                          },
+                                          "action": {
+                                            "type": "string",
+                                            "enum": ["tap", "type", "scroll", "swipe"]
+                                          },
+                                          "selector": {
+                                            "type": "string"
+                                          },
+                                          "value": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": ["kind", "action"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["wait"]
+                                          },
+                                          "condition": {
+                                            "type": "string",
+                                            "enum": ["idle", "selector_visible"]
+                                          },
+                                          "selector": {
+                                            "type": "string"
+                                          },
+                                          "timeoutMs": {
+                                            "type": "integer"
+                                          }
+                                        },
+                                        "required": ["kind", "condition"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["capture"]
+                                          },
+                                          "capture": {
+                                            "type": "string",
+                                            "enum": ["screenshot", "dom_snapshot", "pdf"]
+                                          }
+                                        },
+                                        "required": ["kind", "capture"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["scroll"]
+                                          },
+                                          "direction": {
+                                            "type": "string",
+                                            "enum": ["up", "down"]
+                                          },
+                                          "amount_px": {
+                                            "type": "integer",
+                                            "exclusiveMinimum": 0
+                                          }
+                                        },
+                                        "required": ["kind", "direction"]
+                                      },
+                                      {
+                                        "type": "object",
+                                        "properties": {
+                                          "kind": {
+                                            "type": "string",
+                                            "enum": ["behavioral_pause"]
+                                          },
+                                          "duration_ms": {
+                                            "type": "integer",
+                                            "minimum": 0
+                                          },
+                                          "reading_word_count": {
+                                            "type": "integer",
+                                            "minimum": 0
+                                          }
+                                        },
+                                        "required": ["kind"]
+                                      }
+                                    ]
+                                  },
+                                  "category": {
+                                    "type": "string",
+                                    "enum": ["purchase", "payment", "account_deletion"]
+                                  },
+                                  "matchedText": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": ["kind", "intent", "category", "matchedText"]
                               }
                             ]
                           }

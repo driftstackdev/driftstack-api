@@ -66,7 +66,16 @@ describe('agent-session response schema parity', () => {
     const routeVerbCount = (intentBlock.match(/kind: '/g) ?? []).length;
     expect(routeVerbCount).toBe(6);
     expect(AgentIntentSchema.options).toHaveLength(routeVerbCount);
-    expect(IntentResultSchema.options).toHaveLength(2);
+    // success + failure + confirmation_required (W443/W445 human-confirm guardrail).
+    expect(IntentResultSchema.options).toHaveLength(3);
+    expect(
+      IntentResultSchema.safeParse({
+        kind: 'confirmation_required',
+        intent: { kind: 'interact', action: 'tap', selector: 'Buy Now' },
+        category: 'purchase',
+        matchedText: 'Buy Now',
+      }).success,
+    ).toBe(true);
     // The closed verb vocabulary parses under the schema.
     expect(AgentIntentSchema.safeParse({ kind: 'navigate', url: 'https://x' }).success).toBe(true);
     expect(AgentIntentSchema.safeParse({ kind: 'capture', capture: 'pdf' }).success).toBe(true);

@@ -15,9 +15,11 @@
 // v1.1 (needs A3's typed page-rep). False POSITIVES (spurious confirmation
 // prompts) erode trust, so the patterns stay tight + clearly consequential.
 
-import type { AgentIntent } from '@driftstack/api-types';
+import type { AgentIntent, ConsequentialActionCategory } from '@driftstack/api-types';
 
-export type ConsequentialActionCategory = 'purchase' | 'payment' | 'account_deletion';
+// Re-exported so the executor + tests import the category from one place; the
+// canonical enum lives in api-types (IntentResultSchema's confirmation_required).
+export type { ConsequentialActionCategory };
 
 export interface ConsequentialActionVerdict {
   requiresConfirmation: boolean;

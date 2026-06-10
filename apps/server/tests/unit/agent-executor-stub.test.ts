@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import {
   StubAgentExecutor,
   runResultToTranscriptEntry,
+  consequentialSignature,
   type ExecutorRunResult,
 } from '../../src/services/agent-executor.js';
 import type { AgentIntent } from '../../src/services/agent-decomposer.js';
@@ -127,5 +128,53 @@ describe('AI-B2 runResultToTranscriptEntry', () => {
     const runResult: ExecutorRunResult = { results: [], ok: true };
     const entry = runResultToTranscriptEntry(runResult, '2026-05-16T00:00:00Z');
     expect(entry.role).toBe('agent');
+  });
+
+  // W443/W445 — consequential-action confirmation halt.
+  it('halts BEFORE a consequential tap (confirmation_required + awaitingConfirmation); later intents do not run', async () => {
+    const exec = new StubAgentExecutor();
+    const result = await exec.execute({
+      sessionId: 'sess_1',
+      plan: {
+        kind: 'plan',
+        intents: [
+          { kind: 'navigate', url: 'https://shop.example.com' },
+          { kind: 'interact', action: 'tap', selector: 'Buy Now' },
+          { kind: 'capture', capture: 'screenshot' },
+        ],
+        tokensConsumed: 1,
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.awaitingConfirmation).toBe(true);
+    // navigate ran; halted at the Buy Now tap; the capture never ran.
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0]!.kind).toBe('success');
+    const last = result.results[1]!;
+    expect(last.kind).toBe('confirmation_required');
+    if (last.kind === 'confirmation_required') {
+      expect(last.category).toBe('purchase');
+      expect(last.matchedText.toLowerCase()).toContain('buy now');
+    }
+  });
+
+  it('proceeds past the consequential tap once its signature is approved', async () => {
+    const exec = new StubAgentExecutor();
+    const result = await exec.execute({
+      sessionId: 'sess_1',
+      plan: {
+        kind: 'plan',
+        intents: [
+          { kind: 'interact', action: 'tap', selector: 'Buy Now' },
+          { kind: 'capture', capture: 'screenshot' },
+        ],
+        tokensConsumed: 1,
+      },
+      approvedConsequentialActions: new Set([consequentialSignature('purchase', 'Buy Now')]),
+    });
+    expect(result.ok).toBe(true);
+    expect(result.awaitingConfirmation).toBeUndefined();
+    expect(result.results).toHaveLength(2);
+    expect(result.results.every((r) => r.kind === 'success')).toBe(true);
   });
 });

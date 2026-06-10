@@ -41,7 +41,7 @@ describe('services/agent-executor content parity', () => {
     );
   });
 
-  it('IntentResult 2-variant discriminated union pinned: success (intent + summary + optional captureId) + failure (intent + reason). Drift to dropping the failure variant would force callers to wrap every execute() call in try/catch instead of branching on the discriminator', () => {
+  it('IntentResult 3-variant discriminated union pinned: success (intent + summary + optional captureId) + failure (intent + reason) + confirmation_required (intent + category + matchedText, W443/W445). Drift to dropping a variant would force callers to wrap execute() in try/catch instead of branching on the discriminator', () => {
     expect(body).toMatch(/export type IntentResult =/);
     expect(body).toMatch(
       /\| \{\s*\n?\s*kind: 'success';\s*\n?\s*intent: AgentIntent;\s*\n?\s*\/\*\* Free-form summary string for the transcript log\./,
@@ -50,12 +50,15 @@ describe('services/agent-executor content parity', () => {
     expect(body).toMatch(
       /\| \{\s*\n?\s*kind: 'failure';\s*\n?\s*intent: AgentIntent;\s*\n?\s*\/\*\* Customer-facing failure reason\./,
     );
+    expect(body).toMatch(/kind: 'confirmation_required';/);
+    expect(body).toMatch(/category: ConsequentialActionCategory;/);
   });
 
-  it("ExecutorRunResult 2-field shape pinned: results (ReadonlyArray<IntentResult>) + ok (boolean; true iff every intent succeeded). + 'executor halts on first failure (the agent's next plan can pick up from there)' framing — pinned so the halt-on-first-failure contract + next-plan-picks-up-from-there + Readonly-results commitment stay documented", () => {
-    expect(body).toMatch(
-      /export interface ExecutorRunResult \{\s*\n?\s*results: ReadonlyArray<IntentResult>;\s*\n?\s*\/\*\* True iff every intent in the plan returned `kind: success`\.\s*\n?\s*\*\s+False if any intent failed; the executor halts on first\s*\n?\s*\*\s+failure \(the agent's next plan can pick up from there\)\. \*\/\s*\n?\s*ok: boolean;\s*\n?\s*\}/,
-    );
+  it('ExecutorRunResult 3-field shape pinned: results (ReadonlyArray<IntentResult>) + ok (boolean) + awaitingConfirmation? (W443/W445 — halted awaiting human confirmation, distinct from a plain failure). Pinned so the results + ok + awaitingConfirmation shape stays documented', () => {
+    expect(body).toMatch(/export interface ExecutorRunResult \{/);
+    expect(body).toMatch(/results: ReadonlyArray<IntentResult>;/);
+    expect(body).toMatch(/ok: boolean;/);
+    expect(body).toMatch(/awaitingConfirmation\?: boolean;/);
   });
 
   it("ExecuteArgs sessionId + plan narrowing pinned: 'Refuse + clarify results are no-ops here — the caller (agent runtime) handles those before reaching the executor. The narrowing happens at the type level.' — pinned so the plan-only-narrowing (Extract<DecomposeResult, { kind: 'plan' }>) contract + caller-handles-refuse-clarify rationale stay documented", () => {

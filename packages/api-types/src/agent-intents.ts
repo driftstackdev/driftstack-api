@@ -59,6 +59,14 @@ export type AgentIntent = z.infer<typeof AgentIntentSchema>;
  * union (apps/server/src/services/agent-executor.ts). Surfaced on the
  * typed `results` array of the message plan-executed turn result.
  */
+// W443/W445 — consequential-action categories for the human-confirm guardrail.
+export const ConsequentialActionCategorySchema = z.enum([
+  'purchase',
+  'payment',
+  'account_deletion',
+]);
+export type ConsequentialActionCategory = z.infer<typeof ConsequentialActionCategorySchema>;
+
 export const IntentResultSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('success'),
@@ -70,6 +78,14 @@ export const IntentResultSchema = z.discriminatedUnion('kind', [
     kind: z.literal('failure'),
     intent: AgentIntentSchema,
     reason: z.string(),
+  }),
+  // W443/W445 — the executor halted before dispatching a consequential action
+  // (purchase / payment / account-deletion) that needs human confirmation.
+  z.object({
+    kind: z.literal('confirmation_required'),
+    intent: AgentIntentSchema,
+    category: ConsequentialActionCategorySchema,
+    matchedText: z.string(),
   }),
 ]);
 

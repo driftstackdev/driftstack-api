@@ -19,6 +19,10 @@
 import type { AgentIntent, DecomposeResult, TranscriptEntry } from './agent-decomposer.js';
 import type { AccountContext } from './auth.js';
 import type { CaptureKind, InteractAction, WaitCondition } from '@driftstack/api-types';
+import {
+  classifyConsequentialAction,
+  type ConsequentialActionCategory,
+} from './agent-consequential-action.js';
 
 /**
  * Per-intent execution result. The discriminated union lets callers
@@ -44,14 +48,58 @@ export type IntentResult =
       /** Customer-facing failure reason. Comes from the SessionsService
        *  problem-type response in the wired variant. */
       reason: string;
+    }
+  | {
+      // W443/W445 — the executor halted BEFORE dispatching a consequential
+      // action (purchase / payment / account-deletion) that needs human
+      // confirmation. The customer approves, then the plan re-runs with this
+      // action's signature in `approvedConsequentialActions`.
+      kind: 'confirmation_required';
+      intent: AgentIntent;
+      category: ConsequentialActionCategory;
+      /** The matched consequential phrase — surfaced in the confirmation prompt. */
+      matchedText: string;
     };
 
 export interface ExecutorRunResult {
   results: ReadonlyArray<IntentResult>;
   /** True iff every intent in the plan returned `kind: success`.
-   *  False if any intent failed; the executor halts on first
-   *  failure (the agent's next plan can pick up from there). */
+   *  False if any intent failed OR the plan halted awaiting confirmation. */
   ok: boolean;
+  /** True when the plan halted awaiting human confirmation of a consequential
+   *  action (the last result is `kind: confirmation_required`) — distinct from
+   *  a plain failure; the customer approves then the plan re-runs. */
+  awaitingConfirmation?: boolean;
+}
+
+const EMPTY_APPROVED: ReadonlySet<string> = new Set<string>();
+
+/** Stable signature of a consequential action, for the approve → re-run carry
+ *  (the confirmation_required result echoes back as an approved signature). */
+export function consequentialSignature(
+  category: ConsequentialActionCategory,
+  matchedText: string,
+): string {
+  return `${category}:${matchedText.toLowerCase()}`;
+}
+
+/** If `intent` is a consequential action not yet approved, returns the
+ *  confirmation_required result to halt on; else null. */
+function consequentialHalt(
+  intent: AgentIntent,
+  approved: ReadonlySet<string>,
+): Extract<IntentResult, { kind: 'confirmation_required' }> | null {
+  const v = classifyConsequentialAction(intent);
+  if (!v.requiresConfirmation || v.category === undefined || v.matchedText === undefined) {
+    return null;
+  }
+  if (approved.has(consequentialSignature(v.category, v.matchedText))) return null;
+  return {
+    kind: 'confirmation_required',
+    intent,
+    category: v.category,
+    matchedText: v.matchedText,
+  };
 }
 
 export interface ExecuteArgs {
@@ -70,6 +118,10 @@ export interface ExecuteArgs {
    * 1.5) wires the real executor.
    */
   account?: AccountContext;
+  /** W443/W445 — signatures (consequentialSignature) of consequential actions
+   *  the customer has already approved this run. The executor skips the
+   *  confirmation halt for these so the re-run after approval proceeds. */
+  approvedConsequentialActions?: ReadonlySet<string>;
 }
 
 export interface AgentExecutor {
@@ -93,7 +145,13 @@ export interface AgentExecutor {
 export class StubAgentExecutor implements AgentExecutor {
   execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
     const results: IntentResult[] = [];
+    const approved = args.approvedConsequentialActions ?? EMPTY_APPROVED;
     for (const intent of args.plan.intents) {
+      const halt = consequentialHalt(intent, approved);
+      if (halt) {
+        results.push(halt);
+        return Promise.resolve({ results, ok: false, awaitingConfirmation: true });
+      }
       results.push({
         kind: 'success',
         intent,
@@ -178,7 +236,15 @@ export class RealAgentExecutor implements AgentExecutor {
       return { results, ok: results.length === 0 };
     }
     const results: IntentResult[] = [];
+    const approved = args.approvedConsequentialActions ?? EMPTY_APPROVED;
     for (const intent of args.plan.intents) {
+      // W443/W445 — halt BEFORE dispatching an unapproved consequential action
+      // so the harness never executes it until the customer confirms.
+      const halt = consequentialHalt(intent, approved);
+      if (halt) {
+        results.push(halt);
+        return { results, ok: false, awaitingConfirmation: true };
+      }
       const result = await this.dispatch(account, args.sessionId, intent);
       results.push(result);
       if (result.kind === 'failure') return { results, ok: false };
@@ -359,11 +425,15 @@ export function runResultToTranscriptEntry(
   for (const r of runResult.results) {
     if (r.kind === 'success') {
       lines.push(`✓ ${r.summary}`);
+    } else if (r.kind === 'confirmation_required') {
+      lines.push(`⏸ ${r.intent.kind} — confirmation required (${r.category}: "${r.matchedText}")`);
     } else {
       lines.push(`✗ ${r.intent.kind} — ${r.reason}`);
     }
   }
-  if (!runResult.ok) {
+  if (runResult.awaitingConfirmation) {
+    lines.push('(plan paused — awaiting your confirmation of a consequential action)');
+  } else if (!runResult.ok) {
     lines.push('(plan halted on failure)');
   }
   return {
