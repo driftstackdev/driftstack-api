@@ -458,6 +458,34 @@ If a `human-driving` session goes 30s without a client heartbeat,
 the harness auto-handbacks the session to `ai-driving`. The
 transition emits an `agent_session.pair_mode.timeout` audit row.
 
+### Resume a challenge-paused session
+
+`POST /v1/agent-sessions/{id}/resume`
+
+When the in-session harness detects a bot-challenge (DataDome /
+Arkose / PerimeterX / AWS-WAF / GeeTest / …) it auto-pauses the
+session and emits a [`session.challenge_detected`](/webhooks/events/)
+webhook. After you resolve the challenge (e.g. in the live view),
+call this to resume the agent.
+
+Body: `{ "challenge_id"?: "<id-from-the-event>" }`
+
+`challenge_id` (optional) correlates to the
+`session.challenge_detected` you are responding to — when present, the
+harness validates it against the active challenge (a stale id leaves
+the session paused); when absent, it is a manual override resume.
+
+Response `202`:
+
+```json
+{ "status": "resume_requested", "session_id": "<id>" }
+```
+
+`404` if the session is not found or not owned by your account; `409`
+if the session is in a terminal state (resume requires an active
+session). Available when the fleet control plane is enabled on the
+deployment.
+
 ## Audit log
 
 Six actions land on the customer audit log across the agent-session

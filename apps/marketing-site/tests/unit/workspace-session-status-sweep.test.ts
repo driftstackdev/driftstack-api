@@ -78,6 +78,10 @@ const ALLOWED_NON_SESSION_STATUS = new Set([
   'investigating',
   'identified',
   'resolved',
+  // W393 — the POST /v1/agent-sessions/:id/resume endpoint's response
+  // acknowledgement field ({"status":"resume_requested"}); an ack value,
+  // NOT a session lifecycle status (SessionStatusSchema).
+  'resume_requested',
 ]);
 
 describe('W279.B workspace-wide session-status sweep', () => {
