@@ -44,13 +44,44 @@ make the prod behavior diverge from the harness's (casual 38 vs 28 WPM, etc.).
 This eliminates the divergence by having ONE behavioral model (shared JSON +
 harness), not by wiring the second one.
 
-## Cross-agent (A3) confirmation needed
+## Cross-agent (A3) confirmation — ✅ RECEIVED (bus W782/W784)
 
-- Confirm the shared `personas.json` is the canonical behavioral source and the
-  harness's W386 parity is value-level against it (not just shape).
-- The persona id set `{casual, regular, power_user}` is the file-05 canonical 3;
-  the TS catalogue + the shared JSON keys must agree on the id LIST (the selection
-  contract) — value/shape of params intentionally differ (TS = reference only).
+- **Stronger than parity (W782):** `shared/behavior/personas.json` IS the harness's
+  SOLE canonical source — `BehavioralSimulator.swift` is its Codable MIRROR and the
+  harness LOADS + EXECUTES the JSON's actual values at runtime (`PersonaSetLoader`).
+  There is no independent value-model to diverge. A3 verified casual/regular/
+  power_user `base_wpm` = **28/38/52** (the shared-JSON values, not the TS lib's
+  casual=38). W386 was the shape + load verification.
+- **Id list agrees (W782):** `{casual, regular, power_user}` = the file-05 canonical
+  3 both sides. The selection contract (SessionAssign.behaviorProfile = persona NAME
+  → harness resolves vs the shared JSON) is what A3 relies on; TS param VALUES
+  differing is fine (reference/catalogue, correctly marked non-canonical).
+- A3 never expected the TS lib to feed the harness. **Divergence resolved by design.**
+  This session's A3 behavioral builds (idle-activity planner, persona-drift) all
+  operate on the shared-JSON `Persona`, consistent with the one-model decision.
+
+## Speed-modifier axis (fast/balanced/careful) — queued v1.1 (founder product-call)
+
+The shared `persona-schema.json` requires `profile_speed_modifiers`
+{fast/balanced/careful} "layered on top of persona"; the harness `resolvePersona`
+supports a speed-key (case-2, currently applied to a hardcoded `regular` base). But
+the API exposes only the persona (no field for the speed layer), and the single
+`behaviorProfile` field carries persona OR speed — they can't combine.
+
+- **Persona-only = the v1.0 cut** (working, wired, tested end-to-end via harness
+  case-1). No gap for v1.0.
+- **Full persona×speed matrix = well-scoped, LOW-RISK v1.1** (A2 + A3 agree, bus
+  W432/W784): A2 adds a 2nd `speed_profile` field on CreateSessionRequest +
+  SessionAssign; A3 extends `resolvePersona` to 2-arg `(persona, speedKey)` →
+  `applyProfileModifier(chosen-persona, mod)` — **the apply-fn already exists +
+  is tested** (just pass the chosen persona instead of the hardcoded base).
+  - 🙋 **FOUNDER product-call:** do v1.0 customers need the speed layer on top of
+    persona? Both A2 + A3 recommend **v1.1** (persona-only covers the common case;
+    speed is a power-user refinement).
+- **Naming:** api-types `behavioral_profile`/`BehavioralProfileSchema` = the PERSONA
+  enum; the harness/shared-schema `BehaviorProfile` = the SPEED axis. A3 fixed their
+  stale comment (W784). When the speed axis is exposed (v1.1), name the new field/
+  type `SpeedProfile` to end the collision cleanly.
 
 ## A2 follow-ups (in scope, non-gated)
 
