@@ -392,6 +392,35 @@ const apiBaseUrl = resolveApiBaseUrl();
       </ul>
     </section>
 
+    {/* W527 — ops quick links: the external surfaces an operator checks
+        daily, one click from the overview. Static links only (no fetch). */}
+    <section class="mt-10" aria-label="Ops quick links">
+      <h2 class="text-lg font-semibold tracking-tight text-slate-900">Ops quick links</h2>
+      <ul class="mt-3 flex flex-wrap gap-3 text-sm">
+        <li>
+          <a href="https://api.driftstack.dev/health" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:border-slate-400" rel="noopener" target="_blank">prod /health</a>
+        </li>
+        <li>
+          <a href="https://api.driftstack.dev/version" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:border-slate-400" rel="noopener" target="_blank">prod /version</a>
+        </li>
+        <li>
+          <a href="https://staging.driftstack.dev/version" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:border-slate-400" rel="noopener" target="_blank">staging /version</a>
+        </li>
+        <li>
+          <a href="https://status.driftstack.dev" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:border-slate-400" rel="noopener" target="_blank">status page</a>
+        </li>
+        <li>
+          <a href="https://sentry.io" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:border-slate-400" rel="noopener" target="_blank">Sentry</a>
+        </li>
+        <li>
+          <a href="https://account.postmarkapp.com" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:border-slate-400" rel="noopener" target="_blank">Postmark</a>
+        </li>
+        <li>
+          <a href="https://dash.cloudflare.com" class="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-slate-700 hover:border-slate-400" rel="noopener" target="_blank">Cloudflare</a>
+        </li>
+      </ul>
+    </section>
+
     <p class="mt-8 text-xs text-slate-500">
       All actions on this panel are audit-logged with admin id + target id +
       input payload + ip address. Audit trail is append-only and cannot be
