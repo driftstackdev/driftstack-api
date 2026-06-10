@@ -23,6 +23,7 @@ import {
   type SessionAssign,
   type SessionEnd,
   type ProfileSaved,
+  type ChallengeDetected,
 } from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
 
@@ -39,14 +40,17 @@ export class FleetControlConnection {
   readonly correlator: IntentDispatchCorrelator;
   private readonly send: FleetNodeSocketSend;
   private readonly onProfileSaved?: (frame: ProfileSaved) => void;
+  private readonly onChallengeDetected?: (frame: ChallengeDetected) => void;
 
   constructor(
     readonly nodeId: string,
     send: FleetNodeSocketSend,
     onProfileSaved?: (frame: ProfileSaved) => void,
+    onChallengeDetected?: (frame: ChallengeDetected) => void,
   ) {
     this.send = send;
     this.onProfileSaved = onProfileSaved;
+    this.onChallengeDetected = onChallengeDetected;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
     this.correlator = new IntentDispatchCorrelator(transport);
   }
@@ -116,6 +120,13 @@ export class FleetControlConnection {
           // deploy) → ignored. MUST-DELIVER on the harness side, so a dropped frame
           // is a harness-queue concern, not a server-receive one.
           this.onProfileSaved?.(frame);
+          break;
+        case 'challengeDetected':
+          // Challenge-handling (W393): the harness ChallengeDetector flagged a
+          // bot-check + auto-paused the session. Relay to the customer via the
+          // injected consumer (→ session.challenge_detected SSE + webhook). Absent
+          // consumer (not yet wired / stateless deploy) → ignored, like profileSaved.
+          this.onChallengeDetected?.(frame);
           break;
         // heartbeat / capabilityReport / errorEvent: accepted, not yet consumed.
       }

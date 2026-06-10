@@ -168,6 +168,46 @@ describe('FleetControlConnection', () => {
     ).not.toThrow();
   });
 
+  it('routes an inbound challengeDetected frame → invokes the onChallengeDetected handler (W393)', () => {
+    const seen: unknown[] = [];
+    const conn = new FleetControlConnection(
+      'node-1',
+      () => {},
+      undefined, // onProfileSaved
+      (f) => seen.push(f),
+    );
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'challengeDetected',
+        sessionId: 'ses_x',
+        challengeId: 'chl_1',
+        challenge: { type: 'datadome', confidence: 0.9, detail: 'captcha' },
+      }),
+    );
+    expect(seen).toEqual([
+      {
+        type: 'challengeDetected',
+        sessionId: 'ses_x',
+        challengeId: 'chl_1',
+        challenge: { type: 'datadome', confidence: 0.9, detail: 'captcha' },
+      },
+    ]);
+  });
+
+  it('a challengeDetected frame with no handler wired is accepted + ignored (no crash)', () => {
+    const conn = new FleetControlConnection('node-1', () => {});
+    expect(() =>
+      conn.handleInbound(
+        JSON.stringify({
+          type: 'challengeDetected',
+          sessionId: 's',
+          challengeId: 'c',
+          challenge: { type: 'arkose', confidence: 0.5 },
+        }),
+      ),
+    ).not.toThrow();
+  });
+
   it('a throwing handler on a VALID frame does NOT escape handleInbound (receive-loop + process survive — defence-in-depth)', () => {
     // The route feeds handleInbound from a `socket.on('message')` listener, where
     // an uncaught synchronous throw surfaces as a process-level uncaughtException.
