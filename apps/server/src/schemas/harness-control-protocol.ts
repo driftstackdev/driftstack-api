@@ -300,6 +300,32 @@ export const SessionEndSchema = z
   })
   .strict();
 export type SessionEnd = z.infer<typeof SessionEndSchema>;
+
+// ── ControlInbound.pauseSession / resumeSession (server → harness; W393) ───
+// Challenge-handling controls (A3 W725). The harness AUTO-pauses on
+// detect_challenge (self-contained, immediate); these are the EXPLICIT CP
+// triggers: pauseSession = manual override; resumeSession = recovery once the
+// customer resolves the challenge (re-enables action intents). Pause halts
+// action-intent execution via the harness pause-gate (observation still passes;
+// idle-exempt). resumeSession.challengeId (optional) correlates to the
+// session.challenge_detected the customer is responding to (anti-stale-resume);
+// absent = a manual pause→resume with no specific challenge.
+export const PauseSessionSchema = z
+  .object({
+    type: z.literal('pauseSession'),
+    sessionId: z.string().min(1),
+  })
+  .strict();
+export type PauseSession = z.infer<typeof PauseSessionSchema>;
+
+export const ResumeSessionSchema = z
+  .object({
+    type: z.literal('resumeSession'),
+    sessionId: z.string().min(1),
+    challengeId: z.string().min(1).optional(),
+  })
+  .strict();
+export type ResumeSession = z.infer<typeof ResumeSessionSchema>;
 export const SESSION_ASSIGN_TRANSPORT_MODES = ['h2-only', 'h2-and-h3'] as const;
 export type SessionAssignTransportMode = (typeof SESSION_ASSIGN_TRANSPORT_MODES)[number];
 
@@ -429,10 +455,32 @@ export const ProfileSavedSchema = z.object({
   stored: z.boolean().optional(),
 });
 
+// ── HarnessOutbound.challengeDetected (harness → server; W393, A3 W717) ──
+// Emitted when the harness ChallengeDetector flags a bot-check (DataDome /
+// Arkose / PerimeterX / AWS-WAF / GeeTest / … — 14 types). The harness
+// auto-pauses the session (A3 W725) and emits this; the server relays it as the
+// customer-facing `session.challenge_detected` (transcript SSE + webhook event).
+// challengeId = the harness-minted per-detection id the customer's resumeSession
+// references once the challenge is solved (response correlation). Plain object
+// (not .strict) like the other outbound frames — lenient forward-compat.
+export const ChallengeDetectedSchema = z.object({
+  type: z.literal('challengeDetected'),
+  sessionId: z.string().min(1),
+  challengeId: z.string().min(1),
+  challenge: z.object({
+    type: z.string(),
+    confidence: z.number(),
+    detail: z.string().optional(),
+  }),
+});
+export type ChallengeDetected = z.infer<typeof ChallengeDetectedSchema>;
+
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
-// All 6 variants pinned. intentResult + sessionStatus are consumed precisely;
-// heartbeat / capabilityReport / errorEvent / profileSaved are accepted (typed)
-// + ignored until a consumer wires them (profileSaved consumer = step (d)).
+// All 7 variants pinned. intentResult + sessionStatus are consumed precisely;
+// heartbeat / capabilityReport / errorEvent / profileSaved / challengeDetected
+// are accepted (typed) + ignored until a consumer wires them (profileSaved
+// consumer = step (d); challengeDetected relay → session.challenge_detected
+// wires in the next W393 slice).
 export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
@@ -440,6 +488,7 @@ export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   CapabilityReportSchema,
   ErrorEventSchema,
   ProfileSavedSchema,
+  ChallengeDetectedSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;
 export type ProfileSaved = z.infer<typeof ProfileSavedSchema>;

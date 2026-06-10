@@ -195,12 +195,42 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const SessionStatusSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('sessionStatus'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*status: z\.string\(\)\.min\(1\),\s*\n?\s*timestamp: z\.string\(\),\s*\n?\s*detail: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*\]\);/,
+      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*\]\);/,
     );
     // ControlInbound.sessionEnd — the trivial W122 teardown envelope (source-pinned).
     expect(body).toMatch(
       /export const SessionEndSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('sessionEnd'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
     );
+  });
+
+  it('W393 challenge-handling contract: pauseSession/resumeSession inbound (strict) + challengeDetected outbound (in union) + behavioral parse', () => {
+    // ControlInbound.pauseSession / resumeSession (server → harness, strict).
+    expect(body).toMatch(
+      /export const PauseSessionSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('pauseSession'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+    );
+    expect(body).toMatch(
+      /export const ResumeSessionSchema = z\s*\n?\s*\.object\(\{\s*\n?\s*type: z\.literal\('resumeSession'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*challengeId: z\.string\(\)\.min\(1\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\);/,
+    );
+    // HarnessOutbound.challengeDetected (harness → server) — shape pinned.
+    expect(body).toMatch(
+      /export const ChallengeDetectedSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('challengeDetected'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*challengeId: z\.string\(\)\.min\(1\),\s*\n?\s*challenge: z\.object\(\{\s*\n?\s*type: z\.string\(\),\s*\n?\s*confidence: z\.number\(\),\s*\n?\s*detail: z\.string\(\)\.optional\(\),\s*\n?\s*\}\),\s*\n?\s*\}\);/,
+    );
+    // challengeDetected parses through the outbound union; challengeId required.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'challengeDetected',
+        sessionId: 's1',
+        challengeId: 'chl_1',
+        challenge: { type: 'datadome', confidence: 0.9 },
+      }).success,
+    ).toBe(true);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'challengeDetected',
+        sessionId: 's1',
+        challenge: { type: 'datadome', confidence: 0.9 },
+      }).success,
+    ).toBe(false); // missing challengeId
   });
 
   it('profileSaved (A3 W417) pinned to the outbound union + shape (sessionId camelCase + profile_id/sealed_blob snake_case + stored)', () => {
