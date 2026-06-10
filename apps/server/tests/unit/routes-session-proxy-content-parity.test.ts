@@ -41,9 +41,9 @@ describe('routes/session-proxy content parity', () => {
     );
   });
 
-  it("W495 write-scope gate pinned: POST /v1/sessions/:id/proxy carries app.requireScope('write') — setting a session's egress proxy is a session mutation (write:sessions class). A read-only key is blocked; drift to dropping it lets a read-only key set session egress.", () => {
+  it("W495/W509 write:sessions gate pinned: POST /v1/sessions/:id/proxy carries app.requireScope('write:sessions') — granular, consistent with the sibling /v1/sessions/:id/* mutations (navigate/interact/capture). W495 wrongly used broad 'write' (a write:sessions CI key wouldn't satisfy it); W509 corrected to write:sessions.", () => {
     expect(body).toMatch(
-      /'\/v1\/sessions\/:id\/proxy',[\s\S]*?\{ preHandler: \[app\.requireAuth, app\.requireScope\('write'\), app\.rateLimit\('global'\)\] \},/,
+      /'\/v1\/sessions\/:id\/proxy',[\s\S]*?\{ preHandler: \[app\.requireAuth, app\.requireScope\('write:sessions'\), app\.rateLimit\('global'\)\] \},/,
     );
   });
 

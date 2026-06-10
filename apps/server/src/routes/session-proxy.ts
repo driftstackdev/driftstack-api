@@ -56,9 +56,11 @@ export function registerSessionProxyRoutes(
 
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/proxy',
-    // W495 — write-scope: setting a session's egress proxy is a session
-    // mutation, consistent with navigate/interact/capture (write:sessions).
-    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
+    // W495/W509 — write:sessions (granular), consistent with the sibling
+    // /v1/sessions/:id/* mutations (navigate/interact/capture). W495 wrongly
+    // used broad 'write', which a granular write:sessions key (the documented
+    // CI-runner scope set) does NOT satisfy → would 403 on set-proxy.
+    { preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')] },
     (req): never => {
       requireCtx(req);
       const { id } = req.params;
