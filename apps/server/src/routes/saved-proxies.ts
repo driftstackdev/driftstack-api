@@ -57,7 +57,8 @@ export function registerSavedProxiesRoutes(
 
   app.post(
     '/v1/proxies',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // W491 — write-scope: a read-only key can't create proxies (least-privilege).
+    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
     (req): never => {
       requireCtx(req);
       const parsed = SavedProxyConfigSchema.safeParse(req.body);
@@ -103,7 +104,8 @@ export function registerSavedProxiesRoutes(
   // runs from a Mac node" message consistently rather than a 404.
   app.post<{ Params: { id: string } }>(
     '/v1/proxies/:id/test',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // W491 — write-scope: proxy reachability test is a write-class action.
+    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
     (req): never => {
       requireCtx(req);
       throw new FeatureUnavailableError(
@@ -116,7 +118,8 @@ export function registerSavedProxiesRoutes(
 
   app.delete<{ Params: { id: string } }>(
     '/v1/proxies/:id',
-    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    // W491 — write-scope: a read-only key can't delete proxies (least-privilege).
+    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
     (req): never => {
       requireCtx(req);
       // No saved proxies exist yet → every id is 404.

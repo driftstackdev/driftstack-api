@@ -67,6 +67,13 @@ describe('routes/saved-proxies content parity', () => {
     );
   });
 
+  it("W491 write-scope gate pinned on all 3 mutations — POST /v1/proxies, POST /v1/proxies/:id/test, DELETE /v1/proxies/:id each carry app.requireScope('write') in preHandler. A read-only API key is blocked (403) before the handler; drift to dropping it lets a read-only key mutate proxies (least-privilege hole).", () => {
+    const gated = body.match(
+      /preHandler: \[app\.requireAuth, app\.requireScope\('write'\), app\.rateLimit\('global'\)\]/g,
+    );
+    expect(gated?.length ?? 0).toBeGreaterThanOrEqual(3);
+  });
+
   it("GET /v1/proxies 200-empty-pre-backend framing pinned: 'List returns 200 with empty data even pre-backend so the dashboard's \"no saved proxies yet\" empty state renders the same as a customer with no saved configs. This avoids a confusing 503 on what's a read-only listing.' + { data: [] as Array<{ id: string; label: string; type: string }> } — pinned so the empty-state-vs-503 UX contract stays documented", () => {
     expect(body).toMatch(
       /\/\/ List returns 200 with empty data even pre-backend so the\s*\n?\s*\/\/ dashboard's "no saved proxies yet" empty state renders the\s*\n?\s*\/\/ same as a customer with no saved configs\. This avoids a\s*\n?\s*\/\/ confusing 503 on what's a read-only listing\./,
