@@ -61,13 +61,11 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     expect(body).toMatch(
       /Start free with no card — or pick a paid tier and we'll send you\s+to Stripe to confirm payment\. Your card details stay between you\s+and Stripe — we never see them/,
     );
-    // Step 2 — first session = iPhone Safari instance with optional
-    // proxy/VPN egress. 2026-05-16 honesty pass dropped "real"; 2026-
-    // 05-22 EU-fleet phrasing replaced with SOCKS5/OpenVPN/WireGuard
-    // capability claim (founder direction: customers care about proxy
-    // capabilities, not data-center location).
+    // Step 2 — first session = iPhone Safari browser with optional
+    // proxy/VPN routing. W501 de-jargoned the new-user welcome step
+    // (was "SOCKS5 / OpenVPN / WireGuard egress per profile").
     expect(body).toMatch(
-      /you'll create your first session — an iPhone\s+Safari instance with optional SOCKS5 \/ OpenVPN \/ WireGuard\s+egress per profile/,
+      /you'll create your first session — an iPhone\s+Safari browser, with the option to route its traffic through\s+your own proxy or VPN/,
     );
     // Step 3 — first API key auto-created + revocable.
     expect(body).toMatch(
@@ -103,11 +101,11 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
     expect(body).toMatch(/R6 polish/);
   });
 
-  it('hero claim (R6 + 2026-05-16 honesty pass): iPhone Safari sessions on real WebKit + same engine + indistinguishable from a physical phone (was "real iPhone Safari sessions" — reframed to "real WebKit" since we build the WebKit engine, not the literal Safari binary; matches the homepage hero at 2d0deca0)', () => {
+  it('hero claim (W501 noob-friendly + honesty pass): "an iPhone Safari browser running in the cloud — every website it visits sees a genuine iPhone, not a bot." De-jargoned the WebKit-engine framing for the new-user screen; honesty pass preserved — "an iPhone Safari browser" NOT "real iPhone Safari" (we run WebKit from source, not the binary).', () => {
     expect(body).toMatch(
-      /Driftstack runs iPhone Safari sessions on real WebKit — the same\s+engine every iPhone uses, so your sessions look indistinguishable\s+from a physical phone/,
+      /Driftstack gives you an iPhone Safari browser running in the\s+cloud — every website it visits sees a genuine iPhone, not a bot/,
     );
-    expect(body).not.toMatch(/Driftstack runs real iPhone Safari sessions/);
+    expect(body).not.toMatch(/real iPhone Safari/);
   });
 
   it('layout uses withSidebar={false} (welcome surface is pre-tier-selection)', () => {

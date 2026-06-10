@@ -23,11 +23,12 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     expect(body).toMatch(/Onboarding step 3 — brief intro \+ CTA to tier-select\. R6 polish/);
   });
 
-  it("Brand intro (R6 + 2026-05-16 honesty pass): 'iPhone Safari sessions on real WebKit — the same engine every iPhone uses, so your sessions look indistinguishable from a physical phone.' Aligned with the homepage hero rewrite at 2d0deca0 — 'real WebKit' (engine, which we DO build from Apple's source) rather than 'real iPhone Safari' (binary, which we don't run literally).", () => {
+  it("Brand intro (W501 noob-friendly + honesty pass): plain 'iPhone Safari browser running in the cloud — every website it visits sees a genuine iPhone, not a bot.' Dropped the 'WebKit engine' jargon for the new-user welcome screen; keeps the honesty-pass posture (NO 'real iPhone Safari' binary claim — says 'an iPhone Safari browser', matching first-session.astro).", () => {
     expect(body).toMatch(
-      /Driftstack runs iPhone Safari sessions on real WebKit — the same\s*\n?\s*engine every iPhone uses, so your sessions look indistinguishable\s*\n?\s*from a physical phone\./,
+      /Driftstack gives you an iPhone Safari browser running in the\s*\n?\s*cloud — every website it visits sees a genuine iPhone, not a bot\./,
     );
-    expect(body).not.toMatch(/Driftstack runs real iPhone Safari sessions/);
+    // Honesty pass: must NOT claim to run the Safari binary ("real iPhone Safari").
+    expect(body).not.toMatch(/real iPhone Safari/);
   });
 
   it('Start-free card framing pinned: $0 · no card + already-on-free-plan + create-first-session CTA', () => {
@@ -68,7 +69,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     // 05-22 EU-fleet phrasing replaced with proxy-capability claim
     // per founder direction.
     expect(body).toMatch(
-      /Back here, you'll create your first session — an iPhone\s*\n?\s*Safari instance with optional SOCKS5 \/ OpenVPN \/ WireGuard\s*\n?\s*egress per profile\./,
+      /Back here, you'll create your first session — an iPhone\s*\n?\s*Safari browser, with the option to route its traffic through\s*\n?\s*your own proxy or VPN\./,
     );
     // Step 3 — first API key auto-created + revocable.
     expect(body).toMatch(

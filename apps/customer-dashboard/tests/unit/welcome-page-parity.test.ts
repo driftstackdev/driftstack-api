@@ -45,8 +45,9 @@ describe('W268.C /welcome onboarding ↔ TRIAL_PACK + subscription parity', () =
     expect(page).not.toMatch(/lifetime/i);
   });
 
-  it('iPhone Safari narrative is the canonical product framing (2026-05-16 honesty pass: "the same browser engine" → "the same engine"; whitespace-tolerant for line break between "same" and "engine")', () => {
-    expect(page).toMatch(/iPhone Safari sessions/);
-    expect(page).toMatch(/the same\s+engine/);
+  it('iPhone Safari narrative is the canonical product framing (W501 noob-friendly: "an iPhone Safari browser running in the cloud" + "genuine iPhone, not a bot"; honesty pass preserved — not "real iPhone Safari")', () => {
+    expect(page).toMatch(/iPhone Safari browser/);
+    expect(page).toMatch(/genuine iPhone, not a bot/);
+    expect(page).not.toMatch(/real iPhone Safari/);
   });
 });

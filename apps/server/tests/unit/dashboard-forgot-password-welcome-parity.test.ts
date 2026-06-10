@@ -125,10 +125,10 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
     expect(w).toMatch(
       /Start free with no card — or pick a paid tier and we'll send you\s*\n\s+to Stripe to confirm payment\. Your card details stay between you\s*\n\s+and Stripe — we never see them/,
     );
-    // 2026-05-22 — EU-fleet phrasing replaced with proxy capability
-    // claim (SOCKS5/OpenVPN/WireGuard per profile).
+    // W501 — proxy/VPN claim de-jargoned for the new-user welcome step
+    // (was "SOCKS5 / OpenVPN / WireGuard egress per profile").
     expect(w).toMatch(
-      /Back here, you'll create your first session — an iPhone\s*\n\s+Safari instance with optional SOCKS5 \/ OpenVPN \/ WireGuard\s*\n\s+egress per profile/,
+      /Back here, you'll create your first session — an iPhone\s*\n\s+Safari browser, with the option to route its traffic through\s*\n\s+your own proxy or VPN/,
     );
     expect(w).toMatch(
       /We'll create your first API key automatically\. You can revoke\s*\n\s+or rotate it any time on the API keys page/,
@@ -146,12 +146,12 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
     );
   });
 
-  it('CRITICAL welcome canonical positioning pinned (2026-05-16 honesty pass): "Driftstack runs iPhone Safari sessions on real WebKit — the same engine every iPhone uses, so your sessions look indistinguishable from a physical phone." Aligned with the homepage hero rewrite at 2d0deca0 — "real WebKit" (engine, which we DO build from Apple\'s source) rather than "real iPhone Safari" (binary, which we don\'t literally run).', () => {
+  it('CRITICAL welcome canonical positioning pinned (W501 noob-friendly + honesty pass): "Driftstack gives you an iPhone Safari browser running in the cloud — every website it visits sees a genuine iPhone, not a bot." Plain-language for the new-user screen; honesty pass preserved — says "an iPhone Safari browser" (NOT "real iPhone Safari" — we run WebKit built from source, not the Safari binary).', () => {
     const w = read(WELCOME);
     expect(w).toMatch(
-      /Driftstack runs iPhone Safari sessions on real WebKit — the same\s*\n\s+engine every iPhone uses, so your sessions look indistinguishable\s*\n\s+from a physical phone/,
+      /Driftstack gives you an iPhone Safari browser running in the\s*\n\s+cloud — every website it visits sees a genuine iPhone, not a bot/,
     );
-    expect(w).not.toMatch(/Driftstack runs real iPhone Safari sessions/);
+    expect(w).not.toMatch(/real iPhone Safari/);
   });
 
   it('CRITICAL welcome PCI-out-of-scope framing pinned. The wording — "Your card details stay between you and Stripe — we never see them" — is the customer-facing PCI claim. Matches ADR-002 (W733) Stripe-only fiat rail.', () => {
