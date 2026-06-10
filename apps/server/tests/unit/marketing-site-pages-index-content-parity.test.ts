@@ -42,6 +42,13 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).not.toMatch(/Other API browsers patch JavaScript at runtime/);
   });
 
+  it('W456 — plain-language "How it works in 3 steps" section (noob-friendly explainer placed early): "How it works" label + "Three steps to a real iPhone in the cloud." h2 + three step headings (Pick an iPhone profile / Start a session / Drive it your way). Pinned so the non-technical explainer stays.', () => {
+    expect(body).toMatch(/Three steps to a real iPhone in the cloud\./);
+    expect(body).toMatch(/Pick an iPhone profile/);
+    expect(body).toMatch(/Start a session/);
+    expect(body).toMatch(/Drive it your way/);
+  });
+
   it('M.3 + M.6 — "One iPhone among millions." giant-headline framing (M.3 Plan Item 5 dedupe: "Indistinguishable" now appears once on the page in the hero h1 brand line; M.6 Path A: multi-archetype family — iPhone 15 Pro / 16 Pro / 17 lineup, iOS 18.7 / Safari 26.4-26.5 per founder verdict 2026-05-17) + launch-blocking-bug fidelity commitment', () => {
     expect(body).toMatch(/One iPhone among millions\./);
     // M.6 Path A: multi-archetype family + Safari 26.5 span.

@@ -48,6 +48,13 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).not.toMatch(/Other API browsers patch JavaScript at runtime/);
   });
 
+  it('W456 — plain-language "How it works in 3 steps" section (noob-friendly explainer placed early): "How it works" label + "Three steps to a real iPhone in the cloud." h2 + three step headings (Pick an iPhone profile / Start a session / Drive it your way). Pinned so the non-technical explainer stays.', () => {
+    expect(body).toMatch(/Three steps to a real iPhone in the cloud\./);
+    expect(body).toMatch(/Pick an iPhone profile/);
+    expect(body).toMatch(/Start a session/);
+    expect(body).toMatch(/Drive it your way/);
+  });
+
   it('free-tier CTA + figures pinned: Start free / #free anchor / one-profile subline', () => {
     expect(body).toMatch(/href="\/pricing#free"/);
     expect(body).toMatch(/Start free/);
