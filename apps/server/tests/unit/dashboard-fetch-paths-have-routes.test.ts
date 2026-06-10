@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const DASH_SRC = resolve(REPO_ROOT, 'apps/customer-dashboard/src');
+const ADMIN_SRC = resolve(REPO_ROOT, 'apps/admin-panel/src');
 const ROUTES_DIR = resolve(REPO_ROOT, 'apps/server/src/routes');
 
 function walk(dir: string, re: RegExp): string[] {
@@ -40,29 +41,40 @@ describe('W481 dashboard fetch paths resolve to server routes (frontend↔backen
     .map((f) => readFileSync(f, 'utf8'))
     .join('\n');
 
-  // Distinct /v1/ paths the dashboard references, trailing slash stripped (the
-  // dashboard builds `/v1/api-keys/` + id; the base path is what must exist).
-  // Require a quote/backtick immediately before `/v1/` so we only capture
-  // actual API-call path literals — NOT `/v1/` substrings inside an external
-  // URL (e.g. api.qrserver.com/v1/create-qr-code) or a prose comment mentioning
-  // a planned endpoint. Strip the leading quote + trailing slash.
-  const dashPaths = new Set<string>();
-  for (const f of walk(DASH_SRC, /\.(astro|ts|tsx|js)$/)) {
-    const body = readFileSync(f, 'utf8');
-    for (const m of body.matchAll(/['"`]\/v1\/[a-zA-Z0-9/_-]+/g)) {
-      dashPaths.add(m[0].slice(1).replace(/\/+$/, ''));
+  // Distinct /v1/ paths an app references, trailing slash stripped (apps build
+  // `/v1/api-keys/` + id; the base path is what must exist). Require a quote/
+  // backtick immediately before `/v1/` so we only capture actual API-call path
+  // literals — NOT `/v1/` substrings inside an external URL (e.g.
+  // api.qrserver.com/v1/create-qr-code) or a prose comment mentioning a planned
+  // endpoint.
+  function fetchPaths(srcDir: string): Set<string> {
+    const paths = new Set<string>();
+    for (const f of walk(srcDir, /\.(astro|ts|tsx|js)$/)) {
+      for (const m of readFileSync(f, 'utf8').matchAll(/['"`]\/v1\/[a-zA-Z0-9/_-]+/g)) {
+        paths.add(m[0].slice(1).replace(/\/+$/, ''));
+      }
     }
+    return paths;
   }
 
-  it('finds dashboard fetch paths to check', () => {
-    expect(dashPaths.size).toBeGreaterThan(20);
-  });
+  // W481 customer-dashboard + W482 admin-panel — both are client-fetch apps
+  // whose actions 404 silently if an endpoint is renamed/removed.
+  const APPS = [
+    { name: 'customer-dashboard', src: DASH_SRC, min: 20 },
+    { name: 'admin-panel', src: ADMIN_SRC, min: 5 },
+  ];
 
-  it('every dashboard /v1/ fetch path exists in the server route source', () => {
-    const missing = [...dashPaths].filter((p) => !routeSrc.includes(p)).sort();
-    expect(
-      missing,
-      `dashboard fetches these paths but they have no server route (404 — broken action):\n${missing.join('\n')}`,
-    ).toEqual([]);
-  });
+  for (const { name, src, min } of APPS) {
+    const paths = fetchPaths(src);
+    it(`${name}: finds fetch paths to check (>=${min})`, () => {
+      expect(paths.size).toBeGreaterThanOrEqual(min);
+    });
+    it(`${name}: every /v1/ fetch path exists in the server route source`, () => {
+      const missing = [...paths].filter((p) => !routeSrc.includes(p)).sort();
+      expect(
+        missing,
+        `${name} fetches these paths but they have no server route (404 — broken action):\n${missing.join('\n')}`,
+      ).toEqual([]);
+    });
+  }
 });
