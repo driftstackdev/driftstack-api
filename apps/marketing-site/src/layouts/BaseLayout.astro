@@ -40,6 +40,50 @@ const canonical = new URL(pathname, Astro.site).toString();
 // is generated from og-default.svg via scripts/gen-og-image.mjs (the
 // SVG stays the editable design source-of-truth).
 const ogImageUrl = new URL(ogImage ?? '/og-default.png', Astro.site).toString();
+
+// W464 — JSON-LD structured data (schema.org) for rich-result eligibility +
+// knowledge-graph understanding. Site-wide Organization + WebSite + the
+// SoftwareApplication (the product) with the free-tier Offer. @graph with @id
+// cross-refs is the canonical way to ship multiple linked entities in one
+// block. Strictly factual — no fabricated ratings or reviews (we have none;
+// inventing them is dishonest + a Google structured-data penalty risk).
+const siteOrigin = new URL('/', Astro.site).toString().replace(/\/$/, '');
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': `${siteOrigin}/#organization`,
+      name: 'Driftstack',
+      url: siteOrigin,
+      logo: new URL('/driftstack-mark.svg', Astro.site).toString(),
+      description:
+        'Real iPhone Safari browsers in the cloud that every website treats as a genuine iPhone — for scraping, testing, and automation.',
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${siteOrigin}/#website`,
+      url: siteOrigin,
+      name: 'Driftstack',
+      publisher: { '@id': `${siteOrigin}/#organization` },
+    },
+    {
+      '@type': 'SoftwareApplication',
+      name: 'Driftstack',
+      applicationCategory: 'DeveloperApplication',
+      operatingSystem: 'Web, macOS, Windows',
+      url: siteOrigin,
+      description:
+        'Automate a real iPhone Safari browser in the cloud from TypeScript, Python, Go, or a desktop app — every website sees a genuine iPhone, never a bot.',
+      offers: {
+        '@type': 'Offer',
+        price: '0',
+        priceCurrency: 'USD',
+        description: 'Free tier — one profile, 20-minute sessions, no card required.',
+      },
+    },
+  ],
+};
 ---
 
 <!doctype html>
@@ -66,6 +110,8 @@ const ogImageUrl = new URL(ogImage ?? '/og-default.png', Astro.site).toString();
     <meta name="twitter:title" content={fullTitle} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImageUrl} />
+    {/* W464 — schema.org structured data (Organization + WebSite + SoftwareApplication). */}
+    <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
     <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=2" />
     {/* iOS home-screen icon — apple-touch-icon MUST be raster (PNG); an
         SVG favicon alone leaves driftstack.dev with a blank/generic icon

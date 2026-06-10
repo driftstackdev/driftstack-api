@@ -37,6 +37,16 @@ describe('W282.D BaseLayout shared <head> integrity', () => {
     expect(body).toMatch(/name=["']twitter:description["']/);
   });
 
+  it('W464 — emits JSON-LD structured data (Organization + WebSite + SoftwareApplication via @graph)', () => {
+    expect(body).toMatch(/type=["']application\/ld\+json["']/);
+    expect(body).toMatch(/set:html=\{JSON\.stringify\(structuredData\)\}/);
+    expect(body).toMatch(/'@type': 'Organization'/);
+    expect(body).toMatch(/'@type': 'WebSite'/);
+    expect(body).toMatch(/'@type': 'SoftwareApplication'/);
+    // Strictly factual — no fabricated ratings/reviews.
+    expect(body).not.toMatch(/aggregateRating|"@type": ?"Review"|'@type': 'Review'/);
+  });
+
   it('declares charset + viewport baselines', () => {
     expect(body).toMatch(/<meta\s+charset=["']UTF-8["']/i);
     expect(body).toMatch(/<meta\s+name=["']viewport["']/);
