@@ -318,6 +318,12 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(
       /fleetNodeAuth: new FleetNodeAuthImpl\(drizzleFleetNodesRepo, fleetNonceCache\),/,
     );
+    // W413 — go-live config summary logged at boot when the flag is on, so an
+    // operator catches a half-config (LiveKit/PROFILE_MASTER_KEY unset → inert)
+    // at boot rather than at first dispatch.
+    expect(body).toMatch(/component: 'go-live-config',/);
+    expect(body).toMatch(/livekitReady:/);
+    expect(body).toMatch(/'fleet control plane ENABLED',/);
     // Registry takes the profileSaved→R2 persister when R2 is configured, else
     // undefined (frame accepted + ignored). Pinned so the persistence wiring
     // can't be silently dropped (a profile-backed session would lose its store).

@@ -1191,6 +1191,22 @@ export async function createProductionDeps(
   const fleetControlPlaneDeps = config.fleetControlPlaneEnabled
     ? (() => {
         const fleetNonceCache = new RedisFleetNonceCache(redis);
+        // W413 — go-live config summary at boot. The flag is on; surface which
+        // optional go-live deps are actually configured so an operator catches a
+        // half-config (e.g. flag on but PROFILE_MASTER_KEY / LiveKit unset →
+        // those features degrade inert) at boot, not at first dispatch.
+        logger.info(
+          {
+            component: 'go-live-config',
+            livekitReady:
+              config.livekit?.apiKey !== undefined &&
+              config.livekit?.apiSecret !== undefined &&
+              config.livekit?.wsUrl !== undefined,
+            profileDekReady: config.profileMasterKey !== undefined,
+            fleetInternalTokenSet: config.fleetInternalToken !== undefined,
+          },
+          'fleet control plane ENABLED',
+        );
         return {
           fleetNodeAuth: new FleetNodeAuthImpl(drizzleFleetNodesRepo, fleetNonceCache),
           fleetNonceCache,
