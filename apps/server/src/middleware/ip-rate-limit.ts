@@ -178,4 +178,18 @@ export const AUTH_IP_LIMITS = {
   // Drizzle OAuthStore; this gate ships WITH the routes so the
   // protection is present the moment the store is wired.
   oauthProvider: { capacity: 60, refillPerSecond: 60 / 60 },
+  // W484 — the 4 remaining unauth token routes (surfaced §4.12; gated on the
+  // TRUST_PROXY fix so per-IP keys on the real client IP — live since W424).
+  // The consumed tokens are high-entropy single-use (brute-force infeasible);
+  // these gates close the residual unbounded-request/abuse friction.
+  //   - magic-link/consume + password-reset/confirm: token-paste retries are
+  //     common → verify-email posture (10/min).
+  //   - refresh: HIGH-frequency legitimate traffic (every dashboard session
+  //     refreshes; corporate-NAT puts many users behind one IP) → generous
+  //     60/min so legit flows never see it while loops/floods get friction.
+  //   - logout: cheap single-shot; 10/min covers any sane client.
+  magicLinkConsume: { capacity: 10, refillPerSecond: 10 / 60 },
+  passwordResetConfirm: { capacity: 10, refillPerSecond: 10 / 60 },
+  refresh: { capacity: 60, refillPerSecond: 60 / 60 },
+  logout: { capacity: 10, refillPerSecond: 10 / 60 },
 } as const;

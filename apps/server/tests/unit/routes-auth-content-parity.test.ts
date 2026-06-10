@@ -163,9 +163,9 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     );
   });
 
-  it('Logout: always returns { ok: true as const } regardless of token match (no leak)', () => {
+  it('Logout: IP-gated (W484) + always returns { ok: true as const } regardless of token match (no leak)', () => {
     expect(body).toMatch(
-      /app\.post\('\/v1\/auth\/logout', \{\}, async \(req\) => \{[\s\S]+?await service\.logout\(parsed\.data\.token\);\s*\n?\s*return \{ ok: true as const \};/,
+      /app\.post\('\/v1\/auth\/logout', \{ preHandler: \[logoutGate\] \}, async \(req\) => \{[\s\S]+?await service\.logout\(parsed\.data\.token\);\s*\n?\s*return \{ ok: true as const \};/,
     );
   });
 

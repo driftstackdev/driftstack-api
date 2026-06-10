@@ -98,31 +98,12 @@ const EXEMPT_BY_DESIGN: ReadonlyArray<{ file: string; path: string; reason: stri
 // bounded by bodyLimit). A future founder/maintainer decision either gates
 // them (move the entry to a real ipRateLimit gate + delete it here) or
 // promotes it to EXEMPT_BY_DESIGN.
+// W484 — the four auth.ts entries were CLOSED (the §4.12 blockers cleared:
+// TRUST_PROXY=1 live since W424 means per-IP gates key on the real client IP).
+// magic-link/consume + password-reset/confirm + logout are gated at 10/min/IP,
+// refresh at a generous 60/min/IP (highest-frequency legit traffic; corporate
+// NAT). Only the deliberate oauth omission remains pinned.
 const SURFACED_PENDING_LIMITER: ReadonlyArray<{ file: string; path: string; reason: string }> = [
-  {
-    file: 'auth.ts',
-    path: '/v1/auth/magic-link/consume',
-    reason:
-      'Unauth token-consume → mints a web session; no IP limiter (sibling magic-link/request IS gated). LOW (token sound). §4.12.',
-  },
-  {
-    file: 'auth.ts',
-    path: '/v1/auth/password-reset/confirm',
-    reason:
-      'Unauth token-confirm → resets password; no IP limiter (sibling password-reset/request IS gated). LOW (token sound). §4.12.',
-  },
-  {
-    file: 'auth.ts',
-    path: '/v1/auth/refresh',
-    reason:
-      'Unauth refresh-token rotate; no IP limiter. Highest-frequency of the group → a tight global-bucket gate would be the most disruptive. LOW (token sound). §4.12.',
-  },
-  {
-    file: 'auth.ts',
-    path: '/v1/auth/logout',
-    reason:
-      'Unauth session-token revoke; no IP limiter. LOW (token sound; revocation is idempotent). §4.12.',
-  },
   {
     file: 'oauth.ts',
     path: '/v1/oauth/authorize/complete',

@@ -151,7 +151,7 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
     );
   });
 
-  it('CRITICAL AUTH_IP_LIMITS 13-endpoint roster pinned with capacity + refillPerSecond per endpoint. Each row sets the per-IP cap; drift to widening would let abusers fire more requests per minute. magicLink added 2026-05-15 (#190) since each call fires a Postmark send. 2026-05-20 added oauthClientStart/Callback/ConfirmMerge gates pre-launch + statusIncidentsList/Detail defense-in-depth gates on the public CDN-cached reads. 2026-06-01 added oauthProvider (V-667 unauth public-dance brute-force/oracle gate).', () => {
+  it('CRITICAL AUTH_IP_LIMITS 17-endpoint roster pinned with capacity + refillPerSecond per endpoint. Each row sets the per-IP cap; drift to widening would let abusers fire more requests per minute. magicLink added 2026-05-15 (#190) since each call fires a Postmark send. 2026-05-20 added oauthClientStart/Callback/ConfirmMerge gates pre-launch + statusIncidentsList/Detail defense-in-depth gates on the public CDN-cached reads. 2026-06-01 added oauthProvider (V-667 unauth public-dance brute-force/oracle gate). W484 closed §4.12: magicLinkConsume + passwordResetConfirm + logout (10/min token-paste posture) + refresh (generous 60/min — highest-frequency legit traffic, corporate NAT).', () => {
     const src = read(IP_RATE_LIMIT);
 
     const limits: Array<[string, number]> = [
@@ -168,6 +168,10 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
       ['statusIncidentsList', 60],
       ['statusIncidentDetail', 60],
       ['oauthProvider', 60],
+      ['magicLinkConsume', 10],
+      ['passwordResetConfirm', 10],
+      ['refresh', 60],
+      ['logout', 10],
     ];
 
     for (const [name, capacity] of limits) {
@@ -179,12 +183,12 @@ describe('W714 server-side request-id + V-251 IP rate-limit middleware parity', 
     }
   });
 
-  it('CRITICAL "1-minute window" sustained-rate framing pinned. Every AUTH_IP_LIMITS entry sets refillPerSecond = capacity / 60 — drift to a different divisor would silently change customer expectations about per-minute caps. 2026-05-20 grew the roster to 12 entries (+3 OAuth-client start/callback/confirm-merge gates pre-launch + 2 status-incident list/detail defense-in-depth gates); 2026-06-01 added the 13th (oauthProvider — V-667 unauth public-dance gate).', () => {
+  it('CRITICAL "1-minute window" sustained-rate framing pinned. Every AUTH_IP_LIMITS entry sets refillPerSecond = capacity / 60 — drift to a different divisor would silently change customer expectations about per-minute caps. 2026-06-01 13th (oauthProvider); W484 grew to 17 (the §4.12 closure: magicLinkConsume + passwordResetConfirm + refresh + logout).', () => {
     const src = read(IP_RATE_LIMIT);
 
-    // All 13 entries use the same `/ 60` divisor.
+    // All 17 entries use the same `/ 60` divisor.
     const refillEntries = src.match(/refillPerSecond: \d+ \/ 60/g) ?? [];
-    expect(refillEntries.length, '/ 60 sustained-rate uses').toBe(13);
+    expect(refillEntries.length, '/ 60 sustained-rate uses').toBe(17);
   });
 
   it('CRITICAL AUTH_IP_LIMITS object is `as const` for literal-type narrowing. The `as const` is what lets TypeScript treat each entry as a readonly literal record (vs. a mutable record). Drift to dropping would let callers accidentally mutate the const.', () => {

@@ -144,6 +144,29 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     capacity: AUTH_IP_LIMITS.magicLink.capacity,
     refillPerSecond: AUTH_IP_LIMITS.magicLink.refillPerSecond,
   });
+  // W484 — the 4 remaining unauth token routes (surfaced §4.12, gated on the
+  // TRUST_PROXY fix; live per-IP since W424). Tokens are high-entropy
+  // single-use, so these close residual abuse friction, not a live brute-force.
+  const magicLinkConsumeGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:magic-link-consume',
+    capacity: AUTH_IP_LIMITS.magicLinkConsume.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.magicLinkConsume.refillPerSecond,
+  });
+  const passwordResetConfirmGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:password-reset-confirm',
+    capacity: AUTH_IP_LIMITS.passwordResetConfirm.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.passwordResetConfirm.refillPerSecond,
+  });
+  const refreshGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:refresh',
+    capacity: AUTH_IP_LIMITS.refresh.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.refresh.refillPerSecond,
+  });
+  const logoutGate = ipRateLimit(rateLimitStore, {
+    bucketPrefix: 'auth-ip:logout',
+    capacity: AUTH_IP_LIMITS.logout.capacity,
+    refillPerSecond: AUTH_IP_LIMITS.logout.refillPerSecond,
+  });
 
   app.post('/v1/auth/signup', { preHandler: [signupGate] }, async (req) => {
     const parsed = SignupRequestSchema.safeParse(req.body);
@@ -319,7 +342,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     };
   });
 
-  app.post('/v1/auth/magic-link/consume', {}, async (req) => {
+  app.post('/v1/auth/magic-link/consume', { preHandler: [magicLinkConsumeGate] }, async (req) => {
     const parsed = MagicLinkConsumeRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
@@ -354,24 +377,28 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     },
   );
 
-  app.post('/v1/auth/password-reset/confirm', {}, async (req) => {
-    const parsed = PasswordResetConfirmRequestSchema.safeParse(req.body);
-    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+  app.post(
+    '/v1/auth/password-reset/confirm',
+    { preHandler: [passwordResetConfirmGate] },
+    async (req) => {
+      const parsed = PasswordResetConfirmRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
-    try {
-      const result = await service.confirmPasswordReset({
-        token: parsed.data.token,
-        newPassword: parsed.data.new_password,
-        issuedFromIp: clientIp(req),
-        userAgent: userAgent(req),
-      });
-      return sessionResponse(result);
-    } catch (e) {
-      mapAuthFlowError(e);
-    }
-  });
+      try {
+        const result = await service.confirmPasswordReset({
+          token: parsed.data.token,
+          newPassword: parsed.data.new_password,
+          issuedFromIp: clientIp(req),
+          userAgent: userAgent(req),
+        });
+        return sessionResponse(result);
+      } catch (e) {
+        mapAuthFlowError(e);
+      }
+    },
+  );
 
-  app.post('/v1/auth/refresh', {}, async (req) => {
+  app.post('/v1/auth/refresh', { preHandler: [refreshGate] }, async (req) => {
     const parsed = RefreshSessionRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
@@ -387,7 +414,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     }
   });
 
-  app.post('/v1/auth/logout', {}, async (req) => {
+  app.post('/v1/auth/logout', { preHandler: [logoutGate] }, async (req) => {
     const parsed = LogoutRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
