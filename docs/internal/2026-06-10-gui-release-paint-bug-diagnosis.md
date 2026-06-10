@@ -53,3 +53,16 @@ starting point.
 - Window config: `apps/gui-client/src-tauri/tauri.conf.json` (`app.windows[0]`).
 - Rust setup site: `apps/gui-client/src-tauri/src/lib.rs` (add a `.setup(|app| …)`).
 - Tauri v2 macOS webview: `tauri::WebviewWindow` + `with_webview` for the WKWebView.
+
+## Status — fix #2 APPLIED + compile-verified (W434, 2026-06-10)
+
+Fix #2 (resize-nudge in a Rust `.setup()` hook, macOS-only) is now in
+`apps/gui-client/src-tauri/src/lib.rs`, and `cargo check` passes clean. It's
+benign-if-wrong (an imperceptible 1px nudge at startup; a no-op if the quirk
+differs or on non-macOS) so it ships as the candidate rather than waiting.
+
+🙋 **FOUNDER / eyes-on:** observe the next release `.app` build — if the webview
+now composites, item (b) is RESOLVED. If it's still blank, the Overlay style is a
+weaker trigger than diagnosed → try #1 (`titleBarStyle: "Visible"` to confirm the
+trigger), then #3 (show-after-ready) / #4 (layer-backed `wantsLayer`). Dev mode is
+unaffected (the nudge is imperceptible; dev already worked).

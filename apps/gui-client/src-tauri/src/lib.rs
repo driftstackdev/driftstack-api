@@ -58,6 +58,27 @@ pub fn run() {
         // single-instance behavior keeps a second app launch from a
         // deep-link from spawning a duplicate window.
         .plugin(tauri_plugin_deep_link::init())
+        // W434 (founder W232 item b) — macOS WKWebView blank-until-redraw on the
+        // Overlay-titlebar window: the packaged release `.app` mounts + polls the
+        // backend but the webview never composites (blank window) until a redraw
+        // event; dev-mode hot-reloads mask it. Force ONE compositing pass at
+        // startup by nudging the window size by 1px and immediately back. Benign
+        // no-op if the quirk differs; compiled only on macOS. Highest-confidence /
+        // lowest-risk fix from docs/internal/2026-06-10-gui-release-paint-bug-diagnosis.md
+        // (#2). Needs the release `.app` observed to confirm it composites.
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::Manager;
+                if let Some(win) = app.get_webview_window("main") {
+                    if let Ok(size) = win.outer_size() {
+                        let _ = win.set_size(tauri::PhysicalSize::new(size.width + 1, size.height));
+                        let _ = win.set_size(size);
+                    }
+                }
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             ping,
             secret_save,
