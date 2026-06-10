@@ -1463,6 +1463,14 @@ export const scheduledJobs = pgTable(
   (t) => [
     index('scheduled_jobs_due_idx').on(t.runAt),
     index('scheduled_jobs_account_type_pending_idx').on(t.accountId, t.jobType),
+    // W415 — the worker claim (run_at <= now AND completed_at IS NULL AND
+    // failed_at IS NULL ORDER BY run_at FOR UPDATE SKIP LOCKED) is backed by a
+    // PARTIAL index `scheduled_jobs_claim_idx (run_at) WHERE completed_at IS NULL
+    // AND failed_at IS NULL` (raw SQL, migration 0071) so the claim stays
+    // O(due-unfinished) as finished jobs accumulate. drizzle's index() can't
+    // express the partial WHERE — same pattern as the agent_sessions
+    // idempotency partial-unique in 0047. (A retention sweep for finished jobs
+    // is still an open design decision — see the W415 backlog note.)
   ],
 );
 

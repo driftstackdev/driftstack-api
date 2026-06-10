@@ -498,6 +498,13 @@
       "when": 1780008000000,
       "tag": "0070_session_challenge_detected_webhook_event",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1780094400000,
+      "tag": "0071_scheduled_jobs_claim_partial_index",
+      "breakpoints": true
     }
   ]
 }
