@@ -244,13 +244,21 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
   it('CRITICAL paid manual + API tiers use the "Get started" → /signup CTA (trial-funnel CTA retired with the trial pack 2026-05-27). The 6 non-enterprise paid tiers send signups straight to /signup; the free tier uses "Get started — free".', () => {
     const p = read(PRICING);
 
-    // 6 paid non-enterprise tiers use the direct /signup CTA.
-    const signupCtaMatches = (p.match(/cta: \{ label: 'Get started', href: '\/signup' \}/g) ?? [])
-      .length;
-    expect(signupCtaMatches, 'paid tiers using the /signup CTA').toBeGreaterThanOrEqual(6);
+    // 6 paid non-enterprise tiers use the direct signup CTA. W467 — the CTA
+    // now points to the ABSOLUTE dashboard signup (app.driftstack.dev/signup);
+    // the prior relative '/signup' 404'd on the marketing origin (driftstack.dev).
+    const signupCtaMatches = (
+      p.match(/cta: \{ label: 'Get started', href: 'https:\/\/app\.driftstack\.dev\/signup' \}/g) ??
+      []
+    ).length;
+    expect(signupCtaMatches, 'paid tiers using the signup CTA').toBeGreaterThanOrEqual(6);
 
     // The free tier uses its own free-framed CTA.
-    expect(p).toMatch(/cta: \{ label: 'Get started — free', href: '\/signup' \}/);
+    expect(p).toMatch(
+      /cta: \{ label: 'Get started — free', href: 'https:\/\/app\.driftstack\.dev\/signup' \}/,
+    );
+    // The relative '/signup' (404 on the marketing origin) must not return.
+    expect(p).not.toMatch(/href: '\/signup'/);
 
     // The retired trial-funnel CTA must NOT return.
     expect(p).not.toMatch(/Start with \$2\.99/);
