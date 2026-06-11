@@ -11,7 +11,26 @@
 // against the source via vitest's standard project config.
 
 import { describe, expect, it } from 'vitest';
-import { keychainNameFor, useKeychainForBaseUrl } from '../../src/lib/settings';
+import { hostIdFor, keychainNameFor, useKeychainForBaseUrl } from '../../src/lib/settings';
+
+describe('hostIdFor — per-deployment identifier (W584)', () => {
+  it('keychainNameFor is hostIdFor with the api_key: prefix', () => {
+    for (const u of ['https://api.driftstack.dev', 'http://localhost:3000', '']) {
+      expect(keychainNameFor(u)).toBe('api_key:' + hostIdFor(u));
+    }
+  });
+
+  it('distinct deployments get distinct host ids (the key-map keys)', () => {
+    expect(hostIdFor('https://api.driftstack.dev')).toBe('api.driftstack.dev');
+    expect(hostIdFor('http://localhost:3000')).toBe('localhost_3000');
+    expect(hostIdFor('https://api.driftstack.dev')).not.toBe(hostIdFor('http://localhost:3000'));
+  });
+
+  it('trailing slash + empty normalise like keychainNameFor', () => {
+    expect(hostIdFor('https://api.driftstack.dev/')).toBe(hostIdFor('https://api.driftstack.dev'));
+    expect(hostIdFor('')).toBe('unknown');
+  });
+});
 
 describe('keychainNameFor — per-baseUrl scoping', () => {
   it('cloud URL produces a distinct name', () => {

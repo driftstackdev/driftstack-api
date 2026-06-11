@@ -17,6 +17,7 @@ import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { useSettings } from '../lib/SettingsContext';
 import { isCloudBaseUrl } from '../lib/telemetry';
+import { rememberedKeyFor } from '../lib/settings';
 import { useConfirm } from '../components/ConfirmProvider';
 
 const CLOUD_URL = 'https://api.driftstack.dev';
@@ -49,15 +50,26 @@ export function SettingsView(): JSX.Element {
   >({ kind: 'idle' });
 
   /** Flip mode + auto-fill the URL. Cloud locks the URL; self-hosted
-   *  keeps whatever the customer last typed (or the default). */
+   *  keeps whatever the customer last typed (or the default). W584 — also
+   *  auto-restores that deployment's remembered key so switching modes never
+   *  asks the customer to re-paste a key they already entered once. */
   function switchMode(next: 'cloud' | 'self-hosted'): void {
     setDraftMode(next);
+    let target: string;
     if (next === 'cloud') {
+      target = CLOUD_URL;
       setDraftUrl(CLOUD_URL);
     } else if (draftUrl === CLOUD_URL || draftUrl.length === 0) {
+      target = SELF_HOSTED_DEFAULT;
       setDraftUrl(SELF_HOSTED_DEFAULT);
+    } else {
+      target = draftUrl;
     }
     setTestState({ kind: 'idle' });
+    setKeyCheck({ kind: 'idle' });
+    void rememberedKeyFor(target).then((remembered) => {
+      setDraftKey(remembered ?? '');
+    });
   }
 
   async function runConnectionTest(): Promise<void> {

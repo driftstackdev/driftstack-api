@@ -91,9 +91,11 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
     expect(body).toMatch(/const SETTINGS_KEY = 'driftstack';/);
     expect(body).toMatch(/const LEGACY_KEYCHAIN_NAME = 'api_key';/);
     expect(body).toMatch(/export function keychainNameFor\(baseUrl: string\): string/);
-    expect(body).toMatch(
-      /return 'api_key:' \+ \(normalised\.length > 0 \? normalised : 'unknown'\);/,
-    );
+    // W584 — keychainNameFor now delegates to hostIdFor (the host portion is
+    // reused as the per-deployment key-map key in settings.json too).
+    expect(body).toMatch(/export function hostIdFor\(baseUrl: string\): string/);
+    expect(body).toMatch(/return normalised\.length > 0 \? normalised : 'unknown';/);
+    expect(body).toMatch(/return 'api_key:' \+ hostIdFor\(baseUrl\);/);
   });
 
   it("keychainLoad: invoke<string|null>('secret_load', {key:name}) + try/catch → null fallback framing 'Keychain access failed (user dismissed, locked, etc.) — fall back to null. Higher layers treat null as \"not set\" + prompt the customer in settings.'", () => {
@@ -131,8 +133,14 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
       /export async function saveSettings\(s: DriftstackSettings\): Promise<void>/,
     );
     expect(body).toMatch(
-      /await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*\.\.\.\(!useKeychain && hasKey \? \{ apiKey: s\.apiKey \} : \{\}\),\s*\n?\s*\}\);/,
+      /await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*\.\.\.\(!useKeychain && hasKey \? \{ apiKey: s\.apiKey \} : \{\}\),\s*\n?\s*\.\.\.\(Object\.keys\(keyMap\)\.length > 0 \? \{ apiKeys: keyMap \} : \{\}\),\s*\n?\s*\}\);/,
     );
+    // W584 — per-deployment key map: cloud saves preserve other hosts' keys
+    // (the founder's "switch modes → signed out" loop) and self-hosted
+    // sign-out forgets only its own host.
+    expect(body).toMatch(/const keyMap = keyMapFrom\(persisted\);/);
+    expect(body).toMatch(/if \(hasKey\) keyMap\[hostId\] = s\.apiKey as string;/);
+    expect(body).toMatch(/else delete keyMap\[hostId\];/);
     expect(body).toMatch(/const scopedName = keychainNameFor\(s\.baseUrl\);/);
     // Sign-out path: dual-delete (scoped + legacy) closes the cross-env
     // stale-key incident; pin both calls so a future refactor can't
