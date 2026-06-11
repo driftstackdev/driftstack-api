@@ -137,6 +137,22 @@ describe('admin sessions page — force-destroy (operator)', () => {
     expect(pageText).not.toContain('iphone16pro_ios18_7_safari26_4');
   });
 
+  it('W604: a failed live-load CLEARS the SSG mock rows (no fake force-destroy buttons) + shows an honest error', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      route: () => json({ detail: 'boom' }, 500),
+    });
+    win = window;
+    await flush();
+    // No destroy buttons survive — the mock rows (with fake ids) are gone, so
+    // an admin can't fire force-destroy on a session that doesn't exist.
+    expect(window.document.querySelectorAll('[data-action="destroy"]').length).toBe(0);
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('Could not load live sessions');
+    expect(text).toContain("Couldn't load live sessions");
+    // The old misleading "Showing preview data below" wording is gone.
+    expect(text).not.toContain('Showing preview data below');
+  });
+
   it('destroy WITH reason: POSTs /:id/destroy {reason}, then refresh removes the action', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       promptReturns: 'abuse — ToS violation',

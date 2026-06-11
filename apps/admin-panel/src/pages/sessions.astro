@@ -344,12 +344,22 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           .catch((err) => {
             if (myReq !== inFlight) return;
             const msg = err && err.message ? err.message : 'network error';
+            // W604 — clear the SSG mock table on ANY load failure. Leaving the
+            // mock rows on screen is dangerous here: each row renders a live
+            // force-destroy button wired to a FAKE session id, so an admin
+            // could fire POST /admin/sessions/<mock-id>/destroy on a session
+            // that doesn't exist. Replace with an honest empty/error state.
+            if (tbody) {
+              tbody.innerHTML =
+                '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">Could not load live sessions — nothing to act on. Resolve the error above and retry.</td></tr>';
+            }
+            if (footnote) footnote.textContent = '';
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — admin scope required. You are signed in as a customer account.',
               );
             } else {
-              showBanner("Couldn't load sessions (" + msg + '). Showing preview data below.');
+              showBanner("Couldn't load live sessions (" + msg + ').');
             }
           })
           .finally(() => {
