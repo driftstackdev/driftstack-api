@@ -95,6 +95,11 @@ export function ipRateLimit(
     reply.header('x-ratelimit-limit', cfg.capacity.toString());
     reply.header('x-ratelimit-remaining', Math.floor(result.remaining).toString());
     reply.header('x-ratelimit-reset', (nowSec + secondsToFull).toString());
+    // W561 — IETF draft names alongside the x- set (see rate-limit.ts).
+    // `ratelimit-reset` is RELATIVE delta-seconds, not the absolute stamp.
+    reply.header('ratelimit-limit', cfg.capacity.toString());
+    reply.header('ratelimit-remaining', Math.floor(result.remaining).toString());
+    reply.header('ratelimit-reset', secondsToFull.toString());
 
     if (!result.allowed) {
       const retryAfterSec = Math.max(1, Math.ceil(result.retryAfterMs / 1000));

@@ -138,6 +138,19 @@ The headers are emitted on every status code (including `429`), so
 retry loops can read them without an extra round-trip — combine
 `x-ratelimit-remaining=0` with `Retry-After` to drive a back-off.
 
+The IETF draft-standard names are emitted alongside the `x-` set, for
+gateways and generic client libraries that read the un-prefixed form:
+
+| Header                | Meaning                                                                             |
+| --------------------- | ----------------------------------------------------------------------------------- |
+| `ratelimit-limit`     | Same value as `x-ratelimit-limit`.                                                  |
+| `ratelimit-remaining` | Same value as `x-ratelimit-remaining`.                                              |
+| `ratelimit-reset`     | Seconds **from now** until full refill (relative, per the draft — NOT a timestamp). |
+
+Note the one semantic difference: `ratelimit-reset` is relative
+delta-seconds, while `x-ratelimit-reset` is an absolute unix-seconds
+timestamp. Parse whichever form your tooling expects.
+
 ## Source of truth
 
 The numbers above are mirrored from

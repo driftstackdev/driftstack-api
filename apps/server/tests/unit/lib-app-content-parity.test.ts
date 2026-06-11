@@ -111,9 +111,18 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(/'idempotency-key',/);
     expect(body).toMatch(/'x-byok-anthropic-api-key',/);
     expect(body).toMatch(/'x-driftstack-account',/);
-    expect(body).toMatch(
-      /exposedHeaders: \[\s*\n?\s*'x-request-id',\s*\n?\s*\/\/ W199 — full RateLimit-header set documented at \/docs\/rate-limits\.\s*\n?\s*'x-ratelimit-bucket',\s*\n?\s*'x-ratelimit-limit',\s*\n?\s*'x-ratelimit-remaining',\s*\n?\s*'x-ratelimit-reset',\s*\n?\s*'retry-after',\s*\n?\s*\],/,
-    );
+    // Per-line pins (not one long \s*\n chain — W561 added the IETF names and
+    // extending the chain past 5 groups risks the backtracking-hang lesson).
+    expect(body).toMatch(/exposedHeaders: \[\s*\n?\s*'x-request-id',/);
+    expect(body).toMatch(/'x-ratelimit-bucket',/);
+    expect(body).toMatch(/'x-ratelimit-limit',/);
+    expect(body).toMatch(/'x-ratelimit-remaining',/);
+    expect(body).toMatch(/'x-ratelimit-reset',/);
+    // W561 — IETF draft names exposed too (ratelimit-reset = relative).
+    expect(body).toMatch(/'ratelimit-limit',/);
+    expect(body).toMatch(/'ratelimit-remaining',/);
+    expect(body).toMatch(/'ratelimit-reset',/);
+    expect(body).toMatch(/'retry-after',\s*\n?\s*\],/);
     expect(body).toMatch(/maxAge: 600,/);
   });
 

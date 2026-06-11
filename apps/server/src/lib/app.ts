@@ -741,6 +741,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       'x-ratelimit-limit',
       'x-ratelimit-remaining',
       'x-ratelimit-reset',
+      // W561 — IETF draft names (ratelimit-reset is relative delta-seconds).
+      'ratelimit-limit',
+      'ratelimit-remaining',
+      'ratelimit-reset',
       'retry-after',
     ],
     // Cache preflight responses for 10 minutes — reduces CORS preflight

@@ -48,6 +48,18 @@ describe('W199/W200 rate-limit response headers', () => {
     // Bucket refill is 30/sec for api_builder global, capacity 1800.
     // Worst case from empty: 60 seconds. Allow 120s slack for CI jitter.
     expect(reset).toBeLessThanOrEqual(nowSec + 120);
+
+    // W561 — IETF draft names emitted alongside the x- set, with the
+    // draft's RELATIVE reset semantic: ratelimit-reset is delta-seconds
+    // (== x-ratelimit-reset minus now), NOT an absolute timestamp.
+    expect(res.headers['ratelimit-limit']).toBe(expectedCapacity.toString());
+    expect(res.headers['ratelimit-remaining']).toBe(res.headers['x-ratelimit-remaining']);
+    const relReset = Number(res.headers['ratelimit-reset']);
+    expect(Number.isFinite(relReset)).toBe(true);
+    expect(relReset).toBeGreaterThanOrEqual(0);
+    expect(relReset).toBeLessThanOrEqual(120);
+    // Cross-form coherence: absolute ≈ now + relative (±2s clock skew).
+    expect(Math.abs(reset - (nowSec + relReset))).toBeLessThanOrEqual(2);
   });
 
   // v2-#23 — pin the agent_sessions:message bucket. v2-#13 split it

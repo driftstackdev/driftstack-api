@@ -113,6 +113,15 @@ describe('W395.A apps/server/src/middleware/ip-rate-limit.ts content parity', ()
     );
   });
 
+  it('W561 IETF draft names mirrored here too; ratelimit-reset stays RELATIVE (secondsToFull)', () => {
+    expect(body).toMatch(/reply\.header\('ratelimit-limit', cfg\.capacity\.toString\(\)\);/);
+    expect(body).toMatch(
+      /reply\.header\('ratelimit-remaining', Math\.floor\(result\.remaining\)\.toString\(\)\);/,
+    );
+    expect(body).toMatch(/reply\.header\('ratelimit-reset', secondsToFull\.toString\(\)\);/);
+    expect(body).not.toMatch(/reply\.header\('ratelimit-reset', \(nowSec/);
+  });
+
   it('Denied: retry-after header (max(1, ceil(retryAfterMs/1000))) + ip-rate-limit warn log + RateLimitedError', () => {
     expect(body).toMatch(
       /if \(!result\.allowed\) \{\s*\n?\s*const retryAfterSec = Math\.max\(1, Math\.ceil\(result\.retryAfterMs \/ 1000\)\);\s*\n?\s*reply\.header\('retry-after', retryAfterSec\.toString\(\)\);/,

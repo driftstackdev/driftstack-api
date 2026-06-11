@@ -102,6 +102,17 @@ describe('W394.C apps/server/src/middleware/rate-limit.ts content parity', () =>
     );
   });
 
+  it('W561 IETF draft names emitted alongside the x- set; ratelimit-reset is RELATIVE delta-seconds (secondsToFull), never the absolute stamp', () => {
+    expect(body).toMatch(/reply\.header\('ratelimit-limit', result\.capacity\.toString\(\)\);/);
+    expect(body).toMatch(
+      /reply\.header\('ratelimit-remaining', Math\.floor\(result\.remaining\)\.toString\(\)\);/,
+    );
+    expect(body).toMatch(/reply\.header\('ratelimit-reset', secondsToFull\.toString\(\)\);/);
+    // Guard the semantic: the relative form must NOT accidentally become
+    // the absolute (nowSec + ...) form.
+    expect(body).not.toMatch(/reply\.header\('ratelimit-reset', \(nowSec/);
+  });
+
   it('V-092 structured log framing: 2 levels (debug=allowed → high-volume / warn=denied → operational signal)', () => {
     expect(body).toMatch(
       /V-092: structured log line on every consume so observability\s*\n?\s*\/\/\s*tooling \(Sentry breadcrumbs, log search\) can answer "is account\s*\n?\s*\/\/\s*X near its rate-limit budget right now\?" without piecing it\s*\n?\s*\/\/\s*together from the egress log/,

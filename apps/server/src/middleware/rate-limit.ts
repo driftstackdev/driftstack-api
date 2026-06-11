@@ -82,6 +82,14 @@ function rateLimitPlugin(
       reply.header('x-ratelimit-limit', result.capacity.toString());
       reply.header('x-ratelimit-remaining', Math.floor(result.remaining).toString());
       reply.header('x-ratelimit-reset', (nowSec + secondsToFull).toString());
+      // W561 — IETF draft-ietf-httpapi-ratelimit-headers names, emitted
+      // alongside the vendor x- set (gateways + generic retry libraries read
+      // the un-prefixed names). SEMANTIC DIFFERENCE: `ratelimit-reset` is
+      // RELATIVE delta-seconds per the draft, whereas `x-ratelimit-reset`
+      // is an ABSOLUTE unix timestamp — do not copy the absolute value.
+      reply.header('ratelimit-limit', result.capacity.toString());
+      reply.header('ratelimit-remaining', Math.floor(result.remaining).toString());
+      reply.header('ratelimit-reset', secondsToFull.toString());
 
       // V-092: structured log line on every consume so observability
       // tooling (Sentry breadcrumbs, log search) can answer "is account
