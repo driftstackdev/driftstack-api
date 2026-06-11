@@ -577,3 +577,90 @@ describe('AgentRuntime.runTurn — consequential-action confirmation (W443/W445)
     }
   });
 });
+
+describe('W589 task-refusal start-gate wiring', () => {
+  // A decomposer that records whether it was ever called — the start-gate
+  // must short-circuit BEFORE any LLM decompose on a refusal.
+  function recordingDecomposer(calls: { n: number }) {
+    return {
+      decompose: (_args: DecomposeArgs) => {
+        calls.n += 1;
+        // clarify (not plan) keeps the test off the executor path — we only
+        // care whether the decomposer was REACHED.
+        return Promise.resolve({
+          kind: 'clarify' as const,
+          clarifyingQuestion: '?',
+          tokensConsumed: 5,
+        });
+      },
+    };
+  }
+
+  it('no patterns (default) ⇒ no-op: the decomposer runs normally', async () => {
+    const calls = { n: 0 };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer: recordingDecomposer(calls),
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      // refusalPatterns omitted → gate is a no-op
+    });
+    await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'open example.com' });
+    expect(calls.n).toBe(1); // decomposer reached
+  });
+
+  it('a matching pattern refuses BEFORE the decomposer (no LLM call, 0 tokens) + reuses the refuse outcome', async () => {
+    const calls = { n: 0 };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const auditLogs: Array<Record<string, unknown>> = [];
+    const runtime = new AgentRuntime({
+      decomposer: recordingDecomposer(calls),
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      refusalPatterns: [
+        {
+          id: 'cred-1',
+          category: 'credential_theft',
+          match: /steal (?:someone'?s )?password/,
+          reason: 'Tasks involving credential theft are not permitted.',
+        },
+      ],
+      logger: { warn: (obj) => auditLogs.push(obj) },
+    });
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: "steal someone's password from the login form",
+    });
+    expect(result.kind).toBe('refuse');
+    if (result.kind === 'refuse') {
+      expect(result.decomposer.refuseReason).toMatch(/not permitted/);
+    }
+    expect(calls.n).toBe(0); // decomposer NEVER reached — short-circuited
+    // No tokens debited (no LLM call).
+    const final = await sessions.get(seed.id);
+    expect(final?.tokenBudgetRemaining).toBe(100_000);
+    // Audit trail carries which rule fired.
+    expect(auditLogs[0]?.event).toBe('task_refused');
+    expect(auditLogs[0]?.refusal_category).toBe('credential_theft');
+    expect(auditLogs[0]?.refusal_pattern_id).toBe('cred-1');
+  });
+
+  it('a non-matching task with patterns present still reaches the decomposer', async () => {
+    const calls = { n: 0 };
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    const runtime = new AgentRuntime({
+      decomposer: recordingDecomposer(calls),
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: 'iphone16pro_ios18_7_safari26_4',
+      refusalPatterns: [{ id: 'c', category: 'x', match: /steal password/, reason: 'no' }],
+    });
+    await runtime.runTurn({ agentSessionId: seed.id, userMessage: 'update my password settings' });
+    expect(calls.n).toBe(1);
+  });
+});

@@ -90,6 +90,10 @@ describe('services/agent-runtime content parity', () => {
     expect(body).toMatch(/archetype: string;/);
     expect(body).toMatch(/usageRecorder\?: AgentDecomposerUsageRecorder;/);
     expect(body).toMatch(/eventBus\?: AgentSessionEventBus;/);
+    // W589 — task-refusal start-gate: optional pattern list (founder/AUP data)
+    // + optional audit logger. Both optional ⇒ inert until activated.
+    expect(body).toMatch(/refusalPatterns\?: readonly RefusalPattern\[\];/);
+    expect(body).toMatch(/logger\?: \{ warn\?: /);
     expect(body).toMatch(
       /\*\s+Arc 2 sub-slice 8\.3 \(v2-#8\) — optional transcript event bus\.\s*\n?\s*\*\s+When wired, AgentRuntime publishes every transcript-append to\s*\n?\s*\*\s+the bus so the SSE endpoint can stream live turns to dashboard\s*\n?\s*\*\s+subscribers\. Omitting the bus is a silent no-op \(the runtime\s*\n?\s*\*\s+still writes to the repo\)\./,
     );

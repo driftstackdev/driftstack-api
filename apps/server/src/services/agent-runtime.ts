@@ -17,6 +17,7 @@ import { runResultToTranscriptEntry } from './agent-executor.js';
 import type { AgentSessionRecord, AgentSessionsRepo } from './agent-sessions.js';
 import type { AgentSessionEventBus } from './agent-session-event-bus.js';
 import { METRIC_NAMES } from './metrics-registry.js';
+import { screenTaskForRefusal, type RefusalPattern } from './task-refusal.js';
 
 export interface RunTurnArgs {
   agentSessionId: string;
@@ -148,6 +149,20 @@ export interface AgentRuntimeDeps {
   metrics?: {
     inc: (name: string, labels?: Readonly<Record<string, string>>, delta?: number) => void;
   };
+  /**
+   * W589 — file-06 §Safety guardrail #3: the task-refusal start-gate
+   * pattern list (founder/AUP-curated, Tier-3). Screened deterministically
+   * BEFORE the LLM decompose; an obvious-abuse match short-circuits to a
+   * refuse outcome with NO LLM call + NO token charge. Empty/omitted ⇒ the
+   * gate is a no-op (allows everything), so the wiring ships with zero
+   * runtime-behavior change until the founder supplies the curated list as
+   * pure data. Mechanism + contract: services/task-refusal.ts (W582).
+   */
+  refusalPatterns?: readonly RefusalPattern[];
+  /** W589 — optional structured logger for the task-refusal audit trail
+   *  (which rule fired: category + patternId). Omitted ⇒ no audit log; the
+   *  gate still works. Wired alongside the founder/AUP pattern list. */
+  logger?: { warn?: (obj: Record<string, unknown>, msg: string) => void };
 }
 
 export class AgentRuntime {
@@ -216,28 +231,56 @@ export class AgentRuntime {
     // Fatal failures (credential errors / malformed responses /
     // missing-key configuration) re-throw — the route layer maps
     // them to 502 + Sentry alert.
+    // W589 — file-06 guardrail #3: deterministic task-refusal start-gate,
+    // screened BEFORE the LLM decompose. An obvious-abuse match short-circuits
+    // to a refuse outcome (no LLM call, no token charge) — reusing the
+    // existing `refuse` path. Empty/omitted patterns ⇒ no-op (allows all), so
+    // this is inert until the founder/AUP curated list is supplied as data.
+    const refusal = screenTaskForRefusal(args.userMessage, this.deps.refusalPatterns ?? []);
     let decomposed: DecomposeResult;
-    try {
-      decomposed = await this.deps.decomposer.decompose({
-        task: args.userMessage,
-        archetype: this.deps.archetype,
-        history: sessionWithUser.transcript,
-        budgetTokensRemaining: sessionWithUser.tokenBudgetRemaining,
-        // 6.c / #15 — the session's picked Claude 4.x model drives the
-        // Anthropic call + the per-model cost-to-serve rate.
-        model: sessionWithUser.model,
-        ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
-      });
-    } catch (err) {
-      if (classifyDecomposerError(err) === 'fatal') {
-        throw err;
-      }
-      // Transient — synthesize a refuse, session stays active.
+    if (refusal.refuse) {
+      // (the canonical decompose-total metric is bumped once below, labelled
+      // result_kind:'refuse' — no separate inc here to avoid double-counting.)
       decomposed = {
         kind: 'refuse',
-        refuseReason: 'agent layer temporarily unavailable; please retry',
+        // Surface the policy reason to the customer; the matched
+        // category/patternId go to the structured log for the audit trail.
+        refuseReason: refusal.reason ?? 'This task is not permitted.',
         tokensConsumed: 0,
       };
+      this.deps.logger?.warn?.(
+        {
+          component: 'agent-runtime',
+          event: 'task_refused',
+          agent_session_id: session.id,
+          refusal_category: refusal.category,
+          refusal_pattern_id: refusal.patternId,
+        },
+        'task refused by start-gate',
+      );
+    } else {
+      try {
+        decomposed = await this.deps.decomposer.decompose({
+          task: args.userMessage,
+          archetype: this.deps.archetype,
+          history: sessionWithUser.transcript,
+          budgetTokensRemaining: sessionWithUser.tokenBudgetRemaining,
+          // 6.c / #15 — the session's picked Claude 4.x model drives the
+          // Anthropic call + the per-model cost-to-serve rate.
+          model: sessionWithUser.model,
+          ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
+        });
+      } catch (err) {
+        if (classifyDecomposerError(err) === 'fatal') {
+          throw err;
+        }
+        // Transient — synthesize a refuse, session stays active.
+        decomposed = {
+          kind: 'refuse',
+          refuseReason: 'agent layer temporarily unavailable; please retry',
+          tokensConsumed: 0,
+        };
+      }
     }
 
     // Always debit the decomposer's tokens (even on refuse —

@@ -826,6 +826,10 @@ export async function createProductionDeps(
     usageRecorder: agentDecomposerUsageRecorder,
     eventBus: agentSessionEventBus,
     ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
+    // W589 — task-refusal audit logger. The pattern LIST stays unset until the
+    // founder/AUP supplies it (pure-data activation, Tier-3) → the start-gate
+    // is a no-op today; the logger is wired now so the audit trail is ready.
+    logger,
   });
   // Q.1.c — per-session BYOK key cache. Pure in-memory; wired
   // unconditionally so the route can stash decrypted plaintexts
