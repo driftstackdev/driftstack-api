@@ -20,6 +20,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
+import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import { encryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import { BadRequestError, NotFoundError, ValidationError } from '../lib/errors.js';
 import type { AdminAuditService } from '../services/admin-audit.js';
@@ -55,6 +56,14 @@ export interface RegisterMacNodesRoutesDeps {
    *  Outcome labels: ok / validation / encryption_error / not_found /
    *  unknown. Failures to .inc() are swallowed (best-effort). */
   metrics?: MetricsRegistry;
+  /** W628 — when wired (FLEET_CONTROL_PLANE_ENABLED), the GET-list
+   *  endpoint reports per-node `connected` (a live control-plane
+   *  connection in the registry). Without it, `connected` is null —
+   *  the server can't know connection state. This is the field that
+   *  makes the worker bring-up debuggable: a node can be registered +
+   *  have LiveKit yet not be connected, which is exactly when dispatch
+   *  logs "fleet node not connected". */
+  controlRegistry?: FleetControlRegistry;
 }
 
 export function registerMacNodesRoutes(
@@ -153,6 +162,46 @@ export function registerMacNodesRoutes(
         mac_node_id: updated.id,
         livekit_registered_at: updated.livekit?.registeredAt.toISOString() ?? now().toISOString(),
         ws_url: updated.livekit?.wsUrl ?? body.livekit.ws_url,
+      });
+    },
+  );
+
+  // W628 — GET /v1/mac-nodes: operator visibility into the fleet. The
+  // repo's `listActive()` was documented as the operator-dashboard list
+  // but was never wired to a route, so there was NO way to see whether a
+  // worker had registered, when it was last seen, whether it carries
+  // LiveKit credentials, or whether it's actually CONNECTED — the exact
+  // facts needed to debug why a launch shows an empty stream room. This
+  // is the read-only window onto that. Secret-safe: maps `livekit` to a
+  // boolean `has_livekit`; the api_key / api_secret never appear.
+  app.get(
+    '/v1/mac-nodes',
+    {
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('driftstack_internal_admin'),
+        app.rateLimit('global'),
+      ],
+    },
+    async (_req, reply) => {
+      const nodes = await repo.listActive();
+      return reply.code(200).send({
+        data: nodes.map((n) => ({
+          id: n.id,
+          display_name: n.displayName,
+          region: n.region,
+          hardware_class: n.hardwareClass,
+          registered_at: n.registeredAt.toISOString(),
+          last_seen_at: n.lastSeenAt?.toISOString() ?? null,
+          has_livekit: n.livekit !== null,
+          // null when the control registry isn't wired (the server can't
+          // know connection state); else whether a live control-plane
+          // connection exists for this node.
+          connected:
+            deps.controlRegistry === undefined
+              ? null
+              : deps.controlRegistry.get(n.id) !== undefined,
+        })),
       });
     },
   );

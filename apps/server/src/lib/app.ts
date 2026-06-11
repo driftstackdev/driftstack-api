@@ -1349,6 +1349,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       encryptionKey: deps.livekitSecretEncryptionKey,
       adminAudit: deps.adminAuditService,
       ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
+      // W628 — when the control plane is wired, GET /v1/mac-nodes reports
+      // per-node live-connection state (the dispatch-critical field).
+      ...(deps.fleetControlRegistry !== undefined
+        ? { controlRegistry: deps.fleetControlRegistry }
+        : {}),
     });
   }
   // LK.3 — per-Mac LiveKit JWT mint endpoint. Same gate as LK.2 plus

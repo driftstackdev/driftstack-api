@@ -108,4 +108,20 @@ describe('routes/mac-nodes-register content parity', () => {
       /return reply\.code\(200\)\.send\(\{\s*\n?\s*mac_node_id: updated\.id,\s*\n?\s*livekit_registered_at: updated\.livekit\?\.registeredAt\.toISOString\(\) \?\? now\(\)\.toISOString\(\),\s*\n?\s*ws_url: updated\.livekit\?\.wsUrl \?\? body\.livekit\.ws_url,\s*\n?\s*\}\);/,
     );
   });
+
+  it("W628 GET /v1/mac-nodes operator-visibility endpoint: driftstack_internal_admin-gated, maps listActive() to a SECRET-SAFE DTO (has_livekit boolean, NOT the api_key/secret) + per-node connected (controlRegistry.get !== undefined, null when the registry isn't wired). Pinned so the read-only fleet window can't regress into leaking LiveKit credentials and keeps the connection-state field that makes worker bring-up debuggable", () => {
+    // The endpoint exists, admin-gated.
+    expect(body).toMatch(/app\.get\(\s*\n?\s*'\/v1\/mac-nodes',/);
+    expect(body).toMatch(/app\.requireScope\('driftstack_internal_admin'\)/);
+    // Secret-safe DTO: livekit collapsed to a boolean, never the credentials.
+    expect(body).toMatch(/has_livekit: n\.livekit !== null,/);
+    expect(body).not.toMatch(/api_secret: n\.|apiSecretCiphertextBase64: n\.|api_key: n\.livekit/);
+    // connected derived from the control registry; null when unwired
+    // (prettier may wrap the ternary across lines).
+    expect(body).toMatch(
+      /connected:[\s\S]{0,80}?deps\.controlRegistry === undefined[\s\S]{0,40}?\? null[\s\S]{0,60}?: deps\.controlRegistry\.get\(n\.id\) !== undefined,/,
+    );
+    // controlRegistry is an optional dep (gated on FLEET_CONTROL_PLANE_ENABLED).
+    expect(body).toMatch(/controlRegistry\?: FleetControlRegistry;/);
+  });
 });
