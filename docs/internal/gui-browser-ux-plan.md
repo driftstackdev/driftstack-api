@@ -77,7 +77,10 @@ forward / reload buttons, and the page title. **Pure A2, no cross-agent dep.**
    toggleable iOS bezel (rounded + 10px border + dynamic-island notch),
    persisted localStorage pref, tap-projection math untouched; window was
    already resizable (tauri.conf.json minWidth 960 / minHeight 600).
-3. **A2:** multi-session tab strip (pragmatic tabs) — NEXT.
+3. **A2:** multi-session tab strip (pragmatic tabs) — ✅ SHIPPED W609
+   (d9a5d3b2): tabs = concurrent sessions, 10s list poll, active-always-
+   renders, '+' → Profiles; LiveSessionView keyed by sessionId. W609 also
+   shipped Dev-Logs error capture (loggingFetch + ErrorBanner seams).
 4. **Cross-agent:** loading/error display — A2 drafted `page_state` shape +
    relayed (W606); awaiting A3 feasibility reply, then A2 renders.
 5. **Deferred (Phase-4):** true multi-page-per-session tabs — needs A1 + A3 + A2

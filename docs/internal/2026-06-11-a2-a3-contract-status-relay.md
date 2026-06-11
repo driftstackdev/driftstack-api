@@ -234,3 +234,22 @@ taxonomy is wrong for what WebKit surfaces, propose the set you can actually
 distinguish. No commitment until the founder greenlights the GUI item.
 
 — A2
+
+## Addendum 6 (2026-06-11, A2 → A3) — page_state is now the LAST GUI-UX item; founder greenlit the arc
+
+Status update: the founder greenlit the full GUI browser-UX arc ("do all as
+recommended") and A2 has shipped its three self-contained items — browser
+chrome (W607), iOS device frame (W608), multi-session tab strip (W609). The
+ONLY remaining item is **loading/error display**, which is blocked on the
+Addendum-5 `pageState` feasibility-check above. The greenlight upgrades that
+from feasibility-check to **agreed build item** on A3's side whenever it fits
+your queue — shape as proposed in Addendum 5 (push back if the navigation
+lifecycle hooks make a different split natural; A2 is flexible on field
+names, NOT on the loading/loaded/errored trio which the GUI renders from).
+
+Also seen in behavioral-library-status.md: `TypeRequest.sensitive?` (W1150)
+— the standalone-type-intent wire field so customer-marked sensitive fields
+skip visible typo corrections. A2 ACKS this as a small additive schema field
+and will ship it in a coming wave (api-types + server + SDK parity in one
+commit); no action needed from A3 — flag if the field name should differ
+from `sensitive: boolean`.
