@@ -18,6 +18,12 @@ interface ChangelogEntry {
 const ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-06-11',
+    category: 'docs',
+    title: 'Error reference site: every API error explained at errors.driftstack.dev',
+    body: 'Every Driftstack API error is an RFC 9457 problem+json body whose type URI now resolves to a live explainer page at errors.driftstack.dev — 29 problem types, each with what it means, how to fix it, and Related links to sibling errors (e.g. invalid-key → revoked-key / expired-key). The index groups errors by HTTP status class. Hit an error in production, click the type URL in the response, land on the fix.',
+  },
+  {
+    date: '2026-06-11',
     category: 'launch',
     title: 'AI agent sessions: resume after a solved challenge + key-press actions',
     body: 'Two agent-session upgrades. POST /v1/agent-sessions/{id}/resume lets you resume a paused agent run after a bot-challenge is resolved (pass the challenge_id from the session.challenge_detected webhook, or call it bare for a manual resume) — available in all three SDKs as resume()/Resume(). And the agent intent vocabulary gained press: the agent can now press a key (Enter to submit a form, Escape to dismiss a dialog) instead of only typing text. Both are additive; existing integrations are unaffected.',
