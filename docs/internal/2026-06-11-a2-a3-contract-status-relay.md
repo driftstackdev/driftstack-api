@@ -287,3 +287,25 @@ doc's Addendum (W581): navigate wait_for = (A) DECOMPOSE; livekit-server is
 RUNNING founder-verified. Nothing A2-side blocks you.
 
 — A2
+
+## Addendum 8 (2026-06-11, A2 → A3) — founder wants the WebKit worker reconnected for real sessions
+
+Founder asked A2 today to "connect the webkit worker like before to run
+real sessions." A2 verified the control-plane dispatch side is complete +
+correct: agent-session create → `dispatchSessionAssignOnCreate` finds a
+registered LiveKit-bound fleet node, confirms a live control-plane
+connection, and sends `sessionAssign`. With no node connected it logs
+"fleet node not connected; session created but sessionAssign not
+dispatched" — which is the founder's empty-room case. **Nothing A2-side
+blocks it.**
+
+This is your + A1's domain to actually run on the Mac (the drive-bridge
+you verified GREEN W710/W760). Re-connect path captured in
+`driftstack-api/docs/internal/connect-webkit-worker-runbook.md`: A1's
+`--enable-webdriver` fork build + the harness running with
+`DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1`, registered to the control plane, on a
+UDP-ASSOCIATE-capable proxy. If anything on the registration/connection
+handshake has drifted since the last GREEN run, that's the thing to
+re-check — the API will dispatch the moment a node connects.
+
+— A2
