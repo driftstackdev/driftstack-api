@@ -67,9 +67,27 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
       /const browserSignIn = useBrowserSignIn\(\{\s*\n?\s*baseUrl: draftUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\) \|\| settings\.baseUrl,\s*\n?\s*onSuccess: async \(issuedKey, _accountId\) => \{/,
     );
     // 2026-05-20 — baseUrl fallback shifted 7780→3000 (SDK client default).
+    // W577 — handleSave hoists the normalized URL (it's reused by the
+    // post-save key validation), so the fallback lives on `const url`.
     expect(body).toMatch(
-      /apiKey: draftKey\.length > 0 \? draftKey : null,\s*\n?\s*baseUrl: draftUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\) \|\| 'http:\/\/localhost:3000',\s*\n?\s*telemetryOptIn: draftTelemetry,/,
+      /const url = draftUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\) \|\| 'http:\/\/localhost:3000';/,
     );
+    expect(body).toMatch(
+      /apiKey: draftKey\.length > 0 \? draftKey : null,\s*\n?\s*baseUrl: url,\s*\n?\s*telemetryOptIn: draftTelemetry,/,
+    );
+  });
+
+  it('W577: post-save key validation — non-blocking persist, then GET /v1/account/me with the saved key; 401 message is mode-aware (self-hosted says the key must come from that server, cloud points at app.driftstack.dev/api-keys); unreachable falls to diagnosticFetchError', () => {
+    expect(body).toMatch(/fetch\(`\$\{url\}\/v1\/account\/me`,/);
+    expect(body).toMatch(/authorization: `Bearer \$\{draftKey\}`/);
+    expect(body).toMatch(/res\.status === 401/);
+    expect(body).toMatch(
+      /In self-hosted mode the key must be created on that server's own dashboard — a key from app\.driftstack\.dev won't authenticate here\./,
+    );
+    expect(body).toMatch(
+      /Double-check it, or create a new one at app\.driftstack\.dev\/api-keys\./,
+    );
+    expect(body).toMatch(/Saved\. Key authenticated ✓/);
   });
 
   it("Telemetry 3-radio tri-state (null=platform default / true / false): platformDefaultLabel = cloudBaseUrl ? 'on (cloud default)' : 'off (self-hosted default)' + effectiveTelemetry derived state (null falls back to cloud↔'on' / non-cloud↔'off')", () => {
@@ -97,8 +115,14 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     expect(body).toMatch(
       /Pointing at <span className="mono">\{settings\.baseUrl\}<\/span> with key\{' '\}\s*\n?\s*<span className="mono">\s*\n?\s*\{settings\.apiKey\?\.slice\(0, 12\) \?\? ''\}…\{settings\.apiKey\?\.slice\(-4\) \?\? ''\}\s*\n?\s*<\/span>/,
     );
+    // W577 — the first-run hint is now mode-aware: cloud keeps the
+    // app.driftstack.dev/api-keys pointer; self-hosted explains the key
+    // must come from the customer's own server (deployment-bound keys).
     expect(body).toMatch(
       /Sign in with your browser to mint a fresh API key bound to your account, or paste an\s*\n?\s*existing key from <span className="mono">app\.driftstack\.dev\/api-keys<\/span> below\./,
+    );
+    expect(body).toMatch(
+      /Paste a key created on your own server's dashboard\. A key from\{' '\}\s*\n?\s*<span className="mono">app\.driftstack\.dev<\/span> won't authenticate against a\s*\n?\s*self-hosted server — keys are bound to the deployment that minted them\./,
     );
   });
 

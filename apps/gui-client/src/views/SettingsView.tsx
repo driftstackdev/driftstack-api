@@ -41,6 +41,12 @@ export function SettingsView(): JSX.Element {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [testState, setTestState] = useState<TestState>({ kind: 'idle' });
+  // W577 — post-save key validation result. Save itself never blocks (a
+  // customer may intentionally pre-set a URL before their server is up);
+  // we validate after persisting and surface the outcome here.
+  const [keyCheck, setKeyCheck] = useState<
+    { kind: 'idle' } | { kind: 'checking' } | { kind: 'ok' } | { kind: 'fail'; message: string }
+  >({ kind: 'idle' });
 
   /** Flip mode + auto-fill the URL. Cloud locks the URL; self-hosted
    *  keeps whatever the customer last typed (or the default). */
@@ -108,15 +114,56 @@ export function SettingsView(): JSX.Element {
 
   async function handleSave(): Promise<void> {
     setSaving(true);
+    const url = draftUrl.trim().replace(/\/+$/, '') || 'http://localhost:3000';
     try {
       await update({
         apiKey: draftKey.length > 0 ? draftKey : null,
-        baseUrl: draftUrl.trim().replace(/\/+$/, '') || 'http://localhost:3000',
+        baseUrl: url,
         telemetryOptIn: draftTelemetry,
       });
       setSavedAt(Date.now());
     } finally {
       setSaving(false);
+    }
+
+    // W577 — validate the saved key against the saved server, AFTER the
+    // non-blocking persist. Previously a wrong key saved silently and only
+    // surfaced as 401s in other views with no hint why; the most common
+    // cause is a key minted on a different deployment (cloud key against a
+    // self-hosted server or vice-versa — keys are bound to the server they
+    // were minted on), so the failure message is mode-aware like the
+    // first-run wizard's (W566).
+    if (draftKey.length === 0) {
+      setKeyCheck({ kind: 'idle' });
+      return;
+    }
+    setKeyCheck({ kind: 'checking' });
+    try {
+      const res = await fetch(`${url}/v1/account/me`, {
+        headers: { authorization: `Bearer ${draftKey}` },
+      });
+      if (res.ok) {
+        setKeyCheck({ kind: 'ok' });
+      } else if (res.status === 401) {
+        setKeyCheck({
+          kind: 'fail',
+          message: isCloudBaseUrl(url)
+            ? 'Saved, but the key failed authentication (401). Double-check it, or create a new one at app.driftstack.dev/api-keys.'
+            : `Saved, but the key failed authentication (401) against ${url}. In self-hosted mode the key must be created on that server's own dashboard — a key from app.driftstack.dev won't authenticate here.`,
+        });
+      } else {
+        setKeyCheck({
+          kind: 'fail',
+          message: `Saved, but validation got HTTP ${String(res.status)} from ${url}.`,
+        });
+      }
+    } catch (err) {
+      setKeyCheck({
+        kind: 'fail',
+        message:
+          diagnosticFetchError(err, url) ??
+          `Saved, but ${url} is unreachable — the key couldn't be validated.`,
+      });
     }
   }
 
@@ -146,8 +193,18 @@ export function SettingsView(): JSX.Element {
         <div className="max-w-xl rounded border border-accent/30 bg-accent-subtle/40 px-4 py-3">
           <span className="section-label text-accent">No API key yet</span>
           <p className="mt-1 text-sm text-ink-secondary">
-            Sign in with your browser to mint a fresh API key bound to your account, or paste an
-            existing key from <span className="mono">app.driftstack.dev/api-keys</span> below.
+            {draftMode === 'cloud' ? (
+              <>
+                Sign in with your browser to mint a fresh API key bound to your account, or paste an
+                existing key from <span className="mono">app.driftstack.dev/api-keys</span> below.
+              </>
+            ) : (
+              <>
+                Paste a key created on your own server's dashboard. A key from{' '}
+                <span className="mono">app.driftstack.dev</span> won't authenticate against a
+                self-hosted server — keys are bound to the deployment that minted them.
+              </>
+            )}
           </p>
 
           {browserSignIn.state.kind === 'idle' && (
@@ -380,8 +437,21 @@ export function SettingsView(): JSX.Element {
           >
             {saving ? 'Saving…' : 'Save'}
           </button>
-          {savedAt !== null && !dirty && <span className="text-2xs text-ink-muted">Saved.</span>}
+          {savedAt !== null && !dirty && keyCheck.kind === 'idle' && (
+            <span className="text-2xs text-ink-muted">Saved.</span>
+          )}
+          {keyCheck.kind === 'checking' && (
+            <span className="text-2xs text-ink-muted">Saved. Validating key…</span>
+          )}
+          {keyCheck.kind === 'ok' && (
+            <span className="text-2xs text-status-ready">Saved. Key authenticated ✓</span>
+          )}
         </div>
+        {keyCheck.kind === 'fail' && (
+          <p className="mt-2 max-w-xl text-xs text-status-error" role="alert">
+            {keyCheck.message}
+          </p>
+        )}
 
         {/* V-324 — help links so customers don't have to dig through
             the marketing site to find status / docs / support contact
