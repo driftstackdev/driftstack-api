@@ -18,6 +18,12 @@ interface ChangelogEntry {
 const ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-06-11',
+    category: 'launch',
+    title: 'Rate-limit caps now visible on the dashboard',
+    body: "The /usage page gained a Rate limits card showing every token bucket your account draws from — capacity, refill rate, and whether the value is your tier default or a staff-granted override (with the override's auto-revert date). Previously this data was only reachable by calling GET /v1/account/rate-limits from the SDK or curl. The endpoint stays available for programmatic reads.",
+  },
+  {
+    date: '2026-06-11',
     category: 'sdk',
     title: 'IETF-standard RateLimit response headers',
     body: 'Every rate-limited response now carries the IETF draft-standard ratelimit-limit / ratelimit-remaining / ratelimit-reset headers alongside the existing x-ratelimit-* set, so gateways and generic client libraries that read the un-prefixed names work out of the box. One semantic to note: ratelimit-reset is relative seconds-from-now per the draft, while x-ratelimit-reset stays an absolute unix timestamp. Purely additive — the x- set is unchanged and remains canonical. Details at docs.driftstack.dev/reference/rate-limits.',
