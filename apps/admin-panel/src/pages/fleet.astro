@@ -1,0 +1,183 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+
+// W629 — Fleet view. Read-only operator window onto the Mac fleet,
+// consuming GET /v1/mac-nodes (W628). The whole point is debugging why a
+// launch lands in an empty stream room: a node can be registered + have
+// LiveKit yet not hold a live control-plane connection (dispatch logs
+// "fleet node not connected"). This page makes registered / last-seen /
+// has-LiveKit / connected visible at a glance.
+//
+// W604 discipline: NO mock rows. The table starts in a "Loading…" state
+// and is filled only from the live fetch; on failure it shows an honest
+// error, never fabricated rows.
+const apiBaseUrl = resolveApiBaseUrl();
+---
+
+<AdminLayout title="Fleet">
+  <div class="mx-auto max-w-6xl px-6 py-10" data-page="admin-fleet">
+    <div class="mb-6">
+      <h1 class="text-2xl font-semibold tracking-tight text-slate-900">Fleet nodes</h1>
+      <p class="mt-1 text-sm text-slate-500">
+        Mac workers registered with the control plane. A session only runs a real browser when a
+        node is both <strong>connected</strong> and has <strong>LiveKit</strong>; otherwise launches
+        land in an empty stream room (dispatch logs <code>fleet node not connected</code>).
+      </p>
+    </div>
+
+    <div
+      data-banner
+      class="mb-4 hidden rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+    >
+    </div>
+
+    <div class="overflow-hidden rounded-lg border border-slate-200">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+          <tr>
+            <th class="px-4 py-3">Node</th>
+            <th class="px-4 py-3">Region</th>
+            <th class="px-4 py-3">Connected</th>
+            <th class="px-4 py-3">LiveKit</th>
+            <th class="px-4 py-3">Last seen</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100" data-list="fleet">
+          <tr>
+            <td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">Loading…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="mt-3 text-xs text-slate-400" data-field="footnote"></p>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl }}>
+    (function () {
+      const root = document.querySelector('[data-page="admin-fleet"]');
+      if (!root) return;
+      const banner = root.querySelector('[data-banner]');
+      const tbody = root.querySelector('[data-list="fleet"]');
+      const footnote = root.querySelector('[data-field="footnote"]');
+      const token = localStorage.getItem('ds_web_session_token');
+
+      function showBanner(text) {
+        if (!banner) return;
+        banner.textContent = text;
+        banner.classList.remove('hidden');
+      }
+      function hideBanner() {
+        if (!banner) return;
+        banner.classList.add('hidden');
+      }
+      function escapeHtml(s) {
+        return String(s).replace(
+          /[&<>"']/g,
+          (c) =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+        );
+      }
+      function fmtIso(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+      function boolBadge(value, onText, offText, unknownText) {
+        if (value === null || value === undefined) {
+          return (
+            '<span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">' +
+            escapeHtml(unknownText) +
+            '</span>'
+          );
+        }
+        const cls = value ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700';
+        return (
+          '<span class="rounded-full px-2 py-0.5 text-xs ' +
+          cls +
+          '">' +
+          escapeHtml(value ? onText : offText) +
+          '</span>'
+        );
+      }
+      function rowHtml(n) {
+        return (
+          '<tr>' +
+          '<td class="px-4 py-3"><div class="font-medium text-slate-800">' +
+          escapeHtml(n.display_name || n.id) +
+          '</div><div class="font-mono text-xs text-slate-400">' +
+          escapeHtml(n.id) +
+          '</div></td>' +
+          '<td class="px-4 py-3 text-slate-600">' +
+          escapeHtml(n.region || '—') +
+          '</td>' +
+          '<td class="px-4 py-3">' +
+          boolBadge(n.connected, 'connected', 'offline', 'unknown') +
+          '</td>' +
+          '<td class="px-4 py-3">' +
+          boolBadge(n.has_livekit, 'yes', 'no', '—') +
+          '</td>' +
+          '<td class="px-4 py-3 text-slate-600">' +
+          escapeHtml(fmtIso(n.last_seen_at)) +
+          '</td>' +
+          '</tr>'
+        );
+      }
+
+      function load() {
+        if (!token) {
+          if (tbody)
+            tbody.innerHTML =
+              '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">Sign in as a staff admin to view the fleet.</td></tr>';
+          return Promise.resolve();
+        }
+        return fetch(apiBaseUrl + '/v1/mac-nodes', {
+          headers: { authorization: 'Bearer ' + token },
+          credentials: 'include',
+        })
+          .then((r) => {
+            if (r.status === 403) return Promise.reject(new Error('forbidden'));
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then((body) => {
+            const rows = body.data || [];
+            if (tbody) {
+              if (rows.length === 0) {
+                tbody.innerHTML =
+                  '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">No fleet nodes registered yet. Start a Mac worker (harness with DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1) and it will appear here once it registers.</td></tr>';
+              } else {
+                tbody.innerHTML = rows.map(rowHtml).join('');
+              }
+            }
+            if (footnote) {
+              const connected = rows.filter((n) => n.connected === true).length;
+              footnote.textContent =
+                rows.length +
+                ' node' +
+                (rows.length === 1 ? '' : 's') +
+                ' registered · ' +
+                connected +
+                ' connected. A launch needs a connected node with LiveKit to show a real browser.';
+            }
+            hideBanner();
+          })
+          .catch((err) => {
+            const msg = err && err.message ? err.message : 'network error';
+            // W604 discipline: never leave fabricated rows; show honest state.
+            if (tbody)
+              tbody.innerHTML =
+                '<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">Could not load fleet nodes. Resolve the error above and retry.</td></tr>';
+            if (footnote) footnote.textContent = '';
+            if (msg === 'forbidden') {
+              showBanner(
+                'Access denied — staff admin scope required. You are signed in as a customer account.',
+              );
+            } else {
+              showBanner('Could not load fleet nodes — ' + msg + '.');
+            }
+          });
+      }
+
+      void load();
+    })();
+  </script>
+</AdminLayout>
