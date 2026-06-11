@@ -174,7 +174,12 @@ describe('customer-dashboard Billing (billing.astro) behaviour', () => {
     win = window;
     await flush();
     expect(isHidden(window, '[data-banner]')).toBe(false);
-    expect(text(window, '[data-banner]')).toContain('Live billing is not yet available');
+    expect(text(window, '[data-banner]')).toContain('Live billing is not available yet');
+    // W588 — the mock subscription card is replaced with an honest state, not
+    // left showing a fabricated tier/renew that a real customer misreads.
+    expect(text(window, '[data-field="sub-tier"]')).toBe('Billing not configured yet');
+    expect(text(window, '[data-field="sub-status-badge"]')).toBe('pending setup');
+    expect(isHidden(window, '[data-action="portal"]')).toBe(true);
   });
 
   it('Manage portal: posts to /v1/billing/portal-session', async () => {

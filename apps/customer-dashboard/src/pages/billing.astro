@@ -277,10 +277,22 @@ const apiBaseUrl = resolveApiBaseUrl();
           // soft-message it. Other failures keep the generic shape
           // but surface body.detail via err.message.
           if (err && err.status === 503) {
+            // W588 — billing is activation-gated (Stripe not wired yet). Don't
+            // leave the SSG mock subscription (fabricated tier + renew date) on
+            // screen — a real customer reads it as their actual plan. Replace
+            // the card with an honest "not configured" state.
             showBanner(
-              'Live billing is not yet available — Driftstack is finishing Stripe setup. ' +
-                'Showing preview data below. We will email you when the live billing surface ships.',
+              'Live billing is not available yet — Driftstack is finishing Stripe setup. ' +
+                'We will email you when it ships. Your account access is unaffected.',
             );
+            setText('sub-tier', 'Billing not configured yet');
+            setText(
+              'sub-summary',
+              'Paid-plan billing activates once Stripe setup completes — nothing to pay or manage here yet.',
+            );
+            setText('sub-status-badge', 'pending setup');
+            if (portalBtn) portalBtn.classList.add('hidden');
+            if (cancelBtn) cancelBtn.classList.add('hidden');
           } else {
             showBanner(
               "Couldn't load live billing (" +

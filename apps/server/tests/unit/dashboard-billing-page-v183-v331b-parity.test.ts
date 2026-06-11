@@ -117,6 +117,17 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     );
   });
 
+  it("W588: on a 503 (Stripe activation-gated) the subscription card is reset to an honest 'Billing not configured yet' state — NOT left showing the SSG mock tier/renew, which a real customer reads as their actual plan", () => {
+    const p = read(PAGE);
+    expect(p).toMatch(/if \(err && err\.status === 503\) \{/);
+    expect(p).toMatch(/setText\('sub-tier', 'Billing not configured yet'\);/);
+    expect(p).toMatch(/setText\('sub-status-badge', 'pending setup'\);/);
+    // The mock preview must be cleared, and the portal/cancel actions hidden.
+    expect(p).toMatch(/Paid-plan billing activates once Stripe setup completes/);
+    // The old misleading "Showing preview data below" wording is gone from 503.
+    expect(p).not.toMatch(/finishing Stripe setup\. Showing preview data below/);
+  });
+
   it("CRITICAL portal-error banner framing pinned — `Couldn't open Stripe portal (<error>)` with HTTP status surfacing. Drift to silent error would leave customers stranded on a non-responding button.", () => {
     const p = read(PAGE);
     expect(p).toMatch(
