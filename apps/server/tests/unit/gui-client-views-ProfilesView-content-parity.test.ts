@@ -48,13 +48,19 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).toMatch(/const REFRESH_MS = 15_000;/);
   });
 
-  it("V-238 KNOWN_ARCHETYPES single-option catalog pinned with iphone16pro_ios18_7_safari26_4 id + 'iPhone 16 Pro / iOS 18.7 / Safari 26.4' label — pinned so the archetype select stays preselected to the canonical one + disabled until V-136 expansion lands more archetypes", () => {
+  it("W637 KNOWN_ARCHETYPES derived from ARCHETYPE_REGISTRY filtered to verified statuses (launch + available) — pinned so the GUI archetype catalog is the single-source registry (not a hardcoded list) and EXCLUDES reference/planned (e.g. iPhone 17, still per-value verified) so an unverified fingerprint can't ship; new devices appear automatically when A1 flips their status", () => {
     expect(body).toMatch(
-      /\/\/ V-238 — only one customer-pickable archetype today\. When V-136-style\s*\n?\s*\/\/ expansion lands more archetypes \(e\.g\. iPhone 17 Pro \/ iOS 19\), surface\s*\n?\s*\/\/ them here\. The form preselects this single option; the select control\s*\n?\s*\/\/ is disabled until there are 2\+ choices\./,
+      /import \{ ARCHETYPE_REGISTRY, type ArchetypeStatus, type LiveKitInfo \} from '@driftstack\/sdk';/,
     );
     expect(body).toMatch(
-      /const KNOWN_ARCHETYPES: ReadonlyArray<\{ id: string; label: string \}> = \[\s*\n?\s*\{ id: 'iphone16pro_ios18_7_safari26_4', label: 'iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4' \},\s*\n?\s*\];/,
+      /const SELECTABLE_STATUSES = new Set<ArchetypeStatus>\(\['launch', 'available'\]\);/,
     );
+    expect(body).toMatch(
+      /const KNOWN_ARCHETYPES: ReadonlyArray<\{ id: string; label: string \}> = ARCHETYPE_REGISTRY\.filter\(\s*\n?\s*\(a\) => SELECTABLE_STATUSES\.has\(a\.status\),\s*\n?\s*\)\.map\(\(a\) => \(\{ id: a\.id, label: a\.displayLabel \}\)\);/,
+    );
+    // reference/planned MUST NOT be selectable (the 100%-verified rule).
+    expect(body).not.toMatch(/SELECTABLE_STATUSES[\s\S]{0,80}?'planned'/);
+    expect(body).not.toMatch(/SELECTABLE_STATUSES[\s\S]{0,80}?'reference'/);
   });
 
   it("V-239 cap-gate framing pinned ('gate the New profile button at the tier cap (skip when profile_cap === null which means enterprise / no fixed cap).') + atProfileCap = profileCap !== null && profileCount !== null && profileCount >= profileCap — pinned so a null profile_cap (enterprise) doesn't accidentally gate the button", () => {

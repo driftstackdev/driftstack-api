@@ -51,6 +51,19 @@ export type {
 // LK.6 modifier vocabulary so TS customers can import it without
 // reaching into @driftstack/api-types directly.
 export { CANONICAL_MODIFIER_NAMES, type CanonicalModifier } from '@driftstack/api-types';
+// W637 — re-export the archetype catalog so SDK + GUI consumers can render
+// the selectable archetype list (filtered by `status`) without deep-importing
+// @driftstack/api-types. ARCHETYPE_REGISTRY is the single source of truth; a
+// new device lights up everywhere once its `status` flips to launch/available.
+export {
+  ARCHETYPE_REGISTRY,
+  LOCKED_ARCHETYPE_ID,
+  LOCKED_ARCHETYPE_DISPLAY_LABEL,
+  archetypeDisplayLabel,
+  type ArchetypeConfig,
+  type ArchetypeStatus,
+  type ArchetypeCanvasFamily,
+} from '@driftstack/api-types';
 export type { Recipe, CreateRecipeRequest } from './resources/recipes.js';
 export type {
   TeamRole,

@@ -17,7 +17,7 @@ import {
 } from '../components/ProfilesActionBar';
 import { ProxyChip } from '../components/ProxyChip';
 import { RelativeTime } from '../components/RelativeTime';
-import type { LiveKitInfo } from '@driftstack/sdk';
+import { ARCHETYPE_REGISTRY, type ArchetypeStatus, type LiveKitInfo } from '@driftstack/sdk';
 import { useSettings } from '../lib/SettingsContext';
 import { useConnectionStatus } from '../lib/use-connection-status';
 import { DriftstackError, type Session } from '../lib/client';
@@ -53,13 +53,19 @@ const AgentSessionPanel = lazy(() =>
 // constantly re-flash.
 const REFRESH_MS = 15_000;
 
-// V-238 — only one customer-pickable archetype today. When V-136-style
-// expansion lands more archetypes (e.g. iPhone 17 Pro / iOS 19), surface
-// them here. The form preselects this single option; the select control
-// is disabled until there are 2+ choices.
-const KNOWN_ARCHETYPES: ReadonlyArray<{ id: string; label: string }> = [
-  { id: 'iphone16pro_ios18_7_safari26_4', label: 'iPhone 16 Pro / iOS 18.7 / Safari 26.4' },
-];
+// W637 — the selectable archetype catalog is now derived from the shared
+// ARCHETYPE_REGISTRY (single source of truth), filtered to the verified
+// statuses that are safe to run a real session as: `launch` (the locked
+// reference) + `available` (fingerprint-atlas-ready). `reference` and
+// `planned` (e.g. iPhone 17, still per-value verified vs real-device per
+// the "100% verified profiles" rule) are intentionally EXCLUDED — they
+// light up automatically the moment A1 flips their status, with zero GUI
+// change. The locked launch archetype is preselected; the select enables
+// once 2+ verified options exist.
+const SELECTABLE_STATUSES = new Set<ArchetypeStatus>(['launch', 'available']);
+const KNOWN_ARCHETYPES: ReadonlyArray<{ id: string; label: string }> = ARCHETYPE_REGISTRY.filter(
+  (a) => SELECTABLE_STATUSES.has(a.status),
+).map((a) => ({ id: a.id, label: a.displayLabel }));
 
 interface Profile {
   id: string;
