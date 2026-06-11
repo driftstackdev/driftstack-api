@@ -51,7 +51,7 @@ describe('W430.B apps/server/src/drivers/types.ts content parity', () => {
 
   it('imports: BehavioralProfile + CaptureKind + ExtractionSpec + InteractAction + WaitCondition (api-types) + GUIInputAction (schemas/gui-input)', () => {
     expect(body).toMatch(
-      /import type \{\s*\n?\s*BehavioralProfile,\s*\n?\s*CaptureKind,\s*\n?\s*ExtractionSpec,\s*\n?\s*InteractAction,\s*\n?\s*WaitCondition,\s*\n?\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*\n?\s*BehavioralProfile,\s*\n?\s*CaptureKind,\s*\n?\s*ExtractionSpec,\s*\n?\s*InteractAction,\s*\n?\s*PageState,\s*\n?\s*WaitCondition,\s*\n?\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ GUIInputAction \} from '\.\.\/schemas\/gui-input\.js';/);
   });
@@ -117,7 +117,7 @@ describe('W430.B apps/server/src/drivers/types.ts content parity', () => {
 
   it('SessionStateResult: url + title (both nullable) + cookies + localStorage + capturedAt; CaptureInput: kind + fullPage; CaptureResult: kind + data + encoding union (base64|utf8) + byteSize + durationMs', () => {
     expect(body).toMatch(
-      /export interface SessionStateResult \{\s*\n?\s*url: string \| null;\s*\n?\s*title: string \| null;\s*\n?\s*cookies: Array<Record<string, unknown>>;\s*\n?\s*localStorage: Record<string, string>;\s*\n?\s*capturedAt: Date;\s*\n?\s*\}/,
+      /export interface SessionStateResult \{\s*\n?\s*url: string \| null;\s*\n?\s*title: string \| null;\s*\n?\s*cookies: Array<Record<string, unknown>>;\s*\n?\s*localStorage: Record<string, string>;[\s\S]{0,520}?pageState: PageState \| null;\s*\n?\s*capturedAt: Date;\s*\n?\s*\}/,
     );
     expect(body).toMatch(
       /export interface CaptureInput \{\s*\n?\s*kind: CaptureKind;\s*\n?\s*fullPage: boolean;\s*\n?\s*\}/,

@@ -108,12 +108,13 @@ describe('W904 SessionState + Capture cross-source invariant', () => {
 
   // ─── 5-field cardinality ─────────────────────────────────────
 
-  it('CRITICAL SessionState = EXACTLY 5 fields + CaptureResponse = EXACTLY 5 fields. The 5/5 cardinality is what driver-state + capture-output APIs depend on.', () => {
+  it('CRITICAL SessionState = EXACTLY 6 fields (W615 added page_state) + CaptureResponse = EXACTLY 5 fields. The 6/5 cardinality is what driver-state + capture-output APIs depend on.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
     const stateM = p.match(/SessionStateSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(stateM).not.toBeNull();
     const stateFields = ((stateM![1] ?? '').match(/^\s*[a-z_]+:/gm) || []).length;
-    expect(stateFields).toBe(5);
+    // W615 — page_state joined url/title/cookies/local_storage/captured_at.
+    expect(stateFields).toBe(6);
     const capM = p.match(/CaptureResponseSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(capM).not.toBeNull();
     const capFields = ((capM![1] ?? '').match(/^\s*[a-z_]+:/gm) || []).length;
