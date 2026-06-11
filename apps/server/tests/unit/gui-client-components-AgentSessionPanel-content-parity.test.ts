@@ -89,4 +89,18 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/const onStateChangeRef = useRef\(onStateChange\);/);
     expect(body).toMatch(/onStateChangeRef\.current\?\.\(next\);/);
   });
+
+  it("W617 no-publisher detection: NO_PUBLISHER_TIMEOUT_MS = 10_000 module export; publisher tri-state ('waiting' → 'publishing' on TrackSubscribed video, 'waiting' → 'none' on post-connect timeout); the 'none' overlay offers the parent's onNoPublisher fallback (open-polling-viewer button) — pinned for the founder-hit connected-but-empty-room black screen (no browser worker publishing)", () => {
+    expect(body).toMatch(/export const NO_PUBLISHER_TIMEOUT_MS = 10_000;/);
+    expect(body).toMatch(
+      /const \[publisher, setPublisher\] = useState<'waiting' \| 'publishing' \| 'none'>\('waiting'\);/,
+    );
+    expect(body).toMatch(/setPublisher\('publishing'\);/);
+    expect(body).toMatch(/setPublisher\(\(p\) => \(p === 'waiting' \? 'none' : p\)\);/);
+    // Timer cleared on unmount so a closed panel can't fire a stale fallback.
+    expect(body).toMatch(/if \(noPublisherTimer !== null\) clearTimeout\(noPublisherTimer\);/);
+    expect(body).toMatch(/data-overlay="publisher-state"/);
+    expect(body).toMatch(/data-action="open-polling-viewer"/);
+    expect(body).toMatch(/no browser worker is publishing on/);
+  });
 });

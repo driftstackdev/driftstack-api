@@ -107,6 +107,12 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   // Live-stream viewer: set when a launched session returns a LiveKit block;
   // renders an overlay with the AgentSessionPanel (subscribes immediately).
   const [watchInfo, setWatchInfo] = useState<LiveKitInfo | null>(null);
+  // W617 — the profile + agent-session behind the active stream overlay, so
+  // the empty-room fallback can re-launch the same profile in the viewer.
+  const [watchSource, setWatchSource] = useState<{
+    profileId: string;
+    agentSessionId: string;
+  } | null>(null);
   // V-238 — create-form modal state. Lives here (not lifted to App.tsx)
   // because every other ProfilesView interaction is local; the modal
   // is a transient overlay scoped to this view's lifecycle.
@@ -276,20 +282,14 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       await markLaunched(profile.id, created.id);
       if (created.livekit) {
         setWatchInfo(created.livekit);
+        // W617 — remember which profile/agent-session backs the stream so
+        // the no-publisher fallback can re-launch as a direct session.
+        setWatchSource({ profileId: profile.id, agentSessionId: created.id });
       } else {
         // W611/W613 — no livekit block (deployment without LiveKit, e.g. a
         // self-hosted/mock-driver server): fall back to the polling live
-        // view instead of dead-ending with an error. The polling viewer
-        // speaks the DRIVER-session routes (/v1/sessions/:id, ses_<uuid>),
-        // and a fresh agent session has no driftstack_session_id yet (it's
-        // created lazily on the first agent turn) — so opening the agt_ id
-        // there 400s (founder-hit, W613). Close the unused agent session
-        // (frees the concurrency slot + token budget) and launch a plain
-        // driver session with the same profile for the viewer.
-        await client.agentSessions.close(created.id).catch(() => undefined);
-        const driverSession = await client.sessions.create({ profile_id: profile.id });
-        await markLaunched(profile.id, driverSession.id);
-        onOpenSession(driverSession.id);
+        // view instead of dead-ending with an error.
+        await openPollingFallback(profile.id, created.id);
       }
       await refresh(false);
       await refreshAccountMe();
@@ -298,6 +298,20 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     } finally {
       setBusyId(null);
     }
+  }
+
+  // W613/W617 — shared LiveKit-less fallback. The polling viewer speaks the
+  // DRIVER-session routes (/v1/sessions/:id, ses_<uuid>), and a fresh agent
+  // session has no driftstack_session_id yet (created lazily on the first
+  // agent turn) — so opening the agt_ id there 400s (founder-hit, W613).
+  // Close the unused agent session (frees the concurrency slot + token
+  // budget) and launch a plain driver session with the same profile.
+  async function openPollingFallback(profileId: string, agentSessionId: string): Promise<void> {
+    if (!client) return;
+    await client.agentSessions.close(agentSessionId).catch(() => undefined);
+    const driverSession = await client.sessions.create({ profile_id: profileId });
+    await markLaunched(profileId, driverSession.id);
+    onOpenSession(driverSession.id);
   }
 
   async function handleStop(profile: Profile): Promise<void> {
@@ -336,6 +350,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             className="btn ml-auto"
             onClick={() => {
               setWatchInfo(null);
+              setWatchSource(null);
             }}
           >
             Close
@@ -343,7 +358,24 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
         </div>
         <div className="flex flex-1 items-center justify-center overflow-hidden">
           <Suspense fallback={<div className="text-sm text-ink-secondary">Loading viewer…</div>}>
-            <AgentSessionPanel info={watchInfo} />
+            <AgentSessionPanel
+              info={watchInfo}
+              // W617 — empty-room fallback: room connected but no browser
+              // worker published video → offer the polling viewer instead.
+              onNoPublisher={() => {
+                const src = watchSource;
+                setWatchInfo(null);
+                setWatchSource(null);
+                if (src !== null) {
+                  void openPollingFallback(src.profileId, src.agentSessionId).catch(() => {
+                    setState((s) => ({
+                      ...s,
+                      error: 'Could not open the direct viewer — try launching again.',
+                    }));
+                  });
+                }
+              }}
+            />
           </Suspense>
         </div>
       </div>

@@ -37,7 +37,18 @@ export interface AgentSessionPanelProps {
   /** Callback fired on every connection-state transition. LK.6.c
    *  wires the chrome badge to this. */
   onStateChange?: (state: LivekitConnectionState) => void;
+  /** W617 — offered when the room connects but NO video track arrives
+   *  within NO_PUBLISHER_TIMEOUT_MS (founder-hit: empty LiveKit room on a
+   *  deployment with no browser worker → black screen). The parent wires
+   *  this to a fallback (e.g. open the polling viewer); rendered as a
+   *  button on the no-publisher overlay. */
+  onNoPublisher?: () => void;
 }
+
+/** W617 — how long a connected-but-videoless room waits before the panel
+ *  declares "no publisher" (a real worker publishes within ~2-5s; 10s is
+ *  comfortably past that without feeling stuck). */
+export const NO_PUBLISHER_TIMEOUT_MS = 10_000;
 
 const IPHONE_16_PRO_ASPECT_RATIO = 1206 / 2622; // ≈ 0.46
 
@@ -45,9 +56,14 @@ export function AgentSessionPanel({
   info,
   aspectRatio = IPHONE_16_PRO_ASPECT_RATIO,
   onStateChange,
+  onNoPublisher,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
+  // W617 — track whether a video track ever arrived; 'waiting' →
+  // 'publishing' on TrackSubscribed, 'waiting' → 'none' on timeout after
+  // connect. 'none' renders the honest no-worker overlay.
+  const [publisher, setPublisher] = useState<'waiting' | 'publishing' | 'none'>('waiting');
   // Manual reconnect: bumping this re-runs the connect effect (new Room +
   // reconnect). Lets the customer recover from an error/disconnect without
   // reloading the whole app. Only bumped on the Reconnect button — not a
@@ -83,6 +99,7 @@ export function AgentSessionPanel({
       if (track.kind !== 'video') return;
       const el = videoRef.current;
       if (el !== null) track.attach(el);
+      setPublisher('publishing');
     });
     (room as any).on(RoomEvent.Disconnected, () => {
       if (!cancelled) setS({ kind: 'disconnected' });
@@ -95,9 +112,19 @@ export function AgentSessionPanel({
     });
 
     setS({ kind: 'connecting' });
+    setPublisher('waiting');
+    // W617 — empty-room detector: connected but no video track within the
+    // timeout means no browser worker is publishing on this deployment
+    // (founder-hit black screen). Cleared by TrackSubscribed above.
+    let noPublisherTimer: ReturnType<typeof setTimeout> | null = null;
     connectToAgentSession(room, info)
       .then(() => {
-        if (!cancelled) setS({ kind: 'connected' });
+        if (cancelled) return;
+        setS({ kind: 'connected' });
+        noPublisherTimer = setTimeout(() => {
+          if (cancelled) return;
+          setPublisher((p) => (p === 'waiting' ? 'none' : p));
+        }, NO_PUBLISHER_TIMEOUT_MS);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -107,6 +134,7 @@ export function AgentSessionPanel({
 
     return () => {
       cancelled = true;
+      if (noPublisherTimer !== null) clearTimeout(noPublisherTimer);
       void (room as any).disconnect();
     };
     // Reconnect only when the connection identity (ws_url + token) changes, NOT
@@ -138,6 +166,42 @@ export function AgentSessionPanel({
         className="h-full w-full object-contain"
         aria-label="Agent session live video stream"
       />
+      {/* W617 — connected but nothing publishing: waiting spinner first,
+          then the honest no-worker overlay with the parent's fallback. */}
+      {state.kind === 'connected' && publisher !== 'publishing' && (
+        <div
+          data-overlay="publisher-state"
+          data-state={publisher}
+          className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 px-6 text-center text-sm text-ink-primary"
+        >
+          {publisher === 'waiting' ? (
+            <>
+              <span
+                className="h-7 w-7 animate-spin rounded-full border-2 border-white/25 border-t-white/90"
+                aria-hidden="true"
+              />
+              <span>Connected — waiting for the browser to start streaming…</span>
+            </>
+          ) : (
+            <>
+              <span>
+                No live video — the stream room is up, but no browser worker is publishing on this
+                deployment.
+              </span>
+              {onNoPublisher !== undefined && (
+                <button
+                  type="button"
+                  data-action="open-polling-viewer"
+                  onClick={onNoPublisher}
+                  className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
+                >
+                  Open in the direct viewer instead
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
       {state.kind !== 'connected' && (
         <div
           data-overlay="connection-state"
