@@ -158,6 +158,18 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     expect(body).toMatch(/\} finally \{\s*\n?\s*fetchInFlightRef\.current = false;\s*\n?\s*\}/);
   });
 
+  it('W607 browser chrome: navigateTo drives client.sessions.navigate (bare-host → https), wired to an editable URL bar (Enter) + Reload (re-navigate currentUrl)', () => {
+    expect(body).toMatch(/const navigateTo = useCallback\(/);
+    expect(body).toMatch(/await client\.sessions\.navigate\(sessionId, \{ url: target \}\)/);
+    expect(body).toMatch(/'https:\/\/' \+ url/);
+    expect(body).toMatch(/props\.onNavigate\(draftUrl\)/);
+    expect(body).toMatch(/void navigateTo\(state\.currentUrl\)/);
+    // The draft URL isn't clobbered by the poll mid-type (synced only when
+    // currentUrl actually changes underneath).
+    expect(body).toMatch(/const \[draftUrl, setDraftUrl\] = useState/);
+    expect(body).toMatch(/aria-label="Address bar"/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

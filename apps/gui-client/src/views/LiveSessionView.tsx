@@ -173,6 +173,34 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
     }
   }, [client, sessionId]);
 
+  // W607 — browser-chrome navigation. The URL bar (Enter) + Reload button both
+  // drive the existing navigate intent; reload re-navigates the current URL.
+  // After navigating we refetch meta + a frame so the chrome + viewport reflect
+  // the new page promptly (the poll would catch up anyway, but this is snappier).
+  const navigateTo = useCallback(
+    async (rawUrl: string): Promise<void> => {
+      if (!client) return;
+      const url = rawUrl.trim();
+      if (url.length === 0) return;
+      // Be forgiving: a bare host (example.com) gets https://.
+      const target = /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : 'https://' + url;
+      setState((s) => ({ ...s, loading: true, error: null }));
+      try {
+        await client.sessions.navigate(sessionId, { url: target });
+        await fetchSessionMeta();
+        await fetchFrame();
+      } catch (err) {
+        const diag = diagnosticFetchError(err, settings.baseUrl);
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: diag ?? (err instanceof Error ? err.message : 'Navigation failed.'),
+        }));
+      }
+    },
+    [client, sessionId, fetchSessionMeta, fetchFrame, settings.baseUrl],
+  );
+
   // Mount: fetch session meta + start frame polling.
   useEffect(() => {
     void fetchSessionMeta();
@@ -353,6 +381,10 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
         onToggleManualControl={toggleManualControl}
         onToggleRecording={toggleRecording}
         onRefresh={() => void fetchFrame()}
+        onNavigate={(url) => void navigateTo(url)}
+        onReload={() => {
+          if (state.currentUrl !== null) void navigateTo(state.currentUrl);
+        }}
         onDestroy={() => void handleDestroy()}
       />
 
@@ -404,13 +436,24 @@ interface HeaderProps {
   onToggleManualControl: () => void;
   onToggleRecording: () => void;
   onRefresh: () => void;
+  onNavigate: (url: string) => void;
+  onReload: () => void;
   onDestroy: () => void;
 }
 
 function Header(props: HeaderProps): JSX.Element {
+  // W607 — editable URL bar. Local draft so the customer can type without the
+  // poll-driven currentUrl clobbering keystrokes; resets to currentUrl when the
+  // page actually changes underneath.
+  const [draftUrl, setDraftUrl] = useState(props.currentUrl ?? '');
+  const lastSyncedUrl = useRef(props.currentUrl);
+  if (props.currentUrl !== lastSyncedUrl.current) {
+    lastSyncedUrl.current = props.currentUrl;
+    setDraftUrl(props.currentUrl ?? '');
+  }
   return (
     <header className="flex items-center justify-between gap-3">
-      <div className="flex flex-col gap-0.5 min-w-0">
+      <div className="flex flex-col gap-1 min-w-0 flex-1">
         <button
           type="button"
           onClick={props.onBack}
@@ -418,15 +461,38 @@ function Header(props: HeaderProps): JSX.Element {
         >
           ← Sessions
         </button>
-        <h2 className="mono truncate text-sm text-ink-primary">{props.sessionId}</h2>
-        <div className="flex items-center gap-3 text-2xs text-ink-muted">
-          {props.currentTitle !== null && (
-            <span className="truncate max-w-xs text-ink-secondary">{props.currentTitle}</span>
-          )}
-          {props.currentUrl !== null && (
-            <span className="mono truncate max-w-md">{props.currentUrl}</span>
-          )}
-        </div>
+        {/* W607 — browser chrome: title + editable URL bar + reload. */}
+        {props.currentTitle !== null && (
+          <span className="truncate max-w-md text-sm text-ink-primary">{props.currentTitle}</span>
+        )}
+        <form
+          className="flex items-center gap-1.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            props.onNavigate(draftUrl);
+          }}
+        >
+          <button
+            type="button"
+            className="btn-secondary shrink-0 px-2"
+            title="Reload the current page"
+            aria-label="Reload"
+            onClick={props.onReload}
+          >
+            ↻
+          </button>
+          <input
+            type="text"
+            value={draftUrl}
+            onChange={(e) => setDraftUrl(e.target.value)}
+            placeholder="example.com — type a URL, press Enter"
+            spellCheck={false}
+            autoComplete="off"
+            aria-label="Address bar"
+            className="mono w-full min-w-0 rounded-md border border-surface-divider bg-surface-base px-2 py-1 text-2xs text-ink-secondary"
+          />
+        </form>
+        <h2 className="mono truncate text-2xs text-ink-muted">{props.sessionId}</h2>
       </div>
       <div className="flex items-center gap-2 shrink-0">
         <button type="button" className="btn-secondary" onClick={props.onRefresh}>
