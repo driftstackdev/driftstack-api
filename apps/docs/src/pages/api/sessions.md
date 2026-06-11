@@ -228,6 +228,38 @@ object (`kind`: `http` / `tls` / `dns` / `net` / `timeout`, plus
 the session hasn't reported a lifecycle event yet (e.g. before the
 first navigation).
 
+A typical `page_state` after a failed navigation:
+
+```json
+{
+  "url": "https://unreachable.example",
+  "title": null,
+  "page_state": {
+    "state": "errored",
+    "error": { "kind": "dns", "message": "Could not resolve host" }
+  },
+  "captured_at": "2026-06-11T18:00:00Z"
+}
+```
+
+Use it to confirm a navigation succeeded before acting on the page —
+poll `GET /v1/sessions/:id/state` after `navigate` until `page_state`
+is `loaded` (proceed) or `errored` (branch on `error.kind`), rather
+than guessing from a screenshot:
+
+```js
+await client.sessions.navigate(id, { url });
+let state;
+do {
+  state = await client.sessions.getState(id);
+} while (state.page_state?.state === 'loading');
+
+if (state.page_state?.state === 'errored') {
+  // e.g. 'dns' → bad host, 'http' → check error.http_status, 'tls' → cert
+  throw new Error(`Navigation failed: ${state.page_state.error.kind}`);
+}
+```
+
 ## Capture
 
 `POST /v1/sessions/:id/capture`
