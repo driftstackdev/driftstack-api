@@ -195,7 +195,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const SessionStatusSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('sessionStatus'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*status: z\.string\(\)\.min\(1\),\s*\n?\s*timestamp: z\.string\(\),\s*\n?\s*detail: z\.string\(\)\.optional\(\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*\]\);/,
+      /export const HarnessOutboundSchema = z\.discriminatedUnion\('type', \[\s*\n?\s*IntentResultEnvelopeSchema,\s*\n?\s*SessionStatusSchema,\s*\n?\s*HeartbeatSchema,\s*\n?\s*CapabilityReportSchema,\s*\n?\s*ErrorEventSchema,\s*\n?\s*ProfileSavedSchema,\s*\n?\s*ChallengeDetectedSchema,\s*\n?\s*PageStateFrameSchema,\s*\n?\s*\]\);/,
     );
     // ControlInbound.sessionEnd — the trivial W122 teardown envelope (source-pinned).
     expect(body).toMatch(
@@ -256,6 +256,52 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(true);
     expect(
       HarnessOutboundSchema.safeParse({ type: 'profileSaved', profile_id: 'p1' }).success,
+    ).toBe(false);
+  });
+
+  it('pageState (A3 W1238/W1240) pinned to the outbound union + shape (camelCase sessionId, state enum, url nullable, error null|{kind:net|timeout, http_status:null, message}) — was silently dropped at safeParse before recognition', () => {
+    // Shape pinned to A3's wire contract (testHarnessOutboundPageStateCodable).
+    expect(body).toMatch(
+      /export const PageStateFrameSchema = z\.object\(\{\s*\n?\s*type: z\.literal\('pageState'\),\s*\n?\s*sessionId: z\.string\(\)\.min\(1\),\s*\n?\s*state: z\.enum\(\['loading', 'loaded', 'errored'\]\),\s*\n?\s*url: z\.string\(\)\.nullable\(\),\s*\n?\s*error: z\s*\n?\s*\.object\(\{\s*\n?\s*kind: z\.enum\(\['net', 'timeout'\]\),\s*\n?\s*http_status: z\.null\(\),\s*\n?\s*message: z\.string\(\),\s*\n?\s*\}\)\s*\n?\s*\.nullable\(\),\s*\n?\s*\}\);/,
+    );
+    // loading (no error) + loaded + errored (with error) all parse via the union.
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 's1',
+        state: 'loading',
+        url: 'https://example.com',
+        error: null,
+      }).success,
+    ).toBe(true);
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 's1',
+        state: 'errored',
+        url: null,
+        error: { kind: 'net', http_status: null, message: 'connection refused' },
+      }).success,
+    ).toBe(true);
+    // http_status must be null (A3 W1222 — not observable via W3C WebDriver).
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 's1',
+        state: 'errored',
+        url: null,
+        error: { kind: 'net', http_status: 404, message: 'x' },
+      }).success,
+    ).toBe(false);
+    // an unknown error.kind (tls/dns/http) is rejected (only net|timeout observable).
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 's1',
+        state: 'errored',
+        url: null,
+        error: { kind: 'tls', http_status: null, message: 'x' },
+      }).success,
     ).toBe(false);
   });
 

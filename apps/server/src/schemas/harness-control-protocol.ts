@@ -475,12 +475,40 @@ export const ChallengeDetectedSchema = z.object({
 });
 export type ChallengeDetected = z.infer<typeof ChallengeDetectedSchema>;
 
+// ── HarnessOutbound.pageState (harness → server; A3 W1238/W1240) ──
+// Emitted on an AGENT-INITIATED navigate: loading → loaded | errored. Intended
+// to drive the GUI loading-bar / error-overlay (W615/W616). `error.kind` is
+// net|timeout ONLY (tls/dns/http-distinct + http_status need an A1 nav-error
+// channel — A3 W1222); `http_status` is on the wire per the spec but the
+// harness ALWAYS sends null. Recognized + typed here so the frame is no longer
+// silently dropped at safeParse (was: unknown type → ignored). The CONSUMER
+// (map → the session's REST page_state) is GATED on the agent↔driver session
+// coupling: the harness emits pageState for the ControlPlaneAgentExecutor
+// (agent / agt_) session, while GET /v1/sessions/:id/state.page_state is the
+// DRIVER (ses_) session's `driver.getState`. Wiring pending A3 keying confirm
+// (A2 bus W650). Plain object (lenient forward-compat), like the sibling frames.
+export const PageStateFrameSchema = z.object({
+  type: z.literal('pageState'),
+  sessionId: z.string().min(1),
+  state: z.enum(['loading', 'loaded', 'errored']),
+  url: z.string().nullable(),
+  error: z
+    .object({
+      kind: z.enum(['net', 'timeout']),
+      http_status: z.null(),
+      message: z.string(),
+    })
+    .nullable(),
+});
+export type PageStateFrame = z.infer<typeof PageStateFrameSchema>;
+
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
-// All 7 variants pinned. intentResult + sessionStatus are consumed precisely;
+// All 8 variants pinned. intentResult + sessionStatus are consumed precisely;
 // heartbeat / capabilityReport / errorEvent / profileSaved / challengeDetected
-// are accepted (typed) + ignored until a consumer wires them (profileSaved
-// consumer = step (d); challengeDetected relay → session.challenge_detected
-// wires in the next W393 slice).
+// / pageState are accepted (typed) + ignored until a consumer wires them
+// (profileSaved consumer = step (d); challengeDetected relay →
+// session.challenge_detected wired W393; pageState consumer pending the agent↔
+// driver page_state coupling, A2 bus W650).
 export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
@@ -489,6 +517,7 @@ export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   ErrorEventSchema,
   ProfileSavedSchema,
   ChallengeDetectedSchema,
+  PageStateFrameSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;
 export type ProfileSaved = z.infer<typeof ProfileSavedSchema>;
