@@ -98,8 +98,11 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     );
     expect(p).not.toMatch(/The runtime is real Safari on real iOS/);
     expect(p).toMatch(
-      /`client\.sessions\.capture\(\)` returned a screenshot of the rendered page\./,
+      /`client\.sessions\.capture\(\)` returned a `\{ kind, data, encoding, byte_size, duration_ms \}` object\./,
     );
+    // W564 — capture-response shape + the base64-decode gotcha are spelled out.
+    expect(p).toMatch(/`data` is the PNG \*\*base64-encoded\*\*/);
+    expect(p).toMatch(/Buffer\.from\(shot\.data, 'base64'\)/);
     expect(p).toMatch(
       /`client\.sessions\.destroy\(\)` released the concurrent slot\. Sessions also auto-expire after the per-tier idle timeout if you forget to destroy them\./,
     );

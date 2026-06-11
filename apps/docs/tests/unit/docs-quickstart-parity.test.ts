@@ -7,6 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { CaptureResponseSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -58,5 +59,16 @@ describe('W254.D docs/quickstart ↔ SDK method parity', () => {
     expect(doc).toMatch(/Node\.js 18\+/);
     expect(doc).toMatch(/Python 3\.10\+/);
     expect(doc).toMatch(/Go 1\.21\+/);
+  });
+
+  it('W564: "what happened" documents the real capture-response shape + base64 decode', () => {
+    // Source-derived: every CaptureResponseSchema field must appear in the
+    // doc, so a schema change forces the quickstart to keep up.
+    for (const field of Object.keys(CaptureResponseSchema.shape)) {
+      expect(doc, `quickstart must document capture field '${field}'`).toContain(field);
+    }
+    // The base64-decode hint (the gotcha the shape note exists to prevent).
+    expect(doc).toContain("Buffer.from(shot.data, 'base64')");
+    expect(doc).toMatch(/base64-encoded/);
   });
 });

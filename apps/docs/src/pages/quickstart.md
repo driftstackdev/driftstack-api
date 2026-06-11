@@ -119,7 +119,7 @@ func main() {
 
 - `client.sessions.create()` reserved one of your account's concurrent session slots. Each tier has a concurrent cap (Free: 1, API Starter: 2, API Builder: 8, API Scale: 24 — see [pricing](https://driftstack.dev/pricing)). Exceeding the cap returns 429.
 - `client.sessions.navigate()` drove the iPhone Safari runtime to the URL on Driftstack's WebKit build. The runtime is built from Apple's WebKit source directly — not a Chromium-stealth shim pretending to be Safari.
-- `client.sessions.capture()` returned a screenshot of the rendered page.
+- `client.sessions.capture()` returned a `{ kind, data, encoding, byte_size, duration_ms }` object. For a screenshot, `data` is the PNG **base64-encoded** (`encoding: "base64"`), so decode it to bytes before saving — e.g. `fs.writeFileSync('shot.png', Buffer.from(shot.data, 'base64'))`. A `dom_snapshot` capture instead returns the raw HTML as UTF-8 text (`encoding: "utf8"`).
 - `client.sessions.destroy()` released the concurrent slot. Sessions also auto-expire after the per-tier idle timeout if you forget to destroy them.
 
 ## 5. Next steps
