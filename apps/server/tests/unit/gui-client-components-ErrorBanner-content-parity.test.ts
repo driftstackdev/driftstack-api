@@ -45,14 +45,27 @@ describe('W478.A apps/gui-client/src/components/ErrorBanner.tsx content parity',
   });
 
   it('2026-05-20 — message span flipped from `truncate` to `whitespace-pre-line` so multi-line diagnosticFetchError output (newlines + bullets) renders intact instead of collapsing to a single line. Outer flex / border / bg / section-label / Dismiss button shape unchanged.', () => {
+    // W609 — a record('error', …) useEffect now sits between the signature
+    // and the return (every visible error mirrors into Dev Logs), so the
+    // signature + JSX shells are pinned separately.
     expect(body).toMatch(
-      /export function ErrorBanner\(\{ message, onDismiss \}: ErrorBannerProps\): JSX\.Element \{\s*\n?\s*return \(\s*\n?\s*<div className="flex items-start justify-between gap-3 rounded border border-status-error\/30 bg-status-error\/10 px-3 py-2">\s*\n?\s*<div className="flex flex-col gap-0\.5 min-w-0">\s*\n?\s*<span className="section-label text-status-error\/80">Error<\/span>/,
+      /export function ErrorBanner\(\{ message, onDismiss \}: ErrorBannerProps\): JSX\.Element \{/,
+    );
+    expect(body).toMatch(
+      /<div className="flex items-start justify-between gap-3 rounded border border-status-error\/30 bg-status-error\/10 px-3 py-2">\s*\n?\s*<div className="flex flex-col gap-0\.5 min-w-0">\s*\n?\s*<span className="section-label text-status-error\/80">Error<\/span>/,
     );
     expect(body).toMatch(
       /<span className="whitespace-pre-line text-sm text-ink-primary">\{message\}<\/span>\s*\n?\s*<\/div>\s*\n?\s*<button type="button" className="btn-secondary" onClick=\{onDismiss\}>\s*\n?\s*Dismiss\s*\n?\s*<\/button>/,
     );
     expect(body).toMatch(
       /\/\/ 2026-05-20 — whitespace-pre-line so multi-line diagnostic|whitespace-pre-line so multi-line diagnostic/,
+    );
+  });
+
+  it("W609 — every visible error mirrors into Dev Logs: useEffect keyed on message calls record('error', ['[ui] ' + message]) — pinned so the banner stays the chokepoint that makes the Dev Logs panel useful during user-facing failures (views render friendly messages without touching console.*)", () => {
+    expect(body).toMatch(/import \{ record \} from '\.\.\/lib\/log-buffer';/);
+    expect(body).toMatch(
+      /useEffect\(\(\) => \{\s*\n?\s*record\('error', \['\[ui\] ' \+ message\]\);\s*\n?\s*\}, \[message\]\);/,
     );
   });
 

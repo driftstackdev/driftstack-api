@@ -189,6 +189,15 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     );
   });
 
+  it('W609 tab strip mounted: <SessionTabStrip activeSessionId onSwitch onNewTab> renders above the Header; LiveSessionViewProps gained onSwitchSession + onNewTab — pinned so the browser-tabs surface stays wired (App.tsx keys the view by sessionId for clean remounts, covered by its own parity file)', () => {
+    expect(body).toMatch(/import \{ SessionTabStrip \} from '\.\.\/components\/SessionTabStrip';/);
+    expect(body).toMatch(
+      /<SessionTabStrip\s*\n?\s*activeSessionId=\{sessionId\}\s*\n?\s*onSwitch=\{onSwitchSession\}\s*\n?\s*onNewTab=\{onNewTab\}\s*\n?\s*\/>/,
+    );
+    expect(body).toMatch(/onSwitchSession: \(sessionId: string\) => void;/);
+    expect(body).toMatch(/onNewTab: \(\) => void;/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

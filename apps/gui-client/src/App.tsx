@@ -185,9 +185,14 @@ function CurrentView({
       );
     case 'live-session':
       return (
+        // W609 — key by sessionId so a tab switch fully remounts the view
+        // (fresh frame poll, URL bar, fps window — no stale-session bleed).
         <LiveSessionView
+          key={view.sessionId}
           sessionId={view.sessionId}
           onBack={() => onNavigate({ kind: 'sessions' })}
+          onSwitchSession={(sessionId) => onNavigate({ kind: 'live-session', sessionId })}
+          onNewTab={() => onNavigate({ kind: 'profiles' })}
         />
       );
     case 'settings':

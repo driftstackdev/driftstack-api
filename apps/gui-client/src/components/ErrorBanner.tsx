@@ -1,12 +1,22 @@
 // Shared inline error banner. Lifted out of three views during GUI8
 // polish so all error surfaces look identical and dismiss the same way.
 
+import { useEffect } from 'react';
+import { record } from '../lib/log-buffer';
+
 export interface ErrorBannerProps {
   message: string;
   onDismiss: () => void;
 }
 
 export function ErrorBanner({ message, onDismiss }: ErrorBannerProps): JSX.Element {
+  // W609 — Dev Logs productivity: every error a user SEES also lands in
+  // the Dev Logs panel (views render friendly messages without touching
+  // console.*, so before this the panel was empty during visible errors).
+  // Effect keyed on message → re-logs only when the text changes.
+  useEffect(() => {
+    record('error', ['[ui] ' + message]);
+  }, [message]);
   return (
     <div className="flex items-start justify-between gap-3 rounded border border-status-error/30 bg-status-error/10 px-3 py-2">
       <div className="flex flex-col gap-0.5 min-w-0">

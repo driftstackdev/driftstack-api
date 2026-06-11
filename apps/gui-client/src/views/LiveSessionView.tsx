@@ -34,6 +34,7 @@ import { useSettings } from '../lib/SettingsContext';
 import { DriftstackError } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { GUIInputError, sendGUIInput, type GUIInputAction } from '../lib/gui-input';
+import { SessionTabStrip } from '../components/SessionTabStrip';
 import { useRecordings } from '../lib/recordings';
 
 const FRAME_INTERVAL_MS = 500;
@@ -80,9 +81,18 @@ interface ViewportState {
 export interface LiveSessionViewProps {
   sessionId: string;
   onBack: () => void;
+  /** W609 — tab strip: switch the live view to another concurrent session. */
+  onSwitchSession: (sessionId: string) => void;
+  /** W609 — tab strip "+": launch another phone (routes to Profiles). */
+  onNewTab: () => void;
 }
 
-export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JSX.Element {
+export function LiveSessionView({
+  sessionId,
+  onBack,
+  onSwitchSession,
+  onNewTab,
+}: LiveSessionViewProps): JSX.Element {
   const { client, settings } = useSettings();
   const { startRecording, stopRecording, addFrame, activeRecordingFor } = useRecordings();
   const recordingId = activeRecordingFor(sessionId);
@@ -379,6 +389,9 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
       onKeyDown={handleKeyDown}
       className="flex h-full flex-col gap-3 p-6 outline-none"
     >
+      {/* W609 — browser-style tabs. v1 tabs = concurrent sessions (each
+          tab is its own iPhone); see SessionTabStrip + the UX plan doc. */}
+      <SessionTabStrip activeSessionId={sessionId} onSwitch={onSwitchSession} onNewTab={onNewTab} />
       <Header
         sessionId={sessionId}
         currentUrl={state.currentUrl}
