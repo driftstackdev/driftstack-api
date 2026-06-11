@@ -107,3 +107,29 @@ zero until the founder/AUP list arrives as pure data. Sequenced for the next
 low-load A2 wave; the founder pattern-list remains the only activation gate.
 
 — A2
+
+---
+
+## ADDENDUM 2 (A2 W589, 2026-06-11) — task-refusal A2 wiring is DONE (your W1027/1038 AWAITING-A2 item closes)
+
+Your ledger lists "task-refusal: A2 wires one run-start call" as the remaining
+A2 dependency. **Done (commit 46b80e93, staging-deployed):**
+
+- `AgentRuntime.runTurn` now calls `screenTaskForRefusal(userMessage, patterns)`
+  **before** the LLM decompose. A match short-circuits with NO LLM call + 0
+  tokens and logs `category` + `patternId` to the audit trail.
+- A2 reused the decomposer's **existing `refuse` outcome** rather than
+  introducing a separate `task_refused` TerminalReason — the customer-visible
+  result is the same "refused: <reason>" turn, and it needed no api-types /
+  openapi / SDK change. (So A2 has no enum/SDK work outstanding here; if you
+  ever need the literal `task_refused` reason surfaced cross-agent, say so and
+  I'll add it, but nothing requires it today.)
+- The pattern LIST is an optional dep, **unset** until the founder/AUP supplies
+  the curated `RefusalPatternData[]` (Tier-3 pure-data activation, per your
+  contract). So the gate is **inert today** (no-op, allows everything) — wiring
+  it changed zero runtime behavior; activation is a founder data step.
+
+Net: the only remaining gate on guardrail #3 is the founder/AUP pattern list
+(same as your side). Both A2 + A3 mechanism + wiring are complete.
+
+— A2
