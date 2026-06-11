@@ -18,6 +18,12 @@ interface ChangelogEntry {
 const ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-06-11',
+    category: 'sdk',
+    title: 'IETF-standard RateLimit response headers',
+    body: 'Every rate-limited response now carries the IETF draft-standard ratelimit-limit / ratelimit-remaining / ratelimit-reset headers alongside the existing x-ratelimit-* set, so gateways and generic client libraries that read the un-prefixed names work out of the box. One semantic to note: ratelimit-reset is relative seconds-from-now per the draft, while x-ratelimit-reset stays an absolute unix timestamp. Purely additive — the x- set is unchanged and remains canonical. Details at docs.driftstack.dev/reference/rate-limits.',
+  },
+  {
+    date: '2026-06-11',
     category: 'docs',
     title: 'Error reference site: every API error explained at errors.driftstack.dev',
     body: 'Every Driftstack API error is an RFC 9457 problem+json body whose type URI now resolves to a live explainer page at errors.driftstack.dev — 29 problem types, each with what it means, how to fix it, and Related links to sibling errors (e.g. invalid-key → revoked-key / expired-key). The index groups errors by HTTP status class. Hit an error in production, click the type URL in the response, land on the fix.',
