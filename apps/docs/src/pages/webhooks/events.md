@@ -402,6 +402,48 @@ All three follow the same Stripe-adjacent pattern: parse `t=` and
 `v1=` from the header, recompute HMAC-SHA256(`<t>.<body>`), constant-
 time compare.
 
+### Verifying without an SDK
+
+If you integrate from a language without a Driftstack SDK, the scheme
+is small enough to implement directly. Three rules matter:
+
+1. **Sign the RAW request body** — recompute the HMAC over the exact
+   bytes you received, _before_ any JSON parse/re-serialize. A
+   re-serialized body almost never matches byte-for-byte and is the
+   single most common verification failure.
+2. **Reject stale timestamps** — if `now - t` exceeds your tolerance
+   (the SDKs default to 300 seconds), treat the delivery as a possible
+   replay and reject it.
+3. **Constant-time compare**, and accept if _any_ `v1=` matches — the
+   header carries two during the 24-hour secret-rotation grace window.
+
+Node.js, no SDK:
+
+```js
+const crypto = require('node:crypto');
+
+function verifyWebhook(secret, header, rawBody, toleranceSec = 300) {
+  // header: "t=<unix-seconds>,v1=<hex>[,v1=<hex>]"
+  const fields = header.split(',').map((p) => p.trim());
+  const t = Number(fields.find((p) => p.startsWith('t='))?.slice(2));
+  if (!Number.isFinite(t)) return false;
+  if (Math.abs(Date.now() / 1000 - t) > toleranceSec) return false; // replay guard
+
+  // Recompute over the RAW body — not a re-serialized JSON object.
+  const expected = crypto.createHmac('sha256', secret).update(`${t}.${rawBody}`).digest('hex');
+
+  // Accept if ANY v1= matches (two are present during a rotation grace window).
+  return fields
+    .filter((p) => p.startsWith('v1='))
+    .map((p) => p.slice(3))
+    .some(
+      (sig) =>
+        sig.length === expected.length &&
+        crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)),
+    );
+}
+```
+
 ## Failure modes
 
 A delivery is considered "successful" only if your endpoint returns

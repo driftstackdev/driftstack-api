@@ -199,6 +199,21 @@ describe('W570.C /docs/api/webhook-events.md content parity', () => {
       /`v1=` from the header, recompute HMAC-SHA256\(`<t>\.<body>`\), constant-/,
     );
     expect(body).toMatch(/time compare\./);
+    // W562 — no-SDK verification example: the three load-bearing rules
+    // (raw body, replay tolerance, any-v1 constant-time match) + a runnable
+    // Node crypto snippet signing `${t}.${rawBody}`.
+    expect(body).toMatch(/### Verifying without an SDK/);
+    expect(body).toMatch(/\*\*Sign the RAW request body\*\*/);
+    expect(body).toMatch(/single most common verification failure\./);
+    expect(body).toMatch(/\*\*Reject stale timestamps\*\* — if `now - t` exceeds your tolerance/);
+    // prettier normalises markdown italics `*any*` → `_any_`.
+    expect(body).toMatch(/accept if _any_ `v1=` matches/);
+    expect(body).toMatch(/secret-rotation grace window\./);
+    expect(body).toMatch(/createHmac\('sha256', secret\)/);
+    expect(body).toMatch(/\.update\(`\$\{t\}\.\$\{rawBody\}`\)/);
+    expect(body).toMatch(
+      /crypto\.timingSafeEqual\(Buffer\.from\(sig\), Buffer\.from\(expected\)\)/,
+    );
     expect(body).toMatch(/## Failure modes/);
     expect(body).toMatch(/A delivery is considered "successful" only if your endpoint returns/);
     expect(body).toMatch(/HTTP 2xx within the 10s timeout\./);
