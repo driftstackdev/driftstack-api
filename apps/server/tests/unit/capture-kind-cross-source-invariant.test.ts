@@ -21,6 +21,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { CaptureKindSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -138,6 +139,17 @@ describe('W872 CaptureKind cross-source invariant', () => {
 
   it('CRITICAL encoding enum has EXACTLY 2 values (base64 + utf8). The 2-value model maps to binary (base64) vs text (utf8) capture outputs — binary kinds (screenshot/pdf) use base64; dom_snapshot uses utf8.', () => {
     expect(ENCODING_VALUES).toEqual(['base64', 'utf8']);
+  });
+
+  it('W602 doc coverage: every CaptureKind is documented in the customer api/sessions.md — source-derived from CaptureKindSchema.options so a future 4th kind can ship SDK-documented yet doc-stale no longer (the W564/W565/W600 doc-drift class)', () => {
+    const doc = read(resolve(REPO_ROOT, 'apps/docs/src/pages/api/sessions.md'));
+    for (const kind of CaptureKindSchema.options) {
+      // doc quotes/backticks each kind, e.g. `'screenshot'`; bound on either
+      // side so `pdf` can't false-match an unrelated substring.
+      expect(doc, `sessions.md must document capture kind '${kind}'`).toMatch(
+        new RegExp("[`']" + kind + "[`']"),
+      );
+    }
   });
 
   it('test file metadata — file exists at canonical path', () => {
