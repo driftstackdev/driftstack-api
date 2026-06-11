@@ -32,7 +32,7 @@ export interface AgentSessionPanelProps {
   info: LiveKitInfo;
   /** Optional: archetype-driven aspect ratio. Defaults to iPhone 16
    *  Pro (1206×2622 px) since that's the locked archetype
-   *  (iphone16pro_ios18_7_safari26_4) for v1.0 per the orchestrator brief. */
+   *  (iphone17_ios18_7_safari26_4) for v1.0 per the orchestrator brief. */
   aspectRatio?: number;
   /** Callback fired on every connection-state transition. LK.6.c
    *  wires the chrome badge to this. */

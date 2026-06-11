@@ -10,7 +10,7 @@
 //     admin-force-actions.ts (separate route file).
 //   • Force-destroy audit action 'session.destroyed_by_admin'
 //     pinned ↔ the action emitted by the route handler.
-//   • Page-side mock archetype slug 'iphone16pro_ios18_7_safari26_4'
+//   • Page-side mock archetype slug 'iphone17_ios18_7_safari26_4'
 //     pinned (matches LOCKED_ARCHETYPE_ID server-side).
 //   • Filter wiring: status + account_id text input.
 //   • "Force-destroy is the only mutation surfaced here" framing
@@ -65,8 +65,8 @@ describe('W361.C admin-panel /sessions page content parity', () => {
   });
 
   it('page-side mock archetype slug matches LOCKED_ARCHETYPE_ID server-side', () => {
-    expect(LOCKED_ARCHETYPE_ID).toBe('iphone16pro_ios18_7_safari26_4');
-    expect(body).toContain("archetype: 'iphone16pro_ios18_7_safari26_4'");
+    expect(LOCKED_ARCHETYPE_ID).toBe('iphone17_ios18_7_safari26_4');
+    expect(body).toContain("archetype: 'iphone17_ios18_7_safari26_4'");
   });
 
   it('filter wiring: status select + account_id text input', () => {

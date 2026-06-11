@@ -47,10 +47,10 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
     );
   });
 
-  it('SAMPLE_PROFILE 7-field shape pinned: id (prof_) + name us-east-sales-bot + archetype iphone16pro_ios18_7_safari26_4 + description Sales-team account for east-coast scraping + last_used_at + created_at + updated_at — pinned so the 7-field publicProfile shape + canonical-archetype-slug + sales-team-example commitments survive (drift to a different field set would create marketing↔ProfileSchema divergence)', () => {
+  it('SAMPLE_PROFILE 7-field shape pinned: id (prof_) + name us-east-sales-bot + archetype iphone17_ios18_7_safari26_4 + description Sales-team account for east-coast scraping + last_used_at + created_at + updated_at — pinned so the 7-field publicProfile shape + canonical-archetype-slug + sales-team-example commitments survive (drift to a different field set would create marketing↔ProfileSchema divergence)', () => {
     expect(body).toMatch(/"id": "prof_…"/);
     expect(body).toMatch(/"name": "us-east-sales-bot"/);
-    expect(body).toMatch(/"archetype": "iphone16pro_ios18_7_safari26_4"/);
+    expect(body).toMatch(/"archetype": "iphone17_ios18_7_safari26_4"/);
     expect(body).toMatch(/"description": "Sales-team account for east-coast scraping\."/);
     expect(body).toMatch(/"last_used_at": "2026-05-11T12:00:00\.000Z"/);
     expect(body).toMatch(/"created_at": "2026-05-01T00:00:00\.000Z"/);
@@ -75,7 +75,7 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
   it("POST /v1/profiles 3-field body + 201 framing pinned: name + archetype (optional, defaults server-side) + description + 'The response is a flat profile object — no envelope. Profile ids are prefixed prof_.' + 'The archetype field is a lowercase slug (3–120 chars) identifying a Driftstack-managed device profile' + 'Browser state (cookies, localStorage, etc.) is created on first use and is not part of the create request.' — pinned so the 3-field-body + flat-no-envelope + prof_-prefix + 3-120-char-archetype + browser-state-lazy-not-on-create commitments survive (drift to a different archetype slug regex would create marketing↔CreateProfileRequestSchema divergence)", () => {
     expect(body).toMatch(/"name": "us-east-sales-bot"/);
     expect(body).toMatch(
-      /"archetype": "iphone16pro_ios18_7_safari26_4",\s+← optional, defaults server-side/,
+      /"archetype": "iphone17_ios18_7_safari26_4",\s+← optional, defaults server-side/,
     );
     expect(body).toMatch(/"description": "Sales-team account for east-coast scraping\."/);
     expect(body).toMatch(
@@ -111,7 +111,7 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
     expect(body).toMatch(/POST \/v1\/profiles\/prof_…\/snapshots/);
     expect(body).toMatch(/"id": "psnap_…"/);
     expect(body).toMatch(/"parent_profile_id": "prof_…"/);
-    expect(body).toMatch(/"parent_archetype": "iphone16pro_ios18_7_safari26_4"/);
+    expect(body).toMatch(/"parent_archetype": "iphone17_ios18_7_safari26_4"/);
     expect(body).toMatch(/"parent_name": "us-east-sales-bot"/);
     expect(body).toMatch(/"captured_at": "2026-05-12T12:00:00\.000Z"/);
     expect(body).toMatch(/POST \/v1\/profile-snapshots\/psnap_…\/restore/);

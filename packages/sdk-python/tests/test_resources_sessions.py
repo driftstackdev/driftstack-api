@@ -31,7 +31,7 @@ SESSION_FIXTURE: dict = {
     "account_id": "acc_00000000-0000-4000-8000-000000000001",
     "api_key_id": "key_00000000-0000-4000-8000-000000000001",
     "status": "ready",
-    "archetype": "iphone16pro_ios18_7_safari26_4",
+    "archetype": "iphone17_ios18_7_safari26_4",
     # V-169 — purpose is required; defaults to production_customer.
     "purpose": "production_customer",
     "label": None,

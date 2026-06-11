@@ -52,7 +52,7 @@ describe('GET /v1/profiles/:id/export', () => {
     expect(env.source_profile_id).toBe(profile.id);
     expect(env.source_account_id).toMatch(/^[0-9a-f-]{36}$/);
     expect(env.profile.name).toBe('shopper-acctA');
-    expect(env.profile.archetype).toBe('iphone16pro_ios18_7_safari26_4');
+    expect(env.profile.archetype).toBe('iphone17_ios18_7_safari26_4');
     expect(env.profile.description).toBe('returning checkout flow');
     // exported_at is ISO-8601, near now.
     const ts = Date.parse(env.exported_at);

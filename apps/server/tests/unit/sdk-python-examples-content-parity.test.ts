@@ -205,7 +205,7 @@ describe('W620 sdk-python/examples content parity', () => {
     expect(body).toMatch(/"account_id": "acc_00000000-0000-4000-8000-000000000001",/);
     expect(body).toMatch(/"api_key_id": "key_00000000-0000-4000-8000-000000000001",/);
     expect(body).toMatch(/"status": "ready",/);
-    expect(body).toMatch(/"archetype": "iphone16pro_ios18_7_safari26_4",/);
+    expect(body).toMatch(/"archetype": "iphone17_ios18_7_safari26_4",/);
     expect(existsSync(E('pytest_fixture.py'))).toBe(true);
   });
 

@@ -292,7 +292,7 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
       <div class="mt-10">
         <h3 class="text-xl font-semibold text-ink-primary">1. Create a session</h3>
         <p class="mt-2 max-w-prose text-sm text-ink-secondary">
-          The minimal "hello world" — provision an iPhone 16 Pro Safari
+          The minimal "hello world" — provision an iPhone 17 Safari
           session, return its id. Default archetype if you don't pass one.
         </p>
         <div class="mt-5 grid gap-4 md:grid-cols-2">
@@ -301,14 +301,14 @@ const OPENAPI_JSON_URL = 'https://api.driftstack.dev/openapi.json';
 curl -X POST https://api.driftstack.dev/v1/sessions \\
   -H "authorization: Bearer $DRIFTSTACK_API_KEY" \\
   -H "content-type: application/json" \\
-  -d '{"archetype":"iphone16pro_ios18_7_safari26_4"}'
+  -d '{"archetype":"iphone17_ios18_7_safari26_4"}'
 `}</code></pre>
           <pre
             class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300">// TypeScript</span>{`
 import { Driftstack } from "@driftstack/sdk";
 const client = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 const session = await client.sessions.create({
-  archetype: "iphone16pro_ios18_7_safari26_4",
+  archetype: "iphone17_ios18_7_safari26_4",
 });
 console.log(session.id);
 `}</code></pre>
@@ -316,7 +316,7 @@ console.log(session.id);
             class="overflow-x-auto rounded-md bg-surface-inset p-4 font-mono text-xs leading-relaxed text-slate-100"><code><span class="text-emerald-300"># Python</span>{`
 from driftstack import Driftstack
 client = Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"])
-session = client.sessions.create(archetype="iphone16pro_ios18_7_safari26_4")
+session = client.sessions.create(archetype="iphone17_ios18_7_safari26_4")
 print(session.id)
 `}</code></pre>
           <pre
@@ -325,7 +325,7 @@ client := driftstack.NewClient(driftstack.Config{
     APIKey: os.Getenv("DRIFTSTACK_API_KEY"),
 })
 session, err := client.Sessions.Create(ctx, &driftstack.SessionCreateParams{
-    Archetype: "iphone16pro_ios18_7_safari26_4",
+    Archetype: "iphone17_ios18_7_safari26_4",
 })
 if err != nil { return err }
 fmt.Println(session.ID)

@@ -85,10 +85,10 @@ describe('W347.A /docs/profiles parity', () => {
     expect(body).toMatch(/"id":\s*"psnap_/);
   });
 
-  it('locked archetype id (iphone16pro_ios18_7_safari26_4) is the canonical default', () => {
+  it('locked archetype id (iphone17_ios18_7_safari26_4) is the canonical default', () => {
     // The sample profile uses the locked archetype literally — pin
     // it so a future archetype rename has to update the doc too.
-    expect(body).toMatch(/iphone16pro_ios18_7_safari26_4/);
+    expect(body).toMatch(/iphone17_ios18_7_safari26_4/);
   });
 
   it('PATCH is restricted to name + description (archetype is immutable)', () => {

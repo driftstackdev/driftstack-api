@@ -52,7 +52,7 @@ Response (201):
   "parent_profile_id": "prof_<uuid>",
   "label": "post-login-known-good",
   "description": null,
-  "parent_archetype": "iphone16pro_ios18_7_safari26_4",
+  "parent_archetype": "iphone17_ios18_7_safari26_4",
   "parent_name": "main-account",
   "captured_at": "2026-05-10T18:00:00Z"
 }
@@ -88,7 +88,7 @@ Response (200):
       "parent_profile_id": "prof_<uuid>",
       "label": "post-login-known-good",
       "description": null,
-      "parent_archetype": "iphone16pro_ios18_7_safari26_4",
+      "parent_archetype": "iphone17_ios18_7_safari26_4",
       "parent_name": "main-account",
       "captured_at": "2026-05-10T18:00:00Z"
     }
@@ -121,7 +121,7 @@ Response (200):
       "parent_profile_id": "prof_<uuid>",
       "label": "post-login-known-good",
       "description": null,
-      "parent_archetype": "iphone16pro_ios18_7_safari26_4",
+      "parent_archetype": "iphone17_ios18_7_safari26_4",
       "parent_name": "main-account",
       "captured_at": "2026-05-10T18:00:00Z"
     }
@@ -152,7 +152,7 @@ Response (200):
   "parent_profile_id": "prof_<uuid>",
   "label": "post-login-known-good",
   "description": null,
-  "parent_archetype": "iphone16pro_ios18_7_safari26_4",
+  "parent_archetype": "iphone17_ios18_7_safari26_4",
   "parent_name": "main-account",
   "captured_at": "2026-05-10T18:00:00Z"
 }
@@ -182,7 +182,7 @@ Response (201):
 {
   "id": "prof_<uuid>",
   "name": "main-account-rolled-back",
-  "archetype": "iphone16pro_ios18_7_safari26_4",
+  "archetype": "iphone17_ios18_7_safari26_4",
   "description": null,
   "created_at": "2026-05-10T18:30:00Z",
   "last_used_at": null

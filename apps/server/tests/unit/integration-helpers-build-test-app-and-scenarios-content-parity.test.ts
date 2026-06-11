@@ -184,11 +184,11 @@ describe('W795 integration _helpers/build-test-app + scenarios parity', () => {
     );
   });
 
-  it('CRITICAL archetype default iphone16pro_ios18_7_safari26_4 pinned. Matches W763 /api/profiles + W774 /api/profile-snapshots LOCKED_ARCHETYPE_ID convention.', () => {
+  it('CRITICAL archetype default iphone17_ios18_7_safari26_4 pinned. Matches W763 /api/profiles + W774 /api/profile-snapshots LOCKED_ARCHETYPE_ID convention.', () => {
     const p = read(SCENARIOS);
 
     expect(p).toMatch(
-      /\*\* Archetype applied to every seeded profile\. Default `'iphone16pro_ios18_7_safari26_4'`\. \*\//,
+      /\*\* Archetype applied to every seeded profile\. Default `'iphone17_ios18_7_safari26_4'`\. \*\//,
     );
   });
 

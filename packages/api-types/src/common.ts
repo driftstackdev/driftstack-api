@@ -457,8 +457,14 @@ export function tierHasFeature(tier: AccountTier, feature: TierBooleanFeature): 
  * correct `iphone16pro_ios18_7_safari26_4`. Customer-facing copy
  * also redlined in the same commit.
  */
-export const LOCKED_ARCHETYPE_ID = 'iphone16pro_ios18_7_safari26_4';
-export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 16 Pro / iOS 18.7 / Safari 26.4';
+// 2026-06-11 launch-archetype cutover: the v1.0 launch DEFAULT moved from
+// iphone16pro_ios18_7_safari26_4 to iphone17_ios18_7_safari26_4 — the single
+// real-device-verified ("PASS") archetype per Agent-1's atlas validator
+// (operations/archetype-catalog.json: status=ready). iphone16pro is now a
+// scaffolded `reference` baseline (coming_soon), retained below for back-compat
+// label resolution on already-created profiles.
+export const LOCKED_ARCHETYPE_ID = 'iphone17_ios18_7_safari26_4';
+export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 17 / iOS 18.7 / Safari 26.4';
 
 /**
  * Multi-archetype registry — the catalogue of device archetypes the
@@ -507,23 +513,37 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
   {
     id: LOCKED_ARCHETYPE_ID,
     displayLabel: LOCKED_ARCHETYPE_DISPLAY_LABEL,
-    device: 'iPhone 16 Pro',
+    device: 'iPhone 17',
     iosVersion: '18.7',
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'launch',
   },
   {
-    // The GUI FirstRunWizard already offers this as the 'Legacy' option
-    // (V-669) — registered here so the registry is the source of truth for
-    // the customer-selectable catalog. Safari 17.5 is pre-26 → Family A.
+    // Former v1.0 launch archetype (LOCKED until the 2026-06-11 cutover to
+    // iphone17). Now a non-selectable `reference` baseline — Agent-1's catalog
+    // marks it coming_soon (scaffolded); retained so already-created profiles
+    // referencing this slug still resolve a display label.
+    id: 'iphone16pro_ios18_7_safari26_4',
+    displayLabel: 'iPhone 16 Pro / iOS 18.7 / Safari 26.4',
+    device: 'iPhone 16 Pro',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'reference',
+  },
+  {
+    // iPhone 15 Pro / iOS 17.5 (Family A baseline). Pre-cutover this was a
+    // customer-selectable 'available' option; demoted to a non-selectable
+    // `reference` baseline at the iphone17 cutover (only the validator-PASS
+    // archetype is customer-selectable at v1.0).
     id: 'iphone15pro_ios17_5_safari17_5',
     displayLabel: 'iPhone 15 Pro / iOS 17.5 / Safari 17.5',
     device: 'iPhone 15 Pro',
     iosVersion: '17.5',
     safariVersion: '17.5',
     canvasFamily: 'A',
-    status: 'available',
+    status: 'reference',
   },
   {
     id: 'iphone16pro_ios18_6_safari18_6',
@@ -533,15 +553,6 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'reference',
-  },
-  {
-    id: 'iphone17_ios18_7_safari26_4',
-    displayLabel: 'iPhone 17 / iOS 18.7 / Safari 26.4',
-    device: 'iPhone 17',
-    iosVersion: '18.7',
-    safariVersion: '26.4',
-    canvasFamily: 'B',
-    status: 'planned',
   },
   {
     id: 'iphone17_ios18_7_safari26_5',

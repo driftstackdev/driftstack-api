@@ -88,7 +88,7 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
 
   it('SDK snippet pinned: archetype + sessions API shape (TypeScript)', () => {
     expect(body).toMatch(/import \{ Driftstack \} from '@driftstack\/sdk'/);
-    expect(body).toMatch(/archetype: 'iphone16pro_ios18_7_safari26_4'/);
+    expect(body).toMatch(/archetype: 'iphone17_ios18_7_safari26_4'/);
     // Hero snippet stays focused on the create / navigate / capture /
     // destroy critical path. Egress / proxy is documented separately
     // (see /docs/egress + the @driftstack/sdk proxy attachment

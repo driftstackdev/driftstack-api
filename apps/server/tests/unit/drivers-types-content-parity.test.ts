@@ -59,7 +59,7 @@ describe('W430.B apps/server/src/drivers/types.ts content parity', () => {
   it('DriverSessionId = string + CreateSessionInput: archetype iPhone slug + purpose union (V-169) + optional metadata', () => {
     expect(body).toMatch(/export type DriverSessionId = string;/);
     expect(body).toMatch(
-      /export interface CreateSessionInput \{\s*\n?\s*\/\*\* iPhone archetype slug, e\.g\. "iphone16pro_ios18_7_safari26_4"\. \*\/\s*\n?\s*archetype: string;/,
+      /export interface CreateSessionInput \{\s*\n?\s*\/\*\* iPhone archetype slug, e\.g\. "iphone17_ios18_7_safari26_4"\. \*\/\s*\n?\s*archetype: string;/,
     );
     expect(body).toMatch(
       /\*\s*V-169 — harness purpose\. Drives WebKit driver's harness-config\s*\n?\s*\*\s*selection \(persistent vs ephemeral context, _resourceLoad\s*\n?\s*\*\s*StatisticsEnabled flag, ATFP firing\)/,

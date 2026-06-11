@@ -11,7 +11,7 @@
 //   • V-662 "Three flows, four languages" patterns: each of
 //     {create / drive / capture} session has cURL + TypeScript
 //     + Python + Go sample.
-//   • Default archetype id "iphone16pro_ios18_7_safari26_4"
+//   • Default archetype id "iphone17_ios18_7_safari26_4"
 //     pinned (matches index.astro + roadmap.astro).
 //   • Error taxonomy: 10 rows with stable type URIs (400 / 401
 //     / 404 / 409 / 410 / 429×3 / 500 / 503), retryable markers
@@ -74,8 +74,8 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
     }
   });
 
-  it('default archetype id pinned: iphone16pro_ios18_7_safari26_4 (aligned with /index + /roadmap)', () => {
-    expect(body).toMatch(/iphone16pro_ios18_7_safari26_4/);
+  it('default archetype id pinned: iphone17_ios18_7_safari26_4 (aligned with /index + /roadmap)', () => {
+    expect(body).toMatch(/iphone17_ios18_7_safari26_4/);
   });
 
   it('error taxonomy: 10 status-code rows pinned with stable type URIs', () => {

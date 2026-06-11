@@ -24,7 +24,7 @@ const MOCK_SESSIONS: MockAdminSession[] = [
     accountId: 'acc_00000000-0000-4000-8000-000000000001',
     accountEmail: 'tester@driftstack.local',
     status: 'ready',
-    archetype: 'iphone16pro_ios18_7_safari26_4',
+    archetype: 'iphone17_ios18_7_safari26_4',
     createdAt: '2026-05-04T11:30:00Z',
     destroyedAt: null,
   },
@@ -33,7 +33,7 @@ const MOCK_SESSIONS: MockAdminSession[] = [
     accountId: 'acc_00000000-0000-4000-8000-000000000002',
     accountEmail: 'agency@driftstack.local',
     status: 'busy',
-    archetype: 'iphone16pro_ios18_7_safari26_4',
+    archetype: 'iphone17_ios18_7_safari26_4',
     createdAt: '2026-05-04T10:15:00Z',
     destroyedAt: null,
   },
@@ -42,7 +42,7 @@ const MOCK_SESSIONS: MockAdminSession[] = [
     accountId: 'acc_00000000-0000-4000-8000-000000000001',
     accountEmail: 'tester@driftstack.local',
     status: 'errored',
-    archetype: 'iphone16pro_ios18_7_safari26_4',
+    archetype: 'iphone17_ios18_7_safari26_4',
     createdAt: '2026-05-04T08:00:00Z',
     destroyedAt: null,
   },
@@ -63,7 +63,7 @@ function fmtIso(iso: string | null): string {
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
-// Friendly archetype labels (slug → "iPhone 16 Pro / iOS 18.7 / Safari 26.4")
+// Friendly archetype labels (slug → "iPhone 17 / iOS 18.7 / Safari 26.4")
 // for the operator's session list — injected into the client script + used for
 // the SSG mock render, so the device shows readable, not a raw slug.
 const ARCHETYPE_LABELS = Object.fromEntries(

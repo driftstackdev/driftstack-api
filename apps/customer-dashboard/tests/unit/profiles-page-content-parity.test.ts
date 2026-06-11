@@ -10,7 +10,7 @@
 //     enterprise tiers — not trial_pack (which has 0-profile
 //     entitlement and would show as a confusing 0 row).
 //   • The archetype picker defaults to LOCKED_ARCHETYPE_ID
-//     'iphone16pro_ios18_7_safari26_4'; labels derive from the
+//     'iphone17_ios18_7_safari26_4'; labels derive from the
 //     registry (injected archetypeLabels map), so a server-side
 //     enum expansion renders friendly, not the raw id.
 //   • Snapshot-form replaces window.prompt (V-470 keyboard-
@@ -70,7 +70,7 @@ describe('W361.B customer-dashboard /profiles page content parity', () => {
   });
 
   it('selector default tracks LOCKED_ARCHETYPE_ID from @driftstack/api-types (registry-derived; raw-id leak guarded by the injected label map)', () => {
-    expect(LOCKED_ARCHETYPE_ID).toBe('iphone16pro_ios18_7_safari26_4');
+    expect(LOCKED_ARCHETYPE_ID).toBe('iphone17_ios18_7_safari26_4');
     // The page imports the locked-archetype constant and defaults the picker to
     // it — rather than hardcoding the slug. The slug→label derivation + the
     // end-to-end render proof live in the server parity + behavioral suites.

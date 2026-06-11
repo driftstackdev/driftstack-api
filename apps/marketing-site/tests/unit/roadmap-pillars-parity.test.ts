@@ -21,8 +21,8 @@ function read(p: string): string {
 describe('W262.A /roadmap ↔ live LOCKED_ARCHETYPE_ID + roadmap framing parity', () => {
   const page = read(PAGE);
 
-  it('LOCKED_ARCHETYPE_ID slug iphone16pro_ios18_7_safari26_4 is in the schema', () => {
-    expect(LOCKED_ARCHETYPE_ID).toBe('iphone16pro_ios18_7_safari26_4');
+  it('LOCKED_ARCHETYPE_ID slug iphone17_ios18_7_safari26_4 is in the schema', () => {
+    expect(LOCKED_ARCHETYPE_ID).toBe('iphone17_ios18_7_safari26_4');
   });
 
   it('roadmap names the live iOS 18.7 / Safari 26.4 combo, not the legacy "iOS 26.4"', () => {

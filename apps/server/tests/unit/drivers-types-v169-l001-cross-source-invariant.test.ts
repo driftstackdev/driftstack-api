@@ -101,9 +101,9 @@ describe('W984 drivers/types V-169 + L-001 cross-source invariant', () => {
     expect(p).toMatch(/metadata\?: Record<string, unknown>;/);
   });
 
-  it("CRITICAL archetype slug example — 'iPhone archetype slug, e.g. iphone16pro_ios18_7_safari26_4'. The 4-component slug shape (model_ios_safari_revision) is the archetype-identity contract.", () => {
+  it("CRITICAL archetype slug example — 'iPhone archetype slug, e.g. iphone17_ios18_7_safari26_4'. The 4-component slug shape (model_ios_safari_revision) is the archetype-identity contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/drivers/types.ts'));
-    expect(p).toMatch(/iPhone archetype slug, e\.g\. "iphone16pro_ios18_7_safari26_4"\./);
+    expect(p).toMatch(/iPhone archetype slug, e\.g\. "iphone17_ios18_7_safari26_4"\./);
   });
 
   // ─── V-169 purpose framing ───────────────────────────────────

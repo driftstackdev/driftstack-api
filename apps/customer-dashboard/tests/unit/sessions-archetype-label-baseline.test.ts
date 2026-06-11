@@ -30,12 +30,12 @@ function read(p: string): string {
 }
 
 describe('W303.C customer-dashboard archetype-id baseline', () => {
-  it('canonical LOCKED_ARCHETYPE_ID is iphone16pro_ios18_7_safari26_4', () => {
-    expect(LOCKED_ARCHETYPE_ID).toBe('iphone16pro_ios18_7_safari26_4');
+  it('canonical LOCKED_ARCHETYPE_ID is iphone17_ios18_7_safari26_4', () => {
+    expect(LOCKED_ARCHETYPE_ID).toBe('iphone17_ios18_7_safari26_4');
   });
 
   it('canonical display label matches the locked-archetype convention', () => {
-    expect(LOCKED_ARCHETYPE_DISPLAY_LABEL).toMatch(/iPhone 16 Pro/);
+    expect(LOCKED_ARCHETYPE_DISPLAY_LABEL).toMatch(/iPhone 17/);
     expect(LOCKED_ARCHETYPE_DISPLAY_LABEL).toMatch(/iOS 18\.7/);
     expect(LOCKED_ARCHETYPE_DISPLAY_LABEL).toMatch(/Safari 26\.4/);
   });

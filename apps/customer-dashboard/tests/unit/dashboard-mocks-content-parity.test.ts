@@ -15,7 +15,7 @@
 //   • MockAccount (id, email, name, tier, emailVerifiedAt, createdAt).
 //   • MOCK_ACCOUNT fixture: api_builder tier, email-verified.
 //   • MOCK_SUBSCRIPTION fixture: api_builder/active/no-cancel.
-//   • MOCK_PROFILES: 2 profiles, archetype iphone16pro_ios18_7_safari26_4.
+//   • MOCK_PROFILES: 2 profiles, archetype iphone17_ios18_7_safari26_4.
 //   • MockApiKey: 4 scope literals (read/write/admin/gui_control).
 //   • MOCK_USAGE_SUMMARY: 5 usage totals (session_minute / navigate
 //     / interact / state_capture / screenshot_capture).
@@ -91,10 +91,10 @@ describe('W383.B customer-dashboard src/data/mocks.ts content parity', () => {
     expect(body).not.toContain('MOCK_TRIAL_PACK_STATE');
   });
 
-  it('MOCK_PROFILES: 2 profiles with iphone16pro_ios18_7_safari26_4 archetype', () => {
+  it('MOCK_PROFILES: 2 profiles with iphone17_ios18_7_safari26_4 archetype', () => {
     expect(body).toMatch(/name: 'work-laptop',/);
     expect(body).toMatch(/name: 'staging-tester',/);
-    const archetypeMatches = body.match(/archetype: 'iphone16pro_ios18_7_safari26_4'/g);
+    const archetypeMatches = body.match(/archetype: 'iphone17_ios18_7_safari26_4'/g);
     expect(archetypeMatches).not.toBeNull();
     expect(archetypeMatches!.length).toBeGreaterThanOrEqual(2);
   });

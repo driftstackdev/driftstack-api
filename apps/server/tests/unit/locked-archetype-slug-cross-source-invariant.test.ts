@@ -25,23 +25,23 @@ describe('locked-archetype-slug cross-source invariant', () => {
   const profileDoc = read(PROFILE_DOC);
   const profileApi = read(PROFILE_API);
 
-  it("DB schema profiles + sessions tables BOTH default archetype to 'iphone16pro_ios18_7_safari26_4'", () => {
+  it("DB schema profiles + sessions tables BOTH default archetype to 'iphone17_ios18_7_safari26_4' (post-2026-06-11 cutover; migration 0072 ALTERs the column defaults)", () => {
     const occurrences = (
       schema.match(
-        /archetype: text\('archetype'\)\.notNull\(\)\.default\('iphone16pro_ios18_7_safari26_4'\)/g,
+        /archetype: text\('archetype'\)\.notNull\(\)\.default\('iphone17_ios18_7_safari26_4'\)/g,
       ) || []
     ).length;
     expect(occurrences).toBeGreaterThanOrEqual(2);
   });
 
-  it("docs/guides/profile-management.md customer copy explicitly names the locked slug + the 'current iPhone 16 Pro on iOS 18.7 with Safari 26.4' decode + 'when iOS 18.8 ships, the locked archetype slug bumps' framing", () => {
-    expect(profileDoc).toMatch(/`iphone16pro_ios18_7_safari26_4`/);
-    expect(profileDoc).toMatch(/current iPhone 16 Pro on iOS 18\.7 with Safari 26\.4/);
+  it("docs/guides/profile-management.md customer copy explicitly names the locked slug + the 'current iPhone 17 on iOS 18.7 with Safari 26.4' decode + 'when iOS 18.8 ships, the locked archetype slug bumps' framing", () => {
+    expect(profileDoc).toMatch(/`iphone17_ios18_7_safari26_4`/);
+    expect(profileDoc).toMatch(/current iPhone 17 on iOS 18\.7 with Safari 26\.4/);
     expect(profileDoc).toMatch(/when iOS 18\.8 ships, the locked archetype slug bumps/);
   });
 
-  it("docs/api/profiles.md exposes the locked slug in the resource shape example: 'archetype': 'iphone16pro_ios18_7_safari26_4'", () => {
-    expect(profileApi).toMatch(/"archetype": "iphone16pro_ios18_7_safari26_4",/);
+  it("docs/api/profiles.md exposes the locked slug in the resource shape example: 'archetype': 'iphone17_ios18_7_safari26_4'", () => {
+    expect(profileApi).toMatch(/"archetype": "iphone17_ios18_7_safari26_4",/);
   });
 
   it("docs/guides/profile-management.md commits to profile-archetype-pin stability: 'a profile created against iphone16pro_ios18_7_safari26_4 keeps that fingerprint forever, even after the locked default rolls forward' — pinned so the no-surprise-iOS-bump contract stays documented (drift to auto-bumping pinned profiles would surprise downstream behavioural-detection systems)", () => {
@@ -52,6 +52,6 @@ describe('locked-archetype-slug cross-source invariant', () => {
 
   it('apps/server/src/lib/bootstrap.ts seeds a default profile with the locked archetype slug — pinned so dev/test seed data stays consistent with the production-locked default', () => {
     const bootstrap = read(resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts'));
-    expect(bootstrap).toMatch(/archetype: 'iphone16pro_ios18_7_safari26_4',/);
+    expect(bootstrap).toMatch(/archetype: 'iphone17_ios18_7_safari26_4',/);
   });
 });

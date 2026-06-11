@@ -59,7 +59,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 
 const session = await ds.sessions.create({
-  archetype: 'iphone16pro_ios18_7_safari26_4',
+  archetype: 'iphone17_ios18_7_safari26_4',
   label: 'target-flow',
 });
 
@@ -233,7 +233,7 @@ try {
         <div class="overflow-hidden rounded-lg border border-white/10 bg-surface-raised">
           <div class="flex items-center gap-2 border-b border-white/10 bg-white/[0.02] px-5 py-3 text-xs text-ink-muted">
             <span class="size-2 rounded-full bg-glow-red"></span>
-            <span class="font-mono">AI agent · iPhone 16 Pro</span>
+            <span class="font-mono">AI agent · iPhone 17</span>
           </div>
           <div class="space-y-4 p-5 text-sm">
             <div class="flex gap-3">

@@ -53,7 +53,7 @@ describe('POST /v1/sessions', () => {
     expect(typeof body.id).toBe('string');
     expect(body.id).toMatch(/^ses_[0-9a-f-]{36}$/);
     expect(body.status).toBe('ready');
-    expect(body.archetype).toBe('iphone16pro_ios18_7_safari26_4');
+    expect(body.archetype).toBe('iphone17_ios18_7_safari26_4');
     expect(body.label).toBe('demo');
   });
 

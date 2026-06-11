@@ -36,7 +36,7 @@ export const CreateProfileRequestSchema = z.object({
   name: ProfileNameSchema,
   /**
    * Archetype slug — defaults to `LOCKED_ARCHETYPE_ID`
-   * (`iphone16pro_ios18_7_safari26_4`) server-side if omitted.
+   * (`iphone17_ios18_7_safari26_4`) server-side if omitted.
    * Customers may pin a profile to an older archetype for
    * behavioural-stability reasons.
    */

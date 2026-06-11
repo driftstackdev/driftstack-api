@@ -27,7 +27,7 @@ import type { GUIInputAction } from '../schemas/gui-input.js';
 export type DriverSessionId = string;
 
 export interface CreateSessionInput {
-  /** iPhone archetype slug, e.g. "iphone16pro_ios18_7_safari26_4". */
+  /** iPhone archetype slug, e.g. "iphone17_ios18_7_safari26_4". */
   archetype: string;
   /**
    * V-169 — harness purpose. Drives WebKit driver's harness-config

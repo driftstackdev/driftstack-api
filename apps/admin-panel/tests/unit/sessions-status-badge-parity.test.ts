@@ -63,11 +63,11 @@ describe('W344.C admin /sessions STATUS_BADGE ↔ SessionStatusSchema parity', (
     expect(page).toMatch(/Force-destroy is\s+the only mutation surfaced here/);
   });
 
-  it('page narrative cites the canonical iPhone 16 Pro / iOS 18.7 / Safari 26.4 archetype', () => {
+  it('page narrative cites the canonical iPhone 17 / iOS 18.7 / Safari 26.4 archetype', () => {
     // V-LOCKED_ARCHETYPE drift guard: every mock row uses the
     // single locked archetype id. If we ever rename the
     // archetype, this catches the stale mock.
-    expect(page).toMatch(/iphone16pro_ios18_7_safari26_4/);
+    expect(page).toMatch(/iphone17_ios18_7_safari26_4/);
   });
 
   it('admin endpoints surface: GET /v1/admin/sessions + POST /v1/admin/sessions/:id/destroy', () => {

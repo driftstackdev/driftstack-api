@@ -26,7 +26,7 @@ func sessionFixture() Session {
 		AccountID: "acc_00000000-0000-4000-8000-000000000001",
 		APIKeyID:  "key_00000000-0000-4000-8000-000000000001",
 		Status:    SessionReady,
-		Archetype: "iphone16pro_ios18_7_safari26_4",
+		Archetype: "iphone17_ios18_7_safari26_4",
 		Label:     label,
 	}
 }

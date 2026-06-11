@@ -69,9 +69,9 @@ describe('W214.C sdk-typescript doc parity', () => {
     expect(doc).not.toMatch(/sessions\.get\(/);
   });
 
-  it('session-create body uses archetype/purpose, not target_url/profile_archetype (post-Wave 29-358 LOCKED_ARCHETYPE_ID — example uses the launch-default iphone16pro_ios18_7_safari26_4)', () => {
+  it('session-create body uses archetype/purpose, not target_url/profile_archetype (post-Wave 29-358 LOCKED_ARCHETYPE_ID — example uses the launch-default iphone17_ios18_7_safari26_4)', () => {
     // The doc's example must use the real schema fields.
-    expect(doc).toMatch(/archetype:\s*'iphone16pro_ios18_7_safari26_4'/);
+    expect(doc).toMatch(/archetype:\s*'iphone17_ios18_7_safari26_4'/);
     // And not the stale ones:
     expect(doc).not.toMatch(/target_url:/);
     expect(doc).not.toMatch(/profile_archetype:/);

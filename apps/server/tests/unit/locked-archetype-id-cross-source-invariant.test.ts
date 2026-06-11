@@ -23,18 +23,19 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-const LOCKED_ARCHETYPE_ID = 'iphone16pro_ios18_7_safari26_4';
-const LOCKED_ARCHETYPE_DISPLAY = 'iPhone 16 Pro / iOS 18.7 / Safari 26.4';
+// 2026-06-11 launch-archetype cutover: canonical id moved iphone16pro → iphone17.
+const LOCKED_ARCHETYPE_ID = 'iphone17_ios18_7_safari26_4';
+const LOCKED_ARCHETYPE_DISPLAY = 'iPhone 17 / iOS 18.7 / Safari 26.4';
 
 describe('W847 LOCKED_ARCHETYPE_ID cross-source invariant', () => {
   // ─── api-types canonical source ──────────────────────────────
 
-  it("CRITICAL packages/api-types/src/common.ts declares LOCKED_ARCHETYPE_ID = 'iphone16pro_ios18_7_safari26_4' as the cross-cutting source-of-truth. Drift to a different identifier would cascade through every other reference.", () => {
+  it("CRITICAL packages/api-types/src/common.ts declares LOCKED_ARCHETYPE_ID = 'iphone17_ios18_7_safari26_4' as the cross-cutting source-of-truth. Drift to a different identifier would cascade through every other reference.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
     expect(p).toMatch(new RegExp(`export const LOCKED_ARCHETYPE_ID = '${LOCKED_ARCHETYPE_ID}';`));
   });
 
-  it("CRITICAL packages/api-types/src/common.ts also declares LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 16 Pro / iOS 18.7 / Safari 26.4' (human-readable form). The dual ID + DISPLAY pair lets API responses ship both the machine ID and the customer-renderable label.", () => {
+  it("CRITICAL packages/api-types/src/common.ts also declares LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 17 / iOS 18.7 / Safari 26.4' (human-readable form). The dual ID + DISPLAY pair lets API responses ship both the machine ID and the customer-renderable label.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
     expect(p).toMatch(
       new RegExp(
@@ -62,8 +63,8 @@ describe('W847 LOCKED_ARCHETYPE_ID cross-source invariant', () => {
 
     expect(tsExample).toMatch(/V-136 LOCKED_ARCHETYPE_ID/);
     expect(pyExample).toMatch(/V-136 LOCKED_ARCHETYPE_ID/);
-    expect(tsExample).toMatch(/iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4/);
-    expect(pyExample).toMatch(/iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4/);
+    expect(tsExample).toMatch(/iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4/);
+    expect(pyExample).toMatch(/iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4/);
   });
 
   // ─── Python pytest_fixture references same archetype ─────────

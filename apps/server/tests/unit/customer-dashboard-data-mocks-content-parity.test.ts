@@ -74,13 +74,11 @@ describe('W463.B apps/customer-dashboard/src/data/mocks.ts content parity', () =
     );
   });
 
-  it("MOCK_PROFILES: 2 Profile entries with archetype 'iphone16pro_ios18_7_safari26_4' for both + names 'work-laptop' + 'staging-tester'", () => {
+  it("MOCK_PROFILES: 2 Profile entries with archetype 'iphone17_ios18_7_safari26_4' for both + names 'work-laptop' + 'staging-tester'", () => {
     expect(body).toMatch(/export const MOCK_PROFILES: Profile\[\] = \[/);
+    expect(body).toMatch(/name: 'work-laptop',\s*\n?\s*archetype: 'iphone17_ios18_7_safari26_4',/);
     expect(body).toMatch(
-      /name: 'work-laptop',\s*\n?\s*archetype: 'iphone16pro_ios18_7_safari26_4',/,
-    );
-    expect(body).toMatch(
-      /name: 'staging-tester',\s*\n?\s*archetype: 'iphone16pro_ios18_7_safari26_4',/,
+      /name: 'staging-tester',\s*\n?\s*archetype: 'iphone17_ios18_7_safari26_4',/,
     );
   });
 

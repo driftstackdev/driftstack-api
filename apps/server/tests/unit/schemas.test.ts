@@ -317,7 +317,9 @@ describe('Archetype display labels (V-136 / V-154 invariant)', () => {
 
   it('LOCKED_ARCHETYPE_ID matches the documented identifier shape', () => {
     // device_family_modelN_iosMAJOR_MINOR_safariMAJOR_MINOR
+    // device_model is alnum (e.g. `17`, `16pro`, `15`) — the optional
+    // trailing suffix letters cover variants like `pro`.
     // see docs/architecture/archetype-naming-convention.md
-    expect(LOCKED_ARCHETYPE_ID).toMatch(/^[a-z]+\d+[a-z]+_ios\d+_\d+_safari\d+_\d+$/);
+    expect(LOCKED_ARCHETYPE_ID).toMatch(/^[a-z]+\d+[a-z]*_ios\d+_\d+_safari\d+_\d+$/);
   });
 });

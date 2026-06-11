@@ -544,15 +544,10 @@ export function ApiKeyStep({
 // here pre-seeds the profile's archetype field.
 const PROFILE_ARCHETYPE_OPTIONS = [
   {
-    value: 'iphone16pro_ios18_7_safari26_4',
-    label: 'iPhone 16 Pro · iOS 18.7 · Safari 26.4',
+    value: 'iphone17_ios18_7_safari26_4',
+    label: 'iPhone 17 · iOS 18.7 · Safari 26.4',
     description:
-      'Most popular — matches the default fleet image. Pick this unless you know you need something else.',
-  },
-  {
-    value: 'iphone15pro_ios17_5_safari17_5',
-    label: 'iPhone 15 Pro · iOS 17.5 · Safari 17.5',
-    description: 'Legacy archetype — match a production user base still on the prior generation.',
+      'The v1.0 launch archetype — the device profile verified bit-for-bit against a real iPhone 17. Additional models are coming soon.',
   },
 ] as const;
 
@@ -567,7 +562,7 @@ export function ProfileStep({
 }): JSX.Element {
   const { client } = useSettings();
   const [name, setName] = useState('');
-  const [archetype, setArchetype] = useState<ProfileArchetype>('iphone16pro_ios18_7_safari26_4');
+  const [archetype, setArchetype] = useState<ProfileArchetype>('iphone17_ios18_7_safari26_4');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

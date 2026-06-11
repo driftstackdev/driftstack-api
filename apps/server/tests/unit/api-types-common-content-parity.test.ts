@@ -262,9 +262,9 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     expect(body).toMatch(
       /\*\s*V-136: renamed from the prior `iphone16pro_ios26_4_1` identifier\s*\n?\s*\*\s*\(which conflated Safari 26\.4 with a fictional "iOS 26\.4\.1"\) to the\s*\n?\s*\*\s*correct `iphone16pro_ios18_7_safari26_4`\./,
     );
-    expect(body).toMatch(/export const LOCKED_ARCHETYPE_ID = 'iphone16pro_ios18_7_safari26_4';/);
+    expect(body).toMatch(/export const LOCKED_ARCHETYPE_ID = 'iphone17_ios18_7_safari26_4';/);
     expect(body).toMatch(
-      /export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 16 Pro \/ iOS 18\.7 \/ Safari 26\.4';/,
+      /export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4';/,
     );
     // ARCHETYPE_DISPLAY_LABEL is now DERIVED from ARCHETYPE_REGISTRY (the
     // multi-archetype source of truth) rather than a hand-built single
@@ -277,7 +277,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     );
   });
 
-  it('ARCHETYPE_REGISTRY is the multi-archetype catalogue (NOT a single hardcoded device): ArchetypeConfig shape + status enum (launch/reference/planned for atlas-readiness) + the locked id is the sole status:launch entry + iphone17 slugs registered as planned placeholders', () => {
+  it('ARCHETYPE_REGISTRY is the multi-archetype catalogue (NOT a single hardcoded device): ArchetypeConfig shape + status enum (launch/reference/planned for atlas-readiness) + the locked id (iphone17, post-2026-06-11 cutover) is the sole status:launch entry + the prior iphone16pro + sibling slugs registered as reference/planned placeholders', () => {
     // The platform models a device MATRIX; the registry is the source of
     // truth. A drift back to a single hardcoded archetype would re-break
     // the multi-archetype architecture.
@@ -286,9 +286,11 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /export type ArchetypeStatus = 'launch' \| 'available' \| 'reference' \| 'planned';/,
     );
     expect(body).toMatch(/export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig\[\] = \[/);
-    // Slugs are registered (incl. iphone17 placeholders) so the cutover is
-    // a status flip, not a system-wide slug swap.
-    expect(body).toMatch(/id: 'iphone17_ios18_7_safari26_4',/);
+    // Sibling slugs are registered so the matrix is the source of truth. The
+    // prior launch (iphone16pro_ios18_7_safari26_4) is retained as a literal
+    // `reference` entry post-cutover; iphone17 is now the LOCKED entry (checked
+    // via LOCKED_ARCHETYPE_ID below, not as a standalone literal).
+    expect(body).toMatch(/id: 'iphone16pro_ios18_7_safari26_4',/);
     expect(body).toMatch(/id: 'iphone17_ios18_7_safari26_5',/);
     expect(body).toMatch(/id: 'iphone16pro_ios18_6_safari18_6',/);
     // Broader launch-family device matrix registered as placeholders
@@ -304,11 +306,13 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /id: LOCKED_ARCHETYPE_ID,\s*\n?\s*displayLabel: LOCKED_ARCHETYPE_DISPLAY_LABEL,/,
     );
     expect(body).toMatch(/status: 'launch',/);
-    expect(body).toMatch(/status: 'available',/);
     expect(body).toMatch(/status: 'reference',/);
     expect(body).toMatch(/status: 'planned',/);
-    // The GUI FirstRunWizard's 'Legacy' archetype is now registered (source
-    // of truth for the customer-selectable catalog = launch | available).
+    // Post-cutover the registry has exactly ONE selectable entry (iphone17 =
+    // launch); the prior launch (iphone16pro) + iphone15pro are demoted to
+    // 'reference' (non-selectable), so no entry currently carries 'available'
+    // — the enum still defines it (pinned above) for future selectable siblings.
+    expect(body).not.toMatch(/status: 'available',/);
     expect(body).toMatch(/id: 'iphone15pro_ios17_5_safari17_5',/);
   });
 

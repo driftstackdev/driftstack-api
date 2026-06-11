@@ -45,7 +45,7 @@ The cap on enterprise tier is negotiated; the API returns
 {
   "id": "prof_<uuid>",
   "name": "production",
-  "archetype": "iphone16pro_ios18_7_safari26_4",
+  "archetype": "iphone17_ios18_7_safari26_4",
   "description": "primary prod-data scrape profile",
   "last_used_at": "2026-05-09T22:00:00.000Z",
   "created_at": "2026-04-15T11:30:00.000Z",
@@ -58,7 +58,7 @@ The cap on enterprise tier is negotiated; the API returns
   allowed inner characters are letters, digits, spaces, underscore,
   hyphen, and dot. Leading/trailing whitespace is trimmed.
 - `archetype` — the pinned device + OS + Safari version triple. New
-  profiles default to `iphone16pro_ios18_7_safari26_4`. You can
+  profiles default to `iphone17_ios18_7_safari26_4`. You can
   pin to an older archetype for behavioural-stability reasons (e.g.
   hold a profile on iOS 17 while you migrate). Once set, the
   archetype is sticky for that profile's lifetime.
@@ -73,7 +73,7 @@ The cap on enterprise tier is negotiated; the API returns
 ```json
 {
   "name": "production",
-  "archetype": "iphone16pro_ios18_7_safari26_4",
+  "archetype": "iphone17_ios18_7_safari26_4",
   "description": "primary prod-data scrape profile"
 }
 ```

@@ -51,11 +51,11 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/onStateChange\?: \(state: LivekitConnectionState\) => void;/);
   });
 
-  it('iPhone 16 Pro aspect-ratio default pinned: 1206/2622 ≈ 0.46 (the locked archetype iphone16pro_ios18_7_safari26_4). Drift to a different default would render a wrong-aspect video frame when callers omit aspectRatio', () => {
+  it('iPhone 16 Pro aspect-ratio default pinned: 1206/2622 ≈ 0.46 (the locked archetype iphone17_ios18_7_safari26_4; iPhone 17 shares iPhone 16 Pro geometry). Drift to a different default would render a wrong-aspect video frame when callers omit aspectRatio', () => {
     expect(body).toMatch(/const IPHONE_16_PRO_ASPECT_RATIO = 1206 \/ 2622; \/\/ ≈ 0\.46/);
     expect(body).toMatch(/Defaults to iPhone 16/);
     expect(body).toMatch(/Pro \(1206×2622 px\) since that's the locked archetype/);
-    expect(body).toMatch(/\(iphone16pro_ios18_7_safari26_4\) for v1\.0 per the orchestrator brief/);
+    expect(body).toMatch(/\(iphone17_ios18_7_safari26_4\) for v1\.0 per the orchestrator brief/);
   });
 
   it('Scale-to-fit container sizing pinned: the panel box is `h-full max-h-full max-w-full` + aspectRatio style (fills available HEIGHT, derives width from the iPhone aspect, centered by the parent), NOT `w-full`. Drift back to w-full re-introduces the stretched-giant view (height = width × 2.17 on a wide window); the <video> object-contain fills the box exactly', () => {

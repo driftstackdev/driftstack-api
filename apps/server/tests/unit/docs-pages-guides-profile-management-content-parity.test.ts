@@ -87,11 +87,11 @@ describe('W782 docs /guides/profile-management content parity', () => {
     );
   });
 
-  it('CRITICAL LOCKED_ARCHETYPE_ID iphone16pro_ios18_7_safari26_4 framing pinned. Matches W763 + W774 + W761 archetype default contract.', () => {
+  it('CRITICAL LOCKED_ARCHETYPE_ID iphone17_ios18_7_safari26_4 framing pinned (post-2026-06-11 cutover). Matches W763 + W774 + W761 archetype default contract.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The `archetype` field is optional and defaults to the locked archetype \(`iphone16pro_ios18_7_safari26_4` — current iPhone 16 Pro on iOS 18\.7 with Safari 26\.4\)\./,
+      /The `archetype` field is optional and defaults to the locked archetype \(`iphone17_ios18_7_safari26_4` — current iPhone 17 on iOS 18\.7 with Safari 26\.4\)\./,
     );
     expect(p).toMatch(
       /Pin to an older archetype only if you have a behavioural-stability reason\./,

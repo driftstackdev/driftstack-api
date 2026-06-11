@@ -126,20 +126,21 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     );
   });
 
-  it("V-669 PROFILE_ARCHETYPE_OPTIONS 2-option catalog: iphone16pro_ios18_7_safari26_4 (Most popular — matches the default fleet image. Pick this unless you know you need something else.) + iphone15pro_ios17_5_safari17_5 (Legacy archetype — match a production user base still on the prior generation.) — pinned so the archetype catalog matches the rest of the GUI + the default selection is the 'most popular' one", () => {
+  it("V-669 PROFILE_ARCHETYPE_OPTIONS single-option catalog (post-2026-06-11 cutover): iphone17_ios18_7_safari26_4 only — the one validator-PASS launch archetype. iphone16pro/iphone15pro were removed when the launch default moved to iphone17 (A1's catalog marks them coming_soon/scaffolded). Pinned so the wizard never offers a non-selectable/detectably-wrong archetype.", () => {
     expect(body).toMatch(
       /\/\/ V-669 — archetype picker in the first-run wizard\. Aligns with the\s*\n?\s*\/\/ existing ARCHETYPES catalogue elsewhere in the GUI; selecting one\s*\n?\s*\/\/ here pre-seeds the profile's archetype field\./,
     );
     expect(body).toMatch(
-      /value: 'iphone16pro_ios18_7_safari26_4',\s*\n?\s*label: 'iPhone 16 Pro · iOS 18\.7 · Safari 26\.4',\s*\n?\s*description:\s*\n?\s*'Most popular — matches the default fleet image\. Pick this unless you know you need something else\.',/,
+      /value: 'iphone17_ios18_7_safari26_4',\s*\n?\s*label: 'iPhone 17 · iOS 18\.7 · Safari 26\.4',\s*\n?\s*description:\s*\n?\s*'The v1.0 launch archetype — the device profile verified bit-for-bit against a real iPhone 17\. Additional models are coming soon\.',/,
     );
-    expect(body).toMatch(
-      /value: 'iphone15pro_ios17_5_safari17_5',\s*\n?\s*label: 'iPhone 15 Pro · iOS 17\.5 · Safari 17\.5',\s*\n?\s*description: 'Legacy archetype — match a production user base still on the prior generation\.',/,
-    );
+    // The prior 2-option catalog (iphone16pro 'Most popular' + iphone15pro
+    // 'Legacy') is gone — neither is selectable post-cutover.
+    expect(body).not.toMatch(/value: 'iphone16pro_ios18_7_safari26_4',/);
+    expect(body).not.toMatch(/value: 'iphone15pro_ios17_5_safari17_5',/);
   });
 
-  it("ProfileStep: default archetype state = 'iphone16pro_ios18_7_safari26_4' + Skip-for-now path (onSkip) calls finish() to flip step to 'done' + onComplete — pinned so skipping the optional profile step still completes the wizard properly + name input maxLength=120 matches server schema bound", () => {
-    expect(body).toMatch(/useState<ProfileArchetype>\('iphone16pro_ios18_7_safari26_4'\)/);
+  it("ProfileStep: default archetype state = 'iphone17_ios18_7_safari26_4' + Skip-for-now path (onSkip) calls finish() to flip step to 'done' + onComplete — pinned so skipping the optional profile step still completes the wizard properly + name input maxLength=120 matches server schema bound", () => {
+    expect(body).toMatch(/useState<ProfileArchetype>\('iphone17_ios18_7_safari26_4'\)/);
     expect(body).toMatch(
       /function finish\(\): void \{\s*\n?\s*setStep\('done'\);\s*\n?\s*onComplete\(\);\s*\n?\s*\}/,
     );

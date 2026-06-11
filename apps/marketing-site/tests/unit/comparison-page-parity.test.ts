@@ -21,11 +21,11 @@ describe('W263.A /comparison ↔ live archetype + competitor framing parity', ()
   const page = read(PAGE);
 
   it('Driftstack device-target cell names the M.6 Path-A multi-archetype launch family: iPhone 15 Pro / 16 Pro / 17 family · iOS 18.7 · Safari 26.4-26.5 (founder verdict 2026-05-17 locks multi-archetype at v1.0)', () => {
-    // The LOCKED_ARCHETYPE_ID constant in the comparison page source
-    // still points at iphone16pro_ios18_7_safari26_4 as the
-    // canonical reference id; the marketing claim spans more
-    // archetypes than the id alone implies.
-    expect(LOCKED_ARCHETYPE_ID).toBe('iphone16pro_ios18_7_safari26_4');
+    // The LOCKED_ARCHETYPE_ID constant points at iphone17_ios18_7_safari26_4
+    // (post-2026-06-11 cutover) as the canonical launch id; the marketing claim
+    // spans the wider 15 Pro / 16 Pro / 17 family, more archetypes than the id
+    // alone implies.
+    expect(LOCKED_ARCHETYPE_ID).toBe('iphone17_ios18_7_safari26_4');
     expect(page).toMatch(
       /driftstack: 'iPhone 15 Pro \/ 16 Pro \/ 17 family · iOS 18\.7 · Safari 26\.4-26\.5'/,
     );

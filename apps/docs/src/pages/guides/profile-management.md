@@ -31,7 +31,7 @@ Self-hosted tiers don't enforce per-account profile caps — they enforce concur
 
 ## Create a profile
 
-`POST /v1/profiles` with at minimum a `name`. The `archetype` field is optional and defaults to the locked archetype (`iphone16pro_ios18_7_safari26_4` — current iPhone 16 Pro on iOS 18.7 with Safari 26.4). Pin to an older archetype only if you have a behavioural-stability reason.
+`POST /v1/profiles` with at minimum a `name`. The `archetype` field is optional and defaults to the locked archetype (`iphone17_ios18_7_safari26_4` — current iPhone 17 on iOS 18.7 with Safari 26.4). Pin to an older archetype only if you have a behavioural-stability reason.
 
 **TypeScript:**
 
@@ -67,7 +67,7 @@ The response is the full `Profile`:
 {
   "id": "prof_01HV...",
   "name": "shopper-account-1",
-  "archetype": "iphone16pro_ios18_7_safari26_4",
+  "archetype": "iphone17_ios18_7_safari26_4",
   "description": "Returning-visitor profile for the shopping flow",
   "last_used_at": null,
   "created_at": "2026-05-07T11:00:00.000Z",
@@ -204,7 +204,7 @@ Names ARE visible in the dashboard and any team-member access logs. Don't put PI
 
 ## Archetypes
 
-An **archetype** is the device + OS + browser fingerprint a session impersonates. The locked default (`iphone16pro_ios18_7_safari26_4`) tracks current iPhone — when iOS 18.8 ships, the locked archetype slug bumps and new profiles default to the new fingerprint.
+An **archetype** is the device + OS + browser fingerprint a session impersonates. The locked default (`iphone17_ios18_7_safari26_4`) tracks current iPhone — when iOS 18.8 ships, the locked archetype slug bumps and new profiles default to the new fingerprint.
 
 Profiles pin to one archetype at creation time. The pin is stable: a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the locked default rolls forward. This stability is intentional — re-using a profile shouldn't surprise downstream behavioural-detection systems with a sudden iOS bump.
 

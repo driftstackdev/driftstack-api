@@ -1,14 +1,18 @@
-// W280.A — workspace-wide sweep guard for LOCKED_ARCHETYPE_ID. Every
-// cite of an iphone16pro_* slug in docs / marketing copy must equal
-// the canonical id. Catches drift to the legacy
-// `iphone16pro_ios26_4_1` slug or other fictional Safari/iOS
-// permutations.
+// W280.A — workspace-wide sweep guard for archetype slugs. Every iPhone-family
+// slug cited in docs / marketing / dashboard copy must be a REGISTERED
+// ARCHETYPE_REGISTRY id. Catches drift to the legacy `iphone16pro_ios26_4_1`
+// slug or any other fictional Safari/iOS permutation.
+//
+// Pre-2026-06-11 this asserted "== LOCKED_ARCHETYPE_ID" (single canonical
+// device). Post-cutover the platform is multi-archetype + the prior launch
+// (iphone16pro) is a registered `reference` slug still cited in copy, so the
+// guard validates registry-membership instead of canonical-equality.
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { LOCKED_ARCHETYPE_ID } from '@driftstack/api-types';
+import { ARCHETYPE_REGISTRY } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -36,14 +40,15 @@ const targets = [
 const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md)$/.test(f));
 
 describe('W280.A workspace-wide locked-archetype-id sweep', () => {
-  it('every iphone16pro_* slug is the canonical LOCKED_ARCHETYPE_ID', () => {
+  it('every iPhone-family archetype slug cited in copy is a REGISTERED ARCHETYPE_REGISTRY id', () => {
+    const registeredIds = new Set(ARCHETYPE_REGISTRY.map((a) => a.id));
     const offenders: { file: string; slug: string }[] = [];
     for (const f of allFiles) {
       const body = read(f);
-      const matches = [...body.matchAll(/\biphone16pro_[a-z0-9_]+/g)];
+      const matches = [...body.matchAll(/iphone[a-z0-9]+_ios\d+_\d+_safari\d+_\d+/g)];
       for (const m of matches) {
         const slug = m[0];
-        if (slug !== LOCKED_ARCHETYPE_ID) {
+        if (!registeredIds.has(slug)) {
           offenders.push({ file: f.slice(REPO_ROOT.length + 1), slug });
         }
       }

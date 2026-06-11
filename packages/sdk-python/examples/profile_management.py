@@ -32,7 +32,7 @@ def main() -> int:
     client = Driftstack(api_key=api_key, base_url=base_url)
 
     # 1. Create a fresh profile. Archetype defaults to the locked
-    #    iPhone 16 Pro / iOS 18.7 / Safari 26.4 surface server-side
+    #    iPhone 17 / iOS 18.7 / Safari 26.4 surface server-side
     #    if omitted (V-136 LOCKED_ARCHETYPE_ID).
     print("creating profile…")
     created = client.profiles.create(

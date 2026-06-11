@@ -50,7 +50,7 @@ SESSION_FIXTURE = {
     "account_id": "acc_00000000-0000-4000-8000-000000000001",
     "api_key_id": "key_00000000-0000-4000-8000-000000000001",
     "status": "ready",
-    "archetype": "iphone16pro_ios18_7_safari26_4",
+    "archetype": "iphone17_ios18_7_safari26_4",
     "label": None,
     "metadata": None,
     "egress_capabilities": None,

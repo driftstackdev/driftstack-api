@@ -14,7 +14,7 @@ interface RequestOpts {
 const fakeProfile = (id: string): Profile => ({
   id,
   name: `profile-${id}`,
-  archetype: 'iphone16pro_ios18_7_safari26_4',
+  archetype: 'iphone17_ios18_7_safari26_4',
   description: null,
   last_used_at: null,
   created_at: '2026-05-09T00:00:00Z',

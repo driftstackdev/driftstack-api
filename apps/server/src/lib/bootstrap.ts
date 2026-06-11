@@ -859,7 +859,7 @@ export async function createProductionDeps(
     decomposer: agentDecomposer,
     executor: agentExecutor,
     sessions: agentSessionsRepo,
-    archetype: 'iphone16pro_ios18_7_safari26_4',
+    archetype: 'iphone17_ios18_7_safari26_4',
     usageRecorder: agentDecomposerUsageRecorder,
     eventBus: agentSessionEventBus,
     ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),

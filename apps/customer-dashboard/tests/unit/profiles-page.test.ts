@@ -222,7 +222,7 @@ describe('profiles page — local integration', () => {
     expect(window.document.querySelector('[data-list]')?.textContent).toContain('Fresh profile');
   });
 
-  it('archetype selector: offers the registry selectable catalogue, defaults to the locked archetype, and sends the chosen archetype on create', async () => {
+  it('archetype selector: offers the registry selectable catalogue (post-cutover: iphone17 only), defaults to the locked archetype, and sends the chosen archetype on create', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: makeRouter([]),
@@ -233,21 +233,24 @@ describe('profiles page — local integration', () => {
     expect(select).toBeTruthy();
     const values = Array.from(select.options).map((o) => o.value);
     // The customer-selectable catalogue = registry status launch | available.
-    expect(values).toContain('iphone16pro_ios18_7_safari26_4');
-    expect(values).toContain('iphone15pro_ios17_5_safari17_5');
+    // Post-2026-06-11 cutover that's exactly iphone17 — iphone16pro/iphone15pro
+    // were demoted to non-selectable reference, so they must NOT be offered.
+    expect(values).toContain('iphone17_ios18_7_safari26_4');
+    expect(values).not.toContain('iphone16pro_ios18_7_safari26_4');
+    expect(values).not.toContain('iphone15pro_ios17_5_safari17_5');
     // Defaults to the locked archetype.
-    expect(select.value).toBe('iphone16pro_ios18_7_safari26_4');
-    // Pick the legacy archetype + create — the chosen archetype is sent.
+    expect(select.value).toBe('iphone17_ios18_7_safari26_4');
+    // Create with the (sole) launch archetype — the chosen archetype is sent.
     const form = window.document.querySelector('[data-create-form]') as HTMLFormElement;
-    (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'legacy-profile';
-    select.value = 'iphone15pro_ios17_5_safari17_5';
+    (form.querySelector('input[name="name"]') as HTMLInputElement).value = 'launch-profile';
+    select.value = 'iphone17_ios18_7_safari26_4';
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
     const post = fetchCalls.find((c) => c.init?.method === 'POST' && /\/v1\/profiles$/.test(c.url));
     expect(post).toBeTruthy();
     const body = JSON.parse(String(post?.init?.body));
-    expect(body.name).toBe('legacy-profile');
-    expect(body.archetype).toBe('iphone15pro_ios17_5_safari17_5');
+    expect(body.name).toBe('launch-profile');
+    expect(body.archetype).toBe('iphone17_ios18_7_safari26_4');
   });
 
   it('clone: confirm-gated POST /:id/clone adds the copy after refresh', async () => {

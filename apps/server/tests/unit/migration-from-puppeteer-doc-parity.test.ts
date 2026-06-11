@@ -56,10 +56,10 @@ describe('W227.A migration-from-puppeteer doc parity', () => {
     expect(doc).toMatch(/sessions\.getState\(/);
     expect(doc).not.toMatch(/sessions\.state\(/);
     // Create body uses archetype, not profileId. The example uses the
-    // LOCKED_ARCHETYPE_ID (iPhone 16 Pro / iOS 18.7 / Safari 26.4
+    // LOCKED_ARCHETYPE_ID (iPhone 17 / iOS 18.7 / Safari 26.4
     // family per M.6 multi-archetype framing) — not the generic
     // 'default' label which was the pre-launch placeholder.
-    expect(doc).toMatch(/archetype:\s*'iphone16pro_ios18_7_safari26_4'/);
+    expect(doc).toMatch(/archetype:\s*'iphone17_ios18_7_safari26_4'/);
     expect(doc).not.toMatch(/profileId:/);
   });
 

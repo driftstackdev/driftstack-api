@@ -7,7 +7,7 @@ import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, extname } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { LOCKED_ARCHETYPE_ID } from '@driftstack/api-types';
+import { LOCKED_ARCHETYPE_ID, ARCHETYPE_REGISTRY } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -29,7 +29,8 @@ function read(p: string): string {
 
 describe('W262.D workspace-wide locked-archetype label sweep', () => {
   it('LOCKED_ARCHETYPE_ID encodes iOS 18.7 + Safari 26.4', () => {
-    expect(LOCKED_ARCHETYPE_ID).toBe('iphone16pro_ios18_7_safari26_4');
+    // 2026-06-11 cutover: canonical launch slug moved iphone16pro → iphone17.
+    expect(LOCKED_ARCHETYPE_ID).toBe('iphone17_ios18_7_safari26_4');
   });
 
   const targets = [
@@ -70,14 +71,20 @@ describe('W262.D workspace-wide locked-archetype label sweep', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('pages that mention the locked archetype use the live slug', () => {
-    // Any page that names the slug must use the LOCKED_ARCHETYPE_ID value.
-    const slugRegex = /iphone16pro_ios\w+/g;
+  it('pages that mention any iPhone-family archetype use a REGISTERED slug (no fictional/typo permutations)', () => {
+    // Post-cutover the canonical default is iphone17, but iphone16pro_* slugs
+    // are still legitimately cited (the prior launch is a registered `reference`
+    // archetype + appears in the profile-archetype-pin-stability example). So
+    // the guard is no longer "== LOCKED_ARCHETYPE_ID" — it's "is a REGISTERED
+    // ARCHETYPE_REGISTRY id", which still catches the legacy iphone16pro_ios26_4_1
+    // typo + any fictional Safari/iOS permutation, while allowing every real slug.
+    const registeredIds = new Set(ARCHETYPE_REGISTRY.map((a) => a.id));
+    const slugRegex = /iphone[a-z0-9]+_ios\d+_\d+_safari\d+_\d+/g;
     const offenders: { file: string; slug: string }[] = [];
     for (const f of allFiles) {
       const body = read(f);
       for (const m of body.matchAll(slugRegex)) {
-        if (m[0] !== LOCKED_ARCHETYPE_ID) {
+        if (!registeredIds.has(m[0])) {
           offenders.push({ file: f.slice(REPO_ROOT.length + 1), slug: m[0] });
         }
       }

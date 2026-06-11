@@ -86,7 +86,7 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
   });
 
   it("Code example contract — REAL SDK usage. The previous pin asserted a fictional API (proxy in CreateSessionRequest + session.waitForChallenge / instance-method form) which doesn't exist; customers landing on the front door would copy code that doesn't compile. Now pins the actual resource-method pattern matching the TS quickstart: client.sessions.create({ label }) + sessions.navigate(id, ...) + sessions.capture(id, { kind }) + sessions.getState(id) + sessions.destroy(id). NO proxy field (egress is shipped as 503-stub per the egress card contradiction).", () => {
-    expect(body).toMatch(/archetype: 'iphone16pro_ios18_7_safari26_4',/);
+    expect(body).toMatch(/archetype: 'iphone17_ios18_7_safari26_4',/);
     expect(body).toMatch(/label: 'target-flow',/);
     // Real resource-method pattern: ds.sessions.<method>(session.id, ...).
     expect(body).toMatch(

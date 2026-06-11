@@ -22,12 +22,12 @@ function read(p: string): string {
 describe('W314.C /profiles archetype baseline', () => {
   const body = read(PAGE);
 
-  it('LOCKED_ARCHETYPE_ID is the canonical iphone16pro_ios18_7_safari26_4 slug', () => {
-    expect(LOCKED_ARCHETYPE_ID).toBe('iphone16pro_ios18_7_safari26_4');
+  it('LOCKED_ARCHETYPE_ID is the canonical iphone17_ios18_7_safari26_4 slug', () => {
+    expect(LOCKED_ARCHETYPE_ID).toBe('iphone17_ios18_7_safari26_4');
   });
 
   it('display label matches LOCKED_ARCHETYPE_DISPLAY_LABEL', () => {
-    expect(LOCKED_ARCHETYPE_DISPLAY_LABEL).toBe('iPhone 16 Pro / iOS 18.7 / Safari 26.4');
+    expect(LOCKED_ARCHETYPE_DISPLAY_LABEL).toBe('iPhone 17 / iOS 18.7 / Safari 26.4');
   });
 
   it('page derives the archetype-label map from the registry (no single-archetype hardcode)', () => {

@@ -24,7 +24,7 @@ const client = new Driftstack({ apiKey });
 
 async function main(): Promise<void> {
   // 1. Create a fresh profile. Archetype defaults to the locked
-  //    iPhone 16 Pro / iOS 18.7 / Safari 26.4 surface server-side
+  //    iPhone 17 / iOS 18.7 / Safari 26.4 surface server-side
   //    if omitted (V-136 LOCKED_ARCHETYPE_ID).
   console.log('creating profile…');
   const created = await client.profiles.create({

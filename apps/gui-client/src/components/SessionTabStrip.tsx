@@ -31,7 +31,7 @@ export interface SessionTabStripProps {
 }
 
 // Short, stable per-tab label: the device segment of the archetype slug
-// (e.g. "iphone16pro" from "iphone16pro_ios18_7_safari26_4") + the id
+// (e.g. "iphone16pro" from "iphone17_ios18_7_safari26_4") + the id
 // tail so two same-archetype phones stay tellable-apart. Raw-slug style
 // matches how SessionsView renders archetypes (mono slug); the GUI
 // doesn't carry the api-types display-label registry.

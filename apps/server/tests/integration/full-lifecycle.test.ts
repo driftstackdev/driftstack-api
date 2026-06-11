@@ -336,7 +336,8 @@ describe('Full customer lifecycle (V-166)', () => {
     expect(session.id).toMatch(/^ses_[0-9a-f-]{36}$/);
     expect(session.status).toBe('ready');
     // V-154 archetype rename — verify the locked default flowed through.
-    expect(session.archetype).toBe('iphone16pro_ios18_7_safari26_4');
+    // 2026-06-11 cutover: locked default is now iphone17.
+    expect(session.archetype).toBe('iphone17_ios18_7_safari26_4');
 
     // ─── 3. Navigate ─────────────────────────────────────────────────────
     const navigate = await fx.app.inject({

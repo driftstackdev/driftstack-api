@@ -502,7 +502,7 @@ export const profiles = pgTable(
       .notNull()
       .references(() => accounts.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
-    archetype: text('archetype').notNull().default('iphone16pro_ios18_7_safari26_4'),
+    archetype: text('archetype').notNull().default('iphone17_ios18_7_safari26_4'),
     description: text('description'),
     /** Last time a session was created against this profile. Updated by SessionsService at create-time. */
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
@@ -835,10 +835,10 @@ export const sessions = pgTable(
     // Driver-side opaque identifier (mock returns deterministic ids).
     driverSessionId: text('driver_session_id').notNull(),
     status: sessionStatus('status').notNull().default('creating'),
-    // iPhone archetype slug, e.g. "iphone16pro_ios18_7_safari26_4". See
+    // iPhone archetype slug, e.g. "iphone17_ios18_7_safari26_4". See
     // packages/api-types/src/common.ts LOCKED_ARCHETYPE_ID +
     // docs/architecture/archetype-naming-convention.md for shape rationale.
-    archetype: text('archetype').notNull().default('iphone16pro_ios18_7_safari26_4'),
+    archetype: text('archetype').notNull().default('iphone17_ios18_7_safari26_4'),
     // V-169 — harness purpose (drives WebKit driver harness selection).
     purpose: sessionPurpose('purpose').notNull().default('production_customer'),
     // Optional client-supplied label.

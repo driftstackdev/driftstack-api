@@ -113,7 +113,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).toMatch(/`POST \/v1\/profile-snapshots\/:id\/restore`/);
     expect(p).toMatch(/Creates a new profile populated from the snapshot's frozen state\./);
     expect(p).toMatch(/"id": "prof_<uuid>"/);
-    expect(p).toMatch(/"archetype": "iphone16pro_ios18_7_safari26_4"/);
+    expect(p).toMatch(/"archetype": "iphone17_ios18_7_safari26_4"/);
     expect(p).toMatch(/"last_used_at": null/);
   });
 

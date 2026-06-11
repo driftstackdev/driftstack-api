@@ -65,9 +65,9 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
     );
   });
 
-  it('CreateProfileRequest: name + optional archetype 1..120 (defaults to LOCKED_ARCHETYPE_ID iphone16pro_ios18_7_safari26_4 server-side; behavioural-stability pin rationale) + optional description max 2048', () => {
+  it('CreateProfileRequest: name + optional archetype 1..120 (defaults to LOCKED_ARCHETYPE_ID iphone17_ios18_7_safari26_4 server-side; behavioural-stability pin rationale) + optional description max 2048', () => {
     expect(body).toMatch(
-      /\*\s*Archetype slug — defaults to `LOCKED_ARCHETYPE_ID`\s*\n?\s*\*\s*\(`iphone16pro_ios18_7_safari26_4`\) server-side if omitted\.\s*\n?\s*\*\s*Customers may pin a profile to an older archetype for\s*\n?\s*\*\s*behavioural-stability reasons\./,
+      /\*\s*Archetype slug — defaults to `LOCKED_ARCHETYPE_ID`\s*\n?\s*\*\s*\(`iphone17_ios18_7_safari26_4`\) server-side if omitted\.\s*\n?\s*\*\s*Customers may pin a profile to an older archetype for\s*\n?\s*\*\s*behavioural-stability reasons\./,
     );
     expect(body).toMatch(
       /export const CreateProfileRequestSchema = z\.object\(\{\s*\n?\s*name: ProfileNameSchema,/,

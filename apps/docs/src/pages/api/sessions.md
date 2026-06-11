@@ -44,7 +44,7 @@ their tier-default idle timeout (driver-managed).
   "account_id": "acc_<uuid>",
   "api_key_id": "key_<uuid>",
   "status": "ready",
-  "archetype": "iphone16pro_ios18_7_safari26_4",
+  "archetype": "iphone17_ios18_7_safari26_4",
   "purpose": "production_customer",
   "label": "login flow",
   "metadata": null,
@@ -91,7 +91,7 @@ nullable on every read.
 
 ```json
 {
-  "archetype": "iphone16pro_ios18_7_safari26_4",
+  "archetype": "iphone17_ios18_7_safari26_4",
   "purpose": "production_customer",
   "label": "login flow",
   "metadata": { "ticket": "SUP-42" },

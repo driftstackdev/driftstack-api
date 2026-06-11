@@ -128,10 +128,10 @@ describe('W802 single-language SDK example parity', () => {
     expect(p).toMatch(/_BASE = "https:\/\/api\.driftstack\.test"/);
   });
 
-  it("CRITICAL Python SESSION_FIXTURE archetype pinned to 'iphone16pro_ios18_7_safari26_4' + status 'ready'. Matches V-136 LOCKED_ARCHETYPE_ID + the canonical default session-state shape. Drift would let customer test fixtures diverge from production session shape.", () => {
+  it("CRITICAL Python SESSION_FIXTURE archetype pinned to 'iphone17_ios18_7_safari26_4' + status 'ready'. Matches V-136 LOCKED_ARCHETYPE_ID + the canonical default session-state shape. Drift would let customer test fixtures diverge from production session shape.", () => {
     const p = read(PF);
     expect(p).toMatch(/"status": "ready"/);
-    expect(p).toMatch(/"archetype": "iphone16pro_ios18_7_safari26_4"/);
+    expect(p).toMatch(/"archetype": "iphone17_ios18_7_safari26_4"/);
     expect(p).toMatch(/SESSION_FIXTURE = \{/);
     expect(p).toMatch(/"id": "ses_00000000-0000-4000-8000-000000000001"/);
   });

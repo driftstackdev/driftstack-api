@@ -64,7 +64,7 @@ export interface FingerprintComparison {
 export interface RecaptureRun {
   id: string;
   trigger: RecaptureTrigger;
-  /** Archetype being recaptured, e.g. `'iphone16pro_ios18_7_safari26_4'`. */
+  /** Archetype being recaptured, e.g. `'iphone17_ios18_7_safari26_4'`. */
   archetypeId: string;
   baselineVersion: IosArchetypeVersion;
   /** New version triggering the recapture. May equal baselineVersion for manual reruns. */

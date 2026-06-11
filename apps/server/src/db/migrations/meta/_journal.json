@@ -505,6 +505,13 @@
       "when": 1780094400000,
       "tag": "0071_scheduled_jobs_claim_partial_index",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1780180800000,
+      "tag": "0072_archetype_default_iphone17",
+      "breakpoints": true
     }
   ]
 }
