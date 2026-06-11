@@ -297,13 +297,30 @@ for (const slug of slugs) {
     ),
   );
 }
+// W558 — group the index by HTTP status class so it's scannable (was a flat
+// 29-item list). Buckets in ascending status order; a slug lands in exactly one.
+const STATUS_GROUPS = [
+  { label: '4xx — client errors', test: (s) => s >= 400 && s < 500 },
+  { label: '5xx — server / upstream errors', test: (s) => s >= 500 },
+];
+const groupsHtml = STATUS_GROUPS.map((g) => {
+  const rows = slugs
+    .filter((s) => g.test(ERROR_PAGES[s].status))
+    .sort((a, b) => ERROR_PAGES[a].status - ERROR_PAGES[b].status)
+    .map(
+      (s) =>
+        `<li><a href="/${s}">${ERROR_PAGES[s].title}</a> <code>· ${ERROR_PAGES[s].status} · /${s}</code></li>`,
+    )
+    .join('\n');
+  return rows.length > 0 ? `<h2>${g.label}</h2><ul>${rows}</ul>` : '';
+}).join('\n');
 writeFileSync(
   join(DIST, 'index.html'),
   page(
     'Error reference',
     `<p class="label">Driftstack</p><h1>API error reference</h1><p class="status">${slugs.length} problem types</p>
 <p>Every Driftstack API error is an <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a> <code>application/problem+json</code> body whose <code>type</code> URI points at one of these pages.</p>
-<ul>${slugs.map((s) => `<li><a href="/${s}">${ERROR_PAGES[s].title}</a> <code>· ${ERROR_PAGES[s].status} · /${s}</code></li>`).join('\n')}</ul>`,
+${groupsHtml}`,
   ),
 );
 // 404 → index (Pages serves 404.html for unknown paths).
