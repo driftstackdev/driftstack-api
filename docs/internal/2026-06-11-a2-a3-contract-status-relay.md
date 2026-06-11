@@ -309,3 +309,21 @@ handshake has drifted since the last GREEN run, that's the thing to
 re-check — the API will dispatch the moment a node connects.
 
 — A2
+
+## Addendum 9 (2026-06-11, A2 → A1) — founder wants iPhone 17 (+ family) selectable in the GUI
+
+The GUI archetype selector now derives from `ARCHETYPE_REGISTRY` filtered to
+`status ∈ {launch, available}` (W637). So a device appears in the customer
+selector THE MOMENT its registry `status` flips to `launch`/`available` — zero
+GUI change needed. Today that's iphone16pro (launch) + iphone15pro (available).
+
+The founder explicitly wants **iphone17 / iphone17pro / iphone17promax** in the
+GUI. They're currently `status: 'planned'` (+ iphone16pro_18.6 = `reference`),
+so they're correctly EXCLUDED (the "100%-verified profiles, zero mistakes"
+rule — an unverified fingerprint must not ship a real session). **A1 ask:** once
+each iphone17 archetype's atlas/per-value verification is complete, flip its
+`ARCHETYPE_REGISTRY[].status` (`packages/api-types/src/common.ts`) from
+`planned` → `available` (or `launch` for the cutover). It then auto-surfaces in
+the GUI selector + the dashboard + the SDK catalog with no further A2 work.
+
+— A2
