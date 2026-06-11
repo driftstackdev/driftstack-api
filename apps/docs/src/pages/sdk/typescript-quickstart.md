@@ -59,11 +59,13 @@ async function main() {
       url: 'https://example.com',
     });
 
-    // Capture screenshot or DOM. `kind` is required.
+    // Capture screenshot or DOM. `kind` is required. The result is
+    // { kind, data, encoding, byte_size, duration_ms } — for a screenshot
+    // `data` is the PNG base64-encoded (decode with Buffer.from(data, 'base64')).
     const screenshot = await client.sessions.capture(session.id, {
       kind: 'screenshot',
     });
-    console.log('captured', screenshot.id);
+    console.log(`captured ${screenshot.byte_size} bytes (${screenshot.encoding})`);
 
     // Inspect runtime state without modifying it.
     const state = await client.sessions.getState(session.id);

@@ -9,6 +9,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { CaptureResponseSchema } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -71,5 +72,17 @@ describe('W259.C docs/sdk/typescript-quickstart ↔ live TS SDK parity', () => {
     expect(doc).toMatch(/verifyWebhookSignature/);
     const sig = read(resolve(REPO_ROOT, 'packages/sdk-typescript/src/webhook-signature.ts'));
     expect(sig).toMatch(/export\s+(?:async\s+)?function\s+verifyWebhookSignature\b/);
+  });
+
+  it('W565: capture-result log uses a real CaptureResponse field, not the phantom .id', () => {
+    // The previous example logged `screenshot.id`, which CaptureResponse has
+    // no field for (it is { kind, data, encoding, byte_size, duration_ms }) —
+    // so the snippet logged `undefined`. Guard against that field + any other
+    // not on the schema.
+    expect(CaptureResponseSchema.shape).not.toHaveProperty('id');
+    expect(doc).not.toMatch(/screenshot\.id/);
+    // The field the example now logs must be real.
+    expect(Object.keys(CaptureResponseSchema.shape)).toContain('byte_size');
+    expect(doc).toMatch(/screenshot\.byte_size/);
   });
 });
