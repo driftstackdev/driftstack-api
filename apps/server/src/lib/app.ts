@@ -80,6 +80,7 @@ import type { BundledLlmService } from '../services/bundled-llm.js';
 import type { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
 import type { NotificationEventBus } from '../services/notification-event-bus.js';
 import { registerAccountNotificationsRoutes } from '../routes/account-notifications.js';
+import { corsOriginMatchers } from './cors-allow.js';
 import type { PairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
 import authPlugin from '../middleware/auth.js';
 import rateLimitPlugin from '../middleware/rate-limit.js';
@@ -692,25 +693,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // sends Authorization: Bearer ...). With credentials:true the spec
   // forbids origin:*, hence the explicit allow-list / regex in prod.
   await app.register(cors, {
-    origin:
-      deps.permissiveCors === true
-        ? true
-        : [
-            /^https?:\/\/localhost(:\d+)?$/,
-            // 2026-05-20 — Tauri desktop client webview origins. On
-            // macOS WKWebView, Tauri 2 serves the bundled SPA from
-            // `tauri://localhost`; on Windows WebView2 + Linux WebKit2GTK
-            // it's the same scheme. Newer Tauri builds may also surface
-            // `https://tauri.localhost`. Without these in the allow-list
-            // the GUI's cross-origin fetch to api.driftstack.dev fails
-            // preflight + the customer sees a useless "Load failed".
-            /^tauri:\/\/localhost$/,
-            /^https?:\/\/tauri\.localhost$/,
-            // V-278.C — the canonical dashboard origin is always allowed so the
-            // strict posture can't lock out the primary customer surface.
-            ...(deps.dashboardOrigin !== undefined ? [deps.dashboardOrigin] : []),
-            ...(deps.corsAllowedOrigins ?? []),
-          ],
+    // W586 — the allow-list lives in lib/cors-allow.ts (corsOriginMatchers) as
+    // the single source of truth, so the SSE routes (which hijack the reply
+    // and bypass this plugin's onSend hook) reflect the SAME origins. The
+    // matchers: localhost (any scheme/port) + the Tauri desktop webview
+    // origins (tauri://localhost + https://tauri.localhost — without these the
+    // GUI's cross-origin fetch fails preflight with a useless "Load failed") +
+    // the canonical dashboard origin (V-278.C, always allowed so a strict-
+    // posture flip can't lock out the primary surface) + CORS_ALLOWED_ORIGINS.
+    origin: deps.permissiveCors === true ? true : corsOriginMatchers(deps),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [
@@ -908,6 +899,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerStatusStreamRoutes(app, {
       bus: deps.incidentEventBus,
       sla: deps.slaReportingService,
+      cors: {
+        permissiveCors: deps.permissiveCors,
+        dashboardOrigin: deps.dashboardOrigin,
+        corsAllowedOrigins: deps.corsAllowedOrigins,
+      },
     });
   }
   if (deps.teamMembersService !== undefined) {
@@ -956,7 +952,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // when deps.notificationEventBus is wired (opt-in deploy-side).
   registerAccountNotificationsRoutes(
     app,
-    deps.notificationEventBus !== undefined ? { notificationBus: deps.notificationEventBus } : {},
+    deps.notificationEventBus !== undefined
+      ? {
+          notificationBus: deps.notificationEventBus,
+          // W586 — SSE hijacks the reply; pass the same CORS allow-list config
+          // the global plugin uses so the stream carries ACAO.
+          cors: {
+            permissiveCors: deps.permissiveCors,
+            dashboardOrigin: deps.dashboardOrigin,
+            corsAllowedOrigins: deps.corsAllowedOrigins,
+          },
+        }
+      : {},
   );
   // V-237 — customer self-profile for tier-aware GUI enforcement.
   // Registers only when both repos are wired (production always; tests

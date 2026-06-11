@@ -80,18 +80,19 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).toMatch(
       /\/\/ `credentials: true` is required by the customer dashboard's\s*\n?\s*\/\/ cookie-based session \(Article-13 auth\), NOT by the SDK \(which\s*\n?\s*\/\/ sends Authorization: Bearer \.\.\.\)/,
     );
-    // 2026-05-20 — Tauri webview origins added to the allow-list so
-    // the desktop GUI's cross-origin fetch to api.driftstack.dev
-    // doesn't fail preflight with the customer seeing "Load failed".
+    // W586 — the allow-list moved to lib/cors-allow.ts (single source, so the
+    // SSE routes reflect the SAME origins). app.ts now delegates to it.
     expect(body).toMatch(
-      /origin:\s*\n?\s*deps\.permissiveCors === true\s*\n?\s*\? true\s*\n?\s*: \[\s*\n?\s*\/\^https\?:\\\/\\\/localhost\(:\\d\+\)\?\$\/,/,
+      /origin: deps\.permissiveCors === true \? true : corsOriginMatchers\(deps\)/,
     );
-    expect(body).toMatch(/\/\^tauri:\\\/\\\/localhost\$\//);
-    expect(body).toMatch(/\/\^https\?:\\\/\\\/tauri\\\.localhost\$\//);
-    expect(body).toMatch(/\.\.\.\(deps\.corsAllowedOrigins \?\? \[\]\),/);
-    // V-278.C — the canonical dashboard origin is auto-added to the strict
-    // allow-list so a permissiveCors=false flip can't lock out the dashboard.
-    expect(body).toMatch(
+    // The localhost/tauri regexes + dashboard/extra spreads now live in
+    // cors-allow.ts; pin them there so the matcher set can't silently shrink.
+    const corsAllow = read(resolve(REPO_ROOT, 'apps/server/src/lib/cors-allow.ts'));
+    expect(corsAllow).toMatch(/const LOCALHOST_RE = \/\^https\?:\\\/\\\/localhost\(:\\d\+\)\?\$\//);
+    expect(corsAllow).toMatch(/const TAURI_LOCALHOST_RE = \/\^tauri:\\\/\\\/localhost\$\//);
+    expect(corsAllow).toMatch(/const TAURI_HTTPS_RE = \/\^https\?:\\\/\\\/tauri\\\.localhost\$\//);
+    expect(corsAllow).toMatch(/\.\.\.\(deps\.corsAllowedOrigins \?\? \[\]\),/);
+    expect(corsAllow).toMatch(
       /\.\.\.\(deps\.dashboardOrigin !== undefined \? \[deps\.dashboardOrigin\] : \[\]\),/,
     );
     expect(body).toMatch(/credentials: true,/);

@@ -22,6 +22,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { NotificationEventBus } from '../services/notification-event-bus.js';
+import { sseCorsHeaders, type CorsAllowDeps } from '../lib/cors-allow.js';
 
 function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['account']> {
   if (!request.account) throw new Error('account context missing after requireAuth');
@@ -37,6 +38,10 @@ export interface AccountNotificationsRoutesOptions {
    *  noise on the wire, short enough to keep load-balancers from
    *  closing idle connections. Test seam. */
   heartbeatMs?: number;
+  /** W586 — CORS allow-list config. The SSE handler hijacks the reply and
+   *  writes raw headers, bypassing the @fastify/cors onSend hook, so it must
+   *  set Access-Control-Allow-Origin itself or EventSource is blocked. */
+  cors?: CorsAllowDeps;
 }
 
 const DEFAULT_HEARTBEAT_MS = 25_000;
@@ -64,6 +69,9 @@ export function registerAccountNotificationsRoutes(
         'cache-control': 'no-cache, no-transform',
         connection: 'keep-alive',
         'x-accel-buffering': 'no',
+        // W586 — hijacked reply bypasses @fastify/cors's onSend hook, so set
+        // the CORS header here or EventSource is blocked on the 200 stream.
+        ...sseCorsHeaders(req.headers.origin, opts.cors ?? {}),
       });
       reply.raw.write(': stream open\n\n');
 

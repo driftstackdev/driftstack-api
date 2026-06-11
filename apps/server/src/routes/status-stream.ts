@@ -18,6 +18,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { IncidentEvent, IncidentEventBus } from '../services/incident-event-bus.js';
 import type { SlaReportingService } from '../services/sla-reporting.js';
+import { sseCorsHeaders, type CorsAllowDeps } from '../lib/cors-allow.js';
 
 export interface StatusStreamRoutesOptions {
   bus: IncidentEventBus;
@@ -27,6 +28,9 @@ export interface StatusStreamRoutesOptions {
    * proxy idle-timeouts (60s on Cloudflare, longer elsewhere).
    */
   heartbeatMs?: number;
+  /** W586 — CORS allow-list config; the hijacked SSE reply sets ACAO itself
+   *  (the status site reads this cross-origin). */
+  cors?: CorsAllowDeps;
 }
 
 export function registerStatusStreamRoutes(
@@ -43,6 +47,8 @@ export function registerStatusStreamRoutes(
       'cache-control': 'no-cache, no-transform',
       connection: 'keep-alive',
       'x-accel-buffering': 'no', // disable nginx-style buffering
+      // W586 — hijacked reply bypasses @fastify/cors; set ACAO here.
+      ...sseCorsHeaders(request.headers.origin, opts.cors ?? {}),
     });
     // Initial comment to flush headers immediately on some proxies.
     reply.raw.write(': stream open\n\n');
