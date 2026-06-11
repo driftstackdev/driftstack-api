@@ -125,6 +125,18 @@ describe('W357.C status-site /index page parity', () => {
     expect(body).toMatch(/setInterval\(fetchAndRender,\s*60_000\)/);
   });
 
+  it('W563: "last updated" stamp element + markUpdated() set on every successful fetch', () => {
+    // The element exists with an aria-live region for screen-reader refresh.
+    expect(body).toMatch(/id="last-updated"[^>]*aria-live="polite"/);
+    // markUpdated() writes a UTC time stamp...
+    expect(body).toMatch(/function markUpdated\(\)/);
+    expect(body).toMatch(
+      /'Last updated ' \+ new Date\(\)\.toISOString\(\)\.slice\(11, 19\) \+ ' UTC'/,
+    );
+    // ...and is invoked from the render path (covers empty + populated states).
+    expect(body).toMatch(/\n\s*markUpdated\(\);/);
+  });
+
   it('"last 30 days" framing + V-657 quick-nav to /subscribe + /history', () => {
     expect(body).toMatch(/Incidents — last 30 days/);
     expect(body).toMatch(/Subscribe to incident emails/);

@@ -32,6 +32,11 @@ const R2_FALLBACK_URL =
       <p id="overall-summary" class="mt-2 text-sm text-ink-muted">
         Fetching incident data from <code class="font-mono text-xs">{API_BASE}/v1/status/incidents</code>.
       </p>
+      {/* W563 — "last updated" stamp: a status page's most-expected
+          element. Set on every successful fetch (SSE push or 60s poll)
+          so a visitor checking during a suspected outage can tell the
+          data is current. aria-live=polite announces each refresh. */}
+      <p id="last-updated" class="mt-2 text-xs text-ink-muted" aria-live="polite"></p>
     </div>
   </section>
 
@@ -132,6 +137,15 @@ const R2_FALLBACK_URL =
       summary.textContent = `${openCount} active incident${openCount === 1 ? '' : 's'} below.`;
     }
     card.dataset.state = state;
+  }
+
+  // W563 — stamp the last successful refresh. Only called on a good
+  // fetch (live or snapshot), so the time always reflects real data —
+  // a failed poll leaves the previous stamp intact rather than lying.
+  function markUpdated() {
+    const el = document.getElementById('last-updated');
+    if (!el) return;
+    el.textContent = 'Last updated ' + new Date().toISOString().slice(11, 19) + ' UTC';
   }
 
   function renderIncident(inc) {
@@ -268,6 +282,10 @@ const R2_FALLBACK_URL =
             ' · API temporarily unreachable; showing the last cached snapshot (≤60s old).';
         }
       }
+
+      // W563 — data is in hand (live or snapshot); stamp the refresh
+      // before any early return so the empty-state path is covered too.
+      markUpdated();
 
       if (detailed.length === 0) {
         list.innerHTML = `
