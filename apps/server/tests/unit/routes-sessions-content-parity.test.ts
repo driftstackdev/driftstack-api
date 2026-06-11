@@ -162,7 +162,9 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
       /const state = await service\.getState\(\s*\n?\s*ctx,\s*\n?\s*id,\s*\n?\s*effective\.kind === 'team' \? \{ effectiveAccountId: effective\.accountId \} : \{\},\s*\n?\s*\);/,
     );
     expect(body).toMatch(
-      /return \{\s*\n?\s*url: state\.url,\s*\n?\s*title: state\.title,\s*\n?\s*cookies: state\.cookies,\s*\n?\s*local_storage: state\.localStorage,\s*\n?\s*captured_at: state\.capturedAt\.toISOString\(\),\s*\n?\s*\};/,
+      // W615 — page_state (lifecycle for pollers) sits between local_storage
+      // and captured_at; the comment line is matched loosely.
+      /return \{\s*\n?\s*url: state\.url,\s*\n?\s*title: state\.title,\s*\n?\s*cookies: state\.cookies,\s*\n?\s*local_storage: state\.localStorage,[\s\S]{0,200}?page_state: state\.pageState,\s*\n?\s*captured_at: state\.capturedAt\.toISOString\(\),\s*\n?\s*\};/,
     );
   });
 

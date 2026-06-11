@@ -15,6 +15,7 @@ import type {
   CaptureKind,
   ExtractionSpec,
   InteractAction,
+  PageState,
   WaitCondition,
 } from '@driftstack/api-types';
 import type { GUIInputAction } from '../schemas/gui-input.js';
@@ -109,6 +110,13 @@ export interface SessionStateResult {
   title: string | null;
   cookies: Array<Record<string, unknown>>;
   localStorage: Record<string, string>;
+  /**
+   * W615 — page lifecycle (loading/loaded/errored + error detail) as the
+   * driver/harness sees it. null = the driver has nothing to report yet
+   * (pre-navigation, or a driver that doesn't track lifecycle — the real
+   * harness emit is the A3 side of the cross-agent contract).
+   */
+  pageState: PageState | null;
   capturedAt: Date;
 }
 

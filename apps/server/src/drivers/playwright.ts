@@ -177,6 +177,10 @@ export class PlaywrightDriver implements Driver {
       // Cookies object passes through; consumer treats as opaque.
       cookies: cookies.map((c) => ({ ...c })),
       localStorage: {},
+      // W615 — minimal lifecycle mapping (smoke-test driver): loaded once
+      // a page URL exists; richer errored/loading detail is the real
+      // harness's job (A3 emit).
+      pageState: url ? { state: 'loaded' as const } : null,
       capturedAt: new Date(),
     };
   }

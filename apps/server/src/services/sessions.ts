@@ -22,6 +22,7 @@ import {
   type CreateSessionRequest,
   type InteractRequest,
   type NavigateRequest,
+  type PageState,
   type SessionPurpose,
   type WaitRequest,
 } from '@driftstack/api-types';
@@ -490,6 +491,8 @@ export class SessionsService {
     title: string | null;
     cookies: Array<Record<string, unknown>>;
     localStorage: Record<string, string>;
+    /** W615 — page lifecycle from the driver (null = nothing to report). */
+    pageState: PageState | null;
     capturedAt: Date;
   }> {
     const session = await this.requireOwned(ctx, sessionId, opts);

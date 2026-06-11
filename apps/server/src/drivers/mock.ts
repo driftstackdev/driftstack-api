@@ -228,6 +228,10 @@ export class MockDriver implements Driver {
       title: session.currentTitle,
       cookies: [],
       localStorage: {},
+      // W615 — deterministic lifecycle: a page is 'loaded' once navigated,
+      // null before any navigation (mirrors what a real harness would
+      // report for an idle session).
+      pageState: session.currentUrl !== null ? { state: 'loaded' } : null,
       capturedAt: new Date(),
     };
   }

@@ -258,6 +258,29 @@ export type WaitResponse = z.infer<typeof WaitResponseSchema>;
 // Get state
 // ───────────────────────────────────────────────────────────────────────────
 
+// W615 (GUI-UX item 3, cross-agent contract Addendum 5/7) — page lifecycle
+// as the harness sees it. The harness owns navigation, so only it knows
+// "loading" vs "loaded" vs "errored (DNS / TLS / HTTP 503 / timeout)";
+// a screenshot can't reveal these. Emitted by the harness on navigation
+// lifecycle; relayed here so pollers (the GUI live view) can render a
+// loading bar + an honest "this site couldn't be reached" overlay.
+export const PageStateErrorKindSchema = z.enum(['http', 'tls', 'dns', 'net', 'timeout']);
+export type PageStateErrorKind = z.infer<typeof PageStateErrorKindSchema>;
+
+export const PageStateSchema = z.object({
+  state: z.enum(['loading', 'loaded', 'errored']),
+  /** Present only when state === 'errored'. */
+  error: z
+    .object({
+      kind: PageStateErrorKindSchema,
+      /** For kind 'http': the status the page navigation got (e.g. 503). */
+      http_status: z.number().int().min(100).max(599).optional(),
+      message: z.string().max(500),
+    })
+    .optional(),
+});
+export type PageState = z.infer<typeof PageStateSchema>;
+
 export const SessionStateSchema = z.object({
   url: z.string().url().nullable(),
   title: z.string().nullable(),
@@ -265,6 +288,11 @@ export const SessionStateSchema = z.object({
   cookies: z.array(z.record(z.unknown())),
   // Local storage snapshot.
   local_storage: z.record(z.string()),
+  // W615 — null until the driver/harness reports a lifecycle event (the
+  // mock driver reports 'loaded' after navigate; the real harness emit is
+  // the A3 side of the contract). Additive: pollers that ignore it are
+  // unaffected.
+  page_state: PageStateSchema.nullable().default(null),
   captured_at: Iso8601Schema,
 });
 

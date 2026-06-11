@@ -507,6 +507,8 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         title: state.title,
         cookies: state.cookies,
         local_storage: state.localStorage,
+        // W615 — page lifecycle for pollers (GUI loading bar / error overlay).
+        page_state: state.pageState,
         captured_at: state.capturedAt.toISOString(),
       };
     },

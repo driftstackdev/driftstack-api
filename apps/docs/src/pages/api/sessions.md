@@ -221,6 +221,13 @@ discriminated union in `packages/api-types/src/sessions.ts`:
 timestamp (subject to a payload-size cap). Useful for checkpoint-like
 reads without a full screenshot.
 
+Also includes `page_state` — the page lifecycle as the browser sees
+it: `{ state: 'loading' | 'loaded' | 'errored' }`, with an `error`
+object (`kind`: `http` / `tls` / `dns` / `net` / `timeout`, plus
+`http_status` and `message`) when a navigation failed. `null` when
+the session hasn't reported a lifecycle event yet (e.g. before the
+first navigation).
+
 ## Capture
 
 `POST /v1/sessions/:id/capture`

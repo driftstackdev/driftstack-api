@@ -436,11 +436,27 @@ type WaitResponse struct {
 	DurationMS int  `json:"duration_ms"`
 }
 
+// PageStateError describes a failed navigation as the browser saw it.
+type PageStateError struct {
+	Kind       string `json:"kind"` // http | tls | dns | net | timeout
+	HTTPStatus *int   `json:"http_status,omitempty"`
+	Message    string `json:"message"`
+}
+
+// PageState is the page lifecycle (W615): loading | loaded | errored,
+// with Error present only when errored. Nil on SessionState until the
+// session reports a lifecycle event.
+type PageState struct {
+	State string          `json:"state"` // loading | loaded | errored
+	Error *PageStateError `json:"error,omitempty"`
+}
+
 type SessionState struct {
 	URL          *string           `json:"url"`
 	Title        *string           `json:"title"`
 	Cookies      []map[string]any  `json:"cookies"`
 	LocalStorage map[string]string `json:"local_storage"`
+	PageState    *PageState        `json:"page_state"`
 	CapturedAt   time.Time         `json:"captured_at"`
 }
 

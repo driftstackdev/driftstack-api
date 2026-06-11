@@ -1171,6 +1171,36 @@
               "type": "string"
             }
           },
+          "page_state": {
+            "type": ["object", "null"],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": ["loading", "loaded", "errored"]
+              },
+              "error": {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["http", "tls", "dns", "net", "timeout"]
+                  },
+                  "http_status": {
+                    "type": "integer",
+                    "minimum": 100,
+                    "maximum": 599
+                  },
+                  "message": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "required": ["kind", "message"]
+              }
+            },
+            "default": null,
+            "required": ["state"]
+          },
           "captured_at": {
             "type": "string",
             "format": "date-time",
@@ -4479,6 +4509,36 @@
                       "additionalProperties": {
                         "type": "string"
                       }
+                    },
+                    "page_state": {
+                      "type": ["object", "null"],
+                      "properties": {
+                        "state": {
+                          "type": "string",
+                          "enum": ["loading", "loaded", "errored"]
+                        },
+                        "error": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": ["http", "tls", "dns", "net", "timeout"]
+                            },
+                            "http_status": {
+                              "type": "integer",
+                              "minimum": 100,
+                              "maximum": 599
+                            },
+                            "message": {
+                              "type": "string",
+                              "maxLength": 500
+                            }
+                          },
+                          "required": ["kind", "message"]
+                        }
+                      },
+                      "default": null,
+                      "required": ["state"]
                     },
                     "captured_at": {
                       "type": "string",

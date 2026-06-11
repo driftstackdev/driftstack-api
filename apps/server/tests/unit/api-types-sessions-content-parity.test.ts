@@ -156,7 +156,7 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
 
   it('SessionState: url nullable + title nullable + cookies array of records (driver-controlled) + local_storage record + captured_at', () => {
     expect(body).toMatch(
-      /export const SessionStateSchema = z\.object\(\{\s*\n?\s*url: z\.string\(\)\.url\(\)\.nullable\(\),\s*\n?\s*title: z\.string\(\)\.nullable\(\),\s*\n?\s*\/\/ Serialised cookies \(driver-controlled shape\)\.\s*\n?\s*cookies: z\.array\(z\.record\(z\.unknown\(\)\)\),\s*\n?\s*\/\/ Local storage snapshot\.\s*\n?\s*local_storage: z\.record\(z\.string\(\)\),\s*\n?\s*captured_at: Iso8601Schema,\s*\n?\s*\}\);/,
+      /export const SessionStateSchema = z\.object\(\{\s*\n?\s*url: z\.string\(\)\.url\(\)\.nullable\(\),\s*\n?\s*title: z\.string\(\)\.nullable\(\),\s*\n?\s*\/\/ Serialised cookies \(driver-controlled shape\)\.\s*\n?\s*cookies: z\.array\(z\.record\(z\.unknown\(\)\)\),\s*\n?\s*\/\/ Local storage snapshot\.\s*\n?\s*local_storage: z\.record\(z\.string\(\)\),[\s\S]{0,400}?page_state: PageStateSchema\.nullable\(\)\.default\(null\),\s*\n?\s*captured_at: Iso8601Schema,\s*\n?\s*\}\);/,
     );
   });
 
