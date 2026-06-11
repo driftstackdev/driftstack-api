@@ -218,6 +218,36 @@ export const ERROR_PAGES = {
   },
 };
 
+// W556 — cross-links between errors a developer commonly confuses or hits in
+// sequence (the three 429s, the key/auth family, the LLM rails, etc.). Every
+// key + value must be a slug in ERROR_PAGES (guarded by the slug-parity test).
+export const RELATED = {
+  'rate-limited': ['concurrency-limit', 'tier-limit'],
+  'concurrency-limit': ['rate-limited', 'tier-limit'],
+  'tier-limit': ['concurrency-limit', 'rate-limited'],
+  unauthorized: ['invalid-key', 'invalid-credentials', 'forbidden'],
+  forbidden: ['unauthorized', 'mfa-step-up-required'],
+  'mfa-step-up-required': ['forbidden', 'unauthorized'],
+  'invalid-key': ['revoked-key', 'expired-key', 'unauthorized'],
+  'revoked-key': ['invalid-key', 'expired-key'],
+  'expired-key': ['invalid-key', 'revoked-key'],
+  'invalid-credentials': ['unauthorized', 'invalid-auth-token'],
+  'invalid-auth-token': ['invalid-credentials', 'email-not-verified'],
+  'email-not-verified': ['email-already-registered', 'invalid-auth-token'],
+  'email-already-registered': ['email-not-verified', 'invalid-credentials'],
+  'session-destroyed': ['session-timeout', 'not-found'],
+  'session-timeout': ['session-destroyed', 'driver-error'],
+  'driver-error': ['driver-not-integrated', 'session-timeout'],
+  'driver-not-integrated': ['driver-error', 'feature-unavailable'],
+  'feature-unavailable': ['driver-not-integrated'],
+  'byok-anthropic-required': ['bundled-llm-consent-required', 'bundled-llm-budget-exhausted'],
+  'bundled-llm-consent-required': ['byok-anthropic-required', 'bundled-llm-budget-exhausted'],
+  'bundled-llm-budget-exhausted': ['bundled-llm-consent-required', 'byok-anthropic-required'],
+  'pair-mode-conflict': ['pair-mode-invalid-transition'],
+  'pair-mode-invalid-transition': ['pair-mode-conflict'],
+  'legal-acceptance-required': ['forbidden'],
+};
+
 const css = `
 :root{color-scheme:dark}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -255,7 +285,15 @@ for (const slug of slugs) {
       `<p class="label">API error type</p><h1>${e.title}</h1><p class="status">HTTP ${e.status} · <code>https://errors.driftstack.dev/${slug}</code></p>
 <h2>What it means</h2><p>${e.meaning}</p>
 <h2>How to fix it</h2><p>${e.fix}</p>
-<h2>Where it appears</h2><p>In the <code>type</code> field of the <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a> <code>application/problem+json</code> error body, alongside <code>title</code>, <code>status</code>, <code>detail</code>, and an <code>instance</code> correlation id.</p>`,
+<h2>Where it appears</h2><p>In the <code>type</code> field of the <a href="https://www.rfc-editor.org/rfc/rfc9457">RFC 9457</a> <code>application/problem+json</code> error body, alongside <code>title</code>, <code>status</code>, <code>detail</code>, and an <code>instance</code> correlation id.</p>${
+        (RELATED[slug] ?? []).length > 0
+          ? `<h2>Related</h2><ul>${RELATED[slug]
+              .map(
+                (r) => `<li><a href="/${r}">${ERROR_PAGES[r].title}</a> <code>· /${r}</code></li>`,
+              )
+              .join('')}</ul>`
+          : ''
+      }`,
     ),
   );
 }

@@ -50,4 +50,16 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
       `errors-site pages with no PROBLEM_TYPES entry:\n${phantom.join('\n')}`,
     ).toEqual([]);
   });
+
+  it('W556: every RELATED cross-link key + target is a real error page slug', () => {
+    const m = siteSrc.match(/export const RELATED = \{([\s\S]+?)\n\};/);
+    expect(m, 'RELATED map present').not.toBeNull();
+    const block = m?.[1] ?? '';
+    const keys = [...block.matchAll(/^ {2}'?([a-z0-9-]+)'?:/gm)].map((x) => x[1] as string);
+    const targets = [...block.matchAll(/'([a-z0-9-]+)'/g)]
+      .map((x) => x[1] as string)
+      .filter((s) => !keys.includes(s) || true);
+    const bad = [...new Set([...keys, ...targets])].filter((s) => !pageSlugs.has(s)).sort();
+    expect(bad, `RELATED references non-existent slugs:\n${bad.join('\n')}`).toEqual([]);
+  });
 });
