@@ -277,13 +277,19 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       if (created.livekit) {
         setWatchInfo(created.livekit);
       } else {
-        // W611 — no livekit block (deployment without LiveKit, e.g. a
+        // W611/W613 — no livekit block (deployment without LiveKit, e.g. a
         // self-hosted/mock-driver server): fall back to the polling live
-        // view instead of dead-ending with an error AFTER the session was
-        // already created. The 2-fps viewport (URL bar, tabs, manual
-        // control) works on every deployment; WebRTC is the upgrade, not
-        // the requirement.
-        onOpenSession(created.id);
+        // view instead of dead-ending with an error. The polling viewer
+        // speaks the DRIVER-session routes (/v1/sessions/:id, ses_<uuid>),
+        // and a fresh agent session has no driftstack_session_id yet (it's
+        // created lazily on the first agent turn) — so opening the agt_ id
+        // there 400s (founder-hit, W613). Close the unused agent session
+        // (frees the concurrency slot + token budget) and launch a plain
+        // driver session with the same profile for the viewer.
+        await client.agentSessions.close(created.id).catch(() => undefined);
+        const driverSession = await client.sessions.create({ profile_id: profile.id });
+        await markLaunched(profile.id, driverSession.id);
+        onOpenSession(driverSession.id);
       }
       await refresh(false);
       await refreshAccountMe();

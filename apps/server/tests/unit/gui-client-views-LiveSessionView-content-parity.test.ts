@@ -198,6 +198,16 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     expect(body).toMatch(/onNewTab: \(\) => void;/);
   });
 
+  it("W613 phone-aspect bezel: aspectRatio driven by the frame's naturalWidth/naturalHeight via img onLoad (placeholder '9 / 19.5' until first frame) — pinned so the bezel hugs the phone shape instead of the pane (the founder-reported iPad look) without hardcoding any archetype", () => {
+    expect(body).toMatch(
+      /const \[frameAspect, setFrameAspect\] = useState<string \| null>\(null\);/,
+    );
+    expect(body).toMatch(
+      /style=\{deviceFrame \? \{ aspectRatio: frameAspect \?\? '9 \/ 19\.5' \} : undefined\}/,
+    );
+    expect(body).toMatch(/const next = `\$\{el\.naturalWidth\} \/ \$\{el\.naturalHeight\}`;/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

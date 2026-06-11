@@ -9,6 +9,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 const agentCreate = vi.fn<(b: unknown) => Promise<unknown>>();
+const agentClose = vi.fn<(id: string) => Promise<unknown>>(() => Promise.resolve({}));
+const sessionCreate = vi.fn<(b: unknown) => Promise<unknown>>(() =>
+  Promise.resolve({ id: 'ses_fallback' }),
+);
 
 function profile() {
   return {
@@ -32,8 +36,14 @@ vi.mock('../../src/lib/SettingsContext', () => {
           yield profile();
         },
       },
-      sessions: { list: () => Promise.resolve({ data: [] }) },
-      agentSessions: { create: (b: unknown) => agentCreate(b) },
+      sessions: {
+        list: () => Promise.resolve({ data: [] }),
+        create: (b: unknown) => sessionCreate(b),
+      },
+      agentSessions: {
+        create: (b: unknown) => agentCreate(b),
+        close: (id: string) => agentClose(id),
+      },
     },
     settings: { apiKey: 'ds_test_x', baseUrl: 'http://localhost:3000' },
     accountMe: {
@@ -101,14 +111,17 @@ describe('ProfilesView launch → stream', () => {
     expect(agentCreate).toHaveBeenCalledWith({ profile_id: 'prof_1' });
   });
 
-  it('W611: no livekit block → falls back to the polling live view (onOpenSession with the created id), NOT an error — launch works on LiveKit-less deployments', async () => {
+  it('W611/W613: no livekit block → closes the unused agent session, creates a PLAIN driver session with the same profile, and opens THAT in the polling viewer (agt_ ids 400 on /v1/sessions routes — founder-hit)', async () => {
     agentCreate.mockResolvedValueOnce({ id: 'agt_2' });
     const onOpenSession = vi.fn();
     render(<ProfilesView onGoToSettings={vi.fn()} onOpenSession={onOpenSession} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
-    await waitFor(() => expect(onOpenSession).toHaveBeenCalledWith('agt_2'));
-    // The old dead-end message is gone — the session the customer just
-    // created opens instead of erroring.
+    await waitFor(() => expect(onOpenSession).toHaveBeenCalledWith('ses_fallback'));
+    // The agent session is closed (concurrency slot + token budget freed)
+    // and the driver session carries the profile binding.
+    expect(agentClose).toHaveBeenCalledWith('agt_2');
+    expect(sessionCreate).toHaveBeenCalledWith({ profile_id: 'prof_1' });
+    // The old dead-end message is gone — the launch opens a working viewer.
     expect(screen.queryByText(/no live stream was returned/i)).toBeNull();
   });
 });
