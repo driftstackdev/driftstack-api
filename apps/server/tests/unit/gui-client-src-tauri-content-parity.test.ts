@@ -42,7 +42,11 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(body).toMatch(/^\[build-dependencies\]$/m);
     expect(body).toMatch(/^tauri-build = \{ version = "2\.0", features = \[\] \}$/m);
     expect(body).toMatch(/^\[dependencies\]$/m);
-    expect(body).toMatch(/^tauri = \{ version = "2\.0", features = \[\] \}$/m);
+    // The macos-private-api feature is REQUIRED by tauri.conf.json
+    // app.macOSPrivateApi=true (the floating-iPhone simulator window's
+    // transparency, founder 2026-06-11). Dropping it fails the build's
+    // macOSPrivateApi check.
+    expect(body).toMatch(/^tauri = \{ version = "2\.0", features = \["macos-private-api"\] \}$/m);
     expect(body).toMatch(/^tauri-plugin-shell = "2\.0"$/m);
     expect(body).toMatch(/^tauri-plugin-store = "2\.0"$/m);
     expect(body).toMatch(/^tauri-plugin-fs = "2\.0"$/m);
