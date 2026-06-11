@@ -66,6 +66,17 @@ interface FrameState {
   durationMs: number;
 }
 
+// W616 — page lifecycle from GET /state (W615 server field): the GUI's
+// loading bar + "site couldn't be reached" overlay render from this.
+interface PageStateInfo {
+  state: 'loading' | 'loaded' | 'errored';
+  error?: {
+    kind: 'http' | 'tls' | 'dns' | 'net' | 'timeout';
+    http_status?: number;
+    message: string;
+  };
+}
+
 interface ViewportState {
   currentUrl: string | null;
   currentTitle: string | null;
@@ -76,6 +87,8 @@ interface ViewportState {
   fpsActual: number; // measured from the last 4 frame intervals
   manualControl: boolean;
   lastTap: { x: number; y: number; at: number } | null;
+  /** W616 — null until the driver/harness reports a lifecycle event. */
+  pageState: PageStateInfo | null;
 }
 
 export interface LiveSessionViewProps {
@@ -108,6 +121,7 @@ export function LiveSessionView({
     fpsActual: 0,
     manualControl: false,
     lastTap: null,
+    pageState: null,
   });
   // W608 — device-frame bezel preference, persisted so power users who turn
   // it off for debugging keep the bare image across app restarts.
@@ -129,6 +143,8 @@ export function LiveSessionView({
   // frames). Mirrors createPollingFrameStream's fetchInFlight guard.
   const fetchInFlightRef = useRef(false);
   const frameTimestampsRef = useRef<number[]>([]);
+  // W616 — interval tick counter driving the every-10th-tick meta refresh.
+  const frameCounterRef = useRef(0);
   const manualControlRef = useRef(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
@@ -188,6 +204,9 @@ export function LiveSessionView({
         ...s,
         currentUrl: st.url,
         currentTitle: st.title,
+        // W616 — page lifecycle (W615 server field). Older self-hosted
+        // servers don't send it; treat absent as null.
+        pageState: (st as { page_state?: PageStateInfo | null }).page_state ?? null,
       }));
     } catch {
       // Swallow — we still render frames even without state metadata.
@@ -227,7 +246,17 @@ export function LiveSessionView({
     void fetchSessionMeta();
     // First frame as soon as possible, then on interval.
     void fetchFrame();
-    intervalIdRef.current = window.setInterval(() => void fetchFrame(), FRAME_INTERVAL_MS);
+    intervalIdRef.current = window.setInterval(() => {
+      void fetchFrame();
+      // W616 — refresh meta (url/title/page_state) every 10th tick (~5s).
+      // NOT per-frame: getState records a state_capture usage event server-
+      // side, so a 2/s meta poll would spam the customer's usage meter.
+      // Skipped while paused (no usage burn on an idle window).
+      frameCounterRef.current += 1;
+      if (!pausedRef.current && frameCounterRef.current % 10 === 0) {
+        void fetchSessionMeta();
+      }
+    }, FRAME_INTERVAL_MS);
     return () => {
       if (intervalIdRef.current !== null) {
         window.clearInterval(intervalIdRef.current);
@@ -425,6 +454,10 @@ export function LiveSessionView({
         manualControl={state.manualControl}
         deviceFrame={deviceFrame}
         onToggleDeviceFrame={toggleDeviceFrame}
+        pageState={state.pageState}
+        onReloadPage={() => {
+          if (state.currentUrl !== null) void navigateTo(state.currentUrl);
+        }}
         lastTap={state.lastTap}
         onImgClick={handleImgClick}
         onImgWheel={handleImgWheel}
@@ -551,12 +584,31 @@ function Header(props: HeaderProps): JSX.Element {
   );
 }
 
+// W616 — friendly copy per page-error kind. The harness/driver supplies the
+// kind; the GUI renders what a customer should DO about it.
+function pageErrorCopy(err: NonNullable<PageStateInfo['error']>): string {
+  switch (err.kind) {
+    case 'dns':
+      return "Couldn't find this site — check the address (DNS lookup failed).";
+    case 'tls':
+      return 'Secure connection failed — the site’s certificate could not be trusted.';
+    case 'http':
+      return `The site returned HTTP ${err.http_status ?? 'error'}.`;
+    case 'timeout':
+      return 'The site took too long to respond.';
+    case 'net':
+      return 'Network error while loading the page.';
+  }
+}
+
 function Viewport({
   frame,
   loading,
   manualControl,
   deviceFrame,
   onToggleDeviceFrame,
+  pageState,
+  onReloadPage,
   lastTap,
   onImgClick,
   onImgWheel,
@@ -566,6 +618,8 @@ function Viewport({
   manualControl: boolean;
   deviceFrame: boolean;
   onToggleDeviceFrame: () => void;
+  pageState: PageStateInfo | null;
+  onReloadPage: () => void;
   lastTap: { x: number; y: number; at: number } | null;
   onImgClick: (e: React.MouseEvent<HTMLImageElement>) => void;
   onImgWheel: (e: React.WheelEvent<HTMLImageElement>) => void;
@@ -609,6 +663,33 @@ function Viewport({
             aria-hidden="true"
             className="pointer-events-none absolute top-2 left-1/2 z-10 h-5 w-24 -translate-x-1/2 rounded-full bg-black/80"
           ></div>
+        )}
+        {/* W616 — thin top loading bar while the page is loading (local
+            navigate in-flight OR the harness reports page_state loading). */}
+        {(loading || pageState?.state === 'loading') && (
+          <div
+            data-overlay="page-loading"
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden"
+          >
+            <div className="h-full w-1/3 animate-pulse rounded-full bg-accent" />
+          </div>
+        )}
+        {/* W616 — honest page-error overlay (DNS/TLS/HTTP/timeout/net) with
+            a Retry that re-navigates the current URL. */}
+        {pageState?.state === 'errored' && pageState.error !== undefined && (
+          <div
+            data-overlay="page-error"
+            className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-black/70 px-6 text-center"
+          >
+            <span className="section-label text-status-error/80">Page failed to load</span>
+            <span className="max-w-xs text-sm text-ink-primary">
+              {pageErrorCopy(pageState.error)}
+            </span>
+            <button type="button" className="btn-secondary" onClick={onReloadPage}>
+              Try again
+            </button>
+          </div>
         )}
         {/* Bare-image escape hatch for debugging (pixel-peeping a capture). */}
         <button

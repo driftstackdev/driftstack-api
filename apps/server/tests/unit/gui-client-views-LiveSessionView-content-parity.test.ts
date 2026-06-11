@@ -208,6 +208,29 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     expect(body).toMatch(/const next = `\$\{el\.naturalWidth\} \/ \$\{el\.naturalHeight\}`;/);
   });
 
+  it('W616 page-state rendering: meta refresh every 10th interval tick (~5s, skipped while paused — getState records a state_capture usage event, so a 2/s meta poll would spam the usage meter); loading bar overlay (local navigating OR page_state loading); error overlay with pageErrorCopy kind→action copy + Try again re-navigate', () => {
+    expect(body).toMatch(/const frameCounterRef = useRef\(0\);/);
+    expect(body).toMatch(
+      /if \(!pausedRef\.current && frameCounterRef\.current % 10 === 0\) \{\s*\n?\s*void fetchSessionMeta\(\);\s*\n?\s*\}/,
+    );
+    expect(body).toMatch(
+      /pageState: \(st as \{ page_state\?: PageStateInfo \| null \}\)\.page_state \?\? null,/,
+    );
+    expect(body).toMatch(/\{\(loading \|\| pageState\?\.state === 'loading'\) && \(/);
+    expect(body).toMatch(/data-overlay="page-loading"/);
+    expect(body).toMatch(
+      /\{pageState\?\.state === 'errored' && pageState\.error !== undefined && \(/,
+    );
+    expect(body).toMatch(/data-overlay="page-error"/);
+    // kind→copy map stays total over the 5 error kinds.
+    expect(body).toMatch(
+      /function pageErrorCopy\(err: NonNullable<PageStateInfo\['error'\]>\): string \{/,
+    );
+    for (const kind of ['dns', 'tls', 'http', 'timeout', 'net']) {
+      expect(body, `pageErrorCopy must handle '${kind}'`).toMatch(new RegExp(`case '${kind}':`));
+    }
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
