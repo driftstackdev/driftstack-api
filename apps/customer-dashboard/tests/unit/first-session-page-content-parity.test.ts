@@ -62,9 +62,13 @@ describe('W373.B customer-dashboard /first-session page content parity', () => {
     expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/api-keys'/);
     expect(body).toMatch(/authorization: 'Bearer ' \+ token/);
     expect(body).toMatch(/JSON\.stringify\(\{ name: 'default', scopes: \['read', 'write'\] \}\)/);
-    // Step 2 — create session with the new API key plaintext.
+    // Step 2 — create session with the new (or V-501b-reused) API key.
     expect(body).toMatch(/fetch\(apiBaseUrl \+ '\/v1\/sessions'/);
-    expect(body).toMatch(/authorization: 'Bearer ' \+ apiKey\.plaintext/);
+    expect(body).toMatch(/authorization: 'Bearer ' \+ apiKeyPlaintext/);
+    // V-501b — retry-safe: reuse a stashed key instead of minting a duplicate.
+    expect(body).toMatch(
+      /let apiKeyPlaintext = sessionStorage\.getItem\('ds_first_api_key_plaintext'\)/,
+    );
   });
 
   it.skip('V-168 web-session-on-/v1/api-keys exception framed in comment (minimal-flow rationale)', () => {

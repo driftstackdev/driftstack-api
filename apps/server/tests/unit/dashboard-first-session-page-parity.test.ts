@@ -101,11 +101,15 @@ describe('W741 dashboard first-session V-184a + V-501 parity', () => {
     expect(p).toMatch(/sessionStorage\.setItem\('ds_first_api_key_plaintext', apiKey\.plaintext\)/);
   });
 
-  it("CRITICAL Step 2: POST /v1/sessions contract uses the JUST-MINTED API key (NOT the web-session-token). Auth header is 'Bearer ' + apiKey.plaintext. The api-key-auth choice is what proves the key works end-to-end before the customer sees it. Drift to web-session auth on session-create would skip the verify-the-key step.", () => {
+  it("CRITICAL Step 2: POST /v1/sessions contract uses the JUST-MINTED (or W597-reused) API key (NOT the web-session-token). Auth header is 'Bearer ' + apiKeyPlaintext. The api-key-auth choice is what proves the key works end-to-end before the customer sees it. Drift to web-session auth on session-create would skip the verify-the-key step.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/sessions', \{\s*\n\s+method: 'POST',\s*\n\s+headers: \{ 'content-type': 'application\/json', authorization: 'Bearer ' \+ apiKey\.plaintext \},\s*\n\s+credentials: 'include',\s*\n\s+body: JSON\.stringify\(\{ label \}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/sessions', \{\s*\n\s+method: 'POST',\s*\n\s+headers: \{ 'content-type': 'application\/json', authorization: 'Bearer ' \+ apiKeyPlaintext \},\s*\n\s+credentials: 'include',\s*\n\s+body: JSON\.stringify\(\{ label \}\)/,
+    );
+    // W597 — retry-safe: reuse a stashed key rather than minting a duplicate.
+    expect(p).toMatch(
+      /let apiKeyPlaintext = sessionStorage\.getItem\('ds_first_api_key_plaintext'\)/,
     );
   });
 

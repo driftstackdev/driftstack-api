@@ -158,27 +158,34 @@ const apiBaseUrl = resolveApiBaseUrl();
         setBusy(true);
 
         try {
-          // Mint an API key with web session.
-          const mintRes = await fetch(apiBaseUrl + '/v1/api-keys', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
-            credentials: 'include',
-            body: JSON.stringify({ name: 'default', scopes: ['read', 'write'] }),
-          });
-          if (!mintRes.ok) {
-            const errBody = await mintRes.json().catch(() => ({}));
-            throw new Error(errBody.detail || 'mint key HTTP ' + mintRes.status);
+          // V-501b — retry-safe: if a key was already minted in a prior
+          // attempt this tab (mint succeeded but create failed → user
+          // retries), reuse it instead of minting a SECOND "default" key.
+          let apiKeyPlaintext = sessionStorage.getItem('ds_first_api_key_plaintext');
+          if (!apiKeyPlaintext) {
+            // Mint an API key with web session.
+            const mintRes = await fetch(apiBaseUrl + '/v1/api-keys', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+              credentials: 'include',
+              body: JSON.stringify({ name: 'default', scopes: ['read', 'write'] }),
+            });
+            if (!mintRes.ok) {
+              const errBody = await mintRes.json().catch(() => ({}));
+              throw new Error(errBody.detail || 'mint key HTTP ' + mintRes.status);
+            }
+            const apiKey = await mintRes.json();
+            // Stash plaintext for the customer to copy from the
+            // post-onboarding /api-keys redirect view (it's only
+            // returned once).
+            sessionStorage.setItem('ds_first_api_key_plaintext', apiKey.plaintext);
+            apiKeyPlaintext = apiKey.plaintext;
           }
-          const apiKey = await mintRes.json();
-          // Stash plaintext for the customer to copy from the
-          // post-onboarding /api-keys redirect view (it's only
-          // returned once).
-          sessionStorage.setItem('ds_first_api_key_plaintext', apiKey.plaintext);
 
-          // Create the session.
+          // Create the session with the new (or reused) API key.
           const sessionRes = await fetch(apiBaseUrl + '/v1/sessions', {
             method: 'POST',
-            headers: { 'content-type': 'application/json', authorization: 'Bearer ' + apiKey.plaintext },
+            headers: { 'content-type': 'application/json', authorization: 'Bearer ' + apiKeyPlaintext },
             credentials: 'include',
             body: JSON.stringify({ label }),
           });

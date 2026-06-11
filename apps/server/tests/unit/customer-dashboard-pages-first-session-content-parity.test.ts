@@ -71,8 +71,17 @@ describe('W492.C apps/customer-dashboard/src/pages/first-session.astro content p
       /const mintRes = await fetch\(apiBaseUrl \+ '\/v1\/api-keys', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json', authorization: 'Bearer ' \+ token \},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(\{ name: 'default', scopes: \['read', 'write'\] \}\),\s*\n?\s*\}\);/,
     );
     expect(body).toMatch(
-      /const sessionRes = await fetch\(apiBaseUrl \+ '\/v1\/sessions', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json', authorization: 'Bearer ' \+ apiKey\.plaintext \},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(\{ label \}\),\s*\n?\s*\}\);/,
+      /const sessionRes = await fetch\(apiBaseUrl \+ '\/v1\/sessions', \{\s*\n?\s*method: 'POST',\s*\n?\s*headers: \{ 'content-type': 'application\/json', authorization: 'Bearer ' \+ apiKeyPlaintext \},\s*\n?\s*credentials: 'include',\s*\n?\s*body: JSON\.stringify\(\{ label \}\),\s*\n?\s*\}\);/,
     );
+  });
+
+  it('V-501b retry-safe mint: reuse a stashed key on retry instead of minting a duplicate "default" key (mint-succeeded-then-create-failed → retry would otherwise create a 2nd key)', () => {
+    expect(body).toMatch(
+      /let apiKeyPlaintext = sessionStorage\.getItem\('ds_first_api_key_plaintext'\);\s*\n?\s*if \(!apiKeyPlaintext\) \{/,
+    );
+    // The mint + stash happen ONLY inside the !apiKeyPlaintext guard, and the
+    // reused/new key is what creates the session.
+    expect(body).toMatch(/apiKeyPlaintext = apiKey\.plaintext;/);
   });
 
   it("ds_first_api_key_plaintext sessionStorage handoff + redirect to '/sessions?onboarded=1' — pinned so the one-shot plaintext key (returned ONCE by /v1/api-keys) gets stashed for the /sessions page to display 'copy this somewhere safe' and the ?onboarded=1 query param signals the post-onboarding view to show the key reveal banner", () => {
