@@ -1,12 +1,35 @@
 # v1 launch readiness — Agent-2 (control plane) honest assessment
 
-**2026-06-11 (W596).** Founder asked for "major work + planning" — this is the
-grounded A2-scope picture: what's done + live, what's gated on founder _data_
-(trivial), and what's genuinely blocking a real v1 (work/decisions, not data).
-Scope = driftstack-api (server, dashboard, admin, docs, marketing, SDKs, GUI).
+**2026-06-11 (W596; refreshed W622 same day, prod now d5e50623).** Founder
+asked for "major work + planning" — this is the grounded A2-scope picture:
+what's done + live, what's gated on founder _data_ (trivial), and what's
+genuinely blocking a real v1 (work/decisions, not data). Scope =
+driftstack-api (server, dashboard, admin, docs, marketing, SDKs, GUI).
 A1 (WebKit fork/atlas) + A3 (harness/runtime) carry their own readiness.
 
-## ✅ Done + verified live on prod (542aa089)
+## ✅ NEW since W596 (the 2026-06-11 W607–W621 batch, live on prod d5e50623)
+
+- **Desktop GUI browser-UX arc COMPLETE** (founder-greenlit "do all"): URL
+  bar + reload, toggleable iPhone bezel (frame-aspect-driven), browser tabs
+  (= concurrent sessions, 10s list poll), page loading bar + per-kind page
+  error overlays, Dev Logs error capture ([api] non-2xx + [ui] banners —
+  root-caused 4 founder-hit bugs same-hour), launch degradation chain
+  (no-LiveKit → instant viewer; empty room → 10s honest offer; publisher →
+  stream). Installed on the founder's Mac.
+- **`sensitive` typing flag e2e** (A3's W1149/W1150 ask): api-types +
+  3 SDKs + dispatch wire + docs; A3's harness threading already landed
+  their side — feature live across both agents.
+- **`page_state` on session state** (loading/loaded/errored + error kind):
+  schema → drivers → route → SDKs → docs → GUI render. A3's rich emit is
+  the assigned remainder (relay Addendum 7 GO).
+- **`SESSION_PROXY_REQUIRED` tri-state** (founder verdict): self-hosted
+  creates sessions proxy-free; cloud posture unchanged.
+- **Python SDK spec catch-up**: openapi.json + generated models were stale
+  since W540 (~70 waves) — regenerated + drift-guarded.
+- **Deploys during the Actions outage**: docs / marketing+changelog
+  redeployed manually; staging→prod soak cycle ×2 (prod = d5e50623).
+
+## ✅ Done + verified live on prod (now d5e50623; W596 baseline below)
 
 - **Auth + accounts**: signup/verify/login/MFA/web-session, API keys
   (mint/rotate/revoke/scopes), owner+staff admin via env. Login outage fixed
@@ -57,6 +80,10 @@ A1 (WebKit fork/atlas) + A3 (harness/runtime) carry their own readiness.
 - Behavioral undetectability model ownership (A1/A3 source of truth).
 - GUI per-session HID input channel (Tier-2 architecture, cross-agent A1).
 - GitHub account flag (deploys use bundle-mode workaround meanwhile).
+  **W608 finding: Actions runs have been silently DEAD since 2026-06-08
+  02:19** — the API says enabled but ~30 pushes triggered zero runs. The
+  local pre-push gate is the only test gate; CI-only real-PG drizzle tests
+  are unvalidated since then. Worth adding to the GitHub support thread.
 - GUI cloud-vs-self-hosted: founder should use **Cloud mode** for daily use.
 
 ## Bottom line
