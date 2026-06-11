@@ -63,6 +63,25 @@ proxy. It works; it just has to be \_running + connected*.
 5. Launch a profile in the GUI → the control plane dispatches
    `sessionAssign` to the connected node → real browser + live video.
 
+## How to verify it connected (W628/W629)
+
+Two A2 surfaces now make the registration/connection state observable —
+the exact facts dispatch checks:
+
+- **`GET /v1/mac-nodes`** (staff-admin scope): JSON list of registered
+  nodes with `last_seen_at`, `has_livekit`, and `connected` (live
+  control-plane connection). `connected: true` + `has_livekit: true` on a
+  node = launches will dispatch to it.
+  `curl -H "Authorization: Bearer <admin-key>" https://api.driftstack.dev/v1/mac-nodes`
+- **Admin → Fleet** (`admin.driftstack.dev/fleet`): the same data as a
+  live table (auto-refreshes every 15s), so you can watch a worker flip
+  `offline → connected` as the harness attaches.
+
+If a node shows registered but `connected: false`, the harness process
+isn't holding a control-plane connection — restart it / check it points
+at the right control plane. If `has_livekit: false`, it hasn't POSTed
+LiveKit credentials (`POST /v1/mac-nodes/register`).
+
 ## A2 status: ready, nothing to do
 
 The control-plane side (agent-session create → dispatch → LiveKit token

@@ -178,6 +178,15 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       void load();
+      // W630 — auto-refresh every 15s so an operator watching a worker
+      // come online sees connected flip offline→connected live, without
+      // reloading the page. Cheap (one small GET) and the load() function
+      // already replaces the table wholesale, so no flicker beyond the
+      // row swap. No teardown needed — the page is a full document, the
+      // interval dies with it on navigation away.
+      setInterval(function () {
+        void load();
+      }, 15000);
     })();
   </script>
 </AdminLayout>

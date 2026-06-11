@@ -141,6 +141,12 @@ describe('admin fleet page — operator visibility', () => {
     expect(text).not.toContain('mac-001');
   });
 
+  it('W630 auto-refresh: the inline script arms a 15s poll so connected state updates live during worker bring-up', async () => {
+    const html = loadBuiltPage();
+    expect(html).toContain('setInterval');
+    expect(html).toContain('15000');
+  });
+
   it('403 → access-denied banner (customer account, not staff admin)', async () => {
     const { window } = setUpDom(loadBuiltPage(), { route: () => json({ detail: 'no' }, 403) });
     win = window;
