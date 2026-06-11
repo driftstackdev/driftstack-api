@@ -1386,6 +1386,9 @@ export async function createProductionDeps(
     // explicit `key: key` form so the W247.A regex matches (shorthand
     // syntax silently failed the gate detection).
     sessionEgressService: sessionEgressService,
+    // W615 — SESSION_PROXY_REQUIRED explicit override (tri-state; unset →
+    // inferred from the egress backend, the existing prod posture).
+    sessionProxyRequired: config.sessionProxyRequired,
     // AI-B4 — recipes repo. Wired unconditionally; now activates
     // because Q.1 wires agentSessionsRepo below.
     recipesRepo,

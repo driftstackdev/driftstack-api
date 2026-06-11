@@ -307,6 +307,13 @@ export interface TestAppOptions {
    */
   enableEgressSafeguard?: boolean;
   /**
+   * W615 — explicit SESSION_PROXY_REQUIRED override passthrough.
+   * undefined → inferred from enableEgressSafeguard (the default
+   * posture); false → never required (self-hosted/testing); true →
+   * required even without a wired backend.
+   */
+  sessionProxyRequired?: boolean;
+  /**
    * AI-D — when `true`, wires a deterministic AgentRuntime
    * (DeterministicAgentDecomposer + StubAgentExecutor +
    * InMemoryAgentSessionsRepo) so /v1/agent-sessions/* routes
@@ -1294,6 +1301,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
           },
         }
       : {}),
+    // W615 — explicit override beats backend inference (only spread when set
+    // so exactOptionalPropertyTypes stays satisfied).
+    ...(opts.sessionProxyRequired === undefined
+      ? {}
+      : { sessionProxyRequired: opts.sessionProxyRequired }),
     ...(opts.enableAgentRuntime === true
       ? (() => {
           const agentSessionsRepo = new InMemoryAgentSessionsRepo();

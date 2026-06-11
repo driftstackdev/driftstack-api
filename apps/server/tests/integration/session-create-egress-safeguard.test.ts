@@ -64,4 +64,33 @@ describe('EG-API-1.4 — egress safeguard at API layer', () => {
     });
     expect(res.statusCode).toBe(201);
   });
+
+  // W615 — SESSION_PROXY_REQUIRED explicit override (founder verdict
+  // 2026-06-11): self-hosted/testing deployments egress from the
+  // operator's own machine, so a wired egress backend must not force a
+  // proxy on every session. The override is tri-state; these pin the two
+  // explicit states (the three tests above pin the inferred default).
+
+  it('W615 wired + SESSION_PROXY_REQUIRED=false: POST /v1/sessions with no proxy → 201 (self-hosted posture)', async () => {
+    fx = await buildTestApp({ enableEgressSafeguard: true, sessionProxyRequired: false });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('W615 NOT wired + SESSION_PROXY_REQUIRED=true: POST /v1/sessions with no proxy → 400 (force-required posture)', async () => {
+    fx = await buildTestApp({ sessionProxyRequired: true });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/proxy configuration is required/);
+  });
 });

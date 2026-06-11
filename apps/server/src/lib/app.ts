@@ -334,6 +334,14 @@ export interface AppDeps {
    */
   sessionEgressService?: SessionEgressService;
   /**
+   * W615 — explicit override for the EG-API-1.4 session-create proxy
+   * requirement (SESSION_PROXY_REQUIRED env via config). undefined →
+   * inferred from sessionEgressService presence (the existing posture,
+   * prod-unchanged). false → never required (self-hosted/testing,
+   * founder verdict 2026-06-11). true → always required.
+   */
+  sessionProxyRequired?: boolean;
+  /**
    * AI-D — AgentRuntime composing decomposer + executor + sessions repo
    * (per AI-COMPOSE slice). Optional. When wired, registers
    * /v1/agent-sessions/* routes; when omitted, those routes return 503
@@ -852,13 +860,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   registerSessionRoutes(app, {
     service: deps.sessionsService,
     authRepo: deps.authRepo,
-    // EG-API-1.4 — egress safeguard at API layer. True iff a session-
-    // egress backend is wired (per planning 133 §"Egress safeguard
-    // enforcement"). False until Phase 1 SOCKS5 lands a concrete
-    // backend (currently the prod posture), so session-create proceeds
-    // unchanged. Once true, every session-create body must carry a
-    // proxy envelope or rejects with 400.
-    egressProxyRequired: deps.sessionEgressService !== undefined,
+    // EG-API-1.4 — egress safeguard at API layer. Default: true iff a
+    // session-egress backend is wired (per planning 133 §"Egress
+    // safeguard enforcement"); the prod posture, unchanged. W615 — the
+    // SESSION_PROXY_REQUIRED env (deps.sessionProxyRequired) explicitly
+    // overrides: 'false' for self-hosted/testing where sessions egress
+    // from the operator's own machine (founder verdict 2026-06-11),
+    // 'true' to force-require regardless of backend detection.
+    egressProxyRequired: deps.sessionProxyRequired ?? deps.sessionEgressService !== undefined,
     // 2026-05-20 — antidetect-browser-style profile binding. Routes
     // need the profiles service to validate profile_id ownership +
     // bump last_used_at when a session is created against a profile.

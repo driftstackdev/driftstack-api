@@ -19,6 +19,13 @@ const ConfigSchema = z.object({
   databaseUrl: z.string().url(),
   redisUrl: z.string().url(),
   driver: z.enum(['mock', 'webkit', 'playwright']).default('mock'),
+  // W615 — explicit override for the EG-API-1.4 session-create proxy
+  // requirement. undefined → inferred (required iff the egress backend is
+  // wired — the existing prod posture, unchanged). 'false' → never
+  // required: the self-hosted/testing posture (founder verdict 2026-06-11:
+  // "on self-hosted it's their own pc — no proxy needed"). 'true' →
+  // always required even if backend detection changes.
+  sessionProxyRequired: z.boolean().optional(),
   mockNavigateLatencyMs: z.coerce.number().int().nonnegative().default(120),
   mockInteractLatencyMs: z.coerce.number().int().nonnegative().default(40),
   // V-333b — Playwright driver channel. Consulted only when
@@ -553,6 +560,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     databaseUrl: env.DATABASE_URL ?? 'postgres://driftstack:driftstack@localhost:5432/driftstack',
     redisUrl: env.REDIS_URL ?? 'redis://localhost:6379',
     driver: env.DRIVER,
+    // tri-state: unset env → undefined (inferred); 'true'/'false' → explicit.
+    sessionProxyRequired:
+      env.SESSION_PROXY_REQUIRED === undefined ? undefined : env.SESSION_PROXY_REQUIRED === 'true',
     mockNavigateLatencyMs: env.MOCK_NAVIGATE_LATENCY_MS,
     mockInteractLatencyMs: env.MOCK_INTERACT_LATENCY_MS,
     playwrightBrowser: env.PLAYWRIGHT_BROWSER,
