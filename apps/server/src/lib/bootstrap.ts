@@ -83,6 +83,7 @@ import { DrizzleRecipesRepo } from '../db/recipes-repo.js';
 import { DrizzleAgentSessionsRepo } from '../db/agent-sessions-repo.js';
 import { DrizzleAgentDecomposerUsageRecorder } from '../db/agent-decomposer-usage-recorder.js';
 import { AgentRuntime } from '../services/agent-runtime.js';
+import { loadRefusalPatterns, type RefusalPattern } from '../services/task-refusal.js';
 import { StubAgentExecutor } from '../services/agent-executor.js';
 import { ClaudeAgentDecomposer } from '../services/agent-decomposer-claude.js';
 import { DeterministicAgentDecomposer } from '../services/agent-decomposer-deterministic.js';
@@ -818,6 +819,42 @@ export async function createProductionDeps(
   // Arc 4 Wave 2.B sub-slice 8.18 — metrics registry is now constructed
   // earlier (before the audit service) so every downstream service can
   // accept it at construction time. See the construction block above.
+  // W592 — task-refusal start-gate ACTIVATION path (file-06 guardrail #3).
+  // The mechanism (W582) + run-loop wiring (W589) are in place; this is the
+  // pure-DATA on-switch: set DRIFTSTACK_TASK_REFUSAL_PATTERNS to a JSON array
+  // of { id, category, pattern, flags?, reason } (the policy authored by the
+  // founder/AUP — Tier-3) and restart. Unset/empty/malformed-JSON ⇒ no
+  // patterns ⇒ the gate stays a no-op (allows everything). loadRefusalPatterns
+  // is bias-safe: a bad individual entry is SKIPPED (logged), never thrown, so
+  // one typo can't void the list or crash boot.
+  const refusalPatternsRaw = process.env.DRIFTSTACK_TASK_REFUSAL_PATTERNS;
+  let refusalPatterns: readonly RefusalPattern[] = [];
+  if (refusalPatternsRaw && refusalPatternsRaw.trim().length > 0) {
+    let parsed: unknown = [];
+    try {
+      parsed = JSON.parse(refusalPatternsRaw);
+    } catch {
+      logger.warn(
+        { component: 'agent-runtime' },
+        'DRIFTSTACK_TASK_REFUSAL_PATTERNS is not valid JSON — task-refusal gate stays OFF',
+      );
+    }
+    const loaded = loadRefusalPatterns(parsed);
+    refusalPatterns = loaded.patterns;
+    if (loaded.skipped.length > 0) {
+      logger.warn(
+        { component: 'agent-runtime', skipped: loaded.skipped },
+        'task-refusal: some pattern entries were skipped (malformed) — they will NOT fire',
+      );
+    }
+    logger.info(
+      { component: 'agent-runtime', active_patterns: refusalPatterns.length },
+      refusalPatterns.length > 0
+        ? 'task-refusal start-gate ACTIVE'
+        : 'task-refusal start-gate configured but no valid patterns — gate is a no-op',
+    );
+  }
+
   const agentRuntime = new AgentRuntime({
     decomposer: agentDecomposer,
     executor: agentExecutor,
@@ -826,10 +863,10 @@ export async function createProductionDeps(
     usageRecorder: agentDecomposerUsageRecorder,
     eventBus: agentSessionEventBus,
     ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
-    // W589 — task-refusal audit logger. The pattern LIST stays unset until the
-    // founder/AUP supplies it (pure-data activation, Tier-3) → the start-gate
-    // is a no-op today; the logger is wired now so the audit trail is ready.
+    // W589 — task-refusal audit logger (which rule fired → audit trail).
     logger,
+    // W592 — the curated pattern list (founder/AUP via env). Empty ⇒ no-op.
+    ...(refusalPatterns.length > 0 ? { refusalPatterns } : {}),
   });
   // Q.1.c — per-session BYOK key cache. Pure in-memory; wired
   // unconditionally so the route can stash decrypted plaintexts
