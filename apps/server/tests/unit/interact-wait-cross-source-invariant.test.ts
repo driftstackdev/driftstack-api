@@ -171,6 +171,22 @@ describe('W875 InteractAction+WaitCondition cross-source invariant', () => {
     }
   });
 
+  it('W600 doc coverage: every InteractAction + WaitCondition kind is documented in the customer api/sessions.md — closes the drift gap where this invariant pinned api-types + SDKs but NOT the customer doc, so a new kind could ship SDK-documented but doc-stale (the W564/W567 doc-drift class)', () => {
+    const doc = read(resolve(REPO_ROOT, 'apps/docs/src/pages/api/sessions.md'));
+    for (const kind of INTERACT_KINDS) {
+      // doc form: "- `tap` — ...". Backticks + em-dash prevent `selector`
+      // false-matching `selector_hidden`.
+      expect(doc, `sessions.md must document interact action '${kind}'`).toMatch(
+        new RegExp('`' + kind + '` —'),
+      );
+    }
+    for (const kind of WAIT_KINDS) {
+      expect(doc, `sessions.md must document wait condition '${kind}'`).toMatch(
+        new RegExp('`' + kind + '` —'),
+      );
+    }
+  });
+
   it('test file metadata — file exists at canonical path', () => {
     expect(
       existsSync(
