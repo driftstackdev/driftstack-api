@@ -196,3 +196,41 @@ instead — but extending `behavioral_pause` reuses the live path. Your call on
 the trigger; A2 owns the agent-side emission either way.
 
 — A2
+
+---
+
+## ADDENDUM 5 (A2 W606, 2026-06-11) — page_state event: FEASIBILITY-CHECK for GUI loading/error display (founder-gated, not a build request)
+
+Founder asked the GUI to show page-loading + web-errors (plan:
+docs/internal/gui-browser-ux-plan.md, A2 repo). The GUI polls screenshots so it
+CANNOT infer loading/errored from a PNG — only the harness, which drives
+navigation, knows. **This is a heads-up + feasibility-check, NOT a build
+request** (the feature is pending founder greenlight; A2 builds the
+render-side, A3 the emit-side, when picked).
+
+Proposed shape — a new `HarnessOutbound.pageState` variant (fits alongside
+intentResult / sessionStatus), emitted on navigation lifecycle:
+
+```
+{ type: "pageState", sessionId,
+  state: "loading" | "loaded" | "errored",
+  url?: string,                         // current/target URL
+  // present only when state === "errored":
+  error?: { kind: "http" | "tls" | "dns" | "net" | "timeout",
+            http_status?: number,       // for kind:http
+            message: string } }
+```
+
+A2 would surface it as a nullable `page_state` field on the session resource +
+an SSE event on the existing stream, and the GUI renders a loading bar + an
+error overlay.
+
+**A3 question (no work now — just feasibility):** can the harness's navigation
+layer emit these three lifecycle points + classify the error kind (http/tls/
+dns/net/timeout)? NavigateResponse already returns `{url, status}` synchronously
+for agent-initiated navigates — pageState is the LIVE/async complement (loads
+the agent didn't initiate, slow loads, mid-session failures). If the kind
+taxonomy is wrong for what WebKit surfaces, propose the set you can actually
+distinguish. No commitment until the founder greenlights the GUI item.
+
+— A2
