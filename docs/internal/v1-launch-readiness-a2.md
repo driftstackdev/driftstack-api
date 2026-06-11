@@ -38,10 +38,14 @@ A1 (WebKit fork/atlas) + A3 (harness/runtime) carry their own readiness.
 
 ## 🔴 Genuinely blocking a _real_ v1 (work / decisions, A2 can't close alone)
 
-1. **Mac worker — `driver=mock` in prod.** This is THE blocker for real browser
-   sessions: every session is currently a mock. Needs A1's WebKit fork deployed
-   on a Mac + `DRIVER=webkit`. Cross-agent (A1 fork-deploy + founder Mac
-   hardware). Until then the product runs end-to-end but drives nothing real.
+1. **Mac worker — `driver=mock` in prod.** THE blocker for real browser
+   sessions: every session is currently a mock. Role split (founder-clarified
+   2026-06-11): **A1** makes the WebKit fork bit-identical (the browser);
+   **A3** owns the harness/runtime that _drives_ it (drive-bridge, already
+   built — gated on A1's `--enable-webdriver` fork-deploy + flipping
+   `DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1`); **A2's** control-plane dispatch side
+   (session-create → /v1/agent-sessions → LiveKit) is **done + live**. So the
+   real-drive integration is A1-fork + A3-runtime + a Mac — not A2 work.
 2. **Webhook delivery worker unwired in prod** — the API enqueues deliveries
    but no prod driver POSTs them (0 endpoints fire). Latent; founder-gated
    (don't auto-wire). Needed before webhooks are a real customer feature.

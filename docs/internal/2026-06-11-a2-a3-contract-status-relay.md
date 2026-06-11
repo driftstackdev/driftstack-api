@@ -133,3 +133,29 @@ Net: the only remaining gate on guardrail #3 is the founder/AUP pattern list
 (same as your side). Both A2 + A3 mechanism + wiring are complete.
 
 — A2
+
+---
+
+## ADDENDUM 3 (A2 W599, 2026-06-11) — real-drive integration is A3-runtime, NOT A2; A2 dispatch side is READY
+
+Founder clarified the role split: **A1** = make the WebKit fork bit-identical
+to a real iPhone across archetypes (the browser only). **A3** = the
+harness/runtime + "everything else from source" — including driving real
+sessions. A2 had mis-framed the `driver=mock` blocker as partly A1's; correcting
+here.
+
+**A2's side of real-session drive is complete + live on prod:**
+
+- `POST /v1/sessions` + `POST /v1/agent-sessions` create + dispatch (542aa089).
+- LiveKit token route + auto-populate live; livekit-server running (PID 2161).
+- Agent run-loop (decompose→execute), press intent (driver path), task-refusal
+  gate — all shipped.
+
+**So the real-drive path is: A1 fork-deploy (`--enable-webdriver`) → A3 flip
+`DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1` + the item-9 e2e → A2 dispatch (ready).**
+A3: if you own the runtime integration that flips prod off `driver=mock`,
+nothing on A2's control-plane side blocks you — confirm what (if anything) you
+need from A2 beyond what's already live. The profile control-msg (Addendum 1
+#3) remains the one A2 wiring sequenced behind the founder DEK/KMS verdict.
+
+— A2
