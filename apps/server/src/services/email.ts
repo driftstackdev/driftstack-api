@@ -323,6 +323,34 @@ function escapeVarsForHtml(vars: Record<string, string>): Record<string, string>
   return out;
 }
 
+// Each TEMPLATES entry produces a bare HTML fragment (`<p>…</p>`). Wrap that
+// fragment in a minimal, email-safe HTML document before it reaches the
+// transport. The two `<meta>` tags are the load-bearing part:
+//   • charset=utf-8 — the copy uses non-ASCII characters (em-dashes "—" in
+//     nearly every body, smart quotes in some subjects). Without an explicit
+//     charset some mail clients fall back to latin-1 and render them as
+//     mojibake ("â€"").
+//   • viewport — keeps the body from being zoomed out to desktop width on
+//     mobile clients that honour it.
+// Inline body styling gives a readable sans-serif default instead of each
+// client's serif fallback. Kept deliberately minimal — no external CSS, no
+// images, no tables — so it stays robust across Gmail/Outlook/Apple Mail and
+// doesn't trip spam heuristics. `title` is the email's subject (escaped) so
+// screen readers and clients that surface <title> announce something specific
+// rather than a generic "Driftstack".
+function wrapHtmlDocument(inner: string, title: string): string {
+  return (
+    '<!DOCTYPE html><html lang="en"><head>' +
+    '<meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    `<title>${escapeHtml(title)}</title>` +
+    '</head>' +
+    '<body style="margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#1a1a1a;">' +
+    inner +
+    '</body></html>'
+  );
+}
+
 const TEMPLATES = {
   'signup-verification': {
     subject: 'Verify your Driftstack account',
@@ -615,7 +643,7 @@ export function createEmailService({
         To: to,
         Subject: tpl.subject,
         TextBody: tpl.text(vars),
-        HtmlBody: tpl.html(escapeVarsForHtml(vars)),
+        HtmlBody: wrapHtmlDocument(tpl.html(escapeVarsForHtml(vars)), tpl.subject),
         ReplyTo: config!.replyTo,
         MessageStream: messageStream,
       });

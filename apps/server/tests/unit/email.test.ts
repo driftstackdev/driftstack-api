@@ -81,6 +81,32 @@ describe('createEmailService — configured', () => {
     expect(c.MessageStream).toBe('outbound');
   });
 
+  it('wraps the HTML body in a full email-safe document (DOCTYPE + utf-8 charset + viewport)', async () => {
+    const logger = makeLogger();
+    const client = makeStubClient();
+    const svc = createEmailService({ config, logger, client });
+    // Renewal-reminder copy contains an em-dash ("Heads up —") — the exact
+    // non-ASCII character that mojibakes without an explicit charset.
+    await svc.sendBillingRenewalReminder({
+      to: 'user@example.com',
+      renewalDate: new Date('2026-06-18T00:00:00Z'),
+      amountFormatted: '€199.00',
+      portalUrl: 'https://billing.driftstack.dev/portal',
+    });
+    const c = client.calls[0] as Record<string, string>;
+    const html = c.HtmlBody ?? '';
+    // Document shell present...
+    expect(html).toMatch(/^<!DOCTYPE html><html lang="en"><head>/);
+    expect(html).toContain('<meta charset="utf-8">');
+    expect(html).toContain('<meta name="viewport"');
+    expect(html.trimEnd()).toMatch(/<\/body><\/html>$/);
+    // <title> is the email subject, not a generic "Driftstack".
+    expect(html).toContain(`<title>${c.Subject}</title>`);
+    expect(c.Subject).toContain('renews in 7 days');
+    // ...wrapping (not replacing) the template fragment, em-dash intact.
+    expect(html).toContain('<p>Heads up — your Driftstack subscription renews');
+  });
+
   it('HTML-escapes interpolated values (injection guard); leaves the text body raw', async () => {
     const logger = makeLogger();
     const client = makeStubClient();
