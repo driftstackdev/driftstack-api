@@ -10,8 +10,9 @@ An **agent session** layers a chat-style decompose→execute loop on
 top of a regular driver-backed browser session. The customer sends
 natural-language messages (`"open https://example.com and capture a
 screenshot"`); the server's decomposer translates that into typed
-intents (`navigate`, `interact`, `wait`, `capture`); the runtime
-executes them; results stream back in the response.
+intents (`navigate`, `interact`, `wait`, `capture`, plus the
+behavioural `scroll` and `behavioral_pause`); the runtime executes
+them; results stream back in the response.
 
 Three operational modes:
 

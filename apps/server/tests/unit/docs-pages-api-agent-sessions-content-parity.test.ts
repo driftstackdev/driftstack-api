@@ -26,12 +26,12 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Agent sessions overview framing pinned: 'An agent session layers a chat-style decompose→execute loop on top of a regular driver-backed browser session. The customer sends natural-language messages (\"open https://example.com and capture a screenshot\"); the server's decomposer translates that into typed intents (navigate, interact, wait, capture); the runtime executes them; results stream back in the response.' — pinned so the chat-style + decompose→execute + 4-intent-types (navigate/interact/wait/capture) + streaming-results contract all stay documented", () => {
+  it('Agent sessions overview framing pinned (W554: intent list completed to all 6 kinds — navigate/interact/wait/capture + behavioural scroll/behavioral_pause): chat-style decompose→execute loop + NL messages + streaming-results contract stay documented', () => {
     expect(body).toMatch(
       /An \*\*agent session\*\* layers a chat-style decompose→execute loop on\s*\n?\s*top of a regular driver-backed browser session\./,
     );
     expect(body).toMatch(
-      /the server's decomposer translates that into typed\s*\n?\s*intents \(`navigate`, `interact`, `wait`, `capture`\); the runtime\s*\n?\s*executes them; results stream back in the response\./,
+      /the server's decomposer translates that into typed\s*\n?\s*intents \(`navigate`, `interact`, `wait`, `capture`, plus the\s*\n?\s*behavioural `scroll` and `behavioral_pause`\); the runtime executes\s*\n?\s*them; results stream back in the response\./,
     );
   });
 
