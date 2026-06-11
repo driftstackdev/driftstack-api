@@ -68,13 +68,18 @@ message }`. The harness owns navigation, so it's the source.
 exist. A2 adds a browser toolbar: editable URL bar (Enter → navigate), back /
 forward / reload buttons, and the page title. **Pure A2, no cross-agent dep.**
 
-## Recommended sequence (smallest-valuable-first, all founder-gated to start)
+## Recommended sequence (smallest-valuable-first; founder greenlit ALL 2026-06-11)
 
-1. **A2:** browser chrome (URL bar + nav buttons + title) — pure A2, immediate.
-2. **A2:** device frame + resizable window — pure A2, cosmetic-but-high-impact.
-3. **A2:** multi-session tab strip (pragmatic tabs) — pure A2.
-4. **Cross-agent:** loading/error display — A2 drafts the `page_state` wire
-   shape → relays to A3 → A3 emits → A2 renders.
+1. **A2:** browser chrome (URL bar + nav buttons + title) — ✅ SHIPPED W607
+   (9c814e2a): editable URL bar (Enter → navigate, bare-host → https), reload,
+   title; draft-URL local state so the poll can't clobber mid-type.
+2. **A2:** device frame + resizable window — ✅ SHIPPED W608 (3cfc2315):
+   toggleable iOS bezel (rounded + 10px border + dynamic-island notch),
+   persisted localStorage pref, tap-projection math untouched; window was
+   already resizable (tauri.conf.json minWidth 960 / minHeight 600).
+3. **A2:** multi-session tab strip (pragmatic tabs) — NEXT.
+4. **Cross-agent:** loading/error display — A2 drafted `page_state` shape +
+   relayed (W606); awaiting A3 feasibility reply, then A2 renders.
 5. **Deferred (Phase-4):** true multi-page-per-session tabs — needs A1 + A3 + A2
    design; not v1.
 
