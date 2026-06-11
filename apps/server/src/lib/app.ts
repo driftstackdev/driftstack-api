@@ -857,17 +857,32 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   }
 
+  // EG-API-1.4 — egress safeguard at API layer. Default: true iff a
+  // session-egress backend is wired (per planning 133 §"Egress
+  // safeguard enforcement"); the prod posture, unchanged. W615 — the
+  // SESSION_PROXY_REQUIRED env (deps.sessionProxyRequired) explicitly
+  // overrides: 'false' for self-hosted/testing where sessions egress
+  // from the operator's own machine (founder verdict 2026-06-11),
+  // 'true' to force-require regardless of backend detection.
+  const egressProxyRequired = deps.sessionProxyRequired ?? deps.sessionEgressService !== undefined;
+  // W635 — make the footgun visible: when a proxy is required on EVERY
+  // session-create, proxyless creates (including the onboarding flow)
+  // 400. That's correct once customer egress (SOCKS5) is GA, but until
+  // then it silently blocks onboarding — so warn at boot if someone
+  // re-engages the safeguard without realising (the W632-class regression).
+  if (egressProxyRequired) {
+    app.log.warn(
+      { component: 'egress-safeguard' },
+      'Egress safeguard ACTIVE: a proxy is required on every POST /v1/sessions; ' +
+        'proxyless session-creates (including customer onboarding) will 400. ' +
+        'Set SESSION_PROXY_REQUIRED=false to relax until customer egress (SOCKS5) is GA.',
+    );
+  }
+
   registerSessionRoutes(app, {
     service: deps.sessionsService,
     authRepo: deps.authRepo,
-    // EG-API-1.4 — egress safeguard at API layer. Default: true iff a
-    // session-egress backend is wired (per planning 133 §"Egress
-    // safeguard enforcement"); the prod posture, unchanged. W615 — the
-    // SESSION_PROXY_REQUIRED env (deps.sessionProxyRequired) explicitly
-    // overrides: 'false' for self-hosted/testing where sessions egress
-    // from the operator's own machine (founder verdict 2026-06-11),
-    // 'true' to force-require regardless of backend detection.
-    egressProxyRequired: deps.sessionProxyRequired ?? deps.sessionEgressService !== undefined,
+    egressProxyRequired,
     // 2026-05-20 — antidetect-browser-style profile binding. Routes
     // need the profiles service to validate profile_id ownership +
     // bump last_used_at when a session is created against a profile.

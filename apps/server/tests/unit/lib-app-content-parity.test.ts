@@ -247,6 +247,21 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     );
   });
 
+  it('W635 egress-safeguard boot-warn: when egressProxyRequired resolves true, app.log.warn flags that proxyless session-creates (incl. onboarding) will 400 + names SESSION_PROXY_REQUIRED=false as the relax knob — pinned so re-engaging the safeguard (the W632-class regression) is loud at boot, not a silent onboarding 400', () => {
+    expect(body).toMatch(
+      /const egressProxyRequired = deps\.sessionProxyRequired \?\? deps\.sessionEgressService !== undefined;/,
+    );
+    expect(body).toMatch(/if \(egressProxyRequired\) \{\s*\n?\s*app\.log\.warn\(/);
+    expect(body).toMatch(
+      /Egress safeguard ACTIVE: a proxy is required on every POST \/v1\/sessions/,
+    );
+    expect(body).toMatch(
+      /Set SESSION_PROXY_REQUIRED=false to relax until customer egress \(SOCKS5\) is GA\./,
+    );
+    // the route registration consumes the shared const (not a re-computed inline)
+    expect(body).toMatch(/registerSessionRoutes\(app, \{[\s\S]{0,160}?egressProxyRequired,/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
