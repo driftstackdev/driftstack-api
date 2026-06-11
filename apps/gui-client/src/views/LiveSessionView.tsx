@@ -217,8 +217,22 @@ export function LiveSessionView({
   // drive the existing navigate intent; reload re-navigates the current URL.
   // After navigating we refetch meta + a frame so the chrome + viewport reflect
   // the new page promptly (the poll would catch up anyway, but this is snappier).
+  // W623 — local per-session navigation history (the WebKit driver has no
+  // history route, so Back/Forward are GUI-side). historyRef holds the URLs
+  // navigateTo committed; historyIndexRef points at the current entry.
+  // A NEW navigation truncates any forward entries (browser semantics).
+  const historyRef = useRef<string[]>([]);
+  const historyIndexRef = useRef(-1);
+  const [historyNav, setHistoryNav] = useState({ canBack: false, canForward: false });
+  const syncHistoryNav = useCallback((): void => {
+    setHistoryNav({
+      canBack: historyIndexRef.current > 0,
+      canForward: historyIndexRef.current < historyRef.current.length - 1,
+    });
+  }, []);
+
   const navigateTo = useCallback(
-    async (rawUrl: string): Promise<void> => {
+    async (rawUrl: string, opts: { recordHistory?: boolean } = {}): Promise<void> => {
       if (!client) return;
       const url = rawUrl.trim();
       if (url.length === 0) return;
@@ -227,6 +241,18 @@ export function LiveSessionView({
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
         await client.sessions.navigate(sessionId, { url: target });
+        // W623 — record AFTER a successful navigate (failed navigations
+        // shouldn't pollute history). recordHistory=false for back/forward
+        // themselves (they move the index instead of appending).
+        if (opts.recordHistory !== false) {
+          const h = historyRef.current.slice(0, historyIndexRef.current + 1);
+          if (h[h.length - 1] !== target) {
+            h.push(target);
+            historyRef.current = h;
+            historyIndexRef.current = h.length - 1;
+          }
+          syncHistoryNav();
+        }
         await fetchSessionMeta();
         await fetchFrame();
       } catch (err) {
@@ -238,8 +264,24 @@ export function LiveSessionView({
         }));
       }
     },
-    [client, sessionId, fetchSessionMeta, fetchFrame, settings.baseUrl],
+    [client, sessionId, fetchSessionMeta, fetchFrame, settings.baseUrl, syncHistoryNav],
   );
+
+  const goBack = useCallback((): void => {
+    if (historyIndexRef.current <= 0) return;
+    historyIndexRef.current -= 1;
+    syncHistoryNav();
+    const url = historyRef.current[historyIndexRef.current];
+    if (url !== undefined) void navigateTo(url, { recordHistory: false });
+  }, [navigateTo, syncHistoryNav]);
+
+  const goForward = useCallback((): void => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) return;
+    historyIndexRef.current += 1;
+    syncHistoryNav();
+    const url = historyRef.current[historyIndexRef.current];
+    if (url !== undefined) void navigateTo(url, { recordHistory: false });
+  }, [navigateTo, syncHistoryNav]);
 
   // Mount: fetch session meta + start frame polling.
   useEffect(() => {
@@ -435,6 +477,10 @@ export function LiveSessionView({
         onToggleRecording={toggleRecording}
         onRefresh={() => void fetchFrame()}
         onNavigate={(url) => void navigateTo(url)}
+        canBack={historyNav.canBack}
+        canForward={historyNav.canForward}
+        onBackNav={goBack}
+        onForwardNav={goForward}
         onReload={() => {
           if (state.currentUrl !== null) void navigateTo(state.currentUrl);
         }}
@@ -496,6 +542,11 @@ interface HeaderProps {
   onToggleRecording: () => void;
   onRefresh: () => void;
   onNavigate: (url: string) => void;
+  /** W623 — GUI-side history (the driver has no history route). */
+  canBack: boolean;
+  canForward: boolean;
+  onBackNav: () => void;
+  onForwardNav: () => void;
   onReload: () => void;
   onDestroy: () => void;
 }
@@ -531,6 +582,27 @@ function Header(props: HeaderProps): JSX.Element {
             props.onNavigate(draftUrl);
           }}
         >
+          {/* W623 — back/forward over the GUI-side history stack. */}
+          <button
+            type="button"
+            className="btn-secondary shrink-0 px-2 disabled:opacity-40"
+            title="Back"
+            aria-label="Back"
+            disabled={!props.canBack}
+            onClick={props.onBackNav}
+          >
+            ←
+          </button>
+          <button
+            type="button"
+            className="btn-secondary shrink-0 px-2 disabled:opacity-40"
+            title="Forward"
+            aria-label="Forward"
+            disabled={!props.canForward}
+            onClick={props.onForwardNav}
+          >
+            →
+          </button>
           <button
             type="button"
             className="btn-secondary shrink-0 px-2"

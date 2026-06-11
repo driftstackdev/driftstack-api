@@ -231,6 +231,20 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     }
   });
 
+  it('W623 GUI-side back/forward history: navigateTo records AFTER successful navigate (failed navigations excluded), new navigation truncates forward entries, back/forward move the index with recordHistory:false, buttons disabled at the stack edges — pinned because the driver has no history route (the stack is the only history)', () => {
+    expect(body).toMatch(/const historyRef = useRef<string\[\]>\(\[\]\);/);
+    expect(body).toMatch(/const historyIndexRef = useRef\(-1\);/);
+    expect(body).toMatch(
+      /const h = historyRef\.current\.slice\(0, historyIndexRef\.current \+ 1\);/,
+    );
+    expect(body).toMatch(/if \(opts\.recordHistory !== false\) \{/);
+    expect(body).toMatch(/void navigateTo\(url, \{ recordHistory: false \}\);/);
+    expect(body).toMatch(/disabled=\{!props\.canBack\}/);
+    expect(body).toMatch(/disabled=\{!props\.canForward\}/);
+    expect(body).toMatch(/aria-label="Back"/);
+    expect(body).toMatch(/aria-label="Forward"/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
