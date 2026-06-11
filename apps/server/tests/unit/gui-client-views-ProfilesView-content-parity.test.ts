@@ -167,6 +167,12 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     );
   });
 
+  it('W638 reopenStream stale-binding self-heal: a 403/404 from livekitToken (closed/gone agent session that boundSession optimistically showed as running) clears the profile binding + refreshes so it self-heals to idle instead of re-offering a Live-view that 403s', () => {
+    expect(body).toMatch(
+      /if \(err instanceof DriftstackError && \(err\.status === 403 \|\| err\.status === 404\)\) \{\s*\n?\s*await clearProfileSession\(profileId\)\.catch\(\(\) => undefined\);\s*\n?\s*await refresh\(false\);\s*\n?\s*\}/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

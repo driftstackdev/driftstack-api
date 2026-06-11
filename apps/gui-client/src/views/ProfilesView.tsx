@@ -233,6 +233,17 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       setWatchInfo(info);
       setWatchSource({ profileId, agentSessionId });
     } catch (err) {
+      // W638 — a profile bound to a CLOSED agent session 403s here ("Cannot
+      // mint LiveKit token for closed agent session"); 404 if it's gone.
+      // boundSession (W624) can't cheaply tell live from closed (no list
+      // endpoint), so it optimistically showed the profile "running". On
+      // that signal the binding is stale — clear it so the profile
+      // self-heals to idle instead of repeatedly offering a Live-view that
+      // 403s.
+      if (err instanceof DriftstackError && (err.status === 403 || err.status === 404)) {
+        await clearProfileSession(profileId).catch(() => undefined);
+        await refresh(false);
+      }
       setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
       setBusyId(null);
