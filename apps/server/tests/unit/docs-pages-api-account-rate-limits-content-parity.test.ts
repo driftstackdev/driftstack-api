@@ -144,6 +144,10 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     expect(p).toMatch(/`x-ratelimit-limit`/);
     expect(p).toMatch(/`x-ratelimit-remaining`/);
     expect(p).toMatch(/`x-ratelimit-reset`/);
+    // W561 — IETF draft names documented alongside, incl. the relative-reset
+    // semantic (ratelimit-reset = seconds-from-now, not a timestamp).
+    expect(p).toMatch(/`ratelimit-limit` \/ `ratelimit-remaining` \/\s*\n?`ratelimit-reset`/);
+    expect(p).toMatch(/`ratelimit-reset` is \*\*relative\*\* seconds-from-now/);
     // Invariant: headers are emitted regardless of status code so
     // retry logic can read them after a 4xx/429.
     expect(p).toMatch(/headers\s*\n?are emitted regardless of HTTP status/);

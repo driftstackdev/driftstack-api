@@ -164,6 +164,13 @@ These headers are also surfaced on `429` responses; combine
 `x-ratelimit-remaining=0` + `Retry-After` to drive a back-off
 without an extra round-trip.
 
+The IETF draft-standard `ratelimit-limit` / `ratelimit-remaining` /
+`ratelimit-reset` names are emitted alongside the `x-` set. One
+semantic difference: `ratelimit-reset` is **relative** seconds-from-now
+(per the draft), while `x-ratelimit-reset` is an absolute unix
+timestamp. Full table at
+[/reference/rate-limits](/reference/rate-limits).
+
 ## What happens when you hit a cap
 
 The API returns HTTP 429 with an RFC 9457 problem-details body:
