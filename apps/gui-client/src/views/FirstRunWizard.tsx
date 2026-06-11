@@ -26,7 +26,7 @@
 // founder name; no AI / Anthropic references in any visible string.
 
 import { useEffect, useState } from 'react';
-import { Driftstack } from '@driftstack/sdk';
+import { Driftstack, DriftstackError } from '@driftstack/sdk';
 import { TitleBar } from '../components/TitleBar';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { useSettings } from '../lib/SettingsContext';
@@ -78,7 +78,9 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
       await update({ apiKey: trimmedKey, baseUrl: trimmedUrl });
       setStep('profile');
     } catch (err) {
-      setValidationError(diagnosticFetchError(err, trimmedUrl) ?? friendlyError(err));
+      setValidationError(
+        diagnosticFetchError(err, trimmedUrl) ?? friendlyError(err, mode, trimmedUrl),
+      );
     } finally {
       setValidating(false);
     }
@@ -670,7 +672,21 @@ export function ProfileStep({
 
 // ─── helpers ───────────────────────────────────────────────────────
 
-function friendlyError(err: unknown): string {
+function friendlyError(err: unknown, mode?: 'cloud' | 'self-hosted', baseUrl?: string): string {
+  // W566 — a 401 on the key-validation call is the single most common
+  // onboarding stumble, and the fix differs by deployment mode. A key is
+  // bound to the server (and DB) it was minted on, so a cloud key fails
+  // against a self-hosted server and vice-versa. Point the customer at the
+  // RIGHT place instead of leaving them with a bare "unauthorized".
+  if (err instanceof DriftstackError && err.status === 401) {
+    if (mode === 'self-hosted') {
+      const where = baseUrl
+        ? `your own server's dashboard (${baseUrl})`
+        : "your own server's dashboard";
+      return `Authentication failed (401). In self-hosted mode the API key must be created on ${where} — a key from app.driftstack.dev won't authenticate against your own server.`;
+    }
+    return 'Authentication failed (401). Double-check the key, or create a new one at app.driftstack.dev/api-keys.';
+  }
   if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') {
     return err.message;
   }
