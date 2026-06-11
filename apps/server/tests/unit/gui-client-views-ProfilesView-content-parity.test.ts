@@ -146,6 +146,21 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).toMatch(/await client\.agentSessions\.livekitToken\(agentSessionId\);/);
   });
 
+  it('W625 mock-driver heads-up: ProfilesView reads useConnectionStatus(settings.baseUrl).driver and renders a data-banner="mock-driver" notice only when driver===\'mock\'; the hook parses driver from /version (mock|webkit|playwright, else null) — pinned so a mock deployment sets launch expectations up front instead of the customer hitting an empty stream post-launch', () => {
+    expect(body).toMatch(
+      /import \{ useConnectionStatus \} from '\.\.\/lib\/use-connection-status';/,
+    );
+    expect(body).toMatch(/const serverDriver = useConnectionStatus\(settings\.baseUrl\)\.driver;/);
+    expect(body).toMatch(/\{serverDriver === 'mock' && \(/);
+    expect(body).toMatch(/data-banner="mock-driver"/);
+    // The hook actually surfaces driver from /version.
+    const hook = read(resolve(REPO_ROOT, 'apps/gui-client/src/lib/use-connection-status.ts'));
+    expect(hook).toMatch(/driver: ServerDriver \| null;/);
+    expect(hook).toMatch(
+      /body\.driver === 'mock' \|\|\s*\n?\s*body\.driver === 'webkit' \|\|\s*\n?\s*body\.driver === 'playwright'/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

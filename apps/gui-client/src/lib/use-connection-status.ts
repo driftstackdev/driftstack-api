@@ -25,10 +25,18 @@ const PROBE_TIMEOUT_MS = 8_000;
 
 export type ConnectionState = 'connecting' | 'connected' | 'offline';
 
+/** W625 — the session driver the connected server runs (from /version).
+ *  `mock` means launches won't open a real browser, so the GUI can warn
+ *  up front instead of letting the customer discover it post-launch. */
+export type ServerDriver = 'mock' | 'webkit' | 'playwright';
+
 export interface ConnectionStatus {
   state: ConnectionState;
   lastOkAt: number | null;
   lastError: string | null;
+  /** W625 — null until a /version probe succeeds (or if the field is absent
+   *  on an older server). */
+  driver: ServerDriver | null;
 }
 
 export function useConnectionStatus(baseUrl: string): ConnectionStatus {
@@ -36,13 +44,14 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
     state: 'connecting',
     lastOkAt: null,
     lastError: null,
+    driver: null,
   });
   const probeRef = useRef<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setStatus({ state: 'connecting', lastOkAt: null, lastError: null });
+    setStatus({ state: 'connecting', lastOkAt: null, lastError: null, driver: null });
 
     async function probe(): Promise<void> {
       const trimmed = baseUrl.trim().replace(/\/+$/, '');
@@ -59,13 +68,29 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
         window.clearTimeout(timer);
         if (cancelled) return;
         if (res.ok) {
-          setStatus({ state: 'connected', lastOkAt: Date.now(), lastError: null });
+          // W625 — parse the driver from /version so the UI can warn on mock.
+          let driver: ServerDriver | null = null;
+          try {
+            const body = (await res.json()) as { driver?: unknown };
+            if (
+              body.driver === 'mock' ||
+              body.driver === 'webkit' ||
+              body.driver === 'playwright'
+            ) {
+              driver = body.driver;
+            }
+          } catch {
+            // /version body unreadable — leave driver null (banner just won't show).
+          }
+          if (cancelled) return;
+          setStatus({ state: 'connected', lastOkAt: Date.now(), lastError: null, driver });
           return;
         }
         setStatus((prev) => ({
           state: 'offline',
           lastOkAt: prev.lastOkAt,
           lastError: `HTTP ${res.status}`,
+          driver: prev.driver,
         }));
       } catch (err) {
         window.clearTimeout(timer);
@@ -80,6 +105,7 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
           state: 'offline',
           lastOkAt: prev.lastOkAt,
           lastError: message,
+          driver: prev.driver,
         }));
       }
     }

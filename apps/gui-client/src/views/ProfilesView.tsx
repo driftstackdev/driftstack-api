@@ -19,6 +19,7 @@ import { ProxyChip } from '../components/ProxyChip';
 import { RelativeTime } from '../components/RelativeTime';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import { useSettings } from '../lib/SettingsContext';
+import { useConnectionStatus } from '../lib/use-connection-status';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import {
@@ -85,6 +86,11 @@ export interface ProfilesViewProps {
 
 export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProps): JSX.Element {
   const { client, settings, accountMe, refreshAccountMe } = useSettings();
+  // W625 — surface the connected server's session driver so we can warn up
+  // front that a mock-driver deployment won't open a real browser on launch
+  // (the recurring "I launched but nothing opened" confusion). Reuses the
+  // 30s /version poll the title-bar pill already runs; null until first probe.
+  const serverDriver = useConnectionStatus(settings.baseUrl).driver;
   // 2026-05-20 — antidetect-browser-style hub: profiles are first-class,
   // sessions are an implementation detail of "this profile is running".
   // Track live sessions + GUI-local bindings so we can show per-profile
@@ -424,6 +430,20 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
+      {/* W625 — honest heads-up: a mock-driver server can't open a real
+          browser, so launches will show an empty stream / placeholder. Set
+          expectations here instead of letting the customer discover it after
+          launching. Only shows once /version confirms driver==='mock'. */}
+      {serverDriver === 'mock' && (
+        <div
+          data-banner="mock-driver"
+          className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-2xs text-ink-secondary"
+        >
+          This server runs the <span className="mono">mock</span> driver — launching a profile won’t
+          open a real browser yet (no WebKit worker is connected). The session, viewer and controls
+          still work for testing the flow end-to-end.
+        </div>
+      )}
       <header className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-col gap-0.5">
