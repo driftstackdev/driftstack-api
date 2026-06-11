@@ -23,7 +23,9 @@ import {
   connectToAgentSession,
   createLivekitRoom,
   type LivekitConnectionState,
+  type Room,
 } from '../lib/livekit';
+import { useInputCapture } from '../lib/livekit-input-capture';
 
 export interface AgentSessionPanelProps {
   /** The LiveKit join info returned by the server — either from the
@@ -43,6 +45,13 @@ export interface AgentSessionPanelProps {
    *  this to a fallback (e.g. open the polling viewer); rendered as a
    *  button on the no-publisher overlay. */
   onNoPublisher?: () => void;
+  /** Simulator mode (the floating-iPhone window): when true, the LK.6.d
+   *  input-capture is wired so mouse/keyboard on the video drive the real
+   *  device (forwarded over the LiveKit DataChannel to the Mac-side CGEvent
+   *  decoder). Default false keeps existing embeds (dashboard / in-app
+   *  overlay) subscriber-only. Capture engages only once the customer clicks
+   *  into the screen (`engaged`), so it never hijacks the rest of the UI. */
+  interactive?: boolean;
 }
 
 /** W617 — how long a connected-but-videoless room waits before the panel
@@ -57,9 +66,17 @@ export function AgentSessionPanel({
   aspectRatio = IPHONE_16_PRO_ASPECT_RATIO,
   onStateChange,
   onNoPublisher,
+  interactive = false,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
+  // Simulator control: the live LiveKit room is lifted to state so the
+  // input-capture hook can publish on its DataChannel. In `interactive` mode
+  // (the dedicated floating-iPhone window) capture is on — the window IS the
+  // device, so window-focus naturally scopes the keyboard and there's no other
+  // UI to hijack. Non-interactive embeds stay subscriber-only.
+  const [room, setRoom] = useState<Room | null>(null);
+  useInputCapture({ room, videoRef, enabled: interactive });
   // W617 — track whether a video track ever arrived; 'waiting' →
   // 'publishing' on TrackSubscribed, 'waiting' → 'none' on timeout after
   // connect. 'none' renders the honest no-worker overlay.
@@ -85,6 +102,9 @@ export function AgentSessionPanel({
   useEffect(() => {
     let cancelled = false;
     const room = createLivekitRoom();
+    // Expose the room to the input-capture hook (simulator control). Cleared
+    // in cleanup so a stale room can't receive input after disconnect.
+    setRoom(room);
     const setS = (next: LivekitConnectionState): void => {
       setState(next);
       onStateChangeRef.current?.(next);
@@ -135,6 +155,7 @@ export function AgentSessionPanel({
     return () => {
       cancelled = true;
       if (noPublisherTimer !== null) clearTimeout(noPublisherTimer);
+      setRoom(null);
       void (room as any).disconnect();
     };
     // Reconnect only when the connection identity (ws_url + token) changes, NOT

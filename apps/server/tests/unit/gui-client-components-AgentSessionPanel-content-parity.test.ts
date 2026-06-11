@@ -75,8 +75,12 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
 
   it('LiveKit helpers imported from ../lib/livekit pinned: createLivekitRoom + connectToAgentSession + LivekitConnectionState. Drift to inlining LiveKit-SDK calls would duplicate the helper logic + break the test-injectability', () => {
     expect(body).toMatch(
-      /RoomEvent,\s*\n?\s*connectToAgentSession,\s*\n?\s*createLivekitRoom,\s*\n?\s*type LivekitConnectionState,\s*\n?\s*\} from '\.\.\/lib\/livekit';/,
+      /RoomEvent,\s*\n?\s*connectToAgentSession,\s*\n?\s*createLivekitRoom,\s*\n?\s*type LivekitConnectionState,\s*\n?\s*type Room,\s*\n?\s*\} from '\.\.\/lib\/livekit';/,
     );
+    // Simulator control (founder 2026-06-11): the LK.6.d input-capture hook is
+    // wired so `interactive` embeds (the floating-iPhone window) drive the device.
+    expect(body).toMatch(/import \{ useInputCapture \} from '\.\.\/lib\/livekit-input-capture';/);
+    expect(body).toMatch(/useInputCapture\(\{ room, videoRef, enabled: interactive \}\);/);
   });
 
   it('Connect effect reconnects ONLY on the connection identity (deps [info.ws_url, info.token]) and routes onStateChange through a ref — pinned so a consumer passing an inline onStateChange (the LK.6.c badge usage) cannot make the effect re-run every render and disconnect+reconnect the LiveKit room (streaming reconnect-thrash). A regression to [info, onStateChange] re-introduces that.', () => {

@@ -1,6 +1,7 @@
 import { Component, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { SimulatorWindow } from './views/SimulatorWindow';
 import { ConfirmProvider } from './components/ConfirmProvider';
 import { DevLogPanel } from './components/DevLogPanel';
 import { installLogCapture } from './lib/log-buffer';
@@ -93,16 +94,31 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, { failed: boo
 try {
   const root = document.getElementById('root');
   if (!root) throw new Error('#root element missing from index.html');
+  // The floating-iPhone simulator opens as a separate Tauri window pointed at
+  // `?window=simulator` — that window renders ONLY the device (no app chrome).
+  const isSimulator = new URLSearchParams(window.location.search).get('window') === 'simulator';
+  if (isSimulator) {
+    // The window is `transparent: true` — make the webview see-through so only
+    // the device frame paints (the body otherwise fills it with bg-surface-base).
+    document.documentElement.style.background = 'transparent';
+    document.body.style.background = 'transparent';
+    root.style.background = 'transparent';
+  }
   createRoot(root).render(
     <StrictMode>
       <RootErrorBoundary>
-        <ConfirmProvider>
-          <App />
-        </ConfirmProvider>
+        {isSimulator ? (
+          <SimulatorWindow />
+        ) : (
+          <ConfirmProvider>
+            <App />
+          </ConfirmProvider>
+        )}
       </RootErrorBoundary>
       {/* Outside the error boundary: the dev-log panel stays available even if
-          the App tree throws (so you can read what failed). */}
-      <DevLogPanel />
+          the App tree throws (so you can read what failed). Not in the bare
+          simulator window. */}
+      {!isSimulator && <DevLogPanel />}
     </StrictMode>,
   );
 } catch (err) {

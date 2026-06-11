@@ -18,6 +18,7 @@ import {
 import { ProxyChip } from '../components/ProxyChip';
 import { RelativeTime } from '../components/RelativeTime';
 import { ARCHETYPE_REGISTRY, type ArchetypeStatus, type LiveKitInfo } from '@driftstack/sdk';
+import { openSimulatorWindow } from '../lib/open-simulator';
 import { useSettings } from '../lib/SettingsContext';
 import { useConnectionStatus } from '../lib/use-connection-status';
 import { DriftstackError, type Session } from '../lib/client';
@@ -230,8 +231,11 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     setBusyId(profileId);
     try {
       const info = await client.agentSessions.livekitToken(agentSessionId);
-      setWatchInfo(info);
       setWatchSource({ profileId, agentSessionId });
+      // Open the floating-iPhone simulator window (the standard experience).
+      // Falls back to the in-app overlay when not under Tauri (browser preview).
+      const opened = await openSimulatorWindow({ sessionId: agentSessionId, info });
+      if (!opened) setWatchInfo(info);
     } catch (err) {
       // W638 — a profile bound to a CLOSED agent session 403s here ("Cannot
       // mint LiveKit token for closed agent session"); 404 if it's gone.
@@ -331,10 +335,16 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       const created = await client.agentSessions.create({ profile_id: profile.id });
       await markLaunched(profile.id, created.id);
       if (created.livekit) {
-        setWatchInfo(created.livekit);
         // W617 — remember which profile/agent-session backs the stream so
         // the no-publisher fallback can re-launch as a direct session.
         setWatchSource({ profileId: profile.id, agentSessionId: created.id });
+        // Open the floating-iPhone simulator window (the standard experience).
+        // Falls back to the in-app overlay when not under Tauri (browser preview).
+        const opened = await openSimulatorWindow({
+          sessionId: created.id,
+          info: created.livekit,
+        });
+        if (!opened) setWatchInfo(created.livekit);
       } else {
         // W611/W613 — no livekit block (deployment without LiveKit, e.g. a
         // self-hosted/mock-driver server): fall back to the polling live

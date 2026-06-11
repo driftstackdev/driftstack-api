@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "simulator",
+  "description": "Capabilities for the floating-iPhone simulator windows (label simulator-*): drag the frame to move, focus, close, and render the live session webview. Deliberately minimal — no fs/shell/store; the device window only needs windowing + webview + events.",
+  "windows": ["simulator-*"],
+  "permissions": [
+    "core:window:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-focus",
+    "core:window:allow-close",
+    "core:window:allow-set-always-on-top",
+    "core:webview:default",
+    "core:event:default"
+  ]
+}

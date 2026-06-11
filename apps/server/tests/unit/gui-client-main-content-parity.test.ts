@@ -50,18 +50,22 @@ describe('W486.B apps/gui-client/src/main.tsx content parity', () => {
     );
   });
 
-  it('Render tree pinned: createRoot(root).render with StrictMode > RootErrorBoundary > ConfirmProvider > App — pinned so StrictMode stays at the top, the error boundary stays wrapping the app (render-tree throws surface as RENDER_ERROR, not a blank), and ConfirmProvider keeps useConfirm working everywhere', () => {
+  it('Render tree pinned: createRoot(root).render with StrictMode > RootErrorBoundary > (simulator ? SimulatorWindow : ConfirmProvider > App) — pinned so StrictMode stays at the top, the error boundary stays wrapping the app, ConfirmProvider keeps useConfirm working, and the floating-iPhone simulator window (founder 2026-06-11) renders bare (no app chrome) under the same boundary', () => {
     expect(body).toMatch(/import \{ ConfirmProvider \} from '\.\/components\/ConfirmProvider';/);
+    expect(body).toMatch(/import \{ SimulatorWindow \} from '\.\/views\/SimulatorWindow';/);
     expect(body).toMatch(/createRoot\(root\)\.render\(/);
-    // Discrete ordered pins (NOT one long backtracking regex): the four tree
-    // levels must appear, in order, with the boundary inside StrictMode and
-    // ConfirmProvider inside the boundary.
+    // Discrete ordered pins (NOT one long backtracking regex): StrictMode wraps
+    // the error boundary, which wraps the conditional. The simulator window
+    // (?window=simulator) renders bare; otherwise ConfirmProvider > App.
     expect(body).toMatch(/<StrictMode>\s*<RootErrorBoundary>/);
-    expect(body).toMatch(/<RootErrorBoundary>\s*<ConfirmProvider>/);
+    expect(body).toMatch(/<RootErrorBoundary>\s*\{isSimulator \? \(\s*\n?\s*<SimulatorWindow \/>/);
     expect(body).toMatch(/<ConfirmProvider>\s*<App \/>/);
     // DevLogPanel (GUI W232 d) renders OUTSIDE the error boundary but inside
-    // StrictMode, so the dev-log view survives an App-tree throw.
-    expect(body).toMatch(/<\/RootErrorBoundary>[\s\S]*?<DevLogPanel \/>\s*<\/StrictMode>/);
+    // StrictMode (gated off in the bare simulator window), so the dev-log view
+    // survives an App-tree throw.
+    expect(body).toMatch(
+      /<\/RootErrorBoundary>[\s\S]*?\{!isSimulator && <DevLogPanel \/>\}\s*<\/StrictMode>/,
+    );
   });
 
   it('Dev-log capture wired (GUI W232 d): imports installLogCapture + DevLogPanel, calls installLogCapture() at module top (so startup logs are retained), renders <DevLogPanel /> — pinned so the in-app log view + console/error capture cannot silently regress', () => {
