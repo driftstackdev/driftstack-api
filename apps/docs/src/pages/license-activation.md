@@ -22,7 +22,7 @@ On first launch, the GUI client opens a five-step wizard:
 2. **Deployment mode** — radio: **Cloud** (`https://api.driftstack.dev`) or **Self-hosted** (you paste the URL — defaults to `http://localhost:3000`, matching the port `apps/server` binds to in dev). The GUI is a control panel; the Self-hosted branch points it at a Driftstack Node server you operate yourself.
 3. **API key** — paste the key. The wizard immediately calls `GET /v1/account/me` to validate. You see one of:
    - ✅ valid — wizard advances.
-   - ❌ wrong key — "Authentication failed. Check the value at app.driftstack.dev/api-keys."
+   - ❌ wrong key — the message is deployment-aware. Cloud mode: "Authentication failed (401). Double-check the key, or create a new one at app.driftstack.dev/api-keys." Self-hosted mode explains that the key must be created on your own server's dashboard — a key from app.driftstack.dev won't authenticate against a self-hosted server (keys are bound to the deployment that minted them).
    - ❌ unreachable — "Couldn't reach the control plane at `<url>`. Check the URL and your network."
    - ❌ tier-suspended — "This account is suspended. Email support@driftstack.dev."
 4. **First profile** (skippable) — name + archetype picker. The wizard calls `POST /v1/profiles` against the validated client.
@@ -67,7 +67,7 @@ Tauri Updater + GitHub Releases ship updates automatically. The app polls the ma
 
 ## Troubleshooting
 
-- **"Authentication failed"** — verify the key in [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys). Revoking and reissuing the key is the safest reset.
+- **"Authentication failed"** — in cloud mode, verify the key in [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys); revoking and reissuing the key is the safest reset. In self-hosted mode, make sure the key was created on the server the GUI points at — keys are bound to the deployment that minted them, so a cloud key never works against your own server (and vice-versa). Settings also re-validates the key on every save and shows the same guidance inline.
 - **"Couldn't reach control plane"** — for cloud, check [status.driftstack.dev](https://status.driftstack.dev). For self-hosted, check your control plane's `/v1/status` endpoint directly.
 - **Wizard re-fires on every launch** — the keychain backend may be unavailable. On Linux, install `gnome-keyring` or `kwallet`. On macOS, check that the app has Keychain entitlements (re-install if recently quarantined).
 - **Tier-suspended on activation** — the account is in a suspended state in billing. Email [support@driftstack.dev](mailto:support@driftstack.dev) with the account email and we'll resolve.

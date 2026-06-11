@@ -166,9 +166,14 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     const p = read(LIC);
 
     expect(p).toMatch(/✅ valid — wizard advances\./);
+    // W578 — wrong-key copy is deployment-aware since W566 (wizard) +
+    // W577 (Settings): cloud points at app.driftstack.dev/api-keys,
+    // self-hosted explains deployment-bound keys.
+    expect(p).toMatch(/❌ wrong key — the message is deployment-aware\./);
     expect(p).toMatch(
-      /❌ wrong key — "Authentication failed\. Check the value at app\.driftstack\.dev\/api-keys\."/,
+      /Cloud mode: "Authentication failed \(401\)\. Double-check the key, or create a new one at app\.driftstack\.dev\/api-keys\."/,
     );
+    expect(p).toMatch(/keys are bound to the deployment that minted them/);
     expect(p).toMatch(
       /❌ unreachable — "Couldn't reach the control plane at `<url>`\. Check the URL and your network\."/,
     );
@@ -220,7 +225,10 @@ describe('W785 docs quickstart + license-activation content parity', () => {
   it("CRITICAL 4-troubleshooting bullet set pinned — Authentication failed + Couldn't reach + Wizard re-fires + Tier-suspended. Drift to dropping a row would force customers to file a support ticket for self-recoverable issues.", () => {
     const p = read(LIC);
 
-    expect(p).toMatch(/\*\*"Authentication failed"\*\* — verify the key in/);
+    // W578 — auth-failed bullet covers both modes (deployment-bound keys).
+    expect(p).toMatch(/\*\*"Authentication failed"\*\* — in cloud mode, verify the key in/);
+    expect(p).toMatch(/a cloud key never works against your own server/);
+    expect(p).toMatch(/Settings also re-validates the key on every save/);
     expect(p).toMatch(/\*\*"Couldn't reach control plane"\*\* — for cloud, check/);
     expect(p).toMatch(
       /\*\*Wizard re-fires on every launch\*\* — the keychain backend may be unavailable/,
