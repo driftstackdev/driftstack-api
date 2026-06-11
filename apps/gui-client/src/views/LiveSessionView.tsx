@@ -99,6 +99,17 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
     manualControl: false,
     lastTap: null,
   });
+  // W608 — device-frame bezel preference, persisted so power users who turn
+  // it off for debugging keep the bare image across app restarts.
+  const [deviceFrame, setDeviceFrame] = useState(
+    () => localStorage.getItem('ds_gui_device_frame') !== 'off',
+  );
+  const toggleDeviceFrame = useCallback((): void => {
+    setDeviceFrame((on) => {
+      localStorage.setItem('ds_gui_device_frame', on ? 'off' : 'on');
+      return !on;
+    });
+  }, []);
   // Refs avoid restarting the interval every state mutation.
   const pausedRef = useRef(false);
   const intervalIdRef = useRef<number | null>(null);
@@ -399,6 +410,8 @@ export function LiveSessionView({ sessionId, onBack }: LiveSessionViewProps): JS
         frame={state.frame}
         loading={state.loading}
         manualControl={state.manualControl}
+        deviceFrame={deviceFrame}
+        onToggleDeviceFrame={toggleDeviceFrame}
         lastTap={state.lastTap}
         onImgClick={handleImgClick}
         onImgWheel={handleImgWheel}
@@ -529,6 +542,8 @@ function Viewport({
   frame,
   loading,
   manualControl,
+  deviceFrame,
+  onToggleDeviceFrame,
   lastTap,
   onImgClick,
   onImgWheel,
@@ -536,6 +551,8 @@ function Viewport({
   frame: FrameState | null;
   loading: boolean;
   manualControl: boolean;
+  deviceFrame: boolean;
+  onToggleDeviceFrame: () => void;
   lastTap: { x: number; y: number; at: number } | null;
   onImgClick: (e: React.MouseEvent<HTMLImageElement>) => void;
   onImgWheel: (e: React.WheelEvent<HTMLImageElement>) => void;
@@ -545,11 +562,39 @@ function Viewport({
   const tapAgeMs = lastTap !== null ? Date.now() - lastTap.at : Infinity;
   const showTapMarker = lastTap !== null && tapAgeMs < 600;
   return (
+    // W608 — iOS device-frame treatment (toggleable): thick rounded phone
+    // bezel + a pointer-events-none dynamic-island notch overlay. Purely
+    // cosmetic — the <img> and TapMarker stay direct children of this
+    // positioned container so the tap-projection math (img.parentElement
+    // rect) is unchanged, and the bezel scales with the resizable window
+    // because the img is object-contain (archetype aspect is whatever the
+    // frame's natural dimensions are — nothing hardcoded).
     <div
-      className={`relative flex flex-1 items-center justify-center overflow-hidden rounded border bg-black ${
-        manualControl ? 'border-accent' : 'border-surface-divider'
+      data-device-frame={deviceFrame ? 'on' : 'off'}
+      className={`relative flex flex-1 items-center justify-center overflow-hidden bg-black ${
+        deviceFrame ? 'rounded-[2.25rem] border-[10px] shadow-2xl' : 'rounded border'
+      } ${
+        manualControl ? 'border-accent' : deviceFrame ? 'border-zinc-800' : 'border-surface-divider'
       }`}
     >
+      {/* Dynamic-island notch — sits over the status-bar region like a real
+          iPhone (the OS draws it over web content too); never intercepts taps. */}
+      {deviceFrame && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-2 left-1/2 z-10 h-5 w-24 -translate-x-1/2 rounded-full bg-black/80"
+        ></div>
+      )}
+      {/* Bare-image escape hatch for debugging (pixel-peeping a capture). */}
+      <button
+        type="button"
+        onClick={onToggleDeviceFrame}
+        title={deviceFrame ? 'Hide the phone bezel (bare image)' : 'Show the phone bezel'}
+        aria-label={deviceFrame ? 'Hide device frame' : 'Show device frame'}
+        className="absolute bottom-2 right-3 z-10 rounded-md bg-black/60 px-2 py-0.5 text-2xs text-ink-muted opacity-50 hover:opacity-100"
+      >
+        {deviceFrame ? 'Frame: on' : 'Frame: off'}
+      </button>
       {frame === null ? (
         <div className="flex flex-col items-center gap-2 text-ink-muted">
           <span className="section-label">

@@ -170,6 +170,25 @@ describe('W485.B apps/gui-client/src/views/LiveSessionView.tsx content parity', 
     expect(body).toMatch(/aria-label="Address bar"/);
   });
 
+  it("W608 device frame: toggleable iOS bezel (rounded-[2.25rem] + 10px border + dynamic-island notch), persisted to localStorage 'ds_gui_device_frame', img + TapMarker stay direct children (tap-projection math unchanged), nothing hardcoded to one archetype (img object-contain scales to the frame's natural dimensions)", () => {
+    expect(body).toMatch(/const \[deviceFrame, setDeviceFrame\] = useState\(/);
+    expect(body).toMatch(/localStorage\.getItem\('ds_gui_device_frame'\) !== 'off'/);
+    expect(body).toMatch(/localStorage\.setItem\('ds_gui_device_frame', on \? 'off' : 'on'\)/);
+    expect(body).toMatch(/data-device-frame=\{deviceFrame \? 'on' : 'off'\}/);
+    expect(body).toMatch(/rounded-\[2\.25rem\] border-\[10px\] shadow-2xl/);
+    // Notch overlay never intercepts taps; bezel renders only when toggled on.
+    expect(body).toMatch(
+      /\{deviceFrame && \(\s*\n?\s*<div\s*\n?\s*aria-hidden="true"\s*\n?\s*className="pointer-events-none absolute/,
+    );
+    // Escape hatch for pixel-peeping a capture.
+    expect(body).toMatch(/aria-label=\{deviceFrame \? 'Hide device frame' : 'Show device frame'\}/);
+    // Cosmetic-only contract: container stays the positioned parent the
+    // TapMarker reverse-projects against.
+    expect(body).toMatch(
+      /tap-projection math \(img\.parentElement\s*\n?\s*\/\/ rect\) is unchanged/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
