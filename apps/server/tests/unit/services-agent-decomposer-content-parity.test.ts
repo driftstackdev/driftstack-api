@@ -88,11 +88,11 @@ describe('services/agent-decomposer content parity', () => {
     );
   });
 
-  it('AgentIntent 6-kind locked vocabulary pinned: navigate + interact (4-action: tap/type/scroll/swipe) + wait (2-condition) + capture (3-kind) + scroll (W140: direction up|down, amount_px?) + behavioral_pause (W140: duration_ms?, reading_word_count?). The agent cannot invent new verbs (the prompt template includes the vocabulary as a constraint); the two W140 behavioural verbs map server-side onto the harness scroll/behavioral_pause control-plane intents — pinned so the api-types↔server lockstep + the closed vocabulary stay documented', () => {
+  it('AgentIntent 6-kind locked vocabulary pinned: navigate + interact (5-action: tap/type/scroll/swipe/press, W540 press added per A3-W677) + wait (2-condition) + capture (3-kind) + scroll (W140: direction up|down, amount_px?) + behavioral_pause (W140: duration_ms?, reading_word_count?). The agent cannot invent new verbs (the prompt template includes the vocabulary as a constraint); the two W140 behavioural verbs map server-side onto the harness scroll/behavioral_pause control-plane intents — pinned so the api-types↔server lockstep + the closed vocabulary stay documented', () => {
     expect(body).toMatch(/export type AgentIntent =/);
     expect(body).toMatch(/\{ kind: 'navigate'; url: string \}/);
     expect(body).toMatch(
-      /kind: 'interact';\s*\n?\s*action: 'tap' \| 'type' \| 'scroll' \| 'swipe';/,
+      /kind: 'interact';[\s\S]*?action: 'tap' \| 'type' \| 'scroll' \| 'swipe' \| 'press';/,
     );
     expect(body).toMatch(
       /\{ kind: 'wait'; condition: 'idle' \| 'selector_visible'; selector\?: string; timeoutMs\?: number \}/,

@@ -18,7 +18,8 @@ export const AgentIntentSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('navigate'), url: z.string() }),
   z.object({
     kind: z.literal('interact'),
-    action: z.enum(['tap', 'type', 'scroll', 'swipe']),
+    // W540 — 'press' (A3-W677): value carries the key name (e.g. "Enter").
+    action: z.enum(['tap', 'type', 'scroll', 'swipe', 'press']),
     selector: z.string().optional(),
     value: z.string().optional(),
   }),

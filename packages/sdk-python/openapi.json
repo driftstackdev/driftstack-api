@@ -490,7 +490,7 @@
               },
               "action": {
                 "type": "string",
-                "enum": ["tap", "type", "scroll", "swipe"]
+                "enum": ["tap", "type", "scroll", "swipe", "press"]
               },
               "selector": {
                 "type": "string"
@@ -606,7 +606,7 @@
                       },
                       "action": {
                         "type": "string",
-                        "enum": ["tap", "type", "scroll", "swipe"]
+                        "enum": ["tap", "type", "scroll", "swipe", "press"]
                       },
                       "selector": {
                         "type": "string"
@@ -729,7 +729,7 @@
                       },
                       "action": {
                         "type": "string",
-                        "enum": ["tap", "type", "scroll", "swipe"]
+                        "enum": ["tap", "type", "scroll", "swipe", "press"]
                       },
                       "selector": {
                         "type": "string"
@@ -849,7 +849,7 @@
                       },
                       "action": {
                         "type": "string",
-                        "enum": ["tap", "type", "scroll", "swipe"]
+                        "enum": ["tap", "type", "scroll", "swipe", "press"]
                       },
                       "selector": {
                         "type": "string"
@@ -1036,7 +1036,7 @@
                     },
                     "action": {
                       "type": "string",
-                      "enum": ["tap", "type", "scroll", "swipe"]
+                      "enum": ["tap", "type", "scroll", "swipe", "press"]
                     },
                     "selector": {
                       "type": "string"
@@ -16405,7 +16405,7 @@
                                   },
                                   "action": {
                                     "type": "string",
-                                    "enum": ["tap", "type", "scroll", "swipe"]
+                                    "enum": ["tap", "type", "scroll", "swipe", "press"]
                                   },
                                   "selector": {
                                     "type": "string"
@@ -16524,7 +16524,7 @@
                                           },
                                           "action": {
                                             "type": "string",
-                                            "enum": ["tap", "type", "scroll", "swipe"]
+                                            "enum": ["tap", "type", "scroll", "swipe", "press"]
                                           },
                                           "selector": {
                                             "type": "string"
@@ -16647,7 +16647,7 @@
                                           },
                                           "action": {
                                             "type": "string",
-                                            "enum": ["tap", "type", "scroll", "swipe"]
+                                            "enum": ["tap", "type", "scroll", "swipe", "press"]
                                           },
                                           "selector": {
                                             "type": "string"
@@ -16767,7 +16767,7 @@
                                           },
                                           "action": {
                                             "type": "string",
-                                            "enum": ["tap", "type", "scroll", "swipe"]
+                                            "enum": ["tap", "type", "scroll", "swipe", "press"]
                                           },
                                           "selector": {
                                             "type": "string"
@@ -18232,7 +18232,7 @@
                               },
                               "action": {
                                 "type": "string",
-                                "enum": ["tap", "type", "scroll", "swipe"]
+                                "enum": ["tap", "type", "scroll", "swipe", "press"]
                               },
                               "selector": {
                                 "type": "string"

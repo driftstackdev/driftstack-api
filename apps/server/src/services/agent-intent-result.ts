@@ -80,6 +80,8 @@ function summarizeInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): 
       return 'scrolled';
     case 'swipe':
       return 'swiped';
+    case 'press':
+      return intent.value !== undefined ? `pressed ${intent.value}` : 'pressed key';
   }
 }
 

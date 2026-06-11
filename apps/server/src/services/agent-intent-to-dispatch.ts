@@ -142,6 +142,19 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
       // (down / 600px). Increment-2 (c) adds direction + distance_px.
       return { ok: true, intentName: 'scroll', params: {} };
 
+    case 'press':
+      // W540 — the DRIVER path supports press today (agent-executor →
+      // sessions.interact press). The HARNESS control-plane intent
+      // (press_key, A3-W677 proposal: params { key }) is NOT in
+      // HARNESS_INTENT_NAMES yet — A3 lands the handler after contract
+      // confirmation. Until then fail closed here (swipe pattern) so we
+      // never emit an intentName the harness would reject.
+      return {
+        ok: false,
+        reason:
+          'interact:press has no harness intent yet (A3-W677 press_key pending); driver-path sessions support press',
+      };
+
     case 'swipe':
       // The harness has no swipe intent (touch swipe ≈ a scroll flick, but
       // the AgentIntent carries no direction/distance to translate). Don't

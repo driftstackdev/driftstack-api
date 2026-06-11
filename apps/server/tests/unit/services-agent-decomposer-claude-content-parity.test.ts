@@ -91,14 +91,14 @@ describe('services/agent-decomposer-claude content parity', () => {
     );
   });
 
-  it("SYSTEM_PROMPT 6-verb constraint pinned: 'CONSTRAINT: you can only emit the six intent verbs below. You CANNOT invent new verbs.' + 6-verb shape list (navigate / interact / wait / capture / scroll / behavioral_pause, W140). Drift to dropping the can-only-emit-the-listed-verbs constraint would let the model invent verbs the executor can't dispatch", () => {
+  it("SYSTEM_PROMPT 6-verb constraint pinned (interact gained the press action W540): 'CONSTRAINT: you can only emit the six intent verbs below. You CANNOT invent new verbs.' + 6-verb shape list (navigate / interact / wait / capture / scroll / behavioral_pause, W140). Drift to dropping the can-only-emit-the-listed-verbs constraint would let the model invent verbs the executor can't dispatch", () => {
     expect(body).toMatch(
       /'CONSTRAINT: you can only emit the six intent verbs below\. You CANNOT',/,
     );
     expect(body).toMatch(/'invent new verbs\.',/);
     expect(body).toMatch(/' {2}- navigate \{ url: string \}',/);
     expect(body).toMatch(
-      /' {2}- interact \{ action: "tap"\|"type"\|"scroll"\|"swipe", selector\?: string, value\?: string \}',/,
+      /' {2}- interact \{ action: "tap"\|"type"\|"scroll"\|"swipe"\|"press", selector\?: string, value\?: string \} \(press: value = key name, e\.g\. "Enter"\)',/,
     );
     expect(body).toMatch(
       /' {2}- wait \{ condition: "idle"\|"selector_visible", selector\?: string, timeoutMs\?: number \}',/,

@@ -136,7 +136,10 @@ export type AgentIntent =
   | { kind: 'navigate'; url: string }
   | {
       kind: 'interact';
-      action: 'tap' | 'type' | 'scroll' | 'swipe';
+      // W540 — 'press' added (A3-W677 contract-first): the agent could type
+      // text but never press a key (Enter to submit, Escape to dismiss).
+      // `value` carries the key name; maps onto the driver interact press.
+      action: 'tap' | 'type' | 'scroll' | 'swipe' | 'press';
       selector?: string;
       value?: string;
     }

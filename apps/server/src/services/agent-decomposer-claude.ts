@@ -111,7 +111,7 @@ const SYSTEM_PROMPT = [
   'invent new verbs.',
   '',
   '  - navigate { url: string }',
-  '  - interact { action: "tap"|"type"|"scroll"|"swipe", selector?: string, value?: string }',
+  '  - interact { action: "tap"|"type"|"scroll"|"swipe"|"press", selector?: string, value?: string } (press: value = key name, e.g. "Enter")',
   '  - wait { condition: "idle"|"selector_visible", selector?: string, timeoutMs?: number }',
   '  - capture { capture: "screenshot"|"dom_snapshot"|"pdf" }',
   '  - scroll { direction: "up"|"down", amount_px?: number }',
@@ -407,7 +407,13 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
         break;
       case 'interact': {
         const action = i.action;
-        if (action === 'tap' || action === 'type' || action === 'scroll' || action === 'swipe') {
+        if (
+          action === 'tap' ||
+          action === 'type' ||
+          action === 'scroll' ||
+          action === 'swipe' ||
+          action === 'press'
+        ) {
           out.push({
             kind: 'interact',
             action,

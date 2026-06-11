@@ -79,7 +79,7 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
   it('AgentIntent 4-kind union: navigate / interact / wait / capture. Drift to dropping a kind would break the executor contract; drift to adding an undeclared kind would render as TS error in callers using exhaustive switch', () => {
     expect(body).toMatch(/\{ kind: 'navigate'; url: string \}/);
     expect(body).toMatch(
-      /kind: 'interact';\s*\n?\s*action: 'tap' \| 'type' \| 'scroll' \| 'swipe';/,
+      /kind: 'interact';\s*\n?\s*action: 'tap' \| 'type' \| 'scroll' \| 'swipe' \| 'press';/,
     );
     expect(body).toMatch(
       /\{ kind: 'wait'; condition: 'idle' \| 'selector_visible'; selector\?: string; timeoutMs\?: number \}/,

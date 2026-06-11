@@ -157,7 +157,7 @@ export type AgentIntent =
   | { kind: 'navigate'; url: string }
   | {
       kind: 'interact';
-      action: 'tap' | 'type' | 'scroll' | 'swipe';
+      action: 'tap' | 'type' | 'scroll' | 'swipe' | 'press';
       selector?: string;
       value?: string;
     }

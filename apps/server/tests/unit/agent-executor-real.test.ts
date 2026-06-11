@@ -69,6 +69,35 @@ describe('AI-B2.b RealAgentExecutor — clean dispatch', () => {
     });
   });
 
+  it('interact:press maps value → key on a discriminated press action (W540)', async () => {
+    const { port, interact } = makePort();
+    const exec = new RealAgentExecutor({ sessions: port });
+    const r = await exec.execute({
+      account,
+      sessionId: 'ses_1',
+      plan: plan([{ kind: 'interact', action: 'press', value: 'Enter' }]),
+    });
+    expect(r.ok).toBe(true);
+    expect(interact).toHaveBeenCalledWith(account, 'ses_1', {
+      action: { kind: 'press', key: 'Enter' },
+    });
+  });
+
+  it('interact:press without a value → typed failure, no dispatch (W540)', async () => {
+    const { port, interact } = makePort();
+    const exec = new RealAgentExecutor({ sessions: port });
+    const r = await exec.execute({
+      account,
+      sessionId: 'ses_1',
+      plan: plan([{ kind: 'interact', action: 'press' }]),
+    });
+    expect(r.results[0]).toMatchObject({
+      kind: 'failure',
+      reason: expect.stringMatching(/press requires a value/) as unknown,
+    });
+    expect(interact).not.toHaveBeenCalled();
+  });
+
   it('interact:type maps value → text on a discriminated type action', async () => {
     const { port, interact } = makePort();
     const exec = new RealAgentExecutor({ sessions: port });

@@ -352,6 +352,20 @@ export class RealAgentExecutor implements AgentExecutor {
           summary: `scrolled ${intent.value === 'up' ? 'up' : 'down'}`,
         };
       }
+      case 'press': {
+        // W540 (A3-W677) — key press. `value` carries the key name (e.g.
+        // "Enter", "Escape"); driver InteractAction press caps it at 20 chars.
+        if (intent.value === undefined || intent.value.length === 0) {
+          return { kind: 'failure', intent, reason: 'press requires a value (the key name)' };
+        }
+        if (intent.value.length > 20) {
+          return { kind: 'failure', intent, reason: 'press key name must be ≤20 characters' };
+        }
+        await this.deps.sessions.interact(account, sessionId, {
+          action: { kind: 'press', key: intent.value },
+        });
+        return { kind: 'success', intent, summary: `pressed ${intent.value}` };
+      }
       case 'swipe':
         // No driver gesture maps to swipe (the driver has scroll, not swipe) and
         // AgentIntent.swipe carries no direction — genuinely underspecified.

@@ -168,6 +168,13 @@ describe('agentIntentToDispatch — typed unsupported', () => {
     expect(r.reason).toMatch(/swipe has no harness intent/);
   });
 
+  it('interact:press → fail-closed pending the A3-W677 press_key harness contract (W540: must NOT emit an intentName the harness rejects)', () => {
+    const r = agentIntentToDispatch({ kind: 'interact', action: 'press', value: 'Enter' });
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error('narrow');
+    expect(r.reason).toMatch(/press_key pending/);
+  });
+
   it('wait:idle → unsupported (no harness predicate)', () => {
     const r = agentIntentToDispatch({ kind: 'wait', condition: 'idle' });
     expect(r.ok).toBe(false);
