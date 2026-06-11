@@ -447,18 +447,22 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      {/* W625 — honest heads-up: a mock-driver server can't open a real
-          browser, so launches will show an empty stream / placeholder. Set
-          expectations here instead of letting the customer discover it after
-          launching. Only shows once /version confirms driver==='mock'. */}
+      {/* W625/W640 — heads-up about the real-browser path. The mock driver
+          only affects the DIRECT (polling) viewer — it shows placeholder
+          frames. A live browser comes from a connected WebKit worker (the
+          harness on a Mac), which self-hosted fully supports. So this is
+          framed as "connect a worker to go live", NOT "self-hosted can't do
+          real browsers". Shown while driver==='mock' (a fair proxy for "no
+          real-driver/worker wired yet"). */}
       {serverDriver === 'mock' && (
         <div
           data-banner="mock-driver"
           className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-2xs text-ink-secondary"
         >
-          This server runs the <span className="mono">mock</span> driver — launching a profile won’t
-          open a real browser yet (no WebKit worker is connected). The session, viewer and controls
-          still work for testing the flow end-to-end.
+          The <span className="mono">mock</span> driver is handling the direct viewer, so launches
+          show placeholder frames here. To run a real iPhone session, connect a WebKit browser
+          worker (the harness on a Mac) — then launches stream live video. Sessions, the viewer and
+          controls work now for testing the flow.
         </div>
       )}
       <header className="flex flex-col gap-3">
