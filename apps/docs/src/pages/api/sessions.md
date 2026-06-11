@@ -179,7 +179,9 @@ Supported discriminator values on `action.kind`:
 - `tap` — `selector` (required).
 - `type` — `selector` + `text` (max 10,000 chars) + optional
   `delay_ms` (0-500ms between keystrokes; mock driver honours
-  bounds, real driver clamps).
+  bounds, real driver clamps) + optional `sensitive` (boolean —
+  mark card numbers / OTPs / PINs so the typing simulation makes
+  no visible corrections; password fields get this automatically).
 - `scroll` — optional `selector` + `delta_x` (default 0) + `delta_y`
   (default 0). Both integers; positive scrolls down/right.
 - `press` — `key` (1-20 chars; e.g. `Enter`, `Tab`, `a`).

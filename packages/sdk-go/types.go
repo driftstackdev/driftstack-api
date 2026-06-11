@@ -365,9 +365,12 @@ type InteractAction struct {
 	Selector string `json:"selector,omitempty"` // tap, type, scroll
 	Text     string `json:"text,omitempty"`     // type
 	DelayMs  *int   `json:"delay_ms,omitempty"` // type
-	DeltaX   int    `json:"delta_x,omitempty"`  // scroll
-	DeltaY   int    `json:"delta_y,omitempty"`  // scroll
-	Key      string `json:"key,omitempty"`      // press
+	// Sensitive marks the typed value (card number / OTP / PIN) so the
+	// harness suppresses visible typo-corrections while typing it (W1150).
+	Sensitive *bool  `json:"sensitive,omitempty"` // type
+	DeltaX    int    `json:"delta_x,omitempty"`   // scroll
+	DeltaY    int    `json:"delta_y,omitempty"`   // scroll
+	Key       string `json:"key,omitempty"`       // press
 }
 
 func NewTapAction(selector string) InteractAction {

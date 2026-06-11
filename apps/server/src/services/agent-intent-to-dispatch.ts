@@ -133,7 +133,14 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
       return {
         ok: true,
         intentName: 'send_keys',
-        params: { strategy: 'css selector', value: intent.selector, text: intent.value },
+        params: {
+          strategy: 'css selector',
+          value: intent.selector,
+          text: intent.value,
+          // W1150 (A3 W1149) — forwarded only when set: sensitive fields get
+          // no visible typo-corrections harness-side (and are never logged).
+          ...(intent.sensitive === undefined ? {} : { sensitive: intent.sensitive }),
+        },
       };
 
     case 'scroll':

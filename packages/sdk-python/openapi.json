@@ -497,6 +497,9 @@
               },
               "value": {
                 "type": "string"
+              },
+              "sensitive": {
+                "type": "boolean"
               }
             },
             "required": ["kind", "action"]
@@ -613,6 +616,9 @@
                       },
                       "value": {
                         "type": "string"
+                      },
+                      "sensitive": {
+                        "type": "boolean"
                       }
                     },
                     "required": ["kind", "action"]
@@ -736,6 +742,9 @@
                       },
                       "value": {
                         "type": "string"
+                      },
+                      "sensitive": {
+                        "type": "boolean"
                       }
                     },
                     "required": ["kind", "action"]
@@ -856,6 +865,9 @@
                       },
                       "value": {
                         "type": "string"
+                      },
+                      "sensitive": {
+                        "type": "boolean"
                       }
                     },
                     "required": ["kind", "action"]
@@ -1043,6 +1055,9 @@
                     },
                     "value": {
                       "type": "string"
+                    },
+                    "sensitive": {
+                      "type": "boolean"
                     }
                   },
                   "required": ["kind", "action"]
@@ -1506,6 +1521,9 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 500
+                  },
+                  "sensitive": {
+                    "type": "boolean"
                   }
                 },
                 "required": ["kind", "selector", "text"]
@@ -3813,6 +3831,9 @@
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 500
+                          },
+                          "sensitive": {
+                            "type": "boolean"
                           }
                         },
                         "required": ["kind", "selector", "text"]
@@ -16412,6 +16433,9 @@
                                   },
                                   "value": {
                                     "type": "string"
+                                  },
+                                  "sensitive": {
+                                    "type": "boolean"
                                   }
                                 },
                                 "required": ["kind", "action"]
@@ -16531,6 +16555,9 @@
                                           },
                                           "value": {
                                             "type": "string"
+                                          },
+                                          "sensitive": {
+                                            "type": "boolean"
                                           }
                                         },
                                         "required": ["kind", "action"]
@@ -16654,6 +16681,9 @@
                                           },
                                           "value": {
                                             "type": "string"
+                                          },
+                                          "sensitive": {
+                                            "type": "boolean"
                                           }
                                         },
                                         "required": ["kind", "action"]
@@ -16774,6 +16804,9 @@
                                           },
                                           "value": {
                                             "type": "string"
+                                          },
+                                          "sensitive": {
+                                            "type": "boolean"
                                           }
                                         },
                                         "required": ["kind", "action"]
@@ -18239,6 +18272,9 @@
                               },
                               "value": {
                                 "type": "string"
+                              },
+                              "sensitive": {
+                                "type": "boolean"
                               }
                             },
                             "required": ["kind", "action"]

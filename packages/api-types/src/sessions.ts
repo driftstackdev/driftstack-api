@@ -192,6 +192,12 @@ export const InteractActionSchema = z.discriminatedUnion('kind', [
     text: z.string().max(10_000),
     // ms between keystrokes; mock driver respects bounds, real driver clamps.
     delay_ms: z.number().int().min(0).max(500).optional(),
+    // W1150 (A3 W1149) — mark the field sensitive (card number / OTP / PIN):
+    // the harness suppresses visible typo-corrections while typing it (a
+    // momentary wrong digit trips per-keystroke validation or auto-submit-
+    // on-length). DOM type=password fields get this automatically; this flag
+    // covers sensitive values in tel/text inputs the DOM can't reveal.
+    sensitive: z.boolean().optional(),
   }),
   z.object({
     kind: z.literal('scroll'),

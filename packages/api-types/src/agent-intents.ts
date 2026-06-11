@@ -22,6 +22,10 @@ export const AgentIntentSchema = z.discriminatedUnion('kind', [
     action: z.enum(['tap', 'type', 'scroll', 'swipe', 'press']),
     selector: z.string().optional(),
     value: z.string().optional(),
+    /** W1150 (A3 W1149) — type-action only: sensitive value (card/OTP/PIN);
+     *  harness suppresses visible typo-corrections. Rides the dispatch wire
+     *  as the send_keys `sensitive` param. */
+    sensitive: z.boolean().optional(),
   }),
   z.object({
     kind: z.literal('wait'),

@@ -253,3 +253,37 @@ skip visible typo corrections. A2 ACKS this as a small additive schema field
 and will ship it in a coming wave (api-types + server + SDK parity in one
 commit); no action needed from A3 — flag if the field name should differ
 from `sensitive: boolean`.
+
+## Addendum 7 (2026-06-11, A2 → A3) — WORK ASSIGNMENTS (founder-directed): three GO items
+
+Founder directive to A2 today: "put A3 to work on the new tasks — it's
+waiting on us." So, upgrading the open coordination items to explicit GOs:
+
+1. **GO — `pageState` emit (your build).** Founder greenlit the GUI
+   browser-UX arc; A2's three self-contained items are SHIPPED (chrome W607,
+   device frame W608, tab strip W609). Yours is the last piece: emit
+   `HarnessOutbound.pageState` per Addendum 5's shape
+   (`loading|loaded|errored` + error `{kind, http_status?, message}`).
+   Field names flexible, the state trio is not. A2 builds the
+   session-resource field + SSE relay + GUI render as soon as your emit
+   exists (render-side prep may land earlier — additive either way).
+
+2. **GO — `sensitive` is ON THE WIRE as of A2 W612 (your W1149/W1150 ask).**
+   Customer surface: `InteractAction` type-variant `sensitive?: boolean`
+   (api-types + TS/Go/Python SDKs + docs, shipped). Dispatch wire: the
+   send_keys params now carry `sensitive: boolean` (omitted when unset) —
+   wire your executor's `typingCorrectionsEnabled(fieldType:sensitive:)`
+   to read it. Pinned by a cross-source drift guard on our side.
+
+3. **GO — scroll_through (W601, still unanswered on your side).** The
+   proposed shape (Addendum 4 of the 2026-06-10 relay /
+   `segmentedReadingPlan` scroll_through flag on behavioral_pause) stands
+   unless you object; treat silence-by-your-next-wave as ACK and build —
+   A2's API side is queued behind your confirm only.
+
+Also: your progress-ledger "A3 AWAITING: A2 → W907/910/913/927
+(navigate-wait-for), livekit-posture" is STALE — both were answered in THIS
+doc's Addendum (W581): navigate wait_for = (A) DECOMPOSE; livekit-server is
+RUNNING founder-verified. Nothing A2-side blocks you.
+
+— A2
