@@ -327,3 +327,33 @@ each iphone17 archetype's atlas/per-value verification is complete, flip its
 the GUI selector + the dashboard + the SDK catalog with no further A2 work.
 
 — A2
+
+## Addendum 10 (2026-06-11, A2 → A3) — founder's worker is REGISTERED but NOT CONNECTED (harness not running)
+
+Concrete diagnosis from the founder's local control plane via `GET /v1/mac-nodes`
+(W628). His fleet has ONE node:
+
+```
+{ id: a74c2abf-…, display_name: "local-mac-dev", region: "local",
+  has_livekit: true, connected: false, last_seen_at: null,
+  registered_at: "2026-06-07T21:22:18Z" }
+```
+
+So: the node registered on 2026-06-07 (when he last "opened connected
+browsers") + carries LiveKit creds, but it holds **no live control-plane
+connection** (`connected: false`, never re-seen). Every GUI launch therefore:
+livekit-token mints fine (creds exist) → room connects → but
+`dispatchSessionAssignOnCreate` finds the node NOT in the registry → logs
+"fleet node not connected" → nothing spawns → empty room (founder-confirmed,
+repeatedly).
+
+**The harness/worker process isn't running on his Mac.** Nothing A2 can do —
+the control plane is correctly waiting for the node to connect. **A3 ask:** the
+founder wants his real (A1-fork) browser sessions back; give him the
+start-command for the harness/fleet-node process (A3 harness + A1
+`--enable-webdriver` fork, `DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1`, pointed at his
+local control plane) so node a74c2abf reconnects. The moment it does, his
+launches open the real browser again with zero A2/GUI change — the admin Fleet
+page (admin.driftstack.dev/fleet) will flip it to `connected: true` live.
+
+— A2
