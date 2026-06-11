@@ -101,10 +101,14 @@ describe('ProfilesView launch → stream', () => {
     expect(agentCreate).toHaveBeenCalledWith({ profile_id: 'prof_1' });
   });
 
-  it('no livekit block → clear error, not a black screen (prod-safe fallback)', async () => {
+  it('W611: no livekit block → falls back to the polling live view (onOpenSession with the created id), NOT an error — launch works on LiveKit-less deployments', async () => {
     agentCreate.mockResolvedValueOnce({ id: 'agt_2' });
-    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    const onOpenSession = vi.fn();
+    render(<ProfilesView onGoToSettings={vi.fn()} onOpenSession={onOpenSession} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
-    await waitFor(() => expect(screen.getByText(/no live stream was returned/i)).toBeTruthy());
+    await waitFor(() => expect(onOpenSession).toHaveBeenCalledWith('agt_2'));
+    // The old dead-end message is gone — the session the customer just
+    // created opens instead of erroring.
+    expect(screen.queryByText(/no live stream was returned/i)).toBeNull();
   });
 });

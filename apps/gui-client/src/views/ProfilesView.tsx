@@ -277,11 +277,13 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       if (created.livekit) {
         setWatchInfo(created.livekit);
       } else {
-        setState((s) => ({
-          ...s,
-          error:
-            'Session created but no live stream was returned — LiveKit may not be configured on this deployment.',
-        }));
+        // W611 — no livekit block (deployment without LiveKit, e.g. a
+        // self-hosted/mock-driver server): fall back to the polling live
+        // view instead of dead-ending with an error AFTER the session was
+        // already created. The 2-fps viewport (URL bar, tabs, manual
+        // control) works on every deployment; WebRTC is the upgrade, not
+        // the requirement.
+        onOpenSession(created.id);
       }
       await refresh(false);
       await refreshAccountMe();
