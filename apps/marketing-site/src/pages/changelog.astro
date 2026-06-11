@@ -17,6 +17,18 @@ interface ChangelogEntry {
 
 const ENTRIES: readonly ChangelogEntry[] = [
   {
+    date: '2026-06-11',
+    category: 'launch',
+    title: 'AI agent sessions: resume after a solved challenge + key-press actions',
+    body: 'Two agent-session upgrades. POST /v1/agent-sessions/{id}/resume lets you resume a paused agent run after a bot-challenge is resolved (pass the challenge_id from the session.challenge_detected webhook, or call it bare for a manual resume) — available in all three SDKs as resume()/Resume(). And the agent intent vocabulary gained press: the agent can now press a key (Enter to submit a form, Escape to dismiss a dialog) instead of only typing text. Both are additive; existing integrations are unaffected.',
+  },
+  {
+    date: '2026-06-11',
+    category: 'security',
+    title: 'MFA sign-in on the web dashboard',
+    body: 'Accounts with two-factor enabled can now complete sign-in directly on app.driftstack.dev — the login page gained the authenticator-code step (with a recovery-code fallback for a lost device). Previously MFA-enrolled accounts had to sign in via the API.',
+  },
+  {
     date: '2026-05-29',
     category: 'pricing',
     title: 'Manual-ladder plans renamed: Personal, Team, Agency',
