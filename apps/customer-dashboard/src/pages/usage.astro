@@ -240,6 +240,55 @@ const SPARK_H = 48;
       </dl>
     </section>
 
+    {/* W576 — per-bucket rate-limit panel. Closes the gap the docs called
+        out ("the dashboard does not yet render this data visually"): the
+        /v1/account/rate-limits read endpoint surfaced per-bucket config +
+        overrides since W199, but customers had to curl it. SSG renders the
+        skeleton; the inline script populates rows on fetch. */}
+    <section class="mt-10 dashboard-card" data-section="rate-limits">
+      <div class="flex items-start gap-3">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        </div>
+        <div>
+          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Rate limits</p>
+          <h2 class="mt-2 text-xl font-semibold tracking-tight text-ink-primary">
+            Per-bucket caps for your account
+          </h2>
+          <p class="mt-1 max-w-prose text-sm text-ink-muted">
+            Anti-abuse token buckets — not the pricing meter. Staff-granted
+            overrides show with their auto-revert time. Full semantics in the
+            <a
+              href="https://docs.driftstack.dev/reference/rate-limits/"
+              class="text-glow-red hover:underline">rate-limit reference</a
+            >.
+          </p>
+        </div>
+      </div>
+      <div class="mt-6 overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-white/10 font-mono text-xs uppercase tracking-widest text-ink-muted">
+              <th scope="col" class="pb-2 pr-4">Bucket</th>
+              <th scope="col" class="pb-2 pr-4">Capacity</th>
+              <th scope="col" class="pb-2 pr-4">Refill / s</th>
+              <th scope="col" class="pb-2">Source</th>
+            </tr>
+          </thead>
+          <tbody data-rate-limit-rows>
+            <tr class="border-b border-white/5">
+              <td colspan="4" class="py-3 text-ink-muted" data-rate-limit-placeholder>
+                Sign in to see your live per-bucket caps.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <p class="mt-8 text-xs text-ink-muted">
       None of these counters drive billing. Concurrent caps are the only meter
       per ADR-004. We surface counts so you can spot pipeline regressions —
@@ -376,6 +425,66 @@ const SPARK_H = 48;
             window.dashboardHydrated();
           }
         });
+
+      // W576 — per-bucket rate-limit panel. Independent fetch: a failure
+      // here must not affect the usage tiles (and vice-versa).
+      function escapeHtml(s) {
+        return String(s ?? '').replace(/[&<>"']/g, function (c) {
+          switch (c) {
+            case '&':
+              return '&amp;';
+            case '<':
+              return '&lt;';
+            case '>':
+              return '&gt;';
+            case '"':
+              return '&quot;';
+            default:
+              return '&#39;';
+          }
+        });
+      }
+      const rlBody = root.querySelector('[data-rate-limit-rows]');
+      if (rlBody) {
+        fetch(apiBaseUrl + '/v1/account/rate-limits', { headers, credentials: 'include' })
+          .then(function (r) {
+            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+          })
+          .then(function (data) {
+            const buckets = Array.isArray(data.buckets) ? data.buckets : [];
+            if (buckets.length === 0) return;
+            rlBody.innerHTML = buckets
+              .map(function (b) {
+                const override = b.source === 'override';
+                const src = override
+                  ? 'override · reverts ' + escapeHtml(String(b.override_expires_at).slice(0, 10))
+                  : 'tier default';
+                return (
+                  '<tr class="border-b border-white/5">' +
+                  '<td class="py-2 pr-4 font-mono text-xs text-ink-primary">' +
+                  escapeHtml(b.bucket_key) +
+                  '</td>' +
+                  '<td class="py-2 pr-4 text-ink-primary">' +
+                  escapeHtml(Number(b.capacity).toLocaleString('en-US')) +
+                  '</td>' +
+                  '<td class="py-2 pr-4 text-ink-primary">' +
+                  escapeHtml(String(b.refill_per_second)) +
+                  '</td>' +
+                  '<td class="py-2 ' +
+                  (override ? 'text-glow-red' : 'text-ink-muted') +
+                  '">' +
+                  src +
+                  '</td>' +
+                  '</tr>'
+                );
+              })
+              .join('');
+          })
+          .catch(function () {
+            const ph = root.querySelector('[data-rate-limit-placeholder]');
+            if (ph) ph.textContent = "Couldn't load rate-limit config — try a reload.";
+          });
+      }
     })();
   </script>
 </DashboardLayout>

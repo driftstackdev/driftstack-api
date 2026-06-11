@@ -122,18 +122,20 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     );
   });
 
-  it("CRITICAL Customer-dashboard-surface framing pinned — TRUTHFUL version. The previous pin asserted '/usage renders the same data visually' which was source-of-truth-divergent (no such section exists in apps/customer-dashboard/src/pages/usage.astro). Now pins the honest 'read via SDK/curl; /usage shows time-series usage counts only; dedicated surface queued' framing.", () => {
+  it("CRITICAL Customer-dashboard-surface framing pinned — TRUTHFUL version, W576 edition. History: the original pin claimed '/usage renders the same data visually' when no such section existed (source-divergent lie → fixed to 'not yet'); W576 BUILT the section, so the claim flipped true again. To keep the doc honest in BOTH directions, this pin now also asserts the dashboard source actually contains the rate-limits section + fetch — if the section is ever removed, this fails and the doc must flip back.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Read this endpoint directly via the SDK or `curl` — the customer\s*\n?dashboard does not yet render the rate-limit bucket config\s*\n?visually\./,
+      /The `\/usage` page on the dashboard renders this endpoint's data in\s*\n?its "Rate limits" card/,
     );
-    expect(p).toMatch(
-      /The `\/usage` page on the dashboard shows time-series\s*\n?usage counts \(session minutes, navigates, captures, etc\.\) but not\s*\n?the per-bucket capacity \/ refill \/ source rows from this endpoint\./,
-    );
-    expect(p).toMatch(
-      /A dedicated rate-limits surface is queued for a future dashboard\s*\n?slice\./,
-    );
+    expect(p).toMatch(/tier default vs staff override/);
+    expect(p).toMatch(/The endpoint remains available for SDK \/ `curl`\s*\n?reads\./);
+
+    // Source-of-truth coupling: the dashboard section + fetch must exist.
+    const usagePage = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/usage.astro'));
+    expect(usagePage).toMatch(/data-section="rate-limits"/);
+    expect(usagePage).toMatch(/\/v1\/account\/rate-limits/);
+    expect(usagePage).toMatch(/data-rate-limit-rows/);
   });
 
   it('CRITICAL x-ratelimit-* response headers documented. Drift would orphan SDK consumers from the per-response capacity/remaining/reset surface emitted by middleware/rate-limit.ts. Pins all 4 headers + the emitted-on-every-status invariant.', () => {

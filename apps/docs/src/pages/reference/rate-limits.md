@@ -116,11 +116,12 @@ active, `override_expires_at` carries the auto-revert timestamp.
 Full read-endpoint docs at
 [/api/account-rate-limits](/api/account-rate-limits/).
 
-The customer dashboard does not yet render this data visually —
-`/usage` on the dashboard shows time-series usage counts (session
-minutes, navigates, captures) but not the per-bucket rate-limit
-rows. Read this endpoint directly via the SDK or `curl`; a
-dedicated dashboard surface is queued for a future slice.
+The dashboard renders this data on
+[app.driftstack.dev/usage](https://app.driftstack.dev/usage) — the
+"Rate limits" card lists each bucket's capacity, refill rate, and
+source (tier default vs staff override, with the override's
+auto-revert date). The endpoint remains available for SDK / `curl`
+reads.
 
 ## Response headers
 
