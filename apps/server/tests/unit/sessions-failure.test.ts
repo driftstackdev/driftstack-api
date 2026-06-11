@@ -204,6 +204,7 @@ class ThrowingDriver implements Driver {
     title: string | null;
     cookies: Array<Record<string, unknown>>;
     localStorage: Record<string, string>;
+    pageState: null;
     capturedAt: Date;
   }> {
     this.throwIfArmed();
@@ -212,6 +213,7 @@ class ThrowingDriver implements Driver {
       title: null,
       cookies: [],
       localStorage: {},
+      pageState: null,
       capturedAt: new Date(),
     });
   }
