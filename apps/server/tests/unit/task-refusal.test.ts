@@ -1,0 +1,188 @@
+// W582 — task-refusal start-gate contract-mirror tests. The canonical
+// mechanism lives in A3's agent-service (task-refusal-contract.md); this
+// pins A2's mirror to the same semantics: normalize order, bias-to-allow,
+// bounds, lastIndex determinism, and the loader's skip-not-throw rules.
+
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import {
+  loadRefusalPatterns,
+  normalizeTaskForScreening,
+  screenTaskForRefusal,
+} from '../../src/services/task-refusal.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SRC = resolve(HERE, '..', '..', 'src', 'services', 'task-refusal.ts');
+
+describe('W582 task-refusal contract mirror', () => {
+  describe('normalizeTaskForScreening', () => {
+    it('strips zero-width splitters so a flagged phrase cannot hide (evasion class)', () => {
+      // "st<U+200B>eal" — zero-width space splitting the keyword.
+      expect(normalizeTaskForScreening('st\u200Beal the password')).toBe('steal the password');
+    });
+
+    it('NFKC-folds full-width confusables', () => {
+      expect(normalizeTaskForScreening('ｓｔｅａｌ')).toBe('steal');
+    });
+
+    it('lowercases + collapses whitespace + trims', () => {
+      expect(normalizeTaskForScreening('  STEAL\t\n the   Password  ')).toBe('steal the password');
+    });
+
+    it('strips bidi overrides + control chars', () => {
+      expect(normalizeTaskForScreening('a‮bc')).toBe('abc');
+    });
+
+    it('caps scanned length at 8192 chars BEFORE normalizing (bounds adversarial cost)', () => {
+      const long = 'a'.repeat(9000) + ' steal password';
+      const out = normalizeTaskForScreening(long);
+      expect(out.length).toBeLessThanOrEqual(8192);
+      expect(out).not.toContain('steal');
+    });
+
+    it('coerces non-string to empty (never throws on runtime garbage)', () => {
+      expect(normalizeTaskForScreening(undefined as unknown as string)).toBe('');
+      expect(normalizeTaskForScreening(42 as unknown as string)).toBe('');
+    });
+  });
+
+  describe('screenTaskForRefusal (bias-to-allow)', () => {
+    const PATTERNS = [
+      {
+        id: 'test-cred-1',
+        category: 'credential_theft',
+        match: /steal (?:someone'?s )?password/,
+        reason: 'Tasks that involve stealing credentials are not allowed.',
+      },
+    ];
+
+    it('empty / omitted patterns ⇒ allow (the no-op activation state)', () => {
+      expect(screenTaskForRefusal('steal the password')).toEqual({ refuse: false });
+      expect(screenTaskForRefusal('steal the password', [])).toEqual({ refuse: false });
+    });
+
+    it('empty / whitespace task ⇒ allow', () => {
+      expect(screenTaskForRefusal('', PATTERNS)).toEqual({ refuse: false });
+      expect(screenTaskForRefusal('   \n\t ', PATTERNS)).toEqual({ refuse: false });
+    });
+
+    it('match ⇒ refuse with category + reason + patternId (audit fields)', () => {
+      const d = screenTaskForRefusal("please steal someone's password for me", PATTERNS);
+      expect(d.refuse).toBe(true);
+      expect(d.category).toBe('credential_theft');
+      expect(d.patternId).toBe('test-cred-1');
+      expect(d.reason).toMatch(/not allowed/);
+    });
+
+    it('matches the NORMALIZED form (zero-width evasion still refused)', () => {
+      const d = screenTaskForRefusal('st\u200Beal pass\u200Bword'.replace('pass', ' pass'), [
+        { id: 'p', category: 'c', match: /steal password/, reason: 'r' },
+      ]);
+      expect(d.refuse).toBe(true);
+    });
+
+    it('non-match ⇒ allow (thin gate; "update my password" passes a phrase pattern)', () => {
+      expect(screenTaskForRefusal('update my password on example.com', PATTERNS).refuse).toBe(
+        false,
+      );
+    });
+
+    it('malformed pattern entries are skipped, never thrown (fail-safe)', () => {
+      const d = screenTaskForRefusal('steal password', [
+        null as unknown as (typeof PATTERNS)[0],
+        { id: 'x', category: 'c', match: 'not-a-regexp' as unknown as RegExp, reason: 'r' },
+        { id: 'p', category: 'c', match: /steal password/, reason: 'caught' },
+      ]);
+      expect(d.refuse).toBe(true);
+      expect(d.patternId).toBe('p');
+    });
+
+    it('global-flag regex is deterministic across repeated calls (lastIndex reset)', () => {
+      const p = [{ id: 'g', category: 'c', match: /steal password/g, reason: 'r' }];
+      expect(screenTaskForRefusal('steal password', p).refuse).toBe(true);
+      expect(screenTaskForRefusal('steal password', p).refuse).toBe(true);
+      expect(screenTaskForRefusal('steal password', p).refuse).toBe(true);
+    });
+
+    it('first matching pattern wins', () => {
+      const d = screenTaskForRefusal('steal password', [
+        { id: 'first', category: 'a', match: /steal/, reason: 'r1' },
+        { id: 'second', category: 'b', match: /password/, reason: 'r2' },
+      ]);
+      expect(d.patternId).toBe('first');
+    });
+  });
+
+  describe('loadRefusalPatterns (pure-data path, skip-not-throw)', () => {
+    it('compiles valid entries', () => {
+      const { patterns, skipped } = loadRefusalPatterns([
+        { id: 'a', category: 'c', pattern: 'steal password', reason: 'r' },
+      ]);
+      expect(patterns).toHaveLength(1);
+      expect(skipped).toHaveLength(0);
+      expect(patterns[0]!.match).toBeInstanceOf(RegExp);
+    });
+
+    it('skips (with reasons) instead of throwing: missing fields, bad regex, non-object', () => {
+      const { patterns, skipped } = loadRefusalPatterns([
+        'not-an-object',
+        { category: 'c', pattern: 'x', reason: 'r' }, // missing id
+        { id: 'b', category: 'c', pattern: '(unclosed', reason: 'r' }, // bad regex
+        { id: 'ok', category: 'c', pattern: 'fine', reason: 'r' },
+      ]);
+      expect(patterns).toHaveLength(1);
+      expect(patterns[0]!.id).toBe('ok');
+      expect(skipped.map((s) => s.reason)).toEqual([
+        'entry is not an object',
+        'missing/empty id',
+        'uncompilable regex (bad source or flags)',
+      ]);
+    });
+
+    it('non-array data ⇒ empty (never throws)', () => {
+      expect(loadRefusalPatterns(null).patterns).toEqual([]);
+      expect(loadRefusalPatterns({ nope: true }).patterns).toEqual([]);
+    });
+
+    it('end-to-end: loaded data refuses through the screen', () => {
+      const { patterns } = loadRefusalPatterns([
+        {
+          id: 'e2e',
+          category: 'credential_theft',
+          pattern: "steal (?:someone'?s )?password",
+          reason: 'no',
+        },
+      ]);
+      expect(screenTaskForRefusal("steal someone's password", patterns).refuse).toBe(true);
+    });
+  });
+
+  describe('contract drift-guards (source pins)', () => {
+    const src = readFileSync(SRC, 'utf8');
+
+    it('DANGEROUS_UNICODE source is byte-identical to the agent-service canonical class', () => {
+      // CI has no cross-repo checkout, so pin the LITERAL source (copied from
+      // driftstack/agent-service/src/page-representation.ts W1019/W1112). If
+      // A3 widens their class, this pin forces a deliberate A2 update.
+      expect(src).toContain(
+        '/[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u2069\\uFEFF]/g',
+      );
+      // And the file itself must contain no RAW dangerous chars (the W1030
+      // binary-to-tooling bug class).
+      const rawDangerous = new RegExp(
+        // eslint-disable-next-line no-control-regex -- intentionally hunting raw control chars
+        '[\u0000-\u0008\u000B\u000C\u000E-\u001F\u200B-\u200F\u202A-\u202E]',
+      );
+      expect(rawDangerous.test(src)).toBe(false);
+    });
+
+    it('normalize order pinned: truncate → strip → NFKC → lowercase → ws-collapse', () => {
+      expect(src).toMatch(
+        /\.replace\(DANGEROUS_UNICODE, ''\)\s*\n?\s*\.normalize\('NFKC'\)\s*\n?\s*\.toLowerCase\(\)\s*\n?\s*\.replace\(\/\\s\+\/g, ' '\)\s*\n?\s*\.trim\(\)/,
+      );
+      expect(src).toMatch(/MAX_SCREEN_CHARS = 8192/);
+    });
+  });
+});
