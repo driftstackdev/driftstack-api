@@ -71,10 +71,13 @@ with Driftstack(api_key=os.environ["DRIFTSTACK_API_KEY"]) as client:
     try:
         client.sessions.navigate(sid, {"url": "https://example.com"})
         screenshot = client.sessions.capture(sid, {"kind": "screenshot"})
-        print("captured:", screenshot["id"])
+        # capture() returns a CaptureResponse model — attribute access, not
+        # subscript: .kind / .data / .encoding / .byte_size / .duration_ms.
+        # For a screenshot, .data is the PNG base64-encoded.
+        print(f"captured {screenshot.byte_size} bytes ({screenshot.encoding})")
 
         state = client.sessions.get_state(sid)
-        print("url:", state["url"], "title:", state["title"])
+        print("url:", state.url, "title:", state.title)
     finally:
         client.sessions.destroy(sid)
 ```
@@ -93,7 +96,7 @@ async def main():
         try:
             await client.sessions.navigate(sid, {"url": "https://example.com"})
             screenshot = await client.sessions.capture(sid, {"kind": "screenshot"})
-            print("captured:", screenshot["id"])
+            print(f"captured {screenshot.byte_size} bytes ({screenshot.encoding})")
         finally:
             await client.sessions.destroy(sid)
 

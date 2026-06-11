@@ -85,4 +85,14 @@ describe('W260.A docs/sdk/python-quickstart ↔ live Python SDK parity', () => {
     const sig = read(resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/webhook_signature.py'));
     expect(sig).toMatch(/def\s+verify_webhook_signature\b/);
   });
+
+  it('W567: response models accessed by attribute, not dict-subscript (capture/get_state return pydantic models)', () => {
+    // sessions.capture() / get_state() return CaptureResponse / SessionState
+    // pydantic models — `screenshot["id"]` (no such field; BaseModel has no
+    // __getitem__) would crash. Guard the prior bug + pin the real fields.
+    expect(doc).not.toMatch(/screenshot\["id"\]/);
+    expect(doc).not.toMatch(/state\["(url|title)"\]/);
+    expect(doc).toMatch(/screenshot\.byte_size/);
+    expect(doc).toMatch(/state\.url/);
+  });
 });

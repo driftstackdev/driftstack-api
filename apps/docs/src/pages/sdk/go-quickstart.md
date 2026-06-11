@@ -104,7 +104,9 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    log.Printf("captured: %s", shot.ID)
+    // CaptureResponse: Kind / Data / Encoding / ByteSize / DurationMS.
+    // For a screenshot, Data is the PNG base64-encoded.
+    log.Printf("captured %d bytes (%s)", shot.ByteSize, shot.Encoding)
 }
 ```
 

@@ -37,6 +37,13 @@ describe('W260.B docs/sdk/go-quickstart ↔ live Go SDK parity', () => {
     expect(doc).not.toMatch(/github\.com\/driftstackdev\/driftstack-go\b/);
   });
 
+  it('W567: capture-result uses real CaptureResponse fields, not the phantom shot.ID (Go would not compile)', () => {
+    // CaptureResponse is { Kind, Data, Encoding, ByteSize, DurationMS } — no
+    // ID field, so `shot.ID` is a compile error. Guard it + pin a real field.
+    expect(doc).not.toMatch(/shot\.ID\b/);
+    expect(doc).toMatch(/shot\.ByteSize\b/);
+  });
+
   it('error sample does not invent driftstack.APIError', () => {
     expect(doc).not.toMatch(/\*driftstack\.APIError\b/);
     const errors = read(GO_ERRORS);
