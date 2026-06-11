@@ -83,11 +83,14 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
     );
   });
 
-  it("mintLivekitToken subscriber-only call shape pinned: identity: `customer-${ctx.account.id}` + room: sessionId + canPublish: false + canSubscribe: true + 'gui-client is a subscriber. Mac-side BrowserController is the publisher (provisioned out-of-band on the Mac).' — pinned so the asymmetric permission split (subscriber-only) + BrowserController-as-publisher contract stays documented (drift to canPublish: true would let the customer's gui-client inject video into the room — a capability boundary leak)", () => {
+  it("mintLivekitToken subscriber-for-tracks call shape pinned: identity: `customer-${ctx.account.id}` + room: sessionId + canPublish: false (no customer-injected video — the capability-boundary leak guard) + canSubscribe: true + canPublishData: true (the simulator's input-capture publishes InputEvents over the DataChannel to the Mac CGEvent decoder — explicit, not LiveKit's default)", () => {
     expect(body).toMatch(/identity: `customer-\$\{ctx\.account\.id\}`,/);
     expect(body).toMatch(
-      /\/\/ gui-client is a subscriber\. Mac-side BrowserController\s*\n?\s*\/\/ is the publisher \(provisioned out-of-band on the Mac\)\.\s*\n?\s*canPublish: false,\s*\n?\s*canSubscribe: true,/,
+      /canPublish: false,\s*\n?\s*canSubscribe: true,\s*\n?\s*canPublishData: true,/,
     );
+    // The capability boundary: the customer can publish DATA (control) but NOT
+    // a video track — drift to canPublish:true would let gui-client inject video.
+    expect(body).not.toMatch(/canPublish: true/);
   });
 
   it('Response 5-field shape pinned: ws_url + room + token + participant_identity + expires_at (ISO from nowMs + ttlSeconds * 1000). + bump("subscriber", "ok") + bump on every error branch. Drift to dropping expires_at would force clients to re-derive token-expiry from JWT exp claim', () => {

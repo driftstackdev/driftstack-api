@@ -144,10 +144,16 @@ export function registerAgentSessionsLivekitTokenRoute(
         video: {
           room: sessionId,
           roomJoin: true,
-          // gui-client is a subscriber. Mac-side BrowserController
-          // is the publisher (provisioned out-of-band on the Mac).
+          // gui-client is a subscriber FOR TRACKS (Mac-side BrowserController
+          // is the publisher, provisioned out-of-band on the Mac) — but it
+          // publishes DATA: the floating-iPhone simulator's input-capture sends
+          // mouse/keyboard InputEvents over the DataChannel to the Mac-side
+          // CGEvent decoder. canPublishData:true is set EXPLICITLY (not left to
+          // LiveKit's default) so manual control works; canPublish stays false
+          // so the customer still can't inject a video track.
           canPublish: false,
           canSubscribe: true,
+          canPublishData: true,
         },
       });
 

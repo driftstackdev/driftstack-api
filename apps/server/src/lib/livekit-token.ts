@@ -29,6 +29,13 @@ export interface VideoGrant {
   canPublish: boolean;
   /** Whether the holder can subscribe to tracks (dashboard viewers). */
   canSubscribe: boolean;
+  /** Whether the holder can publish DATA messages over the room DataChannel.
+   *  The customer (subscriber-only for tracks) needs this true to drive the
+   *  device: the floating-iPhone simulator's input-capture sends mouse/keyboard
+   *  InputEvents over the DataChannel to the Mac-side CGEvent decoder. Omitted
+   *  (undefined) leaves it to LiveKit's default — set it EXPLICITLY on a
+   *  control-bearing token rather than relying on that default. */
+  canPublishData?: boolean;
 }
 
 export interface MintLivekitTokenOpts {

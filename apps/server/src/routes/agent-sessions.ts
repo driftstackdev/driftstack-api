@@ -659,8 +659,13 @@ export function registerAgentSessionsRoutes(
         video: {
           room: sessionId,
           roomJoin: true,
+          // Subscriber for TRACKS, but publishes DATA: the simulator's
+          // input-capture sends InputEvents over the DataChannel to the Mac.
+          // Explicit canPublishData:true (not LiveKit's default); canPublish
+          // stays false (no customer-injected video track).
           canPublish: false,
           canSubscribe: true,
+          canPublishData: true,
         },
       });
       return {
