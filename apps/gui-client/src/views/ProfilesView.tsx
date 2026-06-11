@@ -193,19 +193,45 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
    *  the profile is idle. Looks up the binding's currentSessionId in
    *  the live activeSessions list — a stale binding (session destroyed
    *  externally) reads as idle. */
-  function runningSessionFor(profileId: string): Session | null {
+  // W624 — the session a profile is bound to, by KIND. A launch with live
+  // video binds the profile to an AGENT session (agt_<uuid>); a LiveKit-less
+  // launch binds a DRIVER session (ses_<uuid>). The old runningSessionFor
+  // only looked agt_ ids up in the driver-session list (sessions.list()),
+  // never found them, so an agent-backed profile showed idle AND its Stop
+  // button no-op'd — the founder-hit "destroy doesn't stop it, keeps
+  // running". Driver sessions keep the staleness cross-check against the
+  // live list; agent sessions are treated as running from the binding (no
+  // cheap list endpoint — and agentSessions.close is idempotent, so a Stop
+  // on an already-reaped agent session is a harmless cleanup).
+  function boundSession(profileId: string): { id: string; kind: 'agent' | 'driver' } | null {
     const binding = bindings.find((b) => b.profileId === profileId);
-    if (binding === null || binding === undefined || binding.currentSessionId === null) {
-      return null;
+    const sid = binding?.currentSessionId ?? null;
+    if (sid === null) return null;
+    if (sid.startsWith('agt_')) return { id: sid, kind: 'agent' };
+    return activeSessions.some((s) => s.id === sid) ? { id: sid, kind: 'driver' } : null;
+  }
+
+  // W624 — re-open the live stream for an already-running agent session
+  // (the profile-row "Live view" when the binding is an agent session).
+  async function reopenStream(agentSessionId: string, profileId: string): Promise<void> {
+    if (!client) return;
+    setBusyId(profileId);
+    try {
+      const info = await client.agentSessions.livekitToken(agentSessionId);
+      setWatchInfo(info);
+      setWatchSource({ profileId, agentSessionId });
+    } catch (err) {
+      setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
+    } finally {
+      setBusyId(null);
     }
-    return activeSessions.find((s) => s.id === binding.currentSessionId) ?? null;
   }
 
   // 2026-05-21 — derive the filtered/sorted view over state.profiles.
-  // Search matches name + description + archetype; status filter joins
-  // against activeSessions via runningSessionFor; sort is
-  // recency-by-default ("what did I touch last?" beats alpha for the
-  // operator workflow).
+  // Search matches name + description + archetype; status filter treats a
+  // profile as running when it's bound to a live driver session OR an agent
+  // session (W624); sort is recency-by-default ("what did I touch last?"
+  // beats alpha for the operator workflow).
   const filteredProfiles = useMemo(() => {
     let list = state.profiles;
     const q = searchQuery.trim().toLowerCase();
@@ -219,11 +245,12 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     }
     if (statusFilter !== 'all') {
       list = list.filter((p) => {
+        // W624 — agent-backed (agt_) sessions count as running too, not just
+        // driver sessions present in the live list.
         const binding = bindings.find((b) => b.profileId === p.id);
+        const sid = binding?.currentSessionId ?? null;
         const running =
-          binding !== undefined &&
-          binding.currentSessionId !== null &&
-          activeSessions.some((s) => s.id === binding.currentSessionId);
+          sid !== null && (sid.startsWith('agt_') || activeSessions.some((s) => s.id === sid));
         return statusFilter === 'running' ? running : !running;
       });
     }
@@ -316,15 +343,28 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
 
   async function handleStop(profile: Profile): Promise<void> {
     if (!client) return;
-    const session = runningSessionFor(profile.id);
-    if (session === null) {
+    const bound = boundSession(profile.id);
+    if (bound === null) {
       await clearProfileSession(profile.id);
       await refresh(false);
       return;
     }
     setBusyId(profile.id);
     try {
-      await client.sessions.destroy(session.id);
+      // W624 — close by KIND so an agent-backed profile actually stops
+      // (was the founder-hit "destroy keeps running"): agent → close the
+      // agent session (which tears down its dispatched browser); driver →
+      // destroy the session. If the live overlay is showing this session,
+      // dismiss it too.
+      if (bound.kind === 'agent') {
+        await client.agentSessions.close(bound.id);
+      } else {
+        await client.sessions.destroy(bound.id);
+      }
+      if (watchSource?.profileId === profile.id) {
+        setWatchInfo(null);
+        setWatchSource(null);
+      }
       await clearProfileSession(profile.id);
       await refresh(false);
       await refreshAccountMe();
@@ -519,8 +559,8 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             </li>
           ) : null}
           {filteredProfiles.map((profile) => {
-            const session = runningSessionFor(profile.id);
-            const running = session !== null;
+            const bound = boundSession(profile.id);
+            const running = bound !== null;
             const binding = bindings.find((b) => b.profileId === profile.id) ?? null;
             const selectedProxy = pickProxy(profile.id);
             const busy = busyId === profile.id;
@@ -593,7 +633,16 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                       <button
                         type="button"
                         className="btn-secondary text-xs"
-                        onClick={() => onOpenSession(session.id)}
+                        onClick={() => {
+                          // W624 — agent session → re-open the WebRTC stream;
+                          // driver session → the polling viewer.
+                          if (bound === null) return;
+                          if (bound.kind === 'agent') {
+                            void reopenStream(bound.id, profile.id);
+                          } else {
+                            onOpenSession(bound.id);
+                          }
+                        }}
                         disabled={busy}
                       >
                         Live view

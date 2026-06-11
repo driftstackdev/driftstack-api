@@ -127,6 +127,25 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).not.toMatch(/disabled=\{busy\s*\|\|\s*atProfileCap\}/);
   });
 
+  it("W624 stop-actually-stops: boundSession resolves the profile's session by KIND (agt_ → agent, else live driver session) so an agent-backed profile counts as running AND its Stop closes the right thing — handleStop calls agentSessions.close(agt_) / sessions.destroy(ses_). The founder-hit bug: launch-with-LiveKit bound an agt_ id that the driver-only lookup never matched, so the profile showed idle and Stop no-op'd (the agent session kept running).", () => {
+    expect(body).toMatch(
+      /function boundSession\(profileId: string\): \{ id: string; kind: 'agent' \| 'driver' \} \| null \{/,
+    );
+    expect(body).toMatch(/if \(sid\.startsWith\('agt_'\)\) return \{ id: sid, kind: 'agent' \};/);
+    expect(body).toMatch(
+      /return activeSessions\.some\(\(s\) => s\.id === sid\) \? \{ id: sid, kind: 'driver' \} : null;/,
+    );
+    // handleStop closes by kind (the actual fix for "destroy keeps running").
+    expect(body).toMatch(
+      /if \(bound\.kind === 'agent'\) \{\s*\n?\s*await client\.agentSessions\.close\(bound\.id\);\s*\n?\s*\} else \{\s*\n?\s*await client\.sessions\.destroy\(bound\.id\);\s*\n?\s*\}/,
+    );
+    // running flag + status filter both recognise agt_ sessions.
+    expect(body).toMatch(/const running = bound !== null;/);
+    expect(body).toMatch(/sid !== null && \(sid\.startsWith\('agt_'\) \|\| activeSessions\.some/);
+    // Live view re-opens the stream for an agent session (livekitToken).
+    expect(body).toMatch(/await client\.agentSessions\.livekitToken\(agentSessionId\);/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

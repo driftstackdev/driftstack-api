@@ -43,6 +43,8 @@ vi.mock('../../src/lib/SettingsContext', () => {
       agentSessions: {
         create: (b: unknown) => agentCreate(b),
         close: (id: string) => agentClose(id),
+        // W624 — Live-view re-open path for an already-running agent session.
+        livekitToken: () => Promise.resolve(LIVEKIT),
       },
     },
     settings: { apiKey: 'ds_test_x', baseUrl: 'http://localhost:3000' },
