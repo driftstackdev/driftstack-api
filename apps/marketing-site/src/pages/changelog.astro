@@ -19,6 +19,24 @@ const ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-06-11',
     category: 'launch',
+    title: 'Desktop app: the session viewer is now a real phone browser',
+    body: 'The live session view in the desktop app grew up: an editable address bar with reload, browser-style tabs (each tab is one of your concurrent sessions — sessions started from the dashboard or API appear automatically), an iPhone-style device frame that matches your session’s real screen shape (toggleable for pixel-level debugging), a page-loading bar, and honest page-error overlays (DNS, TLS, HTTP status, timeout) with one-click retry. Launching a profile now always lands you in a working viewer: deployments without live video streaming fall back to the direct viewer automatically, and an empty stream room says so instead of showing a black screen. The Dev Logs panel now also captures every failing API call and every visible error, so self-hosted debugging no longer needs devtools.',
+  },
+  {
+    date: '2026-06-11',
+    category: 'sdk',
+    title: 'Sensitive-field typing + page lifecycle on session state',
+    body: "Two additive API surfaces. (1) The type action accepts sensitive: true for card numbers, OTPs and PINs — the human-typing simulation then makes no visible corrections while typing them, so per-keystroke validation and auto-submit-on-length can't misfire (password fields get this automatically; the flag covers values the DOM can't reveal). All three SDKs carry it. (2) GET /v1/sessions/:id/state now includes page_state — the page lifecycle as the browser sees it (loading / loaded / errored, with error kind and HTTP status on failures) — so pollers can render loading and error states without screenshot guesswork. Both are documented at docs.driftstack.dev/api/sessions.",
+  },
+  {
+    date: '2026-06-11',
+    category: 'self-hosted',
+    title: 'Self-hosted: sessions no longer require a proxy',
+    body: 'On self-hosted deployments, sessions egress from your own machine — so requiring a proxy on every session-create made no sense there. The new SESSION_PROXY_REQUIRED environment variable makes the egress safeguard explicit: leave it unset for the existing inferred behavior (required when an egress backend is wired — the cloud posture), set false on self-hosted boxes to create sessions proxy-free, or true to force-require. One env var, no code change.',
+  },
+  {
+    date: '2026-06-11',
+    category: 'launch',
     title: 'Rate-limit caps now visible on the dashboard',
     body: "The /usage page gained a Rate limits card showing every token bucket your account draws from — capacity, refill rate, and whether the value is your tier default or a staff-granted override (with the override's auto-revert date). Previously this data was only reachable by calling GET /v1/account/rate-limits from the SDK or curl. The endpoint stays available for programmatic reads.",
   },
