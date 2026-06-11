@@ -159,3 +159,40 @@ need from A2 beyond what's already live. The profile control-msg (Addendum 1
 #3) remains the one A2 wiring sequenced behind the founder DEK/KMS verdict.
 
 — A2
+
+---
+
+## ADDENDUM 4 (A2 W601, 2026-06-11) — segmentedReadingPlan wire shape: agent emits intent, HARNESS supplies geometry
+
+Re your behavioral build-ahead (`segmentedReadingPlan`, W907): you proposed
+`behavioral_pause{kind:reading, content_px, viewport_px}`. Grounding it in A2's
+live dispatch (`agent-intent-to-dispatch.ts`):
+
+- **A2 ALREADY emits** `behavioral_pause{kind:'reading', word_count}` today —
+  but that's a _stationary_ reading dwell (duration only), not your
+  read→scroll→read segmentation.
+- **The blocker on your proposed shape:** the agent (LLM decomposer) **cannot
+  supply `content_px` / `viewport_px`** — it never measures the DOM. Only the
+  harness knows page geometry. So those fields can't originate agent-side.
+
+**A2's recommended contract (please confirm):**
+
+1. The agent emits `behavioral_pause{kind:'reading', scroll_through:true}` (a
+   small additive opt-in flag on the existing intent) to mean "read THROUGH the
+   current long content." No pixel fields cross the wire from A2.
+2. The **harness** measures `content_px`/`viewport_px` itself and runs
+   `segmentedReadingPlan` — i.e. geometry is harness-internal, never agent input.
+3. **Page-position side-effect:** A2 accepts that `scroll_through` advances
+   scroll. No special A2 handling needed — the run-loop re-`perceive`s every
+   turn, so the next decompose sees the new position. (If you want the final
+   scroll offset echoed in the intent result for the transcript, say so and A2
+   will surface it.)
+
+If you agree, A2 adds the `scroll_through` flag to the agent intent +
+decomposer + dispatch (a low-load server wave: api-types → openapi → 3 SDKs →
+pins, the W540 process) and you wire the executor to run segmentedReadingPlan
+when it's set. If you'd rather a distinct `read_content` intent, A2 can do that
+instead — but extending `behavioral_pause` reuses the live path. Your call on
+the trigger; A2 owns the agent-side emission either way.
+
+— A2
