@@ -18,6 +18,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
+import type { Room } from '../lib/livekit';
+import { useLatencyPing } from '../lib/livekit-latency-ping';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 
 /** Frame chrome heights (px) used to derive the window size from the device's
@@ -27,14 +29,20 @@ const TOOLBAR_H = 34;
 const BEZEL_PAD = 20; // p-[10px] × 2
 const STATUS_STRIP_H = 40;
 
-function infoFromQuery(): { info: LiveKitInfo | null; deviceName: string; profileName: string } {
+function infoFromQuery(): {
+  info: LiveKitInfo | null;
+  deviceName: string;
+  profileName: string;
+  proxyLabel: string;
+} {
   const q = new URLSearchParams(window.location.search);
   const ws_url = q.get('ws');
   const token = q.get('token');
   const deviceName = q.get('name') ?? 'iPhone';
   const profileName = q.get('profile') ?? '';
+  const proxyLabel = q.get('proxy') ?? '';
   if (ws_url === null || token === null || ws_url === '' || token === '') {
-    return { info: null, deviceName, profileName };
+    return { info: null, deviceName, profileName, proxyLabel };
   }
   // LiveKitInfo carries ws_url + token (the only fields the panel/connect read);
   // room_name is informational. Cast is safe — the panel reads ws_url/token only.
@@ -42,6 +50,7 @@ function infoFromQuery(): { info: LiveKitInfo | null; deviceName: string; profil
     info: { ws_url, token, room_name: q.get('room') ?? '' } as unknown as LiveKitInfo,
     deviceName,
     profileName,
+    proxyLabel,
   };
 }
 
@@ -317,7 +326,11 @@ function IosStatusBar(): JSX.Element {
 }
 
 export function SimulatorWindow(): JSX.Element {
-  const { info, deviceName, profileName } = infoFromQuery();
+  const { info, deviceName, profileName, proxyLabel } = infoFromQuery();
+  // Night-arc C cockpit: live room handle (from the panel) drives the
+  // previously-dormant LK.6.e latency ping; rendered in the overlay.
+  const [room, setRoom] = useState<Room | null>(null);
+  const latency = useLatencyPing({ room, enabled: room !== null });
   const [landscape, setLandscape] = useState(false);
   // Pin = always-on-top (the floating-iPhone default). Unpinned the window
   // behaves like a normal sibling window (Cmd+` cycling, Mission Control,
@@ -419,6 +432,22 @@ export function SimulatorWindow(): JSX.Element {
                   <div className="truncate">
                     link {info ? new URL(info.ws_url).host : 'not connected'}
                   </div>
+                  {proxyLabel !== '' && <div className="truncate">egress 🌍 {proxyLabel}</div>}
+                  <div className="truncate">
+                    latency{' '}
+                    {latency.rttMs !== null ? (
+                      <span className={latency.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}>
+                        {latency.rttMs} ms
+                      </span>
+                    ) : (
+                      <span className="text-white/50">measuring…</span>
+                    )}
+                  </div>
+                  <div className="mt-1.5 border-t border-white/15 pt-1.5">
+                    <div className="font-sans text-[11px] font-semibold text-white">Identity</div>
+                    <div className="truncate">engine-deep · bit-exact device</div>
+                    <div className="truncate">input human-cadence native</div>
+                  </div>
                 </div>
               )}
               <div className="relative min-h-0 flex-1">
@@ -426,6 +455,7 @@ export function SimulatorWindow(): JSX.Element {
                   info={info}
                   interactive
                   onVideoDimensions={handleVideoDimensions}
+                  onRoom={setRoom}
                 />
               </div>
             </div>

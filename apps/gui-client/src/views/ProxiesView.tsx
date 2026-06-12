@@ -21,6 +21,7 @@ import {
   type ProxyDraft,
   type ProxyTestResult,
 } from '../lib/proxies';
+import { saveProbeResult } from '../lib/proxy-probe-cache';
 
 interface ListState {
   proxies: ProxyConfig[];
@@ -97,6 +98,9 @@ export function ProxiesView(): JSX.Element {
         password: p.password,
       });
       setTestResults((r) => ({ ...r, [p.id]: result }));
+      // Night-arc B: persist so profile cards can render egress
+      // capability (UDP badge) without re-probing. Best-effort.
+      void saveProbeResult(p.id, result, Date.now()).catch(() => undefined);
     } catch (err) {
       setTestResults((r) => ({
         ...r,

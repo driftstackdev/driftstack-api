@@ -56,6 +56,10 @@ export interface AgentSessionPanelProps {
    *  loadedmetadata). The simulator window uses this to resize itself to the
    *  archetype's true proportions — no hardcoded per-archetype table. */
   onVideoDimensions?: (width: number, height: number) => void;
+  /** Night-arc C: surfaces the connected Room upward so the simulator
+   *  cockpit can run the (previously dormant) latency ping. Called with
+   *  the room once connected and with null on teardown. */
+  onRoom?: (room: Room | null) => void;
 }
 
 /** W617 — how long a connected-but-videoless room waits before the panel
@@ -72,6 +76,7 @@ export function AgentSessionPanel({
   onNoPublisher,
   interactive = false,
   onVideoDimensions,
+  onRoom,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
@@ -117,6 +122,7 @@ export function AgentSessionPanel({
     // Expose the room to the input-capture hook (simulator control). Cleared
     // in cleanup so a stale room can't receive input after disconnect.
     setRoom(room);
+    onRoom?.(room);
     const setS = (next: LivekitConnectionState): void => {
       setState(next);
       onStateChangeRef.current?.(next);
@@ -168,6 +174,7 @@ export function AgentSessionPanel({
       cancelled = true;
       if (noPublisherTimer !== null) clearTimeout(noPublisherTimer);
       setRoom(null);
+      onRoom?.(null);
       void (room as any).disconnect();
     };
     // Reconnect only when the connection identity (ws_url + token) changes, NOT

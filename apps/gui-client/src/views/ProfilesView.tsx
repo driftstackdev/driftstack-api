@@ -18,6 +18,7 @@ import {
   saveProfilesMetaBulk,
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
+import { loadProbeCache, type ProbeCacheMap } from '../lib/proxy-probe-cache';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
 import {
@@ -167,6 +168,10 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   const [quickBusy, setQuickBusy] = useState(false);
   // Increment 2 — client-persisted organization (folders/tags/notes).
   const [profilesMeta, setProfilesMeta] = useState<ProfilesMetaMap>({});
+  // Night-arc B: last probe result per proxy id (written by the Proxies
+  // tab's Test actions) — cards render the UDP badge from it; absent =
+  // honest 'untested'.
+  const [probeCache, setProbeCache] = useState<ProbeCacheMap>({});
   const [folderFilter, setFolderFilter] = useState<string>('all');
   const [organizeId, setOrganizeId] = useState<string | null>(null);
   // Increment 3 — bulk select: client-side organize actions over a selection.
@@ -182,6 +187,16 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       return false;
     }
   });
+  // Night-arc D — privacy banner (hub demo). Claims limited to wording
+  // already shipped on the production dashboard trust surface; the
+  // demo's stronger phrasing stays gated on founder+legal sign-off.
+  const [privacyDismissed, setPrivacyDismissed] = useState(() => {
+    try {
+      return localStorage.getItem('ds_privacy_banner_dismissed') === '1';
+    } catch {
+      return false;
+    }
+  });
   const [draftFolder, setDraftFolder] = useState('');
   const [draftTags, setDraftTags] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProfileStatusFilter>('all');
@@ -189,6 +204,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
 
   useEffect(() => {
     void loadProfilesMeta().then(setProfilesMeta);
+    void loadProbeCache().then(setProbeCache);
   }, []);
 
   const refresh = useCallback(
@@ -315,11 +331,15 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       // Open the floating-iPhone simulator window (the standard experience).
       // Falls back to the in-app overlay when not under Tauri (browser preview).
       const reopened = state.profiles.find((p) => p.id === profileId);
+      const reopenProxy = pickProxy(profileId);
       const sim = await openSimulatorWindow({
         sessionId: agentSessionId,
         info,
         deviceName: formatDeviceName(reopened?.archetype ?? ''),
         profileName: reopened?.name,
+        ...(reopenProxy !== null
+          ? { proxyLabel: `${reopenProxy.label} · ${reopenProxy.host}:${String(reopenProxy.port)}` }
+          : {}),
       });
       if (!sim.opened) {
         setWatchInfo(info);
@@ -454,6 +474,11 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           info: created.livekit,
           deviceName: formatDeviceName(profile.archetype),
           profileName: profile.name,
+          ...(pickProxy(profile.id) !== null
+            ? {
+                proxyLabel: `${pickProxy(profile.id)?.label ?? ''} · ${pickProxy(profile.id)?.host ?? ''}:${String(pickProxy(profile.id)?.port ?? '')}`,
+              }
+            : {}),
         });
         if (!sim.opened) {
           setWatchInfo(created.livekit);
@@ -673,6 +698,46 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           show placeholder frames here. To run a real iPhone session, connect a WebKit browser
           worker (the harness on a Mac) — then launches stream live video. Sessions, the viewer and
           controls work now for testing the flow.
+        </div>
+      )}
+      {!privacyDismissed && (
+        <div
+          data-component="privacy-banner"
+          className="flex items-center gap-3 rounded-lg border border-surface-divider bg-surface-raised px-4 py-2.5"
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            aria-hidden="true"
+            className="shrink-0 text-accent"
+          >
+            <rect x="3" y="11" width="18" height="10" rx="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+          <p className="flex-1 text-xs text-ink-secondary">
+            <b className="text-ink-primary">Sealed &amp; private.</b> Profile state is sealed with
+            per-profile encryption under your account's own key hierarchy; proxies and credentials
+            stay on this device — never uploaded to the control plane.
+          </p>
+          <button
+            type="button"
+            aria-label="Dismiss privacy note"
+            className="text-xs text-ink-muted hover:text-ink-primary"
+            onClick={() => {
+              setPrivacyDismissed(true);
+              try {
+                localStorage.setItem('ds_privacy_banner_dismissed', '1');
+              } catch {
+                /* session-only dismissal */
+              }
+            }}
+          >
+            ✕
+          </button>
         </div>
       )}
       {!onboardingDismissed && (
@@ -959,39 +1024,91 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                   return (
                     <div
                       key={profile.id}
-                      className="flex flex-col gap-2 rounded-md border border-surface-divider bg-surface-raised p-4"
+                      className="group flex flex-col gap-2 rounded-md border border-surface-divider bg-surface-raised p-4 transition-colors hover:border-accent/50"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-sm font-medium text-ink-primary">
-                          {profile.name}
-                        </p>
-                        <span
-                          className={
+                      <div className="flex items-start gap-3">
+                        {/* iPhone silhouette (night-arc B): pure-CSS device
+                            shape — Dynamic-Island notch, screen glow when
+                            running. Decorative; facts live in the text. */}
+                        <div
+                          aria-hidden="true"
+                          className={`relative h-16 w-9 shrink-0 rounded-[9px] border-2 ${
                             running
-                              ? 'inline-flex items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] font-semibold text-status-ready'
-                              : 'inline-flex items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] font-semibold text-ink-muted'
-                          }
+                              ? 'border-accent bg-accent-subtle shadow-[0_0_10px] shadow-accent/30'
+                              : 'border-surface-divider bg-surface-inset'
+                          }`}
                         >
-                          <span
-                            className={
-                              running
-                                ? 'h-1.5 w-1.5 rounded-full bg-status-ready'
-                                : 'h-1.5 w-1.5 rounded-full bg-status-idle'
-                            }
-                          />
-                          {running ? 'Running' : 'Idle'}
-                        </span>
+                          <span className="absolute left-1/2 top-1 h-1 w-3 -translate-x-1/2 rounded-full bg-ink-muted/40" />
+                          {running && (
+                            <span className="absolute bottom-1.5 right-1.5 h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-sm font-medium text-ink-primary">
+                              {profile.name}
+                            </p>
+                            <span
+                              className={
+                                running
+                                  ? 'inline-flex items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] font-semibold text-status-ready'
+                                  : 'inline-flex items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] font-semibold text-ink-muted'
+                              }
+                            >
+                              <span
+                                className={
+                                  running
+                                    ? 'h-1.5 w-1.5 rounded-full bg-status-ready'
+                                    : 'h-1.5 w-1.5 rounded-full bg-status-idle'
+                                }
+                              />
+                              {running ? 'Running' : 'Idle'}
+                            </span>
+                          </div>
+                          <p className="mono truncate text-xs text-ink-muted">
+                            {deviceLine(profile.archetype)}
+                          </p>
+                          {/* Egress strip: bound proxy host:port + UDP badge
+                              from the LAST probe (Proxies tab Test) — honest
+                              'untested' when never probed. Exit country
+                              arrives with the echo endpoint. */}
+                          {(() => {
+                            const px = pickProxy(profile.id);
+                            if (px === null) return null;
+                            const probe = probeCache[px.id];
+                            return (
+                              <p className="mono mt-0.5 flex items-center gap-1.5 truncate text-[10px] text-ink-secondary">
+                                <span className="truncate">
+                                  🌍 {px.label} · {px.host}:{px.port}
+                                </span>
+                                {probe ? (
+                                  <span
+                                    className={`shrink-0 rounded-sm px-1 py-px ${
+                                      probe.result.udp_associate
+                                        ? 'bg-status-ready/15 text-status-ready'
+                                        : 'bg-surface-inset text-ink-muted line-through'
+                                    }`}
+                                    title={
+                                      probe.result.udp_associate
+                                        ? 'UDP relay verified — QUIC + WebRTC tunnel through this exit.'
+                                        : 'No UDP relay on last test — sessions fall back to h2 / TURN-over-TCP.'
+                                    }
+                                  >
+                                    UDP
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="shrink-0 rounded-sm bg-surface-inset px-1 py-px text-ink-muted"
+                                    title="Never probed — run Test on the Proxies tab."
+                                  >
+                                    untested
+                                  </span>
+                                )}
+                              </p>
+                            );
+                          })()}
+                        </div>
                       </div>
-                      <p className="mono truncate text-xs text-ink-muted">{profile.archetype}</p>
-                      {/* Egress chip (hub-demo port): the proxy this profile
-                    launches through — explicit binding or first saved.
-                    Exit COUNTRY arrives with the probe backend's echo
-                    endpoint; until then the label is the honest fact. */}
-                      {pickProxy(profile.id) !== null && (
-                        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] text-ink-secondary">
-                          🌍 {pickProxy(profile.id)?.label}
-                        </span>
-                      )}
                       {organizeId === profile.id && (
                         <div className="mt-2 flex flex-wrap items-center gap-2 rounded border border-surface-divider bg-surface-inset p-2">
                           <FolderPicker
@@ -2026,6 +2143,14 @@ function EmptyConnect({
       </button>
     </div>
   );
+}
+
+/** Human device line from the registry — 'iPhone 17 · iOS 18.7 · Safari 26.4';
+ *  unknown archetypes fall back to the raw slug (never crash on growth). */
+function deviceLine(archetypeId: string): string {
+  const a = ARCHETYPE_REGISTRY.find((x) => x.id === archetypeId);
+  if (!a) return archetypeId;
+  return `${a.device} · iOS ${a.iosVersion} · Safari ${a.safariVersion}`;
 }
 
 function friendlyError(err: unknown, baseUrl?: string): string {

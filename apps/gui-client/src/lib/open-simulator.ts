@@ -26,6 +26,9 @@ export interface OpenSimulatorArgs {
   /** Profile name shown next to the Drift mark in the toolbar (the identity
    *  this phone is running as). Omitted → the toolbar shows the device only. */
   profileName?: string;
+  /** Night-arc C: egress label for the cockpit overlay — 'label · host:port'
+   *  of the proxy the session launched through. Omitted → row hidden. */
+  proxyLabel?: string;
 }
 
 export interface OpenSimulatorResult {
@@ -44,6 +47,7 @@ export async function openSimulatorWindow({
   info,
   deviceName,
   profileName,
+  proxyLabel,
 }: OpenSimulatorArgs): Promise<OpenSimulatorResult> {
   // Tauri-only — guard so a browser preview doesn't throw on the dynamic import.
   if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
@@ -71,6 +75,8 @@ export async function openSimulatorWindow({
     name: deviceName ?? 'iPhone',
     // Profile identity for the toolbar branding (empty → device-only).
     profile: profileName ?? '',
+    // Egress line for the cockpit overlay (empty → row hidden).
+    proxy: proxyLabel ?? '',
   });
 
   // Spawn BESIDE the main window, not centered over it — a borderless
