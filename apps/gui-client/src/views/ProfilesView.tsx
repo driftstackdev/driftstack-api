@@ -19,6 +19,7 @@ import {
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
 import { loadProbeCache, type ProbeCacheMap } from '../lib/proxy-probe-cache';
+import { loadTemplates, saveTemplate, type ProfileTemplate } from '../lib/profile-templates';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
 import {
@@ -1424,6 +1425,36 @@ function CreateProfileModal({
   // Organization metadata at create (backend columns, migration 0076).
   const [folder, setFolder] = useState('');
   const [tags, setTags] = useState('');
+  // Night-arc H: named create-presets (demo's From-template / Save-as-
+  // template) — client-side store; loading one fills the form fields.
+  const [templates, setTemplates] = useState<ProfileTemplate[]>([]);
+  const [templateNotice, setTemplateNotice] = useState<string | null>(null);
+  useEffect(() => {
+    void loadTemplates().then(setTemplates);
+  }, []);
+  function applyTemplate(t: ProfileTemplate): void {
+    if (t.archetype.length > 0 && ARCHETYPE_REGISTRY.some((a) => a.id === t.archetype)) {
+      setArchetype(t.archetype);
+    }
+    setDescription(t.description);
+    setFolder(t.folder);
+    setTags(t.tags);
+    setTemplateNotice(`Loaded template "${t.name}" — give the profile a name.`);
+  }
+  async function handleSaveTemplate(): Promise<void> {
+    const tplName =
+      name.trim().length > 0 ? name.trim() : `template-${String(templates.length + 1)}`;
+    const next = await saveTemplate({
+      name: tplName,
+      archetype,
+      description,
+      folder,
+      tags,
+      savedAt: Date.now(),
+    });
+    setTemplates(next);
+    setTemplateNotice(`Saved as template "${tplName}".`);
+  }
   // 2026-05-20 — antidetect-style advanced panel. Proxy is selected
   // up-front + bound to the profile via profile-bindings on create.
   // 'create-new' opens an inline SOCKS5 mini-form so the customer can
@@ -1600,16 +1631,44 @@ function CreateProfileModal({
           <h3 id="create-profile-title" className="text-base font-medium text-ink-primary">
             New profile
           </h3>
-          <button
-            type="button"
-            className="btn-secondary text-xs"
-            onClick={onClose}
-            disabled={submitting}
-            aria-label="Close"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            {templates.length > 0 && (
+              <select
+                aria-label="From template"
+                className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-secondary"
+                value=""
+                disabled={submitting}
+                onChange={(e) => {
+                  const t = templates.find((x) => x.name === e.target.value);
+                  if (t) applyTemplate(t);
+                }}
+              >
+                <option value="" disabled>
+                  ⎘ From template…
+                </option>
+                {templates.map((t) => (
+                  <option key={t.name} value={t.name}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              type="button"
+              className="btn-secondary text-xs"
+              onClick={onClose}
+              disabled={submitting}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
         </header>
+        {templateNotice !== null && (
+          <p role="status" className="mb-2 text-2xs text-accent">
+            {templateNotice}
+          </p>
+        )}
 
         {/* Configurator tabs (demo port). role=tablist keyboardable via the buttons. */}
         <div
@@ -1666,9 +1725,15 @@ function CreateProfileModal({
                   </span>
                 </label>
 
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <span className="section-label">Device archetype</span>
+                <div className="flex flex-col gap-2 rounded border border-surface-divider bg-surface-base/40 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-medium text-ink-primary">Device & identity</h4>
+                      <p className="mt-0.5 text-2xs text-ink-muted">
+                        A bit-exact mobile fingerprint, not a spoofed user-agent — pick the device;
+                        everything stays coherent with it.
+                      </p>
+                    </div>
                     <button
                       type="button"
                       onClick={randomizeArchetype}
@@ -1721,7 +1786,7 @@ function CreateProfileModal({
                 </div>
 
                 <div className="flex flex-col gap-1 rounded border border-surface-divider bg-surface-base/40 p-3">
-                  <span className="section-label">Locale & timezone</span>
+                  <h4 className="text-sm font-medium text-ink-primary">Locale &amp; timezone</h4>
                   <p className="text-xs text-ink-secondary">
                     Auto-follows the proxy exit geo at session time — language, locale and timezone
                     never contradict the IP. No overrides: coherence is the point.
@@ -1874,7 +1939,7 @@ function CreateProfileModal({
 
             {tab === 'storage' && (
               <div className="flex flex-col gap-2 rounded border border-surface-divider bg-surface-base/40 p-3">
-                <span className="section-label">Persistent browser state</span>
+                <h4 className="text-sm font-medium text-ink-primary">Persistent browser state</h4>
                 <p className="text-xs text-ink-secondary">
                   Cookies, localStorage and IndexedDB persist across this profile's sessions — log
                   in once, stay logged in. State is sealed with per-profile encryption under your
@@ -1889,7 +1954,7 @@ function CreateProfileModal({
 
             {tab === 'behavior' && (
               <div className="flex flex-col gap-2 rounded border border-surface-divider bg-surface-base/40 p-3">
-                <span className="section-label">Human-cadence input</span>
+                <h4 className="text-sm font-medium text-ink-primary">Human-cadence input</h4>
                 <p className="text-xs text-ink-secondary">
                   Taps, scrolls and typing run through the behavioral simulation layer — native
                   events with human timing, not synthetic JavaScript. On by default for every
@@ -2008,6 +2073,14 @@ function CreateProfileModal({
                 disabled={submitting}
               >
                 Cancel
+              </button>
+              <button
+                type="button"
+                className="text-2xs text-ink-muted underline-offset-2 hover:text-ink-primary hover:underline"
+                onClick={() => void handleSaveTemplate()}
+                disabled={submitting}
+              >
+                ⎘ Save as template
               </button>
             </div>
           </aside>
