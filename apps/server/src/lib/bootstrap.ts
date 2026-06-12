@@ -30,6 +30,7 @@ import { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import { SessionPageStateStore } from '../services/session-page-state-store.js';
 import { makeProfileSavedPersister } from '../services/profile-store.js';
 import { makeChallengeRelay } from '../services/challenge-relay.js';
+import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-relay.js';
 import { RedisFleetNonceCache } from '../lib/redis-fleet-nonce-cache.js';
 import { DrizzleAtlasPriorityEventsRepo } from '../db/atlas-priority-events-repo.js';
 import { InternalFleetAuth } from './internal-fleet-auth.js';
@@ -1280,6 +1281,9 @@ export async function createProductionDeps(
             // W650/A3-W1254: a pageState frame (agent-initiated navigate) → store
             // the latest per agent session for GET /v1/agent-sessions/:id/page-state.
             (frame) => sessionPageStateStore.set(frame),
+            // A3 W1364: a profileSaveFailed frame (save-back failed at teardown)
+            // → relay as the customer-facing session.profile_save_failed webhook.
+            makeProfileSaveFailedRelay(agentSessionsRepo, webhooksService, logger),
           ),
           // Local fleet-demo: the config a dispatched session browses with. Only
           // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The

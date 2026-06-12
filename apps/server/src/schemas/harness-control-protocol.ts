@@ -495,6 +495,30 @@ export const ChallengeDetectedSchema = z.object({
 });
 export type ChallengeDetected = z.infer<typeof ChallengeDetectedSchema>;
 
+// ── HarnessOutbound.profileSaveFailed (harness → server; A3 W1364 / A2 decision 2026-06-12) ──
+// Emitted on session TEARDOWN when a profile-backed session's save-back fails
+// on any leg (serialize / seal / >256MiB / presigned-PUT) — the asymmetry fix:
+// restore-failure was customer-visible (errored session) while save-failure was
+// ops-stderr-only, so a customer relying on persisted state couldn't distinguish
+// "saved" from "silently lost" until a stale NEXT-session restore. The session
+// itself stays SUCCEEDED (this is an event, not a state change — A3 W966
+// posture). TERMINAL by contract: the harness's internal one-shot PUT retry is
+// exhausted before this emits, the outbound queue retries FRAMES not blobs, and
+// teardown is one-shot — so there is deliberately NO will_retry field (A3
+// confirmed it would always be false; add it back as an optional field if a
+// save-retry path ever exists). `detail` is a short scrubbed ops-grade string
+// (no secrets/paths). Relayed as the customer-facing
+// `session.profile_save_failed` webhook. Plain object (lenient forward-compat),
+// like the sibling frames.
+export const ProfileSaveFailedSchema = z.object({
+  type: z.literal('profileSaveFailed'),
+  sessionId: z.string().min(1),
+  profile_id: z.string().min(1),
+  reason: z.enum(['serialize_failed', 'seal_failed', 'too_large', 'upload_failed']),
+  detail: z.string().optional(),
+});
+export type ProfileSaveFailed = z.infer<typeof ProfileSaveFailedSchema>;
+
 // ── HarnessOutbound.pageState (harness → server; A3 W1238/W1240) ──
 // Emitted on an AGENT-INITIATED navigate: loading → loaded | errored. Intended
 // to drive the GUI loading-bar / error-overlay (W615/W616). `error.kind` is
@@ -523,12 +547,12 @@ export const PageStateFrameSchema = z.object({
 export type PageStateFrame = z.infer<typeof PageStateFrameSchema>;
 
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
-// All 8 variants pinned. intentResult + sessionStatus are consumed precisely;
+// All 9 variants pinned. intentResult + sessionStatus are consumed precisely;
 // heartbeat / capabilityReport / errorEvent / profileSaved / challengeDetected
-// / pageState are accepted (typed) + ignored until a consumer wires them
-// (profileSaved consumer = step (d); challengeDetected relay →
-// session.challenge_detected wired W393; pageState consumer pending the agent↔
-// driver page_state coupling, A2 bus W650).
+// / pageState / profileSaveFailed are accepted (typed) + routed where a
+// consumer is wired (profileSaved consumer = step (d); challengeDetected relay
+// → session.challenge_detected W393; pageState → SessionPageStateStore W650;
+// profileSaveFailed relay → session.profile_save_failed, A3 W1364).
 export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
@@ -538,6 +562,7 @@ export const HarnessOutboundSchema = z.discriminatedUnion('type', [
   ProfileSavedSchema,
   ChallengeDetectedSchema,
   PageStateFrameSchema,
+  ProfileSaveFailedSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;
 export type ProfileSaved = z.infer<typeof ProfileSavedSchema>;

@@ -224,6 +224,63 @@ describe('FleetControlConnection', () => {
     ).not.toThrow();
   });
 
+  it('routes an inbound profileSaveFailed frame \u2192 invokes the onProfileSaveFailed handler (A3 W1364)', () => {
+    const seen: unknown[] = [];
+    const conn = new FleetControlConnection(
+      'node-1',
+      () => {},
+      undefined, // onProfileSaved
+      undefined, // onChallengeDetected
+      undefined, // onPageState
+      (f) => seen.push(f),
+    );
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'profileSaveFailed',
+        sessionId: 'agt_x',
+        profile_id: 'prof_1',
+        reason: 'upload_failed',
+        detail: 'presigned PUT returned 503',
+      }),
+    );
+    // detail optional \u2014 the minimal shape routes too.
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'profileSaveFailed',
+        sessionId: 'agt_x',
+        profile_id: 'prof_1',
+        reason: 'too_large',
+      }),
+    );
+    expect(seen).toHaveLength(2);
+    expect((seen[0] as { reason: string }).reason).toBe('upload_failed');
+    expect((seen[1] as { detail?: string }).detail).toBeUndefined();
+    // An unknown reason value fails the enum \u2192 frame ignored (no crash).
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'profileSaveFailed',
+        sessionId: 'agt_x',
+        profile_id: 'prof_1',
+        reason: 'gremlins',
+      }),
+    );
+    expect(seen).toHaveLength(2);
+  });
+
+  it('a profileSaveFailed frame with no handler wired is accepted + ignored (no crash \u2014 stateless deploy)', () => {
+    const conn = new FleetControlConnection('node-1', () => {});
+    expect(() =>
+      conn.handleInbound(
+        JSON.stringify({
+          type: 'profileSaveFailed',
+          sessionId: 'agt_x',
+          profile_id: 'prof_1',
+          reason: 'seal_failed',
+        }),
+      ),
+    ).not.toThrow();
+  });
+
   it('routes an inbound pageState frame → invokes the onPageState handler (W650/A3-W1254)', () => {
     const seen: unknown[] = [];
     const conn = new FleetControlConnection(

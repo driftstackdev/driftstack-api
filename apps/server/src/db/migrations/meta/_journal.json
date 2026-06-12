@@ -512,6 +512,13 @@
       "when": 1780180800000,
       "tag": "0072_archetype_default_iphone17",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1780267200000,
+      "tag": "0073_session_profile_save_failed_webhook_event",
+      "breakpoints": true
     }
   ]
 }

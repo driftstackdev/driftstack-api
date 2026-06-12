@@ -31,6 +31,9 @@ const DECLARED_NOT_LIVE = new Set<string>([
   // W393 — in the enum + subscribable, but the relay emitter wires in a
   // follow-up slice; not marketed as LIVE in the hub until then.
   'session.challenge_detected',
+  // A3 W1364 — declared + relay wired, but gated behind the fleet control
+  // plane; not marketed as LIVE in the hub until it fires in prod.
+  'session.profile_save_failed',
 ]);
 
 function read(): string {

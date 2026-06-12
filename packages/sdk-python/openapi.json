@@ -2045,7 +2045,8 @@
                 "test.ping",
                 "crypto.order.paid",
                 "crypto.order.failed",
-                "session.challenge_detected"
+                "session.challenge_detected",
+                "session.profile_save_failed"
               ]
             }
           },
@@ -2135,7 +2136,8 @@
                 "session.egress_capability_changed",
                 "crypto.order.paid",
                 "crypto.order.failed",
-                "session.challenge_detected"
+                "session.challenge_detected",
+                "session.profile_save_failed"
               ]
             },
             "minItems": 1,
@@ -2184,7 +2186,8 @@
                 "test.ping",
                 "crypto.order.paid",
                 "crypto.order.failed",
-                "session.challenge_detected"
+                "session.challenge_detected",
+                "session.profile_save_failed"
               ]
             }
           },
@@ -2286,7 +2289,8 @@
               "test.ping",
               "crypto.order.paid",
               "crypto.order.failed",
-              "session.challenge_detected"
+              "session.challenge_detected",
+              "session.profile_save_failed"
             ]
           },
           "status": {
@@ -7383,7 +7387,8 @@
                         "test.ping",
                         "crypto.order.paid",
                         "crypto.order.failed",
-                        "session.challenge_detected"
+                        "session.challenge_detected",
+                        "session.profile_save_failed"
                       ]
                     },
                     "status": {
@@ -7541,7 +7546,8 @@
                         "test.ping",
                         "crypto.order.paid",
                         "crypto.order.failed",
-                        "session.challenge_detected"
+                        "session.challenge_detected",
+                        "session.profile_save_failed"
                       ]
                     },
                     "status": {
@@ -7725,7 +7731,8 @@
                               "test.ping",
                               "crypto.order.paid",
                               "crypto.order.failed",
-                              "session.challenge_detected"
+                              "session.challenge_detected",
+                              "session.profile_save_failed"
                             ]
                           },
                           "status": {
@@ -7880,7 +7887,8 @@
                         "test.ping",
                         "crypto.order.paid",
                         "crypto.order.failed",
-                        "session.challenge_detected"
+                        "session.challenge_detected",
+                        "session.profile_save_failed"
                       ]
                     },
                     "status": {
@@ -8051,7 +8059,8 @@
                         "test.ping",
                         "crypto.order.paid",
                         "crypto.order.failed",
-                        "session.challenge_detected"
+                        "session.challenge_detected",
+                        "session.profile_save_failed"
                       ]
                     },
                     "status": {
@@ -23336,7 +23345,8 @@
                         "session.egress_capability_changed",
                         "crypto.order.paid",
                         "crypto.order.failed",
-                        "session.challenge_detected"
+                        "session.challenge_detected",
+                        "session.profile_save_failed"
                       ]
                     },
                     "minItems": 1,
@@ -23397,7 +23407,8 @@
                           "test.ping",
                           "crypto.order.paid",
                           "crypto.order.failed",
-                          "session.challenge_detected"
+                          "session.challenge_detected",
+                          "session.profile_save_failed"
                         ]
                       }
                     },
@@ -23593,7 +23604,8 @@
                                 "test.ping",
                                 "crypto.order.paid",
                                 "crypto.order.failed",
-                                "session.challenge_detected"
+                                "session.challenge_detected",
+                                "session.profile_save_failed"
                               ]
                             }
                           },
@@ -23774,7 +23786,8 @@
                           "test.ping",
                           "crypto.order.paid",
                           "crypto.order.failed",
-                          "session.challenge_detected"
+                          "session.challenge_detected",
+                          "session.profile_save_failed"
                         ]
                       }
                     },
@@ -23961,7 +23974,8 @@
                         "session.egress_capability_changed",
                         "crypto.order.paid",
                         "crypto.order.failed",
-                        "session.challenge_detected"
+                        "session.challenge_detected",
+                        "session.profile_save_failed"
                       ]
                     },
                     "minItems": 1,
@@ -24023,7 +24037,8 @@
                           "test.ping",
                           "crypto.order.paid",
                           "crypto.order.failed",
-                          "session.challenge_detected"
+                          "session.challenge_detected",
+                          "session.profile_save_failed"
                         ]
                       }
                     },
@@ -24308,7 +24323,8 @@
                               "test.ping",
                               "crypto.order.paid",
                               "crypto.order.failed",
-                              "session.challenge_detected"
+                              "session.challenge_detected",
+                              "session.profile_save_failed"
                             ]
                           },
                           "status": {

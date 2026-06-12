@@ -129,6 +129,10 @@ const (
 	// plane relays it. Subscribable so customers wire challenge alerts into their
 	// own ops surface; the harness auto-pauses + the customer resumes.
 	EventSessionChallengeDetected WebhookEventType = "session.challenge_detected"
+	// A3 W1364 — profile save-back failed at session teardown (terminal; the
+	// session itself succeeded). Subscribable so customers persisting profile
+	// state can alert on a stale next restore.
+	EventSessionProfileSaveFailed WebhookEventType = "session.profile_save_failed"
 )
 
 // WebhookDeliveryStatus.

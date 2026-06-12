@@ -40,7 +40,13 @@ export type WebhookEventType =
   // W393 — challenge-handling. Fired when the harness ChallengeDetector flags a
   // bot-check + the control plane relays it to the customer (session.challenge_
   // detected webhook + transcript SSE). Migration 0070 ALTERs the pgEnum.
-  | 'session.challenge_detected';
+  | 'session.challenge_detected'
+  // A3 W1364 / 2026-06-12 — profile save-back failed at session teardown; the
+  // control plane relays the harness profileSaveFailed frame so customers
+  // relying on persisted profile state know not to trust the next restore.
+  // Terminal (no retry path); the session itself stays succeeded. Migration
+  // 0073 ALTERs the pgEnum.
+  | 'session.profile_save_failed';
 
 export type WebhookDeliveryStatus = 'pending' | 'in_flight' | 'delivered' | 'failed' | 'dlq';
 

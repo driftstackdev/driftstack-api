@@ -25,6 +25,7 @@ import {
   type PauseSession,
   type ResumeSession,
   type ProfileSaved,
+  type ProfileSaveFailed,
   type ChallengeDetected,
   type PageStateFrame,
 } from '../schemas/harness-control-protocol.js';
@@ -45,6 +46,7 @@ export class FleetControlConnection {
   private readonly onProfileSaved?: (frame: ProfileSaved) => void;
   private readonly onChallengeDetected?: (frame: ChallengeDetected) => void;
   private readonly onPageState?: (frame: PageStateFrame) => void;
+  private readonly onProfileSaveFailed?: (frame: ProfileSaveFailed) => void;
 
   constructor(
     readonly nodeId: string,
@@ -52,11 +54,13 @@ export class FleetControlConnection {
     onProfileSaved?: (frame: ProfileSaved) => void,
     onChallengeDetected?: (frame: ChallengeDetected) => void,
     onPageState?: (frame: PageStateFrame) => void,
+    onProfileSaveFailed?: (frame: ProfileSaveFailed) => void,
   ) {
     this.send = send;
     this.onProfileSaved = onProfileSaved;
     this.onChallengeDetected = onChallengeDetected;
     this.onPageState = onPageState;
+    this.onProfileSaveFailed = onProfileSaveFailed;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
     this.correlator = new IntentDispatchCorrelator(transport);
   }
@@ -156,6 +160,14 @@ export class FleetControlConnection {
           // consumer (stateless deploy) → ignored, like the others.
           this.onPageState?.(frame);
           break;
+        case 'profileSaveFailed':
+          // Profile save-back failed at session teardown (A3 W1364): relay to
+          // the customer as session.profile_save_failed so persisted-state
+          // reliance is informed (terminal — no retry path; session itself
+          // stays SUCCEEDED). Absent consumer (stateless deploy) → ignored,
+          // like the others.
+          this.onProfileSaveFailed?.(frame);
+          break;
         // heartbeat / capabilityReport / errorEvent: accepted, not yet consumed.
       }
     } catch {
@@ -195,6 +207,7 @@ export class FleetControlRegistry {
     private readonly onProfileSaved?: (frame: ProfileSaved) => void,
     private readonly onChallengeDetected?: (frame: ChallengeDetected) => void,
     private readonly onPageState?: (frame: PageStateFrame) => void,
+    private readonly onProfileSaveFailed?: (frame: ProfileSaveFailed) => void,
   ) {}
 
   register(nodeId: string, send: FleetNodeSocketSend): FleetControlConnection {
@@ -208,6 +221,7 @@ export class FleetControlRegistry {
       this.onProfileSaved,
       this.onChallengeDetected,
       this.onPageState,
+      this.onProfileSaveFailed,
     );
     this.connections.set(nodeId, conn);
     return conn;

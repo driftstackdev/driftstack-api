@@ -146,6 +146,9 @@ export const webhookEventType = pgEnum('webhook_event_type', [
   // bot-check + the control plane relays it. Migration 0070 ALTERs the existing
   // pgEnum to add this value.
   'session.challenge_detected',
+  // 2026-06-12 — A3 W1364: profile save-back failure relay (migration 0073).
+  // Terminal teardown event; the session stays succeeded.
+  'session.profile_save_failed',
 ]);
 
 export const webhookDeliveryStatus = pgEnum('webhook_delivery_status', [

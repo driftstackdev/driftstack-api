@@ -47,12 +47,14 @@ describe('W259.D docs/guides/session-lifecycle ↔ live session surface parity',
       e.startsWith('session.'),
     );
     // Arc 5 EGRESS eg.7.e added session.egress_capability_changed;
-    // W393 added session.challenge_detected (challenge-handling).
+    // W393 added session.challenge_detected (challenge-handling);
+    // A3 W1364 added session.profile_save_failed (save-back failure).
     expect(sessionEvents.sort()).toEqual([
       'session.challenge_detected',
       'session.completed',
       'session.egress_capability_changed',
       'session.failed',
+      'session.profile_save_failed',
     ]);
     for (const e of sessionEvents) {
       expect(doc).toMatch(new RegExp(`\`${e}\``));

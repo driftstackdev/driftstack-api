@@ -30,6 +30,7 @@ site (when it lands as a Tier 3 visual surface).
 | `crypto.order.paid`                 | [LIVE]     | NowPayments-backed order transitioned to `paid` (V-666)           |
 | `crypto.order.failed`               | [LIVE]     | Crypto order moved to terminal `failed` (timeout/refund/expired)  |
 | `session.challenge_detected`        | [DECLARED] | Harness ChallengeDetector flagged a bot-check (DataDome/Arkose/…) |
+| `session.profile_save_failed`       | [DECLARED] | Profile save-back failed at session teardown (next restore stale) |
 | `session.created`                   | [PLANNED]  | Session transitions `creating` → `ready`                          |
 | `session.destroyed`                 | [PLANNED]  | Distinct from `session.completed` (no semantic shift)             |
 | `profile.created`                   | [PLANNED]  | New profile created                                               |
@@ -314,6 +315,33 @@ and fires once the fleet control plane is live (gated behind
       "confidence": 0.94,
       "detail": "interstitial captcha"
     }
+  }
+}
+```
+
+### `session.profile_save_failed` [DECLARED]
+
+Fires when a profile-backed session's save-back fails at session
+teardown — the browsing session itself **succeeded**, but the updated
+profile store (cookies / logins / browser state from this run) could
+not be persisted, so the **next restore of this profile will be
+stale**. The failure is terminal: the harness's internal upload retry
+is already exhausted before this event is emitted, and there is no
+later retry path. `reason` is one of `serialize_failed`, `seal_failed`,
+`too_large` (the sealed store exceeded the 256 MiB cap), or
+`upload_failed`. Subscribable so customers relying on persisted profile
+state can alert on it. In the enum (migration 0073); the relay emitter
+is wired and fires once the fleet control plane is live (gated behind
+`FLEET_CONTROL_PLANE_ENABLED`).
+
+```json
+{
+  "event_type": "session.profile_save_failed",
+  "data": {
+    "session_id": "ses_a1b2c3d4e5f6",
+    "profile_id": "prof_1f2e3d4c",
+    "reason": "upload_failed",
+    "detail": "presigned PUT returned 503"
   }
 }
 ```

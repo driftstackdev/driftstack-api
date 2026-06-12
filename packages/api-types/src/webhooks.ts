@@ -37,6 +37,12 @@ export const WebhookEventTypeSchema = z.enum([
   // challenge (e.g. in the live view) then resumes. Payload: { session_id,
   // challenge_id, challenge: { type, confidence, detail? } }. Subscribable.
   'session.challenge_detected',
+  // A3 W1364 / 2026-06-12 — profile save-back failed at session TEARDOWN
+  // (serialize/seal/too-large/upload). Terminal — no retry path — and the
+  // session itself stays succeeded; this informs customers relying on
+  // persisted profile state that the next restore will be stale. Payload:
+  // { session_id, profile_id, reason, detail? }. Subscribable.
+  'session.profile_save_failed',
 ]);
 export type WebhookEventType = z.infer<typeof WebhookEventTypeSchema>;
 
@@ -63,6 +69,9 @@ export const SubscribableWebhookEventTypeSchema = z.enum([
   // W393 — challenge-handling. Subscribable so customers wire challenge alerts
   // into their own ops/notification surface (the live view also shows it).
   'session.challenge_detected',
+  // A3 W1364 — subscribable so customers persisting profile state can alert on
+  // a failed save-back (stale-restore warning) in their own ops surface.
+  'session.profile_save_failed',
 ]);
 export type SubscribableWebhookEventType = z.infer<typeof SubscribableWebhookEventTypeSchema>;
 

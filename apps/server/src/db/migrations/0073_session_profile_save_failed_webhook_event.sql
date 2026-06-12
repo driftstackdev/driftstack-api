@@ -1,0 +1,11 @@
+-- 2026-06-12 — A3 W1364 / A2 contract decision: profile save-back failure
+-- becomes customer-visible. Adds the `session.profile_save_failed` value to the
+-- existing webhook_event_type enum so the control plane can relay harness
+-- profileSaveFailed frames to customer webhook endpoints (+ accept
+-- subscriptions to it) without the "22P02 invalid input value for enum" insert
+-- error.
+--
+-- Same ALTER TYPE ADD VALUE pattern as 0070 (session.challenge_detected) /
+-- 0064 (crypto-order events) / 0055 (egress_capability_changed). Runs outside
+-- a transaction; idempotent via IF NOT EXISTS.
+ALTER TYPE "webhook_event_type" ADD VALUE IF NOT EXISTS 'session.profile_save_failed';
