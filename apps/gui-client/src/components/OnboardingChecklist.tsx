@@ -81,7 +81,14 @@ export function OnboardingChecklist({
           </li>
         ))}
       </ul>
-      <div className="mt-3 h-1 overflow-hidden rounded-full bg-surface-inset">
+      <div
+        className="mt-3 h-1 overflow-hidden rounded-full bg-surface-inset"
+        role="progressbar"
+        aria-label="Setup progress"
+        aria-valuemin={0}
+        aria-valuemax={steps.length}
+        aria-valuenow={doneCount}
+      >
         <div
           className="h-full rounded-full bg-accent transition-all"
           style={{ width: `${String(Math.round((doneCount / steps.length) * 100))}%` }}

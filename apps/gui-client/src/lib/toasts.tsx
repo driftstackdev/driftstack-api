@@ -77,12 +77,14 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
       {toasts.length > 0 && (
         <div
           data-component="toast-stack"
+          aria-live="polite"
+          aria-relevant="additions"
           className="fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2"
         >
           {toasts.map((t) => (
             <div
               key={t.id}
-              role="status"
+              role={t.tone === 'warn' ? 'alert' : 'status'}
               className={`rounded-lg border bg-surface-raised p-3.5 shadow-xl ${
                 t.tone === 'warn' ? 'border-accent' : 'border-surface-divider'
               }`}

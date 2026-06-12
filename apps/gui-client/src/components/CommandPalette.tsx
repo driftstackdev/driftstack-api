@@ -93,6 +93,12 @@ export function CommandPalette({
             value={query}
             placeholder="Search profiles, views, actions…"
             aria-label="Command palette search"
+            role="combobox"
+            aria-expanded={matches.length > 0}
+            aria-controls="palette-results"
+            aria-activedescendant={
+              matches[cursor] ? `palette-opt-${matches[cursor].id}` : undefined
+            }
             className="flex-1 border-0 bg-transparent text-sm text-ink-primary outline-none placeholder:text-ink-muted"
             onChange={(e) => {
               setQuery(e.target.value);
@@ -100,7 +106,12 @@ export function CommandPalette({
             }}
             onKeyDown={(e) => {
               if (e.key === 'Escape') onClose();
-              else if (e.key === 'ArrowDown') {
+              else if (e.key === 'Tab') {
+                // containment: the palette is modal — Tab must not move focus
+                // behind the backdrop. Close instead (same as Escape).
+                e.preventDefault();
+                onClose();
+              } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 setCursor((c) => Math.min(c + 1, matches.length - 1));
               } else if (e.key === 'ArrowUp') {
@@ -114,12 +125,12 @@ export function CommandPalette({
           />
           <span className="mono text-2xs text-ink-muted">esc</span>
         </div>
-        <ul className="p-2" role="listbox" aria-label="Command results">
+        <ul id="palette-results" className="p-2" role="listbox" aria-label="Command results">
           {matches.length === 0 && (
             <li className="px-3 py-4 text-center text-sm text-ink-muted">No matches.</li>
           )}
           {matches.map((a, i) => (
-            <li key={a.id} role="option" aria-selected={i === cursor}>
+            <li key={a.id} id={`palette-opt-${a.id}`} role="option" aria-selected={i === cursor}>
               <button
                 type="button"
                 className={`flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm ${
