@@ -65,7 +65,7 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
     expect(body).toMatch(/width="32"\s*\n?\s*height="32"/);
     expect(body).toMatch(
-      /<span class="font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK<\/span><\/span>/,
+      /<span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK<\/span><\/span>/,
     );
   });
 

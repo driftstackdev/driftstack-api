@@ -88,7 +88,7 @@ describe('W382.C marketing-site Header.astro content parity', () => {
   it('R15 brand mark in header: /driftstack-mark.svg <img> (iPhone-D logo) + lowercase "driftstack" wordmark — replaces the prior bg-gradient-accent D-tile chip with the real SVG brand asset', () => {
     expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
     expect(body).toMatch(
-      /<span class="font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK<\/span><\/span>/,
+      /<span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK<\/span><\/span>/,
     );
   });
 
