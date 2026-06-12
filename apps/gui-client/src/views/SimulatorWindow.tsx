@@ -126,12 +126,16 @@ function DeviceToolbar({
   deviceName,
   profileName,
   landscape,
+  pinned,
   onToggleRotate,
+  onTogglePinned,
 }: {
   deviceName: string;
   profileName: string;
   landscape: boolean;
+  pinned: boolean;
   onToggleRotate: () => void;
+  onTogglePinned: () => void;
 }): JSX.Element {
   return (
     <div
@@ -173,6 +177,27 @@ function DeviceToolbar({
       </div>
       {/* Right — actions. */}
       <div data-tauri-drag-region="false" className="flex items-center gap-1.5 text-ink-muted">
+        <button
+          type="button"
+          aria-label={pinned ? 'Unpin (stop floating on top)' : 'Pin on top'}
+          title={pinned ? 'Unpin — behave like a normal window' : 'Pin — float above everything'}
+          onClick={onTogglePinned}
+          className={`rounded p-1 transition hover:bg-white/10 hover:text-ink-primary ${pinned ? 'text-accent' : ''}`}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 17v5" />
+            <path d="M9 3h6l-1 7 3 3H7l3-3z" />
+          </svg>
+        </button>
         <button
           type="button"
           aria-label="Screenshot"
@@ -283,6 +308,17 @@ function IosStatusBar(): JSX.Element {
 export function SimulatorWindow(): JSX.Element {
   const { info, deviceName, profileName } = infoFromQuery();
   const [landscape, setLandscape] = useState(false);
+  // Pin = always-on-top (the floating-iPhone default). Unpinned the window
+  // behaves like a normal sibling window (Cmd+` cycling, Mission Control,
+  // doesn't hover over other apps) — the strongest separate-window identity
+  // macOS allows inside one app (a per-window Dock icon needs a helper app
+  // bundle — scoped as a post-launch item).
+  const [pinned, setPinned] = useState(true);
+  const togglePinned = (): void => {
+    const next = !pinned;
+    setPinned(next);
+    void withCurrentWindow((w) => w.setAlwaysOnTop(next));
+  };
   const landscapeRef = useRef(false);
   landscapeRef.current = landscape;
   // Resize-to-archetype runs ONCE per window (first real video dimensions) so
@@ -337,7 +373,9 @@ export function SimulatorWindow(): JSX.Element {
             deviceName={deviceName}
             profileName={profileName}
             landscape={landscape}
+            pinned={pinned}
             onToggleRotate={toggleRotate}
+            onTogglePinned={togglePinned}
           />
           {/* Device body — the bezel. data-tauri-drag-region makes the frame a
               window-drag handle; the inner screen overrides it so taps reach the

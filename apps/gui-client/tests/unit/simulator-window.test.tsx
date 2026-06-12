@@ -75,6 +75,10 @@ describe('SimulatorWindow — floating iPhone', () => {
         '[aria-label="Rotate to landscape"], [aria-label="Rotate to portrait"]',
       ),
     ).not.toBeNull();
+    // Pin toggle (always-on-top) — defaults pinned (the floating-iPhone
+    // vision); unpinned = a normal sibling window (Cmd+backtick / Mission
+    // Control identity).
+    expect(toolbar?.querySelector('[aria-label="Unpin (stop floating on top)"]')).not.toBeNull();
     // The toolbar is a drag-region (drag the window by it); the button clusters
     // opt out so clicks land.
     expect(toolbar?.getAttribute('data-tauri-drag-region')).toBe('true');
