@@ -43,8 +43,11 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(statusBar?.textContent).toMatch(/^\d{1,2}:\d{2}$/);
     // Cellular / Wi-Fi / battery glyphs.
     expect(statusBar?.querySelectorAll('svg').length).toBe(3);
-    // Cosmetic overlay — must NOT intercept taps meant for the device screen.
-    expect(statusBar?.className).toContain('pointer-events-none');
+    // The bar IS a window drag-region (founder: drag the window by the status
+    // strip) — the inner clock/glyphs are pointer-events-none so a click on the
+    // strip falls through to the bar and drags rather than landing on text.
+    expect(statusBar?.getAttribute('data-tauri-drag-region')).toBe('true');
+    expect(statusBar?.querySelector('span')?.className).toContain('pointer-events-none');
     // It lives inside the screen (over the video), not the bezel.
     const screen = container.querySelector('[data-component="simulator-screen"]');
     expect(screen?.querySelector('[data-component="simulator-statusbar"]')).not.toBeNull();

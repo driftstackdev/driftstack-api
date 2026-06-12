@@ -49,8 +49,11 @@ function useStatusClock(): string {
 /**
  * Cosmetic iOS status bar — live clock on the left, cellular/Wi-Fi/battery
  * glyphs on the right, flanking the centered dynamic island (Xcode-Simulator
- * style). `pointer-events-none` so taps fall through to the device screen; a
- * faint drop-shadow keeps the white glyphs legible over arbitrary web content.
+ * style). The bar IS a `data-tauri-drag-region` so you can grab the window by
+ * the status strip (founder ask) — the inner clock/glyphs are
+ * `pointer-events-none` so a click anywhere on the strip falls through to the
+ * bar and drags (the same bezel/dynamic-island pattern). A faint drop-shadow
+ * keeps the white glyphs legible over arbitrary web content.
  */
 function IosStatusBar(): JSX.Element {
   const time = useStatusClock();
@@ -58,10 +61,13 @@ function IosStatusBar(): JSX.Element {
     <div
       aria-hidden="true"
       data-component="simulator-statusbar"
-      className="pointer-events-none absolute inset-x-0 top-0 z-20 flex h-[40px] items-center justify-between px-[24px] text-white [filter:drop-shadow(0_0_2px_rgba(0,0,0,0.45))]"
+      data-tauri-drag-region
+      className="absolute inset-x-0 top-0 z-20 flex h-[40px] items-center justify-between px-[24px] text-white [filter:drop-shadow(0_0_2px_rgba(0,0,0,0.45))]"
     >
-      <span className="text-[14px] font-semibold tracking-tight tabular-nums">{time}</span>
-      <div className="flex items-center gap-[6px]">
+      <span className="pointer-events-none text-[14px] font-semibold tracking-tight tabular-nums">
+        {time}
+      </span>
+      <div className="pointer-events-none flex items-center gap-[6px]">
         {/* Cellular — four full bars. */}
         <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor">
           <rect x="0" y="8" width="3" height="4" rx="1" />
