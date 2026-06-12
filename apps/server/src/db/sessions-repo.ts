@@ -13,6 +13,7 @@ import type {
 } from '../services/sessions.js';
 import type { Database } from './client.js';
 import { accounts, sessionEvents, sessions } from './schema.js';
+import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
 // 6.g — non-terminal statuses eligible for the duration auto-destroy sweep.
 const ACTIVE_SESSION_STATUSES: SessionRecord['status'][] = ['creating', 'ready', 'busy'];
@@ -111,7 +112,7 @@ export class DrizzleSessionRepo implements SessionRepo {
     // same-createdAt rows aren't dropped at a page boundary. Mirrors the
     // profiles-repo keyset pattern.
     const conds: SQL[] = [eq(sessions.accountId, accountId)];
-    if (opts.cursor !== undefined) {
+    if (opts.cursor !== undefined && parseUuidCursor(opts.cursor) !== undefined) {
       const [c] = await this.database.db
         .select({ createdAt: sessions.createdAt, id: sessions.id })
         .from(sessions)
@@ -205,7 +206,7 @@ export class DrizzleSessionRepo implements SessionRepo {
   }): Promise<SessionListPage> {
     // Keyset cursor on (createdAt desc, id desc) — see listSessions.
     const filters: SQL[] = [];
-    if (opts.cursor !== undefined) {
+    if (opts.cursor !== undefined && parseUuidCursor(opts.cursor) !== undefined) {
       const [c] = await this.database.db
         .select({ createdAt: sessions.createdAt, id: sessions.id })
         .from(sessions)

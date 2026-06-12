@@ -10,6 +10,7 @@ import type {
 import type { AccountRow } from '../services/auth.js';
 import type { Database } from './client.js';
 import { accounts } from './schema.js';
+import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
 export class DrizzleAccountsAdminRepo implements AccountsAdminRepo {
   constructor(private readonly database: Database) {}
@@ -55,7 +56,7 @@ export class DrizzleAccountsAdminRepo implements AccountsAdminRepo {
       filters.push(ilike(accounts.email, `%${args.emailContains.toLowerCase()}%`));
     }
 
-    if (args.cursor !== undefined) {
+    if (args.cursor !== undefined && parseUuidCursor(args.cursor) !== undefined) {
       const [cursorRow] = await this.database.db
         .select({ createdAt: accounts.createdAt, id: accounts.id })
         .from(accounts)

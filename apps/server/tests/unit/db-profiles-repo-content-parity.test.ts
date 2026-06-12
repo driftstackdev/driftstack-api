@@ -88,7 +88,7 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
 
   it('list cursor framing pinned: cursor lookup is ACCOUNT-SCOPED via and(eq(id, cursor), eq(accountId, args.accountId)) — prevents cross-account cursor probe; composite OR(lt(createdAt, c.createdAt), and(eq(createdAt, c.createdAt), lt(id, c.id)))', () => {
     expect(body).toMatch(
-      /if \(args\.cursor !== undefined\) \{\s*\n?\s*const \[cursorRow\] = await this\.database\.db\s*\n?\s*\.select\(\{ createdAt: profiles\.createdAt, id: profiles\.id \}\)\s*\n?\s*\.from\(profiles\)\s*\n?\s*\.where\(and\(eq\(profiles\.id, args\.cursor\), eq\(profiles\.accountId, args\.accountId\)\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*if \(cursorRow !== undefined\) \{\s*\n?\s*cursorWhere = or\(\s*\n?\s*lt\(profiles\.createdAt, cursorRow\.createdAt\),\s*\n?\s*and\(eq\(profiles\.createdAt, cursorRow\.createdAt\), lt\(profiles\.id, cursorRow\.id\)\),\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*\}/,
+      /if \(args\.cursor !== undefined && parseUuidCursor\(args\.cursor\) !== undefined\) \{\s*\n?\s*const \[cursorRow\] = await this\.database\.db\s*\n?\s*\.select\(\{ createdAt: profiles\.createdAt, id: profiles\.id \}\)\s*\n?\s*\.from\(profiles\)\s*\n?\s*\.where\(and\(eq\(profiles\.id, args\.cursor\), eq\(profiles\.accountId, args\.accountId\)\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*if \(cursorRow !== undefined\) \{\s*\n?\s*cursorWhere = or\(\s*\n?\s*lt\(profiles\.createdAt, cursorRow\.createdAt\),\s*\n?\s*and\(eq\(profiles\.createdAt, cursorRow\.createdAt\), lt\(profiles\.id, cursorRow\.id\)\),\s*\n?\s*\);\s*\n?\s*\}\s*\n?\s*\}/,
     );
   });
 

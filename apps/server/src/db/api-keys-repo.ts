@@ -5,6 +5,7 @@ import type { ApiKeyRow } from '../services/auth.js';
 import type { ApiKeysRepo, NewApiKeyInput } from '../services/api-keys.js';
 import type { Database } from './client.js';
 import { apiKeys } from './schema.js';
+import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
 export class DrizzleApiKeysRepo implements ApiKeysRepo {
   constructor(private readonly database: Database) {}
@@ -65,7 +66,7 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
     // Keyset cursor on (createdAt desc, id desc) — cursor = last row id.
     // Mirrors profiles-repo; avoids dropping same-createdAt rows.
     const filters: SQL[] = [];
-    if (opts.cursor !== undefined) {
+    if (opts.cursor !== undefined && parseUuidCursor(opts.cursor) !== undefined) {
       const [c] = await this.database.db
         .select({ createdAt: apiKeys.createdAt, id: apiKeys.id })
         .from(apiKeys)

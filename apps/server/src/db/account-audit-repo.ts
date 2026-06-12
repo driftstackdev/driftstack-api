@@ -11,6 +11,7 @@ import type {
 } from '../services/account-audit.js';
 import type { Database } from './client.js';
 import { accountAuditLog } from './schema.js';
+import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
 export class DrizzleAccountAuditRepo implements AccountAuditRepo {
   constructor(private readonly database: Database) {}
@@ -42,7 +43,7 @@ export class DrizzleAccountAuditRepo implements AccountAuditRepo {
     // cursor's timestamp at a page boundary — and audit rows written in
     // one transaction share an identical timestamp, so the drop was
     // real. Mirrors the profiles-repo keyset pattern.
-    if (opts.cursor !== undefined) {
+    if (opts.cursor !== undefined && parseUuidCursor(opts.cursor) !== undefined) {
       const [cursorRow] = await this.database.db
         .select({ timestamp: accountAuditLog.timestamp, id: accountAuditLog.id })
         .from(accountAuditLog)

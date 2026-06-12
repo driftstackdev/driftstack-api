@@ -81,7 +81,7 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
 
   it('Composite cursor over (createdAt, id): lookup row by id via 2-field select; OR(lt(createdAt), and(eq(createdAt), lt(id))) — required because multiple accounts can share createdAt', () => {
     expect(body).toMatch(
-      /if \(args\.cursor !== undefined\) \{\s*\n?\s*const \[cursorRow\] = await this\.database\.db\s*\n?\s*\.select\(\{ createdAt: accounts\.createdAt, id: accounts\.id \}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.id, args\.cursor\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*if \(cursorRow !== undefined\) \{\s*\n?\s*const cursorClause = or\(\s*\n?\s*lt\(accounts\.createdAt, cursorRow\.createdAt\),\s*\n?\s*and\(eq\(accounts\.createdAt, cursorRow\.createdAt\), lt\(accounts\.id, cursorRow\.id\)\),\s*\n?\s*\);\s*\n?\s*if \(cursorClause !== undefined\) filters\.push\(cursorClause\);\s*\n?\s*\}\s*\n?\s*\}/,
+      /if \(args\.cursor !== undefined && parseUuidCursor\(args\.cursor\) !== undefined\) \{\s*\n?\s*const \[cursorRow\] = await this\.database\.db\s*\n?\s*\.select\(\{ createdAt: accounts\.createdAt, id: accounts\.id \}\)\s*\n?\s*\.from\(accounts\)\s*\n?\s*\.where\(eq\(accounts\.id, args\.cursor\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*if \(cursorRow !== undefined\) \{\s*\n?\s*const cursorClause = or\(\s*\n?\s*lt\(accounts\.createdAt, cursorRow\.createdAt\),\s*\n?\s*and\(eq\(accounts\.createdAt, cursorRow\.createdAt\), lt\(accounts\.id, cursorRow\.id\)\),\s*\n?\s*\);\s*\n?\s*if \(cursorClause !== undefined\) filters\.push\(cursorClause\);\s*\n?\s*\}\s*\n?\s*\}/,
     );
   });
 

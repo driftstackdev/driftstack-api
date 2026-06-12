@@ -13,6 +13,7 @@ import type {
 } from '../services/admin-audit.js';
 import type { Database } from './client.js';
 import { adminAuditLog } from './schema.js';
+import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
 export class DrizzleAdminAuditLogRepo implements AdminAuditLogRepo {
   constructor(private readonly database: Database) {}
@@ -56,7 +57,7 @@ export class DrizzleAdminAuditLogRepo implements AdminAuditLogRepo {
     // the cursor timestamp at a page boundary, and bulk admin actions
     // written in one transaction share an identical timestamp. Mirrors
     // the profiles-repo keyset pattern.
-    if (filters.cursor) {
+    if (filters.cursor !== undefined && parseUuidCursor(filters.cursor) !== undefined) {
       const [cursorRow] = await this.database.db
         .select({ timestamp: adminAuditLog.timestamp, id: adminAuditLog.id })
         .from(adminAuditLog)

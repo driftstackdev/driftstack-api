@@ -10,6 +10,7 @@ import type {
 } from '../services/profile-snapshots.js';
 import type { Database } from './client.js';
 import { profileSnapshots } from './schema.js';
+import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
 function toRow(r: typeof profileSnapshots.$inferSelect): ProfileSnapshotRecord {
   return {
@@ -52,7 +53,7 @@ export class DrizzleProfileSnapshotsRepo implements ProfileSnapshotsRepo {
     if (args.parentProfileId !== undefined) {
       filters.push(eq(profileSnapshots.parentProfileId, args.parentProfileId));
     }
-    if (args.cursor !== undefined) {
+    if (args.cursor !== undefined && parseUuidCursor(args.cursor) !== undefined) {
       const [c] = await this.database.db
         .select({
           createdAt: profileSnapshots.createdAt,

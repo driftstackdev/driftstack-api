@@ -11,6 +11,7 @@ import type {
 } from '../services/profiles.js';
 import type { Database } from './client.js';
 import { accounts, profiles } from './schema.js';
+import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
 const DEFAULT_PAGE = 50;
 const MAX_PAGE = 100;
@@ -136,7 +137,7 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
     const limit = Math.min(args.limit ?? DEFAULT_PAGE, MAX_PAGE);
 
     let cursorWhere;
-    if (args.cursor !== undefined) {
+    if (args.cursor !== undefined && parseUuidCursor(args.cursor) !== undefined) {
       const [cursorRow] = await this.database.db
         .select({ createdAt: profiles.createdAt, id: profiles.id })
         .from(profiles)

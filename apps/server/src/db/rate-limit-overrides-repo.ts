@@ -9,6 +9,7 @@ import type {
 } from '../services/rate-limit-overrides.js';
 import type { Database } from './client.js';
 import { rateLimitOverrides } from './schema.js';
+import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
 export class DrizzleRateLimitOverridesRepo implements RateLimitOverridesRepo {
   constructor(private readonly database: Database) {}
@@ -64,7 +65,7 @@ export class DrizzleRateLimitOverridesRepo implements RateLimitOverridesRepo {
     // Keyset cursor on (createdAt desc, id desc) — cursor = last row id.
     // Mirrors profiles-repo; avoids dropping same-createdAt rows.
     const filters: SQL[] = [];
-    if (opts.cursor !== undefined) {
+    if (opts.cursor !== undefined && parseUuidCursor(opts.cursor) !== undefined) {
       const [c] = await this.database.db
         .select({ createdAt: rateLimitOverrides.createdAt, id: rateLimitOverrides.id })
         .from(rateLimitOverrides)
