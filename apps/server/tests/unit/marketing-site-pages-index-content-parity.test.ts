@@ -171,6 +171,27 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/<a href="https:\/\/docs\.driftstack\.dev" class="btn-secondary">/);
   });
 
+  it("Fleet merge (founder 2026-06-12 'best of both'): 'Mission control for a fleet of real iPhones.' fleet-wall section pinned — complete-iPhone-identity copy + live-status framing + GENERIC telemetry wording (fingerprint coherence verified / detection flags 0 — founder: no tool names, keep it professional)", () => {
+    expect(body).toMatch(/Mission control for a fleet of real iPhones\./);
+    expect(body).toMatch(/Every profile is a complete iPhone identity, live in the cloud/);
+    expect(body).toMatch(/fingerprint coherence <b class="text-tk-ready">verified<\/b>/);
+    expect(body).toMatch(/detection flags <b class="text-tk-ready">0<\/b>/);
+    // honest-claims guard: the demo's CONCEPT features must NOT ship until built
+    expect(body).not.toMatch(/Session Replay/);
+    expect(body).not.toMatch(/Warm-up Scheduler/);
+    expect(body).not.toMatch(/CreepJS/);
+  });
+
+  it("Fleet merge: homepage 'Not another anti-detect browser.' comparison table pinned — 4 capability rows (fingerprint / where-it-runs / detection surface / automation) + the /comparison cross-link for full detail", () => {
+    expect(body).toMatch(/Not another anti-detect browser\./);
+    expect(body).toMatch(/Anti-detects patch a desktop browser to lie about itself\./);
+    expect(body).toMatch(/real WebKit, real iOS/);
+    expect(body).toMatch(/no runtime JS patching at all/);
+    expect(body).toMatch(
+      /<a href="\/comparison" class="text-tk-accent underline">comparison page<\/a>/,
+    );
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

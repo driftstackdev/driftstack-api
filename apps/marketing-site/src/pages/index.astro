@@ -150,6 +150,99 @@ try {
     </div>
   </section>
 
+  <!-- ═══ Fleet merge (founder 2026-06-12: "best of both, towards 100% perfect").
+       Sections lifted from the picked Direction-D demo (marketing-d-fleet.html),
+       honest-claims filtered: only REAL capabilities; the demo's concept features
+       (replay/warm-up) are excluded until they exist. ═══ -->
+
+  <!-- The fleet wall — "mission control" visual (demo hero, now a showcase section) -->
+  <section class="relative border-t border-tk-border">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <div class="grid gap-10 md:grid-cols-2 md:items-center">
+        <div>
+          <p class="section-label">Your fleet</p>
+          <h2 class="mt-5 text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl" style="letter-spacing: -0.02em;">
+            Mission control for a fleet of real iPhones.
+          </h2>
+          <p class="mt-4 max-w-prose text-sm text-tk-ink-2 leading-relaxed sm:text-base">
+            Every profile is a complete iPhone identity, live in the cloud —
+            its own cookies, storage, fingerprint and proxy. Watch the whole
+            fleet at a glance, drive any device by hand, by SDK, or by AI —
+            and no website ever knows.
+          </p>
+          <p class="mt-6 font-mono text-xs text-tk-ink-3">
+            <span class="text-tk-ready">●</span> live status per profile ·
+            isolated identities · persistent across runs
+          </p>
+        </div>
+        <div class="rounded-2xl border border-tk-border bg-tk-surface p-4 shadow-lg">
+          <div class="mb-3 flex items-center gap-2 font-mono text-[11px] text-tk-ink-3">
+            <span class="font-bold text-tk-ready">● LIVE</span>
+            <span>your-fleet · profiles</span>
+            <span class="ml-auto">running · idle · ready</span>
+          </div>
+          <div class="grid grid-cols-5 gap-2">
+            <div class="relative col-span-2 row-span-2 rounded-xl border-2 border-tk-accent bg-gradient-to-b from-white to-slate-200 p-2 shadow-glow-accent">
+              <div class="h-2 w-3/4 rounded-sm bg-slate-300"></div>
+              <div class="mt-1 h-8 rounded-md bg-slate-800"></div>
+              <div class="mt-1 h-4 rounded-sm bg-white ring-1 ring-slate-200"></div>
+              <div class="mt-1 h-4 rounded-sm bg-white ring-1 ring-slate-200"></div>
+              <span class="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-tk-ready shadow-[0_0_6px] shadow-tk-ready"></span>
+              <span class="absolute bottom-1 left-2 font-mono text-[8px] text-slate-500">amsterdam-shopper · agent</span>
+            </div>
+            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ready"></span></div>
+            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-busy"></span></div>
+            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ready"></span></div>
+            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ink-3"></span></div>
+            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ready"></span></div>
+            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ink-3"></span></div>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-tk-ink-3">
+            <span>fingerprint coherence <b class="text-tk-ready">verified</b></span>
+            <span>detection flags <b class="text-tk-ready">0</b></span>
+            <span>median control latency <b class="text-tk-ink-2">&lt;100ms</b></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Not-an-anti-detect comparison (demo's table, distilled from /comparison) -->
+  <section class="relative border-t border-tk-border">
+    <div class="mx-auto max-w-6xl px-6 py-20">
+      <p class="section-label">Comparison</p>
+      <h2 class="mt-5 max-w-3xl text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl" style="letter-spacing: -0.02em;">
+        Not another anti-detect browser.
+      </h2>
+      <p class="mt-4 max-w-prose text-sm text-tk-ink-2 leading-relaxed sm:text-base">
+        Anti-detects patch a desktop browser to lie about itself.
+        Driftstack runs the real thing — actual WebKit on Apple-shipped
+        iOS versions — so there's nothing to detect.
+      </p>
+      <div class="mt-8 overflow-x-auto rounded-xl border border-tk-border bg-tk-surface">
+        <table class="w-full text-left text-sm">
+          <thead>
+            <tr class="border-b border-tk-border font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">
+              <th class="px-5 py-3 font-medium">Capability</th>
+              <th class="px-5 py-3 font-medium">Typical anti-detect</th>
+              <th class="px-5 py-3 font-medium">Driftstack</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-tk-border">
+            <tr><td class="px-5 py-3 text-tk-ink-2">Mobile fingerprint</td><td class="px-5 py-3 text-tk-ink-3">spoofed desktop UA</td><td class="px-5 py-3 font-medium text-tk-ink">real WebKit, real iOS</td></tr>
+            <tr><td class="px-5 py-3 text-tk-ink-2">Where it runs</td><td class="px-5 py-3 text-tk-ink-3">your machine</td><td class="px-5 py-3 font-medium text-tk-ink">cloud + live control</td></tr>
+            <tr><td class="px-5 py-3 text-tk-ink-2">Detection surface</td><td class="px-5 py-3 text-tk-ink-3">stealth-patch bundle to spot</td><td class="px-5 py-3 font-medium text-tk-ink">no runtime JS patching at all</td></tr>
+            <tr><td class="px-5 py-3 text-tk-ink-2">Automation</td><td class="px-5 py-3 text-tk-ink-3">clunky local RPA</td><td class="px-5 py-3 font-medium text-tk-ink">3 SDKs · AI agent · API</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="mt-4 text-sm text-tk-ink-3">
+        Full tier-by-tier and tool-by-tool detail on the
+        <a href="/comparison" class="text-tk-accent underline">comparison page</a>.
+      </p>
+    </div>
+  </section>
+
   <!-- W456 — plain-language "How it works in 3 steps" explainer, placed early
        for non-technical visitors who don't scroll to the deeper technical
        sections. Mirrors the Use-cases 3-card grid; numbered step badges. -->
