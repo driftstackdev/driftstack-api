@@ -35,9 +35,9 @@ describe('services/webhook-rotation-reminder content parity', () => {
     );
   });
 
-  it("Wiring-deferred framing pinned: 'Wiring (deferred to a follow-up): a scheduled job calls tickOnce once per day. Until that wire lands, this service is dormant — no reminders fire. The schema (v2-#10 migration 0048) is already in place so the wiring can layer on top without further migrations.' — pinned so the dormant-until-cron-wired + once-per-day cadence + v2-#10 migration 0048 schema-already-shipped + no-further-migrations-needed contract stay documented", () => {
+  it("Wiring-LIVE framing pinned: the header documents the bootstrap setInterval (24h ROTATION_REMINDER_INTERVAL_MS) + the DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS kill-switch + migration 0048 — corrected 2026-06-12 from the stale 'deferred/dormant' text (the timer shipped after that header was written)", () => {
     expect(body).toMatch(
-      /\/\/ Wiring \(deferred to a follow-up\): a scheduled job calls tickOnce\s*\n?\s*\/\/ once per day\. Until that wire lands, this service is dormant — no\s*\n?\s*\/\/ reminders fire\. The schema \(v2-#10 migration 0048\) is already in\s*\n?\s*\/\/ place so the wiring can layer on top without further migrations\./,
+      /\/\/ Wiring \(LIVE since the bootstrap timer landed\): bootstrap\.ts runs\s*\n?\s*\/\/ tickOnce once per day via a setInterval \(ROTATION_REMINDER_INTERVAL_MS,\s*\n?\s*\/\/ 24h\), gated off by DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1/,
     );
   });
 

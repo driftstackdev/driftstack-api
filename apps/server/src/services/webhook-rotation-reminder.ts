@@ -10,10 +10,12 @@
 // nag, not a side-effecting action; the existing V-359 dual-sign
 // machinery handles the actual rotation with zero customer downtime.
 //
-// Wiring (deferred to a follow-up): a scheduled job calls tickOnce
-// once per day. Until that wire lands, this service is dormant — no
-// reminders fire. The schema (v2-#10 migration 0048) is already in
-// place so the wiring can layer on top without further migrations.
+// Wiring (LIVE since the bootstrap timer landed): bootstrap.ts runs
+// tickOnce once per day via a setInterval (ROTATION_REMINDER_INTERVAL_MS,
+// 24h), gated off by DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1 (the
+// kill-switch shared with the BYOK/API-key reminder timers). The schema
+// is v2-#10 migration 0048. (An earlier revision of this header said the
+// wiring was deferred/dormant — stale since the timer shipped.)
 
 import type { Logger } from '../lib/logger.js';
 import type { EmailService } from './email.js';
