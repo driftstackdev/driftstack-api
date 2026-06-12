@@ -183,3 +183,26 @@ the player hydrates from disk on mount); (2) STALE COPY — the UI still said
 disk persistence "lands in a follow-up phase" after that phase shipped.
 Next port: proxy-health capability board → ProxiesView (UI first; the probe
 backend is its own design).
+
+## Addendum (~18:25) — fresh-audit wave on this week's new code + a latent test-rot class
+
+Per the audit-roster directive (target genuinely NEW code), self-audited the
+organization-metadata chain: dashboard `escapeHtml` verified attribute-safe
+(customer tags can't break out of `data-profile-search`); GUI/server caps
+verified mutually consistent (client clamps to exactly what the server
+rejects). One real coverage gap closed: the jsonb `tags` column had ZERO
+real-driver testing (route/service suites use the in-memory repo) — added a
+real-PG round-trip test (array-not-string, defaults, exact-set update,
+null-clears).
+
+Running it with DATABASE_URL exposed a latent class: **all 6
+db-\*-keyset-drizzle real-PG tests broken** by the postgres-js 3.4.9
+dependabot bump — raw `Date` binds now throw on the prepared path. Nothing
+caught it because GitHub Actions (their only unconditional runner) has been
+down since 06-08 and local runs skip without DATABASE_URL. All 6 fixed
+(`toISOString()` binds) + verified green against local PG (migrated through
+0076). **⚠️ FOUNDER: the Actions outage is now demonstrably masking
+dependency regressions — repo Settings → Actions needs the look.**
+
+GUI rebuilt + reinstalled to /Applications (both approved ports included);
+founder notified.
