@@ -23,7 +23,7 @@ import type { AccountTier } from '@driftstack/api-types';
 import type { PricingService } from '../services/pricing.js';
 import type { PlatformSecretsService } from '../services/platform-secrets.js';
 import type { AdminAuditService } from '../services/admin-audit.js';
-import { NotFoundError, ValidationError } from '../lib/errors.js';
+import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
 import { TIER_MONTHLY_PRICE_CENTS } from '../lib/cost-defaults.js';
 
@@ -193,6 +193,13 @@ export function registerAdminOwnerRoutes(
     async (req, reply) => {
       const ctx = req.account;
       if (!ctx) throw new Error('account context missing after requireOwner');
+      // V-352b mapping the service header documents: key unset → clean 503,
+      // not a generic 500 from the service's plain Error.
+      if (!opts.secrets.enabled) {
+        throw new FeatureUnavailableError(
+          'Platform secrets are disabled on this deployment (MFA_ENCRYPTION_KEY unset).',
+        );
+      }
       const params = SecretNameParamsSchema.safeParse(req.params);
       if (!params.success) throw new ValidationError(params.error.flatten());
       const body = SetSecretBodySchema.safeParse(req.body);
@@ -246,6 +253,12 @@ export function registerAdminOwnerRoutes(
     async (req) => {
       const ctx = req.account;
       if (!ctx) throw new Error('account context missing after requireOwner');
+      // Same V-352b mapping as PUT — reveal needs the key to decrypt.
+      if (!opts.secrets.enabled) {
+        throw new FeatureUnavailableError(
+          'Platform secrets are disabled on this deployment (MFA_ENCRYPTION_KEY unset).',
+        );
+      }
       const params = SecretNameParamsSchema.safeParse(req.params);
       if (!params.success) throw new ValidationError(params.error.flatten());
       try {

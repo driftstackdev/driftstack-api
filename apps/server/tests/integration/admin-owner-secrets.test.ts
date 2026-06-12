@@ -77,7 +77,10 @@ function makeCache(): AuthCache {
   };
 }
 
-async function buildApp(): Promise<{ app: FastifyInstance; auditRepo: InMemoryAdminAuditLogRepo }> {
+async function buildApp(
+  /** Pass `null` to build a DISABLED-secrets deployment (MFA_ENCRYPTION_KEY unset). */
+  encryptionKeyBase64: string | null = randomBytes(32).toString('base64'),
+): Promise<{ app: FastifyInstance; auditRepo: InMemoryAdminAuditLogRepo }> {
   const app = Fastify();
   registerErrorHandler(app);
   await app.register(authPlugin, {
@@ -98,10 +101,7 @@ async function buildApp(): Promise<{ app: FastifyInstance; auditRepo: InMemoryAd
       permissive_cors: false,
     },
     pricing: new PricingService(new InMemoryPricingRepo()),
-    secrets: new PlatformSecretsService(
-      new InMemoryPlatformSecretsRepo(),
-      randomBytes(32).toString('base64'),
-    ),
+    secrets: new PlatformSecretsService(new InMemoryPlatformSecretsRepo(), encryptionKeyBase64),
     audit: new AdminAuditService(auditRepo),
   });
   await app.ready();
@@ -198,6 +198,48 @@ describe('owner secrets-management routes (secrets Phase A slice 2)', () => {
       payload: { value: 'v' },
     });
     expect(bad.statusCode).toBe(400);
+    expect(auditRepo.getAll()).toHaveLength(0);
+  });
+});
+
+describe('disabled deployment (MFA_ENCRYPTION_KEY unset) — V-352b mapping', () => {
+  it('list reports enabled:false; set + reveal return a clean 503 (not a 500), nothing audited', async () => {
+    const { app, auditRepo } = await buildApp(null);
+    const owner = { authorization: `Bearer ${OWNER_TOKEN}` };
+
+    const list = await app.inject({
+      method: 'GET',
+      url: '/v1/admin/owner/secrets',
+      headers: owner,
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.json<{ enabled: boolean }>().enabled).toBe(false);
+
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/v1/admin/owner/secrets/stripe_secret_key',
+      headers: owner,
+      payload: { value: SECRET_VALUE },
+    });
+    expect(put.statusCode).toBe(503);
+
+    const reveal = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/owner/secrets/stripe_secret_key/reveal',
+      headers: owner,
+    });
+    expect(reveal.statusCode).toBe(503);
+    expect(reveal.body).not.toContain(SECRET_VALUE);
+
+    // DELETE needs no key — keyless removal still works (404 when absent).
+    const del = await app.inject({
+      method: 'DELETE',
+      url: '/v1/admin/owner/secrets/stripe_secret_key',
+      headers: owner,
+    });
+    expect(del.statusCode).toBe(404);
+
+    // The disabled guard fires before any audited action.
     expect(auditRepo.getAll()).toHaveLength(0);
   });
 });
