@@ -135,11 +135,17 @@
         color: var(--ink-3);
       }
       .navlabel {
-        font-size: 11px;
+        font-family: var(--mono);
+        font-size: 10px;
         text-transform: uppercase;
-        letter-spacing: 0.6px;
+        letter-spacing: 1.4px;
         color: var(--ink-3);
         padding: 10px 10px 4px;
+      }
+      .navlabel::before {
+        content: '// ';
+        color: var(--accent);
+        opacity: 0.7;
       }
       .nav a {
         display: flex;
@@ -442,6 +448,24 @@
         background: var(--raised);
         border: 1px solid var(--border);
       }
+      /* Fleet-language: live dots breathe (mission-control DNA from Direction D). */
+      @keyframes livepulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 color-mix(in srgb, var(--ready) 45%, transparent);
+        }
+        55% {
+          box-shadow: 0 0 0 5px transparent;
+        }
+      }
+      .status .dot[style*='--ready'] {
+        animation: livepulse 2.4s ease-out infinite;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .status .dot[style*='--ready'] {
+          animation: none;
+        }
+      }
       .tags {
         display: flex;
         flex-wrap: wrap;
@@ -490,7 +514,35 @@
     <div class="app">
       <!-- sidebar -->
       <aside class="side">
-        <div class="brand"><span class="mark">⌇</span> Driftstack</div>
+        <!-- Lead brand lockup (founder round-2): L3 two-layer Drift Layers mark +
+             W2 black-italic two-tone wordmark. Swap here if a different W/L wins. -->
+        <div class="brand">
+          <svg width="19" height="19" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <rect
+              x="11"
+              y="7"
+              width="22"
+              height="36"
+              rx="6"
+              stroke="var(--ink-2)"
+              stroke-width="2.6"
+              opacity=".5"
+              transform="rotate(-7 22 25)"
+            />
+            <rect
+              x="16"
+              y="5"
+              width="22"
+              height="36"
+              rx="6"
+              stroke="var(--accent)"
+              stroke-width="3"
+            />
+          </svg>
+          <span style="font-weight: 900; font-style: italic; letter-spacing: -0.4px"
+            >DRIFT<span style="color: var(--accent)">STACK</span></span
+          >
+        </div>
         <div class="ws">
           <span class="ava">A</span>
           <div>
@@ -587,8 +639,13 @@
           >
         </nav>
 
-        <div class="foot">
-          <span class="dot" style="background: var(--ready)"></span> All systems operational
+        <!-- Fleet-language telemetry foot (mission-control DNA from Direction D) -->
+        <div class="foot" style="font-family: var(--mono); font-size: 10.5px">
+          <span
+            class="dot"
+            style="background: var(--ready); box-shadow: 0 0 8px var(--ready)"
+          ></span>
+          99.98% · 74ms · <span style="color: var(--ready)">0 lies</span>
         </div>
       </aside>
 
