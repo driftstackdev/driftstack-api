@@ -106,6 +106,57 @@ describe('profiles-meta store', () => {
     expect(all['a']!.folder).toBe('New');
   });
 
+  it('seedMetaFromServer: seeds only no-local-entry profiles with server organization; local wins conflicts; empty server org skipped', async () => {
+    const { seedMetaFromServer } = await import('../../src/lib/profiles-meta');
+    const local = { kept: { folder: 'Local', tags: ['mine'], note: 'n' } };
+    const { map, changed } = seedMetaFromServer(local, [
+      // Local entry exists — server value must NOT overwrite (local wins).
+      { id: 'kept', folder: 'Server', tags: ['theirs'] },
+      // No local entry + server organization → seeded.
+      { id: 'new', folder: 'Synced', tags: ['remote'] },
+      // No local entry + nothing server-side → no entry minted.
+      { id: 'plain', folder: null, tags: [] },
+      // Pre-0076 server: fields absent entirely → no entry minted.
+      { id: 'old-server' },
+    ]);
+    expect(changed).toBe(true);
+    expect(map['kept']).toEqual({ folder: 'Local', tags: ['mine'], note: 'n' });
+    expect(map['new']).toEqual({ folder: 'Synced', tags: ['remote'], note: '' });
+    expect(map['plain']).toBeUndefined();
+    expect(map['old-server']).toBeUndefined();
+    // Nothing to seed → changed=false and the SAME map reference (caller
+    // skips the store write).
+    const again = seedMetaFromServer(map, [{ id: 'kept', folder: 'Server', tags: [] }]);
+    expect(again.changed).toBe(false);
+  });
+
+  it('seedMetaFromServer entries pass through cleanEntry caps (oversized server values clamped)', async () => {
+    const { seedMetaFromServer } = await import('../../src/lib/profiles-meta');
+    const { map } = seedMetaFromServer({}, [
+      {
+        id: 'big',
+        folder: 'x'.repeat(99),
+        tags: Array.from({ length: 20 }, (_, i) => `t${String(i)}`),
+      },
+    ]);
+    expect(map['big']!.folder).toHaveLength(32);
+    expect(map['big']!.tags).toHaveLength(12);
+  });
+
+  it('persistProfilesMeta: writes the map and prunes ids not in the live list', async () => {
+    const { persistProfilesMeta } = await import('../../src/lib/profiles-meta');
+    await persistProfilesMeta(
+      {
+        live: { folder: 'A', tags: [], note: '' },
+        gone: { folder: 'B', tags: [], note: '' },
+      },
+      ['live'],
+    );
+    const all = await loadProfilesMeta();
+    expect(all['live']).toEqual({ folder: 'A', tags: [], note: '' });
+    expect(all['gone']).toBeUndefined();
+  });
+
   it('folderList: distinct, sorted, unfiled excluded', () => {
     expect(
       folderList({

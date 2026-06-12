@@ -12,7 +12,9 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import {
   folderList,
   loadProfilesMeta,
+  persistProfilesMeta,
   saveProfileMeta,
+  seedMetaFromServer,
   saveProfilesMetaBulk,
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
@@ -217,6 +219,19 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           loading: false,
           error: s.error,
         }));
+        // Organization sync Phase 2 — seed-down: profiles organized on
+        // another device (server folder/tags set, no local entry) get a
+        // local entry so the hub shows them immediately. Local-vs-server
+        // conflicts: local wins; the next edit's write-through reconciles.
+        setProfilesMeta((local) => {
+          const seeded = seedMetaFromServer(local, profilesPage);
+          if (!seeded.changed) return local;
+          void persistProfilesMeta(
+            seeded.map,
+            profilesPage.map((p) => p.id),
+          ).catch(() => undefined);
+          return seeded.map;
+        });
       } catch (err) {
         setState((s) => ({
           ...s,
@@ -501,6 +516,19 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     );
     setProfilesMeta(next);
     setOrganizeId(null);
+    // Phase 2 write-through: persist organization server-side too
+    // (migration 0076 columns). Best-effort — offline or a pre-0076
+    // server (which strips the fields) must never break the local save
+    // the user just watched succeed. Local store remains the UI source.
+    const saved = next[profileId];
+    if (client && saved) {
+      void client.profiles
+        .update(profileId, {
+          folder: saved.folder.length > 0 ? saved.folder : null,
+          tags: saved.tags,
+        })
+        .catch(() => undefined);
+    }
   }
 
   function toggleSelected(id: string): void {
@@ -525,6 +553,20 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       state.profiles.map((p) => p.id),
     );
     setProfilesMeta(next);
+    // Phase 2 write-through (same best-effort contract as the single-
+    // profile organize save): push each selected profile's merged result.
+    if (client) {
+      for (const id of selectedIds) {
+        const saved = next[id];
+        if (!saved) continue;
+        void client.profiles
+          .update(id, {
+            folder: saved.folder.length > 0 ? saved.folder : null,
+            tags: saved.tags,
+          })
+          .catch(() => undefined);
+      }
+    }
     setSelectedIds(new Set());
     setBulkFolder('');
     setBulkTag('');

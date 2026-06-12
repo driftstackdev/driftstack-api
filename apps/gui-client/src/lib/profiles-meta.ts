@@ -132,6 +132,67 @@ export async function saveProfilesMetaBulk(
   return all;
 }
 
+// ── Server sync (organization metadata Phase 2, 2026-06-12) ────────────────
+// The backend now stores folder/tags on the profile row (migration 0076).
+// Sync model v1, deliberately conservative:
+//   • The LOCAL store stays what the hub UI reads (instant, offline-safe).
+//   • Writes WRITE THROUGH to the API best-effort (ProfilesView does the
+//     PATCH; a pre-0076 server strips the unknown fields harmlessly).
+//   • Reads SEED DOWN: a profile with server-side organization but NO local
+//     entry gets its local entry seeded from the server (covers "organized
+//     on another device"). When BOTH exist and differ, local wins — the
+//     next local edit write-through reconciles. `note` stays local-only
+//     (no backend column; description is the server-side analogue).
+
+/** The slice of a server Profile response this store cares about. The
+ *  fields are typed required in api-types but a pre-0076 server omits
+ *  them — hence the optional/undefined handling. */
+export interface ServerProfileOrg {
+  id: string;
+  folder?: string | null;
+  tags?: string[];
+}
+
+/**
+ * Seed local entries from server organization for profiles that have no
+ * local entry yet. Pure on the map (returns a new map + whether anything
+ * changed); the caller persists via `persistProfilesMeta` only when
+ * `changed` — avoids a store write on every refresh.
+ */
+export function seedMetaFromServer(
+  local: ProfilesMetaMap,
+  serverProfiles: ServerProfileOrg[],
+): { map: ProfilesMetaMap; changed: boolean } {
+  let changed = false;
+  const map = { ...local };
+  for (const p of serverProfiles) {
+    if (p.id.length === 0 || map[p.id] !== undefined) continue;
+    const folder = typeof p.folder === 'string' ? p.folder : '';
+    const tags = Array.isArray(p.tags) ? p.tags : [];
+    if (folder.length === 0 && tags.length === 0) continue; // nothing to seed
+    map[p.id] = cleanEntry({ folder, tags, note: '' });
+    changed = true;
+  }
+  return { map, changed };
+}
+
+/** Persist a full map (the seed path). Same prune-by-live-ids semantics
+ *  as the save helpers. */
+export async function persistProfilesMeta(
+  map: ProfilesMetaMap,
+  liveProfileIds?: string[],
+): Promise<void> {
+  const all = { ...map };
+  if (liveProfileIds) {
+    const live = new Set(liveProfileIds);
+    for (const id of Object.keys(all)) {
+      if (!live.has(id)) delete all[id];
+    }
+  }
+  await getStore().set(META_KEY, all);
+  await getStore().save();
+}
+
 /** Distinct folder names across the map, sorted, excluding unfiled. */
 export function folderList(meta: ProfilesMetaMap): string[] {
   const set = new Set<string>();

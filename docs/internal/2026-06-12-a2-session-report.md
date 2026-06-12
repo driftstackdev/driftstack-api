@@ -109,3 +109,50 @@ points now pending:** (a) Tauri app walkthrough, (b) dashboard deploy
 Next waves = maintenance/fresh-audit or backend slices (folders/tags sync,
 Roadmap-chip features) — the proposal queue is intentionally not being padded
 further.
+
+## Addendum (~17:20) — folders/tags backend Phase 1 (organization metadata API)
+
+The named next frontier after the frontend arc's review point: profiles gain
+server-side organization metadata so the GUI's folders/tags (client-side
+profiles-meta.json today) can sync across devices.
+
+- `profiles.folder` (nullable text) + `profiles.tags` (jsonb, NOT NULL `[]`) —
+  additive migration **0076** (idempotent, no backfill; reaches prod with the
+  founder-gated 0072+ deploy batch).
+- api-types caps mirror the GUI store exactly (folder ≤32, ≤12 unique tags ≤24
+  chars) — a value the GUI accepts is never rejected server-side. PATCH
+  semantics: `folder: null` clears, `tags` is an exact-set replace.
+- Clone copies organization metadata (in-account); V-480 export/import and
+  V-666 transfer deliberately don't (a recipient's folder taxonomy is their
+  own — documented at the schema).
+- OpenAPI auto-follows (imports the zod schemas) + python spec dump regen'd;
+  Go SDK structs updated; TS SDK auto-follows api-types; python is untyped
+  pass-through. NOTE: the amended commit body under-describes the consumer
+  fixes (dashboard mocks, sdk-ts fixtures, Go structs) — they ride the same
+  commit.
+- Gate lesson recorded: the api-types `Profile` shape is consumed by
+  customer-dashboard `mocks.ts` and sdk-typescript test fixtures — change
+  them WITH the schema or the push gate's workspace typecheck fails.
+
+Phase 2 (next waves): GUI ProfilesView reads/writes the API fields with
+profiles-meta.json demoted to offline cache + one-shot migrate-up; docs page
+mention; dashboard profile-list organization UI.
+
+Follow-up (~17:30): the push gate caught TWO more same-commit obligations the
+slice owed — (1) W216.A profiles-doc-parity derives required doc fields FROM
+CreateProfileRequestSchema/ProfileSchema shapes, so the customer docs page
+(docs/profiles.astro) had to gain folder/tags examples + patchable-fields
+prose in the same commit (doc-accuracy methodology working exactly as
+designed); (2) its W516.C content pin re-pinned to the new 4-PATCH-fields
+prose. Both amended into the slice. Full footprint: server + migration +
+api-types + Go SDK + dashboard mocks + sdk-ts fixtures + customer docs +
+6 pin files — one commit, every channel moves together.
+
+Follow-up 2 (~17:40): gate 3 caught the marketing-site OWN-dir twin
+(apps/marketing-site/tests/unit/docs-profiles-parity.test.ts) of the W516.C
+patchable-fields pin — the 3-pin-locations lesson striking on a DOCS page this
+time. Rule restated concretely: when touching apps/<app>/src/\*\*, grep for pins
+in apps/server/tests/unit AND apps/<app>/tests/unit AND the cross-app rollups
+BEFORE the commit (`grep -rln '<changed-file-basename>' apps/server/tests/unit
+apps/<app>/tests`). Swept 'are patchable' across both dirs — no third
+location. Slice now 05a3b1e8, gate 4 in flight.
