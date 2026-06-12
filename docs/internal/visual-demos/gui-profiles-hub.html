@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en" data-mode="dark" data-accent="oxblood">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Driftstack — GUI Profiles Hub (visual demo)</title>
+<!--
+  THROWAWAY VISUAL DEMO (2026-06-12, A2) — not production code. A pickable mockup
+  of the redesigned GUI profiles hub: workspace/folders sidebar, profile grid with
+  status + tags + country + proxy, Quick Session, bulk actions, privacy badge.
+  Theme switcher (top-right) flips mode (dark/light) × accent (oxblood/violet/teal)
+  — the same token model section 1 of the rework plan proposes. Open in a browser;
+  pick a direction. Self-contained: inline CSS + system fonts + inline SVG.
+-->
+<style>
+  /* ---- token layer: every color derives from these (the proposed system) ---- */
+  :root {
+    --radius: 12px; --radius-sm: 8px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    --mono: "Berkeley Mono", "SF Mono", ui-monospace, Menlo, monospace;
+    --shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 24px -12px rgba(0,0,0,.35);
+  }
+  /* accent hues (axis B) */
+  [data-accent="oxblood"] { --accent: #9b3b46; --accent-strong: #722f37; --accent-ink: #fff; --accent-soft: rgba(155,59,70,.14); }
+  [data-accent="violet"]  { --accent: #6d5efc; --accent-strong: #5847e0; --accent-ink: #fff; --accent-soft: rgba(109,94,252,.16); }
+  [data-accent="teal"]    { --accent: #109a82; --accent-strong: #0c7d69; --accent-ink: #fff; --accent-soft: rgba(16,154,130,.16); }
+  /* mode (axis A) */
+  [data-mode="dark"] {
+    --bg: #0b0b0e; --surface: #131318; --raised: #1a1a21; --hover: #20212a;
+    --ink: #f4f4f6; --ink-2: #b7b7c2; --ink-3: #7d7d8a; --border: #26262f;
+    --ready:#34d399; --busy:#fbbf24; --err:#f87171; --idle:#6b7280; --sync:#60a5fa;
+  }
+  [data-mode="light"] {
+    --bg: #f6f7f9; --surface: #ffffff; --raised: #ffffff; --hover: #f1f2f5;
+    --ink: #15161a; --ink-2: #4a4c57; --ink-3: #8a8d99; --border: #e6e8ee;
+    --ready:#0f9d58; --busy:#c77700; --err:#d33; --idle:#9097a3; --sync:#2563eb;
+    --shadow: 0 1px 2px rgba(20,22,30,.05), 0 10px 30px -16px rgba(20,22,30,.18);
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family:var(--font); background:var(--bg); color:var(--ink);
+    -webkit-font-smoothing:antialiased; font-size:14px; }
+  .app { display:grid; grid-template-columns: 248px 1fr; height:100vh; }
+
+  /* ---- sidebar ---- */
+  .side { background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; padding:16px 12px; gap:6px; }
+  .brand { display:flex; align-items:center; gap:9px; padding:6px 8px 14px; font-weight:700; letter-spacing:-.2px; }
+  .brand .mark { color:var(--accent); }
+  .ws { display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--raised); border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:10px; cursor:pointer; }
+  .ws .ava { width:22px;height:22px;border-radius:6px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-size:11px;font-weight:700; }
+  .ws small { color:var(--ink-3); }
+  .navlabel { font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--ink-3); padding:10px 10px 4px; }
+  .nav a { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:var(--radius-sm); color:var(--ink-2); text-decoration:none; font-weight:500; }
+  .nav a:hover { background:var(--hover); color:var(--ink); }
+  .nav a.active { background:var(--accent-soft); color:var(--ink); }
+  .nav a .ico { width:16px; height:16px; opacity:.85; }
+  .nav a .count { margin-left:auto; font-size:11px; color:var(--ink-3); }
+  .folder { padding-left:24px; font-weight:500; }
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .side .foot { margin-top:auto; padding:10px; border-top:1px solid var(--border); color:var(--ink-3); font-size:12px; display:flex; align-items:center; gap:8px; }
+
+  /* ---- main ---- */
+  .main { display:flex; flex-direction:column; min-width:0; }
+  .top { display:flex; align-items:center; gap:12px; padding:14px 22px; border-bottom:1px solid var(--border); background:var(--surface); }
+  .search { flex:1; max-width:420px; display:flex; align-items:center; gap:8px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 12px; color:var(--ink-3); }
+  .search input { border:0; background:transparent; color:var(--ink); outline:none; width:100%; font-size:14px; }
+  .btn { border:0; border-radius:var(--radius-sm); padding:9px 14px; font-weight:600; font-size:13px; cursor:pointer; display:inline-flex; align-items:center; gap:7px; }
+  .btn.primary { background:var(--accent); color:var(--accent-ink); }
+  .btn.primary:hover { background:var(--accent-strong); }
+  .btn.ghost { background:transparent; color:var(--ink-2); border:1px solid var(--border); }
+  .btn.ghost:hover { background:var(--hover); color:var(--ink); }
+  .spacer { flex:1; }
+  .acct { width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-strong));color:#fff;display:grid;place-items:center;font-weight:700;font-size:12px; }
+
+  /* theme switcher */
+  .themer { display:flex; align-items:center; gap:6px; padding:4px; background:var(--bg); border:1px solid var(--border); border-radius:999px; }
+  .themer button { border:0; background:transparent; color:var(--ink-3); cursor:pointer; border-radius:999px; padding:5px 10px; font-size:12px; font-weight:600; }
+  .themer button.on { background:var(--accent); color:var(--accent-ink); }
+  .sw-acc { width:18px;height:18px;border-radius:50%;border:2px solid transparent;cursor:pointer; }
+  .sw-acc.on { border-color:var(--ink); }
+
+  /* content */
+  .content { padding:22px; overflow:auto; }
+  .privacy { display:flex; align-items:center; gap:10px; background:var(--accent-soft); border:1px solid var(--border); border-radius:var(--radius); padding:11px 14px; margin-bottom:18px; font-size:13px; color:var(--ink-2); }
+  .privacy b { color:var(--ink); }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+  .stat { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; }
+  .stat .n { font-size:24px; font-weight:700; letter-spacing:-.5px; }
+  .stat .l { color:var(--ink-3); font-size:12px; margin-top:2px; }
+
+  .barline { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .barline h2 { font-size:17px; margin:0; letter-spacing:-.3px; }
+  .chip { font-size:12px; color:var(--ink-2); background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:5px 11px; cursor:pointer; }
+  .chip.on { background:var(--accent-soft); color:var(--ink); border-color:transparent; }
+  .seg { display:flex; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; }
+  .seg button { border:0; background:var(--surface); color:var(--ink-3); padding:6px 11px; cursor:pointer; font-size:12px; }
+  .seg button.on { background:var(--hover); color:var(--ink); }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); transition:border-color .15s, transform .15s; }
+  .card:hover { border-color:var(--accent); transform:translateY(-1px); }
+  .card .head { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .pava { width:36px;height:36px;border-radius:9px;background:var(--raised);border:1px solid var(--border);display:grid;place-items:center;font-size:17px; }
+  .card .nm { font-weight:600; }
+  .card .sub { color:var(--ink-3); font-size:12px; }
+  .status { margin-left:auto; display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:4px 9px; border-radius:999px; background:var(--raised); border:1px solid var(--border); }
+  .tags { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0; }
+  .tag { font-size:11px; padding:3px 8px; border-radius:6px; background:var(--accent-soft); color:var(--ink-2); }
+  .meta { display:grid; grid-template-columns:1fr 1fr; gap:7px 12px; font-size:12px; color:var(--ink-2); margin:10px 0 14px; }
+  .meta .k { color:var(--ink-3); }
+  .cardact { display:flex; gap:8px; }
+  .cardact .btn { flex:1; justify-content:center; }
+  .checkbox { width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border);cursor:pointer; }
+  svg { display:block; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- sidebar -->
+  <aside class="side">
+    <div class="brand"><span class="mark">⌇</span> Driftstack</div>
+    <div class="ws"><span class="ava">A</span><div><div style="font-weight:600">Acme Growth</div><small>Team · 6 seats</small></div></div>
+
+    <div class="navlabel">Workspace</div>
+    <nav class="nav">
+      <a class="active" href="#"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg> Profiles <span class="count">128</span></a>
+      <a href="#"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Sessions <span class="count">4</span></a>
+      <a href="#"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h10"/></svg> Recipes</a>
+      <a href="#"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6z"/></svg> Proxies <span class="count">42</span></a>
+      <a href="#"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.4"/></svg> Team</a>
+    </nav>
+
+    <div class="navlabel">Folders</div>
+    <nav class="nav">
+      <a class="folder" href="#"><span class="dot" style="background:var(--ready)"></span> E-commerce <span class="count">54</span></a>
+      <a class="folder" href="#"><span class="dot" style="background:var(--sync)"></span> Social ops <span class="count">38</span></a>
+      <a class="folder" href="#"><span class="dot" style="background:var(--busy)"></span> Ad accounts <span class="count">22</span></a>
+      <a class="folder" href="#"><span class="dot" style="background:var(--idle)"></span> Archive <span class="count">14</span></a>
+    </nav>
+
+    <div class="foot"><span class="dot" style="background:var(--ready)"></span> All systems operational</div>
+  </aside>
+
+  <!-- main -->
+  <div class="main">
+    <header class="top">
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4-4"/></svg>
+        <input placeholder="Search profiles, tags, proxies…" />
+      </div>
+      <span class="spacer"></span>
+      <button class="btn ghost" title="Quick session — launch a throwaway with smart defaults">⚡ Quick Session</button>
+      <button class="btn primary">+ New profile</button>
+      <!-- theme switcher -->
+      <div class="themer" title="Theme">
+        <button id="m-dark" class="on" onclick="setMode('dark')">Dark</button>
+        <button id="m-light" onclick="setMode('light')">Light</button>
+        <span style="width:1px;height:18px;background:var(--border)"></span>
+        <span class="sw-acc on" id="a-oxblood" style="background:#9b3b46" onclick="setAccent('oxblood')" title="Oxblood"></span>
+        <span class="sw-acc" id="a-violet" style="background:#6d5efc" onclick="setAccent('violet')" title="Violet"></span>
+        <span class="sw-acc" id="a-teal" style="background:#109a82" onclick="setAccent('teal')" title="Teal"></span>
+      </div>
+      <div class="acct">JD</div>
+    </header>
+
+    <div class="content">
+      <div class="privacy">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span><b>Sealed &amp; private.</b> Your profiles are client-encrypted (AES-256-GCM) — Driftstack moves only opaque bytes and can't read your sessions or data. <a href="#" style="color:var(--accent)">How it works →</a></span>
+      </div>
+
+      <div class="stats">
+        <div class="stat"><div class="n">128</div><div class="l">Profiles</div></div>
+        <div class="stat"><div class="n" style="color:var(--ready)">4</div><div class="l">Running now</div></div>
+        <div class="stat"><div class="n">42</div><div class="l">Proxies · 11 countries</div></div>
+        <div class="stat"><div class="n">6</div><div class="l">Team seats</div></div>
+      </div>
+
+      <div class="barline">
+        <h2>E-commerce</h2>
+        <span class="chip on">All</span><span class="chip">Running</span><span class="chip">Idle</span><span class="chip">Errored</span>
+        <span class="spacer"></span>
+        <div class="seg"><button class="on">▦ Grid</button><button>≣ Table</button></div>
+      </div>
+
+      <div class="grid">
+        <!-- profile card 1 -->
+        <div class="card">
+          <div class="head">
+            <span class="checkbox"></span>
+            <span class="pava">🛍️</span>
+            <div><div class="nm">Amsterdam Shopper</div><div class="sub">iPhone 17 · iOS 18.7</div></div>
+            <span class="status"><span class="dot" style="background:var(--ready)"></span> Running</span>
+          </div>
+          <div class="tags"><span class="tag">checkout</span><span class="tag">NL</span><span class="tag">priority</span></div>
+          <div class="meta"><span class="k">Proxy</span><span>🇳🇱 Amsterdam · SOCKS5</span><span class="k">Last used</span><span>2m ago</span></div>
+          <div class="cardact"><button class="btn primary">▶ Live view</button><button class="btn ghost">Edit</button><button class="btn ghost">⋯</button></div>
+        </div>
+        <!-- card 2 -->
+        <div class="card">
+          <div class="head">
+            <span class="checkbox"></span>
+            <span class="pava">📦</span>
+            <div><div class="nm">Berlin Reseller</div><div class="sub">iPhone 17 Pro · iOS 18.7</div></div>
+            <span class="status"><span class="dot" style="background:var(--idle)"></span> Idle</span>
+          </div>
+          <div class="tags"><span class="tag">marketplace</span><span class="tag">DE</span></div>
+          <div class="meta"><span class="k">Proxy</span><span>🇩🇪 Berlin · SOCKS5</span><span class="k">Last used</span><span>3h ago</span></div>
+          <div class="cardact"><button class="btn primary">▶ Launch</button><button class="btn ghost">Edit</button><button class="btn ghost">⋯</button></div>
+        </div>
+        <!-- card 3 -->
+        <div class="card">
+          <div class="head">
+            <span class="checkbox"></span>
+            <span class="pava">🛒</span>
+            <div><div class="nm">Paris Boutique</div><div class="sub">iPhone 16 Pro · iOS 18.6</div></div>
+            <span class="status"><span class="dot" style="background:var(--err)"></span> Proxy error</span>
+          </div>
+          <div class="tags"><span class="tag">retail</span><span class="tag">FR</span></div>
+          <div class="meta"><span class="k">Proxy</span><span>🇫🇷 Paris · unreachable</span><span class="k">Last used</span><span>1d ago</span></div>
+          <div class="cardact"><button class="btn primary">▶ Launch</button><button class="btn ghost">Fix proxy</button><button class="btn ghost">⋯</button></div>
+        </div>
+        <!-- card 4 -->
+        <div class="card">
+          <div class="head">
+            <span class="checkbox"></span>
+            <span class="pava">🎁</span>
+            <div><div class="nm">Tokyo Drop</div><div class="sub">iPhone 17 · iOS 18.7</div></div>
+            <span class="status"><span class="dot" style="background:var(--sync)"></span> Syncing</span>
+          </div>
+          <div class="tags"><span class="tag">sneakers</span><span class="tag">JP</span><span class="tag">bot-check?</span></div>
+          <div class="meta"><span class="k">Proxy</span><span>🇯🇵 Tokyo · SOCKS5</span><span class="k">Last used</span><span>just now</span></div>
+          <div class="cardact"><button class="btn primary">▶ Live view</button><button class="btn ghost">Edit</button><button class="btn ghost">⋯</button></div>
+        </div>
+        <!-- new profile tile -->
+        <div class="card" style="display:grid;place-items:center;border-style:dashed;cursor:pointer;color:var(--ink-3);min-height:190px">
+          <div style="text-align:center"><div style="font-size:30px">＋</div><div style="font-weight:600;color:var(--ink-2)">New profile</div><div style="font-size:12px">or ⚡ Quick Session</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function setMode(m){ document.documentElement.dataset.mode=m;
+    document.getElementById('m-dark').classList.toggle('on', m==='dark');
+    document.getElementById('m-light').classList.toggle('on', m==='light'); }
+  function setAccent(a){ document.documentElement.dataset.accent=a;
+    ['oxblood','violet','teal'].forEach(x=>document.getElementById('a-'+x).classList.toggle('on', x===a)); }
+</script>
+</body>
+</html>
