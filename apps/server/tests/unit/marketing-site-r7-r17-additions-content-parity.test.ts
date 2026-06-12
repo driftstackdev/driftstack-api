@@ -216,34 +216,14 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(svg).toMatch(/aria-label="Driftstack logo"/);
     });
 
-    it('R17 vertical gradient stops pinned (oxblood-600 #8d2c3e top → oxblood-500 #a83b4d mid → glow-red #e23847 bottom) — replaces the R15 flat-oxblood fill="#722F37"', () => {
-      expect(svg).toMatch(/<linearGradient id="d-grad"/);
-      expect(svg).toMatch(/<stop offset="0%" stop-color="#8d2c3e"\/>/);
-      expect(svg).toMatch(/<stop offset="55%" stop-color="#a83b4d"\/>/);
-      expect(svg).toMatch(/<stop offset="100%" stop-color="#e23847"\/>/);
-    });
-
-    it('R17 red drop-shadow glow filter pinned (gaussian-blur stdDeviation=3 + dy=2 + flood-color glow-red 0.45 alpha) — the halo that gives the mark visual punch against the dark surface', () => {
-      expect(svg).toMatch(/<filter id="d-glow"/);
-      expect(svg).toMatch(/<feGaussianBlur in="SourceAlpha" stdDeviation="3"\/>/);
-      expect(svg).toMatch(/<feOffset dx="0" dy="2"/);
-      expect(svg).toMatch(/<feFlood flood-color="#e23847" flood-opacity="0\.45"\/>/);
-    });
-
-    it('Path uses even-odd fill rule + url(#d-grad) gradient fill + url(#d-glow) filter — so the inner iPhone shape punches transparent and any surface shows through', () => {
-      expect(svg).toMatch(/fill="url\(#d-grad\)"/);
-      expect(svg).toMatch(/fill-rule="evenodd"/);
-      expect(svg).toMatch(/filter="url\(#d-glow\)"/);
-    });
-
-    it('iPhone-shaped inner counter path commands pinned (notch-detail control points at y=52/56/60 that define the speaker-and-camera cutout at the top of the inner silhouette)', () => {
-      // The 4 control points at lines `L 130 52 / 132 60 / 152 60 / 158 52`
-      // define the notch dip. Pinning these specific coordinates so a
-      // future SVG edit that drops the notch breaks the test.
-      expect(svg).toMatch(/L 130 52/);
-      expect(svg).toMatch(/132 60/);
-      expect(svg).toMatch(/152 60/);
-      expect(svg).toMatch(/158 52/);
+    it('Fleet L2 mark pinned (founder-picked 2026-06-12, replaces the R17 gradient D-badge): ink-outline back layer (stroke #474a55 @ .55, rotate -7) + violet #6d5efc flat-filled front layer + white home-indicator dot — flat fills so the mark stays crisp at favicon sizes', () => {
+      expect(svg).toMatch(/stroke="#474a55" stroke-width="14" opacity="0\.55"/);
+      expect(svg).toMatch(/transform="rotate\(-7 105 127\)"/);
+      expect(svg).toMatch(/<rect x="86" y="30" width="118" height="194" rx="34" fill="#6d5efc"\/>/);
+      expect(svg).toMatch(/<circle cx="145" cy="192" r="12" fill="#ffffff"\/>/);
+      // the old gradient/glow-filter internals must be GONE (flat-fill commitment)
+      expect(svg).not.toMatch(/<linearGradient/);
+      expect(svg).not.toMatch(/<filter/);
     });
 
     it("Brand SVG mirrored byte-identical across all 5 apps (marketing-site + customer-dashboard + docs + status-site + admin-panel) — so a brand-asset update can't silently diverge between sites", () => {
