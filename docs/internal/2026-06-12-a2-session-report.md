@@ -227,3 +227,37 @@ file's two Date binds fixed; the wrong in-source attribution corrected.
 Founder takeaway softened accordingly: the Actions outage didn't mask a
 dependency regression — but reviving CI is still what makes these tests
 (and the new loud guards) actually bite.
+
+## Addendum (night arc, ~20:00) — GUI beauty/fidelity run, slices landed
+
+Founder directive (~19:00): GUI to "truly beautiful and fully featured",
+all-night autopilot, demos are the spec. Landed since (each gate-green):
+
+1. Grid view DEFAULT + FolderPicker (select-not-retype) across bulk bar,
+   organize editor, create wizard.
+2. iPhone-silhouette cards + registry device line + egress strip with UDP
+   badge (new shared proxy-probe-cache; honest 'untested' state).
+3. Simulator cockpit: previously-DORMANT useLatencyPing wired (live RTT),
+   egress line threaded, honest identity block + fps counter
+   (requestVideoFrameCallback).
+4. Privacy banner (production-trust-surface wording only — demo's stronger
+   claims stay founder+legal-gated).
+5. /v1/egress/echo (probe design step 1; unauth+IP-limited, cf-ipcountry
+   geo) + openapi/spec/pins; goes live with the founder-gated prod deploy.
+6. Create-wizard fidelity: templates (save/load presets), demo tab cards,
+   honest coherence ring, Notes FolderPicker; tag-clamp 400 edge fixed.
+7. Simulator Snapshot (frame → PNG in Downloads) + Record (1fps off the
+   live stream into the shared store; provider mounted in the simulator
+   root; Pause SKIPPED — no pause intent exists, fake control).
+8. Hub stats strip + folder/tag chips restored on the now-default grid
+   (the founder's literal complaint).
+
+Judgments logged: wizard Quick-Session button SKIPPED (creating ≠
+launching; hub header owns Quick Session — demo parity loses to UX sense
+here). E-2 exit-geo probe planned to the function signature (ureq over
+SOCKS5 → echo); cargo work load-gated (box at 70-130 all night, A1 fork
+rebuilds). Tauri rebuild queued on the load watcher — founder's app
+refreshes with everything at once.
+
+Process: three working-tree-bleed gate failures tonight → rule hardened:
+edits reach tsc-clean before any push gates, tree frozen during gates.
