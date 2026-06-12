@@ -101,3 +101,42 @@ describe('apps/server/src/routes/admin-owner.ts content parity', () => {
     expect(app).toContain('audit: deps.adminAuditService');
   });
 });
+
+describe('owner platform-secrets routes (secrets Phase A slice 2) parity', () => {
+  const body = readFileSync(ROUTE, 'utf8');
+
+  it('all four secrets routes exist, OWNER-gated + rate-limited', () => {
+    expect(body).toContain("app.get(\n    '/v1/admin/owner/secrets',");
+    expect(body).toContain("'/v1/admin/owner/secrets/:name',");
+    expect(body).toContain("'/v1/admin/owner/secrets/:name/reveal',");
+    // Each registration uses the owner-identity gate (not a scope).
+    const gateCount = (
+      body.match(/preHandler: \[app\.requireOwner, app\.rateLimit\('global'\)\]/g) ?? []
+    ).length;
+    expect(gateCount).toBeGreaterThanOrEqual(7); // 3 pre-existing + 4 secrets routes
+  });
+
+  it('reveal is the audited decrypt: secret.revealed recorded BEFORE the plaintext returns', () => {
+    expect(body).toMatch(
+      /action: 'secret\.revealed',[\s\S]{0,400}return \{ name: params\.data\.name, value: value as string \};/,
+    );
+  });
+
+  it('audit payloads carry name + description ONLY — never the secret value (taint rule)', () => {
+    // No inputPayload in the secrets routes includes a `value` key.
+    const secretsSection = body.slice(body.indexOf('Secrets Phase A slice 2'));
+    const payloads = secretsSection.match(/inputPayload: \{[^}]*\}/g) ?? [];
+    expect(payloads.length).toBeGreaterThanOrEqual(3);
+    for (const p of payloads) {
+      expect(p).not.toContain('value');
+    }
+  });
+
+  it('create-vs-update statuses + lifecycle audit actions pinned', () => {
+    expect(body).toMatch(
+      /isUpdate \? \('secret\.updated' as const\) : \('secret\.created' as const\)/,
+    );
+    expect(body).toContain("action: 'secret.deleted',");
+    expect(body).toMatch(/reply\.code\(isUpdate \? 200 : 201\)/);
+  });
+});

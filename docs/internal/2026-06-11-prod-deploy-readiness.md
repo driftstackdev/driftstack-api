@@ -113,6 +113,23 @@ constraint change, runs outside a transaction). So the deploy now runs **0072
 the go-live risk posture is unchanged. (The new webhook event itself is inert in
 prod until the fleet control plane is enabled — taxonomy + relay only.)
 
+### Migrations 0074 + 0075 added — 2026-06-12 (~07:30): secrets Phase A in the delta
+
+The admin-cockpit secrets arc (founder-locked decision 3; slices `a5ca8a74` +
+`3449f046` + UI `197762cd`) adds two more migrations:
+
+- **`0074_platform_secrets_table.sql`** — a plain `CREATE TABLE IF NOT EXISTS`
+  (new table, no existing-data interaction; instant).
+- **`0075_platform_secret_audit_actions.sql`** — four `ALTER TYPE ADD VALUE IF
+NOT EXISTS` on `admin_audit_action` (same pattern as 0068/0070; idempotent,
+  lock-free).
+
+So the deploy now runs **0072 + 0073 + 0074 + 0075** — all metadata-only/
+additive; the go-live risk posture is unchanged. No new required env (secrets
+encrypt under the existing `MFA_ENCRYPTION_KEY`; unset → the feature is cleanly
+disabled). The admin-panel cockpit UI ships separately via the manual
+`deploy-frontend.sh admin-panel` (Actions still down).
+
 ## Remaining to go-live (per the cutover memory)
 
 Correction after cross-checking the cutover memory: the frontend + GUI steps are **already
