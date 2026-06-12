@@ -482,6 +482,28 @@ export const pricing = pgTable('pricing', {
   updatedByKeyId: uuid('updated_by_key_id'),
 });
 
+// platform_secrets — admin-cockpit secrets Phase A (founder-locked decision 3):
+// DB-backed platform secret store, encrypted at rest with the BYOK blob
+// pattern ([12 IV | 16 tag | N ct] AES-256-GCM under the shared
+// MFA_ENCRYPTION_KEY). `name` is the stable slug PK; ciphertext is NEVER
+// returned by list reads (repo list selects metadata only). Owner-gated
+// management + audit ride the routes slice. Migration 0074.
+export const platformSecrets = pgTable('platform_secrets', {
+  name: text('name').primaryKey(),
+  description: text('description'),
+  ciphertext: customType<{ data: Buffer; driverData: Buffer }>({
+    dataType: () => 'bytea',
+  })('ciphertext').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .default(sql`now()`),
+  /** API key id of the owner who last set this secret (null = never set via API). */
+  updatedByKeyId: uuid('updated_by_key_id'),
+});
+
 // profiles — persistent customer-defined identity slots that sessions
 // are created against. The Manual ladder caps profile count as the
 // tier-defining metric (e.g. team_manual = 50 profiles); the API ladder
