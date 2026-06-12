@@ -47,6 +47,14 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
     };
   }, []);
 
+  // Fleet theme axes (2026-06-12 rework) — apply mode + accent to the
+  // document root so the token layer (styles/index.css) flips the whole
+  // GUI. Runs on load and on every settings change; cheap + idempotent.
+  useEffect(() => {
+    document.documentElement.dataset.mode = settings.themeMode;
+    document.documentElement.dataset.accent = settings.themeAccent;
+  }, [settings.themeMode, settings.themeAccent]);
+
   // V-242 — re-init telemetry whenever baseUrl or telemetryOptIn changes.
   // initTelemetry is idempotent + reconfigure-safe; it close()s the
   // existing client when the customer opts out mid-session.

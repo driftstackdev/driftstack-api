@@ -21,9 +21,15 @@
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { invoke } from '@tauri-apps/api/core';
 
+export type ThemeMode = 'light' | 'dark';
+export type ThemeAccent = 'violet' | 'oxblood' | 'teal';
+
 export interface DriftstackSettings {
   apiKey: string | null;
   baseUrl: string;
+  /** Fleet two-axis theme (2026-06-12 rework): mode + accent, persisted. */
+  themeMode: ThemeMode;
+  themeAccent: ThemeAccent;
   /**
    * V-242 / D-2026-05-06-02 — explicit telemetry opt-in/out. When
    * `null`, the platform default is used: ON for cloud, OFF for
@@ -36,6 +42,8 @@ export interface DriftstackSettings {
 export const DEFAULT_SETTINGS: DriftstackSettings = {
   apiKey: null,
   baseUrl: 'http://localhost:3000',
+  themeMode: 'light',
+  themeAccent: 'violet',
   telemetryOptIn: null,
 };
 
@@ -84,6 +92,8 @@ export function useKeychainForBaseUrl(baseUrl: string): boolean {
 interface PersistedSettings {
   apiKey?: unknown;
   baseUrl?: unknown;
+  themeMode?: unknown;
+  themeAccent?: unknown;
   telemetryOptIn?: unknown;
   /** W584 — per-deployment self-hosted keys, keyed by hostIdFor(baseUrl). */
   apiKeys?: unknown;
@@ -142,6 +152,18 @@ export async function loadSettings(): Promise<DriftstackSettings> {
       : DEFAULT_SETTINGS.baseUrl;
   const telemetryOptIn =
     persisted && typeof persisted.telemetryOptIn === 'boolean' ? persisted.telemetryOptIn : null;
+  // Fleet theme axes — validated against the known sets; anything else
+  // (older settings.json, hand edits) falls back to the defaults.
+  const themeMode: ThemeMode =
+    persisted?.themeMode === 'dark' || persisted?.themeMode === 'light'
+      ? persisted.themeMode
+      : DEFAULT_SETTINGS.themeMode;
+  const themeAccent: ThemeAccent =
+    persisted?.themeAccent === 'violet' ||
+    persisted?.themeAccent === 'oxblood' ||
+    persisted?.themeAccent === 'teal'
+      ? persisted.themeAccent
+      : DEFAULT_SETTINGS.themeAccent;
 
   // GUI W232 (c) — self-hosted / localhost: the API key lives in settings.json
   // (no keychain → no per-rebuild ACL prompt). Read it straight from the store.
@@ -180,7 +202,7 @@ export async function loadSettings(): Promise<DriftstackSettings> {
       });
       await getStore().save();
     }
-    return { apiKey, baseUrl, telemetryOptIn };
+    return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn };
   }
 
   const scopedName = keychainNameFor(baseUrl);
@@ -226,11 +248,11 @@ export async function loadSettings(): Promise<DriftstackSettings> {
   // If migration ran (or settings.json had a stale apiKey that we just
   // dropped), persist the cleaned-up shape.
   if (persisted && 'apiKey' in persisted) {
-    await getStore().set(SETTINGS_KEY, { baseUrl, telemetryOptIn });
+    await getStore().set(SETTINGS_KEY, { baseUrl, themeMode, themeAccent, telemetryOptIn });
     await getStore().save();
   }
 
-  return { apiKey, baseUrl, telemetryOptIn };
+  return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn };
 }
 
 export async function saveSettings(s: DriftstackSettings): Promise<void> {
@@ -253,6 +275,8 @@ export async function saveSettings(s: DriftstackSettings): Promise<void> {
   // apiKey is simply omitted from the store shape.
   await getStore().set(SETTINGS_KEY, {
     baseUrl: s.baseUrl,
+    themeMode: s.themeMode,
+    themeAccent: s.themeAccent,
     telemetryOptIn: s.telemetryOptIn,
     ...(!useKeychain && hasKey ? { apiKey: s.apiKey } : {}),
     ...(Object.keys(keyMap).length > 0 ? { apiKeys: keyMap } : {}),

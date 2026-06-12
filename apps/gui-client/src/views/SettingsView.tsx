@@ -264,6 +264,57 @@ export function SettingsView(): JSX.Element {
         </div>
       )}
 
+      {/* Appearance — Fleet two-axis theme (2026-06-12 rework). Mode +
+          accent persist in settings.json and apply instantly via the
+          SettingsProvider effect (document.documentElement data attrs). */}
+      <div className="max-w-xl rounded border border-surface-divider bg-surface-raised px-4 py-3">
+        <span className="section-label">Appearance</span>
+        <div className="mt-4 flex items-center gap-3">
+          <span className="w-24 text-sm text-ink-secondary">Mode</span>
+          <div className="flex overflow-hidden rounded border border-surface-divider">
+            {(['light', 'dark'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => void update({ themeMode: m })}
+                className={
+                  settings.themeMode === m
+                    ? 'bg-accent px-3 py-1 text-xs font-medium text-ink-inverted'
+                    : 'bg-surface-inset px-3 py-1 text-xs text-ink-secondary hover:text-ink-primary'
+                }
+              >
+                {m === 'light' ? 'Light' : 'Dark'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <span className="w-24 text-sm text-ink-secondary">Accent</span>
+          <div className="flex items-center gap-2">
+            {(
+              [
+                ['violet', '#6d5efc'],
+                ['oxblood', '#722f37'],
+                ['teal', '#109a82'],
+              ] as const
+            ).map(([a, hex]) => (
+              <button
+                key={a}
+                type="button"
+                aria-label={`${a} accent`}
+                onClick={() => void update({ themeAccent: a })}
+                className={
+                  settings.themeAccent === a
+                    ? 'h-5 w-5 rounded-full ring-2 ring-ink-primary ring-offset-2 ring-offset-surface-raised'
+                    : 'h-5 w-5 rounded-full opacity-70 hover:opacity-100'
+                }
+                style={{ background: hex }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
       {!isFirstRun && (
         <div className="max-w-xl rounded border border-surface-divider bg-surface-raised px-4 py-3">
           <span className="section-label">Connected</span>

@@ -73,16 +73,19 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
     );
   });
 
-  it("DriftstackSettings 3-field (apiKey nullable + baseUrl + telemetryOptIn nullable) with V-242 / D-2026-05-06-02 framing 'explicit telemetry opt-in/out. When `null`, the platform default is used: ON for cloud, OFF for self-hosted. A non-null value is the customer's explicit choice and overrides the default.'", () => {
+  it('DriftstackSettings 5-field (apiKey nullable + baseUrl + Fleet themeMode/themeAccent + telemetryOptIn nullable) with the V-242 telemetry framing + the 2026-06-12 theme-axes field', () => {
     expect(body).toMatch(
-      /export interface DriftstackSettings \{\s*\n?\s*apiKey: string \| null;\s*\n?\s*baseUrl: string;\s*\n?\s*\/\*\*\s*\n?\s*\*\s*V-242 \/ D-2026-05-06-02 — explicit telemetry opt-in\/out\. When\s*\n?\s*\*\s*`null`, the platform default is used: ON for cloud, OFF for\s*\n?\s*\*\s*self-hosted\. A non-null value is the customer's explicit choice\s*\n?\s*\*\s*and overrides the default\./,
+      /export interface DriftstackSettings \{\s*\n?\s*apiKey: string \| null;\s*\n?\s*baseUrl: string;\s*\n?\s*\/\*\* Fleet two-axis theme \(2026-06-12 rework\): mode \+ accent, persisted\. \*\/\s*\n?\s*themeMode: ThemeMode;\s*\n?\s*themeAccent: ThemeAccent;/,
+    );
+    expect(body).toMatch(
+      /V-242 \/ D-2026-05-06-02 — explicit telemetry opt-in\/out\. When\s*\n?\s*\*\s*`null`, the platform default is used: ON for cloud, OFF for\s*\n?\s*\*\s*self-hosted\. A non-null value is the customer's explicit choice\s*\n?\s*\*\s*and overrides the default\./,
     );
     expect(body).toMatch(/telemetryOptIn: boolean \| null;\s*\n?\s*\}/);
   });
 
-  it("DEFAULT_SETTINGS pinned: apiKey null + baseUrl 'http://localhost:3000' (SDK default port) + telemetryOptIn null", () => {
+  it("DEFAULT_SETTINGS pinned: apiKey null + baseUrl 'http://localhost:3000' (SDK default port) + light/violet theme defaults (founder-locked) + telemetryOptIn null", () => {
     expect(body).toMatch(
-      /export const DEFAULT_SETTINGS: DriftstackSettings = \{\s*\n?\s*apiKey: null,\s*\n?\s*baseUrl: 'http:\/\/localhost:3000',\s*\n?\s*telemetryOptIn: null,\s*\n?\s*\};/,
+      /export const DEFAULT_SETTINGS: DriftstackSettings = \{\s*\n?\s*apiKey: null,\s*\n?\s*baseUrl: 'http:\/\/localhost:3000',\s*\n?\s*themeMode: 'light',\s*\n?\s*themeAccent: 'violet',\s*\n?\s*telemetryOptIn: null,\s*\n?\s*\};/,
     );
   });
 
@@ -122,18 +125,18 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
     expect(body).toMatch(/\} else \{\s*\n?\s*migratedApiKey = inKeychain;\s*\n?\s*\}/);
   });
 
-  it("loadSettings cleanup write: persisted && 'apiKey' in persisted → store.set + store.save without apiKey field (cleaned shape) + returns {apiKey, baseUrl, telemetryOptIn}", () => {
+  it("loadSettings cleanup write: persisted && 'apiKey' in persisted → store.set + store.save without apiKey field (cleaned shape) + returns {apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn}", () => {
     expect(body).toMatch(
-      /if \(persisted && 'apiKey' in persisted\) \{\s*\n?\s*await getStore\(\)\.set\(SETTINGS_KEY, \{ baseUrl, telemetryOptIn \}\);\s*\n?\s*await getStore\(\)\.save\(\);\s*\n?\s*\}\s*\n?\s*return \{ apiKey, baseUrl, telemetryOptIn \};/,
+      /if \(persisted && 'apiKey' in persisted\) \{\s*\n?\s*await getStore\(\)\.set\(SETTINGS_KEY, \{ baseUrl, themeMode, themeAccent, telemetryOptIn \}\);\s*\n?\s*await getStore\(\)\.save\(\);\s*\n?\s*\}\s*\n?\s*return \{ apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn \};/,
     );
   });
 
-  it("saveSettings: store.set {baseUrl, telemetryOptIn} + store.save + apiKey null OR length===0 → scoped+legacy dual keychainDelete else keychainSave(scopedName); 2026-05-20 b876a576 scopedName + legacy-name dual-delete on sign-out so cross-env switching can't reuse stale entry ('logout doesn't work, keychain keeps pulling from self-hosted' incident)", () => {
+  it("saveSettings: store.set {baseUrl, themeMode, themeAccent, telemetryOptIn} + store.save + apiKey null OR length===0 → scoped+legacy dual keychainDelete else keychainSave(scopedName); 2026-05-20 b876a576 scopedName + legacy-name dual-delete on sign-out so cross-env switching can't reuse stale entry ('logout doesn't work, keychain keeps pulling from self-hosted' incident)", () => {
     expect(body).toMatch(
       /export async function saveSettings\(s: DriftstackSettings\): Promise<void>/,
     );
     expect(body).toMatch(
-      /await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*\.\.\.\(!useKeychain && hasKey \? \{ apiKey: s\.apiKey \} : \{\}\),\s*\n?\s*\.\.\.\(Object\.keys\(keyMap\)\.length > 0 \? \{ apiKeys: keyMap \} : \{\}\),\s*\n?\s*\}\);/,
+      /await getStore\(\)\.set\(SETTINGS_KEY, \{\s*\n?\s*baseUrl: s\.baseUrl,\s*\n?\s*themeMode: s\.themeMode,\s*\n?\s*themeAccent: s\.themeAccent,\s*\n?\s*telemetryOptIn: s\.telemetryOptIn,\s*\n?\s*\.\.\.\(!useKeychain && hasKey \? \{ apiKey: s\.apiKey \} : \{\}\),\s*\n?\s*\.\.\.\(Object\.keys\(keyMap\)\.length > 0 \? \{ apiKeys: keyMap \} : \{\}\),\s*\n?\s*\}\);/,
     );
     // W584 — per-deployment key map: cloud saves preserve other hosts' keys
     // (the founder's "switch modes → signed out" loop) and self-hosted
