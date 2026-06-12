@@ -6,29 +6,27 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   title="Driftstack"
   description="A real iPhone browser in the cloud that every website sees as a genuine iPhone — never a bot. Automate iPhone Safari from TypeScript, Python, Go, or a desktop app. Start free."
 >
-  <!-- Hero -->
+  <!-- ═══ HERO — Fleet mission control (founder 2026-06-12: the fleet section
+       IS the hero; the SDK-first hero moved to a compact section below).
+       Honest-claims: only real capabilities; generic professional telemetry. ═══ -->
   <section class="relative overflow-hidden">
-    {/* 2026-05-22 — atmospheric glow behind the hero. Two soft glow-
-        red radial gradients that pulse on a 12s loop. Pure CSS;
-        respects prefers-reduced-motion. */}
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="absolute inset-0 grid-bg opacity-40" aria-hidden="true"></div>
-    <div class="relative mx-auto max-w-6xl px-6 py-16 sm:pb-28 sm:pt-24 md:pt-32">
+    <div class="relative mx-auto max-w-6xl px-6 py-16 sm:pb-24 sm:pt-24 md:pt-28">
       <div class="grid gap-10 sm:gap-12 md:grid-cols-2 md:items-center">
         <div class="animate-fade-up">
           <p class="section-label">iPhone Safari · on demand</p>
           <h1
-            class="mt-4 text-[1.5rem] font-semibold tracking-tight text-tk-ink sm:mt-5 sm:text-4xl md:text-5xl lg:text-6xl"
-            style="letter-spacing: -0.02em; line-height: 1.15;"
+            class="mt-4 text-[1.6rem] font-semibold tracking-tight text-tk-ink sm:mt-5 sm:text-4xl md:text-5xl"
+            style="letter-spacing: -0.02em; line-height: 1.12;"
           >
-            Indistinguishable iPhone Safari.
-            <span class="block">Programmable from any language.</span>
+            Mission control for a fleet of real iPhones.
           </h1>
           <p class="mt-4 max-w-prose text-sm text-tk-ink-2 leading-relaxed sm:mt-5 sm:text-base md:text-lg">
-            Run a real iPhone browser in the cloud that every website treats as
-            a genuine iPhone — never a bot, never an emulator. Built for
-            scraping, testing, and automation that has to pass as a real mobile
-            user. Drive it from TypeScript, Python, Go, or the desktop app.
+            Every profile is a complete iPhone identity, live in the cloud —
+            its own cookies, storage, fingerprint and proxy. Watch the whole
+            fleet at a glance, drive any device by hand, by SDK, or by AI —
+            and no website ever knows.
           </p>
           <div class="mt-5 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4">
             <a href="/pricing#free" class="btn-primary">Start free</a>
@@ -39,41 +37,39 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           </p>
         </div>
 
-        <div class="code-preview relative">
-          <div class="code-window-chrome">
-            <span class="pip"></span>
-            <span class="pip"></span>
-            <span class="pip"></span>
-            <span class="ml-3 truncate text-[11px] text-tk-ink-3 sm:text-xs">driftstack-typescript-sdk</span>
-            <button
-              type="button"
-              data-copy-target="hero-sdk-code"
-              class="ml-auto rounded border border-tk-border px-2 py-0.5 text-[10px] font-mono text-tk-ink-3 transition hover:border-tk-accent hover:text-tk-accent"
-              aria-label="Copy code to clipboard"
-            >
-              <span data-copy-label>Copy</span>
-            </button>
+        <!-- The fleet wall — each mini phone renders live page content
+             (micro-mockups: shop / article / feed / search / checkout / video)
+             so the wall reads as REAL browsing sessions, not empty frames. -->
+        <div class="rounded-2xl border border-tk-border bg-tk-surface p-4 shadow-lg">
+          <div class="mb-3 flex items-center gap-2 font-mono text-[11px] text-tk-ink-3">
+            <span class="font-bold text-tk-ready"><span class="live-dot mr-1 inline-block h-2 w-2 rounded-full bg-tk-ready align-middle"></span>LIVE</span>
+            <span>your-fleet · profiles</span>
+            <span class="ml-auto">running · idle · ready</span>
           </div>
-          <pre class="max-h-[220px] overflow-x-auto p-3 text-[9.5px] leading-relaxed sm:max-h-none sm:p-5 sm:text-xs md:text-sm"><code id="hero-sdk-code">{`import { Driftstack } from '@driftstack/sdk';
-
-const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
-
-const session = await ds.sessions.create({
-  archetype: 'iphone17_ios18_7_safari26_4',
-  label: 'target-flow',
-});
-
-try {
-  await ds.sessions.navigate(session.id, { url: 'https://target.example' });
-  await ds.sessions.capture(session.id, { kind: 'screenshot' });
-  const state = await ds.sessions.getState(session.id);
-  console.log(state.url, state.title);
-} finally {
-  await ds.sessions.destroy(session.id);
-}`}</code></pre>
-          <!-- Horizontal-scroll affordance: fade on the right edge so
-               readers know the code preview can be panned on mobile. -->
-          <div class="pointer-events-none absolute inset-y-12 right-0 w-8 bg-gradient-to-l from-black/70 to-transparent sm:hidden"></div>
+          <div class="grid grid-cols-5 gap-2">
+            <div class="relative col-span-2 row-span-2 rounded-xl border-2 border-tk-accent bg-gradient-to-b from-white to-slate-200 p-2 shadow-glow-accent">
+              <div class="flex h-2.5 items-center gap-1 rounded-sm bg-white px-1 ring-1 ring-slate-200"><span class="h-1 w-1 rounded-full bg-slate-300"></span><span class="h-1 w-10 rounded-sm bg-slate-200"></span></div>
+              <div class="mt-1 flex h-8 items-end rounded-md bg-gradient-to-br from-slate-800 to-slate-600 p-1"><span class="h-1.5 w-12 rounded-sm bg-white/70"></span></div>
+              <div class="mt-1 grid grid-cols-2 gap-1">
+                <div class="h-6 rounded-sm bg-white ring-1 ring-slate-200"><div class="m-0.5 h-3 rounded-sm bg-violet-100"></div></div>
+                <div class="h-6 rounded-sm bg-white ring-1 ring-slate-200"><div class="m-0.5 h-3 rounded-sm bg-amber-100"></div></div>
+              </div>
+              <div class="mt-1 h-3 rounded-sm bg-slate-900"></div>
+              <span class="live-dot absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-tk-ready shadow-[0_0_6px] shadow-tk-ready"></span>
+              <span class="absolute bottom-1 left-2 font-mono text-[8px] text-slate-500">amsterdam-shopper · agent</span>
+            </div>
+            <div class="relative aspect-[9/16] overflow-hidden rounded-lg border border-tk-border bg-white p-1"><div class="h-1.5 rounded-sm bg-slate-100"></div><div class="mt-1 h-2 w-3/4 rounded-sm bg-slate-300"></div><div class="mt-1 space-y-0.5"><div class="h-1 rounded-sm bg-slate-100"></div><div class="h-1 rounded-sm bg-slate-100"></div><div class="h-1 w-2/3 rounded-sm bg-slate-100"></div></div><span class="live-dot absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ready"></span></div>
+            <div class="relative aspect-[9/16] overflow-hidden rounded-lg border border-tk-border bg-white p-1"><div class="flex items-center gap-0.5"><span class="h-1.5 w-1.5 rounded-full bg-violet-200"></span><span class="h-1 w-6 rounded-sm bg-slate-200"></span></div><div class="mt-1 h-5 rounded-sm bg-slate-100"></div><div class="mt-0.5 flex items-center gap-0.5"><span class="h-1.5 w-1.5 rounded-full bg-amber-200"></span><span class="h-1 w-5 rounded-sm bg-slate-200"></span></div><div class="mt-0.5 h-4 rounded-sm bg-slate-100"></div><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-busy"></span></div>
+            <div class="relative aspect-[9/16] overflow-hidden rounded-lg border border-tk-border bg-white p-1"><div class="h-2 rounded-full bg-slate-100 ring-1 ring-slate-200"></div><div class="mt-1 space-y-0.5"><div class="h-1.5 rounded-sm bg-violet-50"></div><div class="h-1 w-3/4 rounded-sm bg-slate-100"></div><div class="h-1.5 rounded-sm bg-violet-50"></div><div class="h-1 w-2/3 rounded-sm bg-slate-100"></div></div><span class="live-dot absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ready"></span></div>
+            <div class="relative aspect-[9/16] overflow-hidden rounded-lg border border-tk-border bg-white p-1"><div class="space-y-0.5"><div class="h-1.5 rounded-sm bg-slate-100"></div><div class="h-1.5 rounded-sm bg-slate-100"></div><div class="h-1.5 w-3/4 rounded-sm bg-slate-100"></div></div><div class="mt-1 h-2.5 rounded-sm bg-slate-900"></div><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ink-3"></span></div>
+            <div class="relative aspect-[9/16] overflow-hidden rounded-lg border border-tk-border bg-white p-1"><div class="flex h-7 items-center justify-center rounded-sm bg-slate-800"><span class="h-2 w-2 rounded-full bg-white/80"></span></div><div class="mt-1 h-1.5 w-3/4 rounded-sm bg-slate-200"></div><div class="mt-0.5 h-1 w-1/2 rounded-sm bg-slate-100"></div><span class="live-dot absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ready"></span></div>
+            <div class="relative aspect-[9/16] overflow-hidden rounded-lg border border-tk-border bg-white p-1"><div class="h-1.5 w-1/2 rounded-sm bg-slate-300"></div><div class="mt-1 grid grid-cols-2 gap-0.5"><div class="h-4 rounded-sm bg-emerald-50"></div><div class="h-4 rounded-sm bg-slate-100"></div><div class="h-4 rounded-sm bg-slate-100"></div><div class="h-4 rounded-sm bg-violet-50"></div></div><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ink-3"></span></div>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-tk-ink-3">
+            <span>fingerprint coherence <b class="text-tk-ready">verified</b></span>
+            <span>detection flags <b class="text-tk-ready">0</b></span>
+            <span>median control latency <b class="text-tk-ink-2">&lt;100ms</b></span>
+          </div>
         </div>
       </div>
     </div>
@@ -150,62 +146,79 @@ try {
     </div>
   </section>
 
-  <!-- ═══ Fleet merge (founder 2026-06-12: "best of both, towards 100% perfect").
-       Sections lifted from the picked Direction-D demo (marketing-d-fleet.html),
-       honest-claims filtered: only REAL capabilities; the demo's concept features
-       (replay/warm-up) are excluded until they exist. ═══ -->
-
-  <!-- The fleet wall — "mission control" visual (demo hero, now a showcase section) -->
+  <!-- Build-with-code — the former hero, compacted below the fleet hero
+       (founder 2026-06-12). All pinned copy + the REAL SDK snippet kept. -->
   <section class="relative border-t border-tk-border">
-    <div class="mx-auto max-w-6xl px-6 py-20">
-      <div class="grid gap-10 md:grid-cols-2 md:items-center">
-        <div>
-          <p class="section-label">Your fleet</p>
-          <h2 class="mt-5 text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl" style="letter-spacing: -0.02em;">
-            Mission control for a fleet of real iPhones.
+    {/* 2026-05-22 — atmospheric glow behind the hero. Two soft glow-
+        red radial gradients that pulse on a 12s loop. Pure CSS;
+        respects prefers-reduced-motion. */}
+            <div class="relative mx-auto max-w-6xl px-6 py-16 sm:py-20">
+      <div class="grid gap-10 sm:gap-12 md:grid-cols-2 md:items-center">
+        <div class="animate-fade-up">
+          <p class="section-label">iPhone Safari · on demand</p>
+          <h2
+            class="mt-4 text-xl font-semibold tracking-tight text-tk-ink sm:mt-5 sm:text-2xl md:text-3xl"
+            style="letter-spacing: -0.02em; line-height: 1.2;"
+          >
+            Indistinguishable iPhone Safari.
+            <span class="block">Programmable from any language.</span>
           </h2>
-          <p class="mt-4 max-w-prose text-sm text-tk-ink-2 leading-relaxed sm:text-base">
-            Every profile is a complete iPhone identity, live in the cloud —
-            its own cookies, storage, fingerprint and proxy. Watch the whole
-            fleet at a glance, drive any device by hand, by SDK, or by AI —
-            and no website ever knows.
+          <p class="mt-4 max-w-prose text-sm text-tk-ink-2 leading-relaxed sm:mt-5 sm:text-base md:text-lg">
+            Run a real iPhone browser in the cloud that every website treats as
+            a genuine iPhone — never a bot, never an emulator. Built for
+            scraping, testing, and automation that has to pass as a real mobile
+            user. Drive it from TypeScript, Python, Go, or the desktop app.
           </p>
-          <p class="mt-6 font-mono text-xs text-tk-ink-3">
-            <span class="text-tk-ready">●</span> live status per profile ·
-            isolated identities · persistent across runs
+          <div class="mt-5 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4">
+            <a href="/pricing#free" class="btn-primary">Start free</a>
+            <a href="/comparison" class="btn-secondary">Compare the alternatives</a>
+          </div>
+          <p class="mt-3 text-[11px] text-tk-ink-3 sm:mt-4 sm:text-xs">
+            One profile · 20-minute sessions · no card required.
           </p>
         </div>
-        <div class="rounded-2xl border border-tk-border bg-tk-surface p-4 shadow-lg">
-          <div class="mb-3 flex items-center gap-2 font-mono text-[11px] text-tk-ink-3">
-            <span class="font-bold text-tk-ready"><span class="live-dot mr-1 inline-block h-2 w-2 rounded-full bg-tk-ready align-middle"></span>LIVE</span>
-            <span>your-fleet · profiles</span>
-            <span class="ml-auto">running · idle · ready</span>
+
+        <div class="code-preview relative">
+          <div class="code-window-chrome">
+            <span class="pip"></span>
+            <span class="pip"></span>
+            <span class="pip"></span>
+            <span class="ml-3 truncate text-[11px] text-tk-ink-3 sm:text-xs">driftstack-typescript-sdk</span>
+            <button
+              type="button"
+              data-copy-target="hero-sdk-code"
+              class="ml-auto rounded border border-tk-border px-2 py-0.5 text-[10px] font-mono text-tk-ink-3 transition hover:border-tk-accent hover:text-tk-accent"
+              aria-label="Copy code to clipboard"
+            >
+              <span data-copy-label>Copy</span>
+            </button>
           </div>
-          <div class="grid grid-cols-5 gap-2">
-            <div class="relative col-span-2 row-span-2 rounded-xl border-2 border-tk-accent bg-gradient-to-b from-white to-slate-200 p-2 shadow-glow-accent">
-              <div class="h-2 w-3/4 rounded-sm bg-slate-300"></div>
-              <div class="mt-1 h-8 rounded-md bg-slate-800"></div>
-              <div class="mt-1 h-4 rounded-sm bg-white ring-1 ring-slate-200"></div>
-              <div class="mt-1 h-4 rounded-sm bg-white ring-1 ring-slate-200"></div>
-              <span class="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-tk-ready shadow-[0_0_6px] shadow-tk-ready live-dot"></span>
-              <span class="absolute bottom-1 left-2 font-mono text-[8px] text-slate-500">amsterdam-shopper · agent</span>
-            </div>
-            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ready live-dot"></span></div>
-            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-busy"></span></div>
-            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ready live-dot"></span></div>
-            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ink-3"></span></div>
-            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ready live-dot"></span></div>
-            <div class="aspect-[9/16] rounded-lg border border-tk-border bg-tk-hover relative"><span class="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-tk-ink-3"></span></div>
-          </div>
-          <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-tk-ink-3">
-            <span>fingerprint coherence <b class="text-tk-ready">verified</b></span>
-            <span>detection flags <b class="text-tk-ready">0</b></span>
-            <span>median control latency <b class="text-tk-ink-2">&lt;100ms</b></span>
-          </div>
+          <pre class="max-h-[220px] overflow-x-auto p-3 text-[9.5px] leading-relaxed sm:max-h-none sm:p-5 sm:text-xs md:text-sm"><code id="hero-sdk-code">{`import { Driftstack } from '@driftstack/sdk';
+
+const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
+
+const session = await ds.sessions.create({
+  archetype: 'iphone17_ios18_7_safari26_4',
+  label: 'target-flow',
+});
+
+try {
+  await ds.sessions.navigate(session.id, { url: 'https://target.example' });
+  await ds.sessions.capture(session.id, { kind: 'screenshot' });
+  const state = await ds.sessions.getState(session.id);
+  console.log(state.url, state.title);
+} finally {
+  await ds.sessions.destroy(session.id);
+}`}</code></pre>
+          <!-- Horizontal-scroll affordance: fade on the right edge so
+               readers know the code preview can be panned on mobile. -->
+          <div class="pointer-events-none absolute inset-y-12 right-0 w-8 bg-gradient-to-l from-black/70 to-transparent sm:hidden"></div>
         </div>
       </div>
     </div>
   </section>
+
+
 
   <!-- Not-an-anti-detect comparison (demo's table, distilled from /comparison) -->
   <section class="relative border-t border-tk-border">
@@ -320,103 +333,89 @@ try {
         the option to export the result as code anytime.
       </p>
 
-      <div class="mt-10 grid gap-6 md:grid-cols-2 md:items-stretch">
-        <!-- Chat-panel mockup. Renders as a faux conversation between
-             the customer and the AI agent. Pure CSS; no JS needed. -->
-        <div class="overflow-hidden rounded-lg border border-tk-border bg-tk-surface">
-          <div class="flex items-center gap-2 border-b border-tk-border bg-tk-hover/60 px-5 py-3 text-xs text-tk-ink-3">
-            <span class="size-2 rounded-full bg-tk-accent"></span>
-            <span class="font-mono">AI agent · iPhone 17</span>
+      <!-- The cockpit showcase — a high-fidelity mockup of the desktop GUI
+           (the real product, not a live session): hub window + the floating
+           iPhone simulator, with breathing live-status. Founder 2026-06-12:
+           no live-session implication on the homepage; show the GUI itself. -->
+      <div class="mt-10 relative">
+        <div class="rounded-2xl border border-tk-border bg-tk-surface shadow-lg overflow-hidden">
+          <!-- window chrome -->
+          <div class="flex items-center gap-2 border-b border-tk-border bg-tk-hover/60 px-4 py-2.5">
+            <span class="h-3 w-3 rounded-full bg-[#ff5f57]"></span>
+            <span class="h-3 w-3 rounded-full bg-[#febc2e]"></span>
+            <span class="h-3 w-3 rounded-full bg-[#28c840]"></span>
+            <span class="ml-3 font-sans text-xs font-black italic tracking-tight text-tk-ink">DRIFT<span class="text-tk-accent">STACK</span></span>
+            <span class="ml-auto font-mono text-[10px] text-tk-ink-3">your-workspace · 4 running</span>
           </div>
-          <div class="space-y-4 p-5 text-sm">
-            <div class="flex gap-3">
-              <span
-                class="flex size-7 shrink-0 items-center justify-center rounded-full bg-tk-accent/20 text-xs"
-                >you</span
-              >
-              <p class="rounded-lg bg-tk-hover px-4 py-3 text-tk-ink">
-                Log in with the test account, open the revenue
-                dashboard, and screenshot the chart for the last 30 days.
-              </p>
+          <div class="grid md:grid-cols-[180px_1fr]">
+            <!-- sidebar -->
+            <div class="hidden border-r border-tk-border bg-tk-bg/60 p-3 md:block">
+              <div class="font-mono text-[9px] uppercase tracking-widest text-tk-ink-3"><span class="text-tk-accent">//</span> workspace</div>
+              <div class="mt-2 rounded bg-tk-accent/10 px-2 py-1 text-xs font-medium text-tk-ink">Profiles</div>
+              <div class="mt-1 px-2 py-1 text-xs text-tk-ink-2">Sessions</div>
+              <div class="mt-1 px-2 py-1 text-xs text-tk-ink-2">Recipes</div>
+              <div class="mt-1 px-2 py-1 text-xs text-tk-ink-2">Proxies</div>
+              <div class="mt-4 font-mono text-[9px] uppercase tracking-widest text-tk-ink-3"><span class="text-tk-accent">//</span> folders</div>
+              <div class="mt-2 flex items-center gap-1.5 px-2 py-0.5 text-xs text-tk-ink-2"><span class="h-1.5 w-1.5 rounded-full bg-tk-ready"></span> E-commerce</div>
+              <div class="flex items-center gap-1.5 px-2 py-0.5 text-xs text-tk-ink-2"><span class="h-1.5 w-1.5 rounded-full bg-tk-accent/60"></span> Social ops</div>
+              <div class="flex items-center gap-1.5 px-2 py-0.5 text-xs text-tk-ink-2"><span class="h-1.5 w-1.5 rounded-full bg-tk-busy"></span> QA suite</div>
             </div>
-            <div class="flex gap-3">
-              <span
-                class="flex size-7 shrink-0 items-center justify-center rounded-full bg-tk-ink/10 text-xs"
-                >AI</span
-              >
-              <div class="space-y-2 text-tk-ink-2">
-                <p class="rounded-lg bg-tk-hover/60 px-4 py-3">
-                  Planning 4 steps:
-                  <span class="font-mono text-tk-accent">navigate</span>,
-                  <span class="font-mono text-tk-accent">fillForm</span>,
-                  <span class="font-mono text-tk-accent">click</span>,
-                  <span class="font-mono text-tk-accent">screenshot</span>.
-                </p>
-                <p class="rounded-lg bg-tk-hover/60 px-4 py-3">
-                  Logged in. Navigating to /dashboard/revenue.
-                </p>
-                <p class="rounded-lg bg-tk-hover/60 px-4 py-3">
-                  Screenshot captured ·
-                  <span class="text-tk-accent underline underline-offset-4">view</span>
-                </p>
+            <!-- profile grid -->
+            <div class="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div class="rounded-lg border border-tk-border bg-tk-bg/40 p-3">
+                <div class="flex items-center justify-between"><span class="text-xs font-semibold text-tk-ink">amsterdam-shopper</span><span class="inline-flex items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[9px] font-semibold text-tk-ready"><span class="live-dot h-1.5 w-1.5 rounded-full bg-tk-ready"></span>Running</span></div>
+                <div class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 17 · 🇳🇱 AMS · SOCKS5</div>
+                <div class="mt-2 flex gap-1"><span class="rounded-sm bg-tk-accent/10 px-1 text-[8px] text-tk-accent">checkout</span><span class="rounded-sm bg-tk-hover px-1 text-[8px] text-tk-ink-3">priority</span></div>
+              </div>
+              <div class="rounded-lg border border-tk-border bg-tk-bg/40 p-3">
+                <div class="flex items-center justify-between"><span class="text-xs font-semibold text-tk-ink">us-retail-qa</span><span class="inline-flex items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[9px] font-semibold text-tk-ready"><span class="live-dot h-1.5 w-1.5 rounded-full bg-tk-ready"></span>Running</span></div>
+                <div class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 17 · 🇺🇸 NYC · WireGuard</div>
+                <div class="mt-2 flex gap-1"><span class="rounded-sm bg-tk-hover px-1 text-[8px] text-tk-ink-3">e2e</span></div>
+              </div>
+              <div class="hidden rounded-lg border border-tk-border bg-tk-bg/40 p-3 lg:block">
+                <div class="flex items-center justify-between"><span class="text-xs font-semibold text-tk-ink">jp-market</span><span class="inline-flex items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[9px] font-semibold text-tk-ink-3"><span class="h-1.5 w-1.5 rounded-full bg-tk-ink-3"></span>Idle</span></div>
+                <div class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 15 Pro · 🇯🇵 TYO · SOCKS5</div>
+                <div class="mt-2 flex gap-1"><span class="rounded-sm bg-tk-hover px-1 text-[8px] text-tk-ink-3">research</span></div>
+              </div>
+              <div class="rounded-lg border border-tk-border bg-tk-bg/40 p-3">
+                <div class="flex items-center justify-between"><span class="text-xs font-semibold text-tk-ink">de-pricing</span><span class="inline-flex items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[9px] font-semibold text-tk-busy"><span class="h-1.5 w-1.5 rounded-full bg-tk-busy"></span>Syncing</span></div>
+                <div class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 17 · 🇩🇪 FRA · SOCKS5</div>
+                <div class="mt-2 flex gap-1"><span class="rounded-sm bg-tk-accent/10 px-1 text-[8px] text-tk-accent">daily</span></div>
+              </div>
+              <div class="rounded-lg border border-tk-border bg-tk-bg/40 p-3">
+                <div class="flex items-center justify-between"><span class="text-xs font-semibold text-tk-ink">uk-checkout</span><span class="inline-flex items-center gap-1 rounded-full border border-tk-border px-1.5 py-0.5 text-[9px] font-semibold text-tk-ready"><span class="live-dot h-1.5 w-1.5 rounded-full bg-tk-ready"></span>Running</span></div>
+                <div class="mt-1 font-mono text-[9px] text-tk-ink-3">iPhone 17 · 🇬🇧 LDN · OpenVPN</div>
+                <div class="mt-2 flex gap-1"><span class="rounded-sm bg-tk-hover px-1 text-[8px] text-tk-ink-3">bot-check</span></div>
+              </div>
+              <div class="hidden items-center justify-center rounded-lg border border-dashed border-tk-border p-3 text-center sm:flex">
+                <span class="text-[10px] text-tk-ink-3">+ New profile<br/>or ⚡ Quick Session</span>
               </div>
             </div>
           </div>
-          <div class="flex items-center justify-between border-t border-tk-border bg-tk-hover/60 px-5 py-3 text-xs">
-            <span class="text-tk-ink-3">A few seconds · 4 steps planned</span>
-            <span class="text-tk-accent">Export as SDK code →</span>
-          </div>
         </div>
-
-        <!-- Live-preview pane stub. Placeholder for a real
-             LiveKit-streamed iPhone-frame mockup; the static
-             monospace label avoids implying a live stream exists
-             at this URL today. -->
-        <div class="flex flex-col overflow-hidden rounded-lg border border-tk-border bg-tk-surface">
-          <div class="flex items-center gap-2 border-b border-tk-border bg-tk-hover/60 px-5 py-3 text-xs text-tk-ink-3">
-            <span class="size-2 rounded-full bg-green-500"></span>
-            <span class="font-mono">Live preview — &lt;livekit-room&gt;</span>
-          </div>
-          {/* 2026-05-23 — scan-line animation behind the live-preview
-              mockup so the "live" indicator reads as actually-alive.
-              Same shape as the workbench preview placeholder. */}
-          <div class="relative flex min-h-[280px] flex-1 items-center justify-center bg-black/60 overflow-hidden">
-            <div
-              aria-hidden="true"
-              class="pointer-events-none absolute inset-0 overflow-hidden"
-            >
-              <div
-                class="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-tk-accent/40 to-transparent"
-                style="animation: hero-mockup-scan 6s linear infinite;"
-              ></div>
+        <!-- floating simulator window, overlapping the hub -->
+        <div class="pointer-events-none absolute -bottom-6 right-4 hidden w-44 md:block">
+          <div class="overflow-hidden rounded-xl border border-tk-border bg-tk-surface shadow-xl">
+            <div class="flex items-center gap-1 border-b border-tk-border bg-tk-hover/60 px-2 py-1">
+              <span class="h-1.5 w-1.5 rounded-full bg-[#ff5f57]"></span><span class="h-1.5 w-1.5 rounded-full bg-[#febc2e]"></span>
+              <span class="ml-1 font-mono text-[8px] text-tk-ink-3">amsterdam-shopper</span>
+              <span class="live-dot ml-auto h-1.5 w-1.5 rounded-full bg-tk-ready"></span>
             </div>
-            <style is:global>
-              @keyframes hero-mockup-scan {
-                0% { top: -2%; opacity: 0; }
-                10% { opacity: 1; }
-                90% { opacity: 1; }
-                100% { top: 102%; opacity: 0; }
-              }
-              @media (prefers-reduced-motion: reduce) {
-                [data-mockup-scan] { animation: none !important; display: none; }
-              }
-            </style>
-            <span class="font-mono text-xs text-tk-ink-3 relative">
-              [ iPhone Safari · live preview ]
-            </span>
-          </div>
-          <div class="border-t border-tk-border bg-tk-hover/60 px-5 py-3 text-xs text-tk-ink-3">
-            Watch in real time · 95ms median latency
+            <div class="bg-gradient-to-b from-white to-slate-100 p-1.5">
+              <div class="rounded-sm bg-white px-1 py-0.5 font-mono text-[7px] text-slate-400 ring-1 ring-slate-200">shop.example.com 🔒</div>
+              <div class="mt-1 h-7 rounded-sm bg-gradient-to-br from-slate-800 to-slate-600"></div>
+              <div class="mt-1 grid grid-cols-2 gap-1"><div class="h-5 rounded-sm bg-white ring-1 ring-slate-200"></div><div class="h-5 rounded-sm bg-white ring-1 ring-slate-200"></div></div>
+              <div class="mt-1 h-2.5 rounded-sm bg-slate-900"></div>
+            </div>
           </div>
         </div>
       </div>
 
-      <p class="mt-6 max-w-prose text-sm text-tk-ink-3">
-        The chat agent is the fast path for one-off tasks and
-        explorations. Click
-        <strong class="text-tk-ink">Export as SDK code</strong> to
-        lift the decomposed intent log into a reusable script — same
-        engine, same fingerprint, no agent overhead on repeat runs.
+      <p class="mt-10 max-w-prose text-sm text-tk-ink-3">
+        The desktop app is the cockpit: organize profiles in folders, launch
+        with one click, and pop any session out into its own floating device
+        window. Engineers get the same power from the SDK —
+        <strong class="text-tk-ink">no agent overhead on repeat runs</strong>.
       </p>
     </div>
   </section>

@@ -60,7 +60,7 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
 
   it("R15 logo + brand framing pinned: a href / wrapping the new /driftstack-mark.svg <img> (iPhone-D brand SVG) + the W2 DRIFT/STACK two-tone wordmark + font-mono font-semibold + h-8-w-8 mark size. Replaces the prior bg-gradient-accent text-white 'D' chip with the real SVG brand asset. Drift to a different brand-mark source or font-family would create cross-page styling divergence.", () => {
     expect(body).toMatch(
-      /<a\s+href="\/"\s+class="group flex items-center gap-2\.5 font-mono text-base font-semibold text-tk-ink"/,
+      /<a\s+href="\/"\s+class="group flex items-center gap-2\.5 font-mono text-xl font-semibold text-tk-ink"/,
     );
     expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
     expect(body).toMatch(/width="32"\s*\n?\s*height="32"/);
