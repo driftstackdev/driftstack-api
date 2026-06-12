@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en" data-mode="light" data-accent="violet">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Driftstack — Recordings Gallery (proposal demo)</title>
+    <!-- PROPOSAL DEMO (2026-06-12, A2). A richer recordings surface for the GUI:
+         thumbnail gallery + inline player rail + per-recording session facts.
+         The GUI has a recordings list today; this is the gallery upgrade.
+         Honest framing: recordings exist (GUI lib/recordings); the gallery is
+         a UI proposal over real data. -->
+    <style>
+      :root {
+        --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+        --mono: 'SF Mono', ui-monospace, Menlo, monospace;
+      }
+      [data-accent='violet'] {
+        --accent: #6d5efc;
+        --accent-ink: #fff;
+        --accent-soft: rgba(109, 94, 252, 0.13);
+      }
+      [data-mode='light'] {
+        --bg: #f2f3f6;
+        --surface: #fff;
+        --hover: #f1f2f5;
+        --ink: #0f1014;
+        --ink-2: #474a55;
+        --ink-3: #8a8d99;
+        --border: #e4e6ec;
+        --ready: #0c9a5d;
+      }
+      [data-mode='dark'] {
+        --bg: #060608;
+        --surface: #0e0e12;
+        --hover: #22232c;
+        --ink: #f5f5f7;
+        --ink-2: #b0b0bb;
+        --ink-3: #73737f;
+        --border: #1e1e26;
+        --ready: #2fe39a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--ink);
+        font-size: 14px;
+        -webkit-font-smoothing: antialiased;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 22px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 900;
+        font-style: italic;
+        letter-spacing: -0.4px;
+      }
+      .brand b {
+        color: var(--accent);
+        font-weight: 900;
+      }
+      .stage {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: 20px;
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 22px;
+      }
+      .label {
+        font-family: var(--mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1.4px;
+        color: var(--ink-3);
+      }
+      .label::before {
+        content: '// ';
+        color: var(--accent);
+      }
+      h1 {
+        font-size: 20px;
+        letter-spacing: -0.4px;
+        margin: 6px 0 16px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+      }
+      .rec {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--surface);
+        cursor: pointer;
+      }
+      .rec.sel {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent);
+      }
+      .thumb {
+        position: relative;
+        aspect-ratio: 9/12;
+        background: linear-gradient(165deg, #1a1a22, #34343f);
+        display: grid;
+        place-items: center;
+      }
+      .thumb .play {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: rgb(255 255 255 / 0.92);
+        display: grid;
+        place-items: center;
+        color: #111;
+        font-size: 12px;
+      }
+      .thumb .dur {
+        position: absolute;
+        right: 7px;
+        bottom: 7px;
+        background: rgb(0 0 0 / 0.7);
+        color: #fff;
+        font-family: var(--mono);
+        font-size: 9px;
+        border-radius: 4px;
+        padding: 2px 5px;
+      }
+      .thumb .mini {
+        position: absolute;
+        inset: 10px 10px 30%;
+        border-radius: 8px;
+        background: linear-gradient(180deg, #fff, #e8eaef);
+        opacity: 0.9;
+      }
+      .recmeta {
+        padding: 9px 11px;
+      }
+      .recmeta b {
+        display: block;
+        font-size: 12px;
+      }
+      .recmeta span {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--ink-3);
+      }
+      .rail {
+        position: sticky;
+        top: 20px;
+        align-self: start;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--surface);
+        overflow: hidden;
+      }
+      .player {
+        aspect-ratio: 9/13;
+        background: #000;
+        display: grid;
+        place-items: center;
+        color: #777;
+        font-family: var(--mono);
+        font-size: 11px;
+        position: relative;
+      }
+      .scrub {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        height: 26px;
+        border-radius: 8px;
+        background: rgb(255 255 255 / 0.12);
+        overflow: hidden;
+      }
+      .scrub i {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+      }
+      .railmeta {
+        padding: 14px;
+      }
+      .railmeta .row {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+      }
+      .railmeta .row:last-child {
+        border-bottom: 0;
+      }
+      .railmeta .k {
+        color: var(--ink-3);
+      }
+      .railmeta .v {
+        font-weight: 600;
+      }
+      .acts {
+        display: flex;
+        gap: 8px;
+        padding: 0 14px 14px;
+      }
+      .btn {
+        flex: 1;
+        text-align: center;
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn.p {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .btn.g {
+        border: 1px solid var(--border);
+        color: var(--ink-2);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <span class="brand">DRIFT<b>STACK</b></span>
+      <span style="color: var(--ink-3); font-size: 13px">· Recordings</span>
+    </div>
+    <div class="stage">
+      <div>
+        <span class="label">Recordings</span>
+        <h1>Every run, replayable.</h1>
+        <div class="grid">
+          <div class="rec sel">
+            <div class="thumb">
+              <div class="mini"></div>
+              <span class="play">▶</span><span class="dur">12:41</span>
+            </div>
+            <div class="recmeta">
+              <b>amsterdam-shopper · checkout</b><span>today 15:54 · agent · 14 taps</span>
+            </div>
+          </div>
+          <div class="rec">
+            <div class="thumb">
+              <div class="mini" style="opacity: 0.75"></div>
+              <span class="play">▶</span><span class="dur">03:09</span>
+            </div>
+            <div class="recmeta">
+              <b>us-retail-qa · e2e suite</b><span>today 14:02 · manual</span>
+            </div>
+          </div>
+          <div class="rec">
+            <div class="thumb">
+              <div class="mini" style="opacity: 0.6"></div>
+              <span class="play">▶</span><span class="dur">07:55</span>
+            </div>
+            <div class="recmeta">
+              <b>uk-checkout · bot-check</b><span>yesterday · agent · 31 taps</span>
+            </div>
+          </div>
+          <div class="rec">
+            <div class="thumb">
+              <div class="mini" style="opacity: 0.8"></div>
+              <span class="play">▶</span><span class="dur">01:12</span>
+            </div>
+            <div class="recmeta"><b>de-pricing · daily sweep</b><span>yesterday · agent</span></div>
+          </div>
+          <div class="rec">
+            <div class="thumb">
+              <div class="mini" style="opacity: 0.7"></div>
+              <span class="play">▶</span><span class="dur">22:08</span>
+            </div>
+            <div class="recmeta"><b>jp-market · research</b><span>2d ago · manual</span></div>
+          </div>
+          <div class="rec">
+            <div class="thumb">
+              <div class="mini" style="opacity: 0.65"></div>
+              <span class="play">▶</span><span class="dur">05:30</span>
+            </div>
+            <div class="recmeta"><b>fr-social · warmup</b><span>2d ago · agent</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="rail">
+        <div class="player">
+          [ recording player ]
+          <div class="scrub">
+            <i style="left: 0; width: 18%; background: rgb(109 94 252 / 0.5)"></i>
+            <i style="left: 18%; width: 44%; background: rgb(109 94 252 / 0.8)"></i>
+            <i style="left: 62%; width: 38%; background: rgb(47 227 154 / 0.5)"></i>
+            <i style="left: 62%; width: 2px; background: #fff"></i>
+          </div>
+        </div>
+        <div class="railmeta">
+          <div class="row">
+            <span class="k">Profile</span><span class="v">amsterdam-shopper</span>
+          </div>
+          <div class="row">
+            <span class="k">Driver</span><span class="v">AI agent · 4 steps</span>
+          </div>
+          <div class="row">
+            <span class="k">Taps</span><span class="v">14 · all human-cadence</span>
+          </div>
+          <div class="row">
+            <span class="k">Result</span
+            ><span class="v" style="color: var(--ready)">completed ✓</span>
+          </div>
+        </div>
+        <div class="acts">
+          <span class="btn p">⬇ Export clip</span>
+          <span class="btn g">Share</span>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
