@@ -129,7 +129,9 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
   });
 
   it('html lang="en" + charset UTF-8 + viewport meta', () => {
-    expect(body).toMatch(/<html lang="en" class="dark">/);
+    // Fleet token axes (2026-06-12 rework): dark+oxblood = today's look until
+    // the index Fleet port flips the default to light+violet (founder-locked).
+    expect(body).toMatch(/<html lang="en" class="dark" data-mode="dark" data-accent="oxblood">/);
     expect(body).toMatch(/<meta charset="UTF-8" \/>/);
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
   });
