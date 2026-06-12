@@ -149,6 +149,10 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   // mirror the "what did I touch last" mental model that dominates
   // operator usage (show all, sort by recent use).
   const [searchQuery, setSearchQuery] = useState('');
+  // Fleet hub (2026-06-12, demo-concepts greenlight): grid/list toggle +
+  // one-click ephemeral Quick Session. List stays the default render.
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [quickBusy, setQuickBusy] = useState(false);
   const [statusFilter, setStatusFilter] = useState<ProfileStatusFilter>('all');
   const [sortBy, setSortBy] = useState<ProfileSortBy>('last-used');
 
@@ -409,6 +413,19 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     onOpenSession(driverSession.id);
   }
 
+  async function handleQuickSession(): Promise<void> {
+    if (!client || quickBusy) return;
+    setQuickBusy(true);
+    try {
+      // Ephemeral by design: no profile_id — fresh state every run (the
+      // same contract the empty-state copy documents).
+      const driverSession = await client.sessions.create({ label: 'quick-session' });
+      onOpenSession(driverSession.id);
+    } finally {
+      setQuickBusy(false);
+    }
+  }
+
   async function handleStop(profile: Profile): Promise<void> {
     if (!client) return;
     const bound = boundSession(profile.id);
@@ -536,6 +553,16 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             </button>
             <button
               type="button"
+              className="btn-secondary flex items-center gap-1.5"
+              onClick={() => void handleQuickSession()}
+              disabled={state.loading || quickBusy || !client}
+              title="Launch an ephemeral session with fresh state — no profile, no setup"
+            >
+              <span aria-hidden="true">⚡</span>
+              <span>{quickBusy ? 'Starting…' : 'Quick Session'}</span>
+            </button>
+            <button
+              type="button"
               className="btn-primary flex items-center gap-1.5"
               onClick={() => setCreateOpen(true)}
               disabled={state.loading || atProfileCap}
@@ -572,6 +599,34 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             visibleCount={filteredProfiles.length}
             totalCount={state.profiles.length}
           />
+        )}
+        {state.profiles.length > 0 && (
+          <div className="flex items-center justify-end gap-1">
+            <button
+              type="button"
+              aria-pressed={viewMode === 'list'}
+              className={
+                viewMode === 'list'
+                  ? 'rounded bg-accent-subtle px-2 py-1 text-xs font-medium text-ink-primary'
+                  : 'rounded px-2 py-1 text-xs text-ink-muted hover:text-ink-primary'
+              }
+              onClick={() => setViewMode('list')}
+            >
+              ☰ List
+            </button>
+            <button
+              type="button"
+              aria-pressed={viewMode === 'grid'}
+              className={
+                viewMode === 'grid'
+                  ? 'rounded bg-accent-subtle px-2 py-1 text-xs font-medium text-ink-primary'
+                  : 'rounded px-2 py-1 text-xs text-ink-muted hover:text-ink-primary'
+              }
+              onClick={() => setViewMode('grid')}
+            >
+              ▦ Grid
+            </button>
+          </div>
         )}
       </header>
 
@@ -626,6 +681,65 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           <p className="text-xs text-ink-muted">
             Sessions without a profile start ephemeral — fresh state every run.
           </p>
+        </div>
+      ) : viewMode === 'grid' ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredProfiles.length === 0 ? (
+            <p className="col-span-full px-4 py-8 text-center text-sm text-ink-muted">
+              No profiles match the current filter.
+            </p>
+          ) : null}
+          {filteredProfiles.map((profile) => {
+            const bound = boundSession(profile.id);
+            const running = bound !== null;
+            return (
+              <div
+                key={profile.id}
+                className="flex flex-col gap-2 rounded-md border border-surface-divider bg-surface-raised p-4"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-medium text-ink-primary">{profile.name}</p>
+                  <span
+                    className={
+                      running
+                        ? 'inline-flex items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] font-semibold text-status-ready'
+                        : 'inline-flex items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] font-semibold text-ink-muted'
+                    }
+                  >
+                    <span
+                      className={
+                        running
+                          ? 'h-1.5 w-1.5 rounded-full bg-status-ready'
+                          : 'h-1.5 w-1.5 rounded-full bg-status-idle'
+                      }
+                    />
+                    {running ? 'Running' : 'Idle'}
+                  </span>
+                </div>
+                <p className="mono truncate text-xs text-ink-muted">{profile.archetype}</p>
+                <div className="mt-auto flex gap-2 pt-1">
+                  {running ? (
+                    <button
+                      type="button"
+                      className="btn-secondary flex-1 text-xs"
+                      onClick={() => onOpenSession(bound.id)}
+                    >
+                      Open session
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-primary flex-1 text-xs"
+                      disabled={busyId === profile.id}
+                      onClick={() => void handleLaunch(profile)}
+                    >
+                      {busyId === profile.id ? 'Launching…' : 'Launch'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <ul className="flex flex-col divide-y divide-surface-divider rounded-md border border-surface-divider bg-surface-raised">
