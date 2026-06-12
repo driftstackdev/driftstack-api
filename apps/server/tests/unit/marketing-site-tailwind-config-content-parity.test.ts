@@ -78,9 +78,11 @@ describe('W525.B apps/marketing-site/tailwind.config.mjs content parity', () => 
   });
 
   it("Fleet tk token namespace + glow-accent shadow pinned (2026-06-12 rework): tk.* resolves to the two-axis CSS custom properties (styles/base.css) so tk-* classes flip with <html data-mode>/<html data-accent>; 'glow-accent' shadow follows the accent axis — ADDITIVE next to the legacy palettes until each page ports", () => {
-    expect(body).toMatch(/tk: \{\s*\n\s*bg: 'var\(--bg\)',/);
-    expect(body).toMatch(/accent: 'var\(--accent\)',/);
-    expect(body).toMatch(/'accent-strong': 'var\(--accent-strong\)',/);
+    // rgb-triplet + <alpha-value> form so Tailwind alpha modifiers
+    // (bg-tk-accent\/10, ring-tk-accent\/30) work on token colors.
+    expect(body).toMatch(/tk: \{\s*\n\s*bg: 'rgb\(var\(--bg-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/accent: 'rgb\(var\(--accent-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/'accent-strong': 'rgb\(var\(--accent-strong-rgb\) \/ <alpha-value>\)',/);
     expect(body).toMatch(/'glow-accent': '0 0 0 1px var\(--accent\), 0 0 26px var\(--glow\)',/);
   });
 

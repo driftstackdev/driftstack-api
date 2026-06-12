@@ -263,6 +263,9 @@
    block changes NOTHING visually on its own. Default flips to light+violet with
    the index.astro Fleet port (founder-locked direction). */
 [data-accent='violet'] {
+  --accent-rgb: 109 94 252;
+  --accent-2-rgb: 139 125 255;
+  --accent-strong-rgb: 88 71 224;
   --accent: #6d5efc;
   --accent-2: #8b7dff;
   --accent-strong: #5847e0;
@@ -271,6 +274,9 @@
   --glow: rgba(109, 94, 252, 0.32);
 }
 [data-accent='oxblood'] {
+  --accent-rgb: 155 59 70;
+  --accent-2-rgb: 192 75 88;
+  --accent-strong-rgb: 114 47 55;
   --accent: #9b3b46;
   --accent-2: #c04b58;
   --accent-strong: #722f37;
@@ -279,6 +285,9 @@
   --glow: rgba(155, 59, 70, 0.32);
 }
 [data-accent='teal'] {
+  --accent-rgb: 16 154 130;
+  --accent-2-rgb: 27 199 168;
+  --accent-strong-rgb: 12 125 105;
   --accent: #109a82;
   --accent-2: #1bc7a8;
   --accent-strong: #0c7d69;
@@ -287,6 +296,17 @@
   --glow: rgba(16, 154, 130, 0.28);
 }
 [data-mode='light'] {
+  --bg-rgb: 242 243 246;
+  --surface-rgb: 255 255 255;
+  --raised-rgb: 255 255 255;
+  --hover-rgb: 241 242 245;
+  --ink-rgb: 15 16 20;
+  --ink-2-rgb: 71 74 85;
+  --ink-3-rgb: 138 141 153;
+  --border-rgb: 228 230 236;
+  --ready-rgb: 12 154 93;
+  --busy-rgb: 201 138 18;
+  --err-rgb: 216 69 60;
   --bg: #f2f3f6;
   --surface: #fff;
   --raised: #fff;
@@ -302,6 +322,17 @@
   --code-bg: #16171c;
 }
 [data-mode='dark'] {
+  --bg-rgb: 6 6 8;
+  --surface-rgb: 14 14 18;
+  --raised-rgb: 21 21 27;
+  --hover-rgb: 34 35 44;
+  --ink-rgb: 245 245 247;
+  --ink-2-rgb: 176 176 187;
+  --ink-3-rgb: 115 115 127;
+  --border-rgb: 30 30 38;
+  --ready-rgb: 47 227 154;
+  --busy-rgb: 255 194 77;
+  --err-rgb: 255 107 97;
   --bg: #060608;
   --surface: #0e0e12;
   --raised: #15151b;

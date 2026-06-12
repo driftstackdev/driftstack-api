@@ -161,11 +161,18 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
 
   it('Fleet token layer pinned (2026-06-12 rework): two-axis data-mode/data-accent custom-property blocks — violet/oxblood/teal accents + light/dark modes — referencing the locked spec; ADDITIVE (legacy classes keep their baked palette until each page ports)', () => {
     expect(body).toMatch(/docs\/internal\/2026-06-12-design-system-spec\.md/);
-    expect(body).toMatch(/\[data-accent='violet'\] \{\s*\n\s*--accent: #6d5efc;/);
-    expect(body).toMatch(/\[data-accent='oxblood'\] \{\s*\n\s*--accent: #9b3b46;/);
-    expect(body).toMatch(/\[data-accent='teal'\] \{\s*\n\s*--accent: #109a82;/);
-    expect(body).toMatch(/\[data-mode='light'\] \{\s*\n\s*--bg: #f2f3f6;/);
-    expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*--bg: #060608;/);
+    // each axis block carries the full-color var AND its -rgb triplet twin
+    // (alpha-capable Tailwind colors); the hex + triplet must stay in sync.
+    expect(body).toMatch(/\[data-accent='violet'\] \{\s*\n\s*--accent-rgb: 109 94 252;/);
+    expect(body).toMatch(/--accent: #6d5efc;/);
+    expect(body).toMatch(/\[data-accent='oxblood'\] \{\s*\n\s*--accent-rgb: 155 59 70;/);
+    expect(body).toMatch(/--accent: #9b3b46;/);
+    expect(body).toMatch(/\[data-accent='teal'\] \{\s*\n\s*--accent-rgb: 16 154 130;/);
+    expect(body).toMatch(/--accent: #109a82;/);
+    expect(body).toMatch(/\[data-mode='light'\] \{\s*\n\s*--bg-rgb: 242 243 246;/);
+    expect(body).toMatch(/--bg: #f2f3f6;/);
+    expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*--bg-rgb: 6 6 8;/);
+    expect(body).toMatch(/--bg: #060608;/);
   });
 
   it('file exists at canonical path', () => {
