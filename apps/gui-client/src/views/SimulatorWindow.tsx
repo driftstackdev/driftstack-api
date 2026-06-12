@@ -15,10 +15,17 @@
 // Session join info (LiveKit ws_url + token) + the device label arrive via the
 // window URL query — the opener encodes them when creating the window.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
+
+/** Frame chrome heights (px) used to derive the window size from the device's
+ *  real screen aspect: toolbar above the bezel, the bezel's p-[10px] padding,
+ *  and the in-screen status strip the video sits below. */
+const TOOLBAR_H = 34;
+const BEZEL_PAD = 20; // p-[10px] × 2
+const STATUS_STRIP_H = 40;
 
 function infoFromQuery(): { info: LiveKitInfo | null; deviceName: string; profileName: string } {
   const q = new URLSearchParams(window.location.search);
@@ -276,6 +283,30 @@ function IosStatusBar(): JSX.Element {
 export function SimulatorWindow(): JSX.Element {
   const { info, deviceName, profileName } = infoFromQuery();
   const [landscape, setLandscape] = useState(false);
+  const landscapeRef = useRef(false);
+  landscapeRef.current = landscape;
+  // Resize-to-archetype runs ONCE per window (first real video dimensions) so
+  // it never fights the user's manual resize or the rotate toggle.
+  const sizedToStreamRef = useRef(false);
+
+  // The stream reported its REAL pixel dimensions (the archetype's screen
+  // resolution): resize the window so the frame matches the device's true
+  // proportions — width stays put (no jump under the cursor), height derives
+  // from the aspect + the fixed chrome (toolbar / bezel / status strip).
+  // Works for ANY archetype — nothing per-device hardcoded.
+  const handleVideoDimensions = (w: number, h: number): void => {
+    if (sizedToStreamRef.current || landscapeRef.current || w <= 0 || h <= 0) return;
+    sizedToStreamRef.current = true;
+    void withCurrentWindow(async (win) => {
+      const { LogicalSize } = await import('@tauri-apps/api/dpi');
+      const size = await win.innerSize();
+      const factor = await win.scaleFactor();
+      const width = Math.round(size.width / factor);
+      const screenW = width - BEZEL_PAD;
+      const height = Math.round(TOOLBAR_H + BEZEL_PAD + STATUS_STRIP_H + screenW * (h / w));
+      await win.setSize(new LogicalSize(width, height));
+    });
+  };
 
   // Rotate: swap the window's width/height so the bezel reflows to the new
   // orientation (the screen object-contains, so the video re-letterboxes). The
@@ -326,7 +357,11 @@ export function SimulatorWindow(): JSX.Element {
             >
               <IosStatusBar />
               <div className="relative min-h-0 flex-1">
-                <AgentSessionPanel info={info} interactive />
+                <AgentSessionPanel
+                  info={info}
+                  interactive
+                  onVideoDimensions={handleVideoDimensions}
+                />
               </div>
             </div>
           </div>

@@ -62,11 +62,20 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(
       /className="relative h-full max-h-full max-w-full overflow-hidden rounded-lg border border-white\/10 bg-black"/,
     );
-    expect(body).toMatch(/style=\{\{ aspectRatio: aspectRatio\.toString\(\) \}\}/);
+    expect(body).toMatch(/style=\{\{ aspectRatio: effectiveAspectRatio\.toString\(\) \}\}/);
     // The video fills its (now correctly-sized) box and letterboxes via object-contain.
     expect(body).toMatch(/className="h-full w-full object-contain"/);
     // Guard the specific regression: the container must not revert to w-full.
     expect(body).not.toMatch(/className="relative w-full overflow-hidden/);
+  });
+
+  it('Live-aspect mechanism pinned: the stream REAL dimensions (loadedmetadata videoWidth/videoHeight) win over the static aspectRatio prop (effectiveAspectRatio = liveAspect ?? aspectRatio), and onVideoDimensions reports them to the parent (the simulator window resizes to the archetype). Drift back to prop-only would hardcode every future archetype to the 16-Pro shape', () => {
+    expect(body).toMatch(/const \[liveAspect, setLiveAspect\] = useState<number \| null>\(null\);/);
+    expect(body).toMatch(/const effectiveAspectRatio = liveAspect \?\? aspectRatio;/);
+    expect(body).toMatch(/onLoadedMetadata=\{/);
+    expect(body).toMatch(/el\.videoWidth \/ el\.videoHeight/);
+    expect(body).toMatch(/onVideoDimensions\?\.\(el\.videoWidth, el\.videoHeight\);/);
+    expect(body).toMatch(/onVideoDimensions\?: \(width: number, height: number\) => void;/);
   });
 
   it('LiveKitInfo import from @driftstack/sdk pinned: drift to a local-only type would break the cross-package single-source-of-truth for the LiveKit join-info wire shape', () => {

@@ -52,6 +52,10 @@ export interface AgentSessionPanelProps {
    *  overlay) subscriber-only. Capture engages only once the customer clicks
    *  into the screen (`engaged`), so it never hijacks the rest of the UI. */
   interactive?: boolean;
+  /** Fired once the stream reports its REAL pixel dimensions (video
+   *  loadedmetadata). The simulator window uses this to resize itself to the
+   *  archetype's true proportions — no hardcoded per-archetype table. */
+  onVideoDimensions?: (width: number, height: number) => void;
 }
 
 /** W617 — how long a connected-but-videoless room waits before the panel
@@ -67,9 +71,17 @@ export function AgentSessionPanel({
   onStateChange,
   onNoPublisher,
   interactive = false,
+  onVideoDimensions,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
+  // Live aspect — the stream's REAL dimensions (loadedmetadata) win over the
+  // static prop, so EVERY archetype renders its true proportions (many
+  // archetypes incoming; no hardcoded per-device table). The prop/constant
+  // stays as the pre-metadata fallback so the box has a sane shape while
+  // connecting.
+  const [liveAspect, setLiveAspect] = useState<number | null>(null);
+  const effectiveAspectRatio = liveAspect ?? aspectRatio;
   // Simulator control: the live LiveKit room is lifted to state so the
   // input-capture hook can publish on its DataChannel. In `interactive` mode
   // (the dedicated floating-iPhone window) capture is on — the window IS the
@@ -175,9 +187,11 @@ export function AgentSessionPanel({
       // view). Fill the available HEIGHT instead and let width derive from the
       // aspect ratio (narrow portrait), capped at the container width; the parent
       // (items-center justify-center) centers the result. object-contain on the
-      // <video> then fills this iPhone-aspect box exactly.
+      // <video> then fills this iPhone-aspect box exactly. The aspect is the
+      // LIVE stream's once metadata arrives (effectiveAspectRatio), so the box
+      // tracks the real archetype.
       className="relative h-full max-h-full max-w-full overflow-hidden rounded-lg border border-white/10 bg-black"
-      style={{ aspectRatio: aspectRatio.toString() }}
+      style={{ aspectRatio: effectiveAspectRatio.toString() }}
     >
       <video
         ref={videoRef}
@@ -186,6 +200,17 @@ export function AgentSessionPanel({
         muted
         className="h-full w-full object-contain"
         aria-label="Agent session live video stream"
+        onLoadedMetadata={(e) => {
+          // The stream's real pixel dimensions — the archetype's true screen
+          // resolution. Adopt the aspect + tell the parent (the simulator
+          // window resizes itself to match).
+          const el = e.currentTarget;
+          if (el.videoWidth > 0 && el.videoHeight > 0) {
+            const next = el.videoWidth / el.videoHeight;
+            setLiveAspect((prev) => (prev === next ? prev : next));
+            onVideoDimensions?.(el.videoWidth, el.videoHeight);
+          }
+        }}
       />
       {/* W617 — connected but nothing publishing: waiting spinner first,
           then the honest no-worker overlay with the parent's fallback. */}
