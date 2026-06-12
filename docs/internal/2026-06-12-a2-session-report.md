@@ -82,3 +82,30 @@ time of writing. Transient "0 frames published" warnings resolve as
 capture starts. → A3: the crash class reproduced under founder retest at
 ~15:54; input-side confirmed NOT the trigger path (input flowed before
 the crash on f93e).
+
+## Addendum (~16:55) — frontier proposal demos shipped (frontend arc review point)
+
+The invented-feature production queue is fully drained (hub demo's feature set is in
+the GUI; a11y pass landed; Tauri review build at
+`apps/gui-client/src-tauri/target/release/bundle/macos/Driftstack.app`). Per the
+"extend the demo on frontend changes" workflow, two NEW proposal mocks shipped to the
+living design canvas (`docs/internal/visual-demos/`, indexed under "New proposals"):
+
+1. **`recordings-gallery.html`** (ba8406aa) — recordings as a thumbnail gallery
+   (durations, play overlays, profile·context labels) + a sticky player rail:
+   phase-colored scrubber, per-recording session facts (profile / driver / taps /
+   result), export-clip + share. Recordings exist in the GUI today; the gallery is a
+   UI proposal over real data.
+2. **`proxy-health.html`** (9ba705ed) — egress health board: pool summary strip
+   (count / healthy / median latency / geo-coherence), a geo-drift callout when an
+   exit country stops matching its pinned profiles, and a per-proxy table with
+   reachability, 24h latency sparklines, exit geo, pinned profiles and Test-now.
+   SOCKS5 egress + auto-geo-locale exist; the health checks are the backend-later
+   half.
+
+Both screenshot-verified in the locked light+violet direction. **Founder review
+points now pending:** (a) Tauri app walkthrough, (b) dashboard deploy
+(`deploy-frontend.sh customer-dashboard`), (c) thumbs up/down on the two proposals.
+Next waves = maintenance/fresh-audit or backend slices (folders/tags sync,
+Roadmap-chip features) — the proposal queue is intentionally not being padded
+further.
