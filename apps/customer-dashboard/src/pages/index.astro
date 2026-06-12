@@ -119,6 +119,56 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         common operations as full-card buttons so a customer landing
         on the dashboard can act in one click without hunting in
         the side nav. */}
+    {/* Your-data-is-sealed trust surface (demo-concepts arc, 2026-06-12).
+        Every claim mirrors the verified architecture: sealed client-encrypted
+        profiles (profile-store), per-tenant cryptographic key isolation,
+        audited secret access. Static truth — no API call needed. */}
+    <section class="mt-10 rounded-xl border border-tk-border bg-gradient-to-br from-tk-accent/5 to-transparent p-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" />
+            <path d="M9 12l2 2 4-4" />
+          </svg>
+        </span>
+        <div>
+          <h2 class="text-lg font-semibold text-tk-ink">Your data is sealed</h2>
+          <p class="text-sm text-tk-ink-2">
+            Profiles are client-encrypted — Driftstack moves opaque bytes and can't read them.
+          </p>
+        </div>
+      </div>
+      <div class="mt-5 grid gap-3 sm:grid-cols-3">
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
+          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Profile encryption</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">AES-256-GCM, sealed</p>
+          <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
+            Encrypted before it reaches us; the server stores ciphertext only.
+          </p>
+        </div>
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
+          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Tenant isolation</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Cryptographic</p>
+          <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
+            A wrong account cannot decrypt your data — enforced by math, not policy.
+          </p>
+        </div>
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
+          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Secret access</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Always audited</p>
+          <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
+            Every credential read lands in your <a href="/audit-log" class="text-tk-accent underline">audit log</a>.
+          </p>
+        </div>
+      </div>
+      <p class="mt-4 text-xs text-tk-ink-3">
+        Full model at
+        <a href="https://driftstack.dev/trust/security-overview" class="text-tk-accent underline">driftstack.dev/trust</a>
+        · your data, your call — export or delete anytime from
+        <a href="/settings" class="text-tk-accent underline">Settings</a>.
+      </p>
+    </section>
+
     <section class="mt-10">
       <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
         <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">

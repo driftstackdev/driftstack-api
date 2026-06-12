@@ -116,4 +116,13 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
+
+  it('Your-data-is-sealed trust surface pinned (demo-concepts arc 2026-06-12): the three verified-architecture claims (AES-256-GCM sealed profiles / cryptographic tenant isolation / always-audited secret access) + audit-log and trust cross-links — every claim mirrors the real architecture (profile-store sealed blobs, per-tenant TMK, D-025 audit)', () => {
+    expect(body).toMatch(/Your data is sealed/);
+    expect(body).toMatch(/AES-256-GCM, sealed/);
+    expect(body).toMatch(/enforced by math, not policy\./);
+    expect(body).toMatch(/Always audited/);
+    expect(body).toMatch(/href="\/audit-log"/);
+    expect(body).toMatch(/driftstack\.dev\/trust\/security-overview/);
+  });
 });
