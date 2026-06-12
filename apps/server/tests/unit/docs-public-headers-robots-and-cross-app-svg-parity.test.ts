@@ -158,17 +158,16 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
     }
   });
 
-  it("CRITICAL driftstack-mark.svg shape pinned — 256×256 viewBox + aria-label 'Driftstack logo' + oxblood→glow-red brand-gradient framing. Drift to a different viewBox/aria would break responsive sizing + a11y.", () => {
+  it("CRITICAL driftstack-mark.svg shape pinned — 256×256 viewBox + aria-label 'Driftstack logo' + the L2 Drift Layers framing (founder-picked 2026-06-12: violet #6d5efc filled front layer + ink outline back layer, flat fills for favicon crispness). Drift to a different viewBox/aria would break responsive sizing + a11y.", () => {
     const mark = readFileSync(resolve(REPO_ROOT, 'apps/docs/public/driftstack-mark.svg'), 'utf8');
 
     expect(mark).toMatch(
       /<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 256 256" width="256" height="256" aria-label="Driftstack logo">/,
     );
-    expect(mark).toMatch(/uppercase D with an iPhone silhouette as the/);
-    expect(mark).toMatch(/inner counter \(notch \+ speaker detail at top\)\./);
-    expect(mark).toMatch(
-      /Vertical brand\s*\n\s+gradient from oxblood #722F37 \(top\) to bright glow-red #e23847/,
-    );
+    expect(mark).toMatch(/the L2 "Drift Layers" mark \(founder-picked/);
+    expect(mark).toMatch(/front layer is filled in the brand violet #6d5efc/);
+    expect(mark).toMatch(/fill="#6d5efc"/);
+    expect(mark).toMatch(/stroke="#474a55" stroke-width="14" opacity="0\.55"/);
   });
 
   it('CRITICAL customer-dashboard + admin-panel + status-site each ship their own public/_headers with the security-header set (X-Frame-Options + X-Content-Type-Options + Referrer-Policy + Permissions-Policy). status-site was added 2026-06-01 (the 2026-05-20 audit covered the other four but omitted it; separate Cloudflare Pages projects do NOT cross-inherit _headers, so it shipped with none). None of the three ship a robots.txt override.', () => {

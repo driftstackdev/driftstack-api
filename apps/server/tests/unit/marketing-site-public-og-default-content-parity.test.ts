@@ -4,17 +4,18 @@
 // social-platform preview divergence) or breaks the brand-color/
 // tagline commitment (would erode brand recognition on shared links).
 //
+// Fleet rework (2026-06-12, founder-locked): light + violet card with
+// the L2 Drift Layers mark + the W2 DRIFTSTACK two-tone wordmark.
+//
 //   • 1200x630 SVG canvas (OpenGraph standard size).
-//   • Slate-900 (#0f172a) background.
-//   • Oxblood (#722F37) 120x120 rounded-22 D-tile.
-//   • Georgia/serif white 'D' glyph.
-//   • 'Driftstack' brand text in ui-monospace 64px.
+//   • Light (#f2f3f6) background + violet (#6d5efc) top rule.
+//   • The L2 mark: ink outline back layer + violet filled front layer
+//     + white home-indicator dot.
+//   • DRIFT (ink #15161a) / STACK (violet #6d5efc) black-italic
+//     two-tone wordmark.
 //   • 'iPhone Safari sessions, on demand.' primary tagline.
-//   • 'Premium fingerprint fidelity for the device that matters.'
-//     subline (note: 'fingerprint fidelity' here vs 'fidelity' alone
-//     in BaseLayout default-description — SVG carries the longer
-//     fingerprint-fidelity-positioning copy).
-//   • 'driftstack.dev' mono footer.
+//   • 'never a bot' positioning subline (plain-language, W452-aligned).
+//   • 'driftstack.dev' mono footer in the accent violet.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -32,46 +33,46 @@ function read(p: string): string {
 describe('W524.C apps/marketing-site/public/og-default.svg content parity', () => {
   const body = read(LIB);
 
-  it('SVG canvas + slate-900-bg framing pinned: \'<?xml version="1.0" encoding="UTF-8"?>\' + \'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">\' + \'<rect width="1200" height="630" fill="#0f172a"/>\' — pinned so the 1200x630-OpenGraph-canvas + slate-900 #0f172a-background commitment survives', () => {
+  it('SVG canvas + Fleet light-bg framing pinned: \'<?xml version="1.0" encoding="UTF-8"?>\' + 1200x630 viewBox + light #f2f3f6 background + violet #6d5efc top rule — pinned so the OpenGraph canvas + the founder-locked light+violet brand surface survives', () => {
     expect(body).toMatch(/<\?xml version="1\.0" encoding="UTF-8"\?>/);
     expect(body).toMatch(
       /<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 1200 630" width="1200" height="630">/,
     );
-    expect(body).toMatch(/<rect width="1200" height="630" fill="#0f172a"\/>/);
+    expect(body).toMatch(/<rect width="1200" height="630" fill="#f2f3f6"\/>/);
+    expect(body).toMatch(/<rect x="0" y="0" width="1200" height="6" fill="#6d5efc"\/>/);
   });
 
-  it('Oxblood D-tile framing pinned: \'<rect x="60" y="60" width="120" height="120" rx="22" fill="#722F37"/>\' + \'<text x="120" y="143" text-anchor="middle" fill="#ffffff" font-family="Georgia, ...serif" font-size="78" font-weight="700">D</text>\' — pinned so the 120x120 oxblood-tile + rx-22 rounded corners + Georgia-serif white-D-glyph + center-anchored commitment survives (drift to a different brand color in the social card would erode brand recognition on shared links)', () => {
-    expect(body).toMatch(/<rect x="60" y="60" width="120" height="120" rx="22" fill="#722F37"\/>/);
+  it('L2 Drift Layers mark pinned: ink-outline back layer (stroke #474a55, opacity .55, rotate -7) + violet #6d5efc filled front layer + white home-indicator dot — pinned so the social card carries the founder-picked brand mark (drift to a different mark would erode brand recognition on shared links)', () => {
+    expect(body).toMatch(/stroke="#474a55" stroke-width="14" opacity="0\.55"/);
+    expect(body).toMatch(/transform="rotate\(-7 105 127\)"/);
+    expect(body).toMatch(/<rect x="86" y="30" width="118" height="194" rx="34" fill="#6d5efc"\/>/);
+    expect(body).toMatch(/<circle cx="145" cy="192" r="12" fill="#ffffff"\/>/);
+  });
+
+  it('W2 two-tone wordmark pinned: black-italic 900-weight DRIFT (ink #15161a) + STACK (violet #6d5efc) tspans — pinned so the picked wordmark treatment survives on shared links', () => {
+    expect(body).toMatch(/font-weight="900" font-style="italic"/);
     expect(body).toMatch(
-      /<text x="120" y="143" text-anchor="middle" fill="#ffffff" font-family="Georgia, 'Times New Roman', serif" font-size="78" font-weight="700">D<\/text>/,
+      /<tspan fill="#15161a">DRIFT<\/tspan><tspan fill="#6d5efc">STACK<\/tspan>/,
     );
   });
 
-  it('Driftstack brand text framing pinned: \'<text x="60" y="280" fill="#f8fafc" font-family="ui-monospace, ...monospace" font-size="64" font-weight="600">Driftstack</text>\' — pinned so the brand-text-monospace + 64px + slate-50-fill + 600-weight commitment survives', () => {
+  it("primary tagline pinned: 'iPhone Safari sessions, on demand.' (matches the BaseLayout default-description lead)", () => {
+    expect(body).toMatch(/iPhone Safari sessions, on demand\./);
+  });
+
+  it("positioning subline pinned: the 'never a bot' outcome copy (plain-language, W452-aligned — replaces the prior 'Premium fingerprint fidelity' jargon subline)", () => {
+    expect(body).toMatch(/A real iPhone browser in the cloud/);
+    expect(body).toMatch(/sees a genuine iPhone, never a bot\./);
+  });
+
+  it("mono footer pinned: 'driftstack.dev' in the accent violet", () => {
     expect(body).toMatch(
-      /<text x="60" y="280" fill="#f8fafc" font-family="ui-monospace, 'SF Mono', Consolas, monospace" font-size="64" font-weight="600">Driftstack<\/text>/,
+      /<text[^>]*fill="#6d5efc"[^>]*font-family="ui-monospace[^"]*"[^>]*>driftstack\.dev<\/text>/,
     );
   });
 
-  it('Primary tagline framing pinned: \'<text x="60" y="360" fill="#cbd5e1" font-family="-apple-system, ...sans-serif" font-size="44" font-weight="500">iPhone Safari sessions, on demand.</text>\' — pinned so the primary-tagline canonical-copy + 44px + slate-300-fill commitment survives', () => {
-    expect(body).toMatch(
-      /<text x="60" y="360" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="44" font-weight="500">iPhone Safari sessions, on demand\.<\/text>/,
-    );
-  });
-
-  it('Subline tagline framing pinned: \'<text x="60" y="420" fill="#94a3b8" font-family="-apple-system, ...sans-serif" font-size="32" font-weight="400">Premium fingerprint fidelity for the device that matters.</text>\' — pinned so the subline-fingerprint-fidelity-positioning + 32px + slate-400-fill commitment survives (note: SVG-card subline uses the longer \'fingerprint fidelity\' phrasing vs \'fidelity\' alone in BaseLayout default-description — pinning both forms separately so each is anchored to its own surface)', () => {
-    expect(body).toMatch(
-      /<text x="60" y="420" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="32" font-weight="400">Premium fingerprint fidelity for the device that matters\.<\/text>/,
-    );
-  });
-
-  it('driftstack.dev mono footer framing pinned: \'<text x="60" y="560" fill="#64748b" font-family="ui-monospace, ...monospace" font-size="24" font-weight="400">driftstack.dev</text>\' — pinned so the driftstack.dev-mono-domain-footer + 24px + slate-500-fill commitment survives', () => {
-    expect(body).toMatch(
-      /<text x="60" y="560" fill="#64748b" font-family="ui-monospace, 'SF Mono', Consolas, monospace" font-size="24" font-weight="400">driftstack\.dev<\/text>/,
-    );
-  });
-
-  it('file exists at canonical path', () => {
+  it('file exists at canonical path + the rendered og-default.png exists beside it', () => {
     expect(existsSync(LIB)).toBe(true);
+    expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/public/og-default.png'))).toBe(true);
   });
 });

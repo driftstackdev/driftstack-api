@@ -1,37 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200" width="720" height="200" aria-label="Driftstack">
-  <!-- Horizontal Driftstack lockup — iPhone-D mark + driftstack wordmark
-       in Geist-style geometric sans. Oxblood #722F37 throughout. -->
-  <g>
-    <!-- D mark, 168×168, left-aligned with 16px padding. -->
-    <path transform="translate(16 16) scale(0.65625)" fill="#722F37" fill-rule="evenodd" d="
-      M 40 24
-      L 148 24
-      C 200 24 244 66 244 118
-      L 244 138
-      C 244 190 200 232 148 232
-      L 40 232
-      Z
-      M 96 66
-      C 96 58 102 52 110 52
-      L 130 52
-      C 130 56 132 60 136 60
-      L 152 60
-      C 156 60 158 56 158 52
-      L 178 52
-      C 186 52 192 58 192 66
-      L 192 190
-      C 192 198 186 204 178 204
-      L 110 204
-      C 102 204 96 198 96 190
-      Z
-    "/>
+  <!-- Horizontal Driftstack lockup — the L2 Drift Layers mark + the W2
+       DRIFTSTACK black-italic two-tone wordmark (founder-picked
+       2026-06-12). Violet #6d5efc accent; ink #15161a for the leading
+       word so the lockup sits on light surfaces (the primary theme). -->
+  <g transform="translate(16 16) scale(0.65625)">
+    <rect x="46" y="30" width="118" height="194" rx="34"
+          fill="none" stroke="#474a55" stroke-width="14" opacity="0.55"
+          transform="rotate(-7 105 127)"/>
+    <rect x="86" y="30" width="118" height="194" rx="34" fill="#6d5efc"/>
+    <circle cx="145" cy="192" r="12" fill="#ffffff"/>
   </g>
-  <!-- driftstack wordmark, mono-feeling geometric letters -->
-  <text
-    x="200" y="130"
-    font-family="Geist, 'Geist Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif"
-    font-size="96" font-weight="600"
-    letter-spacing="-3"
-    fill="#722F37"
-  >driftstack</text>
+  <text x="208" y="134" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif"
+        font-size="86" font-weight="900" font-style="italic" letter-spacing="-2">
+    <tspan fill="#15161a">DRIFT</tspan><tspan fill="#6d5efc">STACK</tspan>
+  </text>
 </svg>

@@ -1,10 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
-  <rect width="1200" height="630" fill="#0f172a"/>
-  <rect x="60" y="60" width="120" height="120" rx="22" fill="#722F37"/>
-  <text x="120" y="143" text-anchor="middle" fill="#ffffff" font-family="Georgia, 'Times New Roman', serif" font-size="78" font-weight="700">D</text>
-  <text x="60" y="280" fill="#f8fafc" font-family="ui-monospace, 'SF Mono', Consolas, monospace" font-size="64" font-weight="600">Driftstack</text>
-  <text x="60" y="360" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="44" font-weight="500">iPhone Safari sessions, on demand.</text>
-  <text x="60" y="420" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="32" font-weight="400">Premium fingerprint fidelity for the device that matters.</text>
-  <text x="60" y="560" fill="#64748b" font-family="ui-monospace, 'SF Mono', Consolas, monospace" font-size="24" font-weight="400">driftstack.dev</text>
+  <!-- Social card — Fleet rework (light + violet, founder-locked 2026-06-12). -->
+  <rect width="1200" height="630" fill="#f2f3f6"/>
+  <rect x="0" y="0" width="1200" height="6" fill="#6d5efc"/>
+  <g transform="translate(60 56) scale(0.55)">
+    <rect x="46" y="30" width="118" height="194" rx="34"
+          fill="none" stroke="#474a55" stroke-width="14" opacity="0.55"
+          transform="rotate(-7 105 127)"/>
+    <rect x="86" y="30" width="118" height="194" rx="34" fill="#6d5efc"/>
+    <circle cx="145" cy="192" r="12" fill="#ffffff"/>
+  </g>
+  <text x="210" y="156" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="64" font-weight="900" font-style="italic" letter-spacing="-2">
+    <tspan fill="#15161a">DRIFT</tspan><tspan fill="#6d5efc">STACK</tspan>
+  </text>
+  <text x="60" y="330" fill="#15161a" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="58" font-weight="650">iPhone Safari sessions, on demand.</text>
+  <text x="60" y="404" fill="#474a55" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="36" font-weight="450">A real iPhone browser in the cloud — every website</text>
+  <text x="60" y="454" fill="#474a55" font-family="-apple-system, BlinkMacSystemFont, 'Inter', sans-serif" font-size="36" font-weight="450">sees a genuine iPhone, never a bot.</text>
+  <text x="60" y="560" fill="#6d5efc" font-family="ui-monospace, 'SF Mono', Consolas, monospace" font-size="26" font-weight="600">driftstack.dev</text>
 </svg>

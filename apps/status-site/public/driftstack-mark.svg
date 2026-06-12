@@ -1,46 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" aria-label="Driftstack logo">
-  <!-- Driftstack mark — uppercase D with an iPhone silhouette as the
-       inner counter (notch + speaker detail at top). Vertical brand
-       gradient from oxblood #722F37 (top) to bright glow-red #e23847
-       (bottom) for visual punch on dark surfaces. Subtle red drop-
-       shadow glow so the mark pops against the graphite body. -->
-  <defs>
-    <linearGradient id="d-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#8d2c3e"/>
-      <stop offset="55%" stop-color="#a83b4d"/>
-      <stop offset="100%" stop-color="#e23847"/>
-    </linearGradient>
-    <filter id="d-glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
-      <feOffset dx="0" dy="2" result="offsetblur"/>
-      <feFlood flood-color="#e23847" flood-opacity="0.45"/>
-      <feComposite in2="offsetblur" operator="in"/>
-      <feMerge>
-        <feMergeNode/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
-  <path fill="url(#d-grad)" fill-rule="evenodd" filter="url(#d-glow)" d="
-    M 40 24
-    L 148 24
-    C 200 24 244 66 244 118
-    L 244 138
-    C 244 190 200 232 148 232
-    L 40 232
-    Z
-    M 96 66
-    C 96 58 102 52 110 52
-    L 130 52
-    C 130 56 132 60 136 60
-    L 152 60
-    C 156 60 158 56 158 52
-    L 178 52
-    C 186 52 192 58 192 66
-    L 192 190
-    C 192 198 186 204 178 204
-    L 110 204
-    C 102 204 96 198 96 190
-    Z
-  "/>
+  <!-- Driftstack mark — the L2 "Drift Layers" mark (founder-picked
+       2026-06-12): two phone-shaped identity layers fanned with a
+       drift offset. The back layer is a neutral ink outline; the
+       front layer is filled in the brand violet #6d5efc with a white
+       home-indicator dot. Flat fills (no gradient/filter) so the mark
+       stays crisp at favicon sizes and inherits no theme assumptions. -->
+  <rect x="46" y="30" width="118" height="194" rx="34"
+        fill="none" stroke="#474a55" stroke-width="14" opacity="0.55"
+        transform="rotate(-7 105 127)"/>
+  <rect x="86" y="30" width="118" height="194" rx="34" fill="#6d5efc"/>
+  <circle cx="145" cy="192" r="12" fill="#ffffff"/>
 </svg>
