@@ -118,11 +118,10 @@ describe('V-276 RecordingsView empty state', () => {
     // places (header + empty-state body); at least one must be present.
     expect(screen.getAllByText(/Record/).length).toBeGreaterThan(0);
 
-    // The persistence-disclaimer footnote (V-276 preserved this) —
-    // appears in both the page header + empty-state footnote.
-    expect(
-      screen.getAllByText(/Recordings live in memory until the app restarts/i).length,
-    ).toBeGreaterThan(0);
+    // The persistence footnote (gallery port 2026-06-12: copy corrected
+    // to reality — the ndjson disk-persistence phase shipped) — appears
+    // in both the page header + empty-state footnote.
+    expect(screen.getAllByText(/Recordings persist on this machine/i).length).toBeGreaterThan(0);
   });
 });
 
