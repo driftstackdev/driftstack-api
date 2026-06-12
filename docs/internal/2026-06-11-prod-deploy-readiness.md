@@ -102,6 +102,17 @@ in the arc. Re-verified every readiness conclusion against `73f70d02..e36b9c20` 
 ⟹ All four de-risk axes (boot / schema / soak / new-code correctness) hold unchanged at the
 larger delta. The go-live action is the same single founder command below.
 
+### Migration 0073 added — 2026-06-12 (~06:55): delta now carries TWO migrations, both safe
+
+`c474785c` (the `session.profile_save_failed` webhook event, A3-W1364 contract) adds
+**`0073_session_profile_save_failed_webhook_event.sql`** to the undeployed delta:
+a single `ALTER TYPE "webhook_event_type" ADD VALUE IF NOT EXISTS` — the same
+instant, idempotent, lock-free pattern as 0070/0064/0055 (no table rewrite, no
+constraint change, runs outside a transaction). So the deploy now runs **0072
+(metadata-only column defaults) + 0073 (enum value add)** — both trivially safe;
+the go-live risk posture is unchanged. (The new webhook event itself is inert in
+prod until the fleet control plane is enabled — taxonomy + relay only.)
+
 ## Remaining to go-live (per the cutover memory)
 
 Correction after cross-checking the cutover memory: the frontend + GUI steps are **already
