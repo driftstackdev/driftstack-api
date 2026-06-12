@@ -249,13 +249,20 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       // Open the floating-iPhone simulator window (the standard experience).
       // Falls back to the in-app overlay when not under Tauri (browser preview).
       const reopened = state.profiles.find((p) => p.id === profileId);
-      const opened = await openSimulatorWindow({
+      const sim = await openSimulatorWindow({
         sessionId: agentSessionId,
         info,
         deviceName: formatDeviceName(reopened?.archetype ?? ''),
         profileName: reopened?.name,
       });
-      if (!opened) setWatchInfo(info);
+      if (!sim.opened) {
+        setWatchInfo(info);
+        // Founder-visible: WHY the separate window fell back in-app.
+        setState((s) => ({
+          ...s,
+          error: `Simulator window could not open (showing in-app view instead): ${sim.reason ?? 'unknown'}`,
+        }));
+      }
     } catch (err) {
       // W638 — a profile bound to a CLOSED agent session 403s here ("Cannot
       // mint LiveKit token for closed agent session"); 404 if it's gone.
@@ -360,13 +367,19 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
         setWatchSource({ profileId: profile.id, agentSessionId: created.id });
         // Open the floating-iPhone simulator window (the standard experience).
         // Falls back to the in-app overlay when not under Tauri (browser preview).
-        const opened = await openSimulatorWindow({
+        const sim = await openSimulatorWindow({
           sessionId: created.id,
           info: created.livekit,
           deviceName: formatDeviceName(profile.archetype),
           profileName: profile.name,
         });
-        if (!opened) setWatchInfo(created.livekit);
+        if (!sim.opened) {
+          setWatchInfo(created.livekit);
+          setState((s) => ({
+            ...s,
+            error: `Simulator window could not open (showing in-app view instead): ${sim.reason ?? 'unknown'}`,
+          }));
+        }
       } else {
         // W611/W613 — no livekit block (deployment without LiveKit, e.g. a
         // self-hosted/mock-driver server): fall back to the polling live

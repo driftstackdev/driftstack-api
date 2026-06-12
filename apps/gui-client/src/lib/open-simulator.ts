@@ -28,17 +28,27 @@ export interface OpenSimulatorArgs {
   profileName?: string;
 }
 
-/** Open (or focus) the floating-iPhone window for a session. Returns true when
- *  a window was opened/focused, false when not running under Tauri (e.g. a
- *  browser dev preview) so callers can fall back to the in-app viewer. */
+export interface OpenSimulatorResult {
+  opened: boolean;
+  /** Why the separate window did NOT open (shown to the user by the caller —
+   *  an invisible fallback caused a multi-hour "still the same window"
+   *  debugging saga, founder-hit 2026-06-12). */
+  reason?: string;
+}
+
+/** Open (or focus) the floating-iPhone window for a session. `opened:false`
+ *  carries a human-readable `reason` so callers can SHOW why they fell back
+ *  to the in-app viewer. */
 export async function openSimulatorWindow({
   sessionId,
   info,
   deviceName,
   profileName,
-}: OpenSimulatorArgs): Promise<boolean> {
+}: OpenSimulatorArgs): Promise<OpenSimulatorResult> {
   // Tauri-only — guard so a browser preview doesn't throw on the dynamic import.
-  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return false;
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) {
+    return { opened: false, reason: 'not running under Tauri (browser preview)' };
+  }
 
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow');
   // Stable, filesystem-safe label per session (window labels disallow most
@@ -48,7 +58,7 @@ export async function openSimulatorWindow({
   const existing = await WebviewWindow.getByLabel(label).catch(() => null);
   if (existing !== null) {
     await existing.setFocus().catch(() => undefined);
-    return true;
+    return { opened: true };
   }
 
   const params = new URLSearchParams({
@@ -96,15 +106,15 @@ export async function openSimulatorWindow({
     shadow: false,
   });
 
-  return await new Promise<boolean>((resolve) => {
+  return await new Promise<OpenSimulatorResult>((resolve) => {
     // created/error are the Tauri v2 lifecycle signals for runtime windows.
-    void win.once('tauri://created', () => resolve(true));
+    void win.once('tauri://created', () => resolve({ opened: true }));
     void win.once('tauri://error', (e) => {
-      // Surfaced, not swallowed: a silent false here used to fall back to the
-      // in-app overlay with no trace of WHY the separate window failed
-      // (founder-hit while diagnosing "still in the same window").
-      console.warn('[simulator] separate window creation failed; falling back in-app:', e);
-      resolve(false);
+      // Surfaced ALL THE WAY TO THE UI, not just the console: a silent
+      // fallback caused the founder's "still the same window" saga.
+      const reason = typeof e?.payload === 'string' ? e.payload : JSON.stringify(e?.payload ?? e);
+      console.warn('[simulator] separate window creation failed; falling back in-app:', reason);
+      resolve({ opened: false, reason });
     });
   });
 }
