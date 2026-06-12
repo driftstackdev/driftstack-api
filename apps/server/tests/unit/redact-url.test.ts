@@ -88,6 +88,27 @@ describe('redactText — free-text (exception/breadcrumb/message) credential red
     expect(out).toContain('done');
   });
 
+  it('redacts an OAuth-implicit token in a URL FRAGMENT (the #-led first param leaks otherwise)', () => {
+    // A landing URL with a fragment token can surface in an error message /
+    // stack that the logger + Sentry pass through redactText. The fragment's
+    // FIRST param is `#`-led, not `?`/`&`-led, so it would leak without `#` in
+    // the delimiter class while `&`-joined params got redacted.
+    const out = redactText(
+      'navigate failed at https://app.example/cb#access_token=LEAKA&id_token=LEAKB',
+    );
+    expect(out).not.toContain('LEAKA'); // #-led fragment token redacted
+    expect(out).not.toContain('LEAKB'); // &-joined fragment token redacted
+    expect(out).toContain('access_token=[redacted]');
+    expect(out).toContain('id_token=[redacted]');
+    expect(out).toContain('navigate failed at'); // prose intact
+  });
+
+  it('does not redact a non-secret fragment / anchor', () => {
+    expect(redactText('see https://docs.example/page#section-two for details')).toBe(
+      'see https://docs.example/page#section-two for details',
+    );
+  });
+
   it('leaves token-free text unchanged', () => {
     expect(redactText('connection reset by peer (ECONNRESET)')).toBe(
       'connection reset by peer (ECONNRESET)',

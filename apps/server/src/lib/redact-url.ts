@@ -76,8 +76,17 @@ export function redactUrlQueryTokens(url: string): string {
 // above would MANGLE free text (they split on the first `?` and absorb trailing
 // prose into the redacted param), so this is a precise per-match regex pass:
 // only the credential token is rewritten, surrounding diagnostics stay intact.
+//
+// Delimiter class is `[?&#]`: a credential rides after `?` (query start), `&`
+// (subsequent param), OR `#` (URL fragment) — OAuth implicit/hybrid flows return
+// access_token/id_token in the fragment (`…#access_token=…`), and a full
+// landing-URL can surface in an error message / stack the logger + Sentry pass
+// through redactText. Without `#`, the FIRST fragment param (`#access_token=…`)
+// would leak while only the `&`-joined ones got redacted. (req.url itself never
+// carries a fragment — the client strips it — so redactUrlQueryTokens above
+// correctly omits `#`; this free-text path is the one that sees whole URLs.)
 const FREE_TEXT_TOKEN_RE =
-  /([?&](?:ds_token|access_token|refresh_token|id_token|api_key|apikey|client_secret|token|secret|password|signature|code)=)[^&\s"'`]+/gi;
+  /([?&#](?:ds_token|access_token|refresh_token|id_token|api_key|apikey|client_secret|token|secret|password|signature|code)=)[^&\s"'`]+/gi;
 const FREE_TEXT_BEARER_RE = /(bearer\s+)[A-Za-z0-9._-]+/gi;
 
 export function redactText(s: string): string {
