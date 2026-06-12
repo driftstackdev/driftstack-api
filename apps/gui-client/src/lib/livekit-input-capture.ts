@@ -1,37 +1,44 @@
-// LK.6.d — keyboard + mouse capture on the AgentSessionPanel
-// video element. Translates browser events to the InputEvent
-// JSON schema Agent 1's Mac-side Quartz CGEvent decoder (commit
-// 9170da82) accepts, and ships them via the LiveKit DataChannel.
+// LK.6.d — input capture on the simulator's video element. Translates the
+// user's mouse/trackpad gestures into iPhone-COHERENT TOUCH InputEvents and
+// ships them over the LiveKit DataChannel to Agent-1's Mac-side W3C touch
+// injector (WebDriverManualTouchInjector → genuine pointerType:touch events).
+//
+// WHY touch, not mouse (A3 W198/W1249): a real iPhone NEVER fires mouse
+// events, so emitting mouseMove/mouseDown/mouseUp is (a) a detectable
+// fingerprint tell and (b) dropped by the harness decoder (touch-only). The
+// user drives with a mouse/trackpad locally; we translate to touch on the wire.
+//
+// Gesture → touch mapping (A3 W207/W1249):
+//   - press (mousedown, left button)   → touchStart{x,y,touchId}
+//   - drag  (mousemove while pressed)  → touchMove{x,y,touchId}  (lossy ok)
+//   - release (mouseup)                → touchEnd{x,y,touchId}
+//     (a press+release with no move = a genuine tap/click)
+//   - wheel / trackpad scroll          → swipe{x1,y1,x2,y2,durationMs}
+//     (scrolling content DOWN = a finger swiping UP, so y decreases)
+//   - keydown / keyup                  → keyDown/keyUp (iPhone Safari fires
+//     these; A3's genuine-WebKit-key injector accepts them). Modifier set
+//     captured from event.shiftKey/ctrlKey/altKey/metaKey.
 //
 // Coordinate translation:
 //   - <video> renders the remote stream with object-contain and fills
-//     its container (w-full h-full), so when the stream aspect differs
-//     from the element aspect the video is bar-boxed — the element's
-//     bounding rect is NOT the visible video region. Map against the
-//     contained sub-rect (centering offset + scaled size); clicks in
-//     the bars are off-surface and return null.
-//   - The Mac side expects viewport-space coordinates (the
-//     fork's logical px). Convert the in-region pointer via the
-//     `naturalWidth / displayedWidth` ratio.
+//     its container, so when the stream aspect differs from the element
+//     aspect the video is bar-boxed — the element's bounding rect is NOT
+//     the visible video region. Map against the contained sub-rect
+//     (centering offset + scaled size); touches in the bars are off-surface
+//     and return null.
+//   - The Mac side expects viewport-space coordinates (the fork's logical
+//     px). Convert the in-region pointer via the `naturalWidth /
+//     displayedWidth` ratio.
 //
 // Reliability:
-//   - Mouse down/up, key down/up, wheel: reliable=true (must
-//     arrive in order; missed events break click logic).
-//   - mouseMove: reliable=false (lossy ok — cursor jitter at the
-//     remote side is preferable to congesting the data channel
-//     when the user moves quickly).
+//   - touchStart/touchEnd, key down/up, swipe: reliable=true (must arrive
+//     in order; a missed start/end breaks the gesture).
+//   - touchMove: reliable=false (lossy ok — a dropped move jitters then
+//     recovers; reliable=true would congest the data channel on a fast drag).
 //
-// Browser-side event sources:
-//   - mousemove / mousedown / mouseup → mouseMove + mouseDown +
-//     mouseUp variants.
-//   - keydown / keyup → keyDown + keyUp variants. Modifier set
-//     captured from event.shiftKey/ctrlKey/altKey/metaKey.
-//   - wheel → wheel variant; deltaX + deltaY pass through.
-//
-// Pointer-capture: when mouseDown fires the capture pointer-
-// captures the video element so subsequent mouseMove / mouseUp
-// land even when the cursor leaves the element bounds (matches
-// remote-desktop UX expectation).
+// Pointer-capture: when the press (mousedown) fires the capture pointer-
+// captures the video element so subsequent move/release land even when the
+// cursor leaves the element bounds (matches remote-desktop UX expectation).
 
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any */
 
@@ -120,12 +127,18 @@ export function mouseButton(raw: number): 0 | 1 | 2 | null {
   return null;
 }
 
-/** React hook that wires keyboard + mouse capture to the
- *  AgentSessionPanel's video element. Calls sendInputEvent
- *  asynchronously; rejections are swallowed (input capture is
- *  best-effort and shouldn't throw out of an event handler). */
+/** React hook that wires the user's mouse/keyboard gestures on the simulator's
+ *  video element to iPhone-COHERENT TOUCH InputEvents (W198/W1249 — a real
+ *  iPhone never fires mouse events; emitting them is detectable + dropped by
+ *  the harness). Calls sendInputEvent asynchronously; rejections are swallowed
+ *  (input capture is best-effort and shouldn't throw out of an event handler). */
 export function useInputCapture(opts: UseInputCaptureOpts): void {
   const lastSend = useRef<Promise<void>>(Promise.resolve());
+  // The in-flight touch gesture: a press holds a touchId until release so the
+  // matching move/end reuse it. null = no finger down → no move is sent (a real
+  // iPhone has no hover/pointer-move without a touch).
+  const active = useRef<{ touchId: number } | null>(null);
+  const touchIdSeq = useRef(0);
 
   useEffect(() => {
     const { room, videoRef, enabled } = opts;
@@ -137,15 +150,12 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       lastSend.current = sendInputEvent(room, event, { reliable }).catch(() => undefined);
     };
 
-    const onMouseMove = (e: MouseEvent): void => {
+    // A left-button mouse press = a finger down → touchStart. Right/middle
+    // buttons have no iPhone touch analogue, so they're ignored.
+    const onMouseDown = (e: MouseEvent): void => {
+      if (mouseButton(e.button) !== 0) return;
       const p = pointerToViewport(e, video);
       if (p === null) return;
-      send({ type: 'mouseMove', x: p.x, y: p.y }, false);
-    };
-    const onMouseDown = (e: MouseEvent): void => {
-      const p = pointerToViewport(e, video);
-      const button = mouseButton(e.button);
-      if (p === null || button === null) return;
       try {
         if ('setPointerCapture' in video && 'pointerId' in e) {
           (video as any).setPointerCapture((e as any).pointerId);
@@ -153,18 +163,46 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       } catch {
         // Browser may refuse pointer-capture — non-fatal.
       }
-      send({ type: 'mouseDown', x: p.x, y: p.y, button }, true);
+      const touchId = touchIdSeq.current++;
+      active.current = { touchId };
+      send({ type: 'touchStart', x: p.x, y: p.y, touchId }, true);
     };
-    const onMouseUp = (e: MouseEvent): void => {
+    // Move only while a finger is down (no iPhone hover). Lossy — a dropped
+    // touchMove jitters then recovers; reliable=true would congest a fast drag.
+    const onMouseMove = (e: MouseEvent): void => {
+      const g = active.current;
+      if (g === null) return;
       const p = pointerToViewport(e, video);
-      const button = mouseButton(e.button);
-      if (p === null || button === null) return;
-      send({ type: 'mouseUp', x: p.x, y: p.y, button }, true);
+      if (p === null) return;
+      send({ type: 'touchMove', x: p.x, y: p.y, touchId: g.touchId }, false);
     };
+    // Release = touchEnd. A press+release with no move is a genuine tap/click.
+    const onMouseUp = (e: MouseEvent): void => {
+      const g = active.current;
+      active.current = null;
+      if (g === null) return;
+      const p = pointerToViewport(e, video);
+      if (p === null) return;
+      send({ type: 'touchEnd', x: p.x, y: p.y, touchId: g.touchId }, true);
+    };
+    // Wheel/trackpad scroll = a swipe gesture. Scrolling content DOWN
+    // (deltaY > 0, reveal below) maps to a finger swiping UP, so y decreases.
+    // Clamp the delta so one scroll notch is a short flick, not a fling.
     const onWheel = (e: WheelEvent): void => {
       const p = pointerToViewport(e, video);
       if (p === null) return;
-      send({ type: 'wheel', x: p.x, y: p.y, deltaX: e.deltaX, deltaY: e.deltaY }, true);
+      const clamp = (d: number): number => Math.max(-240, Math.min(240, d));
+      send(
+        {
+          type: 'swipe',
+          x1: p.x,
+          y1: p.y,
+          x2: p.x - clamp(e.deltaX),
+          y2: p.y - clamp(e.deltaY),
+          durationMs: 120,
+        },
+        true,
+      );
     };
     const onKeyDown = (e: KeyboardEvent): void => {
       const modifiers = modifiersFromEvent(e);
@@ -209,6 +247,8 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       video.removeEventListener('wheel', onWheel);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      // Drop any in-flight gesture so a remount can't reuse a stale touchId.
+      active.current = null;
     };
   }, [opts]);
 }

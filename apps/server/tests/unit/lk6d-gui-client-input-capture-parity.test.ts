@@ -38,17 +38,22 @@ describe('LK.6.d — useInputCapture hook', () => {
     expect(body).toMatch(/addEventListener\('keyup'/);
   });
 
-  it('emits all 6 outgoing InputEvent variants (mouseMove/Down/Up + wheel + keyDown/Up)', () => {
-    expect(body).toMatch(/type: 'mouseMove'/);
-    expect(body).toMatch(/type: 'mouseDown'/);
-    expect(body).toMatch(/type: 'mouseUp'/);
-    expect(body).toMatch(/type: 'wheel'/);
+  it('emits iPhone-COHERENT TOUCH variants (touchStart/Move/End + swipe + keyDown/Up) and NEVER mouse* (W198/W1249 — mouse events are a detectable iPhone tell the harness drops)', () => {
+    expect(body).toMatch(/type: 'touchStart'/);
+    expect(body).toMatch(/type: 'touchMove'/);
+    expect(body).toMatch(/type: 'touchEnd'/);
+    expect(body).toMatch(/type: 'swipe'/);
     expect(body).toMatch(/type: 'keyDown'/);
     expect(body).toMatch(/type: 'keyUp'/);
+    // The browser EVENT SOURCES stay mouse (the user drives with a mouse), but
+    // no mouse* InputEvent is ever emitted on the wire (W198/W1249 coherence).
+    expect(body).not.toMatch(/type: 'mouseMove'/);
+    expect(body).not.toMatch(/type: 'mouseDown'/);
+    expect(body).not.toMatch(/type: 'mouseUp'/);
   });
 
-  it('mouseMove is sent lossy (reliable=false) — cursor jitter > congestion', () => {
-    expect(body).toMatch(/send\(\{ type: 'mouseMove'[^}]+\}, false\)/);
+  it('touchMove is sent lossy (reliable=false) — a dropped move jitters then recovers > congestion', () => {
+    expect(body).toMatch(/send\(\{ type: 'touchMove'[^}]+\}, false\)/);
   });
 
   it('mouseDown / mouseUp / wheel / keyDown / keyUp are reliable (must arrive in order)', () => {

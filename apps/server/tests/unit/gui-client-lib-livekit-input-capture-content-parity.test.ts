@@ -25,32 +25,34 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("LK.6.d module-level framing pinned: 'keyboard + mouse capture on the AgentSessionPanel video element. Translates browser events to the InputEvent JSON schema Agent 1's Mac-side Quartz CGEvent decoder (commit 9170da82) accepts, and ships them via the LiveKit DataChannel.' — pinned so the LK.6.d anchor + browser-to-InputEvent translation + Agent 1 commit 9170da82 cross-reference all stay documented", () => {
+  it("LK.6.d module-level framing pinned (touch translation, W198/W1249): input capture translating the user's mouse/trackpad gestures into iPhone-COHERENT TOUCH InputEvents shipped over the LiveKit DataChannel to Agent-1's W3C touch injector — pinned so the LK.6.d anchor + the why-touch-not-mouse coherence contract (a real iPhone never fires mouse events) stays documented", () => {
     expect(body).toMatch(
-      /\/\/ LK\.6\.d — keyboard \+ mouse capture on the AgentSessionPanel\s*\n?\s*\/\/ video element\. Translates browser events to the InputEvent\s*\n?\s*\/\/ JSON schema Agent 1's Mac-side Quartz CGEvent decoder \(commit\s*\n?\s*\/\/ 9170da82\) accepts, and ships them via the LiveKit DataChannel\./,
+      /\/\/ LK\.6\.d — input capture on the simulator's video element\. Translates the\s*\n?\s*\/\/ user's mouse\/trackpad gestures into iPhone-COHERENT TOUCH InputEvents and\s*\n?\s*\/\/ ships them over the LiveKit DataChannel to Agent-1's Mac-side W3C touch\s*\n?\s*\/\/ injector \(WebDriverManualTouchInjector → genuine pointerType:touch events\)\./,
     );
+    // The coherence rationale: mouse events are a detectable iPhone tell.
+    expect(body).toMatch(/a real iPhone NEVER fires mouse/);
   });
 
   it("Coordinate-translation framing pinned (#7 letterbox-aware): the <video> uses object-contain + FILLS its container, so the bounding rect is NOT the visible video region — map against the contained sub-rect + return null for clicks in the bars; convert the in-region pointer via the naturalWidth / displayedWidth ratio. Pinned so the letterbox-aware contract stays documented (the prior 'rect IS the visible region' assumption mis-mapped clicks on aspect-mismatched streams).", () => {
     expect(body).toMatch(
-      /the element's\s*\n?\s*\/\/\s+bounding rect is NOT the visible video region\./,
+      /the element's bounding rect is NOT\s*\n?\s*\/\/\s+the visible video region\./,
     );
-    expect(body).toMatch(/clicks in\s*\n?\s*\/\/\s+the bars are off-surface and return null\./);
-    expect(body).toMatch(/`naturalWidth \/ displayedWidth` ratio\./);
+    expect(body).toMatch(/touches in the bars are off-surface\s*\n?\s*\/\/\s+and return null\./);
+    expect(body).toMatch(/`naturalWidth \/\s*\n?\s*\/\/\s+displayedWidth` ratio\./);
   });
 
-  it("Reliability framing pinned: 'Mouse down/up, key down/up, wheel: reliable=true (must arrive in order; missed events break click logic).' + 'mouseMove: reliable=false (lossy ok — cursor jitter at the remote side is preferable to congesting the data channel when the user moves quickly).' — pinned so the reliability-split contract stays documented (drift to reliable=true on mouseMove would congest the DataChannel on fast cursor motion; drift to reliable=false on click would lose click events on transient congestion)", () => {
+  it("Reliability framing pinned: 'touchStart/touchEnd, key down/up, swipe: reliable=true (must arrive in order; a missed start/end breaks the gesture).' + 'touchMove: reliable=false (lossy ok — a dropped move jitters then recovers; reliable=true would congest the data channel on a fast drag).' — pinned so the reliability-split contract stays documented (drift to reliable=true on touchMove would congest the DataChannel on a fast drag; drift to reliable=false on touchStart/End would lose the gesture boundary on transient congestion)", () => {
     expect(body).toMatch(
-      /\/\/\s+- Mouse down\/up, key down\/up, wheel: reliable=true \(must\s*\n?\s*\/\/\s+arrive in order; missed events break click logic\)\./,
+      /\/\/\s+- touchStart\/touchEnd, key down\/up, swipe: reliable=true \(must arrive\s*\n?\s*\/\/\s+in order; a missed start\/end breaks the gesture\)\./,
     );
     expect(body).toMatch(
-      /\/\/\s+- mouseMove: reliable=false \(lossy ok — cursor jitter at the\s*\n?\s*\/\/\s+remote side is preferable to congesting the data channel\s*\n?\s*\/\/\s+when the user moves quickly\)\./,
+      /\/\/\s+- touchMove: reliable=false \(lossy ok — a dropped move jitters then\s*\n?\s*\/\/\s+recovers; reliable=true would congest the data channel on a fast drag\)\./,
     );
   });
 
-  it("Pointer-capture framing pinned: 'when mouseDown fires the capture pointer-captures the video element so subsequent mouseMove / mouseUp land even when the cursor leaves the element bounds (matches remote-desktop UX expectation).' + setPointerCapture(pointerId) inside try/catch with 'Browser may refuse pointer-capture — non-fatal.' — pinned so the remote-desktop-UX + non-fatal-refuse contract all stay documented", () => {
+  it("Pointer-capture framing pinned: 'when the press (mousedown) fires the capture pointer-captures the video element so subsequent move/release land even when the cursor leaves the element bounds (matches remote-desktop UX expectation).' + setPointerCapture(pointerId) inside try/catch with 'Browser may refuse pointer-capture — non-fatal.' — pinned so the remote-desktop-UX + non-fatal-refuse contract all stay documented", () => {
     expect(body).toMatch(
-      /\/\/ Pointer-capture: when mouseDown fires the capture pointer-\s*\n?\s*\/\/ captures the video element so subsequent mouseMove \/ mouseUp\s*\n?\s*\/\/ land even when the cursor leaves the element bounds \(matches\s*\n?\s*\/\/ remote-desktop UX expectation\)\./,
+      /\/\/ Pointer-capture: when the press \(mousedown\) fires the capture pointer-\s*\n?\s*\/\/ captures the video element so subsequent move\/release land even when the\s*\n?\s*\/\/ cursor leaves the element bounds \(matches remote-desktop UX expectation\)\./,
     );
     expect(body).toMatch(
       /try \{\s*\n?\s*if \('setPointerCapture' in video && 'pointerId' in e\) \{\s*\n?\s*\(video as any\)\.setPointerCapture\(\(e as any\)\.pointerId\);\s*\n?\s*\}\s*\n?\s*\} catch \{\s*\n?\s*\/\/ Browser may refuse pointer-capture — non-fatal\./,
@@ -76,5 +78,24 @@ describe('gui-client/lib/livekit-input-capture content parity', () => {
     expect(body).toMatch(
       /\/\/ Keyboard events go on window so capture works even when the\s*\n?\s*\/\/ <video> isn't directly focused\. Side-effect: the customer can\s*\n?\s*\/\/ type into the remote browser without first clicking on the\s*\n?\s*\/\/ video\. Trade-off: pressing a key with the panel mounted\s*\n?\s*\/\/ forwards it everywhere — acceptable because the panel is the\s*\n?\s*\/\/ only LK consumer in v1\.0\./,
     );
+  });
+
+  it('touch translation behavior pinned (W198/W1249 coherence): a press → touchStart, drag → touchMove, release → touchEnd, wheel → swipe; left-button-only; NO mouseDown/mouseMove/mouseUp/wheel InputEvents are ever sent (those are the detectable iPhone tell the harness drops). Drift back to mouse* event types would re-break the loop + the fingerprint coherence', () => {
+    // Sends the touch variants.
+    expect(body).toMatch(/send\(\{ type: 'touchStart', x: p\.x, y: p\.y, touchId \}, true\);/);
+    expect(body).toMatch(
+      /send\(\{ type: 'touchMove', x: p\.x, y: p\.y, touchId: g\.touchId \}, false\);/,
+    );
+    expect(body).toMatch(
+      /send\(\{ type: 'touchEnd', x: p\.x, y: p\.y, touchId: g\.touchId \}, true\);/,
+    );
+    expect(body).toMatch(/type: 'swipe',/);
+    // Left-button-only press (right/middle have no touch analogue).
+    expect(body).toMatch(/if \(mouseButton\(e\.button\) !== 0\) return;/);
+    // NEVER emits mouse* / wheel InputEvent types on the wire.
+    expect(body).not.toMatch(/type: 'mouseMove'/);
+    expect(body).not.toMatch(/type: 'mouseDown'/);
+    expect(body).not.toMatch(/type: 'mouseUp'/);
+    expect(body).not.toMatch(/type: 'wheel'/);
   });
 });
