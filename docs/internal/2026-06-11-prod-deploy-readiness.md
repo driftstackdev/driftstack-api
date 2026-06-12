@@ -84,6 +84,24 @@ surfaces the delta adds:
 Combined with boot/schema/soak, the go-live is de-risked on all four axes the deploy touches:
 **boot, schema, soak target, and new-code correctness.**
 
+### Delta re-verified at 33 commits — 2026-06-12 (~06:30, post-GUI-arc)
+
+The delta grew by the simulator-window GUI arc (status bar `31d1d966` → drag `bb6c5e9d` →
+control toolbar `c254b9f1` → Drift-mark branding `a7c5dd31` → no-overlap status strip
+`000282e0` → archetype-driven auto-sizing `e36b9c20`) plus the keyset/redact fixes earlier
+in the arc. Re-verified every readiness conclusion against `73f70d02..e36b9c20` (33 commits):
+
+- **Migrations:** still exactly ONE — `0072` (metadata-only, verified safe above). Nothing new.
+- **Required env:** `config.ts` + `index.ts` still untouched across the whole delta — no new
+  boot-required env.
+- **The 6 newest commits** touch ONLY `apps/gui-client/` + one server-side _test_ file (a
+  content-parity pin) — zero server-runtime impact. The Tauri GUI ships separately from the
+  API deploy (already current on the founder's machine at `000282e0`).
+- **Soak target:** staging `/health` `{"ok":true}`.
+
+⟹ All four de-risk axes (boot / schema / soak / new-code correctness) hold unchanged at the
+larger delta. The go-live action is the same single founder command below.
+
 ## Remaining to go-live (per the cutover memory)
 
 Correction after cross-checking the cutover memory: the frontend + GUI steps are **already
