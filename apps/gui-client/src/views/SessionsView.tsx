@@ -5,9 +5,10 @@
 // unmounts. Failures surface inline rather than via toasts so the
 // founder can debug API issues without losing context.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { useSettings } from '../lib/SettingsContext';
+import { useToasts } from '../lib/toasts';
 import { DriftstackError, type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { listProxies, type ProxyConfig as LocalProxyConfig } from '../lib/proxies';
@@ -33,6 +34,7 @@ export interface SessionsViewProps {
 
 export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX.Element {
   const { client, settings, accountMe, refreshAccountMe } = useSettings();
+  const { push: pushToast } = useToasts();
   const [state, setState] = useState<SessionsState>({
     sessions: [],
     refreshedAt: null,
@@ -40,6 +42,27 @@ export function SessionsView({ onView, onGoToSettings }: SessionsViewProps): JSX
     error: null,
   });
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Toast on status transitions (demo-concepts arc): when the 15s poll sees a
+  // session newly errored, surface it instead of waiting for the customer to
+  // glance at the list. View-scoped v1 — runs while Sessions is mounted; the
+  // app-level watcher arrives when session polling lifts into a shared store.
+  const prevStatuses = useRef(new Map<string, string>());
+  useEffect(() => {
+    const prev = prevStatuses.current;
+    for (const session of state.sessions) {
+      const before = prev.get(session.id);
+      if (before !== undefined && before !== 'errored' && session.status === 'errored') {
+        pushToast({
+          title: 'Session errored',
+          body: `${session.label ?? session.id} stopped unexpectedly.`,
+          tone: 'warn',
+          action: { label: 'Open', run: () => onView(session.id) },
+        });
+      }
+      prev.set(session.id, session.status);
+    }
+  }, [state.sessions, pushToast, onView]);
 
   // V-239 — gate the New session button when the customer is at the
   // concurrent cap. Server enforces (V-073 returns 402); the GUI's job

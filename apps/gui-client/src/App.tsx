@@ -18,6 +18,7 @@ import { ConnectivityView } from './views/ConnectivityView';
 import { FirstRunWizard } from './views/FirstRunWizard';
 import { LiveSessionView } from './views/LiveSessionView';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
+import { ToastProvider } from './lib/toasts';
 import { ProfilesView } from './views/ProfilesView';
 import { ProxiesView } from './views/ProxiesView';
 import { RecordingPlayerView } from './views/RecordingPlayerView';
@@ -186,45 +187,47 @@ function Shell(): JSX.Element {
 
   const mode = deploymentLabel(settings.baseUrl);
   return (
-    <div className="flex h-screen w-screen flex-col bg-surface-base">
-      {/* 2026-05-20 — GUI panel notification overlay. Mounts at the
+    <ToastProvider>
+      <div className="flex h-screen w-screen flex-col bg-surface-base">
+        {/* 2026-05-20 — GUI panel notification overlay. Mounts at the
           shell level (above any view) so cost / incident / audit /
           session.errored toasts surface regardless of which view the
           customer is on. Subscribes via useNotifications() — auto-
           closes on sign-out (apiKey flips null). */}
-      <NotificationToastStack />
-      <TitleBar
-        subtitle={mode}
-        right={
-          <>
-            <LiveConnectionPill
-              baseUrl={settings.baseUrl}
-              onClick={() => setView({ kind: 'settings' })}
-            />
-            <span className="section-label">v0.0.1</span>
-          </>
-        }
-      />
-      {update && !updateDismissed ? (
-        <UpdateBanner update={update} onDismiss={() => setUpdateDismissed(true)} />
-      ) : null}
-      <div className="flex flex-1 overflow-hidden">
-        <Sidebar
-          current={view.kind as SidebarViewKind}
-          onNavigate={(kind) => setView({ kind })}
-          onSignOut={() => void handleSignOut()}
+        <NotificationToastStack />
+        <TitleBar
+          subtitle={mode}
+          right={
+            <>
+              <LiveConnectionPill
+                baseUrl={settings.baseUrl}
+                onClick={() => setView({ kind: 'settings' })}
+              />
+              <span className="section-label">v0.0.1</span>
+            </>
+          }
         />
-        <main className="flex-1 overflow-auto bg-surface-base">
-          <CurrentView view={view} onNavigate={setView} />
-        </main>
+        {update && !updateDismissed ? (
+          <UpdateBanner update={update} onDismiss={() => setUpdateDismissed(true)} />
+        ) : null}
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar
+            current={view.kind as SidebarViewKind}
+            onNavigate={(kind) => setView({ kind })}
+            onSignOut={() => void handleSignOut()}
+          />
+          <main className="flex-1 overflow-auto bg-surface-base">
+            <CurrentView view={view} onNavigate={setView} />
+          </main>
+        </div>
+        <StatusFooter />
+        <CommandPalette
+          open={paletteOpen}
+          actions={paletteActions}
+          onClose={() => setPaletteOpen(false)}
+        />
       </div>
-      <StatusFooter />
-      <CommandPalette
-        open={paletteOpen}
-        actions={paletteActions}
-        onClose={() => setPaletteOpen(false)}
-      />
-    </div>
+    </ToastProvider>
   );
 }
 
