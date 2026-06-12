@@ -61,6 +61,7 @@ import { registerMacNodesRoutes } from '../routes/mac-nodes-register.js';
 import { registerAgentSessionsLivekitTokenRoute } from '../routes/agent-sessions-livekit-token.js';
 import type { FleetNonceCache } from '../services/fleet-nonce-cache.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import type { SessionPageStateStore } from '../services/session-page-state-store.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import { registerAccountMeRoutes } from '../routes/account-me.js';
@@ -455,6 +456,13 @@ export interface AppDeps {
    * the 503 stub.
    */
   fleetControlRegistry?: FleetControlRegistry;
+  /**
+   * Latest-pageState-per-agent-session store (W650/A3-W1254). Present alongside
+   * the registry when the fleet control plane is enabled; the registry's
+   * onPageState consumer writes it + GET /v1/agent-sessions/:id/page-state reads
+   * it (the GUI loading-bar/error-overlay source for the agent/simulator view).
+   */
+  sessionPageStateStore?: SessionPageStateStore;
   /**
    * Local fleet-demo session-dispatch config. Present only when the fleet
    * control plane is enabled (bootstrap assembles it alongside the registry);
@@ -1215,6 +1223,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAgentSessionsRoutes(app, {
       runtime: deps.agentRuntime,
       sessions: deps.agentSessionsRepo,
+      // W650/A3-W1254 — agent-session pageState read (GUI loading-bar/overlay).
+      // Present only when the fleet control plane wired the store.
+      ...(deps.sessionPageStateStore !== undefined
+        ? { sessionPageStateStore: deps.sessionPageStateStore }
+        : {}),
       ...(deps.byokAnthropicService !== undefined
         ? { byokService: deps.byokAnthropicService }
         : {}),

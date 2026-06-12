@@ -59,6 +59,7 @@ import {
   serializeResumeSession,
 } from '../services/harness-control-codec.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import type { SessionPageStateStore } from '../services/session-page-state-store.js';
 import type { SocksProxyConfig } from '@driftstack/api-types';
 import {
   decryptGuiControlKey,
@@ -328,6 +329,12 @@ export interface AgentSessionsRoutesDeps {
    * registry behind that flag) — absent in prod → dispatch is a no-op.
    */
   fleetControlRegistry?: FleetControlRegistry;
+  /**
+   * W650/A3-W1254 — latest-pageState-per-agent-session store. When wired (with
+   * the registry, behind FLEET_CONTROL_PLANE_ENABLED), GET /v1/agent-sessions/
+   * :id/page-state serves the stored pageState; absent → the route returns null.
+   */
+  sessionPageStateStore?: SessionPageStateStore;
   /**
    * Local fleet-demo dispatch config: the archetype / behavior profile /
    * landing URL / SOCKS5 proxy the dispatched session browses with. Wired
@@ -620,6 +627,7 @@ export function registerAgentSessionsRoutes(
     fleetNodesRepo,
     livekitSecretEncryptionKey,
     fleetControlRegistry,
+    sessionPageStateStore,
     sessionDispatch,
     profilesService,
     r2,
@@ -872,6 +880,27 @@ export function registerAgentSessionsRoutes(
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
       }
       return publicAgentSession(rec);
+    },
+  );
+
+  // W650/A3-W1254 — page-state for the AGENT/simulator view. The harness emits
+  // HarnessOutbound.pageState (loading→loaded|errored) keyed by the AGENT
+  // session id on every agent-initiated navigate; this serves the latest so the
+  // GUI loading-bar/error-overlay can poll the agent session it drives. (The
+  // existing GET /v1/sessions/:id/state.page_state is the DRIVER session, a
+  // different type the harness never emits pageState for.) Same owned-check as
+  // GET /:id; returns null when the store isn't wired (no fleet control plane)
+  // or nothing has been reported yet.
+  app.get<{ Params: { id: string } }>(
+    '/v1/agent-sessions/:id/page-state',
+    { preHandler: [app.requireAuth, app.rateLimit('global')] },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const rec = await sessions.get(req.params.id);
+      if (rec === null || rec.accountId !== ctx.account.id) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      return { page_state: sessionPageStateStore?.get(req.params.id) ?? null };
     },
   );
 
@@ -1831,6 +1860,9 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // 404 (same rationale as the takeover/handback/mode stubs below).
   app.get('/v1/agent-sessions', stub);
   app.get('/v1/agent-sessions/:id', stub);
+  // W650/A3-W1254 — the page-state read is gated too (machine-readable 503, not
+  // a bare 404) so the GUI overlay's poll surfaces the documented activation state.
+  app.get('/v1/agent-sessions/:id/page-state', stub);
   app.post('/v1/agent-sessions/:id/message', stub);
   app.delete('/v1/agent-sessions/:id', stub);
   // Arc 2 sub-slice 8.9 (v2-#8) — pair-mode routes must also return

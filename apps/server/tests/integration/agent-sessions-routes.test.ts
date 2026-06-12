@@ -63,6 +63,16 @@ describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)'
     expect(res.statusCode).toBe(503);
   });
 
+  it('GET /v1/agent-sessions/:id/page-state → 503 (W650/A3-W1254 — gated like the others, not a bare 404)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/agent-sessions/agt_xxx/page-state',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(503);
+  });
+
   it('DELETE /v1/agent-sessions/:id → 503', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({

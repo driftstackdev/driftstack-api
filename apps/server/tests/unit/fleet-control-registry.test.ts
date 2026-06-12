@@ -224,6 +224,66 @@ describe('FleetControlConnection', () => {
     ).not.toThrow();
   });
 
+  it('routes an inbound pageState frame → invokes the onPageState handler (W650/A3-W1254)', () => {
+    const seen: unknown[] = [];
+    const conn = new FleetControlConnection(
+      'node-1',
+      () => {},
+      undefined, // onProfileSaved
+      undefined, // onChallengeDetected
+      (f) => seen.push(f),
+    );
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'pageState',
+        sessionId: 'agt_x',
+        state: 'loaded',
+        url: 'https://example.com',
+        error: null,
+      }),
+    );
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'pageState',
+        sessionId: 'agt_x',
+        state: 'errored',
+        url: null,
+        error: { kind: 'timeout', http_status: null, message: 'nav timed out' },
+      }),
+    );
+    expect(seen).toEqual([
+      {
+        type: 'pageState',
+        sessionId: 'agt_x',
+        state: 'loaded',
+        url: 'https://example.com',
+        error: null,
+      },
+      {
+        type: 'pageState',
+        sessionId: 'agt_x',
+        state: 'errored',
+        url: null,
+        error: { kind: 'timeout', http_status: null, message: 'nav timed out' },
+      },
+    ]);
+  });
+
+  it('a pageState frame with no handler wired is accepted + ignored (no crash — stateless deploy)', () => {
+    const conn = new FleetControlConnection('node-1', () => {});
+    expect(() =>
+      conn.handleInbound(
+        JSON.stringify({
+          type: 'pageState',
+          sessionId: 'agt_x',
+          state: 'loading',
+          url: null,
+          error: null,
+        }),
+      ),
+    ).not.toThrow();
+  });
+
   it('a throwing handler on a VALID frame does NOT escape handleInbound (receive-loop + process survive — defence-in-depth)', () => {
     // The route feeds handleInbound from a `socket.on('message')` listener, where
     // an uncaught synchronous throw surfaces as a process-level uncaughtException.

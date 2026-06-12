@@ -27,6 +27,7 @@ import { DrizzleAccountAuthRepo } from '../db/auth-repo.js';
 import { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { FleetNodeAuthImpl } from '../services/fleet-node-auth.js';
 import { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import { SessionPageStateStore } from '../services/session-page-state-store.js';
 import { makeProfileSavedPersister } from '../services/profile-store.js';
 import { makeChallengeRelay } from '../services/challenge-relay.js';
 import { RedisFleetNonceCache } from '../lib/redis-fleet-nonce-cache.js';
@@ -1259,9 +1260,14 @@ export async function createProductionDeps(
           },
           'fleet control plane ENABLED',
         );
+        // W650/A3-W1254 — latest pageState per AGENT session, written by the
+        // registry's onPageState consumer + read by GET /v1/agent-sessions/
+        // :id/page-state (the GUI loading-bar/error-overlay source).
+        const sessionPageStateStore = new SessionPageStateStore();
         return {
           fleetNodeAuth: new FleetNodeAuthImpl(drizzleFleetNodesRepo, fleetNonceCache),
           fleetNonceCache,
+          sessionPageStateStore,
           // Profile-backed session persistence (A3 W417): when R2 is configured,
           // a `profileSaved` frame from a node writes the customer's sealed store
           // to R2; without R2 the frame is accepted + ignored (stateless).
@@ -1271,6 +1277,9 @@ export async function createProductionDeps(
           fleetControlRegistry: new FleetControlRegistry(
             r2 !== null ? makeProfileSavedPersister(r2, logger) : undefined,
             makeChallengeRelay(agentSessionsRepo, webhooksService, logger),
+            // W650/A3-W1254: a pageState frame (agent-initiated navigate) → store
+            // the latest per agent session for GET /v1/agent-sessions/:id/page-state.
+            (frame) => sessionPageStateStore.set(frame),
           ),
           // Local fleet-demo: the config a dispatched session browses with. Only
           // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The

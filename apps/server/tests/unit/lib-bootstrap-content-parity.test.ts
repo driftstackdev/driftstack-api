@@ -328,8 +328,11 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // undefined (frame accepted + ignored). Pinned so the persistence wiring
     // can't be silently dropped (a profile-backed session would lose its store).
     expect(body).toMatch(
-      /fleetControlRegistry: new FleetControlRegistry\(\s*\n?\s*r2 !== null \? makeProfileSavedPersister\(r2, logger\) : undefined,\s*\n?\s*makeChallengeRelay\(agentSessionsRepo, webhooksService, logger\),\s*\n?\s*\),/,
+      /fleetControlRegistry: new FleetControlRegistry\(\s*\n?\s*r2 !== null \? makeProfileSavedPersister\(r2, logger\) : undefined,\s*\n?\s*makeChallengeRelay\(agentSessionsRepo, webhooksService, logger\),[\s\S]*?\(frame\) => sessionPageStateStore\.set\(frame\),\s*\n?\s*\),/,
     );
+    // W650/A3-W1254 — the pageState store is constructed alongside the registry
+    // (behind the same flag) + wired as the registry's onPageState consumer.
+    expect(body).toMatch(/const sessionPageStateStore = new SessionPageStateStore\(\);/);
     // Local fleet-demo session-dispatch config (only assembled behind the flag).
     // Discrete pins (no long \s*\n? chain — backtracking rule). Locks the demo
     // archetype (current-code iphone16pro, NOT the canvas-gated iphone17 cutover)

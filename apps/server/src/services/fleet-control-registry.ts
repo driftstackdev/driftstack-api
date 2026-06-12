@@ -26,6 +26,7 @@ import {
   type ResumeSession,
   type ProfileSaved,
   type ChallengeDetected,
+  type PageStateFrame,
 } from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
 
@@ -43,16 +44,19 @@ export class FleetControlConnection {
   private readonly send: FleetNodeSocketSend;
   private readonly onProfileSaved?: (frame: ProfileSaved) => void;
   private readonly onChallengeDetected?: (frame: ChallengeDetected) => void;
+  private readonly onPageState?: (frame: PageStateFrame) => void;
 
   constructor(
     readonly nodeId: string,
     send: FleetNodeSocketSend,
     onProfileSaved?: (frame: ProfileSaved) => void,
     onChallengeDetected?: (frame: ChallengeDetected) => void,
+    onPageState?: (frame: PageStateFrame) => void,
   ) {
     this.send = send;
     this.onProfileSaved = onProfileSaved;
     this.onChallengeDetected = onChallengeDetected;
+    this.onPageState = onPageState;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
     this.correlator = new IntentDispatchCorrelator(transport);
   }
@@ -144,6 +148,14 @@ export class FleetControlConnection {
           // consumer (not yet wired / stateless deploy) → ignored, like profileSaved.
           this.onChallengeDetected?.(frame);
           break;
+        case 'pageState':
+          // Page lifecycle on an agent-initiated navigate (A3 W1240/W1254):
+          // loading → loaded | errored, keyed by the AGENT session id. The
+          // consumer stores the latest per session so GET /v1/agent-sessions/
+          // :id/page-state serves the GUI loading-bar/error-overlay. Absent
+          // consumer (stateless deploy) → ignored, like the others.
+          this.onPageState?.(frame);
+          break;
         // heartbeat / capabilityReport / errorEvent: accepted, not yet consumed.
       }
     } catch {
@@ -182,6 +194,7 @@ export class FleetControlRegistry {
   constructor(
     private readonly onProfileSaved?: (frame: ProfileSaved) => void,
     private readonly onChallengeDetected?: (frame: ChallengeDetected) => void,
+    private readonly onPageState?: (frame: PageStateFrame) => void,
   ) {}
 
   register(nodeId: string, send: FleetNodeSocketSend): FleetControlConnection {
@@ -194,6 +207,7 @@ export class FleetControlRegistry {
       send,
       this.onProfileSaved,
       this.onChallengeDetected,
+      this.onPageState,
     );
     this.connections.set(nodeId, conn);
     return conn;
