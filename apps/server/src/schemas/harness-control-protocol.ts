@@ -43,6 +43,7 @@ export const HARNESS_INTENT_NAMES = [
   'forward',
   'click',
   'send_keys',
+  'press_key',
   'scroll',
   'behavioral_pause',
   'wait_for',
@@ -162,6 +163,14 @@ export const ExecuteScriptParamsSchema = z
 export const ScreenshotParamsSchema = NoParamsSchema;
 export const GetPageSourceParamsSchema = NoParamsSchema;
 
+// press_key (A3 W677/W1221): ONE key press on the FOCUSED element — a DOM
+// KeyboardEvent.key name (Enter/Tab/Escape/Backspace/Delete/Arrow*/Home/End/
+// Page*) or a single printable char. Shape-only here (key: string, bounded to
+// the customer InteractAction's 1..20); the harness does the resolves-to-a-real-
+// key semantic validation (unmapped/over-long → intent_invalid_parameter).
+// Modifiers deferred (v1 = single key).
+export const PressKeyParamsSchema = z.object({ key: z.string().min(1).max(20) }).strict();
+
 // intentName → param schema. The AgentExecutor validates the logical params
 // it builds against this map before serialising into inputParams, so a wrong
 // shape is caught server-side rather than surfacing as an opaque harness
@@ -172,6 +181,7 @@ export const HARNESS_INTENT_PARAM_SCHEMAS: Record<HarnessIntentName, z.ZodTypeAn
   forward: HistoryNavParamsSchema,
   click: ClickParamsSchema,
   send_keys: SendKeysParamsSchema,
+  press_key: PressKeyParamsSchema,
   scroll: ScrollParamsSchema,
   behavioral_pause: BehavioralPauseParamsSchema,
   wait_for: WaitForParamsSchema,

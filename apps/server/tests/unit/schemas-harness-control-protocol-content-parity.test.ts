@@ -93,9 +93,9 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toMatch(/cross the wire as a BASE64\s*\n?\s*\/\/ STRING of the UTF-8 JSON/);
   });
 
-  it('11-intent dispatchable vocab pinned in canonical order', () => {
+  it('12-intent dispatchable vocab pinned in canonical order (press_key added A3 W1221, after send_keys)', () => {
     expect(body).toMatch(
-      /export const HARNESS_INTENT_NAMES = \[\s*\n?\s*'navigate',\s*\n?\s*'back',\s*\n?\s*'forward',\s*\n?\s*'click',\s*\n?\s*'send_keys',\s*\n?\s*'scroll',\s*\n?\s*'behavioral_pause',\s*\n?\s*'wait_for',\s*\n?\s*'execute_script',\s*\n?\s*'screenshot',\s*\n?\s*'get_page_source',\s*\n?\s*\] as const;/,
+      /export const HARNESS_INTENT_NAMES = \[\s*\n?\s*'navigate',\s*\n?\s*'back',\s*\n?\s*'forward',\s*\n?\s*'click',\s*\n?\s*'send_keys',\s*\n?\s*'press_key',\s*\n?\s*'scroll',\s*\n?\s*'behavioral_pause',\s*\n?\s*'wait_for',\s*\n?\s*'execute_script',\s*\n?\s*'screenshot',\s*\n?\s*'get_page_source',\s*\n?\s*\] as const;/,
     );
   });
 
@@ -141,6 +141,12 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
   });
 
+  it('press_key params pinned: key string 1..20 (strict) — A3 W1221, one DOM KeyboardEvent.key on the focused element', () => {
+    expect(body).toMatch(
+      /export const PressKeyParamsSchema = z\.object\(\{ key: z\.string\(\)\.min\(1\)\.max\(20\) \}\)\.strict\(\);/,
+    );
+  });
+
   it('scroll params pinned: direction up|down, distance_px int>0, start_x/start_y int — all optional; SDK surfaces direction+distance_px only', () => {
     expect(body).toMatch(/direction: z\.enum\(\['up', 'down'\]\)\.optional\(\),/);
     expect(body).toMatch(/distance_px: z\.number\(\)\.int\(\)\.positive\(\)\.optional\(\),/);
@@ -167,7 +173,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toMatch(/args: z\.array\(z\.unknown\(\)\)\.optional\(\),/);
   });
 
-  it('intentName→schema map pinned (all 11 routed)', () => {
+  it('intentName→schema map pinned (all 12 routed, incl. press_key)', () => {
     expect(body).toMatch(
       /export const HARNESS_INTENT_PARAM_SCHEMAS: Record<HarnessIntentName, z\.ZodTypeAny> = \{/,
     );
@@ -353,7 +359,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
 
 describe('harness-control-protocol behavioral contract', () => {
   it('intent vocab + reserved set + error codes match the canonical counts', () => {
-    expect(HARNESS_INTENT_NAMES).toHaveLength(11);
+    expect(HARNESS_INTENT_NAMES).toHaveLength(12); // +press_key (A3 W1221)
     expect(HARNESS_RESERVED_INTENT_NAMES).toEqual(['fill_form', 'login', 'search']);
     expect(HARNESS_ERROR_CODES).toHaveLength(7);
     // The param-schema map covers exactly the dispatchable vocab.

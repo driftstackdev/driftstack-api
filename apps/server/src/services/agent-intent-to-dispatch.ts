@@ -150,17 +150,19 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
       return { ok: true, intentName: 'scroll', params: {} };
 
     case 'press':
-      // W540 — the DRIVER path supports press today (agent-executor →
-      // sessions.interact press). The HARNESS control-plane intent
-      // (press_key, A3-W677 proposal: params { key }) is NOT in
-      // HARNESS_INTENT_NAMES yet — A3 lands the handler after contract
-      // confirmation. Until then fail closed here (swipe pattern) so we
-      // never emit an intentName the harness would reject.
-      return {
-        ok: false,
-        reason:
-          'interact:press has no harness intent yet (A3-W677 press_key pending); driver-path sessions support press',
-      };
+      // W540/W1221 — the harness `press_key` handler is LIVE (A3 W1221): one
+      // genuine W3C key press (keyDown+keyUp) on the FOCUSED element, for submit
+      // (Enter), focus traversal (Tab), dismiss (Escape), list nav (Arrow*). The
+      // customer's interact:press carries the DOM KeyboardEvent.key name in
+      // `value`. The harness validates the key resolves; an unmapped/over-long
+      // key surfaces as intent_invalid_parameter in the result.
+      if (intent.value === undefined || intent.value.length === 0) {
+        return {
+          ok: false,
+          reason: 'interact:press requires a value (the key name, e.g. "Enter")',
+        };
+      }
+      return { ok: true, intentName: 'press_key', params: { key: intent.value } };
 
     case 'swipe':
       // The harness has no swipe intent (touch swipe ≈ a scroll flick, but
