@@ -161,7 +161,9 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   const [searchQuery, setSearchQuery] = useState('');
   // Fleet hub (2026-06-12, demo-concepts greenlight): grid/list toggle +
   // one-click ephemeral Quick Session. List stays the default render.
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  // Grid is the DEFAULT (founder directive 2026-06-12 night arc) — the
+  // visual workspace is the product; list remains a toggle for dense ops.
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [quickBusy, setQuickBusy] = useState(false);
   // Increment 2 — client-persisted organization (folders/tags/notes).
   const [profilesMeta, setProfilesMeta] = useState<ProfilesMetaMap>({});
@@ -829,12 +831,12 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           <span className="text-xs font-medium text-ink-primary">
             {selectedIds.size.toString()} selected
           </span>
-          <input
-            aria-label="Bulk folder"
-            placeholder="Move to folder…"
-            className="w-36 rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
+          <FolderPicker
+            ariaLabel="Bulk folder"
+            noneLabel="Move to folder…"
+            folders={folderList(profilesMeta)}
             value={bulkFolder}
-            onChange={(e) => setBulkFolder(e.target.value)}
+            onChange={setBulkFolder}
           />
           <input
             aria-label="Bulk tag"
@@ -992,12 +994,12 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                       )}
                       {organizeId === profile.id && (
                         <div className="mt-2 flex flex-wrap items-center gap-2 rounded border border-surface-divider bg-surface-inset p-2">
-                          <input
-                            aria-label="Folder"
-                            placeholder="Folder"
-                            className="w-32 rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
+                          <FolderPicker
+                            ariaLabel="Folder"
+                            noneLabel="Unfiled"
+                            folders={folderList(profilesMeta)}
                             value={draftFolder}
-                            onChange={(e) => setDraftFolder(e.target.value)}
+                            onChange={setDraftFolder}
                           />
                           <input
                             aria-label="Tags (comma-separated)"
@@ -1895,6 +1897,77 @@ function CreateProfileModal({
         </form>
       </div>
     </div>
+  );
+}
+
+// Folder picker (founder UX fix, night arc): SELECT existing folders
+// instead of retyping names — '__new__' reveals a free-text input;
+// '' = no change (bulk) / unfiled (organize). Controlled entirely by
+// the caller through value/onChange.
+function FolderPicker({
+  value,
+  onChange,
+  folders,
+  ariaLabel,
+  noneLabel,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  folders: string[];
+  ariaLabel: string;
+  noneLabel: string;
+}): JSX.Element {
+  const isCustom = value.length > 0 && !folders.includes(value);
+  const [mode, setMode] = useState<'pick' | 'new'>(isCustom ? 'new' : 'pick');
+  return (
+    <span className="inline-flex items-center gap-1">
+      {mode === 'pick' ? (
+        <select
+          aria-label={ariaLabel}
+          className="w-36 rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
+          value={folders.includes(value) ? value : ''}
+          onChange={(e) => {
+            if (e.target.value === '__new__') {
+              setMode('new');
+              onChange('');
+            } else {
+              onChange(e.target.value);
+            }
+          }}
+        >
+          <option value="">{noneLabel}</option>
+          {folders.map((f) => (
+            <option key={f} value={f}>
+              📁 {f}
+            </option>
+          ))}
+          <option value="__new__">＋ New folder…</option>
+        </select>
+      ) : (
+        <>
+          <input
+            aria-label={`${ariaLabel} (new)`}
+            placeholder="New folder name"
+            autoFocus
+            maxLength={32}
+            className="w-32 rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          <button
+            type="button"
+            aria-label="Back to folder list"
+            className="text-xs text-ink-muted hover:text-ink-primary"
+            onClick={() => {
+              setMode('pick');
+              onChange('');
+            }}
+          >
+            ↩
+          </button>
+        </>
+      )}
+    </span>
   );
 }
 
