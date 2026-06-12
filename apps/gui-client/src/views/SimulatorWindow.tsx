@@ -401,6 +401,26 @@ export function SimulatorWindow(): JSX.Element {
   // previously-dormant LK.6.e latency ping; rendered in the overlay.
   const [room, setRoom] = useState<Room | null>(null);
   const videoElRef = useRef<HTMLVideoElement | null>(null);
+  // fps: rolling 1s counter via requestVideoFrameCallback (browser-native;
+  // no LiveKit internals). null until the first full window.
+  const [fps, setFps] = useState<number | null>(null);
+  const fpsCounterRef = useRef({ frames: 0, windowStart: 0 });
+  function armFpsCounter(el: HTMLVideoElement): void {
+    const tick = (now: number): void => {
+      const c = fpsCounterRef.current;
+      if (c.windowStart === 0) c.windowStart = now;
+      c.frames += 1;
+      if (now - c.windowStart >= 1000) {
+        setFps(Math.round((c.frames * 1000) / (now - c.windowStart)));
+        c.frames = 0;
+        c.windowStart = now;
+      }
+      // requestVideoFrameCallback is one-shot — re-arm per frame; the
+      // chain dies naturally with the element.
+      el.requestVideoFrameCallback?.((t) => tick(t));
+    };
+    el.requestVideoFrameCallback?.((t) => tick(t));
+  }
   const [snapshotNotice, setSnapshotNotice] = useState<string | null>(null);
   // Night-arc I (cockpit pills): Snapshot — draw the CURRENT live frame to
   // a canvas and save a PNG into ~/Downloads via the fs plugin (no native
@@ -543,6 +563,7 @@ export function SimulatorWindow(): JSX.Element {
                   </div>
                   {proxyLabel !== '' && <div className="truncate">egress 🌍 {proxyLabel}</div>}
                   <div className="truncate">
+                    {fps !== null && <span>{fps} fps · </span>}
                     latency{' '}
                     {latency.rttMs !== null ? (
                       <span className={latency.rttMs < 150 ? 'text-emerald-300' : 'text-amber-300'}>
@@ -567,6 +588,7 @@ export function SimulatorWindow(): JSX.Element {
                   onRoom={setRoom}
                   onVideoEl={(el) => {
                     videoElRef.current = el;
+                    if (el !== null) armFpsCounter(el);
                   }}
                 />
               </div>

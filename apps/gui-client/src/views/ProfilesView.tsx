@@ -1604,9 +1604,12 @@ function CreateProfileModal({
       // 2. Create the profile (organization metadata rides the create —
       //    backend columns since migration 0076; a pre-0076 server strips
       //    the unknown fields harmlessly).
+      // Clamp to the server caps HERE too (the organize paths go through
+      // cleanEntry; create previously didn't — a 25-char tag 400'd the
+      // whole create).
       const tagList = tags
         .split(',')
-        .map((t) => t.trim())
+        .map((t) => t.trim().slice(0, 24))
         .filter((t) => t.length > 0)
         .slice(0, 12);
       const profile = await client.profiles.create({
