@@ -6,7 +6,8 @@ import typography from '@tailwindcss/typography';
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./src/**/*.{astro,html,js,jsx,md,mdx,ts,tsx}'],
-  darkMode: 'class',
+  // Fleet rework: dark: variants follow the data-mode axis (not a .dark class).
+  darkMode: ['selector', '[data-mode="dark"]'],
   theme: {
     extend: {
       colors: {

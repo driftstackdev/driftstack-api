@@ -111,7 +111,7 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
     expect(body).toMatch(/<!doctype html>/);
     // Fleet token axes (2026-06-12 rework): dark+oxblood defaults = today's
     // look until the index Fleet port flips to light+violet (founder-locked).
-    expect(body).toMatch(/<html lang="en" class="dark" data-mode="light" data-accent="violet">/);
+    expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="violet">/);
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
     expect(body).toMatch(/<link rel="canonical" href=\{canonical\} \/>/);
     expect(body).toMatch(/import Header from '\.\.\/components\/Header\.astro';/);
