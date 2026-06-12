@@ -34,7 +34,7 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(screen?.getAttribute('data-tauri-drag-region')).toBe('false');
   });
 
-  it('renders the iOS status bar (live clock + glyphs) over the screen, taps still pass through', () => {
+  it('renders the iOS status bar as a dedicated strip ABOVE the content (never overlapping the page)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok');
     const { container } = render(<SimulatorWindow />);
     const statusBar = container.querySelector('[data-component="simulator-statusbar"]');
@@ -44,13 +44,17 @@ describe('SimulatorWindow — floating iPhone', () => {
     // Cellular / Wi-Fi / battery glyphs.
     expect(statusBar?.querySelectorAll('svg').length).toBe(3);
     // The bar IS a window drag-region (founder: drag the window by the status
-    // strip) — the inner clock/glyphs are pointer-events-none so a click on the
-    // strip falls through to the bar and drags rather than landing on text.
+    // strip) — the inner clock is pointer-events-none so a click on the strip
+    // falls through to the bar and drags rather than landing on text.
     expect(statusBar?.getAttribute('data-tauri-drag-region')).toBe('true');
     expect(statusBar?.querySelector('span')?.className).toContain('pointer-events-none');
-    // It lives inside the screen (over the video), not the bezel.
+    // Founder 2026-06-12: the bar must NOT overlap browser content — it is a
+    // reserved strip (first child of the screen, video below), not an absolute
+    // overlay on the page pixels.
     const screen = container.querySelector('[data-component="simulator-screen"]');
-    expect(screen?.querySelector('[data-component="simulator-statusbar"]')).not.toBeNull();
+    expect(screen?.firstElementChild).toBe(statusBar);
+    expect(statusBar?.className).not.toContain('absolute');
+    expect(statusBar?.className).toContain('shrink-0');
   });
 
   it('renders the Driftstack control toolbar above the device: device name + close/minimize + screenshot/rotate', () => {

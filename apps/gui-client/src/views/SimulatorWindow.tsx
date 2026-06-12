@@ -214,10 +214,13 @@ function DeviceToolbar({
 }
 
 /**
- * Cosmetic iOS status bar — live clock + cellular/Wi-Fi/battery glyphs flanking
- * the dynamic island. Drag-region (drag the window by the strip); inner content
- * pointer-events-none so a click on the strip falls through to drag. Founder
- * 2026-06-12 confirmed keeping this alongside the new toolbar.
+ * Cosmetic iOS status bar — live clock + cellular/Wi-Fi/battery glyphs, with
+ * the dynamic island centered in the strip. A DEDICATED black strip at the top
+ * of the screen — the page video starts BELOW it, so it never overlaps browser
+ * content (founder 2026-06-12: the overlay version could cover site headers;
+ * keep it, but outside the content). Reads like an iPhone with a dark
+ * safe-area. Drag-region (drag the window by the strip); inner content
+ * pointer-events-none so a click on the strip falls through to drag.
  */
 function IosStatusBar(): JSX.Element {
   const time = useStatusClock();
@@ -226,8 +229,14 @@ function IosStatusBar(): JSX.Element {
       aria-hidden="true"
       data-component="simulator-statusbar"
       data-tauri-drag-region
-      className="absolute inset-x-0 top-0 z-20 flex h-[40px] items-center justify-between px-[24px] text-white [filter:drop-shadow(0_0_2px_rgba(0,0,0,0.45))]"
+      className="relative flex h-[40px] w-full shrink-0 items-center justify-between bg-black px-[24px] text-white"
     >
+      {/* Dynamic island — centered in the strip (its natural home now that the
+          strip is reserved space rather than an overlay). */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-1/2 h-[26px] w-[88px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#060607] ring-1 ring-white/10"
+      />
       <span className="pointer-events-none text-[14px] font-semibold tracking-tight tabular-nums">
         {time}
       </span>
@@ -307,22 +316,18 @@ export function SimulatorWindow(): JSX.Element {
             data-component="simulator-device"
             className="relative flex min-h-0 flex-1 w-full flex-col rounded-b-[2.75rem] bg-[#0b0b0d] p-[10px] shadow-2xl ring-1 ring-white/10"
           >
-            {/* Dynamic island — purely cosmetic; sits over the top of the screen. */}
-            <div
-              aria-hidden="true"
-              data-tauri-drag-region
-              className="pointer-events-none absolute left-1/2 top-[18px] z-10 h-[26px] w-[88px] -translate-x-1/2 rounded-full bg-black"
-            />
-            {/* Screen — the live video. NOT a drag region (taps control the device). */}
+            {/* Screen — status strip on top (with the dynamic island), the live
+                video BELOW it (never overlapped). NOT a drag region except the
+                strip itself (taps on the video control the device). */}
             <div
               data-tauri-drag-region="false"
               data-component="simulator-screen"
-              className="relative flex-1 overflow-hidden rounded-[2.1rem] bg-black"
+              className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black"
             >
-              {/* iOS status bar overlay (cosmetic; the web video has none of its
-                  own). pointer-events-none → taps still reach the device. */}
               <IosStatusBar />
-              <AgentSessionPanel info={info} interactive />
+              <div className="relative min-h-0 flex-1">
+                <AgentSessionPanel info={info} interactive />
+              </div>
             </div>
           </div>
         </div>
