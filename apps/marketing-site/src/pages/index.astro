@@ -18,13 +18,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <div class="animate-fade-up">
           <p class="section-label">iPhone Safari · on demand</p>
           <h1
-            class="mt-4 text-[1.5rem] font-semibold tracking-tight text-ink-primary sm:mt-5 sm:text-4xl md:text-5xl lg:text-6xl"
+            class="mt-4 text-[1.5rem] font-semibold tracking-tight text-tk-ink sm:mt-5 sm:text-4xl md:text-5xl lg:text-6xl"
             style="letter-spacing: -0.02em; line-height: 1.15;"
           >
             Indistinguishable iPhone Safari.
             <span class="block">Programmable from any language.</span>
           </h1>
-          <p class="mt-4 max-w-prose text-sm text-ink-secondary leading-relaxed sm:mt-5 sm:text-base md:text-lg">
+          <p class="mt-4 max-w-prose text-sm text-tk-ink-2 leading-relaxed sm:mt-5 sm:text-base md:text-lg">
             Run a real iPhone browser in the cloud that every website treats as
             a genuine iPhone — never a bot, never an emulator. Built for
             scraping, testing, and automation that has to pass as a real mobile
@@ -34,7 +34,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <a href="/pricing#free" class="btn-primary">Start free</a>
             <a href="/comparison" class="btn-secondary">Compare the alternatives</a>
           </div>
-          <p class="mt-3 text-[11px] text-ink-muted sm:mt-4 sm:text-xs">
+          <p class="mt-3 text-[11px] text-tk-ink-3 sm:mt-4 sm:text-xs">
             One profile · 20-minute sessions · no card required.
           </p>
         </div>
@@ -44,17 +44,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             <span class="pip"></span>
             <span class="pip"></span>
             <span class="pip"></span>
-            <span class="ml-3 truncate text-[11px] text-ink-muted sm:text-xs">driftstack-typescript-sdk</span>
+            <span class="ml-3 truncate text-[11px] text-tk-ink-3 sm:text-xs">driftstack-typescript-sdk</span>
             <button
               type="button"
               data-copy-target="hero-sdk-code"
-              class="ml-auto rounded border border-white/10 px-2 py-0.5 text-[10px] font-mono text-ink-muted transition hover:border-glow-red hover:text-glow-red"
+              class="ml-auto rounded border border-tk-border px-2 py-0.5 text-[10px] font-mono text-tk-ink-3 transition hover:border-tk-accent hover:text-tk-accent"
               aria-label="Copy code to clipboard"
             >
               <span data-copy-label>Copy</span>
             </button>
           </div>
-          <pre class="max-h-[220px] overflow-x-auto p-3 text-[9.5px] leading-relaxed text-ink-primary sm:max-h-none sm:p-5 sm:text-xs md:text-sm"><code id="hero-sdk-code">{`import { Driftstack } from '@driftstack/sdk';
+          <pre class="max-h-[220px] overflow-x-auto p-3 text-[9.5px] leading-relaxed sm:max-h-none sm:p-5 sm:text-xs md:text-sm"><code id="hero-sdk-code">{`import { Driftstack } from '@driftstack/sdk';
 
 const ds = new Driftstack({ apiKey: process.env.DRIFTSTACK_API_KEY });
 
@@ -73,7 +73,7 @@ try {
 }`}</code></pre>
           <!-- Horizontal-scroll affordance: fade on the right edge so
                readers know the code preview can be panned on mobile. -->
-          <div class="pointer-events-none absolute inset-y-12 right-0 w-8 bg-gradient-to-l from-surface-base/80 to-transparent sm:hidden"></div>
+          <div class="pointer-events-none absolute inset-y-12 right-0 w-8 bg-gradient-to-l from-black/70 to-transparent sm:hidden"></div>
         </div>
       </div>
     </div>
@@ -83,48 +83,48 @@ try {
       drive it" section. Four concrete numbers replace what would
       otherwise be more prose-heavy claims. Visual breathing room
       between two text-dense sections. */}
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-12 sm:py-16">
       <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <div class="flex items-start gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="5" y="2" width="14" height="20" rx="2" />
               <path d="M12 18h.01" />
             </svg>
           </div>
           <div>
-            <p class="text-2xl font-semibold text-ink-primary">
+            <p class="text-2xl font-semibold text-tk-ink">
               Real WebKit
             </p>
-            <p class="mt-1 text-xs text-ink-muted">The engine every iPhone ships</p>
+            <p class="mt-1 text-xs text-tk-ink-3">The engine every iPhone ships</p>
           </div>
         </div>
         <div class="flex items-start gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
           </div>
           <div>
-            <p class="text-2xl font-semibold text-ink-primary">
+            <p class="text-2xl font-semibold text-tk-ink">
               iOS 18.7 / 26.x
             </p>
-            <p class="mt-1 text-xs text-ink-muted">Safari versions Apple still ships</p>
+            <p class="mt-1 text-xs text-tk-ink-3">Safari versions Apple still ships</p>
           </div>
         </div>
         <div class="flex items-start gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="16 18 22 12 16 6" />
               <polyline points="8 6 2 12 8 18" />
             </svg>
           </div>
           <div>
-            <p class="text-2xl font-semibold text-ink-primary">
+            <p class="text-2xl font-semibold text-tk-ink">
               3 SDKs
             </p>
-            <p class="mt-1 text-xs text-ink-muted">TypeScript · Python · Go</p>
+            <p class="mt-1 text-xs text-tk-ink-3">TypeScript · Python · Go</p>
           </div>
         </div>
         {/* 2026-05-22 — replaced "EU-hosted" with a concrete proxy-
@@ -132,7 +132,7 @@ try {
             UDP/WebRTC/QUIC + OpenVPN/WireGuard support, not the
             data-center location. */}
         <div class="flex items-start gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M5 12h14M12 5l7 7-7 7" />
               <circle cx="5" cy="12" r="2" />
@@ -140,10 +140,10 @@ try {
             </svg>
           </div>
           <div>
-            <p class="text-2xl font-semibold text-ink-primary">
+            <p class="text-2xl font-semibold text-tk-ink">
               SOCKS5 + VPN
             </p>
-            <p class="mt-1 text-xs text-ink-muted">Configurable per profile</p>
+            <p class="mt-1 text-xs text-tk-ink-3">Configurable per profile</p>
           </div>
         </div>
       </div>
@@ -153,7 +153,7 @@ try {
   <!-- W456 — plain-language "How it works in 3 steps" explainer, placed early
        for non-technical visitors who don't scroll to the deeper technical
        sections. Mirrors the Use-cases 3-card grid; numbered step badges. -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <p class="section-label">How it works</p>
       <h2
@@ -164,32 +164,32 @@ try {
       </h2>
       <div class="mt-10 grid gap-6 md:grid-cols-3">
         <div class="card p-6">
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 font-mono text-base font-semibold text-glow-red ring-1 ring-glow-red/30">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-tk-accent/10 font-mono text-base font-semibold text-tk-accent ring-1 ring-tk-accent/30">
             1
           </div>
-          <h3 class="mt-4 text-lg font-semibold text-ink-primary">Pick an iPhone profile</h3>
-          <p class="mt-2 text-sm leading-relaxed text-ink-secondary">
+          <h3 class="mt-4 text-lg font-semibold text-tk-ink">Pick an iPhone profile</h3>
+          <p class="mt-2 text-sm leading-relaxed text-tk-ink-2">
             Start with the default iPhone, or create your own. Each profile is a
             persistent identity that remembers its logins, cookies, and history
             across every run.
           </p>
         </div>
         <div class="card p-6">
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 font-mono text-base font-semibold text-glow-red ring-1 ring-glow-red/30">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-tk-accent/10 font-mono text-base font-semibold text-tk-accent ring-1 ring-tk-accent/30">
             2
           </div>
-          <h3 class="mt-4 text-lg font-semibold text-ink-primary">Start a session</h3>
-          <p class="mt-2 text-sm leading-relaxed text-ink-secondary">
+          <h3 class="mt-4 text-lg font-semibold text-tk-ink">Start a session</h3>
+          <p class="mt-2 text-sm leading-relaxed text-tk-ink-2">
             Spin up a real iPhone Safari browser in the cloud — one click in the
             desktop app, or one API call. No hardware to buy, nothing to install.
           </p>
         </div>
         <div class="card p-6">
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 font-mono text-base font-semibold text-glow-red ring-1 ring-glow-red/30">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-tk-accent/10 font-mono text-base font-semibold text-tk-accent ring-1 ring-tk-accent/30">
             3
           </div>
-          <h3 class="mt-4 text-lg font-semibold text-ink-primary">Drive it your way</h3>
-          <p class="mt-2 text-sm leading-relaxed text-ink-secondary">
+          <h3 class="mt-4 text-lg font-semibold text-tk-ink">Drive it your way</h3>
+          <p class="mt-2 text-sm leading-relaxed text-tk-ink-2">
             Click around yourself, or automate it from TypeScript, Python, or Go.
             Every website it visits sees a genuine iPhone — never a bot.
           </p>
@@ -209,7 +209,7 @@ try {
        arrive). Mobile: md:grid-cols-[1fr_1fr] collapses to single
        column, chat on top + preview below; preview min-height
        stays 280px so the preview pane doesn't shrink to a sliver. -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <p class="section-label">Two ways to drive it</p>
       <h2
@@ -220,7 +220,7 @@ try {
           Code it precisely, or just describe what you want.
         
       </h2>
-      <p class="mt-4 max-w-prose text-sm text-ink-secondary leading-relaxed sm:mt-5 sm:text-base">
+      <p class="mt-4 max-w-prose text-sm text-tk-ink-2 leading-relaxed sm:mt-5 sm:text-base">
         Engineers drive sessions directly with the SDK (see the hero
         example). Everyone else can open the dashboard, type the task
         in plain English, and watch the agent execute it live — with
@@ -230,48 +230,48 @@ try {
       <div class="mt-10 grid gap-6 md:grid-cols-2 md:items-stretch">
         <!-- Chat-panel mockup. Renders as a faux conversation between
              the customer and the AI agent. Pure CSS; no JS needed. -->
-        <div class="overflow-hidden rounded-lg border border-white/10 bg-surface-raised">
-          <div class="flex items-center gap-2 border-b border-white/10 bg-white/[0.02] px-5 py-3 text-xs text-ink-muted">
-            <span class="size-2 rounded-full bg-glow-red"></span>
+        <div class="overflow-hidden rounded-lg border border-tk-border bg-tk-surface">
+          <div class="flex items-center gap-2 border-b border-tk-border bg-tk-hover/60 px-5 py-3 text-xs text-tk-ink-3">
+            <span class="size-2 rounded-full bg-tk-accent"></span>
             <span class="font-mono">AI agent · iPhone 17</span>
           </div>
           <div class="space-y-4 p-5 text-sm">
             <div class="flex gap-3">
               <span
-                class="flex size-7 shrink-0 items-center justify-center rounded-full bg-glow-red/20 text-xs"
+                class="flex size-7 shrink-0 items-center justify-center rounded-full bg-tk-accent/20 text-xs"
                 >you</span
               >
-              <p class="rounded-lg bg-white/[0.03] px-4 py-3 text-ink-primary">
+              <p class="rounded-lg bg-tk-hover px-4 py-3 text-tk-ink">
                 Log in with the test account, open the revenue
                 dashboard, and screenshot the chart for the last 30 days.
               </p>
             </div>
             <div class="flex gap-3">
               <span
-                class="flex size-7 shrink-0 items-center justify-center rounded-full bg-ink-primary/10 text-xs"
+                class="flex size-7 shrink-0 items-center justify-center rounded-full bg-tk-ink/10 text-xs"
                 >AI</span
               >
-              <div class="space-y-2 text-ink-secondary">
-                <p class="rounded-lg bg-white/[0.02] px-4 py-3">
+              <div class="space-y-2 text-tk-ink-2">
+                <p class="rounded-lg bg-tk-hover/60 px-4 py-3">
                   Planning 4 steps:
-                  <span class="font-mono text-glow-red">navigate</span>,
-                  <span class="font-mono text-glow-red">fillForm</span>,
-                  <span class="font-mono text-glow-red">click</span>,
-                  <span class="font-mono text-glow-red">screenshot</span>.
+                  <span class="font-mono text-tk-accent">navigate</span>,
+                  <span class="font-mono text-tk-accent">fillForm</span>,
+                  <span class="font-mono text-tk-accent">click</span>,
+                  <span class="font-mono text-tk-accent">screenshot</span>.
                 </p>
-                <p class="rounded-lg bg-white/[0.02] px-4 py-3">
+                <p class="rounded-lg bg-tk-hover/60 px-4 py-3">
                   Logged in. Navigating to /dashboard/revenue.
                 </p>
-                <p class="rounded-lg bg-white/[0.02] px-4 py-3">
+                <p class="rounded-lg bg-tk-hover/60 px-4 py-3">
                   Screenshot captured ·
-                  <span class="text-glow-red underline underline-offset-4">view</span>
+                  <span class="text-tk-accent underline underline-offset-4">view</span>
                 </p>
               </div>
             </div>
           </div>
-          <div class="flex items-center justify-between border-t border-white/10 bg-white/[0.02] px-5 py-3 text-xs">
-            <span class="text-ink-muted">A few seconds · 4 steps planned</span>
-            <span class="text-glow-red">Export as SDK code →</span>
+          <div class="flex items-center justify-between border-t border-tk-border bg-tk-hover/60 px-5 py-3 text-xs">
+            <span class="text-tk-ink-3">A few seconds · 4 steps planned</span>
+            <span class="text-tk-accent">Export as SDK code →</span>
           </div>
         </div>
 
@@ -279,21 +279,21 @@ try {
              LiveKit-streamed iPhone-frame mockup; the static
              monospace label avoids implying a live stream exists
              at this URL today. -->
-        <div class="flex flex-col overflow-hidden rounded-lg border border-white/10 bg-surface-raised">
-          <div class="flex items-center gap-2 border-b border-white/10 bg-white/[0.02] px-5 py-3 text-xs text-ink-muted">
+        <div class="flex flex-col overflow-hidden rounded-lg border border-tk-border bg-tk-surface">
+          <div class="flex items-center gap-2 border-b border-tk-border bg-tk-hover/60 px-5 py-3 text-xs text-tk-ink-3">
             <span class="size-2 rounded-full bg-green-500"></span>
             <span class="font-mono">Live preview — &lt;livekit-room&gt;</span>
           </div>
           {/* 2026-05-23 — scan-line animation behind the live-preview
               mockup so the "live" indicator reads as actually-alive.
               Same shape as the workbench preview placeholder. */}
-          <div class="relative flex min-h-[280px] flex-1 items-center justify-center bg-black/40 overflow-hidden">
+          <div class="relative flex min-h-[280px] flex-1 items-center justify-center bg-black/60 overflow-hidden">
             <div
               aria-hidden="true"
               class="pointer-events-none absolute inset-0 overflow-hidden"
             >
               <div
-                class="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-glow-red/40 to-transparent"
+                class="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-tk-accent/40 to-transparent"
                 style="animation: hero-mockup-scan 6s linear infinite;"
               ></div>
             </div>
@@ -308,20 +308,20 @@ try {
                 [data-mockup-scan] { animation: none !important; display: none; }
               }
             </style>
-            <span class="font-mono text-xs text-ink-muted relative">
+            <span class="font-mono text-xs text-tk-ink-3 relative">
               [ iPhone Safari · live preview ]
             </span>
           </div>
-          <div class="border-t border-white/10 bg-white/[0.02] px-5 py-3 text-xs text-ink-muted">
+          <div class="border-t border-tk-border bg-tk-hover/60 px-5 py-3 text-xs text-tk-ink-3">
             Watch in real time · 95ms median latency
           </div>
         </div>
       </div>
 
-      <p class="mt-6 max-w-prose text-sm text-ink-muted">
+      <p class="mt-6 max-w-prose text-sm text-tk-ink-3">
         The chat agent is the fast path for one-off tasks and
         explorations. Click
-        <strong class="text-ink-primary">Export as SDK code</strong> to
+        <strong class="text-tk-ink">Export as SDK code</strong> to
         lift the decomposed intent log into a reusable script — same
         engine, same fingerprint, no agent overhead on repeat runs.
       </p>
@@ -336,9 +336,9 @@ try {
        hero is for differentiators a competitor can't claim. The
        prior aspirational-launch eyebrow was stripped per Issue 5
        (launch-only framing — no "Pre-launch" labelling). -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-10">
-      <p class="text-center font-mono text-xs uppercase tracking-[0.2em] text-ink-muted">
+      <p class="text-center font-mono text-xs uppercase tracking-[0.2em] text-tk-ink-3">
         What sets us apart
       </p>
       {/* 2026-05-22 — icon glyphs added to each differentiator chip.
@@ -346,51 +346,51 @@ try {
           claims; same visual family as the use-case cards below. */}
       <div class="mt-6 grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4">
         <div class="flex flex-col items-center gap-2 text-center">
-          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="9" />
               <path d="M12 3a15.3 15.3 0 0 1 4 9 15.3 15.3 0 0 1-4 9 15.3 15.3 0 0 1-4-9 15.3 15.3 0 0 1 4-9z" />
             </svg>
           </div>
-          <span class="text-base font-semibold text-ink-primary">Population-matched</span>
-          <span class="text-xs text-ink-muted">Canvas + WebGL hashes match the real-iPhone population — not unique-per-session like every other API</span>
+          <span class="text-base font-semibold text-tk-ink">Population-matched</span>
+          <span class="text-xs text-tk-ink-3">Canvas + WebGL hashes match the real-iPhone population — not unique-per-session like every other API</span>
         </div>
         <div class="flex flex-col items-center gap-2 text-center">
-          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="11" cy="11" r="8" />
               <path d="M21 21l-4.35-4.35M9 9l4 4M13 9l-4 4" />
             </svg>
           </div>
-          <span class="text-base font-semibold text-ink-primary">Zero detection surface</span>
-          <span class="text-xs text-ink-muted">No runtime JS patching, no stealth bundle for fingerprinters to spot</span>
+          <span class="text-base font-semibold text-tk-ink">Zero detection surface</span>
+          <span class="text-xs text-tk-ink-3">No runtime JS patching, no stealth bundle for fingerprinters to spot</span>
         </div>
         <div class="flex flex-col items-center gap-2 text-center">
-          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="5" y="2" width="14" height="20" rx="2" />
               <path d="M12 18h.01" />
             </svg>
           </div>
-          <span class="text-base font-semibold text-ink-primary">Apple's WebKit, not Chromium</span>
-          <span class="text-xs text-ink-muted">Built from Apple's WebKit source — same engine your iOS users actually run</span>
+          <span class="text-base font-semibold text-tk-ink">Apple's WebKit, not Chromium</span>
+          <span class="text-xs text-tk-ink-3">Built from Apple's WebKit source — same engine your iOS users actually run</span>
         </div>
         <div class="flex flex-col items-center gap-2 text-center">
-          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="16 18 22 12 16 6" />
               <polyline points="8 6 2 12 8 18" />
             </svg>
           </div>
-          <span class="text-base font-semibold text-ink-primary">API · SDK · GUI</span>
-          <span class="text-xs text-ink-muted">TypeScript, Python, Go, or the dashboard — same engine, three access paths</span>
+          <span class="text-base font-semibold text-tk-ink">API · SDK · GUI</span>
+          <span class="text-xs text-tk-ink-3">TypeScript, Python, Go, or the dashboard — same engine, three access paths</span>
         </div>
       </div>
     </div>
   </section>
 
   <!-- Use cases (new — production polish: social proof + concrete uses) -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <p class="section-label">Use cases</p>
       <h2
@@ -405,15 +405,15 @@ try {
           used throughout the dashboard. */}
       <div class="mt-10 grid gap-6 md:grid-cols-3">
         <div class="card p-6">
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M9 11l3 3 8-8" />
               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
             </svg>
           </div>
-          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">QA + testing</p>
-          <h3 class="mt-3 text-lg font-semibold text-ink-primary">Mobile-Safari coverage</h3>
-          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">QA + testing</p>
+          <h3 class="mt-3 text-lg font-semibold text-tk-ink">Mobile-Safari coverage</h3>
+          <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
             Run end-to-end tests against the exact engine your iOS
             users run. Same rendering, same JavaScript timing, same
             quirks — so the bug you reproduce in CI is the same bug
@@ -421,16 +421,16 @@ try {
           </p>
         </div>
         <div class="card p-6">
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <ellipse cx="12" cy="5" rx="9" ry="3" />
               <path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5" />
               <path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6" />
             </svg>
           </div>
-          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">Data collection</p>
-          <h3 class="mt-3 text-lg font-semibold text-ink-primary">Mobile-first scraping</h3>
-          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">Data collection</p>
+          <h3 class="mt-3 text-lg font-semibold text-tk-ink">Mobile-first scraping</h3>
+          <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
             Many sites serve different content to mobile Safari than to
             desktop Chrome. With Driftstack, your scraper sees what an
             iPhone visitor would see — no behind-the-scenes redirects to
@@ -438,16 +438,16 @@ try {
           </p>
         </div>
         <div class="card p-6">
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="8.5" cy="7" r="4" />
               <path d="M20 8v6M23 11h-6" />
             </svg>
           </div>
-          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">Account workflows</p>
-          <h3 class="mt-3 text-lg font-semibold text-ink-primary">Multi-account operations</h3>
-          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">Account workflows</p>
+          <h3 class="mt-3 text-lg font-semibold text-tk-ink">Multi-account operations</h3>
+          <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
             Keep separate identities on services that lock down by device
             fingerprint. Persistent profiles let each account look like
             its own physical phone, every session, every time.
@@ -462,18 +462,18 @@ try {
       OpenVPN/WireGuard per profile — surface it on the homepage
       instead of burying it in /docs/egress. Concrete capability
       claims that competitors can't match. */}
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <p class="section-label">Egress</p>
       <h2
-        class="mt-6 max-w-3xl text-2xl font-semibold tracking-tight text-ink-primary sm:text-3xl md:text-4xl"
+        class="mt-6 max-w-3xl text-2xl font-semibold tracking-tight text-tk-ink sm:text-3xl md:text-4xl"
         style="letter-spacing: -0.02em;"
       >
         
           Route every byte the way you need.
         
       </h2>
-      <p class="mt-4 max-w-prose text-sm text-ink-secondary leading-relaxed sm:text-base">
+      <p class="mt-4 max-w-prose text-sm text-tk-ink-2 leading-relaxed sm:text-base">
         Full proxy + VPN tunnelling per profile — not just HTTP. UDP
         flows, WebRTC datachannels, and QUIC stay on your egress
         path so detection systems see one consistent network identity
@@ -482,15 +482,15 @@ try {
 
       <div class="mt-10 grid gap-6 md:grid-cols-3">
         <div class="card p-6">
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="10" />
               <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
             </svg>
           </div>
-          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">SOCKS5</p>
-          <h3 class="mt-3 text-lg font-semibold text-ink-primary">UDP + WebRTC + QUIC</h3>
-          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">SOCKS5</p>
+          <h3 class="mt-3 text-lg font-semibold text-tk-ink">UDP + WebRTC + QUIC</h3>
+          <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
             Full SOCKS5 UDP-ASSOCIATE so WebRTC media + QUIC sessions
             stream over your proxy, not a leaky direct path. The harness
             reports egress capabilities live so you know when a proxy
@@ -498,14 +498,14 @@ try {
           </p>
         </div>
         <div class="card p-6">
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 2L4 5v6c0 5.5 3.8 10.7 8 11.8 4.2-1.1 8-6.3 8-11.8V5l-8-3z" />
             </svg>
           </div>
-          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">OpenVPN</p>
-          <h3 class="mt-3 text-lg font-semibold text-ink-primary">.ovpn per profile</h3>
-          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">OpenVPN</p>
+          <h3 class="mt-3 text-lg font-semibold text-tk-ink">.ovpn per profile</h3>
+          <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
             Upload a standard OpenVPN config to a profile slot and every
             session bound to that profile dials the tunnel before
             launching the browser. DNS leaks blocked by default; no
@@ -513,14 +513,14 @@ try {
           </p>
         </div>
         <div class="card p-6">
-          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
             </svg>
           </div>
-          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-glow-red">WireGuard</p>
-          <h3 class="mt-3 text-lg font-semibold text-ink-primary">.conf per profile</h3>
-          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+          <p class="mt-4 font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">WireGuard</p>
+          <h3 class="mt-3 text-lg font-semibold text-tk-ink">.conf per profile</h3>
+          <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
             Paste a WireGuard interface block + peer config; sessions
             using the profile attach to the tunnel transparently. Modern
             kernel-level performance — single-digit-ms RTT overhead even
@@ -537,7 +537,7 @@ try {
        the 3 SDKs are first-party; the orchestration tools (Playwright,
        n8n, Make, Zapier) work because we expose a plain HTTPS API,
        not because we ship integration plugins. -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="grid gap-10 md:grid-cols-2 md:items-center">
         <div>
@@ -548,43 +548,43 @@ try {
           >
         Three SDKs. One HTTPS API. Slots into anything.
       </h2>
-          <p class="mt-5 max-w-prose text-base text-ink-secondary leading-relaxed">
+          <p class="mt-5 max-w-prose text-base text-tk-ink-2 leading-relaxed">
             First-party SDKs in TypeScript, Python, and Go. Beyond that, any
             HTTP-aware tool can drive Driftstack — Playwright tests, n8n
             workflows, Make.com scenarios, Zapier triggers, plain
-            <code class="font-mono text-glow-red">curl</code> from a cron job.
+            <code class="font-mono text-tk-accent">curl</code> from a cron job.
           </p>
         </div>
         <div class="grid grid-cols-3 gap-3 text-center md:grid-cols-3">
           <div class="card p-4">
-            <p class="font-mono text-xs uppercase tracking-[0.15em] text-glow-red">SDK</p>
-            <p class="mt-2 text-sm font-semibold text-ink-primary">TypeScript</p>
-            <p class="mt-1 text-xs text-ink-muted">@driftstack/sdk</p>
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-tk-accent">SDK</p>
+            <p class="mt-2 text-sm font-semibold text-tk-ink">TypeScript</p>
+            <p class="mt-1 text-xs text-tk-ink-3">@driftstack/sdk</p>
           </div>
           <div class="card p-4">
-            <p class="font-mono text-xs uppercase tracking-[0.15em] text-glow-red">SDK</p>
-            <p class="mt-2 text-sm font-semibold text-ink-primary">Python</p>
-            <p class="mt-1 text-xs text-ink-muted">driftstack-sdk</p>
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-tk-accent">SDK</p>
+            <p class="mt-2 text-sm font-semibold text-tk-ink">Python</p>
+            <p class="mt-1 text-xs text-tk-ink-3">driftstack-sdk</p>
           </div>
           <div class="card p-4">
-            <p class="font-mono text-xs uppercase tracking-[0.15em] text-glow-red">SDK</p>
-            <p class="mt-2 text-sm font-semibold text-ink-primary">Go</p>
-            <p class="mt-1 text-xs text-ink-muted">driftstack-go</p>
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-tk-accent">SDK</p>
+            <p class="mt-2 text-sm font-semibold text-tk-ink">Go</p>
+            <p class="mt-1 text-xs text-tk-ink-3">driftstack-go</p>
           </div>
           <div class="card p-4">
-            <p class="font-mono text-xs uppercase tracking-[0.15em] text-ink-muted">via API</p>
-            <p class="mt-2 text-sm font-semibold text-ink-primary">Playwright</p>
-            <p class="mt-1 text-xs text-ink-muted">drives sessions</p>
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-tk-ink-3">via API</p>
+            <p class="mt-2 text-sm font-semibold text-tk-ink">Playwright</p>
+            <p class="mt-1 text-xs text-tk-ink-3">drives sessions</p>
           </div>
           <div class="card p-4">
-            <p class="font-mono text-xs uppercase tracking-[0.15em] text-ink-muted">via API</p>
-            <p class="mt-2 text-sm font-semibold text-ink-primary">n8n · Make</p>
-            <p class="mt-1 text-xs text-ink-muted">workflow nodes</p>
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-tk-ink-3">via API</p>
+            <p class="mt-2 text-sm font-semibold text-tk-ink">n8n · Make</p>
+            <p class="mt-1 text-xs text-tk-ink-3">workflow nodes</p>
           </div>
           <div class="card p-4">
-            <p class="font-mono text-xs uppercase tracking-[0.15em] text-ink-muted">via API</p>
-            <p class="mt-2 text-sm font-semibold text-ink-primary">curl · cron</p>
-            <p class="mt-1 text-xs text-ink-muted">plain HTTPS</p>
+            <p class="font-mono text-xs uppercase tracking-[0.15em] text-tk-ink-3">via API</p>
+            <p class="mt-2 text-sm font-semibold text-tk-ink">curl · cron</p>
+            <p class="mt-1 text-xs text-tk-ink-3">plain HTTPS</p>
           </div>
         </div>
       </div>
@@ -592,18 +592,18 @@ try {
   </section>
 
   <!-- The detection problem (renamed from "Cumulative rig" — too jargony) -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-24">
       <p class="section-label">Why Driftstack works</p>
       <p
-        class="mt-5 text-3xl font-semibold tracking-tight text-ink-primary sm:mt-6 sm:text-5xl md:text-7xl lg:text-8xl"
+        class="mt-5 text-3xl font-semibold tracking-tight text-tk-ink sm:mt-6 sm:text-5xl md:text-7xl lg:text-8xl"
         style="letter-spacing: -0.04em; line-height: 1.1;"
       >
         
           One iPhone among millions.
         
       </p>
-      <p class="mt-6 max-w-prose text-sm text-ink-secondary leading-relaxed sm:mt-8 sm:text-base md:text-lg">
+      <p class="mt-6 max-w-prose text-sm text-tk-ink-2 leading-relaxed sm:mt-8 sm:text-base md:text-lg">
         Detection systems read hundreds of small signals — screen size,
         font rendering, GPU details, JavaScript timing — to decide what
         kind of device is visiting. Driftstack matches every signal
@@ -613,7 +613,7 @@ try {
         groups visitors by hash, your session lands in the iPhone bucket
         with everyone else.
       </p>
-      <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
+      <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
         We match the iPhone families your users are actually on — iPhone
         15 Pro, iPhone 16 Pro, and the current iPhone 17 lineup, across
         the iOS versions Apple still ships Safari updates for (iOS 18.7
@@ -622,9 +622,9 @@ try {
         a launch-blocking bug — and we fix the engine, not a JavaScript
         wrapper around it.
       </p>
-      <p class="mt-3 max-w-prose text-sm text-ink-muted">
+      <p class="mt-3 max-w-prose text-sm text-tk-ink-3">
         Full signal-by-signal methodology at
-        <a href="/trust/cumulative-rig" class="font-mono text-glow-red underline underline-offset-4 hover:text-glow-red-soft">/trust/cumulative-rig</a>.
+        <a href="/trust/cumulative-rig" class="font-mono text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft">/trust/cumulative-rig</a>.
       </p>
     </div>
   </section>
@@ -635,7 +635,7 @@ try {
        6-row table is a stand-in for the full /trust/cumulative-rig
        signal table; concrete numbers make the claim visually tangible
        instead of asking the prospect to trust prose. -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-20">
       <div class="grid gap-10 md:grid-cols-2 md:items-start">
         <div>
@@ -646,23 +646,23 @@ try {
           >
         Same signals as a physical iPhone. Not "close enough".
       </h2>
-          <p class="mt-5 max-w-prose text-base text-ink-secondary leading-relaxed">
+          <p class="mt-5 max-w-prose text-base text-tk-ink-2 leading-relaxed">
             Detection systems read hundreds of small signals. A typical
             stealth browser fakes the user-agent string but leaks the
             underlying engine in the canvas, WebGL, or audio fingerprint.
             Driftstack runs Apple's WebKit, so every signal returns the
             exact iPhone value — not approximate.
           </p>
-          <p class="mt-4 text-sm text-ink-muted">
+          <p class="mt-4 text-sm text-tk-ink-3">
             A 7-signal preview. Full signal-by-signal table at
             <a
               href="/trust/cumulative-rig"
-              class="font-mono text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+              class="font-mono text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft"
               >/trust/cumulative-rig</a
             > — see
             <a
               href="/trust/security-overview"
-              class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+              class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft"
               >/trust/security-overview</a
             >
             for what's live today.
@@ -670,43 +670,43 @@ try {
         </div>
         <div class="card overflow-hidden">
           <div class="grid grid-cols-[1fr_auto_auto] items-center gap-x-6 gap-y-3 px-6 py-5 text-sm">
-            <span class="font-mono text-xs uppercase tracking-[0.15em] text-ink-muted">
+            <span class="font-mono text-xs uppercase tracking-[0.15em] text-tk-ink-3">
               Signal
             </span>
-            <span class="text-center font-mono text-xs uppercase tracking-[0.15em] text-ink-muted">
+            <span class="text-center font-mono text-xs uppercase tracking-[0.15em] text-tk-ink-3">
               Stealth Chromium
             </span>
-            <span class="text-center font-mono text-xs uppercase tracking-[0.15em] text-glow-red">
+            <span class="text-center font-mono text-xs uppercase tracking-[0.15em] text-tk-accent">
               Driftstack
             </span>
 
-            <span class="text-ink-primary">User-agent</span>
-            <span class="text-center text-ink-muted">spoofed</span>
-            <span class="text-center font-mono text-glow-red">real</span>
+            <span class="text-tk-ink">User-agent</span>
+            <span class="text-center text-tk-ink-3">spoofed</span>
+            <span class="text-center font-mono text-tk-accent">real</span>
 
-            <span class="text-ink-primary">Canvas hash</span>
-            <span class="text-center text-ink-muted">leaks Chromium</span>
-            <span class="text-center font-mono text-glow-red">iPhone</span>
+            <span class="text-tk-ink">Canvas hash</span>
+            <span class="text-center text-tk-ink-3">leaks Chromium</span>
+            <span class="text-center font-mono text-tk-accent">iPhone</span>
 
-            <span class="text-ink-primary">WebGL renderer</span>
-            <span class="text-center text-ink-muted">leaks Chromium</span>
-            <span class="text-center font-mono text-glow-red">Apple GPU</span>
+            <span class="text-tk-ink">WebGL renderer</span>
+            <span class="text-center text-tk-ink-3">leaks Chromium</span>
+            <span class="text-center font-mono text-tk-accent">Apple GPU</span>
 
-            <span class="text-ink-primary">AudioContext</span>
-            <span class="text-center text-ink-muted">leaks Chromium</span>
-            <span class="text-center font-mono text-glow-red">iOS</span>
+            <span class="text-tk-ink">AudioContext</span>
+            <span class="text-center text-tk-ink-3">leaks Chromium</span>
+            <span class="text-center font-mono text-tk-accent">iOS</span>
 
-            <span class="text-ink-primary">Core Text metrics</span>
-            <span class="text-center text-ink-muted">leaks system</span>
-            <span class="text-center font-mono text-glow-red">iOS</span>
+            <span class="text-tk-ink">Core Text metrics</span>
+            <span class="text-center text-tk-ink-3">leaks system</span>
+            <span class="text-center font-mono text-tk-accent">iOS</span>
 
-            <span class="text-ink-primary">JS engine timing</span>
-            <span class="text-center text-ink-muted">V8 fingerprint</span>
-            <span class="text-center font-mono text-glow-red">JSCore</span>
+            <span class="text-tk-ink">JS engine timing</span>
+            <span class="text-center text-tk-ink-3">V8 fingerprint</span>
+            <span class="text-center font-mono text-tk-accent">JSCore</span>
 
-            <span class="text-ink-primary">Hash uniqueness across sessions</span>
-            <span class="text-center text-ink-muted">100% unique</span>
-            <span class="text-center font-mono text-glow-red">population-stable</span>
+            <span class="text-tk-ink">Hash uniqueness across sessions</span>
+            <span class="text-center text-tk-ink-3">100% unique</span>
+            <span class="text-center font-mono text-tk-accent">population-stable</span>
           </div>
         </div>
       </div>
@@ -714,7 +714,7 @@ try {
   </section>
 
   <!-- Stack — full-width statement -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-24">
       <p class="section-label">How it's built</p>
       <h2
@@ -725,7 +725,7 @@ try {
           Apple's engine. Not a Chromium copy.
         
       </h2>
-      <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
+      <p class="mt-6 max-w-prose text-lg text-tk-ink-2 leading-relaxed">
         Every stealth tool you've used before is a Chromium fork with a
         fake user-agent, or Playwright with a patch plugin layered on
         top. Driftstack runs Apple's WebKit source code itself — the
@@ -737,7 +737,7 @@ try {
   </section>
 
   <!-- Metering — single dense paragraph + data point -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="grid gap-12 md:grid-cols-[1fr_auto] md:items-end">
         <div>
@@ -748,8 +748,8 @@ try {
           >
         One metric. Concurrent sessions. That's it.
       </h2>
-          <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed">
-            <strong class="text-ink-primary">Concurrent</strong> means
+          <p class="mt-6 max-w-prose text-base text-tk-ink-2 leading-relaxed">
+            <strong class="text-tk-ink">Concurrent</strong> means
             sessions running at the same time — think browser tabs. Pick a
             plan, get a concurrent cap, run anything inside it. No
             per-call markup. No per-element fees. No hourly metering that
@@ -758,23 +758,23 @@ try {
           </p>
         </div>
         <div class="accent-rule flex flex-col gap-1">
-          <span class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">
+          <span class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">
             Concurrent cap
           </span>
           <span
-            class="font-mono text-5xl font-semibold text-ink-primary"
+            class="font-mono text-5xl font-semibold text-tk-ink"
             style="letter-spacing: 0.02em;"
           >
             =
           </span>
-          <span class="text-sm text-ink-secondary">the only thing you pay for</span>
+          <span class="text-sm text-tk-ink-2">the only thing you pay for</span>
         </div>
       </div>
     </div>
   </section>
 
   <!-- Compliance — 60/40 split with code-style egress block -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="grid gap-12 md:grid-cols-5 md:items-start">
         <div class="md:col-span-3">
@@ -785,19 +785,19 @@ try {
           >
         EU-only by default.
       </h2>
-          <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed">
+          <p class="mt-6 max-w-prose text-base text-tk-ink-2 leading-relaxed">
             Your data stays in the EU. We don't log what your sessions
             visit or do — only the operational metadata we need to bill
             (session duration, archetype, cap usage). Full data
             residency + sub-processor breakdown at
-            <a href="/trust/sub-processors" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+            <a href="/trust/sub-processors" class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft"
               >/trust/sub-processors</a
             >.
           </p>
-          <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
+          <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
             Customer-configurable egress (SOCKS5 / OpenVPN / WireGuard)
             — see
-            <a href="/trust/security-overview" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+            <a href="/trust/security-overview" class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft"
               >/trust/security-overview</a
             >
             for the current implementation state and the security
@@ -806,13 +806,13 @@ try {
         </div>
         <div class="md:col-span-2">
           <div class="code-preview p-5">
-            <span class="text-ink-muted"># Driftstack control plane</span><br />
+            <span class="text-tk-ink-3"># Driftstack control plane</span><br />
             <span class="arrow-bullet">→</span> stores session metadata only<br />
             <span class="arrow-bullet">→</span> never stores response bodies<br />
             <span class="arrow-bullet">→</span> EU-jurisdiction object storage<br />
             <br />
-            <span class="text-ink-muted"># Roadmap — customer-configurable egress</span><br />
-            <span class="text-ink-muted">→ SOCKS5 / OpenVPN / WireGuard (not shipped)</span>
+            <span class="text-tk-ink-3"># Roadmap — customer-configurable egress</span><br />
+            <span class="text-tk-ink-3">→ SOCKS5 / OpenVPN / WireGuard (not shipped)</span>
           </div>
         </div>
       </div>
@@ -820,7 +820,7 @@ try {
   </section>
 
   <!-- Built for two audiences -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="mb-10">
         <p class="section-label">Two ways to use it</p>
@@ -831,16 +831,16 @@ try {
 
       <div class="grid gap-6 md:grid-cols-2">
         <div class="card p-8">
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">Manual</p>
-          <h3 class="mt-3 text-2xl font-semibold text-ink-primary">Desktop app</h3>
-          <p class="mt-3 text-ink-secondary leading-relaxed">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">Manual</p>
+          <h3 class="mt-3 text-2xl font-semibold text-tk-ink">Desktop app</h3>
+          <p class="mt-3 text-tk-ink-2 leading-relaxed">
             A native desktop client that lets you keep 10 to 200 logged-in
             profiles open at once and switch between them like browser
             tabs. Same WebKit, same fingerprint, no code required. Built
             for account teams and operators who keep multiple sign-ins
             alive across the workday.
           </p>
-          <ul class="mt-5 space-y-2.5 text-sm text-ink-secondary">
+          <ul class="mt-5 space-y-2.5 text-sm text-tk-ink-2">
             <li class="flex gap-2.5">
               <span class="arrow-bullet">→</span>
               <span>Personal $79/mo · Team $249/mo · Agency $699/mo</span>
@@ -858,15 +858,15 @@ try {
         </div>
 
         <div class="card p-8">
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">API</p>
-          <h3 class="mt-3 text-2xl font-semibold text-ink-primary">SDK + HTTPS</h3>
-          <p class="mt-3 text-ink-secondary leading-relaxed">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">API</p>
+          <h3 class="mt-3 text-2xl font-semibold text-tk-ink">SDK + HTTPS</h3>
+          <p class="mt-3 text-tk-ink-2 leading-relaxed">
             First-party SDKs in TypeScript, Python, and Go — plus a
             plain HTTPS API any HTTP client can drive. Built for QA
             pipelines, data collection, integration tests, and
             production automation that needs the real iPhone fingerprint.
           </p>
-          <ul class="mt-5 space-y-2.5 text-sm text-ink-secondary">
+          <ul class="mt-5 space-y-2.5 text-sm text-tk-ink-2">
             <li class="flex gap-2.5">
               <span class="arrow-bullet">→</span>
               <span>API Starter $149/mo · Builder $499/mo · Scale $1,499/mo</span>
@@ -887,7 +887,7 @@ try {
         </div>
       </div>
 
-      <p class="mt-8 max-w-prose text-sm text-ink-muted">
+      <p class="mt-8 max-w-prose text-sm text-tk-ink-3">
         Not sure which fits? Both share the same engine, the same device
         archetypes, the same free tier. Start free, see which workflow
         matches yours, then subscribe.
@@ -896,7 +896,7 @@ try {
   </section>
 
   <!-- Pricing teaser -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="flex flex-col items-start gap-4 md:flex-row md:items-end md:justify-between">
         <div>
@@ -904,7 +904,7 @@ try {
           <h2 class="mt-6 text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl" style="letter-spacing: -0.02em;">
         Two ladders. A free tier to start.
       </h2>
-          <p class="mt-4 max-w-prose text-ink-secondary leading-relaxed">
+          <p class="mt-4 max-w-prose text-tk-ink-2 leading-relaxed">
             Start free — one profile, 20-minute sessions, no card
             required. Then choose: Manual from $79/mo if you're driving by
             hand in the desktop app, or API from $149/mo if your code is
@@ -917,7 +917,7 @@ try {
   </section>
 
   <!-- Self-hosted teaser -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-24">
       <div class="grid gap-10 md:grid-cols-2 md:items-center">
         <div>
@@ -925,7 +925,7 @@ try {
           <h2 class="mt-6 text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl" style="letter-spacing: -0.02em;">
         Run Driftstack on your own infrastructure.
       </h2>
-          <p class="mt-4 max-w-prose text-ink-secondary leading-relaxed">
+          <p class="mt-4 max-w-prose text-tk-ink-2 leading-relaxed">
             For privacy, sovereignty, or sustained high-volume use. We help
             you pick the right hardware, deploy the control plane, and
             operate the fleet. Three packages, annual contracts, hands-on
@@ -934,8 +934,8 @@ try {
           <a href="/self-hosted" class="btn-secondary mt-7 inline-flex">See self-hosted →</a>
         </div>
         <div class="card p-7">
-          <h3 class="font-medium text-ink-primary">When self-hosted makes sense</h3>
-          <ul class="mt-5 space-y-3.5 text-sm text-ink-secondary">
+          <h3 class="font-medium text-tk-ink">When self-hosted makes sense</h3>
+          <ul class="mt-5 space-y-3.5 text-sm text-tk-ink-2">
             <li class="flex gap-3">
               <span class="arrow-bullet">→</span>
               <span
@@ -970,7 +970,7 @@ try {
        who builds Driftstack and how we work with early customers"
        instead of fake testimonials. Sets the tone outseta wins on:
        real people, real photos, real specifics. -->
-  <section class="relative border-t border-white/10">
+  <section class="relative border-t border-tk-border">
     <div class="mx-auto max-w-6xl px-6 py-24">
       <p class="section-label">Who builds it</p>
       <h2
@@ -979,7 +979,7 @@ try {
       >
         Built by engineers, not a growth team.
       </h2>
-      <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
+      <p class="mt-6 max-w-prose text-lg text-tk-ink-2 leading-relaxed">
         Driftstack is built by the people who write the WebKit patches —
         no SDR machine, no upsell ladder, no roadmap chosen by investors.
         Customer feedback goes straight to the engineers shipping the
@@ -987,45 +987,45 @@ try {
       </p>
       <div class="mt-12 grid gap-6 md:grid-cols-3">
         <div class="card p-6">
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">
             Design partner
           </p>
-          <h3 class="mt-3 text-base font-semibold text-ink-primary">
+          <h3 class="mt-3 text-base font-semibold text-tk-ink">
             Direct engineer access
           </h3>
-          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+          <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
             Design-partner customers get a Slack channel shared with the engineer
             who writes the code. Bug → fix → deploy in the same week, not the
             same quarter. No tier-1 support gauntlet.
           </p>
         </div>
         <div class="card p-6">
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">
             Honest pricing
           </p>
-          <h3 class="mt-3 text-base font-semibold text-ink-primary">
+          <h3 class="mt-3 text-base font-semibold text-tk-ink">
             One concurrent metric
           </h3>
-          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+          <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
             No per-call markup, no per-element fees, no opaque "credits"
             that expire. Concurrent cap is the only number you reason about.
             Annual contracts save 20% — listed, not negotiated case-by-case.
           </p>
         </div>
         <div class="card p-6">
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-glow-red">
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent">
             Sovereignty
           </p>
-          <h3 class="mt-3 text-base font-semibold text-ink-primary">
+          <h3 class="mt-3 text-base font-semibold text-tk-ink">
             Your data stays in the EU
           </h3>
-          <p class="mt-2 text-sm text-ink-secondary leading-relaxed">
+          <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
             Customer data lives in the EU, single-region. We don't
             log destination URLs, response bodies, or session content. The
             full sub-processor list is on
             <a
               href="/trust/sub-processors"
-              class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+              class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft"
               >/trust/sub-processors</a
             >.
           </p>
@@ -1035,14 +1035,14 @@ try {
   </section>
 
   <!-- Final CTA — sticky bottom punch -->
-  <section class="relative border-t border-white/10 overflow-hidden">
+  <section class="relative border-t border-tk-border overflow-hidden">
     <div class="absolute inset-0 bg-glow-radial-red opacity-50" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-4xl px-6 py-28 text-center">
       <p class="section-label">Ready when you are</p>
       <h2 class="mt-6 text-2xl font-semibold tracking-tight sm:text-3xl md:text-5xl" style="letter-spacing: -0.02em;">
         See it for yourself. Free.
       </h2>
-      <p class="mt-4 max-w-prose mx-auto text-ink-secondary leading-relaxed">
+      <p class="mt-4 max-w-prose mx-auto text-tk-ink-2 leading-relaxed">
         iPhone Safari sessions on real WebKit — one profile, 20-minute
         manual sessions, no card required. Plenty of room to point your
         workflow at it and decide on your own terms.
@@ -1066,7 +1066,7 @@ try {
        Safari's variable URL-bar viewport. -->
   <div class="h-20 md:hidden" aria-hidden="true"></div>
   <div
-    class="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-black/90 px-4 py-3 backdrop-blur-sm md:hidden"
+    class="fixed inset-x-0 bottom-0 z-40 border-t border-tk-border bg-black/90 px-4 py-3 backdrop-blur-sm md:hidden"
   >
     <a href="/pricing#free" class="btn-primary w-full text-center">
       Start free

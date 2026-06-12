@@ -51,16 +51,16 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     expect(body).not.toMatch(/\{ href: '\/roadmap',/);
   });
 
-  it("Active-link styling + pathname-match framing pinned: 'pathname === item.href && text-oxblood-700 font-medium' + Astro.url.pathname source-of-truth — pinned so the active-link styling pattern + pathname source commitment survives (drift to claiming external active state would mislead users about their current location)", () => {
+  it("Active-link styling + pathname-match framing pinned: 'pathname === item.href && text-tk-accent (Fleet token)' + Astro.url.pathname source-of-truth — pinned so the active-link styling pattern + pathname source commitment survives (drift to claiming external active state would mislead users about their current location)", () => {
     expect(body).toMatch(/const pathname = Astro\.url\.pathname;/);
     expect(body).toMatch(
-      /class:list=\{\[\s*(?:\/\/[^\n]*\n\s*)*'nav-link font-medium',\s*pathname === item\.href && 'text-glow-red',?\s*\]\}/,
+      /class:list=\{\[\s*(?:\/\/[^\n]*\n\s*)*'nav-link font-medium',\s*pathname === item\.href && 'text-tk-accent',?\s*\]\}/,
     );
   });
 
   it("R15 logo + brand framing pinned: a href / wrapping the new /driftstack-mark.svg <img> (iPhone-D brand SVG) + 'driftstack' wordmark + font-mono font-semibold + h-8-w-8 mark size. Replaces the prior bg-gradient-accent text-white 'D' chip with the real SVG brand asset. Drift to a different brand-mark source or font-family would create cross-page styling divergence.", () => {
     expect(body).toMatch(
-      /<a\s+href="\/"\s+class="group flex items-center gap-2\.5 font-mono text-base font-semibold text-ink-primary"/,
+      /<a\s+href="\/"\s+class="group flex items-center gap-2\.5 font-mono text-base font-semibold text-tk-ink"/,
     );
     expect(body).toMatch(/<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"/);
     expect(body).toMatch(/width="32"\s*\n?\s*height="32"/);
@@ -92,9 +92,9 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     expect(body).toMatch(/<line x1="3" y1="18" x2="21" y2="18"><\/line>/);
   });
 
-  it("Mobile nav popup positioning + composed-list framing pinned: 'absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-slate-200 bg-white p-3 shadow-lg' + [...navItems, ...mobileExtraItems].map composition + 'in item && item.external' type-narrowed external check — pinned so the mobile-popup positioning + composed-list-spread + type-narrowed-external check survives", () => {
+  it("Mobile nav popup positioning + composed-list framing pinned: 'absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-tk-border bg-tk-surface p-3 shadow-glow-accent' + [...navItems, ...mobileExtraItems].map composition + 'in item && item.external' type-narrowed external check — pinned so the mobile-popup positioning + composed-list-spread + type-narrowed-external check survives", () => {
     expect(body).toMatch(
-      /class="absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-white\/10 bg-surface-raised p-3 shadow-glow-red"/,
+      /class="absolute right-0 top-12 z-20 flex w-56 flex-col gap-1 rounded-md border border-tk-border bg-tk-surface p-3 shadow-glow-accent"/,
     );
     expect(body).toMatch(/\[\.\.\.navItems, \.\.\.mobileExtraItems\]\.map\(\(item\) => \(/);
     expect(body).toMatch(/'external' in item && item\.external \? '_blank' : undefined/);

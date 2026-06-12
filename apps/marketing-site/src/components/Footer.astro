@@ -4,12 +4,12 @@ import StatusBadge from './StatusBadge.astro';
 const year = new Date().getUTCFullYear();
 ---
 
-<footer class="relative border-t border-white/10 bg-surface-base">
+<footer class="relative border-t border-tk-border bg-tk-bg">
   <div
     class="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-12 md:flex-row md:items-start md:justify-between"
   >
     <div>
-      <div class="flex items-center gap-2.5 font-mono text-sm font-semibold text-ink-primary">
+      <div class="flex items-center gap-2.5 font-mono text-sm font-semibold text-tk-ink">
         <img
           src="/driftstack-mark.svg?v=2"
           alt="Driftstack"
@@ -19,14 +19,14 @@ const year = new Date().getUTCFullYear();
         />
         <span class="tracking-tight">driftstack</span>
       </div>
-      <p class="mt-4 max-w-prose text-sm text-ink-secondary">
+      <p class="mt-4 max-w-prose text-sm text-tk-ink-2">
         Pixel-identical iPhone Safari sessions in the cloud. API, SDK, or GUI.
       </p>
     </div>
     <div class="grid grid-cols-2 gap-8 text-sm md:grid-cols-2">
       <div>
-        <h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Product</h3>
-        <ul class="mt-4 space-y-2.5 text-ink-secondary">
+        <h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Product</h3>
+        <ul class="mt-4 space-y-2.5 text-tk-ink-2">
           <li><a href="/pricing" class="nav-link">Pricing</a></li>
           <li><a href="/comparison" class="nav-link">Comparison</a></li>
           <li><a href="/self-hosted" class="nav-link">Self-hosted</a></li>
@@ -47,8 +47,8 @@ const year = new Date().getUTCFullYear();
         </ul>
       </div>
       <div>
-        <h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Company</h3>
-        <ul class="mt-4 space-y-2.5 text-ink-secondary">
+        <h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Company</h3>
+        <ul class="mt-4 space-y-2.5 text-tk-ink-2">
           <li><a href="/about" class="nav-link">About</a></li>
           <li><a href="/faq" class="nav-link">FAQ</a></li>
           <li><a href="/changelog" class="nav-link">Changelog</a></li>
@@ -67,22 +67,22 @@ const year = new Date().getUTCFullYear();
        with product-focused signals. Legal/trust details live on the
        /legal and /trust pages and in the meta-link row below; the
        splash position is for differentiators, not paperwork. -->
-  <div class="border-t border-white/10">
-    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-6 gap-y-3 px-6 py-5 text-xs text-ink-muted">
+  <div class="border-t border-tk-border">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-6 gap-y-3 px-6 py-5 text-xs text-tk-ink-3">
       <span class="inline-flex items-center gap-1.5">
-        <span class="h-1.5 w-1.5 rounded-full bg-glow-red"></span>
+        <span class="h-1.5 w-1.5 rounded-full bg-tk-accent"></span>
         Bit-identical iPhone Safari fingerprint
       </span>
       <span class="inline-flex items-center gap-1.5">
-        <span class="h-1.5 w-1.5 rounded-full bg-glow-red"></span>
+        <span class="h-1.5 w-1.5 rounded-full bg-tk-accent"></span>
         SOCKS5 · WireGuard · OpenVPN proxies
       </span>
       <span class="inline-flex items-center gap-1.5">
-        <span class="h-1.5 w-1.5 rounded-full bg-glow-red"></span>
+        <span class="h-1.5 w-1.5 rounded-full bg-tk-accent"></span>
         API · SDK · GUI access
       </span>
       <span class="inline-flex items-center gap-1.5">
-        <span class="h-1.5 w-1.5 rounded-full bg-glow-red"></span>
+        <span class="h-1.5 w-1.5 rounded-full bg-tk-accent"></span>
         UDP / QUIC / WebRTC tunnelling
       </span>
     </div>
@@ -90,8 +90,8 @@ const year = new Date().getUTCFullYear();
   <!-- F-3 (Issue 7) — meta link row: legal + trust + status
        consolidated into one small bottom-most row, replacing the
        four separate footer columns that previously displayed them. -->
-  <div class="border-t border-white/10">
-    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-2 px-6 py-4 text-xs text-ink-muted">
+  <div class="border-t border-tk-border">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-4 gap-y-2 px-6 py-4 text-xs text-tk-ink-3">
       <a href="/legal/privacy" class="nav-link">Privacy</a>
       <span aria-hidden="true">·</span>
       <a href="/legal/terms" class="nav-link">Terms</a>
@@ -114,9 +114,9 @@ const year = new Date().getUTCFullYear();
       >
     </div>
   </div>
-  <div class="border-t border-white/10">
+  <div class="border-t border-tk-border">
     <div
-      class="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-5 text-xs text-ink-muted md:flex-row md:items-center md:justify-between"
+      class="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-5 text-xs text-tk-ink-3 md:flex-row md:items-center md:justify-between"
     >
       <p>&copy; {year} Driftstack. All rights reserved.</p>
       <div class="flex flex-wrap items-center gap-3">

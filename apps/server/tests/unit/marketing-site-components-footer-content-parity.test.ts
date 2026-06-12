@@ -50,7 +50,7 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
 
   it('Product-category 6-link framing pinned (F-3 — /roadmap removed per Issue 5 no-aspirational-language): /pricing + /comparison + /self-hosted + docs.driftstack.dev (external) + app/signup + app/login', () => {
     expect(body).toMatch(
-      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Product<\/h3>/,
+      /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Product<\/h3>/,
     );
     expect(body).toMatch(/<li><a href="\/pricing" class="nav-link">Pricing<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/comparison" class="nav-link">Comparison<\/a><\/li>/);
@@ -69,7 +69,7 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
 
   it('Company-category 5-link framing pinned: /about + /faq + /changelog + mailto:support@driftstack.dev + mailto:sales@driftstack.dev — pinned so the 5-company-link surface + 2-mailto-channel (support + sales) commitment survives (drift to dropping either mailto would orphan the sales+support routing)', () => {
     expect(body).toMatch(
-      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Company<\/h3>/,
+      /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Company<\/h3>/,
     );
     expect(body).toMatch(/<li><a href="\/about" class="nav-link">About<\/a><\/li>/);
     expect(body).toMatch(/<li><a href="\/faq" class="nav-link">FAQ<\/a><\/li>/);
@@ -85,10 +85,10 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
   it('F-3 meta link row (Trust + Legal collapsed): /legal/privacy + /legal/terms + /legal/dpa + /legal/aup + /trust + /security + /trust/sub-processors + status.driftstack.dev (external). Trust/Legal sub-headed columns removed; surfaces these as a single small bottom link row.', () => {
     // Trust + Legal grid columns must NOT exist as headed sub-blocks.
     expect(body).not.toMatch(
-      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Trust<\/h3>/,
+      /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Trust<\/h3>/,
     );
     expect(body).not.toMatch(
-      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Legal<\/h3>/,
+      /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Legal<\/h3>/,
     );
     // But the links must still be present as nav-links somewhere
     // (the meta-link row).

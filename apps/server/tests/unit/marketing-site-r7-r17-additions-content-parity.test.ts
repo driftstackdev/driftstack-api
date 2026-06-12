@@ -62,20 +62,20 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(body).toMatch(/What sets us apart/);
       expect(body).not.toMatch(/Pre-launch trust signals/);
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">Population-matched<\/span>/,
+        /<span class="text-base font-semibold text-tk-ink">Population-matched<\/span>/,
       );
       // The pre-dedupe label must NOT return at this slot.
       expect(body).not.toMatch(
-        /<span class="text-base font-semibold text-ink-primary">Indistinguishable<\/span>/,
+        /<span class="text-base font-semibold text-tk-ink">Indistinguishable<\/span>/,
       );
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">Zero detection surface<\/span>/,
+        /<span class="text-base font-semibold text-tk-ink">Zero detection surface<\/span>/,
       );
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">Apple's WebKit, not Chromium<\/span>/,
+        /<span class="text-base font-semibold text-tk-ink">Apple's WebKit, not Chromium<\/span>/,
       );
       expect(body).toMatch(
-        /<span class="text-base font-semibold text-ink-primary">API · SDK · GUI<\/span>/,
+        /<span class="text-base font-semibold text-tk-ink">API · SDK · GUI<\/span>/,
       );
     });
 
@@ -133,28 +133,20 @@ describe('W627 R7-R17 marketing additions content parity', () => {
     });
 
     it('3 first-party SDK cards pinned (TypeScript @driftstack/sdk + Python driftstack-sdk + Go driftstack-go)', () => {
-      expect(body).toMatch(
-        /<p class="mt-2 text-sm font-semibold text-ink-primary">TypeScript<\/p>/,
-      );
+      expect(body).toMatch(/<p class="mt-2 text-sm font-semibold text-tk-ink">TypeScript<\/p>/);
       expect(body).toMatch(/@driftstack\/sdk/);
-      expect(body).toMatch(/<p class="mt-2 text-sm font-semibold text-ink-primary">Python<\/p>/);
+      expect(body).toMatch(/<p class="mt-2 text-sm font-semibold text-tk-ink">Python<\/p>/);
       expect(body).toMatch(/driftstack-sdk/);
-      expect(body).toMatch(/<p class="mt-2 text-sm font-semibold text-ink-primary">Go<\/p>/);
+      expect(body).toMatch(/<p class="mt-2 text-sm font-semibold text-tk-ink">Go<\/p>/);
       expect(body).toMatch(/driftstack-go/);
     });
 
     it('3 "via API" orchestration cards pinned (Playwright + n8n · Make + curl · cron)', () => {
-      expect(body).toMatch(
-        /<p class="mt-2 text-sm font-semibold text-ink-primary">Playwright<\/p>/,
-      );
+      expect(body).toMatch(/<p class="mt-2 text-sm font-semibold text-tk-ink">Playwright<\/p>/);
       expect(body).toMatch(/drives sessions/);
-      expect(body).toMatch(
-        /<p class="mt-2 text-sm font-semibold text-ink-primary">n8n · Make<\/p>/,
-      );
+      expect(body).toMatch(/<p class="mt-2 text-sm font-semibold text-tk-ink">n8n · Make<\/p>/);
       expect(body).toMatch(/workflow nodes/);
-      expect(body).toMatch(
-        /<p class="mt-2 text-sm font-semibold text-ink-primary">curl · cron<\/p>/,
-      );
+      expect(body).toMatch(/<p class="mt-2 text-sm font-semibold text-tk-ink">curl · cron<\/p>/);
       expect(body).toMatch(/plain HTTPS/);
     });
   });
@@ -170,15 +162,13 @@ describe('W627 R7-R17 marketing additions content parity', () => {
 
     it('7-signal table rows pinned (User-agent / Canvas hash / WebGL renderer / AudioContext / Core Text metrics / JS engine timing / Hash uniqueness across sessions — the 7th row added 2026-05-16 to make the population-stable claim concrete) + Driftstack-column values', () => {
       // Left-column signal names.
-      expect(body).toMatch(/<span class="text-ink-primary">User-agent<\/span>/);
-      expect(body).toMatch(/<span class="text-ink-primary">Canvas hash<\/span>/);
-      expect(body).toMatch(/<span class="text-ink-primary">WebGL renderer<\/span>/);
-      expect(body).toMatch(/<span class="text-ink-primary">AudioContext<\/span>/);
-      expect(body).toMatch(/<span class="text-ink-primary">Core Text metrics<\/span>/);
-      expect(body).toMatch(/<span class="text-ink-primary">JS engine timing<\/span>/);
-      expect(body).toMatch(
-        /<span class="text-ink-primary">Hash uniqueness across sessions<\/span>/,
-      );
+      expect(body).toMatch(/<span class="text-tk-ink">User-agent<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">Canvas hash<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">WebGL renderer<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">AudioContext<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">Core Text metrics<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">JS engine timing<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">Hash uniqueness across sessions<\/span>/);
       // Right-column Driftstack values — concrete brand/engine references.
       expect(body).toMatch(/Apple GPU/);
       expect(body).toMatch(/JSCore/);

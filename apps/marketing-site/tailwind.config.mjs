@@ -109,6 +109,11 @@ export default {
           'linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px)',
         'glow-radial-red':
           'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(226, 56, 71, 0.18), transparent 70%)',
+        // Fleet: accent-aware ambient radials (follow the data-accent axis).
+        'glow-radial-accent':
+          'radial-gradient(ellipse 70% 50% at 50% 0%, var(--glow), transparent 70%)',
+        'glow-radial-accent-soft':
+          'radial-gradient(ellipse 60% 40% at 50% 100%, var(--accent-soft), transparent 75%)',
         'glow-radial-red-soft':
           'radial-gradient(ellipse 60% 40% at 50% 100%, rgba(114, 47, 55, 0.22), transparent 75%)',
         'gradient-accent': 'linear-gradient(135deg, #722F37 0%, #e23847 100%)',

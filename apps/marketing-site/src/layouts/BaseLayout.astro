@@ -86,17 +86,18 @@ const structuredData = {
 };
 ---
 
+<!-- Fleet token axes (2026-06-12 rework): data-mode/data-accent drive the
+     tk-* token classes + token-aware components (styles/base.css).
+     light+violet = the founder-locked default. class="dark" stays for the
+     legacy darkMode:'class' variants until the last page is ported.
+     NOTE: nothing may sit between doctype and <html> — a JSX comment there
+     makes the Astro compiler DROP the <html> element (and the axes). -->
 <!doctype html>
-{/* Fleet token axes (2026-06-12 rework): data-mode/data-accent drive the
-    tk-* token classes (styles/base.css). dark+oxblood = today's look, so
-    this is a no-op until pages adopt tk-*; the index Fleet port flips the
-    default to light+violet (founder-locked). class="dark" stays for the
-    legacy darkMode:'class' variants until the last page is ported. */}
-<html lang="en" class="dark" data-mode="dark" data-accent="oxblood">
+<html lang="en" class="dark" data-mode="light" data-accent="violet">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0b0f14" />
+    <meta name="theme-color" content="#f2f3f6" />
     <meta name="robots" content={noindex ? 'noindex,nofollow' : 'index,follow'} />
     <link rel="canonical" href={canonical} />
     <title>{fullTitle}</title>
@@ -128,15 +129,15 @@ const structuredData = {
     {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR users skip the nav. */}
     <a
       href="#main-content"
-      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-glow-red focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-tk-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
     >
       Skip to main content
     </a>
     <!-- Ambient background layer: radial glow + faint grid pattern. -->
     <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">
       <div class="absolute inset-0 grid-bg opacity-60"></div>
-      <div class="absolute inset-x-0 top-0 h-[600px] bg-glow-radial-red"></div>
-      <div class="absolute inset-x-0 bottom-0 h-[400px] bg-glow-radial-red-soft"></div>
+      <div class="absolute inset-x-0 top-0 h-[600px] bg-glow-radial-accent"></div>
+      <div class="absolute inset-x-0 bottom-0 h-[400px] bg-glow-radial-accent-soft"></div>
     </div>
 
     <Header />

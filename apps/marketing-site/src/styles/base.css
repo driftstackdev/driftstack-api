@@ -8,11 +8,15 @@
 
 @layer base {
   :root {
+    /* Fleet rework: color-scheme follows the data-mode axis (set on <html>). */
+    color-scheme: light;
+  }
+  [data-mode='dark'] {
     color-scheme: dark;
   }
 
   html {
-    @apply bg-surface-base text-ink-primary;
+    @apply bg-tk-bg text-tk-ink;
     font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
@@ -36,9 +40,10 @@
        oppressive on hero/footer; halving them keeps the brand wash
        but lets the slate-900 surface breathe (outseta-style
        restraint). */
+    /* Fleet rework: the brand wash follows the accent axis. */
     background-image:
-      radial-gradient(ellipse 90% 60% at 50% -10%, rgba(226, 56, 71, 0.07), transparent 70%),
-      radial-gradient(ellipse 80% 50% at 50% 100%, rgba(114, 47, 55, 0.05), transparent 75%);
+      radial-gradient(ellipse 90% 60% at 50% -10%, var(--glow), transparent 70%),
+      radial-gradient(ellipse 80% 50% at 50% 100%, var(--accent-soft), transparent 75%);
     background-attachment: fixed;
   }
 
@@ -61,7 +66,8 @@
   }
 
   ::selection {
-    @apply bg-oxblood-700 text-white;
+    /* Fleet rework: selection follows the accent axis. */
+    @apply bg-tk-accent-strong text-white;
   }
 
   /* Hairline divider rule used between sections. The white-04 mix
@@ -72,9 +78,9 @@
     background: linear-gradient(
       to right,
       transparent 0%,
-      rgba(255, 255, 255, 0.08) 40%,
-      rgba(226, 56, 71, 0.25) 50%,
-      rgba(255, 255, 255, 0.08) 60%,
+      rgb(var(--border-rgb) / 0.9) 40%,
+      rgb(var(--accent-rgb) / 0.35) 50%,
+      rgb(var(--border-rgb) / 0.9) 60%,
       transparent 100%
     );
   }
@@ -86,28 +92,28 @@
      without overloading the saturation budget. */
   .btn-primary {
     @apply relative inline-flex items-center justify-center rounded-md
-           bg-oxblood-700 px-5 py-2.5 text-sm font-medium text-white
-           shadow-glow-red transition-all duration-200
-           hover:bg-oxblood-600 hover:shadow-glow-red-lg hover:-translate-y-0.5
+           bg-tk-accent px-5 py-2.5 text-sm font-medium text-tk-accent-ink
+           shadow-glow-accent transition-all duration-200
+           hover:bg-tk-accent-strong hover:-translate-y-0.5
            focus-visible:outline focus-visible:outline-2
-           focus-visible:outline-offset-2 focus-visible:outline-glow-red
+           focus-visible:outline-offset-2 focus-visible:outline-tk-accent
            active:translate-y-0;
   }
 
   /* Secondary CTA — glass-on-dark with subtle border + soft hover. */
   .btn-secondary {
     @apply inline-flex items-center justify-center rounded-md
-           border border-white/10 bg-white/5 px-5 py-2.5 text-sm
-           font-medium text-ink-primary backdrop-blur-sm
+           border border-tk-border bg-tk-surface px-5 py-2.5 text-sm
+           font-medium text-tk-ink backdrop-blur-sm
            transition-all duration-200
-           hover:border-white/20 hover:bg-white/10
+           hover:border-tk-ink-3 hover:bg-tk-hover
            focus-visible:outline focus-visible:outline-2
-           focus-visible:outline-offset-2 focus-visible:outline-glow-red;
+           focus-visible:outline-offset-2 focus-visible:outline-tk-accent;
   }
 
   /* Nav link — muted by default, accent on hover. */
   .nav-link {
-    @apply text-sm text-ink-secondary transition-colors hover:text-glow-red;
+    @apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent;
   }
 
   /* Bracketed section label — mono + glow accent. Used as the
@@ -116,25 +122,21 @@
      content stays the bare word. */
   .section-label {
     @apply inline-flex items-center font-mono text-xs uppercase
-           tracking-[0.2em] text-glow-red;
+           tracking-[0.2em] text-tk-accent;
   }
   .section-label::before {
-    content: '[ ';
-    @apply text-ink-muted;
-  }
-  .section-label::after {
-    content: ' ]';
-    @apply text-ink-muted;
+    content: '// ';
+    @apply text-tk-ink-3;
   }
 
   /* Card surface — glass-morphism on dark with red-tinted top edge
      accent on hover. Used for feature cards, tier teasers, code
      previews, etc. */
   .card {
-    @apply relative overflow-hidden rounded-xl border border-white/10
-           bg-surface-raised/60 backdrop-blur-sm
-           shadow-inset-divider transition-all duration-300
-           hover:border-glow-red/30 hover:bg-surface-raised/80;
+    @apply relative overflow-hidden rounded-xl border border-tk-border
+           bg-tk-surface/70 backdrop-blur-sm
+           transition-all duration-300
+           hover:border-tk-accent/40 hover:bg-tk-surface;
   }
   .card::before {
     content: '';
@@ -143,7 +145,7 @@
     background: linear-gradient(
       to right,
       transparent 0%,
-      rgba(226, 56, 71, 0.6) 50%,
+      rgb(var(--accent-rgb) / 0.6) 50%,
       transparent 100%
     );
   }
@@ -155,8 +157,8 @@
      depth without overpowering content. */
   .grid-bg {
     background-image:
-      linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      linear-gradient(to right, rgb(var(--ink-rgb) / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(var(--ink-rgb) / 0.04) 1px, transparent 1px);
     background-size: 40px 40px;
     mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 75%);
     -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 50%, black 30%, transparent 75%);
@@ -186,14 +188,14 @@
     left: -10%;
     width: 50%;
     height: 60%;
-    background: radial-gradient(circle, rgba(220, 38, 38, 0.18), transparent 70%);
+    background: radial-gradient(circle, rgb(var(--accent-rgb) / 0.18), transparent 70%);
   }
   .hero-glow::after {
     bottom: -20%;
     right: -10%;
     width: 60%;
     height: 70%;
-    background: radial-gradient(circle, rgba(220, 38, 38, 0.12), transparent 70%);
+    background: radial-gradient(circle, rgb(var(--accent-rgb) / 0.12), transparent 70%);
     animation-delay: -6s;
   }
   @keyframes hero-glow-pulse {
@@ -216,12 +218,14 @@
   /* Code-preview block — monospace, dark inset, syntax-friendly
      foreground tones. */
   .code-preview {
-    @apply rounded-xl border border-white/10 bg-surface-inset
-           font-mono text-xs leading-6 text-ink-secondary
-           shadow-inset-divider;
+    @apply rounded-xl border border-tk-border font-mono text-xs
+           leading-6 shadow-inset-divider;
+    /* the code window stays a dark terminal in BOTH modes */
+    background: var(--code-bg);
+    color: #cfd2dc;
   }
   .code-preview .code-window-chrome {
-    @apply flex items-center gap-2 border-b border-white/10 px-4 py-3;
+    @apply flex items-center gap-2 border-b border-white/10 px-4 py-3; /* dark-terminal chrome in both modes */
   }
   .code-preview .code-window-chrome span.pip {
     @apply h-2.5 w-2.5 rounded-full bg-white/15;
@@ -230,13 +234,13 @@
   /* Accent rule — vertical glow line used to draw the eye to a
      metric or callout. */
   .accent-rule {
-    @apply border-l-2 border-glow-red pl-6;
-    box-shadow: -2px 0 16px -4px rgba(226, 56, 71, 0.4);
+    @apply border-l-2 border-tk-accent pl-6;
+    box-shadow: -2px 0 16px -4px var(--glow);
   }
 
   /* Trust pip — small dot used in stat callouts. */
   .arrow-bullet {
-    @apply text-glow-red font-mono;
+    @apply text-tk-accent font-mono;
   }
 }
 

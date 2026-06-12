@@ -42,9 +42,10 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
     expect(body).toMatch(/Tokens shared with apps\/customer-/);
   });
 
-  it('base layer html/body framing pinned: color-scheme: dark + surface-base bg + Geist Sans font stack + cv11/ss01 OpenType + radial-glow body background', () => {
-    expect(body).toMatch(/color-scheme: dark;/);
-    expect(body).toMatch(/@apply bg-surface-base text-ink-primary;/);
+  it('base layer html/body framing pinned (Fleet rework): color-scheme follows data-mode (light default, dark override) + tk token bg/ink + Geist Sans font stack + cv11/ss01 OpenType + accent-aware radial body wash', () => {
+    expect(body).toMatch(/color-scheme: light;/);
+    expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*color-scheme: dark;/);
+    expect(body).toMatch(/@apply bg-tk-bg text-tk-ink;/);
     expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
     expect(body).toMatch(/font-feature-settings: 'cv11', 'ss01';/);
     expect(body).toMatch(/-webkit-font-smoothing: antialiased;/);
@@ -52,12 +53,8 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
     expect(body).toMatch(/@apply min-h-screen flex flex-col;/);
     // R7 — softened radial alphas (0.12→0.07 + 0.08→0.05) so the
     // graphite surface breathes (outseta-style restraint).
-    expect(body).toMatch(
-      /radial-gradient\(ellipse 90% 60% at 50% -10%, rgba\(226, 56, 71, 0\.07\)/,
-    );
-    expect(body).toMatch(
-      /radial-gradient\(ellipse 80% 50% at 50% 100%, rgba\(114, 47, 55, 0\.05\)/,
-    );
+    expect(body).toMatch(/radial-gradient\(ellipse 90% 60% at 50% -10%, var\(--glow\)/);
+    expect(body).toMatch(/radial-gradient\(ellipse 80% 50% at 50% 100%, var\(--accent-soft\)/);
     expect(body).toMatch(/background-attachment: fixed;/);
   });
 
@@ -68,61 +65,54 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
     expect(body).toMatch(/pre \{[\s\S]*?overflow-x: auto;\s*\n?\s*\}/);
   });
 
-  it('::selection oxblood framing pinned (brand-locked selection)', () => {
-    expect(body).toMatch(/::selection \{\s*\n?\s*@apply bg-oxblood-700 text-white;\s*\n?\s*\}/);
+  it('::selection accent framing pinned (follows the data-accent axis)', () => {
+    expect(body).toMatch(/::selection \{[\s\S]*?@apply bg-tk-accent-strong text-white;/);
   });
 
-  it('hairline divider hr: 1px gradient with red glimmer in middle', () => {
+  it('hairline divider hr: 1px gradient with accent glimmer in middle (token-aware)', () => {
     expect(body).toMatch(/hr \{/);
     expect(body).toMatch(/@apply border-0 h-px;/);
-    expect(body).toMatch(/rgba\(226, 56, 71, 0\.25\)/);
+    expect(body).toMatch(/rgb\(var\(--accent-rgb\) \/ 0\.35\) 50%/);
   });
 
-  it('btn-primary framing pinned: bg-oxblood-700 + shadow-glow-red + hover lift (hover:bg-oxblood-600 + hover:shadow-glow-red-lg + hover:-translate-y-0.5) + focus-visible outline-glow-red', () => {
+  it('btn-primary framing pinned (Fleet): bg-tk-accent + shadow-glow-accent + hover lift (hover:bg-tk-accent-strong + hover:-translate-y-0.5) + focus-visible outline-tk-accent', () => {
     expect(body).toMatch(/\.btn-primary \{/);
-    expect(body).toMatch(/bg-oxblood-700/);
-    expect(body).toMatch(/shadow-glow-red/);
-    expect(body).toMatch(/hover:bg-oxblood-600/);
-    expect(body).toMatch(/hover:shadow-glow-red-lg/);
+    expect(body).toMatch(/bg-tk-accent px-5/);
+    expect(body).toMatch(/shadow-glow-accent/);
+    expect(body).toMatch(/hover:bg-tk-accent-strong/);
     expect(body).toMatch(/hover:-translate-y-0\.5/);
-    expect(body).toMatch(/focus-visible:outline-glow-red/);
+    expect(body).toMatch(/focus-visible:outline-tk-accent/);
     expect(body).toMatch(/active:translate-y-0/);
   });
 
-  it('btn-secondary framing pinned: glass-on-dark border-white/10 + bg-white/5 + backdrop-blur-sm + hover:border-white/20 + hover:bg-white/10', () => {
+  it('btn-secondary framing pinned (Fleet): tokened border/surface + hover tk-hover', () => {
     expect(body).toMatch(/\.btn-secondary \{/);
-    expect(body).toMatch(/border border-white\/10/);
-    expect(body).toMatch(/bg-white\/5/);
-    expect(body).toMatch(/text-ink-primary/);
+    expect(body).toMatch(/border border-tk-border bg-tk-surface/);
+    expect(body).toMatch(/font-medium text-tk-ink backdrop-blur-sm/);
     expect(body).toMatch(/backdrop-blur-sm/);
-    expect(body).toMatch(/hover:border-white\/20/);
-    expect(body).toMatch(/hover:bg-white\/10/);
+    expect(body).toMatch(/hover:border-tk-ink-3 hover:bg-tk-hover/);
   });
 
-  it('nav-link framing pinned: text-sm + text-ink-secondary + hover:text-glow-red', () => {
+  it('nav-link framing pinned (Fleet): text-sm + tk-ink-2 + hover:text-tk-accent', () => {
     expect(body).toMatch(/\.nav-link \{/);
-    expect(body).toMatch(
-      /@apply text-sm text-ink-secondary transition-colors hover:text-glow-red;/,
-    );
+    expect(body).toMatch(/@apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent;/);
   });
 
-  it('section-label framing pinned: mono uppercase tracking-[0.2em] text-glow-red + [BRACKETED] pseudo-element before/after', () => {
+  it('section-label framing pinned (Fleet): mono uppercase tracking-[0.2em] tk-accent + the // mission-control prefix', () => {
     expect(body).toMatch(/\.section-label \{/);
     expect(body).toMatch(/font-mono text-xs uppercase/);
-    expect(body).toMatch(/tracking-\[0\.2em\] text-glow-red/);
+    expect(body).toMatch(/tracking-\[0\.2em\] text-tk-accent/);
     expect(body).toMatch(/\.section-label::before \{/);
-    expect(body).toMatch(/content: '\[ ';/);
-    expect(body).toMatch(/\.section-label::after \{/);
-    expect(body).toMatch(/content: ' \]';/);
+    expect(body).toMatch(/content: '\/\/ ';/);
   });
 
-  it('card framing pinned: rounded-xl glass border-white/10 + bg-surface-raised/60 + backdrop-blur-sm + hover red-tinted top edge accent', () => {
+  it('card framing pinned (Fleet): rounded-xl tokened border + bg-tk-surface/70 + backdrop-blur-sm + hover accent-tinted top edge', () => {
     expect(body).toMatch(/\.card \{/);
-    expect(body).toMatch(/rounded-xl border border-white\/10/);
-    expect(body).toMatch(/bg-surface-raised\/60 backdrop-blur-sm/);
-    expect(body).toMatch(/hover:border-glow-red\/30/);
+    expect(body).toMatch(/rounded-xl border border-tk-border/);
+    expect(body).toMatch(/bg-tk-surface\/70 backdrop-blur-sm/);
+    expect(body).toMatch(/hover:border-tk-accent\/40/);
     expect(body).toMatch(/\.card::before \{/);
-    expect(body).toMatch(/rgba\(226, 56, 71, 0\.6\)/);
+    expect(body).toMatch(/rgb\(var\(--accent-rgb\) \/ 0\.6\)/);
     expect(body).toMatch(/\.card:hover::before \{/);
     expect(body).toMatch(/@apply opacity-100;/);
   });
@@ -130,33 +120,33 @@ describe('W524.A apps/marketing-site/src/styles/base.css content parity', () => 
   it('grid-bg framing pinned: dual linear-gradient grid pattern with radial mask', () => {
     expect(body).toMatch(/\.grid-bg \{/);
     expect(body).toMatch(
-      /linear-gradient\(to right, rgba\(255, 255, 255, 0\.04\) 1px, transparent 1px\)/,
+      /linear-gradient\(to right, rgb\(var\(--ink-rgb\) \/ 0\.04\) 1px, transparent 1px\)/,
     );
     expect(body).toMatch(
-      /linear-gradient\(to bottom, rgba\(255, 255, 255, 0\.04\) 1px, transparent 1px\)/,
+      /linear-gradient\(to bottom, rgb\(var\(--ink-rgb\) \/ 0\.04\) 1px, transparent 1px\)/,
     );
     expect(body).toMatch(/background-size: 40px 40px;/);
     expect(body).toMatch(/mask-image: radial-gradient/);
   });
 
-  it('code-preview framing pinned: monospace dark inset + window-chrome pip 3-circle header', () => {
+  it('code-preview framing pinned (Fleet): dark terminal in BOTH modes (background: var(--code-bg)) + window-chrome pips', () => {
     expect(body).toMatch(/\.code-preview \{/);
-    expect(body).toMatch(/rounded-xl border border-white\/10 bg-surface-inset/);
-    expect(body).toMatch(/font-mono text-xs leading-6/);
+    expect(body).toMatch(/rounded-xl border border-tk-border font-mono/);
+    expect(body).toMatch(/background: var\(--code-bg\);/);
     expect(body).toMatch(/\.code-preview \.code-window-chrome \{/);
     expect(body).toMatch(/\.code-preview \.code-window-chrome span\.pip \{/);
     expect(body).toMatch(/h-2\.5 w-2\.5 rounded-full bg-white\/15/);
   });
 
-  it('accent-rule framing pinned: vertical glow-red border-left + box-shadow red glow', () => {
+  it('accent-rule framing pinned (Fleet): vertical tk-accent border-left + accent glow shadow', () => {
     expect(body).toMatch(/\.accent-rule \{/);
-    expect(body).toMatch(/border-l-2 border-glow-red pl-6/);
-    expect(body).toMatch(/box-shadow: -2px 0 16px -4px rgba\(226, 56, 71, 0\.4\)/);
+    expect(body).toMatch(/border-l-2 border-tk-accent pl-6/);
+    expect(body).toMatch(/box-shadow: -2px 0 16px -4px var\(--glow\)/);
   });
 
-  it('arrow-bullet framing pinned: text-glow-red font-mono', () => {
+  it('arrow-bullet framing pinned (Fleet): text-tk-accent font-mono', () => {
     expect(body).toMatch(/\.arrow-bullet \{/);
-    expect(body).toMatch(/@apply text-glow-red font-mono;/);
+    expect(body).toMatch(/@apply text-tk-accent font-mono;/);
   });
 
   it('Fleet token layer pinned (2026-06-12 rework): two-axis data-mode/data-accent custom-property blocks — violet/oxblood/teal accents + light/dark modes — referencing the locked spec; ADDITIVE (legacy classes keep their baked palette until each page ports)', () => {
