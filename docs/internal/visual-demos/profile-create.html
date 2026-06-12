@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en" data-mode="dark" data-accent="oxblood">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Driftstack — Profile Create / Edit (visual demo)</title>
+    <!-- THROWAWAY VISUAL DEMO (2026-06-12, A2). Profile create/edit configurator, theme-switchable.
+     Tabbed (Identity / Proxy / Storage / Behavior / Notes) + live identity-preview chip +
+     templates + Quick Session. The "fancier-than-the-anti-detects" configurator. Self-contained. -->
+    <style>
+      :root {
+        --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+        --mono: 'SF Mono', ui-monospace, Menlo, monospace;
+      }
+      [data-accent='oxblood'] {
+        --accent: #9b3b46;
+        --accent-2: #c04b58;
+        --accent-strong: #722f37;
+        --accent-ink: #fff;
+        --accent-soft: rgba(155, 59, 70, 0.14);
+      }
+      [data-accent='violet'] {
+        --accent: #6d5efc;
+        --accent-2: #8b7dff;
+        --accent-strong: #5847e0;
+        --accent-ink: #fff;
+        --accent-soft: rgba(109, 94, 252, 0.16);
+      }
+      [data-accent='teal'] {
+        --accent: #109a82;
+        --accent-2: #1bc7a8;
+        --accent-strong: #0c7d69;
+        --accent-ink: #fff;
+        --accent-soft: rgba(16, 154, 130, 0.16);
+      }
+      [data-mode='dark'] {
+        --bg: #08080b;
+        --surface: #121218;
+        --raised: #1a1a22;
+        --hover: #22232c;
+        --ink: #f6f6f8;
+        --ink-2: #b7b7c2;
+        --ink-3: #7d7d8a;
+        --border: #23232c;
+        --ready: #34d399;
+      }
+      [data-mode='light'] {
+        --bg: #f6f7f9;
+        --surface: #fff;
+        --raised: #fff;
+        --hover: #f1f2f5;
+        --ink: #101116;
+        --ink-2: #474a55;
+        --ink-3: #878a97;
+        --border: #e7e9ef;
+        --ready: #0f9d58;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+        font-size: 14px;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 13px 22px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .brand {
+        font-weight: 700;
+        letter-spacing: -0.2px;
+      }
+      .brand .mark {
+        color: var(--accent);
+      }
+      .crumb {
+        color: var(--ink-3);
+        font-size: 13px;
+      }
+      .crumb b {
+        color: var(--ink-2);
+        font-weight: 600;
+      }
+      .spacer {
+        flex: 1;
+      }
+      .themer {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+      }
+      .themer button {
+        border: 0;
+        background: transparent;
+        color: var(--ink-3);
+        cursor: pointer;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .themer button.on {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .sw {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        cursor: pointer;
+      }
+      .sw.on {
+        border-color: var(--ink);
+      }
+      .btn {
+        border: 0;
+        border-radius: 9px;
+        padding: 9px 15px;
+        font-weight: 600;
+        font-size: 13px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .btn.primary {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .btn.primary:hover {
+        background: var(--accent-strong);
+      }
+      .btn.ghost {
+        background: var(--surface);
+        color: var(--ink-2);
+        border: 1px solid var(--border);
+      }
+      .btn.ghost:hover {
+        color: var(--ink);
+      }
+
+      .stage {
+        display: grid;
+        grid-template-columns: 1fr 326px;
+        gap: 22px;
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+      .head h1 {
+        font-size: 23px;
+        letter-spacing: -0.5px;
+        margin: 0;
+      }
+      .quickbar {
+        display: flex;
+        gap: 8px;
+        margin-left: auto;
+      }
+      .qb {
+        background: var(--accent-soft);
+        color: var(--ink);
+        border: 1px solid transparent;
+        border-radius: 9px;
+        padding: 8px 13px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        gap: 7px;
+        align-items: center;
+      }
+      .qb:hover {
+        border-color: var(--accent);
+      }
+
+      /* tabs */
+      .tabs {
+        display: flex;
+        gap: 4px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 20px;
+      }
+      .tab {
+        padding: 10px 16px;
+        font-weight: 600;
+        font-size: 13px;
+        color: var(--ink-3);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .tab.on {
+        color: var(--ink);
+        border-bottom-color: var(--accent);
+      }
+      .tab .n {
+        font-size: 11px;
+        background: var(--raised);
+        border-radius: 999px;
+        padding: 1px 7px;
+        color: var(--ink-3);
+      }
+      .tab.on .n {
+        background: var(--accent-soft);
+        color: var(--accent-2);
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 20px;
+        margin-bottom: 16px;
+      }
+      .card h3 {
+        margin: 0 0 4px;
+        font-size: 15px;
+      }
+      .card .desc {
+        color: var(--ink-3);
+        font-size: 12px;
+        margin: 0 0 16px;
+      }
+      .field {
+        margin-bottom: 16px;
+      }
+      .field label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--ink-2);
+        margin-bottom: 7px;
+      }
+      .field .hint {
+        font-size: 11px;
+        color: var(--ink-3);
+        margin-top: 5px;
+      }
+      input[type='text'],
+      select,
+      textarea {
+        width: 100%;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        padding: 10px 12px;
+        color: var(--ink);
+        font-family: inherit;
+        font-size: 13px;
+      }
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+
+      /* device picker */
+      .devices {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+      }
+      .dev {
+        border: 1.5px solid var(--border);
+        border-radius: 11px;
+        padding: 13px;
+        cursor: pointer;
+        text-align: center;
+        background: var(--bg);
+      }
+      .dev.on {
+        border-color: var(--accent);
+        background: var(--accent-soft);
+      }
+      .dev .ph {
+        font-size: 22px;
+      }
+      .dev .nm {
+        font-weight: 600;
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      .dev .sm {
+        font-size: 10px;
+        color: var(--ink-3);
+      }
+      .dev .tag {
+        font-size: 9px;
+        color: var(--ready);
+        font-weight: 700;
+        margin-top: 3px;
+      }
+
+      /* toggles */
+      .toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 13px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .toggle:last-child {
+        border-bottom: 0;
+      }
+      .toggle .l b {
+        display: block;
+        font-size: 13px;
+      }
+      .toggle .l span {
+        font-size: 11px;
+        color: var(--ink-3);
+      }
+      .switch {
+        width: 38px;
+        height: 22px;
+        border-radius: 999px;
+        background: var(--raised);
+        position: relative;
+        cursor: pointer;
+        flex: none;
+        border: 1px solid var(--border);
+      }
+      .switch.on {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .switch i {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #fff;
+        transition: left 0.15s;
+      }
+      .switch.on i {
+        left: 18px;
+      }
+      .seg {
+        display: flex;
+        gap: 6px;
+      }
+      .seg button {
+        flex: 1;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--ink-2);
+        cursor: pointer;
+      }
+      .seg button.on {
+        background: var(--accent-soft);
+        color: var(--ink);
+        border-color: var(--accent);
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+      }
+      .chip {
+        font-size: 12px;
+        font-weight: 600;
+        border-radius: 999px;
+        padding: 5px 11px;
+        border: 1px solid var(--border);
+        cursor: pointer;
+        color: var(--ink-2);
+      }
+      .chip.on {
+        background: var(--accent-soft);
+        border-color: var(--accent);
+        color: var(--ink);
+      }
+      .filechip {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--bg);
+        border: 1px dashed var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-size: 12px;
+        color: var(--ink-2);
+      }
+
+      /* live preview rail */
+      .rail {
+        position: sticky;
+        top: 24px;
+        align-self: start;
+      }
+      .preview {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .pvtop {
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        color: #fff;
+        padding: 16px;
+      }
+      .pvtop .t {
+        font-size: 11px;
+        opacity: 0.85;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .pvtop .nm {
+        font-size: 17px;
+        font-weight: 700;
+        margin-top: 3px;
+      }
+      .pvtop .sub {
+        font-size: 11px;
+        opacity: 0.9;
+        margin-top: 2px;
+      }
+      .pvbody {
+        padding: 16px;
+      }
+      .pvrow {
+        display: flex;
+        justify-content: space-between;
+        padding: 9px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+      }
+      .pvrow:last-child {
+        border-bottom: 0;
+      }
+      .pvrow .k {
+        color: var(--ink-3);
+      }
+      .pvrow .v {
+        font-weight: 600;
+        text-align: right;
+      }
+      .coh {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        padding: 12px;
+        margin: 14px 0;
+      }
+      .ring {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: conic-gradient(var(--ready) 0 96%, var(--border) 96% 100%);
+        display: grid;
+        place-items: center;
+        flex: none;
+      }
+      .ring span {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--surface);
+        display: grid;
+        place-items: center;
+        font-weight: 800;
+        font-size: 13px;
+      }
+      .coh .ct b {
+        display: block;
+        font-size: 12px;
+      }
+      .coh .ct span {
+        font-size: 11px;
+        color: var(--ink-3);
+      }
+      .seenas {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        padding: 12px;
+        font-size: 11px;
+        color: var(--ink-3);
+        font-family: var(--mono);
+        line-height: 1.6;
+      }
+      .seenas b {
+        color: var(--ink-2);
+      }
+      .savebar {
+        display: flex;
+        gap: 8px;
+        margin-top: 14px;
+      }
+      .tpl {
+        font-size: 11px;
+        color: var(--accent-2);
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 10px;
+        display: inline-block;
+      }
+      @media (max-width: 900px) {
+        .stage {
+          grid-template-columns: 1fr;
+        }
+        .rail {
+          position: static;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <span class="brand"><span class="mark">⌇</span> Driftstack</span>
+      <span class="crumb">Profiles · <b>New profile</b></span>
+      <span class="spacer"></span>
+      <div class="themer">
+        <button id="m-dark" class="on" onclick="setMode('dark')">Dark</button
+        ><button id="m-light" onclick="setMode('light')">Light</button>
+        <span style="width: 1px; height: 16px; background: var(--border)"></span>
+        <span
+          class="sw on"
+          id="a-oxblood"
+          style="background: #9b3b46"
+          onclick="setAccent('oxblood')"
+        ></span>
+        <span
+          class="sw"
+          id="a-violet"
+          style="background: #6d5efc"
+          onclick="setAccent('violet')"
+        ></span>
+        <span class="sw" id="a-teal" style="background: #109a82" onclick="setAccent('teal')"></span>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div>
+        <div class="head">
+          <h1>Create profile</h1>
+          <div class="quickbar">
+            <button class="qb">⚡ Quick Session</button>
+            <button class="qb">⎘ From template</button>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab on">📱 Identity</div>
+          <div class="tab">🌍 Proxy</div>
+          <div class="tab">🍪 Storage</div>
+          <div class="tab">🖐 Behavior</div>
+          <div class="tab">🏷 Notes &amp; tags <span class="n">2</span></div>
+        </div>
+
+        <!-- IDENTITY tab content -->
+        <div class="card">
+          <h3>Device &amp; identity</h3>
+          <p class="desc">
+            Our real strength — a bit-exact mobile fingerprint, not a spoofed user-agent. Pick the
+            device archetype; everything below stays coherent with it.
+          </p>
+          <div class="field">
+            <label>Profile name</label>
+            <input type="text" value="amsterdam-shopper" />
+          </div>
+          <div class="field">
+            <label>Device archetype</label>
+            <div class="devices">
+              <div class="dev on">
+                <div class="ph">📱</div>
+                <div class="nm">iPhone 17</div>
+                <div class="sm">iOS 26.4 · Safari</div>
+                <div class="tag">✓ bit-exact</div>
+              </div>
+              <div class="dev">
+                <div class="ph">📱</div>
+                <div class="nm">iPhone 15 Pro</div>
+                <div class="sm">iOS 26 · Safari</div>
+                <div class="tag">reference</div>
+              </div>
+              <div class="dev">
+                <div class="ph">📱</div>
+                <div class="nm">iPhone 16 Pro</div>
+                <div class="sm">iOS 26 · Safari</div>
+                <div class="tag">reference</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Locale &amp; timezone</h3>
+          <p class="desc">
+            Auto-follows your proxy exit geo so locale, language and timezone never contradict the
+            IP. Override only if you know what you're doing.
+          </p>
+          <div class="toggle">
+            <div class="l">
+              <b>Match proxy exit geo</b><span>Recommended — keeps everything coherent</span>
+            </div>
+            <div class="switch on" onclick="this.classList.toggle('on')"><i></i></div>
+          </div>
+          <div class="row" style="margin-top: 16px">
+            <div class="field" style="margin: 0">
+              <label>Language</label
+              ><select>
+                <option>nl-NL (Dutch)</option>
+                <option>en-US</option>
+                <option>de-DE</option>
+              </select>
+            </div>
+            <div class="field" style="margin: 0">
+              <label>Timezone</label
+              ><select>
+                <option>Europe/Amsterdam</option>
+                <option>America/New_York</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- live identity preview rail -->
+      <div class="rail">
+        <div class="preview">
+          <div class="pvtop">
+            <div class="t">Live identity preview</div>
+            <div class="nm">amsterdam-shopper</div>
+            <div class="sub">iPhone 17 · iOS 26.4 · 🇳🇱 NL</div>
+          </div>
+          <div class="pvbody">
+            <div class="coh">
+              <div class="ring"><span>96</span></div>
+              <div class="ct">
+                <b>Identity coherence</b><span>0 detection lies · CreepJS clean</span>
+              </div>
+            </div>
+            <div class="pvrow"><span class="k">Device</span><span class="v">iPhone 17</span></div>
+            <div class="pvrow">
+              <span class="k">Screen</span><span class="v">402 × 874 @3×</span>
+            </div>
+            <div class="pvrow"><span class="k">Locale</span><span class="v">nl-NL</span></div>
+            <div class="pvrow">
+              <span class="k">Timezone</span><span class="v">Europe/Amsterdam</span>
+            </div>
+            <div class="pvrow">
+              <span class="k">Proxy</span><span class="v">SOCKS5 · 🇳🇱 AMS</span>
+            </div>
+            <div class="pvrow"><span class="k">Storage</span><span class="v">🔒 sealed</span></div>
+            <div class="seenas" style="margin-top: 14px">
+              <b>What a site sees:</b><br />Mozilla/5.0 (iPhone; CPU iPhone OS 26_4 like Mac OS X)
+              AppleWebKit/… Safari/…
+            </div>
+            <div class="savebar">
+              <button class="btn primary" style="flex: 1; justify-content: center">
+                Create profile
+              </button>
+              <button class="btn ghost">⚡</button>
+            </div>
+            <span class="tpl">⎘ Save as template</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      function setMode(m) {
+        document.documentElement.dataset.mode = m;
+        document.getElementById('m-dark').classList.toggle('on', m === 'dark');
+        document.getElementById('m-light').classList.toggle('on', m === 'light');
+      }
+      function setAccent(a) {
+        document.documentElement.dataset.accent = a;
+        ['oxblood', 'violet', 'teal'].forEach((x) =>
+          document.getElementById('a-' + x).classList.toggle('on', x === a),
+        );
+      }
+      document.querySelectorAll('.tab').forEach(
+        (t) =>
+          (t.onclick = () => {
+            document.querySelectorAll('.tab').forEach((x) => x.classList.remove('on'));
+            t.classList.add('on');
+          }),
+      );
+      document.querySelectorAll('.dev').forEach(
+        (d) =>
+          (d.onclick = () => {
+            document.querySelectorAll('.dev').forEach((x) => x.classList.remove('on'));
+            d.classList.add('on');
+          }),
+      );
+    </script>
+  </body>
+</html>

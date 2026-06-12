@@ -203,9 +203,12 @@ positioned _above_ the anti-detect category, not inside it.
   - [x] **Dashboard** (`dashboard.html`) — overview (usage stats, recent sessions,
         session-hours chart, plan) + front-and-center "Your data is sealed" trust
         surface (encryption status, what staff can/can't see, export/delete + audit).
-  - [ ] **GUI — Profile create/edit** — remaining mock; tabbed configurator
-        (Identity · Proxy · Storage · Behavior · Notes), live identity preview,
-        templates, Quick Session. Lands after the founder picks directions.
+  - [x] **GUI — Profile create/edit** (`profile-create.html`) — the showpiece
+        configurator: tabbed (Identity · Proxy · Storage · Behavior · Notes & tags),
+        device-archetype picker (bit-exact iPhone 17 vs reference), locale/timezone
+        auto-follows proxy exit geo, and a live **identity-preview rail** (coherence
+        ring scoring 96, per-field summary, "what a site sees" UA, Quick Session +
+        save-as-template). The full demo set is now complete.
 - [ ] Locked design-system spec (after the founder picks a direction).
 - [ ] Token layer + Tailwind unification (build phase).
 - [ ] Per-surface re-skin + the GUI feature buildout (incremental, w/ backend).
