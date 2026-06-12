@@ -566,10 +566,38 @@ const apiBaseUrl = resolveApiBaseUrl();
         return (archetypeLabels && archetypeLabels[slug]) || slug;
       }
 
+      function organizationChips(p) {
+        const tags = Array.isArray(p.tags) ? p.tags : [];
+        const folder = typeof p.folder === 'string' && p.folder.length > 0 ? p.folder : null;
+        if (!folder && tags.length === 0) return '';
+        const chip = (label) =>
+          '<span class="rounded-full border border-tk-border bg-tk-bg px-2 py-0.5 text-xs text-tk-ink-2">' +
+          escapeHtml(label) +
+          '</span>';
+        return (
+          '<p class="mt-2 flex flex-wrap items-center gap-1.5" data-profile-organization>' +
+          (folder ? chip('\uD83D\uDCC1 ' + folder) : '') +
+          tags.map(chip).join('') +
+          '</p>'
+        );
+      }
+
       function profileLi(p) {
         return (
           '<li data-profile-search="' +
-          escapeHtml(((p.name || '') + ' ' + (p.description || '')).toLowerCase()) +
+          escapeHtml(
+            (
+              (p.name || '') +
+              ' ' +
+              (p.description || '') +
+              ' ' +
+              // Organization metadata (migration 0076) joins the search
+              // haystack — find a profile by its folder or a tag.
+              (p.folder || '') +
+              ' ' +
+              (Array.isArray(p.tags) ? p.tags.join(' ') : '')
+            ).toLowerCase(),
+          ) +
           '" class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
           '<p class="text-base font-medium text-tk-ink">' +
@@ -581,6 +609,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           (p.description
             ? '<p class="mt-2 text-sm text-tk-ink-2">' + escapeHtml(p.description) + '</p>'
             : '') +
+          // Organization chips (read-only here — organizing lives in the
+          // GUI hub; a pre-0076 server omits the fields and the row just
+          // renders without chips).
+          organizationChips(p) +
           '<p class="mt-2 text-xs text-tk-ink-3">Archetype: ' +
           escapeHtml(archetypeLabel(p.archetype)) +
           ' · last used ' +

@@ -20,6 +20,9 @@
 //   • localStorage key ds_web_session_token.
 //   • Tier-limit reached badge gated by atLimit (server enforces
 //     at session creation — defensive in-UI display).
+//   • Organization chips (migration 0076 folder/tags): read-only
+//     render guarded for pre-0076 responses (absent fields → no
+//     chips row); folder + tags join the search haystack.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -101,6 +104,21 @@ describe('W361.B customer-dashboard /profiles page content parity', () => {
     expect(body).toMatch(
       /authedFetch\('\/v1\/profiles\/' \+ encodeURIComponent\(id\), \{ method: 'DELETE' \}\)/,
     );
+  });
+
+  it('organization chips (0076 folder/tags): read-only, pre-0076-safe, in the search haystack', () => {
+    // Chips render only when the server sent organization values — a
+    // pre-0076 server omits the fields and the row renders chipless.
+    expect(body).toContain('function organizationChips(p)');
+    expect(body).toContain('data-profile-organization');
+    expect(body).toMatch(/const tags = Array\.isArray\(p\.tags\) \? p\.tags : \[\];/);
+    expect(body).toMatch(
+      /const folder = typeof p\.folder === 'string' && p\.folder\.length > 0 \? p\.folder : null;/,
+    );
+    expect(body).toContain("if (!folder && tags.length === 0) return '';");
+    // Search haystack includes folder + tags (find a profile by either).
+    expect(body).toContain("(p.folder || '')");
+    expect(body).toContain("(Array.isArray(p.tags) ? p.tags.join(' ') : '')");
   });
 
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {
