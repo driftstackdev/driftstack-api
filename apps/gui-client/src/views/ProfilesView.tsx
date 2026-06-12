@@ -1122,6 +1122,27 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                           })()}
                         </div>
                       </div>
+                      {/* Organization chips — folder + tags VISIBLE on the
+                          default grid view (founder: 'missing folders,
+                          tags'); same data as the list rows. */}
+                      {((profilesMeta[profile.id]?.folder ?? '') !== '' ||
+                        (profilesMeta[profile.id]?.tags ?? []).length > 0) && (
+                        <div className="flex flex-wrap items-center gap-1">
+                          {(profilesMeta[profile.id]?.folder ?? '') !== '' && (
+                            <span className="rounded-full border border-surface-divider bg-surface-inset px-2 py-0.5 text-[10px] text-ink-secondary">
+                              📁 {profilesMeta[profile.id]?.folder}
+                            </span>
+                          )}
+                          {(profilesMeta[profile.id]?.tags ?? []).map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded-full border border-surface-divider px-2 py-0.5 text-[10px] text-ink-muted"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       {organizeId === profile.id && (
                         <div className="mt-2 flex flex-wrap items-center gap-2 rounded border border-surface-divider bg-surface-inset p-2">
                           <FolderPicker
