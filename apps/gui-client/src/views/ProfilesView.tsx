@@ -9,6 +9,12 @@
 // state per row.
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  folderList,
+  loadProfilesMeta,
+  saveProfileMeta,
+  type ProfilesMetaMap,
+} from '../lib/profiles-meta';
 import { ErrorBanner } from '../components/ErrorBanner';
 import {
   ProfilesActionBar,
@@ -153,8 +159,18 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   // one-click ephemeral Quick Session. List stays the default render.
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [quickBusy, setQuickBusy] = useState(false);
+  // Increment 2 — client-persisted organization (folders/tags/notes).
+  const [profilesMeta, setProfilesMeta] = useState<ProfilesMetaMap>({});
+  const [folderFilter, setFolderFilter] = useState<string>('all');
+  const [organizeId, setOrganizeId] = useState<string | null>(null);
+  const [draftFolder, setDraftFolder] = useState('');
+  const [draftTags, setDraftTags] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProfileStatusFilter>('all');
   const [sortBy, setSortBy] = useState<ProfileSortBy>('last-used');
+
+  useEffect(() => {
+    void loadProfilesMeta().then(setProfilesMeta);
+  }, []);
 
   const refresh = useCallback(
     async (showLoading: boolean): Promise<void> => {
@@ -301,6 +317,13 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           p.archetype.toLowerCase().includes(q),
       );
     }
+    if (folderFilter !== 'all') {
+      list = list.filter((p) =>
+        folderFilter === 'unfiled'
+          ? (profilesMeta[p.id]?.folder ?? '') === ''
+          : profilesMeta[p.id]?.folder === folderFilter,
+      );
+    }
     if (statusFilter !== 'all') {
       list = list.filter((p) => {
         // W624 — agent-backed (agt_) sessions count as running too, not just
@@ -326,7 +349,16 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       }
     });
     return ordered;
-  }, [state.profiles, searchQuery, statusFilter, sortBy, activeSessions, bindings]);
+  }, [
+    folderFilter,
+    profilesMeta,
+    state.profiles,
+    searchQuery,
+    statusFilter,
+    sortBy,
+    activeSessions,
+    bindings,
+  ]);
 
   /** Pick the proxy to use on Launch — explicit binding default first,
    *  else the first saved proxy, else null (handled in handleLaunch as
@@ -424,6 +456,22 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     } finally {
       setQuickBusy(false);
     }
+  }
+
+  async function handleOrganizeSave(profileId: string): Promise<void> {
+    const next = await saveProfileMeta(
+      profileId,
+      {
+        folder: draftFolder.trim(),
+        tags: draftTags
+          .split(',')
+          .map((t) => t.trim())
+          .filter((t) => t.length > 0),
+      },
+      state.profiles.map((p) => p.id),
+    );
+    setProfilesMeta(next);
+    setOrganizeId(null);
   }
 
   async function handleStop(profile: Profile): Promise<void> {
@@ -601,7 +649,21 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           />
         )}
         {state.profiles.length > 0 && (
-          <div className="flex items-center justify-end gap-1">
+          <div className="flex items-center justify-end gap-2">
+            <select
+              aria-label="Filter by folder"
+              className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary"
+              value={folderFilter}
+              onChange={(e) => setFolderFilter(e.target.value)}
+            >
+              <option value="all">All folders</option>
+              <option value="unfiled">Unfiled</option>
+              {folderList(profilesMeta).map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
             <button
               type="button"
               aria-pressed={viewMode === 'list'}
@@ -717,6 +779,38 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                   </span>
                 </div>
                 <p className="mono truncate text-xs text-ink-muted">{profile.archetype}</p>
+                {organizeId === profile.id && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded border border-surface-divider bg-surface-inset p-2">
+                    <input
+                      aria-label="Folder"
+                      placeholder="Folder"
+                      className="w-32 rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
+                      value={draftFolder}
+                      onChange={(e) => setDraftFolder(e.target.value)}
+                    />
+                    <input
+                      aria-label="Tags (comma-separated)"
+                      placeholder="tags, comma, separated"
+                      className="w-48 rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
+                      value={draftTags}
+                      onChange={(e) => setDraftTags(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="btn-primary px-2 py-1 text-xs"
+                      onClick={() => void handleOrganizeSave(profile.id)}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs text-ink-muted hover:text-ink-primary"
+                      onClick={() => setOrganizeId(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
                 <div className="mt-auto flex gap-2 pt-1">
                   {running ? (
                     <button
@@ -778,6 +872,34 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                       aria-label={running ? 'Running' : 'Idle'}
                     />
                     <p className="text-sm font-medium text-ink-primary">{profile.name}</p>
+                    {(profilesMeta[profile.id]?.folder ?? '') !== '' && (
+                      <span className="rounded-sm bg-accent-subtle px-1.5 py-0.5 text-[10px] text-ink-secondary">
+                        📁 {profilesMeta[profile.id]?.folder}
+                      </span>
+                    )}
+                    {(profilesMeta[profile.id]?.tags ?? []).map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-sm border border-surface-divider px-1.5 py-0.5 text-[10px] text-ink-muted"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                    <button
+                      type="button"
+                      className="text-[10px] text-ink-muted underline-offset-2 hover:text-ink-primary hover:underline"
+                      onClick={() => {
+                        if (organizeId === profile.id) {
+                          setOrganizeId(null);
+                          return;
+                        }
+                        setDraftFolder(profilesMeta[profile.id]?.folder ?? '');
+                        setDraftTags((profilesMeta[profile.id]?.tags ?? []).join(', '));
+                        setOrganizeId(profile.id);
+                      }}
+                    >
+                      Organize
+                    </button>
                     <span
                       className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
                         running
