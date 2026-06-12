@@ -912,296 +912,347 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             Sessions without a profile start ephemeral — fresh state every run.
           </p>
         </div>
-      ) : viewMode === 'grid' ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredProfiles.length === 0 ? (
-            <p className="col-span-full px-4 py-8 text-center text-sm text-ink-muted">
-              No profiles match the current filter.
-            </p>
-          ) : null}
-          {filteredProfiles.map((profile) => {
-            const bound = boundSession(profile.id);
-            const running = bound !== null;
-            return (
-              <div
-                key={profile.id}
-                className="flex flex-col gap-2 rounded-md border border-surface-divider bg-surface-raised p-4"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="truncate text-sm font-medium text-ink-primary">{profile.name}</p>
-                  <span
-                    className={
-                      running
-                        ? 'inline-flex items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] font-semibold text-status-ready'
-                        : 'inline-flex items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] font-semibold text-ink-muted'
-                    }
-                  >
-                    <span
-                      className={
-                        running
-                          ? 'h-1.5 w-1.5 rounded-full bg-status-ready'
-                          : 'h-1.5 w-1.5 rounded-full bg-status-idle'
-                      }
-                    />
-                    {running ? 'Running' : 'Idle'}
-                  </span>
-                </div>
-                <p className="mono truncate text-xs text-ink-muted">{profile.archetype}</p>
-                {organizeId === profile.id && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded border border-surface-divider bg-surface-inset p-2">
-                    <input
-                      aria-label="Folder"
-                      placeholder="Folder"
-                      className="w-32 rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
-                      value={draftFolder}
-                      onChange={(e) => setDraftFolder(e.target.value)}
-                    />
-                    <input
-                      aria-label="Tags (comma-separated)"
-                      placeholder="tags, comma, separated"
-                      className="w-48 rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
-                      value={draftTags}
-                      onChange={(e) => setDraftTags(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="btn-primary px-2 py-1 text-xs"
-                      onClick={() => void handleOrganizeSave(profile.id)}
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs text-ink-muted hover:text-ink-primary"
-                      onClick={() => setOrganizeId(null)}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
-                <div className="mt-auto flex gap-2 pt-1">
-                  {running ? (
-                    <button
-                      type="button"
-                      className="btn-secondary flex-1 text-xs"
-                      onClick={() => onOpenSession(bound.id)}
-                    >
-                      Open session
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn-primary flex-1 text-xs"
-                      disabled={busyId === profile.id}
-                      onClick={() => void handleLaunch(profile)}
-                    >
-                      {busyId === profile.id ? 'Launching…' : 'Launch'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
       ) : (
-        <ul className="flex flex-col divide-y divide-surface-divider rounded-md border border-surface-divider bg-surface-raised">
-          {filteredProfiles.length === 0 ? (
-            <li className="px-4 py-8 text-center text-sm text-ink-muted">
-              No profiles match the current filter.{' '}
-              <button
-                type="button"
-                className="text-accent underline-offset-2 hover:underline"
-                onClick={() => {
-                  setSearchQuery('');
-                  setStatusFilter('all');
-                }}
-              >
-                Clear
-              </button>
-            </li>
-          ) : null}
-          {filteredProfiles.map((profile) => {
-            const bound = boundSession(profile.id);
-            const running = bound !== null;
-            const binding = bindings.find((b) => b.profileId === profile.id) ?? null;
-            const selectedProxy = pickProxy(profile.id);
-            const busy = busyId === profile.id;
-            return (
-              <li
-                key={profile.id}
-                className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-block h-2 w-2 rounded-full ${
-                        running ? 'bg-emerald-500' : 'bg-ink-muted/40'
-                      }`}
-                      aria-label={running ? 'Running' : 'Idle'}
-                    />
-                    <input
-                      type="checkbox"
-                      aria-label={`Select ${profile.name}`}
-                      className="h-3.5 w-3.5 accent-[var(--accent)]"
-                      checked={selectedIds.has(profile.id)}
-                      onChange={() => toggleSelected(profile.id)}
-                    />
-                    <p className="text-sm font-medium text-ink-primary">{profile.name}</p>
-                    {(profilesMeta[profile.id]?.folder ?? '') !== '' && (
-                      <span className="rounded-sm bg-accent-subtle px-1.5 py-0.5 text-[10px] text-ink-secondary">
-                        📁 {profilesMeta[profile.id]?.folder}
-                      </span>
-                    )}
-                    {(profilesMeta[profile.id]?.tags ?? []).map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-sm border border-surface-divider px-1.5 py-0.5 text-[10px] text-ink-muted"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                    <button
-                      type="button"
-                      className="text-[10px] text-ink-muted underline-offset-2 hover:text-ink-primary hover:underline"
-                      onClick={() => {
-                        if (organizeId === profile.id) {
-                          setOrganizeId(null);
-                          return;
-                        }
-                        setDraftFolder(profilesMeta[profile.id]?.folder ?? '');
-                        setDraftTags((profilesMeta[profile.id]?.tags ?? []).join(', '));
-                        setOrganizeId(profile.id);
-                      }}
+        <div className="flex min-h-0 flex-1 items-start gap-3">
+          {/* Folders sidebar (hub-demo port — replaces the old dropdown
+              filter). Counts derive from the same organization map the
+              filter reads; selection drives folderFilter unchanged. */}
+          <nav
+            aria-label="Folders"
+            className="flex w-40 shrink-0 flex-col gap-0.5 rounded-md border border-surface-divider bg-surface-raised p-2"
+          >
+            <FolderItem
+              label="All profiles"
+              count={state.profiles.length}
+              active={folderFilter === 'all'}
+              onSelect={() => setFolderFilter('all')}
+            />
+            <FolderItem
+              label="Unfiled"
+              count={state.profiles.filter((p) => (profilesMeta[p.id]?.folder ?? '') === '').length}
+              active={folderFilter === 'unfiled'}
+              onSelect={() => setFolderFilter('unfiled')}
+            />
+            {folderList(profilesMeta).map((f) => (
+              <FolderItem
+                key={f}
+                label={f}
+                count={state.profiles.filter((p) => profilesMeta[p.id]?.folder === f).length}
+                active={folderFilter === f}
+                onSelect={() => setFolderFilter(f)}
+              />
+            ))}
+          </nav>
+          <div className="min-w-0 flex-1">
+            {viewMode === 'grid' ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredProfiles.length === 0 ? (
+                  <p className="col-span-full px-4 py-8 text-center text-sm text-ink-muted">
+                    No profiles match the current filter.
+                  </p>
+                ) : null}
+                {filteredProfiles.map((profile) => {
+                  const bound = boundSession(profile.id);
+                  const running = bound !== null;
+                  return (
+                    <div
+                      key={profile.id}
+                      className="flex flex-col gap-2 rounded-md border border-surface-divider bg-surface-raised p-4"
                     >
-                      Organize
-                    </button>
-                    <span
-                      className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-                        running
-                          ? 'bg-emerald-500/15 text-emerald-300'
-                          : 'bg-surface-base text-ink-muted'
-                      }`}
-                    >
-                      {running ? 'Running' : 'Idle'}
-                    </span>
-                  </div>
-                  {profile.description !== null && (
-                    <p className="mt-1 text-xs text-ink-secondary">{profile.description}</p>
-                  )}
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
-                    <span className="mono rounded-sm bg-surface-base px-1.5 py-0.5 text-[11px]">
-                      {profile.archetype}
-                    </span>
-                    <ProxyChip
-                      proxy={selectedProxy}
-                      defaulted={
-                        binding?.defaultProxyId === null || binding?.defaultProxyId === undefined
-                      }
-                    />
-                    <select
-                      aria-label={`Change proxy binding for ${profile.name}`}
-                      className="mono rounded-sm bg-surface-base px-1 py-0.5 text-[11px] text-ink-secondary"
-                      value={binding?.defaultProxyId ?? ''}
-                      onChange={(e) => {
-                        const next = e.target.value === '' ? null : e.target.value;
-                        void setDefaultProxy(profile.id, next).then(() => void refresh(false));
-                      }}
-                      disabled={busy || running}
-                      title={running ? 'Stop the profile to change proxy' : 'Change proxy binding'}
-                    >
-                      <option value="">— (first available)</option>
-                      {proxies.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.label} ({p.host}:{p.port})
-                        </option>
-                      ))}
-                    </select>
-                    {profile.last_used_at !== null && (
-                      <span>
-                        last used{' '}
-                        <RelativeTime iso={profile.last_used_at} tooltipPrefix="Last used" />
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {running ? (
-                    <>
-                      <button
-                        type="button"
-                        className="btn-secondary text-xs"
-                        onClick={() => {
-                          // W624 — agent session → re-open the WebRTC stream;
-                          // driver session → the polling viewer.
-                          if (bound === null) return;
-                          if (bound.kind === 'agent') {
-                            void reopenStream(bound.id, profile.id);
-                          } else {
-                            onOpenSession(bound.id);
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-medium text-ink-primary">
+                          {profile.name}
+                        </p>
+                        <span
+                          className={
+                            running
+                              ? 'inline-flex items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] font-semibold text-status-ready'
+                              : 'inline-flex items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] font-semibold text-ink-muted'
                           }
-                        }}
-                        disabled={busy}
-                      >
-                        Live view
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded border border-status-error/40 bg-status-error/10 px-3 py-1 text-xs font-medium text-status-error hover:bg-status-error/20 disabled:cursor-not-allowed disabled:opacity-60"
-                        onClick={() => void handleStop(profile)}
-                        disabled={busy}
-                      >
-                        {busy ? 'Stopping…' : 'Stop'}
-                      </button>
-                    </>
-                  ) : (
+                        >
+                          <span
+                            className={
+                              running
+                                ? 'h-1.5 w-1.5 rounded-full bg-status-ready'
+                                : 'h-1.5 w-1.5 rounded-full bg-status-idle'
+                            }
+                          />
+                          {running ? 'Running' : 'Idle'}
+                        </span>
+                      </div>
+                      <p className="mono truncate text-xs text-ink-muted">{profile.archetype}</p>
+                      {/* Egress chip (hub-demo port): the proxy this profile
+                    launches through — explicit binding or first saved.
+                    Exit COUNTRY arrives with the probe backend's echo
+                    endpoint; until then the label is the honest fact. */}
+                      {pickProxy(profile.id) !== null && (
+                        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-surface-divider px-2 py-0.5 text-[10px] text-ink-secondary">
+                          🌍 {pickProxy(profile.id)?.label}
+                        </span>
+                      )}
+                      {organizeId === profile.id && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 rounded border border-surface-divider bg-surface-inset p-2">
+                          <input
+                            aria-label="Folder"
+                            placeholder="Folder"
+                            className="w-32 rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
+                            value={draftFolder}
+                            onChange={(e) => setDraftFolder(e.target.value)}
+                          />
+                          <input
+                            aria-label="Tags (comma-separated)"
+                            placeholder="tags, comma, separated"
+                            className="w-48 rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
+                            value={draftTags}
+                            onChange={(e) => setDraftTags(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="btn-primary px-2 py-1 text-xs"
+                            onClick={() => void handleOrganizeSave(profile.id)}
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            className="text-xs text-ink-muted hover:text-ink-primary"
+                            onClick={() => setOrganizeId(null)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                      <div className="mt-auto flex gap-2 pt-1">
+                        {running ? (
+                          <button
+                            type="button"
+                            className="btn-secondary flex-1 text-xs"
+                            onClick={() => onOpenSession(bound.id)}
+                          >
+                            Open session
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-primary flex-1 text-xs"
+                            disabled={busyId === profile.id}
+                            onClick={() => void handleLaunch(profile)}
+                          >
+                            {busyId === profile.id ? 'Launching…' : 'Launch'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <ul className="flex flex-col divide-y divide-surface-divider rounded-md border border-surface-divider bg-surface-raised">
+                {filteredProfiles.length === 0 ? (
+                  <li className="px-4 py-8 text-center text-sm text-ink-muted">
+                    No profiles match the current filter.{' '}
                     <button
                       type="button"
-                      className="btn-primary text-xs"
-                      onClick={() => void handleLaunch(profile)}
-                      // Launch gates on `busy` only. NOT atProfileCap: the
-                      // profile cap limits how many profiles you can CREATE, not
-                      // whether you can launch an existing one (launching consumes
-                      // a session slot, not a profile slot). Gating Launch on
-                      // atProfileCap meant a free-tier user (profile_cap 1) could
-                      // never launch their one allowed profile. The server
-                      // enforces the concurrent-session cap and handleLaunch
-                      // surfaces that error.
-                      disabled={busy}
+                      className="text-accent underline-offset-2 hover:underline"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setStatusFilter('all');
+                      }}
                     >
-                      {busy ? 'Launching…' : 'Launch'}
+                      Clear
                     </button>
-                  )}
-                  {/* cap-first operand order ON PURPOSE: duplicate CREATES a
+                  </li>
+                ) : null}
+                {filteredProfiles.map((profile) => {
+                  const bound = boundSession(profile.id);
+                  const running = bound !== null;
+                  const binding = bindings.find((b) => b.profileId === profile.id) ?? null;
+                  const selectedProxy = pickProxy(profile.id);
+                  const busy = busyId === profile.id;
+                  return (
+                    <li
+                      key={profile.id}
+                      className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-block h-2 w-2 rounded-full ${
+                              running ? 'bg-emerald-500' : 'bg-ink-muted/40'
+                            }`}
+                            aria-label={running ? 'Running' : 'Idle'}
+                          />
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${profile.name}`}
+                            className="h-3.5 w-3.5 accent-[var(--accent)]"
+                            checked={selectedIds.has(profile.id)}
+                            onChange={() => toggleSelected(profile.id)}
+                          />
+                          <p className="text-sm font-medium text-ink-primary">{profile.name}</p>
+                          {(profilesMeta[profile.id]?.folder ?? '') !== '' && (
+                            <span className="rounded-sm bg-accent-subtle px-1.5 py-0.5 text-[10px] text-ink-secondary">
+                              📁 {profilesMeta[profile.id]?.folder}
+                            </span>
+                          )}
+                          {(profilesMeta[profile.id]?.tags ?? []).map((tag) => (
+                            <span
+                              key={tag}
+                              className="rounded-sm border border-surface-divider px-1.5 py-0.5 text-[10px] text-ink-muted"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          <button
+                            type="button"
+                            className="text-[10px] text-ink-muted underline-offset-2 hover:text-ink-primary hover:underline"
+                            onClick={() => {
+                              if (organizeId === profile.id) {
+                                setOrganizeId(null);
+                                return;
+                              }
+                              setDraftFolder(profilesMeta[profile.id]?.folder ?? '');
+                              setDraftTags((profilesMeta[profile.id]?.tags ?? []).join(', '));
+                              setOrganizeId(profile.id);
+                            }}
+                          >
+                            Organize
+                          </button>
+                          <span
+                            className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+                              running
+                                ? 'bg-emerald-500/15 text-emerald-300'
+                                : 'bg-surface-base text-ink-muted'
+                            }`}
+                          >
+                            {running ? 'Running' : 'Idle'}
+                          </span>
+                        </div>
+                        {profile.description !== null && (
+                          <p className="mt-1 text-xs text-ink-secondary">{profile.description}</p>
+                        )}
+                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
+                          <span className="mono rounded-sm bg-surface-base px-1.5 py-0.5 text-[11px]">
+                            {profile.archetype}
+                          </span>
+                          <ProxyChip
+                            proxy={selectedProxy}
+                            defaulted={
+                              binding?.defaultProxyId === null ||
+                              binding?.defaultProxyId === undefined
+                            }
+                          />
+                          <select
+                            aria-label={`Change proxy binding for ${profile.name}`}
+                            className="mono rounded-sm bg-surface-base px-1 py-0.5 text-[11px] text-ink-secondary"
+                            value={binding?.defaultProxyId ?? ''}
+                            onChange={(e) => {
+                              const next = e.target.value === '' ? null : e.target.value;
+                              void setDefaultProxy(profile.id, next).then(
+                                () => void refresh(false),
+                              );
+                            }}
+                            disabled={busy || running}
+                            title={
+                              running ? 'Stop the profile to change proxy' : 'Change proxy binding'
+                            }
+                          >
+                            <option value="">— (first available)</option>
+                            {proxies.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.label} ({p.host}:{p.port})
+                              </option>
+                            ))}
+                          </select>
+                          {profile.last_used_at !== null && (
+                            <span>
+                              last used{' '}
+                              <RelativeTime iso={profile.last_used_at} tooltipPrefix="Last used" />
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {running ? (
+                          <>
+                            <button
+                              type="button"
+                              className="btn-secondary text-xs"
+                              onClick={() => {
+                                // W624 — agent session → re-open the WebRTC stream;
+                                // driver session → the polling viewer.
+                                if (bound === null) return;
+                                if (bound.kind === 'agent') {
+                                  void reopenStream(bound.id, profile.id);
+                                } else {
+                                  onOpenSession(bound.id);
+                                }
+                              }}
+                              disabled={busy}
+                            >
+                              Live view
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded border border-status-error/40 bg-status-error/10 px-3 py-1 text-xs font-medium text-status-error hover:bg-status-error/20 disabled:cursor-not-allowed disabled:opacity-60"
+                              onClick={() => void handleStop(profile)}
+                              disabled={busy}
+                            >
+                              {busy ? 'Stopping…' : 'Stop'}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-primary text-xs"
+                            onClick={() => void handleLaunch(profile)}
+                            // Launch gates on `busy` only. NOT atProfileCap: the
+                            // profile cap limits how many profiles you can CREATE, not
+                            // whether you can launch an existing one (launching consumes
+                            // a session slot, not a profile slot). Gating Launch on
+                            // atProfileCap meant a free-tier user (profile_cap 1) could
+                            // never launch their one allowed profile. The server
+                            // enforces the concurrent-session cap and handleLaunch
+                            // surfaces that error.
+                            disabled={busy}
+                          >
+                            {busy ? 'Launching…' : 'Launch'}
+                          </button>
+                        )}
+                        {/* cap-first operand order ON PURPOSE: duplicate CREATES a
                       profile so cap-gating is correct here — but the pinned
                       free-tier regression guard bans the `busy || atProfileCap`
                       form (the Launch bug pattern); keep this order. */}
-                  <button
-                    type="button"
-                    className="text-xs text-ink-muted hover:text-ink-primary"
-                    onClick={() => void handleDuplicate(profile)}
-                    disabled={atProfileCap || busy}
-                    title={
-                      atProfileCap
-                        ? 'Profile cap reached — delete a profile or upgrade to duplicate'
-                        : 'Server-side copy: same archetype + state, fresh identity'
-                    }
-                  >
-                    Duplicate
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs text-ink-muted hover:text-status-error"
-                    onClick={() => void handleDelete(profile.id)}
-                    disabled={busy || running}
-                    title={running ? 'Stop the profile before deleting' : undefined}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+                        <button
+                          type="button"
+                          className="text-xs text-ink-muted hover:text-ink-primary"
+                          onClick={() => void handleDuplicate(profile)}
+                          disabled={atProfileCap || busy}
+                          title={
+                            atProfileCap
+                              ? 'Profile cap reached — delete a profile or upgrade to duplicate'
+                              : 'Server-side copy: same archetype + state, fresh identity'
+                          }
+                        >
+                          Duplicate
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs text-ink-muted hover:text-status-error"
+                          onClick={() => void handleDelete(profile.id)}
+                          disabled={busy || running}
+                          title={running ? 'Stop the profile before deleting' : undefined}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </div>
       )}
 
       {state.refreshedAt !== null && (
@@ -1844,6 +1895,34 @@ function CreateProfileModal({
         </form>
       </div>
     </div>
+  );
+}
+
+function FolderItem({
+  label,
+  count,
+  active,
+  onSelect,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onSelect: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onSelect}
+      className={`flex items-center justify-between gap-2 rounded px-2 py-1 text-left text-xs ${
+        active
+          ? 'bg-accent-subtle font-medium text-ink-primary'
+          : 'text-ink-secondary hover:bg-surface-inset'
+      }`}
+    >
+      <span className="truncate">{label}</span>
+      <span className="mono text-2xs text-ink-muted">{count}</span>
+    </button>
   );
 }
 
