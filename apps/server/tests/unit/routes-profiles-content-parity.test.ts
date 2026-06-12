@@ -36,10 +36,10 @@ function read(p: string): string {
 describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
   const body = read(LIB);
 
-  it('header framing pinned: V-081 5 endpoints (POST create tier-limit / GET list cursor / GET one / PATCH partial / DELETE) + auth-gated + rate-limit("global") + prof_<uuid> public-id (same prefix-conversion convention as sessions.ts)', () => {
+  it('header framing pinned: V-081 5 endpoints (POST create tier-limit / GET list cursor / GET one / PATCH partial incl folder/tags / DELETE) + auth-gated + rate-limit("global") + prof_<uuid> public-id (same prefix-conversion convention as sessions.ts)', () => {
     expect(body).toMatch(/\/\/ Profile routes — five endpoints under \/v1\/profiles \(V-081\)\./);
     expect(body).toMatch(
-      /\/\/\s*POST\s+\/v1\/profiles\s+— create \(tier-limit enforced\)\s*\n?\s*\/\/\s*GET\s+\/v1\/profiles\s+— list \(cursor pagination\)\s*\n?\s*\/\/\s*GET\s+\/v1\/profiles\/:id\s+— get one\s*\n?\s*\/\/\s*PATCH\s+\/v1\/profiles\/:id\s+— partial update \(name, description\)\s*\n?\s*\/\/\s*DELETE \/v1\/profiles\/:id\s+— delete/,
+      /\/\/\s*POST\s+\/v1\/profiles\s+— create \(tier-limit enforced\)\s*\n?\s*\/\/\s*GET\s+\/v1\/profiles\s+— list \(cursor pagination\)\s*\n?\s*\/\/\s*GET\s+\/v1\/profiles\/:id\s+— get one\s*\n?\s*\/\/\s*PATCH\s+\/v1\/profiles\/:id\s+— partial update \(name, description, folder, tags\)\s*\n?\s*\/\/\s*DELETE \/v1\/profiles\/:id\s+— delete/,
     );
     expect(body).toMatch(
       /\/\/ Auth-gated via app\.requireAuth \+ app\.rateLimit\('global'\)\. Public id\s*\n?\s*\/\/ format: `prof_<uuid>` — same prefix-conversion convention as\s*\n?\s*\/\/ sessions\.ts\./,
@@ -67,16 +67,26 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
     );
   });
 
-  it('PROFILE_ID_RE regex (prof_ + UUID); uuidFromProfileId throws BadRequestError; publicProfile mapper (7 fields: id prof_ + name + archetype + description + last_used_at nullable + created/updated_at)', () => {
+  it('PROFILE_ID_RE regex (prof_ + UUID); uuidFromProfileId throws BadRequestError; publicProfile mapper (9 fields: id prof_ + name + archetype + description + folder + tags + last_used_at nullable + created/updated_at)', () => {
     expect(body).toMatch(
       /const PROFILE_ID_RE = \/\^prof_\(\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\)\$\/;/,
     );
     expect(body).toMatch(
       /function uuidFromProfileId\(value: string\): string \{\s*\n?\s*const match = PROFILE_ID_RE\.exec\(value\);\s*\n?\s*if \(!match \|\| !match\[1\]\) \{\s*\n?\s*throw new BadRequestError\('Invalid id format\. Expected "prof_<uuid>"\.'\);\s*\n?\s*\}\s*\n?\s*return match\[1\];\s*\n?\s*\}/,
     );
-    expect(body).toMatch(
-      /function publicProfile\(p: ProfileRecord\): Record<string, unknown> \{\s*\n?\s*return \{\s*\n?\s*id: `prof_\$\{p\.id\}`,\s*\n?\s*name: p\.name,\s*\n?\s*archetype: p\.archetype,\s*\n?\s*description: p\.description,\s*\n?\s*last_used_at: p\.lastUsedAt \? p\.lastUsedAt\.toISOString\(\) : null,\s*\n?\s*created_at: p\.createdAt\.toISOString\(\),\s*\n?\s*updated_at: p\.updatedAt\.toISOString\(\),\s*\n?\s*\};\s*\n?\s*\}/,
-    );
+    // Per-field toContain rather than one long \s*\n?\s*-chained regex (the
+    // chain backtracks pathologically past ~5 groups; folder/tags pushed it
+    // over — see feedback_no_long_chain_parity_regex).
+    expect(body).toMatch(/function publicProfile\(p: ProfileRecord\): Record<string, unknown> \{/);
+    expect(body).toContain('id: `prof_${p.id}`,');
+    expect(body).toContain('name: p.name,');
+    expect(body).toContain('archetype: p.archetype,');
+    expect(body).toContain('description: p.description,');
+    expect(body).toContain('folder: p.folder,');
+    expect(body).toContain('tags: p.tags,');
+    expect(body).toContain('last_used_at: p.lastUsedAt ? p.lastUsedAt.toISOString() : null,');
+    expect(body).toContain('created_at: p.createdAt.toISOString(),');
+    expect(body).toContain('updated_at: p.updatedAt.toISOString(),');
   });
 
   it('ProfileRoutesDeps: service + V-326e4 authRepo rationale (lookup OWNER tier for profile-cap check on POST when team-scoped)', () => {
@@ -122,11 +132,17 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
     );
   });
 
-  it('V-326e4 PATCH /v1/profiles/:id: admin-only on team scope; UpdateProfileRequestSchema; selective updates (name?/description?) preserved', () => {
+  it('V-326e4 PATCH /v1/profiles/:id: admin-only on team scope; UpdateProfileRequestSchema; selective updates (name?/description?/folder?/tags?) preserved', () => {
     expect(body).toMatch(/\/\/ V-326e4 — admin-only on team scope\./);
-    expect(body).toMatch(
-      /const updates: \{ name\?: string; description\?: string \| null \} = \{\};\s*\n?\s*if \(parsed\.data\.name !== undefined\) updates\.name = parsed\.data\.name;\s*\n?\s*if \(parsed\.data\.description !== undefined\) updates\.description = parsed\.data\.description;/,
+    // Selective-update guards, one per PATCH-able field (undefined = untouched).
+    expect(body).toContain('if (parsed.data.name !== undefined) updates.name = parsed.data.name;');
+    expect(body).toContain(
+      'if (parsed.data.description !== undefined) updates.description = parsed.data.description;',
     );
+    expect(body).toContain(
+      'if (parsed.data.folder !== undefined) updates.folder = parsed.data.folder;',
+    );
+    expect(body).toContain('if (parsed.data.tags !== undefined) updates.tags = parsed.data.tags;');
   });
 
   it('DELETE /v1/profiles/:id: V-326e4 admin-only on team; 204 No Content', () => {

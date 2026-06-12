@@ -535,6 +535,17 @@ export const profiles = pgTable(
     name: text('name').notNull(),
     archetype: text('archetype').notNull().default('iphone17_ios18_7_safari26_4'),
     description: text('description'),
+    // Organization metadata (2026-06-12) — backend half of the GUI's
+    // folders/tags surface; caps enforced at the api-types layer
+    // (folder ≤32 chars, ≤12 unique tags ≤24 chars each). NULL folder =
+    // unfiled. Account-local organization only — deliberately NOT part
+    // of the V-480 export envelope or V-666 transfers (a recipient's
+    // folder taxonomy is their own).
+    folder: text('folder'),
+    tags: jsonb('tags')
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     /** Last time a session was created against this profile. Updated by SessionsService at create-time. */
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     // Profile-backed sessions (file 57 key hierarchy): the per-profile DEK,

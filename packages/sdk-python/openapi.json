@@ -24705,6 +24705,20 @@
                   "description": {
                     "type": "string",
                     "maxLength": 2048
+                  },
+                  "folder": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 24
+                    },
+                    "maxItems": 12
                   }
                 },
                 "required": ["name"]
@@ -24733,6 +24747,15 @@
                     "description": {
                       "type": ["string", "null"]
                     },
+                    "folder": {
+                      "type": ["string", "null"]
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "last_used_at": {
                       "type": ["string", "null"],
                       "format": "date-time",
@@ -24754,6 +24777,8 @@
                     "name",
                     "archetype",
                     "description",
+                    "folder",
+                    "tags",
                     "last_used_at",
                     "created_at",
                     "updated_at"
@@ -24872,6 +24897,15 @@
                           "description": {
                             "type": ["string", "null"]
                           },
+                          "folder": {
+                            "type": ["string", "null"]
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
                           "last_used_at": {
                             "type": ["string", "null"],
                             "format": "date-time",
@@ -24893,6 +24927,8 @@
                           "name",
                           "archetype",
                           "description",
+                          "folder",
+                          "tags",
                           "last_used_at",
                           "created_at",
                           "updated_at"
@@ -24995,6 +25031,15 @@
                     "description": {
                       "type": ["string", "null"]
                     },
+                    "folder": {
+                      "type": ["string", "null"]
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "last_used_at": {
                       "type": ["string", "null"],
                       "format": "date-time",
@@ -25016,6 +25061,8 @@
                     "name",
                     "archetype",
                     "description",
+                    "folder",
+                    "tags",
                     "last_used_at",
                     "created_at",
                     "updated_at"
@@ -25110,6 +25157,20 @@
                   "description": {
                     "type": ["string", "null"],
                     "maxLength": 2048
+                  },
+                  "folder": {
+                    "type": ["string", "null"],
+                    "minLength": 1,
+                    "maxLength": 32
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 24
+                    },
+                    "maxItems": 12
                   }
                 }
               }
@@ -25137,6 +25198,15 @@
                     "description": {
                       "type": ["string", "null"]
                     },
+                    "folder": {
+                      "type": ["string", "null"]
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "last_used_at": {
                       "type": ["string", "null"],
                       "format": "date-time",
@@ -25158,6 +25228,8 @@
                     "name",
                     "archetype",
                     "description",
+                    "folder",
+                    "tags",
                     "last_used_at",
                     "created_at",
                     "updated_at"

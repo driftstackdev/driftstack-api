@@ -21,11 +21,29 @@ export const ProfileNameSchema = z
       'name must start and end with alphanumeric; allowed inner chars: letters, digits, space, underscore, hyphen, dot',
   });
 
+// Profile organization metadata (folders + tags). Backend half of the
+// GUI's profiles-meta organization surface — caps mirror the client
+// store (apps/gui-client/src/lib/profiles-meta.ts: folder ≤32 chars,
+// ≤12 tags ≤24 chars each) so a value the GUI accepts is never rejected
+// server-side. Tags are an exact-set replace on update (no merge
+// semantics at the API layer); duplicates are rejected rather than
+// silently dropped so callers learn about their bug.
+export const ProfileFolderSchema = z.string().trim().min(1).max(32);
+export const ProfileTagSchema = z.string().trim().min(1).max(24);
+export const ProfileTagsSchema = z
+  .array(ProfileTagSchema)
+  .max(12)
+  .refine((tags) => new Set(tags).size === tags.length, {
+    message: 'tags must be unique',
+  });
+
 export const ProfileSchema = z.object({
   id: ProfileIdSchema,
   name: z.string(),
   archetype: z.string(),
   description: z.string().nullable(),
+  folder: z.string().nullable(),
+  tags: z.array(z.string()),
   last_used_at: Iso8601Schema.nullable(),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,
@@ -42,12 +60,18 @@ export const CreateProfileRequestSchema = z.object({
    */
   archetype: z.string().min(1).max(120).optional(),
   description: z.string().max(2048).optional(),
+  folder: ProfileFolderSchema.optional(),
+  tags: ProfileTagsSchema.optional(),
 });
 export type CreateProfileRequest = z.infer<typeof CreateProfileRequestSchema>;
 
 export const UpdateProfileRequestSchema = z.object({
   name: ProfileNameSchema.optional(),
   description: z.string().max(2048).nullable().optional(),
+  /** `null` clears the folder (back to unfiled). */
+  folder: ProfileFolderSchema.nullable().optional(),
+  /** Exact-set replace; `[]` clears all tags. */
+  tags: ProfileTagsSchema.optional(),
 });
 export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;
 

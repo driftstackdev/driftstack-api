@@ -17,6 +17,8 @@ const SAMPLE_PROFILE = `{
   "name": "us-east-sales-bot",
   "archetype": "iphone17_ios18_7_safari26_4",
   "description": "Sales-team account for east-coast scraping.",
+  "folder": "Sales",
+  "tags": ["us-east", "scraping"],
   "last_used_at": "2026-05-11T12:00:00.000Z",
   "created_at": "2026-05-01T00:00:00.000Z",
   "updated_at": "2026-05-11T12:00:00.000Z"
@@ -63,7 +65,9 @@ Content-Type: application/json
 {
   "name": "us-east-sales-bot",
   "archetype": "iphone17_ios18_7_safari26_4",   ← optional, defaults server-side
-  "description": "Sales-team account for east-coast scraping."
+  "description": "Sales-team account for east-coast scraping.",
+  "folder": "Sales",                            ← optional, ≤32 chars
+  "tags": ["us-east", "scraping"]               ← optional, ≤12 unique, ≤24 chars each
 }
 
 → 201 Created
@@ -109,14 +113,19 @@ Content-Type: application/json
 
 {
   "name": "us-east-sales-bot-v2",
-  "description": "Renamed after the 2026-05 reorg."
+  "description": "Renamed after the 2026-05 reorg.",
+  "folder": null,
+  "tags": ["us-east", "scraping", "v2"]
 }
 
 → 200 OK
 ${SAMPLE_PROFILE}`}</code></pre>
     <p>
-      Only <code>name</code> and <code>description</code> are
-      patchable. To change the archetype, clone the profile via
+      <code>name</code>, <code>description</code>, <code>folder</code>
+      and <code>tags</code> are patchable — <code>folder: null</code>
+      files the profile back under no folder, and <code>tags</code> is
+      an exact-set replace (<code>[]</code> clears them). To change the
+      archetype, clone the profile via
       <code>POST /v1/profiles/:id/clone</code> and discard the old
       one (the archetype is set at create time and pins the device
       identity for the life of the profile).

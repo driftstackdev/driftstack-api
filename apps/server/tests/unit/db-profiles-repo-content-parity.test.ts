@@ -7,8 +7,8 @@
 //
 //   • V-081 framing pinned.
 //   • DEFAULT_PAGE 50; MAX_PAGE 100 constants.
-//   • toRecord: 8-field ProfileRecord.
-//   • insert: 5-field values (+ wrappedDek); returning(); throws on no-row.
+//   • toRecord: 10-field ProfileRecord (incl folder/tags organization).
+//   • insert: 7-field values (+ wrappedDek); returning(); throws on no-row.
 //   • countByAccount: count() helper aggregate; row?.n ?? 0.
 //   • findById + findByAccountAndName: account-scoped + limit 1.
 //   • list cursor framing: cursor row lookup IS account-scoped
@@ -52,13 +52,25 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toMatch(/const DEFAULT_PAGE = 50;\s*\n?\s*const MAX_PAGE = 100;/);
   });
 
-  it('toRecord: 8-field ProfileRecord (id + accountId + name + archetype + description + lastUsedAt + created/updated_at)', () => {
+  it('toRecord: 10-field ProfileRecord (id + accountId + name + archetype + description + folder + tags + lastUsedAt + created/updated_at)', () => {
+    // Per-field toContain (no long \s*\n?\s* chains — see
+    // feedback_no_long_chain_parity_regex).
     expect(body).toMatch(
-      /function toRecord\(r: typeof profiles\.\$inferSelect\): ProfileRecord \{\s*\n?\s*return \{\s*\n?\s*id: r\.id,\s*\n?\s*accountId: r\.accountId,\s*\n?\s*name: r\.name,\s*\n?\s*archetype: r\.archetype,\s*\n?\s*description: r\.description,\s*\n?\s*lastUsedAt: r\.lastUsedAt,\s*\n?\s*createdAt: r\.createdAt,\s*\n?\s*updatedAt: r\.updatedAt,\s*\n?\s*\};\s*\n?\s*\}/,
+      /function toRecord\(r: typeof profiles\.\$inferSelect\): ProfileRecord \{/,
     );
+    expect(body).toContain('id: r.id,');
+    expect(body).toContain('accountId: r.accountId,');
+    expect(body).toContain('name: r.name,');
+    expect(body).toContain('archetype: r.archetype,');
+    expect(body).toContain('description: r.description,');
+    expect(body).toContain('folder: r.folder,');
+    expect(body).toContain('tags: r.tags,');
+    expect(body).toContain('lastUsedAt: r.lastUsedAt,');
+    expect(body).toContain('createdAt: r.createdAt,');
+    expect(body).toContain('updatedAt: r.updatedAt,');
   });
 
-  it("insert: 5-field values (accountId + name + archetype + description + wrappedDek); returning(); throws 'insert profile: no row returned'", () => {
+  it("insert: 7-field values (accountId + name + archetype + description + folder + tags + wrappedDek); returning(); throws 'insert profile: no row returned'", () => {
     // Per-field toContain rather than one long \s*\n?\s*-chained regex (the
     // chain backtracks pathologically past ~5 groups; the wrapped_dek field
     // pushed it over — see feedback_no_long_chain_parity_regex).
@@ -66,6 +78,8 @@ describe('W446.B apps/server/src/db/profiles-repo.ts content parity', () => {
     expect(body).toContain('name: input.name,');
     expect(body).toContain('archetype: input.archetype,');
     expect(body).toContain('description: input.description,');
+    expect(body).toContain('folder: input.folder ?? null,');
+    expect(body).toContain('tags: input.tags ?? [],');
     expect(body).toContain('wrappedDek: input.wrappedDek ?? null,');
     expect(body).toContain('.returning();');
     expect(body).toContain("if (!row) throw new Error('insert profile: no row returned');");

@@ -59,10 +59,27 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
     );
   });
 
-  it('ProfileSchema: id + name + archetype + description nullable + last_used_at nullable + created/updated_at (7 fields)', () => {
+  it('ProfileSchema: id + name + archetype + description nullable + folder nullable + tags array + last_used_at nullable + created/updated_at (9 fields)', () => {
+    // Per-field toContain (no long \s*\n?\s* chains — see
+    // feedback_no_long_chain_parity_regex).
+    expect(body).toMatch(/export const ProfileSchema = z\.object\(\{/);
+    expect(body).toContain('id: ProfileIdSchema,');
+    expect(body).toContain('archetype: z.string(),');
+    expect(body).toContain('description: z.string().nullable(),');
+    expect(body).toContain('folder: z.string().nullable(),');
+    expect(body).toContain('tags: z.array(z.string()),');
+    expect(body).toContain('last_used_at: Iso8601Schema.nullable(),');
+    expect(body).toContain('created_at: Iso8601Schema,');
+    expect(body).toContain('updated_at: Iso8601Schema,');
+  });
+
+  it('organization metadata caps mirror the GUI client store: folder <=32, tag <=24, <=12 unique tags (apps/gui-client/src/lib/profiles-meta.ts)', () => {
+    expect(body).toContain('export const ProfileFolderSchema = z.string().trim().min(1).max(32);');
+    expect(body).toContain('export const ProfileTagSchema = z.string().trim().min(1).max(24);');
     expect(body).toMatch(
-      /export const ProfileSchema = z\.object\(\{\s*\n?\s*id: ProfileIdSchema,\s*\n?\s*name: z\.string\(\),\s*\n?\s*archetype: z\.string\(\),\s*\n?\s*description: z\.string\(\)\.nullable\(\),\s*\n?\s*last_used_at: Iso8601Schema\.nullable\(\),\s*\n?\s*created_at: Iso8601Schema,\s*\n?\s*updated_at: Iso8601Schema,\s*\n?\s*\}\);/,
+      /export const ProfileTagsSchema = z\s*\n?\s*\.array\(ProfileTagSchema\)\s*\n?\s*\.max\(12\)/,
     );
+    expect(body).toContain('tags must be unique');
   });
 
   it('CreateProfileRequest: name + optional archetype 1..120 (defaults to LOCKED_ARCHETYPE_ID iphone17_ios18_7_safari26_4 server-side; behavioural-stability pin rationale) + optional description max 2048', () => {
@@ -76,10 +93,15 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
     expect(body).toMatch(/description: z\.string\(\)\.max\(2048\)\.optional\(\),/);
   });
 
-  it('UpdateProfileRequest: name optional + description max 2048 nullable optional (PATCH partial)', () => {
-    expect(body).toMatch(
-      /export const UpdateProfileRequestSchema = z\.object\(\{\s*\n?\s*name: ProfileNameSchema\.optional\(\),\s*\n?\s*description: z\.string\(\)\.max\(2048\)\.nullable\(\)\.optional\(\),\s*\n?\s*\}\);/,
-    );
+  it('UpdateProfileRequest: name optional + description max 2048 nullable optional + folder nullable optional (null clears) + tags exact-set replace (PATCH partial)', () => {
+    expect(body).toMatch(/export const UpdateProfileRequestSchema = z\.object\(\{/);
+    expect(body).toContain('name: ProfileNameSchema.optional(),');
+    expect(body).toContain('description: z.string().max(2048).nullable().optional(),');
+    expect(body).toContain('folder: ProfileFolderSchema.nullable().optional(),');
+    expect(body).toContain('tags: ProfileTagsSchema.optional(),');
+    // The clears semantics are documented at the schema (customer-visible contract).
+    expect(body).toContain('`null` clears the folder');
+    expect(body).toContain('Exact-set replace; `[]` clears all tags.');
   });
 
   it('V-313 CloneProfileRequest: name optional only; server auto-derives `${source} (copy)` / `(copy 2)` / ... when omitted rationale', () => {

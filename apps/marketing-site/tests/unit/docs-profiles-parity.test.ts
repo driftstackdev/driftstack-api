@@ -5,7 +5,8 @@
 //     POST /v1/profile-snapshots/:id/restore — all server-registered.
 //   • Snapshot id-prefix convention (psnap_) + profile-id prefix
 //     (prof_) + LOCKED_ARCHETYPE_ID.
-//   • "name + description are the only patchable fields" claim.
+//   • "name + description + folder + tags are patchable" claim
+//     (archetype stays immutable — clone to change it).
 //   • Restore endpoint lives under /v1/profile-snapshots, NOT under
 //     /v1/profiles/<parent>/snapshots — pin both the doc + route.
 
@@ -91,8 +92,10 @@ describe('W347.A /docs/profiles parity', () => {
     expect(body).toMatch(/iphone17_ios18_7_safari26_4/);
   });
 
-  it('PATCH is restricted to name + description (archetype is immutable)', () => {
-    expect(body).toMatch(/Only <code>name<\/code> and <code>description<\/code> are\s+patchable/);
+  it('PATCH covers name + description + folder + tags (archetype is immutable)', () => {
+    expect(body).toMatch(
+      /<code>name<\/code>, <code>description<\/code>, <code>folder<\/code>\s+and <code>tags<\/code> are patchable/,
+    );
     expect(body).toMatch(/the archetype is set at create time and pins the device\s+identity/);
   });
 

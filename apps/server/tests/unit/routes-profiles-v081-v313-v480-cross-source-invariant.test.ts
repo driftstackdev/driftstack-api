@@ -68,7 +68,9 @@ describe('W1051 routes/profiles V-081 + V-313 + V-480 + V-326e4 cross-source inv
     expect(p).toMatch(/POST\s+\/v1\/profiles\s+— create \(tier-limit enforced\)/);
     expect(p).toMatch(/GET\s+\/v1\/profiles\s+— list \(cursor pagination\)/);
     expect(p).toMatch(/GET\s+\/v1\/profiles\/:id\s+— get one/);
-    expect(p).toMatch(/PATCH\s+\/v1\/profiles\/:id\s+— partial update \(name, description\)/);
+    expect(p).toMatch(
+      /PATCH\s+\/v1\/profiles\/:id\s+— partial update \(name, description, folder, tags\)/,
+    );
     expect(p).toMatch(/DELETE \/v1\/profiles\/:id\s+— delete/);
     expect(p).toMatch(/'\/v1\/profiles\/:id\/clone'/);
     expect(p).toMatch(/'\/v1\/profiles\/:id\/export'/);

@@ -3,7 +3,7 @@
 //   POST   /v1/profiles       — create (tier-limit enforced)
 //   GET    /v1/profiles       — list (cursor pagination)
 //   GET    /v1/profiles/:id   — get one
-//   PATCH  /v1/profiles/:id   — partial update (name, description)
+//   PATCH  /v1/profiles/:id   — partial update (name, description, folder, tags)
 //   DELETE /v1/profiles/:id   — delete
 //
 // Auth-gated via app.requireAuth + app.rateLimit('global'). Public id
@@ -59,6 +59,8 @@ function publicProfile(p: ProfileRecord): Record<string, unknown> {
     name: p.name,
     archetype: p.archetype,
     description: p.description,
+    folder: p.folder,
+    tags: p.tags,
     last_used_at: p.lastUsedAt ? p.lastUsedAt.toISOString() : null,
     created_at: p.createdAt.toISOString(),
     updated_at: p.updatedAt.toISOString(),
@@ -109,6 +111,8 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         name: parsed.data.name,
         ...(parsed.data.archetype !== undefined ? { archetype: parsed.data.archetype } : {}),
         ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
+        ...(parsed.data.folder !== undefined ? { folder: parsed.data.folder } : {}),
+        ...(parsed.data.tags !== undefined ? { tags: parsed.data.tags } : {}),
       });
       return publicProfile(profile);
     },
@@ -168,9 +172,16 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       const parsed = UpdateProfileRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
 
-      const updates: { name?: string; description?: string | null } = {};
+      const updates: {
+        name?: string;
+        description?: string | null;
+        folder?: string | null;
+        tags?: string[];
+      } = {};
       if (parsed.data.name !== undefined) updates.name = parsed.data.name;
       if (parsed.data.description !== undefined) updates.description = parsed.data.description;
+      if (parsed.data.folder !== undefined) updates.folder = parsed.data.folder;
+      if (parsed.data.tags !== undefined) updates.tags = parsed.data.tags;
 
       const eff = effectiveAccountIdForWrite(req, ctx);
       const accountId = eff ?? ctx.account.id;

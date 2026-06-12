@@ -10,6 +10,8 @@ interface ProfileResponse {
   name: string;
   archetype: string;
   description: string | null;
+  folder: string | null;
+  tags: string[];
   last_used_at: string | null;
   created_at: string;
   updated_at: string;
@@ -36,6 +38,8 @@ describe('POST /v1/profiles', () => {
     expect(body.name).toBe('work-laptop');
     expect(body.archetype).toBe('iphone17_ios18_7_safari26_4');
     expect(body.description).toBeNull();
+    expect(body.folder).toBeNull();
+    expect(body.tags).toEqual([]);
   });
 
   it('403 when the key lacks write:profiles scope (read-only key)', async () => {
@@ -67,6 +71,38 @@ describe('POST /v1/profiles', () => {
     const body = res.json<ProfileResponse>();
     expect(body.archetype).toBe('iphone15_ios17_5_1');
     expect(body.description).toBe('pinned to iOS 17 for stability');
+  });
+
+  it('200 honors folder + tags at create (organization metadata)', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'eu-shop', folder: 'EU accounts', tags: ['retail', 'warmup'] },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<ProfileResponse>();
+    expect(body.folder).toBe('EU accounts');
+    expect(body.tags).toEqual(['retail', 'warmup']);
+  });
+
+  it('400 ValidationFailed on over-cap organization metadata (folder >32 / >12 tags / duplicate tags)', async () => {
+    fx = await buildTestApp();
+    const cases = [
+      { name: 'bad-folder', folder: 'x'.repeat(33) },
+      { name: 'bad-tags', tags: Array.from({ length: 13 }, (_, i) => `t${i.toString()}`) },
+      { name: 'dup-tags', tags: ['same', 'same'] },
+    ];
+    for (const payload of cases) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/profiles',
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        payload,
+      });
+      expect(res.statusCode).toBe(400);
+    }
   });
 
   it('429 TierLimit when profile count exceeds tier limit', async () => {
@@ -269,6 +305,40 @@ describe('PATCH /v1/profiles/:id', () => {
     expect(body.description).toBe('with description');
   });
 
+  it('200 sets then clears folder + tags (null folder / [] tags)', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'org-me', folder: 'Clients', tags: ['a', 'b'] },
+    });
+    const id = create.json<ProfileResponse>().id;
+
+    const set = await fx.app.inject({
+      method: 'PATCH',
+      url: `/v1/profiles/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { folder: 'Archive', tags: ['b', 'c'] },
+    });
+    expect(set.statusCode).toBe(200);
+    expect(set.json<ProfileResponse>().folder).toBe('Archive');
+    // Exact-set replace, not a merge.
+    expect(set.json<ProfileResponse>().tags).toEqual(['b', 'c']);
+
+    const clear = await fx.app.inject({
+      method: 'PATCH',
+      url: `/v1/profiles/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { folder: null, tags: [] },
+    });
+    expect(clear.statusCode).toBe(200);
+    expect(clear.json<ProfileResponse>().folder).toBeNull();
+    expect(clear.json<ProfileResponse>().tags).toEqual([]);
+    // Untouched fields survive the organization-only patch.
+    expect(clear.json<ProfileResponse>().name).toBe('org-me');
+  });
+
   it('409 Conflict when renaming to an existing name', async () => {
     fx = await buildTestApp();
     await fx.app.inject({
@@ -411,6 +481,27 @@ describe('POST /v1/profiles/:id/clone (V-313)', () => {
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     expect(c2.json<{ name: string }>().name).toBe('beta (copy 2)');
+  });
+
+  it('clone copies organization metadata (folder + tags ride along in-account)', async () => {
+    fx = await buildTestApp();
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'org-source', folder: 'Clients', tags: ['retail'] },
+    });
+    const id = create.json<ProfileResponse>().id;
+
+    const clone = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/profiles/${id}/clone`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: {},
+    });
+    expect(clone.statusCode).toBe(200);
+    expect(clone.json<ProfileResponse>().folder).toBe('Clients');
+    expect(clone.json<ProfileResponse>().tags).toEqual(['retail']);
   });
 
   it('201 accepts an explicit name override', async () => {

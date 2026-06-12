@@ -21,6 +21,8 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       name: input.name,
       archetype: input.archetype,
       description: input.description,
+      folder: input.folder ?? null,
+      tags: input.tags ?? [],
       lastUsedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -57,6 +59,8 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       name: input.name,
       archetype: input.archetype,
       description: input.description,
+      folder: input.folder ?? null,
+      tags: input.tags ?? [],
       lastUsedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -116,6 +120,8 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
       name: args.updates.name ?? r.name,
       description:
         args.updates.description !== undefined ? args.updates.description : r.description,
+      folder: args.updates.folder !== undefined ? args.updates.folder : r.folder,
+      tags: args.updates.tags !== undefined ? args.updates.tags : r.tags,
       updatedAt: new Date(),
     };
     this.rows.set(r.id, next);

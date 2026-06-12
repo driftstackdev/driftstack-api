@@ -12,7 +12,8 @@
 //     + archetype-pinning.
 //   • POST /v1/profiles 3-field body (name + archetype + description) + 201.
 //   • GET /v1/profiles cursor-paginated + default 50 + max 100.
-//   • PATCH only-name+description-are-patchable + clone-to-change-archetype.
+//   • PATCH name/description/folder/tags-are-patchable (folder null-clears,
+//     tags exact-set-replace) + clone-to-change-archetype.
 //   • DELETE 204 + in-flight sessions keep running + idempotent.
 //   • Snapshots V-312: psnap_-prefix + /v1/profile-snapshots/:id/restore
 //     (NOT under /v1/profiles/<parent>/snapshots) + immutable.
@@ -89,13 +90,20 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
     );
   });
 
-  it("GET /v1/profiles cursor-paginated + default 50 / max 100 framing pinned + PATCH only-name+description-are-patchable + clone-to-change-archetype 'POST /v1/profiles/:id/clone' + 'the archetype is set at create time and pins the device identity for the life of the profile' — pinned so the cursor-pagination + 50-default + 100-max + 2-PATCH-fields + clone-not-PATCH-for-archetype commitments survive", () => {
+  it("GET /v1/profiles cursor-paginated + default 50 / max 100 framing pinned + PATCH name/description/folder/tags-patchable (folder null-clears, tags exact-set-replace) + clone-to-change-archetype 'POST /v1/profiles/:id/clone' + 'the archetype is set at create time and pins the device identity for the life of the profile' — pinned so the cursor-pagination + 50-default + 100-max + 4-PATCH-fields + clone-not-PATCH-for-archetype commitments survive", () => {
     expect(body).toMatch(/GET \/v1\/profiles\?limit=25/);
     expect(body).toMatch(
       /Cursor pagination\. Default page size <strong>50<\/strong>; max\s*\n?\s*<strong>100<\/strong>\./,
     );
     expect(body).toMatch(
-      /Only <code>name<\/code> and <code>description<\/code> are\s*\n?\s*patchable\. To change the archetype, clone the profile via\s*\n?\s*<code>POST \/v1\/profiles\/:id\/clone<\/code> and discard the old\s*\n?\s*one \(the archetype is set at create time and pins the device\s*\n?\s*identity for the life of the profile\)\./,
+      /<code>name<\/code>, <code>description<\/code>, <code>folder<\/code>\s*\n?\s*and <code>tags<\/code> are patchable/,
+    );
+    expect(body).toMatch(
+      /<code>folder: null<\/code>\s*\n?\s*files the profile back under no folder/,
+    );
+    expect(body).toMatch(/an exact-set replace \(<code>\[\]<\/code> clears them\)/);
+    expect(body).toMatch(
+      /To change the\s*\n?\s*archetype, clone the profile via\s*\n?\s*<code>POST \/v1\/profiles\/:id\/clone<\/code> and discard the old\s*\n?\s*one \(the archetype is set at create time and pins the device\s*\n?\s*identity for the life of the profile\)\./,
     );
   });
 

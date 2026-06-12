@@ -23,6 +23,10 @@ export interface ProfileRecord {
   name: string;
   archetype: string;
   description: string | null;
+  /** Organization metadata — NULL folder = unfiled. */
+  folder: string | null;
+  /** Organization metadata — exact tag set ([] = untagged). */
+  tags: string[];
   lastUsedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -33,6 +37,9 @@ export interface NewProfileInput {
   name: string;
   archetype: string;
   description: string | null;
+  /** Organization metadata — omitted/undefined → unfiled / no tags. */
+  folder?: string | null;
+  tags?: string[];
   /**
    * Profile-backed sessions (file 57): the per-profile DEK wrapped under the
    * account TMK (base64[iv|tag|ct]). Optional — absent/undefined → stored NULL
@@ -45,6 +52,10 @@ export interface NewProfileInput {
 export interface ProfileUpdates {
   name?: string;
   description?: string | null;
+  /** `null` clears the folder. */
+  folder?: string | null;
+  /** Exact-set replace; `[]` clears all tags. */
+  tags?: string[];
 }
 
 export interface ListProfilesArgs {
@@ -120,6 +131,8 @@ export interface CreateProfileArgs {
   name: string;
   archetype?: string;
   description?: string;
+  folder?: string;
+  tags?: string[];
 }
 
 export class ProfilesService {
@@ -214,6 +227,8 @@ export class ProfilesService {
           name: args.name,
           archetype: args.archetype ?? DEFAULT_ARCHETYPE,
           description: args.description ?? null,
+          folder: args.folder ?? null,
+          tags: args.tags ?? [],
           wrappedDek,
         },
         limit,
@@ -388,6 +403,11 @@ export class ProfilesService {
           name: cloneName,
           archetype: source.archetype,
           description: source.description,
+          // Clone is an in-account copy — organization metadata rides along
+          // (unlike V-480 import / V-666 transfer, which cross accounts and
+          // deliberately leave folder/tags at their defaults).
+          folder: source.folder,
+          tags: source.tags,
         },
         limit,
       );

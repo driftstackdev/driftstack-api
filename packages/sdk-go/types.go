@@ -691,27 +691,36 @@ type Profile struct {
 	Name        string     `json:"name"`
 	Archetype   string     `json:"archetype"`
 	Description *string    `json:"description"`
+	Folder      *string    `json:"folder"`
+	Tags        []string   `json:"tags"`
 	LastUsedAt  *time.Time `json:"last_used_at"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 // CreateProfileRequest — V-426. Server's CreateProfileRequestSchema
-// is `{ name, archetype?, description? }`. `Archetype` defaults
+// is `{ name, archetype?, description?, folder?, tags? }`. `Archetype` defaults
 // server-side to the locked iPhone-16-Pro / iOS / Safari archetype
 // when omitted (V-136 LOCKED_ARCHETYPE_ID).
 type CreateProfileRequest struct {
-	Name        string `json:"name"`
-	Archetype   string `json:"archetype,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name        string   `json:"name"`
+	Archetype   string   `json:"archetype,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Folder      string   `json:"folder,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 }
 
 // UpdateProfileRequest — V-426. Server's UpdateProfileRequestSchema
-// is `{ name?, description? }`. Both optional; at least one must
-// be provided.
+// is `{ name?, description?, folder?, tags? }`. All optional. Tags is
+// an exact-set replace. Note: `omitempty` means a nil Folder is
+// omitted (field untouched) — same explicit-null limitation as
+// Description; clear via Tags: []string{} marshals away too, so
+// null-clears need a raw request (documented SDK-wide limitation).
 type UpdateProfileRequest struct {
-	Name        *string `json:"name,omitempty"`
-	Description *string `json:"description,omitempty"`
+	Name        *string  `json:"name,omitempty"`
+	Description *string  `json:"description,omitempty"`
+	Folder      *string  `json:"folder,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
 }
 
 type ProfilesListPage struct {
