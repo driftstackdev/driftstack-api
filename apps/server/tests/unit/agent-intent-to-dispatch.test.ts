@@ -49,7 +49,9 @@ describe('agentIntentToDispatch — clean 1:1 mappings', () => {
     expect(agentIntentToDispatch({ kind: 'behavioral_pause', reading_word_count: 120 })).toEqual({
       ok: true,
       intentName: 'behavioral_pause',
-      params: { kind: 'reading', word_count: 120 },
+      // W1223 — reading pauses always request scroll_through (harness read→scroll→read
+      // on long content; byte-identical single dwell for content that fits).
+      params: { kind: 'reading', word_count: 120, scroll_through: true },
     });
     expect(agentIntentToDispatch({ kind: 'behavioral_pause', duration_ms: 2500 })).toEqual({
       ok: true,
@@ -66,7 +68,7 @@ describe('agentIntentToDispatch — clean 1:1 mappings', () => {
     ).toEqual({
       ok: true,
       intentName: 'behavioral_pause',
-      params: { kind: 'reading', word_count: 50 },
+      params: { kind: 'reading', word_count: 50, scroll_through: true },
     });
     // neither → bare {} (harness persona idle pause).
     expect(agentIntentToDispatch({ kind: 'behavioral_pause' })).toEqual({

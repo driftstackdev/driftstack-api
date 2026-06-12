@@ -157,10 +157,21 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
   });
 
-  it('behavioral_pause params pinned: { duration_ms } OR { kind:reading, word_count } OR none (idle)', () => {
+  it('behavioral_pause params pinned: { duration_ms } OR { kind:reading, word_count, scroll_through? } OR none (idle)', () => {
+    // Split into small assertions (each ≤6 \s*\n?\s* groups) to avoid the
+    // long-chain parity-regex backtracking hazard now that the reading variant is
+    // multi-line (W1223 added the optional scroll_through read-through flag).
+    expect(body).toContain('export const BehavioralPauseParamsSchema = z.union([');
+    // duration_ms variant (strict, single-line).
     expect(body).toMatch(
-      /export const BehavioralPauseParamsSchema = z\.union\(\[\s*\n?\s*z\.object\(\{ duration_ms: z\.number\(\)\.int\(\)\.nonnegative\(\) \}\)\.strict\(\),\s*\n?\s*z\.object\(\{ kind: z\.literal\('reading'\), word_count: z\.number\(\)\.int\(\)\.nonnegative\(\) \}\)\.strict\(\),\s*\n?\s*NoParamsSchema,\s*\n?\s*\]\);/,
+      /z\.object\(\{ duration_ms: z\.number\(\)\.int\(\)\.nonnegative\(\) \}\)\.strict\(\),/,
     );
+    // reading variant — W1223 adds the optional scroll_through (read→scroll→read).
+    expect(body).toMatch(
+      /z\s*\n?\s*\.object\(\{\s*\n?\s*kind: z\.literal\('reading'\),\s*\n?\s*word_count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n?\s*scroll_through: z\.boolean\(\)\.optional\(\),\s*\n?\s*\}\)\s*\n?\s*\.strict\(\),/,
+    );
+    // idle variant + union close.
+    expect(body).toMatch(/NoParamsSchema,\s*\n?\s*\]\);/);
   });
 
   it('wait_for params pinned: predicate required + timeout_seconds int>0 optional', () => {

@@ -137,9 +137,19 @@ export const ScrollParamsSchema = z
 // behavioral_pause: explicit ms, OR reading-time by word_count, OR idle (none).
 // duration_ms is clamped to HARNESS_BEHAVIORAL_PAUSE_CAP_MS by the harness
 // (capped:true reported) — sender passes through.
+// W1223 (A3) — the reading variant carries an optional `scroll_through`: when set,
+// the harness segmentedReadingPlan traverses long content (read→scroll→read) instead
+// of a single frozen multi-minute dwell (a behavioural tell); it measures page
+// geometry itself + degrades to ONE in-place dwell (byte-identical) when content fits.
 export const BehavioralPauseParamsSchema = z.union([
   z.object({ duration_ms: z.number().int().nonnegative() }).strict(),
-  z.object({ kind: z.literal('reading'), word_count: z.number().int().nonnegative() }).strict(),
+  z
+    .object({
+      kind: z.literal('reading'),
+      word_count: z.number().int().nonnegative(),
+      scroll_through: z.boolean().optional(),
+    })
+    .strict(),
   NoParamsSchema,
 ]);
 

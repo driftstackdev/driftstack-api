@@ -92,12 +92,17 @@ function mapIntent(intent: AgentIntent): AgentIntentDispatch {
     case 'behavioral_pause':
       // reading_word_count wins (→ persona-scaled reading pause); else duration_ms
       // (→ explicit pause); else neither → bare {} = harness persona idle pause.
+      // W1223 (A3) — reading pauses always request scroll_through: the harness
+      // segmentedReadingPlan traverses long content (read→scroll→read) instead of a
+      // frozen multi-minute dwell (a tell), and degrades to a single in-place dwell
+      // (byte-identical to the old behaviour) for content that fits the viewport — so
+      // it's a strict tell-fix with no change to short reads.
       return {
         ok: true,
         intentName: 'behavioral_pause',
         params:
           intent.reading_word_count !== undefined
-            ? { kind: 'reading', word_count: intent.reading_word_count }
+            ? { kind: 'reading', word_count: intent.reading_word_count, scroll_through: true }
             : intent.duration_ms !== undefined
               ? { duration_ms: intent.duration_ms }
               : {},
