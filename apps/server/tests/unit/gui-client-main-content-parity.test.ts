@@ -50,7 +50,7 @@ describe('W486.B apps/gui-client/src/main.tsx content parity', () => {
     );
   });
 
-  it('Render tree pinned: createRoot(root).render with StrictMode > RootErrorBoundary > (simulator ? SimulatorWindow : ConfirmProvider > App) — pinned so StrictMode stays at the top, the error boundary stays wrapping the app, ConfirmProvider keeps useConfirm working, and the floating-iPhone simulator window (founder 2026-06-11) renders bare (no app chrome) under the same boundary', () => {
+  it('Render tree pinned: createRoot(root).render with StrictMode > RootErrorBoundary > (simulator ? RecordingsProvider > SimulatorWindow : ConfirmProvider > App) — pinned so StrictMode stays at the top, the error boundary stays wrapping the app, ConfirmProvider keeps useConfirm working, and the floating-iPhone simulator window (founder 2026-06-11) renders bare (no app chrome) under the same boundary', () => {
     expect(body).toMatch(/import \{ ConfirmProvider \} from '\.\/components\/ConfirmProvider';/);
     expect(body).toMatch(/import \{ SimulatorWindow \} from '\.\/views\/SimulatorWindow';/);
     expect(body).toMatch(/createRoot\(root\)\.render\(/);
@@ -58,7 +58,11 @@ describe('W486.B apps/gui-client/src/main.tsx content parity', () => {
     // the error boundary, which wraps the conditional. The simulator window
     // (?window=simulator) renders bare; otherwise ConfirmProvider > App.
     expect(body).toMatch(/<StrictMode>\s*<RootErrorBoundary>/);
-    expect(body).toMatch(/<RootErrorBoundary>\s*\{isSimulator \? \(\s*\n?\s*<SimulatorWindow \/>/);
+    // Night-arc I: the simulator window mounts RecordingsProvider too (the
+    // Record pill writes the shared Rust-side store) — still bare of app
+    // chrome (no ConfirmProvider/App).
+    expect(body).toMatch(/<RootErrorBoundary>\s*\{isSimulator \? \(/);
+    expect(body).toMatch(/<RecordingsProvider>\s*<SimulatorWindow \/>\s*<\/RecordingsProvider>/);
     expect(body).toMatch(/<ConfirmProvider>\s*<App \/>/);
     // DevLogPanel (GUI W232 d) renders OUTSIDE the error boundary but inside
     // StrictMode (gated off in the bare simulator window), so the dev-log view

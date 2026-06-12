@@ -20,6 +20,7 @@ import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import type { Room } from '../lib/livekit';
 import { useLatencyPing } from '../lib/livekit-latency-ping';
+import { useRecordings } from '../lib/recordings';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 
 /** Frame chrome heights (px) used to derive the window size from the device's
@@ -34,6 +35,7 @@ function infoFromQuery(): {
   deviceName: string;
   profileName: string;
   proxyLabel: string;
+  sessionId: string;
 } {
   const q = new URLSearchParams(window.location.search);
   const ws_url = q.get('ws');
@@ -41,8 +43,9 @@ function infoFromQuery(): {
   const deviceName = q.get('name') ?? 'iPhone';
   const profileName = q.get('profile') ?? '';
   const proxyLabel = q.get('proxy') ?? '';
+  const sessionId = q.get('session') ?? '';
   if (ws_url === null || token === null || ws_url === '' || token === '') {
-    return { info: null, deviceName, profileName, proxyLabel };
+    return { info: null, deviceName, profileName, proxyLabel, sessionId };
   }
   // LiveKitInfo carries ws_url + token (the only fields the panel/connect read);
   // room_name is informational. Cast is safe — the panel reads ws_url/token only.
@@ -51,6 +54,7 @@ function infoFromQuery(): {
     deviceName,
     profileName,
     proxyLabel,
+    sessionId,
   };
 }
 
@@ -140,6 +144,8 @@ function DeviceToolbar({
   onTogglePinned,
   onToggleInfo,
   onSnapshot,
+  recording,
+  onToggleRecord,
 }: {
   deviceName: string;
   profileName: string;
@@ -149,6 +155,8 @@ function DeviceToolbar({
   onTogglePinned: () => void;
   onToggleInfo: () => void;
   onSnapshot: () => void;
+  recording: boolean;
+  onToggleRecord: () => void;
 }): JSX.Element {
   return (
     <div
@@ -208,6 +216,19 @@ function DeviceToolbar({
             strokeLinejoin="round"
           >
             <path d="M12 17v5" />
+            <button
+              type="button"
+              aria-label={recording ? 'Stop recording' : 'Start recording'}
+              title={recording ? 'Stop and save the recording' : 'Record this session (1fps)'}
+              className={
+                recording
+                  ? 'animate-pulse rounded px-1.5 py-0.5 text-[11px] text-red-400 hover:bg-white/10'
+                  : 'rounded px-1.5 py-0.5 text-[11px] text-white/60 hover:bg-white/10 hover:text-white'
+              }
+              onClick={onToggleRecord}
+            >
+              ●
+            </button>
             <button
               type="button"
               aria-label="Save snapshot"
@@ -337,7 +358,45 @@ function IosStatusBar(): JSX.Element {
 }
 
 export function SimulatorWindow(): JSX.Element {
-  const { info, deviceName, profileName, proxyLabel } = infoFromQuery();
+  const { info, deviceName, profileName, proxyLabel, sessionId } = infoFromQuery();
+  // Night-arc I Record pill: frames straight off the live <video> element
+  // (the WebRTC stream IS the device screen) into the shared recordings
+  // store — 1fps JPEG, same bounded-buffer semantics as the main window.
+  const { startRecording, stopRecording, addFrame, activeRecordingFor } = useRecordings();
+  const recordingId = sessionId !== '' ? activeRecordingFor(sessionId) : null;
+  const recordTimerRef = useRef<number | null>(null);
+  function captureFrame(recId: string): void {
+    const el = videoElRef.current;
+    if (el === null || el.videoWidth === 0) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = el.videoWidth;
+    canvas.height = el.videoHeight;
+    canvas.getContext('2d')?.drawImage(el, 0, 0);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+    addFrame(recId, { at: Date.now(), dataUrl, bytes: Math.round(dataUrl.length * 0.75) });
+  }
+  function toggleRecord(): void {
+    if (sessionId === '') return;
+    if (recordingId !== null) {
+      if (recordTimerRef.current !== null) {
+        window.clearInterval(recordTimerRef.current);
+        recordTimerRef.current = null;
+      }
+      void stopRecording(recordingId);
+      setSnapshotNotice('Recording saved');
+      window.setTimeout(() => setSnapshotNotice(null), 4000);
+      return;
+    }
+    const recId = startRecording(sessionId, profileName !== '' ? profileName : undefined);
+    captureFrame(recId);
+    recordTimerRef.current = window.setInterval(() => captureFrame(recId), 1000);
+  }
+  // Stop the capture loop if the window unmounts mid-recording.
+  useEffect(() => {
+    return () => {
+      if (recordTimerRef.current !== null) window.clearInterval(recordTimerRef.current);
+    };
+  }, []);
   // Night-arc C cockpit: live room handle (from the panel) drives the
   // previously-dormant LK.6.e latency ping; rendered in the overlay.
   const [room, setRoom] = useState<Room | null>(null);
@@ -443,6 +502,8 @@ export function SimulatorWindow(): JSX.Element {
             onTogglePinned={togglePinned}
             onToggleInfo={() => setInfoOpen((v) => !v)}
             onSnapshot={() => void handleSnapshot()}
+            recording={recordingId !== null}
+            onToggleRecord={toggleRecord}
           />
           {/* Device body — the bezel. data-tauri-drag-region makes the frame a
               window-drag handle; the inner screen overrides it so taps reach the

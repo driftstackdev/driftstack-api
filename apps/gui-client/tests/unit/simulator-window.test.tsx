@@ -19,11 +19,16 @@ vi.mock('../../src/lib/livekit', () => ({
 }));
 
 const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
+const { RecordingsProvider } = await import('../../src/lib/recordings');
 
 describe('SimulatorWindow — floating iPhone', () => {
   it('renders the device frame + screen when ws/token are present in the query', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok');
-    const { container } = render(<SimulatorWindow />);
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
     const device = container.querySelector('[data-component="simulator-device"]');
     const screen = container.querySelector('[data-component="simulator-screen"]');
     expect(device).not.toBeNull();
@@ -36,7 +41,11 @@ describe('SimulatorWindow — floating iPhone', () => {
 
   it('renders the iOS status bar as a dedicated strip ABOVE the content (never overlapping the page)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok');
-    const { container } = render(<SimulatorWindow />);
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
     const statusBar = container.querySelector('[data-component="simulator-statusbar"]');
     expect(statusBar).not.toBeNull();
     // Live clock in iOS h:mm shape (no leading-zero hour, no AM/PM).
@@ -59,7 +68,11 @@ describe('SimulatorWindow — floating iPhone', () => {
 
   it('renders the Driftstack control toolbar above the device: device name + close/minimize + screenshot/rotate', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
-    const { container } = render(<SimulatorWindow />);
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
     const toolbar = container.querySelector('[data-component="simulator-toolbar"]');
     expect(toolbar).not.toBeNull();
     // Device name (from the ?name= query) shows in the toolbar.
@@ -93,7 +106,11 @@ describe('SimulatorWindow — floating iPhone', () => {
       '',
       '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017&profile=Amsterdam%20Shopper',
     );
-    const { container } = render(<SimulatorWindow />);
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
     const toolbar = container.querySelector('[data-component="simulator-toolbar"]');
     // The Drift mark renders in the toolbar (brand presence on the window).
     expect(toolbar?.querySelector('[data-component="drift-mark"]')).not.toBeNull();
@@ -104,7 +121,11 @@ describe('SimulatorWindow — floating iPhone', () => {
 
   it('toolbar without a profile name falls back to the device name only (no dangling separator)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
-    const { container } = render(<SimulatorWindow />);
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
     const toolbar = container.querySelector('[data-component="simulator-toolbar"]');
     expect(toolbar?.querySelector('[data-component="drift-mark"]')).not.toBeNull();
     expect(toolbar?.textContent).toContain('iPhone 17');
@@ -113,7 +134,11 @@ describe('SimulatorWindow — floating iPhone', () => {
 
   it('shows a no-session hint (no device frame) when the query lacks ws/token', () => {
     window.history.pushState({}, '', '/?window=simulator');
-    const { container } = render(<SimulatorWindow />);
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
     expect(container.querySelector('[data-component="simulator-device"]')).toBeNull();
     expect(container.textContent).toContain('No session');
   });

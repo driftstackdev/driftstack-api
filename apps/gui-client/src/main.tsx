@@ -2,6 +2,7 @@ import { Component, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { SimulatorWindow } from './views/SimulatorWindow';
+import { RecordingsProvider } from './lib/recordings';
 import { ConfirmProvider } from './components/ConfirmProvider';
 import { DevLogPanel } from './components/DevLogPanel';
 import { installLogCapture } from './lib/log-buffer';
@@ -108,7 +109,11 @@ try {
     <StrictMode>
       <RootErrorBoundary>
         {isSimulator ? (
-          <SimulatorWindow />
+          // RecordingsProvider here too: the simulator's Record pill writes
+          // through the same Rust-side shared store as the main window.
+          <RecordingsProvider>
+            <SimulatorWindow />
+          </RecordingsProvider>
         ) : (
           <ConfirmProvider>
             <App />

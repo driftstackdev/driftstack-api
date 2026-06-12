@@ -77,6 +77,9 @@ export async function openSimulatorWindow({
     profile: profileName ?? '',
     // Egress line for the cockpit overlay (empty → row hidden).
     proxy: proxyLabel ?? '',
+    // Session id — lets the simulator window attach recordings to the
+    // session (night-arc I Record pill).
+    session: sessionId,
   });
 
   // Spawn BESIDE the main window, not centered over it — a borderless
