@@ -84,7 +84,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
           const kid = randomUUID();
           const [row] = await client`
             INSERT INTO api_keys (account_id, name, key_prefix, key_hash, created_at)
-            VALUES (${accountId}, 'keyset', ${`dsk_${kid.slice(0, 8)}`}, ${`hash_${kid}`}, ${g.ts})
+            VALUES (${accountId}, 'keyset', ${`dsk_${kid.slice(0, 8)}`}, ${`hash_${kid}`}, ${g.ts.toISOString()})
             RETURNING id`;
           inserted.push(row?.id as string);
         }

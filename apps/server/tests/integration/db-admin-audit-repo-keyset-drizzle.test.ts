@@ -96,7 +96,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         for (let i = 0; i < g.n; i++) {
           const [row] = await client`
             INSERT INTO admin_audit_log (admin_account_id, admin_key_id, action, result, timestamp)
-            VALUES (${accountId}, ${apiKeyId}, 'webhook_delivery.replayed', 'success', ${g.ts})
+            VALUES (${accountId}, ${apiKeyId}, 'webhook_delivery.replayed', 'success', ${g.ts.toISOString()})
             RETURNING id`;
           inserted.push(row?.id as string);
         }

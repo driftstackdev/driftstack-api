@@ -99,7 +99,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         for (let i = 0; i < g.n; i++) {
           const [row] = await client`
             INSERT INTO account_audit_log (account_id, actor_type, action, timestamp)
-            VALUES (${accountId}, 'system', 'webhook_endpoint.created', ${g.ts})
+            VALUES (${accountId}, 'system', 'webhook_endpoint.created', ${g.ts.toISOString()})
             RETURNING id`;
           inserted.push(row?.id as string);
         }

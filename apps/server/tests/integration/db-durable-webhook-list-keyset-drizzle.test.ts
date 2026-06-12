@@ -97,7 +97,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
           const [row] = await client`
             INSERT INTO webhook_deliveries (webhook_id, event_id, event_type, payload, created_at)
             VALUES (${webhookId}, ${randomUUID()}, 'session.completed',
-                    ${JSON.stringify({ body: '{}', emittedAtSec: 1 })}::jsonb, ${g.ts})
+                    ${JSON.stringify({ body: '{}', emittedAtSec: 1 })}::jsonb, ${g.ts.toISOString()})
             RETURNING id`;
           inserted.push(row?.id as string);
         }

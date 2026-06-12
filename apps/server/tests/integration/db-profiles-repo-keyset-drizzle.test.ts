@@ -83,12 +83,16 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         { ts: new Date(base), n: 2 },
       ];
       const inserted: string[] = [];
+      // created_at bound as ISO string: postgres-js 3.4.9 (dependabot bump
+      // while CI was down) rejects a raw Date param on this prepared path
+      // ("argument must be of type string or Buffer"); the ISO form is
+      // version-robust and timestamptz-exact.
       let nameSeq = 0;
       for (const g of groups) {
         for (let i = 0; i < g.n; i++) {
           const [row] = await client`
             INSERT INTO profiles (account_id, name, created_at)
-            VALUES (${accountId}, ${`keyset-prof-${nameSeq++}`}, ${g.ts})
+            VALUES (${accountId}, ${`keyset-prof-${nameSeq++}`}, ${g.ts.toISOString()})
             RETURNING id`;
           inserted.push(row?.id as string);
         }
@@ -127,6 +131,72 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   'DrizzleProfilesRepo.insertWithLimit (V-714 — atomic tier-cap under real concurrency)',
   () => {
+    // Organization metadata (migration 0076) — REAL-PG round-trip for the
+    // jsonb tags column. The profiles route/service tests run on the
+    // in-memory repo, so without this the drizzle path for tags was
+    // untested against the actual driver. postgres-js + drizzle jsonb has
+    // a known double-encode footgun class (array survives as a JSON
+    // STRING instead of an array on read-back) — this pins the array
+    // round-trip, the '[]' column default, the update path, and the
+    // null-clears folder semantics.
+    it('round-trips folder + jsonb tags through insert/update/findById (0076)', async () => {
+      if (!dbReachable || !client) {
+        return;
+      }
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleProfilesRepo({ client, db, close: async () => {} });
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`org-meta-${accountId}@test.local`})`;
+
+      // Insert WITH organization values.
+      const created = await repo.insert({
+        accountId,
+        name: 'org-roundtrip',
+        archetype: 'iphone17_ios18_7_safari26_4',
+        description: null,
+        folder: 'EU accounts',
+        tags: ['retail', 'warmup'],
+      });
+      expect(created.folder).toBe('EU accounts');
+      // The load-bearing assertion: an ARRAY back, not a JSON string.
+      expect(Array.isArray(created.tags)).toBe(true);
+      expect(created.tags).toEqual(['retail', 'warmup']);
+
+      // Re-read through findById (separate SELECT round-trip).
+      const fetched = await repo.findById({ id: created.id, accountId });
+      expect(fetched?.tags).toEqual(['retail', 'warmup']);
+      expect(fetched?.folder).toBe('EU accounts');
+
+      // Insert WITHOUT organization values → column defaults.
+      const bare = await repo.insert({
+        accountId,
+        name: 'org-defaults',
+        archetype: 'iphone17_ios18_7_safari26_4',
+        description: null,
+      });
+      expect(bare.folder).toBeNull();
+      expect(bare.tags).toEqual([]);
+
+      // Update: exact-set tag replace + null-clears folder.
+      const updated = await repo.update({
+        id: created.id,
+        accountId,
+        updates: { folder: null, tags: ['b', 'c'] },
+      });
+      expect(updated.folder).toBeNull();
+      expect(updated.tags).toEqual(['b', 'c']);
+
+      // Clear tags with [].
+      const cleared = await repo.update({
+        id: created.id,
+        accountId,
+        updates: { tags: [] },
+      });
+      expect(cleared.tags).toEqual([]);
+    });
+
     it('serialises N concurrent creates so exactly `limit` succeed (no over-create past the cap)', async () => {
       if (!dbReachable || !client) {
         return;

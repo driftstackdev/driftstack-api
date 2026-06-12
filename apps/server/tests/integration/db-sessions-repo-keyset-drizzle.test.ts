@@ -89,7 +89,7 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         for (let i = 0; i < g.n; i++) {
           const [row] = await client`
             INSERT INTO sessions (account_id, api_key_id, driver_session_id, created_at)
-            VALUES (${accountId}, ${apiKeyId}, ${`drv_${randomUUID()}`}, ${g.ts})
+            VALUES (${accountId}, ${apiKeyId}, ${`drv_${randomUUID()}`}, ${g.ts.toISOString()})
             RETURNING id`;
           inserted.push(row?.id as string);
         }
