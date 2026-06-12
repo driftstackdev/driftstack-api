@@ -1,0 +1,1185 @@
+<!doctype html>
+<html lang="en" data-mode="dark" data-accent="oxblood">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marketing Direction D — "Fleet Mission Control" (radical)</title>
+    <!-- THROWAWAY VISUAL DEMO (2026-06-12, A2). Marketing-home DIRECTION D — the RADICAL one.
+     Concept: the page IS the product. Hero = a live fleet wall of iPhones (your profiles,
+     statuses pulsing, one expanded). Mission-control aesthetic: mono labels, telemetry,
+     scanlines. Includes NEW invented feature concepts (Identity Wardrobe, warm-up scheduler,
+     session replay, egress map, trust center) baked into the visual story. Real pricing/copy. -->
+    <style>
+      :root {
+        --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+        --mono: 'SF Mono', ui-monospace, Menlo, monospace;
+      }
+      [data-accent='oxblood'] {
+        --accent: #a83e4a;
+        --accent-2: #d05562;
+        --accent-strong: #722f37;
+        --accent-ink: #fff;
+        --accent-soft: rgba(168, 62, 74, 0.13);
+        --glow: rgba(168, 62, 74, 0.32);
+      }
+      [data-accent='violet'] {
+        --accent: #6d5efc;
+        --accent-2: #8b7dff;
+        --accent-strong: #5847e0;
+        --accent-ink: #fff;
+        --accent-soft: rgba(109, 94, 252, 0.13);
+        --glow: rgba(109, 94, 252, 0.32);
+      }
+      [data-accent='teal'] {
+        --accent: #109a82;
+        --accent-2: #1bc7a8;
+        --accent-strong: #0c7d69;
+        --accent-ink: #fff;
+        --accent-soft: rgba(16, 154, 130, 0.13);
+        --glow: rgba(16, 154, 130, 0.28);
+      }
+      [data-mode='dark'] {
+        --bg: #060608;
+        --surface: #0e0e12;
+        --raised: #15151b;
+        --ink: #f5f5f7;
+        --ink-2: #b0b0bb;
+        --ink-3: #73737f;
+        --border: #1e1e26;
+        --ready: #2fe39a;
+        --busy: #ffc24d;
+        --err: #ff6b61;
+        --scan: rgba(255, 255, 255, 0.022);
+      }
+      [data-mode='light'] {
+        --bg: #f2f3f6;
+        --surface: #fff;
+        --raised: #fff;
+        --ink: #0f1014;
+        --ink-2: #45485290;
+        --ink-2: #474a55;
+        --ink-3: #8a8d99;
+        --border: #e4e6ec;
+        --ready: #0c9a5d;
+        --busy: #c98a12;
+        --err: #d8453c;
+        --scan: rgba(0, 0, 0, 0.015);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.55;
+        font-size: 15px;
+      }
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        background: repeating-linear-gradient(0deg, transparent 0 3px, var(--scan) 3px 4px);
+        pointer-events: none;
+        z-index: 1;
+      }
+      .wrap {
+        max-width: 1140px;
+        margin: 0 auto;
+        padding: 0 24px;
+        position: relative;
+        z-index: 2;
+      }
+      a {
+        color: inherit;
+      }
+      .mlabel {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: var(--accent-2);
+        font-weight: 600;
+      }
+      nav {
+        position: sticky;
+        top: 0;
+        background: color-mix(in srgb, var(--bg) 85%, transparent);
+        backdrop-filter: blur(14px);
+        border-bottom: 1px solid var(--border);
+        z-index: 30;
+      }
+      nav .wrap {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        height: 58px;
+      }
+      .logo {
+        font-weight: 700;
+        letter-spacing: -0.3px;
+      }
+      .logo .mark {
+        color: var(--accent);
+      }
+      nav a.l {
+        color: var(--ink-2);
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 500;
+        font-family: var(--mono);
+      }
+      nav a.l:hover {
+        color: var(--ink);
+      }
+      .spacer {
+        flex: 1;
+      }
+      .btn {
+        border: 0;
+        border-radius: 8px;
+        padding: 9px 17px;
+        font-weight: 600;
+        font-size: 13.5px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .btn.primary {
+        background: var(--accent);
+        color: var(--accent-ink);
+        box-shadow: 0 0 28px var(--glow);
+      }
+      .btn.primary:hover {
+        background: var(--accent-strong);
+      }
+      .btn.ghost {
+        background: transparent;
+        color: var(--ink-2);
+        border: 1px solid var(--border);
+      }
+      .btn.ghost:hover {
+        color: var(--ink);
+        border-color: var(--ink-3);
+      }
+      .themer {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+        padding: 3px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+      }
+      .themer button {
+        border: 0;
+        background: transparent;
+        color: var(--ink-3);
+        cursor: pointer;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .themer button.on {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .sw {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        cursor: pointer;
+      }
+      .sw.on {
+        border-color: var(--ink);
+      }
+
+      /* ===== HERO: the fleet wall ===== */
+      .hero {
+        padding: 64px 0 56px;
+        position: relative;
+        overflow: hidden;
+      }
+      .hero .glow {
+        position: absolute;
+        width: 760px;
+        height: 760px;
+        border-radius: 50%;
+        background: radial-gradient(circle, var(--glow), transparent 62%);
+        top: -380px;
+        left: 50%;
+        transform: translateX(-50%);
+        pointer-events: none;
+      }
+      .hero .wrap {
+        display: grid;
+        grid-template-columns: 1fr 1.1fr;
+        gap: 52px;
+        align-items: center;
+      }
+      h1 {
+        font-size: 46px;
+        line-height: 1.08;
+        letter-spacing: -1.7px;
+        margin: 16px 0 18px;
+        font-weight: 680;
+      }
+      h1 .tick {
+        color: var(--accent-2);
+      }
+      .sub {
+        font-size: 16.5px;
+        color: var(--ink-2);
+        margin: 0 0 28px;
+        max-width: 44ch;
+      }
+      .cta {
+        display: flex;
+        gap: 12px;
+      }
+      .finep {
+        margin-top: 14px;
+        font-size: 12px;
+        color: var(--ink-3);
+        font-family: var(--mono);
+      }
+      /* fleet wall */
+      .wall {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 40px 90px -40px rgba(0, 0, 0, 0.6);
+      }
+      .wallhd {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 14px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ink-3);
+      }
+      .wallhd .live {
+        color: var(--ready);
+        font-weight: 700;
+      }
+      .wallhd .ct {
+        margin-left: auto;
+      }
+      .fleet {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 10px;
+      }
+      .ph {
+        aspect-ratio: 9/17;
+        border-radius: 11px;
+        background: var(--raised);
+        border: 1px solid var(--border);
+        position: relative;
+        overflow: hidden;
+      }
+      .ph .scr {
+        position: absolute;
+        inset: 4px;
+        border-radius: 8px;
+        background: linear-gradient(160deg, #1b1b23, #101015);
+      }
+      [data-mode='light'] .ph .scr {
+        background: linear-gradient(160deg, #dfe2e8, #c9cdd6);
+      }
+      .ph .st {
+        position: absolute;
+        top: 7px;
+        right: 7px;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+      }
+      .ph .st.r {
+        background: var(--ready);
+        box-shadow: 0 0 8px var(--ready);
+      }
+      .ph .st.b {
+        background: var(--busy);
+      }
+      .ph .st.i {
+        background: var(--ink-3);
+      }
+      .ph .nm {
+        position: absolute;
+        bottom: 6px;
+        left: 7px;
+        right: 7px;
+        font-family: var(--mono);
+        font-size: 8px;
+        color: var(--ink-3);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ph.hero-ph {
+        grid-row: span 2;
+        grid-column: span 2;
+        border-color: var(--accent);
+        box-shadow:
+          0 0 0 1px var(--accent),
+          0 0 30px var(--glow);
+      }
+      .ph.hero-ph .scr {
+        background: linear-gradient(180deg, #fff, #e9ebef);
+      }
+      .ph.hero-ph .pgbar {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        height: 14px;
+        border-radius: 5px;
+        background: #fff;
+        border: 1px solid #e2e2e6;
+        font-size: 7px;
+        color: #666;
+        display: flex;
+        align-items: center;
+        padding: 0 6px;
+        font-family: var(--mono);
+      }
+      .ph.hero-ph .pghero {
+        position: absolute;
+        top: 30px;
+        left: 10px;
+        right: 10px;
+        height: 38px;
+        border-radius: 6px;
+        background: linear-gradient(135deg, #17171d, #34343f);
+      }
+      .ph.hero-ph .pgrow {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        height: 24px;
+        border-radius: 5px;
+        background: #fff;
+        border: 1px solid #ececef;
+      }
+      .ph.hero-ph .ring {
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: conic-gradient(var(--ready) 0 96%, rgba(0, 0, 0, 0.15) 96% 100%);
+        display: grid;
+        place-items: center;
+      }
+      .ph.hero-ph .ring i {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: #fff;
+        display: grid;
+        place-items: center;
+        font-style: normal;
+        font-size: 8.5px;
+        font-weight: 800;
+        color: #111;
+        font-family: var(--mono);
+      }
+      .telem {
+        display: flex;
+        gap: 14px;
+        margin-top: 14px;
+        font-family: var(--mono);
+        font-size: 10.5px;
+        color: var(--ink-3);
+        flex-wrap: wrap;
+      }
+      .telem b {
+        color: var(--ink-2);
+      }
+      .telem .ok {
+        color: var(--ready);
+      }
+
+      /* ticker */
+      .ticker {
+        border-block: 1px solid var(--border);
+        background: var(--surface);
+        overflow: hidden;
+      }
+      .ticker .in {
+        display: flex;
+        gap: 44px;
+        padding: 13px 24px;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--ink-3);
+        white-space: nowrap;
+      }
+      .ticker b {
+        color: var(--ink-2);
+        font-weight: 600;
+      }
+      .ticker .ok {
+        color: var(--ready);
+      }
+
+      section {
+        padding: 74px 0;
+      }
+      h2 {
+        font-size: 34px;
+        letter-spacing: -1.2px;
+        margin: 12px 0 12px;
+        font-weight: 660;
+        max-width: 26ch;
+      }
+      .lede {
+        color: var(--ink-2);
+        max-width: 60ch;
+        margin: 0 0 36px;
+      }
+
+      /* console rows — new feature concepts */
+      .console {
+        display: grid;
+        gap: 14px;
+      }
+      .crow {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+      .crow.flip {
+        direction: rtl;
+      }
+      .crow.flip > * {
+        direction: ltr;
+      }
+      .ctext {
+        padding: 32px;
+      }
+      .ctext h3 {
+        font-size: 21px;
+        letter-spacing: -0.5px;
+        margin: 10px 0 10px;
+      }
+      .ctext p {
+        margin: 0 0 14px;
+        color: var(--ink-2);
+        font-size: 14px;
+      }
+      .ctext .new {
+        display: inline-block;
+        font-family: var(--mono);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        color: var(--accent-ink);
+        background: var(--accent);
+        border-radius: 4px;
+        padding: 2px 7px;
+        margin-left: 8px;
+        vertical-align: 2px;
+      }
+      .cviz {
+        background: var(--raised);
+        border-left: 1px solid var(--border);
+        padding: 24px;
+        display: grid;
+        place-items: center;
+        min-height: 230px;
+      }
+      .crow.flip .cviz {
+        border-left: 0;
+        border-right: 1px solid var(--border);
+      }
+      /* wardrobe viz */
+      .cards3 {
+        position: relative;
+        width: 230px;
+        height: 150px;
+      }
+      .idc {
+        position: absolute;
+        width: 160px;
+        height: 104px;
+        border-radius: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        padding: 12px;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--ink-3);
+      }
+      .idc b {
+        display: block;
+        color: var(--ink);
+        font-size: 11px;
+        margin-bottom: 5px;
+        font-family: var(--font);
+      }
+      .idc.c1 {
+        left: 0;
+        top: 26px;
+        transform: rotate(-6deg);
+      }
+      .idc.c2 {
+        left: 36px;
+        top: 12px;
+        transform: rotate(-1deg);
+      }
+      .idc.c3 {
+        left: 72px;
+        top: 0;
+        border-color: var(--accent);
+        box-shadow: 0 14px 34px -16px var(--glow);
+      }
+      /* replay viz */
+      .replay {
+        width: 100%;
+        max-width: 300px;
+      }
+      .rline {
+        height: 54px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        position: relative;
+        margin-bottom: 10px;
+        overflow: hidden;
+      }
+      .rline .seg {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        opacity: 0.85;
+      }
+      .rline .cursor {
+        position: absolute;
+        top: -4px;
+        bottom: -4px;
+        width: 2px;
+        background: var(--ink);
+        left: 62%;
+      }
+      .rmeta {
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--ink-3);
+      }
+      /* warmup viz */
+      .week {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 5px;
+        width: 100%;
+        max-width: 260px;
+      }
+      .day {
+        aspect-ratio: 1;
+        border-radius: 5px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+      }
+      .day.on1 {
+        background: var(--accent-soft);
+      }
+      .day.on2 {
+        background: color-mix(in srgb, var(--accent) 38%, var(--surface));
+      }
+      .day.on3 {
+        background: var(--accent);
+      }
+      /* egress map viz */
+      .map {
+        position: relative;
+        width: 100%;
+        max-width: 300px;
+        height: 160px;
+      }
+      .map .dot {
+        position: absolute;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--ink-3);
+        opacity: 0.4;
+      }
+      .map .node {
+        position: absolute;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 12px var(--glow);
+      }
+      .map svg {
+        position: absolute;
+        inset: 0;
+      }
+      /* trust viz */
+      .vault {
+        width: 120px;
+        height: 120px;
+        border-radius: 28px;
+        background: var(--accent-soft);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 0 50px var(--glow);
+      }
+
+      /* numbers band */
+      .numbers {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+      .numbers div {
+        padding: 26px;
+        border-right: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .numbers div:last-child {
+        border-right: 0;
+      }
+      .numbers b {
+        display: block;
+        font-size: 26px;
+        letter-spacing: -0.8px;
+        font-family: var(--mono);
+      }
+      .numbers span {
+        font-size: 12px;
+        color: var(--ink-3);
+      }
+
+      /* pricing strip */
+      .pstrip {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+      }
+      .pbox {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 20px;
+        font-family: var(--mono);
+      }
+      .pbox.hot {
+        border-color: var(--accent);
+        box-shadow:
+          0 0 0 1px var(--accent),
+          0 0 26px var(--glow);
+      }
+      .pbox .t {
+        font-size: 11px;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--ink-3);
+      }
+      .pbox .amt {
+        font-size: 26px;
+        font-weight: 800;
+        letter-spacing: -1px;
+        margin: 8px 0 3px;
+      }
+      .pbox .amt small {
+        font-size: 11px;
+        color: var(--ink-3);
+      }
+      .pbox .cc {
+        font-size: 11px;
+        color: var(--ink-3);
+      }
+      .apinote {
+        margin-top: 14px;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--ink-2);
+      }
+      .apinote b {
+        color: var(--ink);
+      }
+      .cta-final {
+        text-align: center;
+        padding: 90px 0;
+      }
+      footer {
+        padding: 34px 0;
+        color: var(--ink-3);
+        font-size: 12.5px;
+        border-top: 1px solid var(--border);
+        font-family: var(--mono);
+      }
+      footer .wrap {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      @media (max-width: 880px) {
+        .hero .wrap,
+        .crow {
+          grid-template-columns: 1fr;
+        }
+        .numbers,
+        .pstrip {
+          grid-template-columns: 1fr 1fr;
+        }
+        h1 {
+          font-size: 34px;
+        }
+        .cviz {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="wrap">
+        <span class="logo"><span class="mark">⌇</span> Driftstack</span>
+        <a class="l" href="#">/pricing</a><a class="l" href="#">/docs</a
+        ><a class="l" href="#">/security</a><a class="l" href="#">/status</a>
+        <span class="spacer"></span>
+        <div class="themer">
+          <button id="m-dark" class="on" onclick="setMode('dark')">Dark</button
+          ><button id="m-light" onclick="setMode('light')">Light</button>
+          <span style="width: 1px; height: 15px; background: var(--border)"></span>
+          <span
+            class="sw on"
+            id="a-oxblood"
+            style="background: #a83e4a"
+            onclick="setAccent('oxblood')"
+          ></span>
+          <span
+            class="sw"
+            id="a-violet"
+            style="background: #6d5efc"
+            onclick="setAccent('violet')"
+          ></span>
+          <span
+            class="sw"
+            id="a-teal"
+            style="background: #109a82"
+            onclick="setAccent('teal')"
+          ></span>
+        </div>
+        <a class="btn ghost" href="#">Sign in</a><a class="btn primary" href="#">Start free</a>
+      </div>
+    </nav>
+
+    <!-- HERO: the fleet wall -->
+    <div class="hero">
+      <div class="glow"></div>
+      <div class="wrap">
+        <div>
+          <span class="mlabel">// your fleet of real iPhones</span>
+          <h1>Mission control for a fleet of real iPhones.<span class="tick">_</span></h1>
+          <p class="sub">
+            Every profile is a complete iPhone identity, live in the cloud. Watch the whole fleet
+            breathe, drive any device by hand, by SDK, or by AI — and no website ever knows.
+          </p>
+          <div class="cta">
+            <a class="btn primary" href="#">Start free</a
+            ><a class="btn ghost" href="#">▶ Watch the fleet live</a>
+          </div>
+          <p class="finep">free: 1 profile · 20-min sessions · no card</p>
+        </div>
+        <div class="wall">
+          <div class="wallhd">
+            <span class="live">● LIVE</span><span>fleet/eu-west · 12 profiles</span
+            ><span class="ct">7 running · 3 idle · 2 warming</span>
+          </div>
+          <div class="fleet">
+            <div class="ph hero-ph">
+              <div class="scr"></div>
+              <div class="pgbar">target.example 🔒</div>
+              <div class="pghero"></div>
+              <div class="pgrow" style="top: 74px"></div>
+              <div class="pgrow" style="top: 104px"></div>
+              <div class="ring"><i>96</i></div>
+              <span class="st r"></span>
+              <div class="nm" style="color: #666">amsterdam-shopper · 🇳🇱 · agent</div>
+            </div>
+            <div class="ph">
+              <div class="scr"></div>
+              <span class="st r"></span>
+              <div class="nm">us-retail-qa</div>
+            </div>
+            <div class="ph">
+              <div class="scr"></div>
+              <span class="st b"></span>
+              <div class="nm">de-pricing</div>
+            </div>
+            <div class="ph">
+              <div class="scr"></div>
+              <span class="st r"></span>
+              <div class="nm">uk-checkout</div>
+            </div>
+            <div class="ph">
+              <div class="scr"></div>
+              <span class="st i"></span>
+              <div class="nm">jp-market</div>
+            </div>
+            <div class="ph">
+              <div class="scr"></div>
+              <span class="st r"></span>
+              <div class="nm">fr-social</div>
+            </div>
+            <div class="ph">
+              <div class="scr"></div>
+              <span class="st i"></span>
+              <div class="nm">es-travel</div>
+            </div>
+            <div class="ph">
+              <div class="scr"></div>
+              <span class="st b"></span>
+              <div class="nm">it-fashion</div>
+            </div>
+            <div class="ph">
+              <div class="scr"></div>
+              <span class="st r"></span>
+              <div class="nm">nl-bank-qa</div>
+            </div>
+            <div class="ph">
+              <div class="scr"></div>
+              <span class="st r"></span>
+              <div class="nm">se-news</div>
+            </div>
+            <div class="ph">
+              <div class="scr"></div>
+              <span class="st i"></span>
+              <div class="nm">pl-shop</div>
+            </div>
+          </div>
+          <div class="telem">
+            <span>uptime <b>99.98%</b></span
+            ><span>median latency <b>74ms</b></span
+            ><span>detection lies <b class="ok">0</b></span
+            ><span>CreepJS <b class="ok">clean</b></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ticker -->
+    <div class="ticker">
+      <div class="in">
+        <span><b>Real WebKit</b> — the engine every iPhone ships</span>
+        <span><b>iOS 18.7 / 26.x</b> — versions Apple still ships</span>
+        <span><b>3 SDKs</b> — TypeScript · Python · Go</span>
+        <span><b>SOCKS5 + OpenVPN + WireGuard</b> — UDP/QUIC tunneled</span>
+        <span class="ok"><b>0 detection lies</b> across the fleet</span>
+      </div>
+    </div>
+
+    <!-- THE CONSOLE: feature concepts, incl NEW ones -->
+    <section>
+      <div class="wrap">
+        <span class="mlabel">// the console</span>
+        <h2>Run identities like infrastructure.</h2>
+        <p class="lede">
+          Everything below is rendered the way you'd actually use it — because the product is the
+          interface.
+        </p>
+        <div class="console">
+          <div class="crow">
+            <div class="ctext">
+              <span class="mlabel">identity</span>
+              <h3>The Identity Wardrobe <span class="new">CONCEPT</span></h3>
+              <p>
+                Profiles as wearable identities: a complete iPhone (hardware, iOS, Safari, fonts,
+                canvas, TLS) with its own cookies, storage, proxy and behavioral persona. Duplicate
+                one, template one, hand one to a teammate — the identity stays coherent for life.
+              </p>
+              <p style="font-size: 12.5px; color: var(--ink-3)">
+                Folders · tags · statuses · bulk ops · per-profile egress
+              </p>
+            </div>
+            <div class="cviz">
+              <div class="cards3">
+                <div class="idc c1">
+                  <b>jp-market</b>iPhone 15 Pro · idle<br />🇯🇵 Tokyo · SOCKS5
+                </div>
+                <div class="idc c2">
+                  <b>us-retail-qa</b>iPhone 17 · running<br />🇺🇸 NYC · WireGuard
+                </div>
+                <div class="idc c3">
+                  <b>amsterdam-shopper</b>iPhone 17 · agent-driven<br />🇳🇱 AMS · coherence 96
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="crow flip">
+            <div class="ctext">
+              <span class="mlabel">time travel</span>
+              <h3>Session Replay <span class="new">CONCEPT</span></h3>
+              <p>
+                Every session can record itself: video, taps, network and agent decisions on one
+                timeline. Scrub back to the moment a flow broke, share the clip with your team, or
+                export it as evidence that the run behaved.
+              </p>
+              <p style="font-size: 12.5px; color: var(--ink-3)">
+                Timeline scrubbing · tap markers · agent-step annotations
+              </p>
+            </div>
+            <div class="cviz">
+              <div class="replay">
+                <div class="rline">
+                  <span
+                    class="seg"
+                    style="left: 0; width: 18%; background: var(--accent-soft)"
+                  ></span>
+                  <span
+                    class="seg"
+                    style="
+                      left: 18%;
+                      width: 30%;
+                      background: color-mix(in srgb, var(--accent) 35%, transparent);
+                    "
+                  ></span>
+                  <span
+                    class="seg"
+                    style="left: 48%; width: 14%; background: var(--busy); opacity: 0.35"
+                  ></span>
+                  <span
+                    class="seg"
+                    style="
+                      left: 62%;
+                      width: 38%;
+                      background: color-mix(in srgb, var(--ready) 35%, transparent);
+                    "
+                  ></span>
+                  <span class="cursor"></span>
+                </div>
+                <div class="rmeta">
+                  <span>00:00</span><span>tap ×14 · nav ×3 · challenge ×1</span><span>12:41</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="crow">
+            <div class="ctext">
+              <span class="mlabel">trust curve</span>
+              <h3>Warm-up Scheduler <span class="new">CONCEPT</span></h3>
+              <p>
+                Fresh identities are suspicious identities. Schedule organic browse sessions that
+                age a profile on a curve — light touches first, deeper flows later — so by the time
+                it works, it has a history.
+              </p>
+              <p style="font-size: 12.5px; color: var(--ink-3)">
+                Curve presets · per-folder schedules · runs on idle fleet capacity
+              </p>
+            </div>
+            <div class="cviz">
+              <div class="week">
+                <div class="day on1"></div>
+                <div class="day"></div>
+                <div class="day on1"></div>
+                <div class="day"></div>
+                <div class="day on1"></div>
+                <div class="day"></div>
+                <div class="day"></div>
+                <div class="day on1"></div>
+                <div class="day on2"></div>
+                <div class="day"></div>
+                <div class="day on2"></div>
+                <div class="day on1"></div>
+                <div class="day on2"></div>
+                <div class="day"></div>
+                <div class="day on2"></div>
+                <div class="day on2"></div>
+                <div class="day on3"></div>
+                <div class="day on2"></div>
+                <div class="day on3"></div>
+                <div class="day on2"></div>
+                <div class="day on3"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="crow flip">
+            <div class="ctext">
+              <span class="mlabel">egress</span>
+              <h3>Exit anywhere. Leak nowhere.</h3>
+              <p>
+                SOCKS5, OpenVPN (.ovpn) and WireGuard (.conf) per profile — and unlike anyone else,
+                UDP, WebRTC and QUIC ride the tunnel too. Locale and timezone follow the exit geo so
+                nothing contradicts the IP.
+              </p>
+              <p style="font-size: 12.5px; color: var(--ink-3)">
+                Per-profile binding · health checks · geo-coherent locale
+              </p>
+            </div>
+            <div class="cviz">
+              <div class="map">
+                <svg viewBox="0 0 300 160" fill="none">
+                  <path
+                    d="M60 80 Q 130 20 215 62"
+                    stroke="var(--accent)"
+                    stroke-width="1.4"
+                    stroke-dasharray="4 4"
+                    opacity=".8"
+                  />
+                  <path
+                    d="M60 80 Q 140 130 248 96"
+                    stroke="var(--accent)"
+                    stroke-width="1.4"
+                    stroke-dasharray="4 4"
+                    opacity=".5"
+                  />
+                </svg>
+                <span class="dot" style="left: 18%; top: 34%"></span
+                ><span class="dot" style="left: 30%; top: 60%"></span
+                ><span class="dot" style="left: 46%; top: 26%"></span
+                ><span class="dot" style="left: 58%; top: 70%"></span
+                ><span class="dot" style="left: 74%; top: 30%"></span
+                ><span class="dot" style="left: 86%; top: 56%"></span
+                ><span class="dot" style="left: 40%; top: 46%"></span
+                ><span class="dot" style="left: 66%; top: 48%"></span>
+                <span class="node" style="left: 19%; top: 48%"></span
+                ><span class="node" style="left: 70%; top: 36%"></span
+                ><span class="node" style="left: 81%; top: 58%"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="crow">
+            <div class="ctext">
+              <span class="mlabel">trust center</span>
+              <h3>Sealed by architecture.</h3>
+              <p>
+                Profiles are client-encrypted (AES-256-GCM) before they reach us — our servers move
+                opaque bytes. Per-tenant key isolation means a wrong account can't decrypt, by math.
+                Nobody at Driftstack can watch your sessions.
+              </p>
+              <p style="font-size: 12.5px; color: var(--ink-3)">
+                Audited secret access · export/delete anytime · public security model
+              </p>
+            </div>
+            <div class="cviz">
+              <div class="vault">
+                <svg
+                  width="52"
+                  height="52"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--accent)"
+                  stroke-width="1.5"
+                >
+                  <rect x="3" y="11" width="18" height="10" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  <circle cx="12" cy="16" r="1.6" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- numbers -->
+    <section style="padding-top: 0">
+      <div class="wrap">
+        <div class="numbers">
+          <div><b>0</b><span>detection lies, fleet-wide (CreepJS clean)</span></div>
+          <div><b>&lt;100ms</b><span>live control latency over WebRTC</span></div>
+          <div><b>3</b><span>SDKs — TypeScript · Python · Go</span></div>
+          <div><b>100%</b><span>of UDP/QUIC/WebRTC through your tunnel</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- pricing -->
+    <section style="padding-top: 30px">
+      <div class="wrap">
+        <span class="mlabel">// pricing</span>
+        <h2>One free tier. Two ladders.</h2>
+        <div class="pstrip" style="margin-top: 26px">
+          <div class="pbox">
+            <div class="t">free</div>
+            <div class="amt">$0</div>
+            <div class="cc">1 concurrent · forever · no card</div>
+          </div>
+          <div class="pbox">
+            <div class="t">personal</div>
+            <div class="amt">$79<small>/mo</small></div>
+            <div class="cc">1 concurrent · desktop app</div>
+          </div>
+          <div class="pbox hot">
+            <div class="t" style="color: var(--accent-2)">team ★</div>
+            <div class="amt">$249<small>/mo</small></div>
+            <div class="cc">3 concurrent · workspace · roles</div>
+          </div>
+          <div class="pbox">
+            <div class="t">agency</div>
+            <div class="amt">$699<small>/mo</small></div>
+            <div class="cc">8 concurrent · priority support</div>
+          </div>
+        </div>
+        <p class="apinote">
+          API ladder: <b>Starter $149</b> (2) · <b>Builder $499</b> (8) · <b>Scale $1,499</b> (24) ·
+          <b>Enterprise</b> custom + SLA
+        </p>
+      </div>
+    </section>
+
+    <!-- final -->
+    <div class="cta-final">
+      <div class="wrap">
+        <span class="mlabel">// ready when you are</span>
+        <h2 style="margin: 14px auto 14px; max-width: none">Your fleet is one call away.</h2>
+        <p class="lede" style="margin: 0 auto 28px; text-align: center">
+          Start free — one profile, real sessions, no card.
+        </p>
+        <a class="btn primary" href="#" style="font-size: 15px; padding: 12px 26px">Start free</a>
+      </div>
+    </div>
+
+    <footer>
+      <div class="wrap">
+        <span class="logo"><span class="mark">⌇</span> driftstack</span>
+        <span class="spacer"></span>
+        <a class="l" href="#">/pricing</a><a class="l" href="#">/security</a
+        ><a class="l" href="#">/trust</a><a class="l" href="#">/legal</a
+        ><a class="l" href="#">/status</a>
+      </div>
+    </footer>
+
+    <script>
+      function setMode(m) {
+        document.documentElement.dataset.mode = m;
+        document.getElementById('m-dark').classList.toggle('on', m === 'dark');
+        document.getElementById('m-light').classList.toggle('on', m === 'light');
+      }
+      function setAccent(a) {
+        document.documentElement.dataset.accent = a;
+        ['oxblood', 'violet', 'teal'].forEach((x) =>
+          document.getElementById('a-' + x).classList.toggle('on', x === a),
+        );
+      }
+    </script>
+  </body>
+</html>
