@@ -171,9 +171,10 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/<a href="https:\/\/docs\.driftstack\.dev" class="btn-secondary">/);
   });
 
-  it("Fleet merge (founder 2026-06-12 'best of both'): 'Mission control for a fleet of real iPhones.' fleet-wall section pinned — complete-iPhone-identity copy + live-status framing + GENERIC telemetry wording (fingerprint coherence verified / detection flags 0 — founder: no tool names, keep it professional)", () => {
-    expect(body).toMatch(/Mission control for a fleet of real iPhones\./);
-    expect(body).toMatch(/Every profile is a complete iPhone identity, live in the cloud/);
+  it("Fleet merge (founder 2026-06-12 'best of both'): 'Command a fleet of real iPhones.' fleet-wall hero pinned — identity/history/geo triad + 'just people on phones' close + live-status framing + GENERIC telemetry wording (fingerprint coherence verified / detection flags 0 — founder: no tool names, keep it professional)", () => {
+    expect(body).toMatch(/Command a fleet of real iPhones\./);
+    expect(body).toMatch(/its own identity,\s*\n?\s*its own history, its own corner of the world/);
+    expect(body).toMatch(/they're just people on\s*\n?\s*phones\./);
     expect(body).toMatch(/fingerprint coherence <b class="text-tk-ready">verified<\/b>/);
     expect(body).toMatch(/detection flags <b class="text-tk-ready">0<\/b>/);
     // honest-claims guard: the demo's CONCEPT features must NOT ship until built
@@ -190,6 +191,14 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(
       /<a href="\/comparison" class="text-tk-accent underline">comparison page<\/a>/,
     );
+  });
+
+  it("Human-by-design behavioural section pinned (2026-06-12, founder: feature the automation framework): 'Every tap drawn from human motion.' + the bots-move-in-straight-lines lead + touch/scroll + typing-cadence + per-profile-persona cards — all claims backed by packages/behavioural-simulation (touch/scroll/keyboard/dwell/profiles, prod-wired)", () => {
+    expect(body).toMatch(/Every tap drawn from human motion\./);
+    expect(body).toMatch(/Bots move in straight lines and constant time\./);
+    expect(body).toMatch(/Curved touch paths, momentum flicks, variable dwell/);
+    expect(body).toMatch(/Per-character rhythm with natural pauses/);
+    expect(body).toMatch(/consistent motion signature across\s*\n?\s*sessions/);
   });
 
   it('file exists at canonical path', () => {
