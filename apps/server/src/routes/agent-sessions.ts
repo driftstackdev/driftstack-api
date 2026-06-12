@@ -1774,6 +1774,13 @@ export function registerAgentSessionsRoutes(
       // delete is idempotent so concurrent budget-exhausted close
       // from the runtime is safe.
       byokKeyCache?.delete(req.params.id);
+      // W650 — evict the agent session's latest pageState on close (same
+      // per-session in-memory cleanup as byokKeyCache above). Bounded anyway
+      // by the store's LRU cap, but freeing it here avoids a closed session's
+      // stale loading-bar state lingering until pushout + fulfils the store's
+      // documented on-session-end eviction. Idempotent + gated (no-op when the
+      // fleet control plane / store isn't wired).
+      sessionPageStateStore?.delete(req.params.id);
       // Slice 6 follow-up 2026-05-20 — agent-session destroy audit.
       // Best-effort emit. Reason 'customer-closed' captured at the
       // route-level (runtime-driven closures use their own audit
