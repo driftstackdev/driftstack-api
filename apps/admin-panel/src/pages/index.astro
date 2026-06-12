@@ -320,6 +320,47 @@ const apiBaseUrl = resolveApiBaseUrl();
       </p>
     </section>
 
+    {/* Owner-only platform secrets (secrets Phase A slice 3, 2026-06-12).
+        SSR-hidden; revealed only when GET /v1/admin/owner/secrets returns 200
+        (the owner). Values NEVER ride the list — Reveal is an explicit,
+        server-audited decrypt; Set/Delete are audited too. */}
+    <section class="mt-6 dashboard-card hidden" data-owner-only="secrets">
+      <div class="flex items-center justify-between">
+        <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </span>
+          Platform secrets
+        </h2>
+        <span class="font-mono text-xs text-slate-400">owner-only · encrypted at rest</span>
+      </div>
+      <div class="mt-4 space-y-2" data-list="owner-secrets">
+        <div class="text-sm text-slate-400">Loading…</div>
+      </div>
+      <form class="mt-4 flex flex-wrap items-end gap-2" data-form="secret-set">
+        <label class="flex flex-col gap-1 text-[11px] text-slate-500">name
+          <input name="name" required pattern="[a-z0-9][a-z0-9_]*" maxlength="64" placeholder="stripe_secret_key"
+            class="w-44 rounded border border-slate-300 px-2 py-1 font-mono text-xs text-slate-900" />
+        </label>
+        <label class="flex flex-col gap-1 text-[11px] text-slate-500">value
+          <input name="value" type="password" required maxlength="8192" autocomplete="off" placeholder="••••••"
+            class="w-56 rounded border border-slate-300 px-2 py-1 font-mono text-xs text-slate-900" />
+        </label>
+        <label class="flex flex-col gap-1 text-[11px] text-slate-500">description (optional)
+          <input name="description" maxlength="256" placeholder="What is this?"
+            class="w-48 rounded border border-slate-300 px-2 py-1 text-xs text-slate-900" />
+        </label>
+        <button type="submit" class="rounded bg-oxblood-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-oxblood-800">Save secret</button>
+        <span class="text-[11px]" data-field="secret-set-status"></span>
+      </form>
+      <p class="mt-3 text-[11px] text-slate-400">
+        AES-256-GCM at rest; list shows metadata only. Reveal decrypts ONCE and is audited
+        (secret.revealed) — every set/delete is audited too. Values never appear in the audit log.
+      </p>
+    </section>
+
     {/* 2026-05-23 — icon on Recent admin activity header. */}
     <!-- Recent admin activity -->
     <section class="mt-10 dashboard-card">
@@ -819,6 +860,112 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
       void fetchPricing().catch(() => {});
+
+      // Owner-only platform secrets (Phase A slice 3, 2026-06-12) — GET
+      // /v1/admin/owner/secrets returns { enabled, secrets: [meta] } for the
+      // OWNER (403 for staff -> card stays hidden). Values NEVER ride the
+      // list; Reveal POSTs the audited decrypt and shows the value until
+      // Hide is clicked (cleared from the DOM on hide, never logged).
+      function renderSecrets(body) {
+        const card = root.querySelector('[data-owner-only="secrets"]');
+        const list = root.querySelector('[data-list="owner-secrets"]');
+        if (!card || !list || !body) return;
+        const rows = Array.isArray(body.secrets) ? body.secrets : [];
+        if (!body.enabled) {
+          list.innerHTML =
+            '<div class="text-sm text-amber-600">Secrets are disabled on this deployment (MFA_ENCRYPTION_KEY unset).</div>';
+        } else if (rows.length === 0) {
+          list.innerHTML = '<div class="text-sm text-slate-400">No secrets stored yet.</div>';
+        } else {
+          list.innerHTML = rows
+            .map((m) => {
+              const name = escapeHtml(String(m.name));
+              const desc = m.description ? escapeHtml(String(m.description)) : '';
+              const updated = m.updated_at ? escapeHtml(String(m.updated_at).slice(0, 16).replace('T', ' ')) : '';
+              return (
+                '<div class="flex flex-wrap items-center gap-2 rounded-md bg-slate-50 px-3 py-2" data-secret-row="' + name + '">' +
+                '<span class="font-mono text-xs text-slate-900">' + name + '</span>' +
+                (desc ? '<span class="text-[11px] text-slate-500">' + desc + '</span>' : '') +
+                '<span class="ml-auto text-[11px] text-slate-400">' + updated + '</span>' +
+                '<output class="hidden max-w-[16rem] truncate rounded bg-slate-900 px-2 py-0.5 font-mono text-[11px] text-emerald-300" data-secret-value="' + name + '"></output>' +
+                '<button type="button" data-reveal-secret="' + name + '" class="rounded border border-slate-300 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-100">Reveal</button>' +
+                '<button type="button" data-delete-secret="' + name + '" class="rounded border border-red-200 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50">Delete</button>' +
+                '</div>'
+              );
+            })
+            .join('');
+        }
+        card.classList.remove('hidden');
+      }
+      function fetchSecrets() {
+        return authedFetch('/v1/admin/owner/secrets')
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+          .then((body) => renderSecrets(body));
+      }
+      const secretsList = root.querySelector('[data-list="owner-secrets"]');
+      if (secretsList) {
+        secretsList.addEventListener('click', (e) => {
+          const t = e.target;
+          const revealBtn = t && t.closest ? t.closest('[data-reveal-secret]') : null;
+          const deleteBtn = t && t.closest ? t.closest('[data-delete-secret]') : null;
+          if (revealBtn) {
+            const name = revealBtn.getAttribute('data-reveal-secret');
+            const out = root.querySelector('[data-secret-value="' + name + '"]');
+            if (!out) return;
+            if (!out.classList.contains('hidden')) {
+              out.textContent = '';
+              out.classList.add('hidden');
+              revealBtn.textContent = 'Reveal';
+              return;
+            }
+            revealBtn.textContent = '…';
+            void authedFetch('/v1/admin/owner/secrets/' + encodeURIComponent(name) + '/reveal', { method: 'POST' })
+              .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+              .then((body) => {
+                out.textContent = String(body.value);
+                out.classList.remove('hidden');
+                revealBtn.textContent = 'Hide';
+              })
+              .catch(() => {
+                revealBtn.textContent = 'Reveal';
+              });
+          }
+          if (deleteBtn) {
+            const name = deleteBtn.getAttribute('data-delete-secret');
+            if (!window.confirm('Delete secret "' + name + '"? This is audited and irreversible.')) return;
+            void authedFetch('/v1/admin/owner/secrets/' + encodeURIComponent(name), { method: 'DELETE' })
+              .then(() => fetchSecrets())
+              .catch(() => {});
+          }
+        });
+      }
+      const secretForm = root.querySelector('[data-form="secret-set"]');
+      if (secretForm) {
+        secretForm.addEventListener('submit', (e) => {
+          e.preventDefault();
+          const status = root.querySelector('[data-field="secret-set-status"]');
+          const fd = new FormData(secretForm);
+          const name = String(fd.get('name') || '');
+          const value = String(fd.get('value') || '');
+          const description = String(fd.get('description') || '');
+          if (status) { status.textContent = 'saving…'; status.className = 'text-[11px] text-slate-400'; }
+          void authedFetch('/v1/admin/owner/secrets/' + encodeURIComponent(name), {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ value, description: description || null }),
+          })
+            .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+            .then((body) => {
+              if (status) { status.textContent = body.status === 'created' ? 'created ✓' : 'updated ✓'; status.className = 'text-[11px] text-emerald-600'; }
+              secretForm.reset();
+              return fetchSecrets();
+            })
+            .catch((err) => {
+              if (status) { status.textContent = 'failed (' + (err && err.message ? err.message : 'error') + ')'; status.className = 'text-[11px] text-red-600'; }
+            });
+        });
+      }
+      void fetchSecrets().catch(() => {});
 
       // 2026-05-21 — live activity feed. The audit-log fetch is
       // extracted so we can refresh it on a 30s timer + bind to the
