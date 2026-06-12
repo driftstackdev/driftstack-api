@@ -23,6 +23,9 @@ export interface OpenSimulatorArgs {
   /** Human device label shown in the toolbar (e.g. "iPhone 17"), derived from
    *  the profile's archetype. Defaults to "iPhone" when omitted. */
   deviceName?: string;
+  /** Profile name shown next to the Drift mark in the toolbar (the identity
+   *  this phone is running as). Omitted → the toolbar shows the device only. */
+  profileName?: string;
 }
 
 /** Open (or focus) the floating-iPhone window for a session. Returns true when
@@ -32,6 +35,7 @@ export async function openSimulatorWindow({
   sessionId,
   info,
   deviceName,
+  profileName,
 }: OpenSimulatorArgs): Promise<boolean> {
   // Tauri-only — guard so a browser preview doesn't throw on the dynamic import.
   if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return false;
@@ -55,6 +59,8 @@ export async function openSimulatorWindow({
     room: (info as unknown as { room_name?: string }).room_name ?? '',
     // Device label for the toolbar (e.g. "iPhone 17").
     name: deviceName ?? 'iPhone',
+    // Profile identity for the toolbar branding (empty → device-only).
+    profile: profileName ?? '',
   });
 
   const win = new WebviewWindow(label, {

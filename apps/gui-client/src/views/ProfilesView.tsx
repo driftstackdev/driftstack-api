@@ -248,12 +248,12 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       setWatchSource({ profileId, agentSessionId });
       // Open the floating-iPhone simulator window (the standard experience).
       // Falls back to the in-app overlay when not under Tauri (browser preview).
+      const reopened = state.profiles.find((p) => p.id === profileId);
       const opened = await openSimulatorWindow({
         sessionId: agentSessionId,
         info,
-        deviceName: formatDeviceName(
-          state.profiles.find((p) => p.id === profileId)?.archetype ?? '',
-        ),
+        deviceName: formatDeviceName(reopened?.archetype ?? ''),
+        profileName: reopened?.name,
       });
       if (!opened) setWatchInfo(info);
     } catch (err) {
@@ -364,6 +364,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           sessionId: created.id,
           info: created.livekit,
           deviceName: formatDeviceName(profile.archetype),
+          profileName: profile.name,
         });
         if (!opened) setWatchInfo(created.livekit);
       } else {

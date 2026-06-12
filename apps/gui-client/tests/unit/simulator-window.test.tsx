@@ -79,6 +79,30 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(shell?.firstElementChild).toBe(toolbar);
   });
 
+  it('brands the toolbar: Drift mark + profile name (primary) with the device muted beside it', () => {
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017&profile=Amsterdam%20Shopper',
+    );
+    const { container } = render(<SimulatorWindow />);
+    const toolbar = container.querySelector('[data-component="simulator-toolbar"]');
+    // The Drift mark renders in the toolbar (brand presence on the window).
+    expect(toolbar?.querySelector('[data-component="drift-mark"]')).not.toBeNull();
+    // Profile identity is primary; the device rides muted beside it.
+    expect(toolbar?.textContent).toContain('Amsterdam Shopper');
+    expect(toolbar?.textContent).toContain('iPhone 17');
+  });
+
+  it('toolbar without a profile name falls back to the device name only (no dangling separator)', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
+    const { container } = render(<SimulatorWindow />);
+    const toolbar = container.querySelector('[data-component="simulator-toolbar"]');
+    expect(toolbar?.querySelector('[data-component="drift-mark"]')).not.toBeNull();
+    expect(toolbar?.textContent).toContain('iPhone 17');
+    expect(toolbar?.textContent).not.toContain('·');
+  });
+
   it('shows a no-session hint (no device frame) when the query lacks ws/token', () => {
     window.history.pushState({}, '', '/?window=simulator');
     const { container } = render(<SimulatorWindow />);

@@ -20,19 +20,21 @@ import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 
-function infoFromQuery(): { info: LiveKitInfo | null; deviceName: string } {
+function infoFromQuery(): { info: LiveKitInfo | null; deviceName: string; profileName: string } {
   const q = new URLSearchParams(window.location.search);
   const ws_url = q.get('ws');
   const token = q.get('token');
   const deviceName = q.get('name') ?? 'iPhone';
+  const profileName = q.get('profile') ?? '';
   if (ws_url === null || token === null || ws_url === '' || token === '') {
-    return { info: null, deviceName };
+    return { info: null, deviceName, profileName };
   }
   // LiveKitInfo carries ws_url + token (the only fields the panel/connect read);
   // room_name is informational. Cast is safe — the panel reads ws_url/token only.
   return {
     info: { ws_url, token, room_name: q.get('room') ?? '' } as unknown as LiveKitInfo,
     deviceName,
+    profileName,
   };
 }
 
@@ -90,12 +92,37 @@ function captureScreenshot(deviceName: string): void {
  * screenshot + rotate actions on the right. The bar is a drag-region (drag the
  * window by it); the button clusters opt out so clicks land.
  */
+/** The Drift mark — three offset drift strokes (layers sliding past each
+ *  other), in the brand accent. Minimal enough to read at 14px. */
+function DriftMark(): JSX.Element {
+  return (
+    <svg
+      data-component="drift-mark"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      className="text-accent"
+      aria-hidden="true"
+    >
+      <path d="M4 6h13" />
+      <path d="M7 12h13" />
+      <path d="M4 18h10" />
+    </svg>
+  );
+}
+
 function DeviceToolbar({
   deviceName,
+  profileName,
   landscape,
   onToggleRotate,
 }: {
   deviceName: string;
+  profileName: string;
   landscape: boolean;
   onToggleRotate: () => void;
 }): JSX.Element {
@@ -123,12 +150,19 @@ function DeviceToolbar({
           className="h-3 w-3 rounded-full bg-[#febc2e] ring-1 ring-black/20 transition hover:brightness-110"
         />
       </div>
-      {/* Center — device name (from the launched archetype). */}
+      {/* Center — Drift mark + identity: the profile this phone runs as
+          (primary) and the device (muted). Profile-less → device only. */}
       <div
         data-tauri-drag-region
-        className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-2xs font-semibold tracking-tight text-ink-secondary"
+        className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-1.5"
       >
-        {deviceName}
+        <DriftMark />
+        <span className="max-w-[140px] truncate text-2xs font-semibold tracking-tight text-ink-secondary">
+          {profileName !== '' ? profileName : deviceName}
+        </span>
+        {profileName !== '' && (
+          <span className="text-2xs tracking-tight text-ink-muted">· {deviceName}</span>
+        )}
       </div>
       {/* Right — actions. */}
       <div data-tauri-drag-region="false" className="flex items-center gap-1.5 text-ink-muted">
@@ -231,7 +265,7 @@ function IosStatusBar(): JSX.Element {
 }
 
 export function SimulatorWindow(): JSX.Element {
-  const { info, deviceName } = infoFromQuery();
+  const { info, deviceName, profileName } = infoFromQuery();
   const [landscape, setLandscape] = useState(false);
 
   // Rotate: swap the window's width/height so the bezel reflows to the new
@@ -261,6 +295,7 @@ export function SimulatorWindow(): JSX.Element {
         <div data-component="simulator-shell" className="flex h-full w-full flex-col">
           <DeviceToolbar
             deviceName={deviceName}
+            profileName={profileName}
             landscape={landscape}
             onToggleRotate={toggleRotate}
           />
