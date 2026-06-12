@@ -107,7 +107,10 @@ describe('LK.6.d — useInputCapture hook', () => {
     expect(body).toMatch(/if \(!enabled \|\| room === null\) return/);
   });
 
-  it('sendInputEvent rejections are swallowed (best-effort — handlers must never throw)', () => {
-    expect(body).toMatch(/sendInputEvent\([\s\S]+?\.catch\(\(\) => undefined\)/);
+  it('sendInputEvent rejections are swallowed per-event BUT the first failure is surfaced (best-effort — handlers never throw; a silently-dead control channel read as view-only, founder-hit 2026-06-12)', () => {
+    expect(body).toMatch(/sendInputEvent\([\s\S]+?\.catch\(\(err: unknown\) =>/);
+    expect(body).toMatch(/warnedPublishFailure = true;/);
+    expect(body).toMatch(/input publish failed — control will not reach the device/);
+    expect(body).toMatch(/return undefined;/);
   });
 });

@@ -63,23 +63,48 @@ export async function openSimulatorWindow({
     profile: profileName ?? '',
   });
 
+  // Spawn BESIDE the main window, not centered over it — a borderless
+  // always-on-top window centered on the main GUI reads as embedded
+  // (founder-hit: "still in the same window as the main GUI"). Best-effort:
+  // place it to the right of the main window with a small gap; fall back to
+  // centering only when the main window's position isn't readable.
+  let position: { x: number; y: number } | null = null;
+  try {
+    const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+    const main = getCurrentWebviewWindow();
+    const pos = await main.outerPosition();
+    const size = await main.outerSize();
+    const factor = await main.scaleFactor();
+    position = {
+      x: Math.round(pos.x / factor + size.width / factor + 16),
+      y: Math.round(pos.y / factor),
+    };
+  } catch {
+    position = null;
+  }
+
   const win = new WebviewWindow(label, {
     url: `index.html?${params.toString()}`,
-    title: 'iPhone',
+    title: deviceName ?? 'iPhone',
     width: SIM_WIDTH,
     height: SIM_HEIGHT,
     resizable: true,
     decorations: false,
     transparent: true,
     alwaysOnTop: true,
-    // Center-ish; the OS places it and the founder drags it where they want.
-    center: true,
+    ...(position !== null ? { x: position.x, y: position.y } : { center: true }),
     shadow: false,
   });
 
   return await new Promise<boolean>((resolve) => {
     // created/error are the Tauri v2 lifecycle signals for runtime windows.
     void win.once('tauri://created', () => resolve(true));
-    void win.once('tauri://error', () => resolve(false));
+    void win.once('tauri://error', (e) => {
+      // Surfaced, not swallowed: a silent false here used to fall back to the
+      // in-app overlay with no trace of WHY the separate window failed
+      // (founder-hit while diagnosing "still in the same window").
+      console.warn('[simulator] separate window creation failed; falling back in-app:', e);
+      resolve(false);
+    });
   });
 }

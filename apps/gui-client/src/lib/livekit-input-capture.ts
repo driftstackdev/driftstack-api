@@ -146,8 +146,21 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     const video = videoRef.current;
     if (video === null) return;
 
+    let warnedPublishFailure = false;
     const send = (event: InputEvent, reliable: boolean): void => {
-      lastSend.current = sendInputEvent(room, event, { reliable }).catch(() => undefined);
+      lastSend.current = sendInputEvent(room, event, { reliable }).catch((err: unknown) => {
+        // Swallow per-event (a rejected move must not throw into the UI), but
+        // surface the FIRST failure: a silently-dead control channel reads as
+        // "view-only" with no diagnostic (founder-hit 2026-06-12).
+        if (!warnedPublishFailure) {
+          warnedPublishFailure = true;
+          console.warn(
+            '[simulator] input publish failed — control will not reach the device:',
+            err,
+          );
+        }
+        return undefined;
+      });
     };
 
     // A left-button mouse press = a finger down → touchStart. Right/middle
