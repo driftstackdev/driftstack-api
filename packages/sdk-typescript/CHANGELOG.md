@@ -8,6 +8,14 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `session.profile_save_failed` webhook event — a profile-backed
+  session's save-back failed at teardown (terminal; the next restore of
+  that profile will be stale). Subscribable; payload:
+  `{ session_id, profile_id, reason, detail? }` with `reason` one of
+  `serialize_failed | seal_failed | too_large | upload_failed`.
+
+### Added
+
 - **`Session.egress_capability_report`** (Arc 5 EGRESS eg.1.c) —
   raw harness-emitted event payload as `Record<string, unknown> | null`,
   stored alongside the derived `egress_capabilities` view. Forensics

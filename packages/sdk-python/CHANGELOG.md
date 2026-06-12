@@ -8,6 +8,15 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `session.profile_save_failed` webhook event (regenerated models) — a
+  profile-backed session's save-back failed at teardown (terminal; the
+  next restore of that profile will be stale). Subscribable; payload
+  carries `session_id`, `profile_id`, `reason`
+  (`serialize_failed|seal_failed|too_large|upload_failed`) and an
+  optional `detail`.
+
+### Added
+
 - **`Session.egress_capability_report`** (Arc 5 EGRESS eg.1.f) —
   raw harness-emitted event payload as `dict[str, Any] | None`,
   stored alongside the derived `egress_capabilities` view. Forensics

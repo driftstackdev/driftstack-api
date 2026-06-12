@@ -1,0 +1,46 @@
+# A2 session report — 2026-06-12 (founder-attended + autopilot)
+
+One-page continuity index of everything Agent-2 shipped/surfaced this session.
+Details live in the per-commit messages; this is the map.
+
+## Shipped (all gate-green on main)
+
+| Arc                                | Commits                                        | Net                                                                                                                                                                                                                                   |
+| ---------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Security fixes                     | `45512fc6`, `22d48843`                         | URL-FRAGMENT credential redaction closed in BOTH redactors (recipe-library + the canonical free-text log/Sentry sanitizer) — OAuth-implicit tokens no longer leak                                                                     |
+| pageState evict                    | `6dca621c`                                     | Closed agent sessions evict their in-memory pageState (was a tested-but-never-called method)                                                                                                                                          |
+| Simulator GUI arc (founder-driven) | `31d1d966`→`e36b9c20` (6)                      | iOS status bar → drag-region → Driftstack control toolbar (close/minimize/screenshot/rotate) → Drift-mark + profile-name branding → no-overlap status strip → **archetype-driven auto-sizing** (live video dims; no per-device table) |
+| `session.profile_save_failed`      | `c474785c`                                     | A3-W1364 contract closed END-TO-END (A3's harness emit landed on this CP half same-day): frame → relay → subscribable webhook; migration 0073                                                                                         |
+| Secrets Phase A (cockpit)          | `a5ca8a74`, `3449f046`, `197762cd`, `d11ea8c3` | Complete: encrypted-at-rest store (migration 0074, BYOK pattern, no new env) + owner routes with audited reveal (migration 0075) + admin-panel card + drift-pins                                                                      |
+| Doc accuracy                       | `25c80f23`, `6a0b1f9a`, `f66cd5db`             | Deploy readiness re-verified at every delta growth (now 0072–0075, all metadata-safe); webhook-rotation-reminder "dormant" header was a LIVE-surface lie — fixed with its pinned parity test                                          |
+
+## Ops (founder-visible)
+
+- **Blank pages root-caused twice = gost:1080 down** (the hardcoded local-demo egress). Now
+  **launchd-supervised** (`dev.driftstack.gost-1080`, KeepAlive, self-heal verified <7s).
+  A1 informed (their verify-script pkills now just blip).
+- Tauri GUI rebuilt+relaunched 3× for the founder (current install = `000282e0`;
+  `e36b9c20` auto-sizing needs the next rebuild).
+
+## Surfaced (founder decisions — NOT auto-done)
+
+1. **Prod API deploy** — one command, delta de-risked on 4 axes, 4 safe migrations.
+2. **`deploy-frontend.sh admin-panel`** — puts the secrets cockpit live (Actions still down).
+3. **Proxy truth-gap** — GUI-saved/bound proxies do NOT route sessions (server env proxy does);
+   wiring = the decided EG-API-1.6 design; prerequisite for the country-flag ask.
+4. **Stale local-demo archetype** (`iphone16pro_ios18_6…` in bootstrap sessionDispatch) — flip on nod.
+5. **§4.12 IP rate-limiter** — gap set completed at 7 routes (+cli-authorize initiate/exchange).
+6. hstspreload submission; toolbar palette revisit ("kinda dark").
+
+## Cross-agent
+
+- A3: `profileSaveFailed` emit landed (lockstep contract); Oxblood `#722F37` palette relayed →
+  applied to the MiniBrowser bar (screenshot-verified).
+- A1: gost coordination + supervisor handoff posted; no reply needed.
+
+## Audit roster additions (don't re-sweep)
+
+Harness wire-protocol robustness · SDK auto-pagination (3 langs, one unreachable divergence
+surfaced) · webhook-delivery SSRF (verified comprehensive, rebind-proof) · profile-store
+TTL coupling (latent, trigger documented) · LLM-output parse + recapture scheduler/matrix/atlas ·
+cli-authorize (textbook) · webhook-rotation-reminder (clean; header lie fixed). Roster at 22 entries.

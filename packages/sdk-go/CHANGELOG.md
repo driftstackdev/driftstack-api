@@ -8,6 +8,14 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`EventSessionProfileSaveFailed`** (`session.profile_save_failed`) —
+  webhook event constant for a profile-backed session whose save-back
+  failed at teardown (the session itself succeeded; terminal — the next
+  restore of that profile will be stale). Subscribable; payload carries
+  `session_id`, `profile_id`, `reason`
+  (`serialize_failed|seal_failed|too_large|upload_failed`) and an
+  optional `detail`.
+
 - **`Session.EgressCapabilityReport`** (Arc 5 EGRESS eg.1.g) —
   raw harness-emitted event payload as `map[string]any` (with
   `json:"egress_capability_report"` tag), stored alongside the
