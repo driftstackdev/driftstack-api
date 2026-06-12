@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en" data-mode="light" data-accent="violet">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Driftstack — Proxy Health (proposal demo)</title>
+    <!-- PROPOSAL DEMO (2026-06-12, A2). An egress/proxy health surface for the
+         GUI or dashboard: per-proxy status board (reachability, latency, exit
+         geo, last check), pool summary strip, and a geo-coherence callout when
+         a proxy's exit country no longer matches the profiles pinned to it.
+         Honest framing: SOCKS5 egress + auto-geo-locale exist today; the
+         health checks + this board are a UI proposal (backend later). -->
+    <style>
+      :root {
+        --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+        --mono: 'SF Mono', ui-monospace, Menlo, monospace;
+      }
+      [data-accent='violet'] {
+        --accent: #6d5efc;
+        --accent-ink: #fff;
+        --accent-soft: rgba(109, 94, 252, 0.13);
+      }
+      [data-mode='light'] {
+        --bg: #f2f3f6;
+        --surface: #fff;
+        --hover: #f1f2f5;
+        --ink: #0f1014;
+        --ink-2: #474a55;
+        --ink-3: #8a8d99;
+        --border: #e4e6ec;
+        --ready: #0c9a5d;
+        --warn: #b45309;
+        --bad: #c0354b;
+      }
+      [data-mode='dark'] {
+        --bg: #060608;
+        --surface: #0e0e12;
+        --hover: #22232c;
+        --ink: #f5f5f7;
+        --ink-2: #b0b0bb;
+        --ink-3: #73737f;
+        --border: #1e1e26;
+        --ready: #2fe39a;
+        --warn: #f0a44b;
+        --bad: #ff5d76;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--ink);
+        font-size: 14px;
+        -webkit-font-smoothing: antialiased;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 22px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 900;
+        font-style: italic;
+        letter-spacing: -0.4px;
+      }
+      .brand b {
+        color: var(--accent);
+        font-weight: 900;
+      }
+      .stage {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 22px;
+      }
+      .label {
+        font-family: var(--mono);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1.4px;
+        color: var(--ink-3);
+      }
+      .label::before {
+        content: '// ';
+        color: var(--accent);
+      }
+      h1 {
+        font-size: 20px;
+        letter-spacing: -0.4px;
+        margin: 6px 0 16px;
+      }
+      .pool {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 18px;
+      }
+      .stat {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        padding: 13px 15px;
+      }
+      .stat .k {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--ink-3);
+      }
+      .stat .v {
+        font-size: 21px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        margin-top: 3px;
+      }
+      .stat .v small {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--ink-3);
+      }
+      .callout {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        border: 1px solid var(--warn);
+        border-radius: 12px;
+        background: var(--surface);
+        padding: 12px 15px;
+        margin-bottom: 18px;
+        font-size: 12.5px;
+      }
+      .callout b {
+        display: block;
+        margin-bottom: 2px;
+      }
+      .callout .fix {
+        margin-left: auto;
+        white-space: nowrap;
+        align-self: center;
+        border-radius: 8px;
+        padding: 7px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        background: var(--accent);
+        color: var(--accent-ink);
+        cursor: pointer;
+      }
+      table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+        background: var(--surface);
+      }
+      th {
+        text-align: left;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--ink-3);
+        font-weight: 600;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      td {
+        padding: 11px 14px;
+        border-bottom: 1px solid var(--border);
+        font-size: 12.5px;
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      tr:hover td {
+        background: var(--hover);
+      }
+      .name {
+        font-weight: 600;
+      }
+      .name span {
+        display: block;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        font-weight: 400;
+        color: var(--ink-3);
+        margin-top: 1px;
+      }
+      .dot {
+        display: inline-block;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        margin-right: 6px;
+        vertical-align: 1px;
+      }
+      .ok {
+        color: var(--ready);
+      }
+      .ok .dot {
+        background: var(--ready);
+      }
+      .slow {
+        color: var(--warn);
+      }
+      .slow .dot {
+        background: var(--warn);
+      }
+      .down {
+        color: var(--bad);
+      }
+      .down .dot {
+        background: var(--bad);
+      }
+      .lat {
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+      .spark {
+        display: inline-flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 16px;
+        margin-left: 8px;
+      }
+      .spark i {
+        width: 3px;
+        border-radius: 1px;
+        background: var(--accent);
+        opacity: 0.55;
+      }
+      .geo {
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+      .profiles {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ink-2);
+      }
+      .rowact {
+        font-size: 11.5px;
+        font-weight: 600;
+        color: var(--accent);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .foot {
+        margin-top: 14px;
+        font-size: 11.5px;
+        color: var(--ink-3);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="top">
+      <span class="brand">DRIFT<b>STACK</b></span>
+      <span style="color: var(--ink-3); font-size: 13px">· Egress / Proxy health</span>
+    </div>
+    <div class="stage">
+      <span class="label">Egress</span>
+      <h1>Every exit, checked.</h1>
+
+      <div class="pool">
+        <div class="stat">
+          <div class="k">Proxies</div>
+          <div class="v">6</div>
+        </div>
+        <div class="stat">
+          <div class="k">Healthy</div>
+          <div class="v ok">4</div>
+        </div>
+        <div class="stat">
+          <div class="k">Median latency</div>
+          <div class="v">86<small> ms</small></div>
+        </div>
+        <div class="stat">
+          <div class="k">Geo-coherent</div>
+          <div class="v">5<small> / 6</small></div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <span aria-hidden="true" style="color: var(--warn)">⚠</span>
+        <div>
+          <b>Geo drift on nl-residential-2</b>
+          Exit now resolves to <span class="geo">DE · Frankfurt</span> but 3 profiles pinned to it
+          present Dutch locale + Amsterdam timezone. Sites can see that mismatch.
+        </div>
+        <span class="fix">Review pinned profiles</span>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Proxy</th>
+            <th>Status</th>
+            <th>Latency (24h)</th>
+            <th>Exit geo</th>
+            <th>Pinned profiles</th>
+            <th>Last check</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="name">nl-residential-1<span>socks5 · ams1.example.net:1080</span></td>
+            <td class="ok"><span class="dot"></span>Healthy</td>
+            <td>
+              <span class="lat">71 ms</span>
+              <span class="spark"
+                ><i style="height: 7px"></i><i style="height: 9px"></i><i style="height: 6px"></i
+                ><i style="height: 8px"></i><i style="height: 7px"></i><i style="height: 10px"></i
+                ><i style="height: 8px"></i
+              ></span>
+            </td>
+            <td class="geo">NL · Amsterdam</td>
+            <td class="profiles">amsterdam-shopper +2</td>
+            <td class="lat">2m ago</td>
+            <td class="rowact">Test now</td>
+          </tr>
+          <tr>
+            <td class="name">nl-residential-2<span>socks5 · rtd2.example.net:1080</span></td>
+            <td class="slow"><span class="dot"></span>Geo drift</td>
+            <td>
+              <span class="lat">94 ms</span>
+              <span class="spark"
+                ><i style="height: 8px"></i><i style="height: 10px"></i><i style="height: 9px"></i
+                ><i style="height: 12px"></i><i style="height: 10px"></i><i style="height: 11px"></i
+                ><i style="height: 9px"></i
+              ></span>
+            </td>
+            <td class="geo" style="color: var(--warn)">DE · Frankfurt ←</td>
+            <td class="profiles">nl-banking +2</td>
+            <td class="lat">1m ago</td>
+            <td class="rowact">Test now</td>
+          </tr>
+          <tr>
+            <td class="name">us-mobile-1<span>socks5 · nyc1.example.net:9050</span></td>
+            <td class="ok"><span class="dot"></span>Healthy</td>
+            <td>
+              <span class="lat">102 ms</span>
+              <span class="spark"
+                ><i style="height: 10px"></i><i style="height: 11px"></i><i style="height: 9px"></i
+                ><i style="height: 12px"></i><i style="height: 11px"></i><i style="height: 10px"></i
+                ><i style="height: 12px"></i
+              ></span>
+            </td>
+            <td class="geo">US · New York</td>
+            <td class="profiles">us-retail-qa +4</td>
+            <td class="lat">2m ago</td>
+            <td class="rowact">Test now</td>
+          </tr>
+          <tr>
+            <td class="name">uk-residential-1<span>socks5 · lon3.example.net:1080</span></td>
+            <td class="ok"><span class="dot"></span>Healthy</td>
+            <td>
+              <span class="lat">79 ms</span>
+              <span class="spark"
+                ><i style="height: 8px"></i><i style="height: 7px"></i><i style="height: 9px"></i
+                ><i style="height: 8px"></i><i style="height: 10px"></i><i style="height: 8px"></i
+                ><i style="height: 9px"></i
+              ></span>
+            </td>
+            <td class="geo">UK · London</td>
+            <td class="profiles">uk-checkout</td>
+            <td class="lat">3m ago</td>
+            <td class="rowact">Test now</td>
+          </tr>
+          <tr>
+            <td class="name">jp-datacenter-1<span>socks5 · tyo1.example.net:1080</span></td>
+            <td class="ok"><span class="dot"></span>Healthy</td>
+            <td>
+              <span class="lat">188 ms</span>
+              <span class="spark"
+                ><i style="height: 12px"></i><i style="height: 14px"></i><i style="height: 13px"></i
+                ><i style="height: 15px"></i><i style="height: 13px"></i><i style="height: 14px"></i
+                ><i style="height: 13px"></i
+              ></span>
+            </td>
+            <td class="geo">JP · Tokyo</td>
+            <td class="profiles">jp-market</td>
+            <td class="lat">2m ago</td>
+            <td class="rowact">Test now</td>
+          </tr>
+          <tr>
+            <td class="name">de-residential-3<span>socks5 · fra2.example.net:1080</span></td>
+            <td class="down"><span class="dot"></span>Unreachable</td>
+            <td>
+              <span class="lat">—</span>
+              <span class="spark"
+                ><i style="height: 9px"></i><i style="height: 8px"></i><i style="height: 10px"></i
+                ><i style="height: 3px; background: var(--bad)"></i
+                ><i style="height: 2px; background: var(--bad)"></i
+                ><i style="height: 2px; background: var(--bad)"></i
+                ><i style="height: 2px; background: var(--bad)"></i
+              ></span>
+            </td>
+            <td class="geo">DE · —</td>
+            <td class="profiles">de-pricing</td>
+            <td class="lat">30s ago · retrying</td>
+            <td class="rowact">Test now</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="foot">
+        Checks run from the fleet, through each proxy, against a neutral endpoint — reachability,
+        round-trip latency and exit-IP geolocation. Sessions never launch through an unreachable
+        exit; geo drift warns before a profile's story stops matching its network.
+      </p>
+    </div>
+  </body>
+</html>
