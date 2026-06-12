@@ -44,3 +44,28 @@ Harness wire-protocol robustness · SDK auto-pagination (3 langs, one unreachabl
 surfaced) · webhook-delivery SSRF (verified comprehensive, rebind-proof) · profile-store
 TTL coupling (latent, trigger documented) · LLM-output parse + recapture scheduler/matrix/atlas ·
 cli-authorize (textbook) · webhook-rotation-reminder (clean; header lie fixed). Roster at 22 entries.
+
+## Addendum (~09:00) — the simulator-control saga: fully diagnosed, two ext fixes pending
+
+Founder's "can't control / no changes" decomposed into THREE stacked causes, all now
+pinned:
+
+1. **Fork crash on touch** (the tap-killer): the full chain VERIFIED working — GUI
+   publish → DataChannel → harness receive (`INPUT-RX` markers, A3) → injection ENABLED →
+   `performActions` executes — then the fork aborts in `WebDriver::HTTPRequestHandler::
+sendResponse` (`bad_optional_access`, empty `optional<unsigned int>`). Exact stack from
+   3 .ips reports → **A3 fixing** (founder corrected routing: fork source = A3; A1 =
+   fingerprints).
+2. **Tooling kills live sessions**: 115 `pkill MiniBrowser` sites across ~75 scripts
+   reaped the founder's sessions on every verify/gate run. Shipped
+   `operations/scripts/kill-own-minibrowsers.sh` (never kills `--enable-webdriver=agt_`
+   forks; synthetic-tested) + migrated the 12 ops/production sites; **the ~103
+   captures/v1-v3 gate sites are A1's to migrate** (helper + recipe handed over).
+3. **Window "same as before"**: every session crashed seconds in, so the new
+   simulator-window features never got exercised. GUI now spawns the window BESIDE the
+   main GUI, has a pin (always-on-top opt-out), and surfaces both formerly-silent
+   failure paths (window-creation error + first failed input publish). Install =
+   `41b7893f`.
+
+Helper-app bundle (per-window Dock identity) = decided post-launch v1.x. Retest plan
+once A3's fork fix lands: launch → window-beside-GUI + pin + tap/type in one pass.
