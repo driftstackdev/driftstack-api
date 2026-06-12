@@ -15,6 +15,7 @@ import {
   saveProfileMeta,
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
+import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
 import {
   ProfilesActionBar,
@@ -163,6 +164,15 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   const [profilesMeta, setProfilesMeta] = useState<ProfilesMetaMap>({});
   const [folderFilter, setFolderFilter] = useState<string>('all');
   const [organizeId, setOrganizeId] = useState<string | null>(null);
+  // Onboarding checklist dismissal — webview localStorage persists per
+  // install. Guarded: some embeddings/test environments stub storage out.
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
+    try {
+      return localStorage.getItem('ds_onboarding_dismissed') === '1';
+    } catch {
+      return false;
+    }
+  });
   const [draftFolder, setDraftFolder] = useState('');
   const [draftTags, setDraftTags] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProfileStatusFilter>('all');
@@ -588,6 +598,37 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           worker (the harness on a Mac) — then launches stream live video. Sessions, the viewer and
           controls work now for testing the flow.
         </div>
+      )}
+      {!onboardingDismissed && (
+        <OnboardingChecklist
+          steps={[
+            {
+              id: 'connect',
+              label: 'Connect your account',
+              done: settings.apiKey !== null,
+              go: onGoToSettings,
+            },
+            {
+              id: 'profile',
+              label: 'Create a profile',
+              done: (accountMe?.profile_count ?? 0) > 0 || state.profiles.length > 0,
+              go: () => setCreateOpen(true),
+            },
+            {
+              id: 'launch',
+              label: 'Launch a session',
+              done: (accountMe?.concurrent_session_active ?? 0) > 0 || activeSessions.length > 0,
+            },
+          ]}
+          onDismiss={() => {
+            try {
+              localStorage.setItem('ds_onboarding_dismissed', '1');
+            } catch {
+              /* storage unavailable — session-only dismissal */
+            }
+            setOnboardingDismissed(true);
+          }}
+        />
       )}
       <header className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-4">
