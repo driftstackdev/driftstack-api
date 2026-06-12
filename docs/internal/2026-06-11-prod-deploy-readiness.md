@@ -31,6 +31,19 @@ So the DB step of the deploy is trivial + safe. The deploy mechanism (`scripts/d
 prod`) additionally runs a migration-immutability + journal-integrity pre-gate, a staging soak,
 an atomic swap, and rollback — see [[2026-06-09-go-live-runbook]].
 
+## Deploy-path readiness — 2026-06-12 (staging soak target verified healthy)
+
+The deploy-bridge soaks on **staging** before prod, so a broken staging would fail the deploy.
+Verified both are up + consistent:
+
+- `staging.driftstack.dev/health` → `{"ok":true}`, `/version` git_sha **`73f70d02`** (driver:mock).
+- `api.driftstack.dev` (prod) → same git_sha **`73f70d02`**.
+
+So the full path (staging soak → atomic prod swap → rollback-on-fail) is operationally ready; the
+~26-commit delta is undeployed to BOTH staging + prod, and the soak step has a live target. No
+pre-deploy operational blocker — go-live reduces to running `deploy-bridge.sh prod` when the
+founder is ready.
+
 ## Remaining to go-live (per the cutover memory)
 
 Correction after cross-checking the cutover memory: the frontend + GUI steps are **already
