@@ -12,39 +12,51 @@ import type { Config } from 'tailwindcss';
 
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
-  darkMode: 'class',
+  // Fleet rework: dark: variants + the semantic palette follow the
+  // data-mode axis (see styles/index.css token layer).
+  darkMode: ['selector', '[data-mode="dark"]'],
   theme: {
     extend: {
       colors: {
         // Slate palette mapped to semantic tokens. The GUI uses these,
         // not raw `slate-*` references, so a future palette tweak
         // doesn't require touching every component.
+        // Fleet rework (2026-06-12): every semantic color resolves to the
+        // two-axis CSS custom properties in styles/index.css, so the whole
+        // GUI flips with <html data-mode>/<html data-accent>. rgb()/<alpha>
+        // form keeps alpha modifiers (bg-status-error/10 etc) working.
         surface: {
-          base: '#0b0f14', // slate-950-ish; primary background
-          raised: '#111722', // panels / cards
-          elevated: '#1a2230', // popovers, dropdowns
-          inset: '#070a0e', // input backgrounds
-          divider: '#1f2937', // hairlines
+          base: 'rgb(var(--surface-base-rgb) / <alpha-value>)',
+          raised: 'rgb(var(--surface-raised-rgb) / <alpha-value>)',
+          elevated: 'rgb(var(--surface-elevated-rgb) / <alpha-value>)',
+          inset: 'rgb(var(--surface-inset-rgb) / <alpha-value>)',
+          divider: 'rgb(var(--surface-divider-rgb) / <alpha-value>)',
         },
         ink: {
-          primary: '#e5e7eb', // body text
-          secondary: '#9ca3af', // labels, captions
-          muted: '#6b7280', // disabled, placeholder
-          inverted: '#0b0f14', // text on accent surfaces
+          primary: 'rgb(var(--ink-primary-rgb) / <alpha-value>)',
+          secondary: 'rgb(var(--ink-secondary-rgb) / <alpha-value>)',
+          muted: 'rgb(var(--ink-muted-rgb) / <alpha-value>)',
+          inverted: 'rgb(var(--ink-inverted-rgb) / <alpha-value>)',
         },
         accent: {
-          // Oxblood — locked. Sole accent color.
-          DEFAULT: '#722f37',
-          hover: '#823942',
-          active: '#5e252c',
-          subtle: '#3a1a1f', // for soft backgrounds (selected row, etc.)
-          ring: 'rgba(114, 47, 55, 0.4)', // focus ring
+          // Follows the data-accent axis (violet default per the rework).
+          DEFAULT: 'rgb(var(--accent-rgb) / <alpha-value>)',
+          hover: 'rgb(var(--accent-hover-rgb) / <alpha-value>)',
+          active: 'rgb(var(--accent-active-rgb) / <alpha-value>)',
+          // soft selected-row wash: accent at a mode-tuned alpha
+          subtle: 'rgb(var(--accent-subtle-rgb) / var(--accent-subtle-alpha))',
+          ring: 'var(--accent-ring)', // focus ring
         },
         status: {
-          ready: '#34d399', // session ready / connected
-          busy: '#fbbf24', // session busy / activity
-          error: '#f87171', // session errored / alerts
-          idle: '#6b7280', // not running
+          ready: 'rgb(var(--status-ready-rgb) / <alpha-value>)',
+          busy: 'rgb(var(--status-busy-rgb) / <alpha-value>)',
+          error: 'rgb(var(--status-error-rgb) / <alpha-value>)',
+          idle: 'rgb(var(--status-idle-rgb) / <alpha-value>)',
+          // aliases — components already use these names; they were
+          // silently UNDEFINED pre-rework (no-op classes). Mapped to the
+          // ready/busy hues they were visually intended as.
+          success: 'rgb(var(--status-ready-rgb) / <alpha-value>)',
+          warning: 'rgb(var(--status-busy-rgb) / <alpha-value>)',
         },
       },
       fontFamily: {

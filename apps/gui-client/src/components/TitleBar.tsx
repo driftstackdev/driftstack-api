@@ -45,7 +45,9 @@ export function TitleBar({ subtitle, right }: Props): JSX.Element {
     >
       <div className="flex items-center gap-2" data-tauri-drag-region="true">
         <DBadge />
-        <span className="text-sm font-medium text-ink-primary">driftstack</span>
+        <span className="text-sm font-black italic tracking-tight text-ink-primary">
+          DRIFT<span className="text-accent">STACK</span>
+        </span>
         {subtitle ? (
           <>
             <span className="mono text-ink-muted">·</span>
@@ -58,33 +60,25 @@ export function TitleBar({ subtitle, right }: Props): JSX.Element {
   );
 }
 
-// 2026-05-20 — DBadge re-tinted to a near-black rounded-square with a
-// glow-red "D" per founder feedback (the earlier oxblood-on-white
-// felt washed out + clashed with the surface-raised title-bar fill).
-// #0b0f14 matches surface-base from globals.css so the badge reads
-// as one continuous element with the dark chrome; #e23847 is the
-// marketing site's glow-red CTA colour for visual continuity.
+// Fleet brand (founder-picked 2026-06-12): the L2 Drift Layers mark —
+// filled front layer follows the accent axis, back layer the ink axis,
+// so the badge is theme-correct in every mode x accent combination.
 function DBadge(): JSX.Element {
   return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 64 64"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <rect width="64" height="64" rx="12" fill="#0b0f14" />
-      <text
-        x="32"
-        y="42"
-        textAnchor="middle"
-        fill="#e23847"
-        fontFamily="Georgia,serif"
-        fontSize="34"
-        fontWeight="700"
-      >
-        D
-      </text>
+    <svg width="18" height="18" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      <rect
+        x="9"
+        y="6"
+        width="22"
+        height="36"
+        rx="6"
+        stroke="rgb(var(--ink-secondary-rgb))"
+        strokeWidth="2.6"
+        opacity=".55"
+        transform="rotate(-7 20 24)"
+      />
+      <rect x="16" y="6" width="22" height="36" rx="6" fill="var(--accent)" />
+      <circle cx="27" cy="36" r="2.2" fill="#fff" />
     </svg>
   );
 }

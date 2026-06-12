@@ -20,8 +20,8 @@
 //     with typeof navigator !== 'undefined' guard for SSR safety.
 //   • TitleBar root: data-tauri-drag-region + Mac→pl-20 / non-Mac
 //     → pl-3 ternary clearance + h-9 + border-b.
-//   • DBadge inline SVG: oxblood-700 #722F37 rect rx=12 + white
-//     Georgia serif 'D' text — pinned mirrors marketing-site
+//   • DBadge inline SVG: the L2 Drift Layers mark (accent-filled front
+//     layer + ink back layer) — pinned mirrors the brand spec
 //     favicon, not a flat colour box.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -62,19 +62,20 @@ describe('W475.C apps/gui-client/src/components/TitleBar.tsx content parity', ()
     );
   });
 
-  it("TitleBar inner: nested data-tauri-drag-region on the title group + <DBadge /> + 'driftstack' wordmark + subtitle fragment with mono dot separator + right slot when truthy", () => {
+  it('TitleBar inner: nested data-tauri-drag-region on the title group + <DBadge /> + the DRIFT/STACK two-tone wordmark + subtitle fragment with mono dot separator + right slot when truthy', () => {
     expect(body).toMatch(
-      /<div className="flex items-center gap-2" data-tauri-drag-region="true">\s*\n?\s*<DBadge \/>\s*\n?\s*<span className="text-sm font-medium text-ink-primary">driftstack<\/span>\s*\n?\s*\{subtitle \? \(\s*\n?\s*<>\s*\n?\s*<span className="mono text-ink-muted">·<\/span>\s*\n?\s*<span className="mono text-ink-secondary">\{subtitle\}<\/span>\s*\n?\s*<\/>\s*\n?\s*\) : null\}\s*\n?\s*<\/div>\s*\n?\s*\{right \? <div className="flex items-center gap-2 text-ink-muted">\{right\}<\/div> : null\}/,
+      /<div className="flex items-center gap-2" data-tauri-drag-region="true">\s*\n?\s*<DBadge \/>\s*\n?\s*<span className="text-sm font-black italic tracking-tight text-ink-primary">\s*\n?\s*DRIFT<span className="text-accent">STACK<\/span>\s*\n?\s*<\/span>\s*\n?\s*\{subtitle \? \(\s*\n?\s*<>\s*\n?\s*<span className="mono text-ink-muted">·<\/span>\s*\n?\s*<span className="mono text-ink-secondary">\{subtitle\}<\/span>\s*\n?\s*<\/>\s*\n?\s*\) : null\}\s*\n?\s*<\/div>\s*\n?\s*\{right \? <div className="flex items-center gap-2 text-ink-muted">\{right\}<\/div> : null\}/,
     );
   });
 
-  it("2026-05-20 — DBadge re-tinted to a near-black (#0b0f14, matches surface-base) rounded-square with a glow-red (#e23847, marketing-site CTA colour) 'D'. Founder feedback: prior oxblood-on-white washed out + clashed with the surface-raised dark chrome.", () => {
+  it('Fleet brand badge (founder-picked 2026-06-12): the L2 Drift Layers mark — accent-filled front layer + ink back layer, theme-correct across mode x accent', () => {
     expect(body).toMatch(
-      /\/\/ 2026-05-20 — DBadge re-tinted to a near-black rounded-square with a\s*\n?\s*\/\/ glow-red "D" per founder feedback \(the earlier oxblood-on-white\s*\n?\s*\/\/ felt washed out \+ clashed with the surface-raised title-bar fill\)\.\s*\n?\s*\/\/ #0b0f14 matches surface-base from globals\.css so the badge reads\s*\n?\s*\/\/ as one continuous element with the dark chrome; #e23847 is the\s*\n?\s*\/\/ marketing site's glow-red CTA colour for visual continuity\./,
+      /\/\/ Fleet brand \(founder-picked 2026-06-12\): the L2 Drift Layers mark —\s*\n?\s*\/\/ filled front layer follows the accent axis, back layer the ink axis,\s*\n?\s*\/\/ so the badge is theme-correct in every mode x accent combination\./,
     );
-    expect(body).toMatch(
-      /<svg\s*\n?\s*width="18"\s*\n?\s*height="18"\s*\n?\s*viewBox="0 0 64 64"\s*\n?\s*xmlns="http:\/\/www\.w3\.org\/2000\/svg"\s*\n?\s*aria-hidden="true"\s*\n?\s*>\s*\n?\s*<rect width="64" height="64" rx="12" fill="#0b0f14" \/>\s*\n?\s*<text\s*\n?\s*x="32"\s*\n?\s*y="42"\s*\n?\s*textAnchor="middle"\s*\n?\s*fill="#e23847"\s*\n?\s*fontFamily="Georgia,serif"\s*\n?\s*fontSize="34"\s*\n?\s*fontWeight="700"\s*\n?\s*>\s*\n?\s*D\s*\n?\s*<\/text>\s*\n?\s*<\/svg>/,
-    );
+    expect(body).toMatch(/viewBox="0 0 48 48"/);
+    expect(body).toMatch(/fill="var\(--accent\)"/);
+    expect(body).toMatch(/stroke="rgb\(var\(--ink-secondary-rgb\)\)"/);
+    expect(body).toMatch(/transform="rotate\(-7 20 24\)"/);
   });
 
   it('file exists at canonical path', () => {

@@ -26,16 +26,16 @@ describe('W791 gui-client index.html + tests/setup.ts content parity', () => {
 
   // ─── index.html ───────────────────────────────────────────────
 
-  it('CRITICAL <html class="dark"> dark-mode attribute pinned. The \'dark\' class on the html element is the load-bearing dark-mode-first GUI framing — matches W775 + gui-client/src/styles/index.css color-scheme:dark contract.', () => {
+  it('CRITICAL <html data-mode/data-accent> Fleet token axes pinned (light+violet default, founder-locked 2026-06-12). dark: variants + the semantic palette key off [data-mode=dark].', () => {
     const p = read(INDEX_HTML);
 
-    expect(p).toMatch(/<html lang="en" class="dark">/);
+    expect(p).toMatch(/<html lang="en" data-mode="light" data-accent="violet">/);
   });
 
-  it('CRITICAL color-scheme: dark + dark-mode-only meta pinned. Drift would let macOS/Windows auto-light-mode flicker the GUI on theme switches.', () => {
+  it('CRITICAL color-scheme meta pinned: "light dark" — the actual scheme is set per data-mode in styles/index.css (light default).', () => {
     const p = read(INDEX_HTML);
 
-    expect(p).toMatch(/<meta name="color-scheme" content="dark" \/>/);
+    expect(p).toMatch(/<meta name="color-scheme" content="light dark" \/>/);
   });
 
   it('CRITICAL <title>Driftstack</title> pinned. No site/window-context suffix — Tauri window titlebar appends context separately via the V-NNN TitleBar component.', () => {
