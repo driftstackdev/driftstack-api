@@ -91,6 +91,7 @@ import { registerErrorHandler } from '../middleware/error-handler.js';
 import { registerSessionRoutes } from '../routes/sessions.js';
 import { registerAdminRoutes } from '../routes/admin.js';
 import { registerStatusRoutes } from '../routes/status.js';
+import { registerEgressEchoRoutes } from '../routes/egress-echo.js';
 import { registerOpenApiRoutes } from '../routes/openapi.js';
 import { registerWebhookRoutes } from '../routes/webhooks.js';
 import { registerAdminAccountsRoutes } from '../routes/admin-accounts.js';
@@ -1027,6 +1028,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     readinessChecks: deps.readinessChecks ?? [],
     ...(deps.incidentsService ? { incidentsService: deps.incidentsService } : {}),
   });
+
+  // Exit-IP echo for device-side proxy probes (proxy-probe-backend design,
+  // build-order step 1). Unauthenticated by design + IP-rate-limited.
+  registerEgressEchoRoutes(app, { rateLimitStore: deps.rateLimitStore });
 
   // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus /metrics scrape.
   // Registers only when the registry is wired (deps.metricsRegistry).

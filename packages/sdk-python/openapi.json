@@ -22692,6 +22692,33 @@
         }
       }
     },
+    "/v1/egress/echo": {
+      "get": {
+        "summary": "Echo the caller exit IP (+ country when resolvable) — proxy-probe support",
+        "tags": ["egress"],
+        "responses": {
+          "200": {
+            "description": "The IP (and CF-edge country, null when unknown) this request arrived from.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ip": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["ip", "country"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/status": {
       "get": {
         "summary": "Public service status (overall + per-component); 30s cache",

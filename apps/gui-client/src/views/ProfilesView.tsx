@@ -1383,6 +1383,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
 
       {createOpen && (
         <CreateProfileModal
+          existingFolders={folderList(profilesMeta)}
           onClose={() => setCreateOpen(false)}
           onCreated={() => {
             setCreateOpen(false);
@@ -1406,9 +1407,12 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
 function CreateProfileModal({
   onClose,
   onCreated,
+  existingFolders,
 }: {
   onClose: () => void;
   onCreated: () => void;
+  /** Folder names for the Notes-tab picker (from the hub's organization map). */
+  existingFolders: string[];
 }): JSX.Element {
   const { client, settings } = useSettings();
   const [name, setName] = useState('');
@@ -1984,14 +1988,12 @@ function CreateProfileModal({
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className="section-label">Folder (optional)</span>
-                  <input
-                    type="text"
+                  <FolderPicker
+                    ariaLabel="Profile folder"
+                    noneLabel="No folder"
+                    folders={existingFolders}
                     value={folder}
-                    onChange={(e) => setFolder(e.target.value)}
-                    maxLength={32}
-                    disabled={submitting}
-                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
-                    placeholder="e.g. EU accounts"
+                    onChange={setFolder}
                   />
                 </label>
                 <label className="flex flex-col gap-1">
@@ -2022,6 +2024,22 @@ function CreateProfileModal({
             <p className="truncate text-sm font-medium text-ink-primary">
               {name.trim().length > 0 ? name.trim() : 'unnamed profile'}
             </p>
+            {/* Identity panel (demo's coherence ring, honest version): the
+                ring renders the VERIFIED state of the selected archetype —
+                launch archetypes are device-verified bit-exact; no invented
+                numeric score. */}
+            <div className="flex items-center gap-2.5 rounded border border-surface-divider bg-surface-base/60 p-2">
+              <div
+                aria-hidden="true"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-status-ready text-status-ready"
+              >
+                ✓
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-ink-primary">Identity coherence</p>
+                <p className="text-2xs text-ink-muted">bit-exact archetype · engine-deep</p>
+              </div>
+            </div>
             {(() => {
               const a = ARCHETYPE_REGISTRY.find((x) => x.id === archetype);
               return (

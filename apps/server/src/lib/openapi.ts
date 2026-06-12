@@ -4501,6 +4501,24 @@ function buildRegistry(): OpenAPIRegistry {
   const StatusTokenQueryOpenApi = z.object({
     token: z.string().describe('Opaque token from the confirm/unsubscribe email link.'),
   });
+  // Exit-IP echo for device-side proxy probes (proxy-probe design step 1).
+  // Unauthenticated by design; IP-rate-limited.
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/egress/echo',
+    summary: 'Echo the caller exit IP (+ country when resolvable) — proxy-probe support',
+    tags: ['egress'],
+    responses: {
+      200: {
+        description: 'The IP (and CF-edge country, null when unknown) this request arrived from.',
+        content: {
+          'application/json': {
+            schema: z.object({ ip: z.string(), country: z.string().nullable() }),
+          },
+        },
+      },
+    },
+  });
   registerRoute(r, {
     method: 'get',
     path: '/v1/status',
