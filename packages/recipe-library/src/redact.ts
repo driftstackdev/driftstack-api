@@ -10,8 +10,10 @@
 //   - `type`-step `text` — the inlined password/secret typed into a field
 //     (e.g. buildLoginRecipe). Fully redacted.
 //   - URL credentials in a `navigate` `url` or a `wait` url-condition `value`:
-//     basic-auth userinfo (`https://user:pass@host`) and secret-bearing query
-//     params (`?token=…`, `?password=…`). Stripped/redacted in place so the
+//     basic-auth userinfo (`https://user:pass@host`), secret-bearing query
+//     params (`?token=…`, `?password=…`), AND secret-bearing fragment params
+//     (`#access_token=…` — the OAuth implicit/hybrid post-auth redirect vector).
+//     Stripped/redacted in place so the
 //     host + path stay legible for debugging but the secret never lands in the
 //     result. A clean URL (no userinfo, no sensitive params) is returned
 //     byte-for-byte unchanged — no URL normalization — so non-secret steps keep
@@ -75,6 +77,27 @@ function redactUrlCredentials(url: string): string {
   for (const key of [...parsed.searchParams.keys()]) {
     if (SECRET_QUERY_PARAMS.has(key.toLowerCase())) {
       parsed.searchParams.set(key, REDACTED);
+      changed = true;
+    }
+  }
+  // OAuth implicit/hybrid flows return tokens in the URL FRAGMENT
+  // (`#access_token=…&id_token=…`), which `searchParams` does NOT cover — the
+  // same post-auth-redirect token vector the `wait:url` path anticipates, just
+  // after the `#`. Parse the fragment as params and redact the same known secret
+  // keys. Only rebuilt when a secret key is actually present, so a non-param
+  // fragment (`#section`, `#/spa/route`) is left byte-for-byte untouched
+  // (URLSearchParams round-tripping would otherwise re-encode it).
+  if (parsed.hash.length > 1) {
+    const frag = new URLSearchParams(parsed.hash.slice(1));
+    let fragChanged = false;
+    for (const key of [...frag.keys()]) {
+      if (SECRET_QUERY_PARAMS.has(key.toLowerCase())) {
+        frag.set(key, REDACTED);
+        fragChanged = true;
+      }
+    }
+    if (fragChanged) {
+      parsed.hash = `#${frag.toString()}`;
       changed = true;
     }
   }

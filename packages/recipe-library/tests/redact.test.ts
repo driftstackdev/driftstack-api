@@ -52,6 +52,39 @@ describe('redactStepForResult', () => {
     const nav: RecipeStep = { kind: 'navigate', url: '/relative/path' };
     expect(redactStepForResult(nav)).toBe(nav);
   });
+
+  it('redacts secret-bearing FRAGMENT params (OAuth implicit post-auth redirect), keeps non-secret fragment params', () => {
+    // OAuth implicit/hybrid returns the token in the fragment, which searchParams
+    // does not cover — the token must not survive into the result.
+    const nav: RecipeStep = {
+      kind: 'navigate',
+      url: 'https://app.example/callback#access_token=leaktok&id_token=leakid&state=xyz',
+    };
+    const out = redactStepForResult(nav) as { kind: 'navigate'; url: string };
+    expect(out.url).not.toContain('leaktok'); // access_token value gone
+    expect(out.url).not.toContain('leakid'); // id_token value gone
+    expect(out.url).toContain('state=xyz'); // non-secret fragment param preserved
+    expect(out.url).toContain(encodeURIComponent(REDACTED));
+  });
+
+  it('redacts a token in a wait url-condition FRAGMENT too', () => {
+    const waitUrl: RecipeStep = {
+      kind: 'wait',
+      condition: 'url',
+      value: 'https://app.example/done#access_token=leakme',
+    };
+    const out = redactStepForResult(waitUrl) as { kind: 'wait'; value: string };
+    expect(out.value).not.toContain('leakme');
+  });
+
+  it('leaves a non-param fragment (anchor / SPA route) byte-for-byte unchanged', () => {
+    // A fragment with no secret param must not be re-encoded by the redactor —
+    // same-reference (nothing to redact) contract holds.
+    const anchor: RecipeStep = { kind: 'navigate', url: 'https://docs.example/page#section-two' };
+    expect(redactStepForResult(anchor)).toBe(anchor);
+    const spaRoute: RecipeStep = { kind: 'navigate', url: 'https://app.example/#/dashboard/home' };
+    expect(redactStepForResult(spaRoute)).toBe(spaRoute);
+  });
 });
 
 describe('MockRecipeRunner result never carries plaintext type-step text', () => {
