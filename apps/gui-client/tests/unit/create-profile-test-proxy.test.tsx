@@ -71,6 +71,9 @@ async function openCreateModal(): Promise<void> {
   // the "Test proxy" button is present without further interaction.
   const open = await screen.findByRole('button', { name: 'Create your first profile' });
   fireEvent.click(open);
+  // Configurator port (2026-06-12): the proxy mini-form lives behind the
+  // Proxy tab now — select it so the Test button renders.
+  fireEvent.click(await screen.findByRole('tab', { name: '🌍 Proxy' }));
 }
 
 describe('create-profile modal "Test proxy" draft validation', () => {

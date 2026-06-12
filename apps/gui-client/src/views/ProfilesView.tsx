@@ -1245,6 +1245,15 @@ function CreateProfileModal({
   const [archetype, setArchetype] = useState(KNOWN_ARCHETYPES[0]?.id ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Configurator port (founder-approved profile-create demo, 2026-06-12):
+  // tabbed layout + live identity-preview rail. Storage/Behavior tabs are
+  // informational (their facts are real, their controls are future).
+  const [tab, setTab] = useState<'identity' | 'proxy' | 'storage' | 'behavior' | 'notes'>(
+    'identity',
+  );
+  // Organization metadata at create (backend columns, migration 0076).
+  const [folder, setFolder] = useState('');
+  const [tags, setTags] = useState('');
   // 2026-05-20 — antidetect-style advanced panel. Proxy is selected
   // up-front + bound to the profile via profile-bindings on create.
   // 'create-new' opens an inline SOCKS5 mini-form so the customer can
@@ -1375,12 +1384,26 @@ function CreateProfileModal({
       } else if (proxyChoice !== 'first-available') {
         resolvedProxyId = proxyChoice;
       }
-      // 2. Create the profile.
+      // 2. Create the profile (organization metadata rides the create —
+      //    backend columns since migration 0076; a pre-0076 server strips
+      //    the unknown fields harmlessly).
+      const tagList = tags
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0)
+        .slice(0, 12);
       const profile = await client.profiles.create({
         name: trimmed,
         archetype,
         ...(description.trim().length > 0 ? { description: description.trim() } : {}),
+        ...(folder.trim().length > 0 ? { folder: folder.trim().slice(0, 32) } : {}),
+        ...(tagList.length > 0 ? { tags: [...new Set(tagList)] } : {}),
       });
+      // Mirror into the local organization cache so the hub shows the
+      // folder/tags immediately (and offline).
+      if (folder.trim().length > 0 || tagList.length > 0) {
+        await saveProfileMeta(profile.id, { folder: folder.trim(), tags: tagList });
+      }
       // 3. Bind the chosen proxy to the new profile. null = use the
       //    first-available proxy at Launch time.
       await setDefaultProxy(profile.id, resolvedProxyId);
@@ -1402,8 +1425,8 @@ function CreateProfileModal({
         if (e.target === e.currentTarget && !submitting) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-md border border-surface-divider bg-surface-raised p-5 shadow-lg">
-        <header className="mb-4 flex items-center justify-between">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-md border border-surface-divider bg-surface-raised p-5 shadow-lg">
+        <header className="mb-3 flex items-center justify-between">
           <h3 id="create-profile-title" className="text-base font-medium text-ink-primary">
             New profile
           </h3>
@@ -1418,235 +1441,417 @@ function CreateProfileModal({
           </button>
         </header>
 
-        <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="section-label">Name</span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={120}
-              minLength={1}
-              required
-              autoFocus
-              disabled={submitting}
-              className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
-              placeholder="my-recurring-workflow"
-            />
-            <span className="text-xs text-ink-muted">
-              Used to identify the profile in lists + when attaching sessions.
-            </span>
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="section-label">Description (optional)</span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={500}
-              rows={2}
-              disabled={submitting}
-              className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
-              placeholder="What this identity slot is for"
-            />
-          </label>
-
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between">
-              <span className="section-label">Device archetype</span>
-              <button
-                type="button"
-                onClick={randomizeArchetype}
-                disabled={submitting || KNOWN_ARCHETYPES.length < 2}
-                className="text-2xs text-glow-red underline disabled:cursor-not-allowed disabled:text-ink-muted disabled:no-underline"
-                title={
-                  KNOWN_ARCHETYPES.length < 2
-                    ? 'Only one archetype available today'
-                    : 'Pick a random device'
-                }
-              >
-                Randomize
-              </button>
-            </div>
-            <select
-              value={archetype}
-              onChange={(e) => setArchetype(e.target.value)}
-              disabled={submitting || KNOWN_ARCHETYPES.length < 2}
-              className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+        {/* Configurator tabs (demo port). role=tablist keyboardable via the buttons. */}
+        <div
+          role="tablist"
+          aria-label="Profile configuration"
+          className="mb-3 flex gap-1 border-b border-surface-divider"
+        >
+          {(
+            [
+              ['identity', '📱 Identity'],
+              ['proxy', '🌍 Proxy'],
+              ['storage', '🍪 Storage'],
+              ['behavior', '🖐 Behavior'],
+              ['notes', '🏷 Notes & tags'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              className={`-mb-px rounded-t border-b-2 px-3 py-1.5 text-xs ${
+                tab === id
+                  ? 'border-accent font-medium text-ink-primary'
+                  : 'border-transparent text-ink-muted hover:text-ink-secondary'
+              }`}
+              onClick={() => setTab(id)}
             >
-              {KNOWN_ARCHETYPES.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-            {KNOWN_ARCHETYPES.length < 2 && (
-              <span className="text-xs text-ink-muted">
-                Single archetype today — Randomize will pick across iPhone 15/16/17 Pro lineups as
-                they land.
-              </span>
-            )}
-          </div>
+              {label}
+            </button>
+          ))}
+        </div>
 
-          <div className="flex flex-col gap-1 rounded border border-surface-divider bg-surface-base/40 p-3">
-            <span className="section-label">Proxy</span>
-            <select
-              value={proxyChoice}
-              onChange={(e) => setProxyChoice(e.target.value)}
-              disabled={submitting}
-              className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
-            >
-              {proxies.length > 0 && (
-                <option value="first-available">First available saved proxy</option>
-              )}
-              {proxies.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label} · {p.host}:{p.port}
-                </option>
-              ))}
-              <option value="create-new">+ Add new SOCKS5 proxy…</option>
-              <option value="future-openvpn" disabled>
-                + Add new OpenVPN (coming soon)
-              </option>
-              <option value="future-wireguard" disabled>
-                + Add new WireGuard (coming soon)
-              </option>
-            </select>
-            {proxyChoice === 'create-new' && (
-              <div className="mt-2 flex flex-col gap-1.5 rounded-sm border border-dashed border-surface-divider bg-surface-base/60 p-2">
-                <div className="grid grid-cols-2 gap-1.5">
+        <form onSubmit={(e) => void handleSubmit(e)} className="flex min-h-0 flex-1 gap-4">
+          <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto pr-1">
+            {tab === 'identity' && (
+              <>
+                <label className="flex flex-col gap-1">
+                  <span className="section-label">Name</span>
                   <input
                     type="text"
-                    value={newProxy.label}
-                    onChange={(e) => setNewProxy((p) => ({ ...p, label: e.target.value }))}
-                    placeholder="Label (e.g. shopify-us-east)"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={120}
+                    minLength={1}
+                    required
+                    autoFocus
                     disabled={submitting}
-                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+                    placeholder="my-recurring-workflow"
                   />
-                  <input
-                    type="text"
-                    value={newProxy.host}
-                    onChange={(e) => {
-                      setNewProxy((p) => ({ ...p, host: e.target.value }));
-                      setTestResult(null);
-                    }}
-                    placeholder="Host (e.g. proxy.example.com)"
-                    disabled={submitting}
-                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                  />
-                  <input
-                    type="number"
-                    min={1}
-                    max={65535}
-                    value={newProxy.port}
-                    onChange={(e) => {
-                      setNewProxy((p) => ({ ...p, port: e.target.value }));
-                      setTestResult(null);
-                    }}
-                    placeholder="Port"
-                    disabled={submitting}
-                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                  />
-                  <input
-                    type="text"
-                    value={newProxy.username}
-                    onChange={(e) => {
-                      setNewProxy((p) => ({ ...p, username: e.target.value }));
-                      setTestResult(null);
-                    }}
-                    placeholder="Username (optional)"
-                    disabled={submitting}
-                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                  />
-                  <input
-                    type="password"
-                    value={newProxy.password}
-                    onChange={(e) => {
-                      setNewProxy((p) => ({ ...p, password: e.target.value }));
-                      setTestResult(null);
-                    }}
-                    placeholder="Password (optional)"
-                    disabled={submitting}
-                    className="col-span-2 rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleTestDraftProxy()}
-                    disabled={submitting || testing || newProxy.host.trim().length === 0}
-                    className="btn-secondary text-xs"
-                  >
-                    {testing ? 'Testing…' : 'Test proxy'}
-                  </button>
-                  <span className="text-2xs text-ink-muted">
-                    Runs a SOCKS5 handshake from this Mac — checks reachability, auth, and UDP
-                    support.
+                  <span className="text-xs text-ink-muted">
+                    Used to identify the profile in lists + when attaching sessions.
                   </span>
-                </div>
-                {testResult !== null && (
-                  <div
-                    role="status"
-                    className={`flex flex-col gap-1 rounded-sm border px-2 py-1.5 text-2xs ${
-                      testResult.reachable && testResult.auth_ok
-                        ? 'border-status-success/40 bg-status-success/10 text-status-success'
-                        : 'border-status-error/40 bg-status-error/10 text-status-error'
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-medium">
-                        {testResult.reachable
-                          ? testResult.auth_ok
-                            ? `Reachable · ${testResult.latency_ms} ms`
-                            : 'Auth failed'
-                          : 'Not reachable'}
-                      </span>
-                      {testResult.reachable && (
-                        <span
-                          className={`rounded-sm px-1 py-0.5 ${
-                            testResult.udp_associate
-                              ? 'bg-status-success/20'
-                              : 'bg-surface-divider text-ink-muted'
-                          }`}
+                </label>
+
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="section-label">Device archetype</span>
+                    <button
+                      type="button"
+                      onClick={randomizeArchetype}
+                      disabled={submitting || KNOWN_ARCHETYPES.length < 2}
+                      className="text-2xs text-accent underline disabled:cursor-not-allowed disabled:text-ink-muted disabled:no-underline"
+                      title={
+                        KNOWN_ARCHETYPES.length < 2
+                          ? 'Only one archetype available today'
+                          : 'Pick a random device'
+                      }
+                    >
+                      Randomize
+                    </button>
+                  </div>
+                  {/* Device cards (demo port): selectable launch archetypes +
+                disabled reference baselines — honest registry facts only. */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {ARCHETYPE_REGISTRY.map((a) => {
+                      const selectable = a.status === 'launch';
+                      const on = archetype === a.id;
+                      return (
+                        <button
+                          key={a.id}
+                          type="button"
+                          disabled={!selectable || submitting}
+                          aria-pressed={on}
+                          onClick={() => setArchetype(a.id)}
+                          className={`flex flex-col items-start gap-0.5 rounded-md border p-2.5 text-left ${
+                            on ? 'border-accent ring-1 ring-accent' : 'border-surface-divider'
+                          } ${selectable ? 'hover:border-ink-muted/40' : 'cursor-not-allowed opacity-50'}`}
                         >
-                          {testResult.udp_associate ? 'UDP ✓' : 'UDP ✗'}
-                        </span>
-                      )}
+                          <span aria-hidden="true">📱</span>
+                          <span className="text-sm font-medium text-ink-primary">{a.device}</span>
+                          <span className="mono text-2xs text-ink-muted">
+                            iOS {a.iosVersion} · Safari {a.safariVersion}
+                          </span>
+                          <span
+                            className={`mt-1 rounded-full px-1.5 py-0.5 text-2xs ${
+                              selectable
+                                ? 'bg-status-ready/15 text-status-ready'
+                                : 'bg-surface-inset text-ink-muted'
+                            }`}
+                          >
+                            {selectable ? '✓ bit-exact' : 'reference'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1 rounded border border-surface-divider bg-surface-base/40 p-3">
+                  <span className="section-label">Locale & timezone</span>
+                  <p className="text-xs text-ink-secondary">
+                    Auto-follows the proxy exit geo at session time — language, locale and timezone
+                    never contradict the IP. No overrides: coherence is the point.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {tab === 'proxy' && (
+              <div className="flex flex-col gap-1 rounded border border-surface-divider bg-surface-base/40 p-3">
+                <span className="section-label">Proxy</span>
+                <select
+                  value={proxyChoice}
+                  onChange={(e) => setProxyChoice(e.target.value)}
+                  disabled={submitting}
+                  className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+                >
+                  {proxies.length > 0 && (
+                    <option value="first-available">First available saved proxy</option>
+                  )}
+                  {proxies.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label} · {p.host}:{p.port}
+                    </option>
+                  ))}
+                  <option value="create-new">+ Add new SOCKS5 proxy…</option>
+                  <option value="future-openvpn" disabled>
+                    + Add new OpenVPN (coming soon)
+                  </option>
+                  <option value="future-wireguard" disabled>
+                    + Add new WireGuard (coming soon)
+                  </option>
+                </select>
+                {proxyChoice === 'create-new' && (
+                  <div className="mt-2 flex flex-col gap-1.5 rounded-sm border border-dashed border-surface-divider bg-surface-base/60 p-2">
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <input
+                        type="text"
+                        value={newProxy.label}
+                        onChange={(e) => setNewProxy((p) => ({ ...p, label: e.target.value }))}
+                        placeholder="Label (e.g. shopify-us-east)"
+                        disabled={submitting}
+                        className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                      />
+                      <input
+                        type="text"
+                        value={newProxy.host}
+                        onChange={(e) => {
+                          setNewProxy((p) => ({ ...p, host: e.target.value }));
+                          setTestResult(null);
+                        }}
+                        placeholder="Host (e.g. proxy.example.com)"
+                        disabled={submitting}
+                        className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                      />
+                      <input
+                        type="number"
+                        min={1}
+                        max={65535}
+                        value={newProxy.port}
+                        onChange={(e) => {
+                          setNewProxy((p) => ({ ...p, port: e.target.value }));
+                          setTestResult(null);
+                        }}
+                        placeholder="Port"
+                        disabled={submitting}
+                        className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                      />
+                      <input
+                        type="text"
+                        value={newProxy.username}
+                        onChange={(e) => {
+                          setNewProxy((p) => ({ ...p, username: e.target.value }));
+                          setTestResult(null);
+                        }}
+                        placeholder="Username (optional)"
+                        disabled={submitting}
+                        className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                      />
+                      <input
+                        type="password"
+                        value={newProxy.password}
+                        onChange={(e) => {
+                          setNewProxy((p) => ({ ...p, password: e.target.value }));
+                          setTestResult(null);
+                        }}
+                        placeholder="Password (optional)"
+                        disabled={submitting}
+                        className="col-span-2 rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                      />
                     </div>
-                    <span className="text-ink-secondary">{testResult.message}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleTestDraftProxy()}
+                        disabled={submitting || testing || newProxy.host.trim().length === 0}
+                        className="btn-secondary text-xs"
+                      >
+                        {testing ? 'Testing…' : 'Test proxy'}
+                      </button>
+                      <span className="text-2xs text-ink-muted">
+                        Runs a SOCKS5 handshake from this Mac — checks reachability, auth, and UDP
+                        support.
+                      </span>
+                    </div>
+                    {testResult !== null && (
+                      <div
+                        role="status"
+                        className={`flex flex-col gap-1 rounded-sm border px-2 py-1.5 text-2xs ${
+                          testResult.reachable && testResult.auth_ok
+                            ? 'border-status-success/40 bg-status-success/10 text-status-success'
+                            : 'border-status-error/40 bg-status-error/10 text-status-error'
+                        }`}
+                      >
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-medium">
+                            {testResult.reachable
+                              ? testResult.auth_ok
+                                ? `Reachable · ${testResult.latency_ms} ms`
+                                : 'Auth failed'
+                              : 'Not reachable'}
+                          </span>
+                          {testResult.reachable && (
+                            <span
+                              className={`rounded-sm px-1 py-0.5 ${
+                                testResult.udp_associate
+                                  ? 'bg-status-success/20'
+                                  : 'bg-surface-divider text-ink-muted'
+                              }`}
+                            >
+                              {testResult.udp_associate ? 'UDP ✓' : 'UDP ✗'}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-ink-secondary">{testResult.message}</span>
+                      </div>
+                    )}
+                    <span className="text-2xs text-ink-muted">
+                      Stored locally in this app — credentials never go to the Driftstack control
+                      plane.
+                    </span>
                   </div>
                 )}
-                <span className="text-2xs text-ink-muted">
-                  Stored locally in this app — credentials never go to the Driftstack control plane.
+                <span className="text-xs text-ink-muted">
+                  Sessions launched from this profile route through the selected proxy. Manage all
+                  saved proxies under the Proxies tab.
                 </span>
               </div>
             )}
-            <span className="text-xs text-ink-muted">
-              Sessions launched from this profile route through the selected proxy. Manage all saved
-              proxies under the Proxies tab.
-            </span>
+
+            {tab === 'storage' && (
+              <div className="flex flex-col gap-2 rounded border border-surface-divider bg-surface-base/40 p-3">
+                <span className="section-label">Persistent browser state</span>
+                <p className="text-xs text-ink-secondary">
+                  Cookies, localStorage and IndexedDB persist across this profile's sessions — log
+                  in once, stay logged in. State is sealed with per-profile encryption under your
+                  account's own key hierarchy; staff can't read it.
+                </p>
+                <p className="text-2xs text-ink-muted">
+                  Always on for profile-backed sessions — nothing to configure here yet. Snapshots
+                  (point-in-time copies) live on the profile's row actions after creation.
+                </p>
+              </div>
+            )}
+
+            {tab === 'behavior' && (
+              <div className="flex flex-col gap-2 rounded border border-surface-divider bg-surface-base/40 p-3">
+                <span className="section-label">Human-cadence input</span>
+                <p className="text-xs text-ink-secondary">
+                  Taps, scrolls and typing run through the behavioral simulation layer — native
+                  events with human timing, not synthetic JavaScript. On by default for every
+                  session this profile launches.
+                </p>
+                <p className="text-2xs text-ink-muted">
+                  Per-session behavioral profiles are selectable via the API/SDK (behavioral_profile
+                  on session create); a per-profile default lands here when the backend grows that
+                  column.
+                </p>
+              </div>
+            )}
+
+            {tab === 'notes' && (
+              <>
+                <label className="flex flex-col gap-1">
+                  <span className="section-label">Description (optional)</span>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    maxLength={500}
+                    rows={2}
+                    disabled={submitting}
+                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+                    placeholder="What this identity slot is for"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="section-label">Folder (optional)</span>
+                  <input
+                    type="text"
+                    value={folder}
+                    onChange={(e) => setFolder(e.target.value)}
+                    maxLength={32}
+                    disabled={submitting}
+                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+                    placeholder="e.g. EU accounts"
+                  />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="section-label">Tags (optional, comma-separated)</span>
+                  <input
+                    type="text"
+                    value={tags}
+                    onChange={(e) => setTags(e.target.value)}
+                    disabled={submitting}
+                    className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+                    placeholder="retail, warmup"
+                  />
+                  <span className="text-2xs text-ink-muted">
+                    Up to 12 tags, 24 characters each — synced to your account and shown across
+                    devices.
+                  </span>
+                </label>
+              </>
+            )}
           </div>
 
-          {error !== null && (
-            <p className="text-xs text-status-error" role="alert">
-              {error}
+          {/* Live identity-preview rail (demo port — verified facts only). */}
+          <aside
+            data-component="identity-preview-rail"
+            className="flex w-60 shrink-0 flex-col gap-2 self-start rounded-md border border-surface-divider bg-surface-base/40 p-3"
+          >
+            <span className="section-label">Live identity preview</span>
+            <p className="truncate text-sm font-medium text-ink-primary">
+              {name.trim().length > 0 ? name.trim() : 'unnamed profile'}
             </p>
-          )}
+            {(() => {
+              const a = ARCHETYPE_REGISTRY.find((x) => x.id === archetype);
+              return (
+                <dl className="flex flex-col">
+                  <PreviewRow k="Device" v={a?.device ?? '—'} />
+                  <PreviewRow
+                    k="iOS / Safari"
+                    v={a ? `${a.iosVersion} / ${a.safariVersion}` : '—'}
+                  />
+                  <PreviewRow k="Locale" v="follows proxy exit" />
+                  <PreviewRow
+                    k="Proxy"
+                    v={
+                      proxyChoice === 'create-new'
+                        ? newProxy.label.trim() || 'new SOCKS5'
+                        : proxyChoice === 'first-available'
+                          ? 'first available'
+                          : (proxies.find((p) => p.id === proxyChoice)?.label ?? '—')
+                    }
+                  />
+                  <PreviewRow k="Storage" v="🔒 sealed" />
+                  <PreviewRow k="Tags" v={tags.trim().length > 0 ? tags.trim() : '—'} />
+                </dl>
+              );
+            })()}
+            <p className="rounded-sm border border-surface-divider bg-surface-base/60 p-2 text-2xs text-ink-muted">
+              <b className="text-ink-secondary">What a site sees:</b> a genuine iPhone — Apple's
+              engine with a bit-exact device identity, not a spoofed user-agent.
+            </p>
 
-          <div className="mt-2 flex items-center justify-end gap-2">
-            <button type="button" className="btn-secondary" onClick={onClose} disabled={submitting}>
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={submitting || name.trim().length === 0}
-            >
-              {submitting ? 'Creating…' : 'Create profile'}
-            </button>
-          </div>
+            {error !== null && (
+              <p className="text-xs text-status-error" role="alert">
+                {error}
+              </p>
+            )}
+
+            <div className="mt-1 flex flex-col gap-1.5">
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={submitting || name.trim().length === 0}
+              >
+                {submitting ? 'Creating…' : 'Create profile'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={onClose}
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+            </div>
+          </aside>
         </form>
       </div>
+    </div>
+  );
+}
+
+function PreviewRow({ k, v }: { k: string; v: string }): JSX.Element {
+  return (
+    <div className="flex items-center justify-between gap-2 border-b border-surface-divider py-1 text-xs last:border-0">
+      <dt className="text-ink-muted">{k}</dt>
+      <dd className="truncate text-ink-primary">{v}</dd>
     </div>
   );
 }
