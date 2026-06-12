@@ -139,6 +139,7 @@ function DeviceToolbar({
   onToggleRotate,
   onTogglePinned,
   onToggleInfo,
+  onSnapshot,
 }: {
   deviceName: string;
   profileName: string;
@@ -147,6 +148,7 @@ function DeviceToolbar({
   onToggleRotate: () => void;
   onTogglePinned: () => void;
   onToggleInfo: () => void;
+  onSnapshot: () => void;
 }): JSX.Element {
   return (
     <div
@@ -206,6 +208,15 @@ function DeviceToolbar({
             strokeLinejoin="round"
           >
             <path d="M12 17v5" />
+            <button
+              type="button"
+              aria-label="Save snapshot"
+              title="Save a PNG of the current frame to Downloads"
+              className="rounded px-1.5 py-0.5 text-[11px] text-white/60 hover:bg-white/10 hover:text-white"
+              onClick={onSnapshot}
+            >
+              ⤓
+            </button>
             <button
               type="button"
               aria-label="Session info"
@@ -330,6 +341,34 @@ export function SimulatorWindow(): JSX.Element {
   // Night-arc C cockpit: live room handle (from the panel) drives the
   // previously-dormant LK.6.e latency ping; rendered in the overlay.
   const [room, setRoom] = useState<Room | null>(null);
+  const videoElRef = useRef<HTMLVideoElement | null>(null);
+  const [snapshotNotice, setSnapshotNotice] = useState<string | null>(null);
+  // Night-arc I (cockpit pills): Snapshot — draw the CURRENT live frame to
+  // a canvas and save a PNG into ~/Downloads via the fs plugin (no native
+  // screenshot API needed; the WebRTC frame IS the device screen).
+  async function handleSnapshot(): Promise<void> {
+    const el = videoElRef.current;
+    if (el === null || el.videoWidth === 0) {
+      setSnapshotNotice('No frame yet');
+      return;
+    }
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = el.videoWidth;
+      canvas.height = el.videoHeight;
+      canvas.getContext('2d')?.drawImage(el, 0, 0);
+      const dataUrl = canvas.toDataURL('image/png');
+      const bytes = Uint8Array.from(atob(dataUrl.split(',')[1] ?? ''), (c) => c.charCodeAt(0));
+      const { writeFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const file = `driftstack-${profileName !== '' ? profileName : deviceName}-${stamp}.png`;
+      await writeFile(file, bytes, { baseDir: BaseDirectory.Download });
+      setSnapshotNotice(`Saved ${file} to Downloads`);
+    } catch (err) {
+      setSnapshotNotice(err instanceof Error ? err.message : 'Snapshot failed');
+    }
+    window.setTimeout(() => setSnapshotNotice(null), 4000);
+  }
   const latency = useLatencyPing({ room, enabled: room !== null });
   const [landscape, setLandscape] = useState(false);
   // Pin = always-on-top (the floating-iPhone default). Unpinned the window
@@ -403,6 +442,7 @@ export function SimulatorWindow(): JSX.Element {
             onToggleRotate={toggleRotate}
             onTogglePinned={togglePinned}
             onToggleInfo={() => setInfoOpen((v) => !v)}
+            onSnapshot={() => void handleSnapshot()}
           />
           {/* Device body — the bezel. data-tauri-drag-region makes the frame a
               window-drag handle; the inner screen overrides it so taps reach the
@@ -421,6 +461,14 @@ export function SimulatorWindow(): JSX.Element {
               className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black"
             >
               <IosStatusBar />
+              {snapshotNotice !== null && (
+                <div
+                  role="status"
+                  className="absolute left-1/2 top-12 z-20 -translate-x-1/2 rounded-full bg-black/80 px-3 py-1 font-mono text-[10px] text-white/90 backdrop-blur"
+                >
+                  {snapshotNotice}
+                </div>
+              )}
               {infoOpen && (
                 <div
                   data-component="simulator-info-overlay"
@@ -456,6 +504,9 @@ export function SimulatorWindow(): JSX.Element {
                   interactive
                   onVideoDimensions={handleVideoDimensions}
                   onRoom={setRoom}
+                  onVideoEl={(el) => {
+                    videoElRef.current = el;
+                  }}
                 />
               </div>
             </div>
