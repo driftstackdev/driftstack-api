@@ -60,6 +60,30 @@ unset. Verified the `73f70d02..5b974638` delta adds NONE:
 with migration 0072 = metadata-only-safe and staging = healthy, the go-live is de-risked on all
 three axes the deploy touches: **boot, schema, and the soak target.**
 
+### New-code correctness + auth-boundary audit — 2026-06-12 (4th de-risk axis)
+
+Boot/schema/soak (above) confirm the deploy _runs_; this confirms the delta's NEW
+customer-facing + behavior code is _correct_ before it ships. Read the four new
+surfaces the delta adds:
+
+- **`GET /v1/agent-sessions/:id/page-state`** (`4514311c`, route `agent-sessions.ts:894`):
+  `requireAuth` + `rateLimit('global')` + owned-check that throws `NotFoundError` on
+  `rec.accountId !== ctx.account.id` — the IDOR-safe 404 pattern (no existence leak),
+  identical to the sibling transcript SSE route. Returns `null` when the store is unwired.
+- **`interact:press` → `press_key`** (`c1f18a5a`, `agent-intent-to-dispatch.ts:164`):
+  fails closed on an empty/absent key value; `PressKeyParamsSchema` is `{key: string 1..20}`
+  `.strict()`; the harness does the resolves-to-real-key validation. No malformed dispatch.
+- **`behavioral_pause` `word_count`/`duration_ms`** (`agent-intent-to-dispatch.ts:100`): both
+  `z.number().int().nonnegative()`; `duration_ms` is harness-clamped to `CAP_MS` and the
+  values are decomposer-emitted, so the unbounded-upper schema is not a server-side DoS.
+- **`scroll_through:true` on reading pauses** (`711daf76`): an internal dispatch→harness
+  flag (no customer/SDK surface), degrades byte-identically to a single in-place dwell for
+  short content. Tell-fix only.
+
+⟹ The new behavior/customer-facing code in the delta is auth-boundary + fail-closed clean.
+Combined with boot/schema/soak, the go-live is de-risked on all four axes the deploy touches:
+**boot, schema, soak target, and new-code correctness.**
+
 ## Remaining to go-live (per the cutover memory)
 
 Correction after cross-checking the cutover memory: the frontend + GUI steps are **already
