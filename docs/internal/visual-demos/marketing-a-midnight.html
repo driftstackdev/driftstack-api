@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="en" data-mode="dark" data-accent="oxblood">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marketing Direction A — "Midnight Signal" (evolved current)</title>
+    <!-- THROWAWAY VISUAL DEMO (2026-06-12, A2). Marketing-home DIRECTION A of 3.
+     "Midnight Signal" — the evolved version of TODAY's site: dark, atmospheric hero glow,
+     grid background, code-window hero. ALL copy/pricing/sections mirror the REAL site
+     (apps/marketing-site index.astro + data/pricing.ts) so this previews an actual redesign. -->
+    <style>
+      :root {
+        --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+        --mono: 'SF Mono', ui-monospace, Menlo, monospace;
+      }
+      [data-accent='oxblood'] {
+        --accent: #9b3b46;
+        --accent-2: #c04b58;
+        --accent-strong: #722f37;
+        --accent-ink: #fff;
+        --accent-soft: rgba(155, 59, 70, 0.12);
+        --glow: rgba(155, 59, 70, 0.25);
+      }
+      [data-accent='violet'] {
+        --accent: #6d5efc;
+        --accent-2: #8b7dff;
+        --accent-strong: #5847e0;
+        --accent-ink: #fff;
+        --accent-soft: rgba(109, 94, 252, 0.12);
+        --glow: rgba(109, 94, 252, 0.25);
+      }
+      [data-accent='teal'] {
+        --accent: #109a82;
+        --accent-2: #1bc7a8;
+        --accent-strong: #0c7d69;
+        --accent-ink: #fff;
+        --accent-soft: rgba(16, 154, 130, 0.12);
+        --glow: rgba(16, 154, 130, 0.22);
+      }
+      [data-mode='dark'] {
+        --bg: #07070a;
+        --surface: #101015;
+        --raised: #16161d;
+        --ink: #f6f6f8;
+        --ink-2: #b4b4bf;
+        --ink-3: #787884;
+        --border: #21212a;
+        --ready: #34d399;
+        --code-bg: #0c0c11;
+        --grid: rgba(255, 255, 255, 0.04);
+      }
+      [data-mode='light'] {
+        --bg: #fafafc;
+        --surface: #fff;
+        --raised: #fff;
+        --ink: #101116;
+        --ink-2: #474a55;
+        --ink-3: #878a97;
+        --border: #e7e9ef;
+        --ready: #0f9d58;
+        --code-bg: #101015;
+        --grid: rgba(0, 0, 0, 0.045);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.55;
+        font-size: 15px;
+      }
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+      a {
+        color: inherit;
+      }
+      nav {
+        position: sticky;
+        top: 0;
+        backdrop-filter: blur(14px);
+        background: color-mix(in srgb, var(--bg) 80%, transparent);
+        border-bottom: 1px solid var(--border);
+        z-index: 20;
+      }
+      nav .wrap {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+        height: 60px;
+      }
+      .logo {
+        font-weight: 700;
+        letter-spacing: -0.3px;
+      }
+      .logo .mark {
+        color: var(--accent);
+      }
+      nav a.l {
+        color: var(--ink-2);
+        text-decoration: none;
+        font-size: 13.5px;
+        font-weight: 500;
+      }
+      nav a.l:hover {
+        color: var(--ink);
+      }
+      .spacer {
+        flex: 1;
+      }
+      .btn {
+        border: 0;
+        border-radius: 9px;
+        padding: 9px 16px;
+        font-weight: 600;
+        font-size: 13.5px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .btn.primary {
+        background: var(--accent);
+        color: var(--accent-ink);
+        box-shadow: 0 0 24px var(--glow);
+      }
+      .btn.primary:hover {
+        background: var(--accent-strong);
+      }
+      .btn.ghost {
+        background: transparent;
+        color: var(--ink-2);
+        border: 1px solid var(--border);
+      }
+      .btn.ghost:hover {
+        color: var(--ink);
+        border-color: var(--ink-3);
+      }
+      .themer {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+        padding: 3px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+      }
+      .themer button {
+        border: 0;
+        background: transparent;
+        color: var(--ink-3);
+        cursor: pointer;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .themer button.on {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .sw {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        cursor: pointer;
+      }
+      .sw.on {
+        border-color: var(--ink);
+      }
+
+      /* hero with glow + grid */
+      .hero {
+        position: relative;
+        overflow: hidden;
+        padding: 84px 0 64px;
+      }
+      .hero .glow {
+        position: absolute;
+        width: 640px;
+        height: 640px;
+        border-radius: 50%;
+        background: radial-gradient(circle, var(--glow), transparent 65%);
+        top: -280px;
+        left: 8%;
+        pointer-events: none;
+      }
+      .hero .glow.g2 {
+        left: auto;
+        right: -10%;
+        top: -180px;
+        opacity: 0.6;
+      }
+      .hero .grid-bg {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(var(--grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 30%, transparent 80%);
+      }
+      .hero .wrap {
+        position: relative;
+        display: grid;
+        grid-template-columns: 1.05fr 0.95fr;
+        gap: 48px;
+        align-items: center;
+      }
+      .label {
+        font-size: 11.5px;
+        font-weight: 700;
+        letter-spacing: 1.4px;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+      h1 {
+        font-size: 50px;
+        line-height: 1.12;
+        letter-spacing: -1.6px;
+        margin: 14px 0 16px;
+        font-weight: 650;
+      }
+      .hero p.sub {
+        font-size: 16.5px;
+        color: var(--ink-2);
+        margin: 0 0 26px;
+        max-width: 46ch;
+      }
+      .cta {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .finep {
+        margin-top: 14px;
+        font-size: 12px;
+        color: var(--ink-3);
+      }
+      /* code window */
+      .codewin {
+        background: var(--code-bg);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.55);
+      }
+      .codechrome {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .pip {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--border);
+      }
+      .codechrome .fn {
+        margin-left: 8px;
+        font-size: 11px;
+        color: var(--ink-3);
+        font-family: var(--mono);
+      }
+      .codechrome .copy {
+        margin-left: auto;
+        font-size: 10px;
+        color: var(--ink-3);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 2px 8px;
+        font-family: var(--mono);
+      }
+      pre {
+        margin: 0;
+        padding: 18px;
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.7;
+        color: #cfd2dc;
+        overflow-x: auto;
+      }
+      .k {
+        color: var(--accent-2);
+      }
+      .s {
+        color: #7fd3a8;
+      }
+      .c {
+        color: #62626e;
+      }
+      .f {
+        color: #8ab4f8;
+      }
+
+      /* stats strip */
+      .stats {
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+      }
+      .stats .wrap {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 22px;
+        padding: 34px 24px;
+      }
+      .stat {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .stat .i {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        background: var(--accent-soft);
+        color: var(--accent-2);
+        display: grid;
+        place-items: center;
+        flex: none;
+        box-shadow: inset 0 0 0 1px var(--glow);
+      }
+      .stat b {
+        display: block;
+        font-size: 18px;
+        letter-spacing: -0.3px;
+      }
+      .stat span {
+        font-size: 12px;
+        color: var(--ink-3);
+      }
+
+      section {
+        padding: 72px 0;
+      }
+      section.alt {
+        border-top: 1px solid var(--border);
+      }
+      h2 {
+        font-size: 32px;
+        letter-spacing: -1px;
+        margin: 14px 0 10px;
+        font-weight: 650;
+        max-width: 24ch;
+      }
+      .lede {
+        color: var(--ink-2);
+        max-width: 60ch;
+        margin: 0 0 36px;
+      }
+      .grid3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 22px;
+      }
+      .card .num {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: var(--accent-soft);
+        color: var(--accent-2);
+        display: grid;
+        place-items: center;
+        font-family: var(--mono);
+        font-weight: 700;
+        box-shadow: inset 0 0 0 1px var(--glow);
+      }
+      .card h3 {
+        margin: 14px 0 7px;
+        font-size: 16.5px;
+      }
+      .card p {
+        margin: 0;
+        color: var(--ink-2);
+        font-size: 13.5px;
+      }
+      .card .uc {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--ink-3);
+      }
+
+      /* comparison */
+      .cmp {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+      }
+      .cmp th,
+      .cmp td {
+        padding: 14px 18px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+        font-size: 14px;
+      }
+      .cmp th {
+        color: var(--ink-3);
+        font-weight: 600;
+        font-size: 11.5px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+      }
+      .cmp td.us {
+        font-weight: 600;
+      }
+      .cmp .y {
+        color: var(--ready);
+      }
+      .cmp .n {
+        color: var(--ink-3);
+      }
+      .cmp tr:last-child td {
+        border-bottom: 0;
+      }
+
+      /* privacy */
+      .privacy {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 36px;
+        align-items: center;
+      }
+      .privacy ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .privacy li {
+        display: flex;
+        gap: 11px;
+        margin: 13px 0;
+        color: var(--ink-2);
+        font-size: 14px;
+      }
+      .privacy li .ok {
+        color: var(--ready);
+        font-weight: 700;
+        flex: none;
+      }
+      .sealcard {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 26px;
+        text-align: center;
+      }
+      .sealcard .lockring {
+        width: 90px;
+        height: 90px;
+        margin: 0 auto 16px;
+        border-radius: 50%;
+        background: var(--accent-soft);
+        display: grid;
+        place-items: center;
+        box-shadow: 0 0 40px var(--glow);
+      }
+      .sealcard b {
+        font-size: 15px;
+      }
+      .sealcard p {
+        color: var(--ink-3);
+        font-size: 12.5px;
+        margin: 6px 0 0;
+      }
+
+      /* two ways */
+      .two {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .way {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 26px;
+      }
+      .way h3 {
+        margin: 12px 0 8px;
+        font-size: 20px;
+      }
+      .way p {
+        color: var(--ink-2);
+        font-size: 14px;
+        margin: 0 0 14px;
+      }
+      .way .tagline {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--accent-2);
+      }
+
+      /* pricing */
+      .ladders {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+      .ladder h3 {
+        font-size: 14px;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin: 0 0 12px;
+      }
+      .tier {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 18px;
+        margin-bottom: 10px;
+      }
+      .tier.hot {
+        border-color: var(--accent);
+        box-shadow:
+          0 0 0 1px var(--accent),
+          0 0 30px var(--glow);
+      }
+      .tier b {
+        font-size: 15px;
+        width: 110px;
+      }
+      .tier .amt {
+        font-weight: 800;
+        font-size: 17px;
+        letter-spacing: -0.4px;
+      }
+      .tier .amt small {
+        font-size: 11px;
+        color: var(--ink-3);
+        font-weight: 500;
+      }
+      .tier .meta {
+        color: var(--ink-3);
+        font-size: 12px;
+        margin-left: auto;
+        text-align: right;
+      }
+      .freebar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        background: linear-gradient(135deg, var(--accent-soft), transparent);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 22px;
+        margin-bottom: 26px;
+      }
+      .freebar b {
+        font-size: 16px;
+      }
+      .freebar span {
+        color: var(--ink-2);
+        font-size: 13px;
+      }
+
+      .cta-final {
+        text-align: center;
+        padding: 90px 0;
+        position: relative;
+        overflow: hidden;
+      }
+      .cta-final .glow {
+        position: absolute;
+        width: 560px;
+        height: 560px;
+        border-radius: 50%;
+        background: radial-gradient(circle, var(--glow), transparent 65%);
+        bottom: -340px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+      .cta-final h2 {
+        margin: 0 auto 12px;
+        max-width: none;
+      }
+      footer {
+        padding: 36px 0;
+        color: var(--ink-3);
+        font-size: 13px;
+        border-top: 1px solid var(--border);
+      }
+      footer .wrap {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+      @media (max-width: 860px) {
+        .hero .wrap,
+        .privacy,
+        .two,
+        .ladders {
+          grid-template-columns: 1fr;
+        }
+        .grid3 {
+          grid-template-columns: 1fr;
+        }
+        .stats .wrap {
+          grid-template-columns: 1fr 1fr;
+        }
+        h1 {
+          font-size: 36px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="wrap">
+        <span class="logo"><span class="mark">⌇</span> Driftstack</span>
+        <a class="l" href="#">Pricing</a><a class="l" href="#">Comparison</a
+        ><a class="l" href="#">Docs</a><a class="l" href="#">Security</a
+        ><a class="l" href="#">Self-hosted</a>
+        <span class="spacer"></span>
+        <div class="themer">
+          <button id="m-dark" class="on" onclick="setMode('dark')">Dark</button
+          ><button id="m-light" onclick="setMode('light')">Light</button>
+          <span style="width: 1px; height: 15px; background: var(--border)"></span>
+          <span
+            class="sw on"
+            id="a-oxblood"
+            style="background: #9b3b46"
+            onclick="setAccent('oxblood')"
+          ></span>
+          <span
+            class="sw"
+            id="a-violet"
+            style="background: #6d5efc"
+            onclick="setAccent('violet')"
+          ></span>
+          <span
+            class="sw"
+            id="a-teal"
+            style="background: #109a82"
+            onclick="setAccent('teal')"
+          ></span>
+        </div>
+        <a class="btn ghost" href="#">Sign in</a><a class="btn primary" href="#">Start free</a>
+      </div>
+    </nav>
+
+    <!-- HERO — real copy, real SDK snippet -->
+    <div class="hero">
+      <div class="glow"></div>
+      <div class="glow g2"></div>
+      <div class="grid-bg"></div>
+      <div class="wrap">
+        <div>
+          <span class="label">iPhone Safari · on demand</span>
+          <h1>Indistinguishable iPhone Safari.<br />Programmable from any language.</h1>
+          <p class="sub">
+            Run a real iPhone browser in the cloud that every website treats as a genuine iPhone —
+            never a bot, never an emulator. Built for scraping, testing, and automation that has to
+            pass as a real mobile user. Drive it from TypeScript, Python, Go, or the desktop app.
+          </p>
+          <div class="cta">
+            <a class="btn primary" href="#">Start free</a
+            ><a class="btn ghost" href="#">Compare the alternatives</a>
+          </div>
+          <p class="finep">One profile · 20-minute sessions · no card required.</p>
+        </div>
+        <div class="codewin">
+          <div class="codechrome">
+            <span class="pip"></span><span class="pip"></span><span class="pip"></span
+            ><span class="fn">driftstack-typescript-sdk</span><span class="copy">Copy</span>
+          </div>
+          <pre><span class="k">import</span> { Driftstack } <span class="k">from</span> <span class="s">'@driftstack/sdk'</span>;
+
+<span class="k">const</span> ds = <span class="k">new</span> <span class="f">Driftstack</span>({ apiKey: process.env.DRIFTSTACK_API_KEY });
+
+<span class="k">const</span> session = <span class="k">await</span> ds.sessions.<span class="f">create</span>({
+  archetype: <span class="s">'iphone17_ios18_7_safari26_4'</span>,
+  label: <span class="s">'target-flow'</span>,
+});
+
+<span class="k">try</span> {
+  <span class="k">await</span> ds.sessions.<span class="f">navigate</span>(session.id, { url: <span class="s">'https://target.example'</span> });
+  <span class="k">await</span> ds.sessions.<span class="f">capture</span>(session.id, { kind: <span class="s">'screenshot'</span> });
+  <span class="k">const</span> state = <span class="k">await</span> ds.sessions.<span class="f">getState</span>(session.id);
+  console.<span class="f">log</span>(state.url, state.title);
+} <span class="k">finally</span> {
+  <span class="k">await</span> ds.sessions.<span class="f">destroy</span>(session.id);
+}</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- STATS strip — real claims -->
+    <div class="stats">
+      <div class="wrap">
+        <div class="stat">
+          <div class="i">📱</div>
+          <div><b>Real WebKit</b><span>The engine every iPhone ships</span></div>
+        </div>
+        <div class="stat">
+          <div class="i">⬡</div>
+          <div><b>iOS 18.7 / 26.x</b><span>Safari versions Apple still ships</span></div>
+        </div>
+        <div class="stat">
+          <div class="i">⌗</div>
+          <div><b>3 SDKs</b><span>TypeScript · Python · Go</span></div>
+        </div>
+        <div class="stat">
+          <div class="i">⇄</div>
+          <div><b>SOCKS5 + VPN</b><span>Configurable per profile</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HOW IT WORKS — real 3 steps -->
+    <section>
+      <div class="wrap">
+        <span class="label">How it works</span>
+        <h2>Three steps to a real iPhone in the cloud.</h2>
+        <div class="grid3" style="margin-top: 34px">
+          <div class="card">
+            <div class="num">1</div>
+            <h3>Pick an iPhone profile</h3>
+            <p>
+              Choose a device archetype — a complete, coherent iPhone identity (hardware, iOS,
+              Safari, fonts, canvas, TLS) that stays consistent for the profile's lifetime.
+            </p>
+          </div>
+          <div class="card">
+            <div class="num">2</div>
+            <h3>Start a session</h3>
+            <p>
+              One API call or one click in the desktop app boots a real WebKit browser in the cloud,
+              wearing that identity, routed through your proxy.
+            </p>
+          </div>
+          <div class="card">
+            <div class="num">3</div>
+            <h3>Drive it your way</h3>
+            <p>
+              Watch and tap it live over WebRTC, script it from TypeScript / Python / Go, or hand
+              the task to the AI agent with your own Anthropic key.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- USE CASES — real three -->
+    <section class="alt">
+      <div class="wrap">
+        <span class="label">Use cases</span>
+        <h2>Built for work that has to look human.</h2>
+        <div class="grid3" style="margin-top: 34px">
+          <div class="card">
+            <span class="uc">QA + testing</span>
+            <h3>Mobile-Safari coverage</h3>
+            <p>
+              Test on the browser your mobile users actually have — real WebKit, real iOS versions —
+              without a device farm.
+            </p>
+          </div>
+          <div class="card">
+            <span class="uc">Data collection</span>
+            <h3>Mobile-first scraping</h3>
+            <p>
+              Mobile pages, mobile prices, mobile-only flows. Collect them from a browser that sites
+              classify as a genuine iPhone.
+            </p>
+          </div>
+          <div class="card">
+            <span class="uc">Account workflows</span>
+            <h3>Multi-account operations</h3>
+            <p>
+              Isolated, persistent profiles — separate cookies, storage and fingerprints per
+              account, organized in folders with tags.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EGRESS — real proxy capabilities -->
+    <section class="alt">
+      <div class="wrap">
+        <span class="label">Network &amp; egress</span>
+        <h2>Your traffic exits where you say it does.</h2>
+        <p class="lede">
+          Bring your own egress per profile — locale and timezone follow the exit geo automatically,
+          so nothing contradicts the IP.
+        </p>
+        <div class="grid3">
+          <div class="card">
+            <div class="num">⇄</div>
+            <h3>UDP + WebRTC + QUIC</h3>
+            <p>
+              Full-stack tunneling — not just TCP. WebRTC and HTTP/3 traffic exits through your
+              proxy too, with no protocol-level tells.
+            </p>
+          </div>
+          <div class="card">
+            <div class="num">🔑</div>
+            <h3>.ovpn per profile</h3>
+            <p>
+              Attach an OpenVPN config to a profile and every session it runs exits through that
+              tunnel.
+            </p>
+          </div>
+          <div class="card">
+            <div class="num">⚙</div>
+            <h3>.conf per profile</h3>
+            <p>
+              WireGuard configs work the same way — per-profile, persistent, testable from the
+              dashboard.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COMPARISON — above the anti-detect category -->
+    <section class="alt">
+      <div class="wrap">
+        <span class="label">Comparison</span>
+        <h2>Not another anti-detect browser.</h2>
+        <p class="lede">
+          Anti-detects patch a desktop browser to lie about itself. Driftstack runs the real thing —
+          actual WebKit on actual Apple-shipped iOS versions — so there's nothing to detect.
+        </p>
+        <table class="cmp">
+          <tr>
+            <th>Capability</th>
+            <th>Typical anti-detect</th>
+            <th>Driftstack</th>
+          </tr>
+          <tr>
+            <td>Mobile fingerprint</td>
+            <td class="n">spoofed desktop UA</td>
+            <td class="us y">real WebKit, bit-exact iPhone</td>
+          </tr>
+          <tr>
+            <td>Where it runs</td>
+            <td class="n">your machine</td>
+            <td class="us y">cloud + live WebRTC control</td>
+          </tr>
+          <tr>
+            <td>Your data</td>
+            <td class="n">trust-us policy</td>
+            <td class="us y">sealed profiles — we can't read them</td>
+          </tr>
+          <tr>
+            <td>Automation</td>
+            <td class="n">clunky local RPA</td>
+            <td class="us y">3 SDKs · AI agent · webhooks</td>
+          </tr>
+          <tr>
+            <td>Egress</td>
+            <td class="n">HTTP/SOCKS only</td>
+            <td class="us y">SOCKS5 + OpenVPN + WireGuard, UDP/QUIC</td>
+          </tr>
+          <tr>
+            <td>Teams</td>
+            <td class="n">seats bolted on</td>
+            <td class="us y">workspaces, folders, roles, audit</td>
+          </tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- PRIVACY -->
+    <section class="alt">
+      <div class="wrap">
+        <div class="privacy">
+          <div>
+            <span class="label">Privacy</span>
+            <h2>Your data is yours. Cryptographically.</h2>
+            <ul>
+              <li>
+                <span class="ok">✓</span> Profiles are client-encrypted (AES-256-GCM) — our servers
+                store and move opaque bytes, never plaintext.
+              </li>
+              <li>
+                <span class="ok">✓</span> Per-tenant key isolation: a wrong account can't decrypt
+                your data. Enforced by math, not policy.
+              </li>
+              <li>
+                <span class="ok">✓</span> No Driftstack employee can read your profiles, cookies, or
+                what happens inside your sessions.
+              </li>
+              <li>
+                <span class="ok">✓</span> Every secret access is audited. Export or delete your data
+                anytime.
+              </li>
+            </ul>
+            <a class="btn ghost" href="#" style="margin-top: 10px">Read the security model →</a>
+          </div>
+          <div class="sealcard">
+            <div class="lockring">
+              <svg
+                width="42"
+                height="42"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--accent)"
+                stroke-width="1.6"
+              >
+                <rect x="3" y="11" width="18" height="10" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+            <b>Sealed profile storage</b>
+            <p>
+              Encrypted before it reaches us.<br />Opaque while it's with us.<br />Decrypted only in
+              your session.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TWO WAYS — real section -->
+    <section class="alt">
+      <div class="wrap">
+        <span class="label">Two ways to use it</span>
+        <h2>Click it or script it.</h2>
+        <div class="two" style="margin-top: 30px">
+          <div class="way">
+            <span class="tagline">Desktop app</span>
+            <h3>See it. Tap it. Live.</h3>
+            <p>
+              The desktop app streams the iPhone over WebRTC — watch sessions in a floating device
+              window, tap and type with manual control, organize profiles in folders, launch with
+              one click.
+            </p>
+            <a class="btn ghost" href="#">Download the app →</a>
+          </div>
+          <div class="way">
+            <span class="tagline">SDK + HTTPS</span>
+            <h3>Automate everything.</h3>
+            <p>
+              First-class TypeScript, Python and Go SDKs over a clean HTTPS API. Sessions,
+              navigation, capture, profiles, webhooks — plus an AI agent you bring your own
+              Anthropic key to.
+            </p>
+            <a class="btn ghost" href="#">Read the API docs →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRICING — REAL ladder -->
+    <section class="alt">
+      <div class="wrap">
+        <span class="label">Pricing</span>
+        <h2>One free tier to start. Two ladders to grow.</h2>
+        <div class="freebar">
+          <b>Free — $0, forever</b
+          ><span>1 concurrent session · 20-minute sessions · manual control · no card required</span
+          ><span style="margin-left: auto"><a class="btn primary" href="#">Start free</a></span>
+        </div>
+        <div class="ladders">
+          <div class="ladder">
+            <h3>Manual — desktop app</h3>
+            <div class="tier">
+              <b>Personal</b><span class="amt">$79<small>/mo</small></span
+              ><span class="meta">1 concurrent</span>
+            </div>
+            <div class="tier hot">
+              <b>Team</b><span class="amt">$249<small>/mo</small></span
+              ><span class="meta">3 concurrent · workspace</span>
+            </div>
+            <div class="tier">
+              <b>Agency</b><span class="amt">$699<small>/mo</small></span
+              ><span class="meta">8 concurrent</span>
+            </div>
+          </div>
+          <div class="ladder">
+            <h3>API — SDKs + automation</h3>
+            <div class="tier">
+              <b>API Starter</b><span class="amt">$149<small>/mo</small></span
+              ><span class="meta">2 concurrent</span>
+            </div>
+            <div class="tier">
+              <b>API Builder</b><span class="amt">$499<small>/mo</small></span
+              ><span class="meta">8 concurrent</span>
+            </div>
+            <div class="tier">
+              <b>API Scale</b><span class="amt">$1,499<small>/mo</small></span
+              ><span class="meta">24 concurrent</span>
+            </div>
+            <div class="tier">
+              <b>Enterprise</b><span class="amt">Custom</span
+              ><span class="meta">custom concurrency · SLA</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FINAL CTA -->
+    <div class="cta-final">
+      <div class="glow"></div>
+      <div class="wrap" style="position: relative">
+        <span class="label">Ready when you are</span>
+        <h2 style="font-size: 38px">A real iPhone is one call away.</h2>
+        <p class="lede" style="margin: 0 auto 28px; text-align: center">
+          Start on the free tier — one profile, real sessions, no card.
+        </p>
+        <a class="btn primary" href="#" style="font-size: 15px; padding: 12px 26px">Start free</a>
+      </div>
+    </div>
+
+    <footer>
+      <div class="wrap">
+        <span
+          ><span class="logo"><span class="mark">⌇</span> Driftstack</span></span
+        >
+        <span class="spacer"></span>
+        <a class="l" href="#">Pricing</a><a class="l" href="#">Security</a
+        ><a class="l" href="#">Trust</a><a class="l" href="#">Legal</a
+        ><a class="l" href="#">Status</a><a class="l" href="#">Changelog</a>
+      </div>
+    </footer>
+
+    <script>
+      function setMode(m) {
+        document.documentElement.dataset.mode = m;
+        document.getElementById('m-dark').classList.toggle('on', m === 'dark');
+        document.getElementById('m-light').classList.toggle('on', m === 'light');
+      }
+      function setAccent(a) {
+        document.documentElement.dataset.accent = a;
+        ['oxblood', 'violet', 'teal'].forEach((x) =>
+          document.getElementById('a-' + x).classList.toggle('on', x === a),
+        );
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="en" data-mode="light" data-accent="oxblood">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marketing Direction C — "Editorial Light" (Stripe-like)</title>
+    <!-- THROWAWAY VISUAL DEMO (2026-06-12, A2). Marketing-home DIRECTION C of 3.
+     "Editorial Light" — Stripe/Notion-like: light-first, big editorial type, numbered
+     sections, generous whitespace, accent used sparingly. Same REAL copy/pricing.
+     Defaults to LIGHT to show the direction's intent; switcher still flips both. -->
+    <style>
+      :root {
+        --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+        --mono: 'SF Mono', ui-monospace, Menlo, monospace;
+      }
+      [data-accent='oxblood'] {
+        --accent: #8a323d;
+        --accent-2: #a84450;
+        --accent-strong: #722f37;
+        --accent-ink: #fff;
+        --accent-soft: rgba(138, 50, 61, 0.08);
+      }
+      [data-accent='violet'] {
+        --accent: #5d4ee8;
+        --accent-2: #7668f5;
+        --accent-strong: #4c3dd0;
+        --accent-ink: #fff;
+        --accent-soft: rgba(93, 78, 232, 0.08);
+      }
+      [data-accent='teal'] {
+        --accent: #0e8a75;
+        --accent-2: #16a98f;
+        --accent-strong: #0b7261;
+        --accent-ink: #fff;
+        --accent-soft: rgba(14, 138, 117, 0.08);
+      }
+      [data-mode='light'] {
+        --bg: #fff;
+        --surface: #fafafb;
+        --raised: #fff;
+        --ink: #16171c;
+        --ink-2: #4c4f59;
+        --ink-3: #8e919d;
+        --border: #eaecf0;
+        --ready: #0f9d58;
+        --code-bg: #16171c;
+        --rule: #16171c;
+      }
+      [data-mode='dark'] {
+        --bg: #0c0c0f;
+        --surface: #141419;
+        --raised: #1b1b21;
+        --ink: #f6f6f8;
+        --ink-2: #b5b5c0;
+        --ink-3: #7c7c89;
+        --border: #222229;
+        --ready: #34d399;
+        --code-bg: #101015;
+        --rule: #f6f6f8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+        line-height: 1.6;
+        font-size: 15.5px;
+      }
+      .wrap {
+        max-width: 1040px;
+        margin: 0 auto;
+        padding: 0 28px;
+      }
+      a {
+        color: inherit;
+      }
+      nav {
+        position: sticky;
+        top: 0;
+        background: color-mix(in srgb, var(--bg) 88%, transparent);
+        backdrop-filter: blur(12px);
+        z-index: 20;
+        border-bottom: 1px solid var(--border);
+      }
+      nav .wrap {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        height: 64px;
+      }
+      .logo {
+        font-weight: 700;
+        letter-spacing: -0.3px;
+        font-size: 16px;
+      }
+      .logo .mark {
+        color: var(--accent);
+      }
+      nav a.l {
+        color: var(--ink-2);
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      nav a.l:hover {
+        color: var(--ink);
+      }
+      .spacer {
+        flex: 1;
+      }
+      .btn {
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 18px;
+        font-weight: 600;
+        font-size: 14px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .btn.primary {
+        background: var(--ink);
+        color: var(--bg);
+      }
+      .btn.primary:hover {
+        opacity: 0.85;
+      }
+      .btn.accent {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .btn.accent:hover {
+        background: var(--accent-strong);
+      }
+      .btn.ghost {
+        background: transparent;
+        color: var(--ink);
+        border: 1px solid var(--border);
+      }
+      .btn.ghost:hover {
+        border-color: var(--ink-3);
+      }
+      .themer {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+        padding: 3px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+      }
+      .themer button {
+        border: 0;
+        background: transparent;
+        color: var(--ink-3);
+        cursor: pointer;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .themer button.on {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .sw {
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        cursor: pointer;
+      }
+      .sw.on {
+        border-color: var(--ink);
+      }
+
+      /* editorial hero */
+      .hero {
+        padding: 96px 0 70px;
+      }
+      .kick {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--accent);
+        margin-bottom: 22px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .kick::before {
+        content: '';
+        width: 34px;
+        height: 2px;
+        background: var(--accent);
+      }
+      h1 {
+        font-size: 64px;
+        line-height: 1.04;
+        letter-spacing: -2.6px;
+        margin: 0 0 26px;
+        font-weight: 660;
+        max-width: 16ch;
+      }
+      h1 em {
+        font-style: normal;
+        color: var(--accent);
+      }
+      .hero .sub {
+        font-size: 19px;
+        color: var(--ink-2);
+        max-width: 52ch;
+        margin: 0 0 32px;
+      }
+      .cta {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+      }
+      .finep {
+        margin-top: 16px;
+        font-size: 13px;
+        color: var(--ink-3);
+      }
+      /* proof row under hero */
+      .proof {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0;
+        border-block: 1px solid var(--border);
+      }
+      .proof div {
+        padding: 26px 22px;
+        border-right: 1px solid var(--border);
+      }
+      .proof div:last-child {
+        border-right: 0;
+      }
+      .proof b {
+        display: block;
+        font-size: 19px;
+        letter-spacing: -0.4px;
+      }
+      .proof span {
+        font-size: 12.5px;
+        color: var(--ink-3);
+      }
+
+      section {
+        padding: 84px 0;
+      }
+      .secnum {
+        font-family: var(--mono);
+        font-size: 13px;
+        color: var(--accent);
+        font-weight: 700;
+      }
+      h2 {
+        font-size: 40px;
+        letter-spacing: -1.5px;
+        margin: 10px 0 14px;
+        font-weight: 650;
+        max-width: 22ch;
+      }
+      .lede {
+        color: var(--ink-2);
+        max-width: 58ch;
+        font-size: 17px;
+        margin: 0 0 40px;
+      }
+      .rule {
+        border-top: 1px solid var(--border);
+      }
+
+      /* split rows */
+      .split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 54px;
+        align-items: center;
+      }
+      .split .codewin {
+        background: var(--code-bg);
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 30px 70px -34px rgba(0, 0, 0, 0.4);
+      }
+      .codechrome {
+        display: flex;
+        gap: 7px;
+        padding: 12px 16px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .pip {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.14);
+      }
+      pre {
+        margin: 0;
+        padding: 20px;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        line-height: 1.7;
+        color: #d6d9e0;
+        overflow-x: auto;
+      }
+      .k {
+        color: #ff9fb1;
+      }
+      .s {
+        color: #7fd3a8;
+      }
+      .f {
+        color: #8ab4f8;
+      }
+      .featlist {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .featlist li {
+        padding: 18px 0;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+      }
+      .featlist li:last-child {
+        border-bottom: 0;
+      }
+      .featlist .n {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--accent);
+        font-weight: 700;
+        padding-top: 3px;
+      }
+      .featlist b {
+        display: block;
+        font-size: 16px;
+        margin-bottom: 3px;
+      }
+      .featlist p {
+        margin: 0;
+        color: var(--ink-2);
+        font-size: 14px;
+      }
+
+      /* numbered uses */
+      .uses {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+      .use {
+        padding: 30px 26px;
+        border-right: 1px solid var(--border);
+        background: var(--raised);
+      }
+      .use:last-child {
+        border-right: 0;
+      }
+      .use .uc {
+        font-size: 11.5px;
+        font-weight: 700;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--ink-3);
+      }
+      .use h3 {
+        margin: 10px 0 8px;
+        font-size: 18px;
+        letter-spacing: -0.3px;
+      }
+      .use p {
+        margin: 0;
+        color: var(--ink-2);
+        font-size: 14px;
+      }
+
+      /* privacy manifesto */
+      .manifesto {
+        background: var(--surface);
+        border-radius: 20px;
+        padding: 60px;
+        border: 1px solid var(--border);
+      }
+      .manifesto h2 {
+        font-size: 34px;
+      }
+      .manifesto .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px 40px;
+        margin-top: 30px;
+      }
+      .manifesto .grid div {
+        display: flex;
+        gap: 11px;
+        color: var(--ink-2);
+        font-size: 15px;
+      }
+      .manifesto .ok {
+        color: var(--ready);
+        font-weight: 700;
+      }
+      blockquote {
+        margin: 34px 0 0;
+        padding-left: 22px;
+        border-left: 3px solid var(--accent);
+        font-size: 17px;
+        color: var(--ink);
+        max-width: 54ch;
+      }
+      blockquote footer {
+        padding: 8px 0 0;
+        border: 0;
+        color: var(--ink-3);
+        font-size: 13px;
+      }
+
+      /* comparison list editorial */
+      .vs {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .vs th,
+      .vs td {
+        text-align: left;
+        padding: 16px 14px;
+        border-bottom: 1px solid var(--border);
+        font-size: 15px;
+      }
+      .vs th {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: var(--ink-3);
+        font-weight: 600;
+      }
+      .vs .y {
+        color: var(--ready);
+        font-weight: 600;
+      }
+      .vs .n {
+        color: var(--ink-3);
+      }
+
+      /* pricing editorial */
+      .ptiers {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+      .pt {
+        padding: 30px 26px;
+        border-right: 1px solid var(--border);
+        background: var(--raised);
+      }
+      .pt:last-child {
+        border-right: 0;
+      }
+      .pt.hot {
+        background: var(--accent-soft);
+      }
+      .pt .t {
+        font-weight: 600;
+        font-size: 14px;
+        color: var(--ink-2);
+      }
+      .pt .amt {
+        font-size: 34px;
+        font-weight: 760;
+        letter-spacing: -1.4px;
+        margin: 10px 0 2px;
+      }
+      .pt .amt small {
+        font-size: 13px;
+        color: var(--ink-3);
+        font-weight: 500;
+      }
+      .pt .cc {
+        font-size: 13px;
+        color: var(--ink-3);
+      }
+      .apis {
+        display: flex;
+        gap: 26px;
+        margin-top: 26px;
+        flex-wrap: wrap;
+        color: var(--ink-2);
+        font-size: 14.5px;
+      }
+      .apis b {
+        color: var(--ink);
+      }
+      .cta-final {
+        padding: 100px 0;
+        text-align: center;
+      }
+      .cta-final h2 {
+        margin: 10px auto 16px;
+        max-width: none;
+      }
+      footer.site {
+        padding: 40px 0;
+        color: var(--ink-3);
+        font-size: 13.5px;
+        border-top: 1px solid var(--border);
+      }
+      footer.site .wrap {
+        display: flex;
+        gap: 22px;
+        flex-wrap: wrap;
+      }
+      @media (max-width: 880px) {
+        h1 {
+          font-size: 42px;
+        }
+        .split,
+        .manifesto .grid {
+          grid-template-columns: 1fr;
+        }
+        .uses,
+        .ptiers {
+          grid-template-columns: 1fr;
+        }
+        .use,
+        .pt {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+        .proof {
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="wrap">
+        <span class="logo"><span class="mark">⌇</span> Driftstack</span>
+        <a class="l" href="#">Pricing</a><a class="l" href="#">Comparison</a
+        ><a class="l" href="#">Docs</a><a class="l" href="#">Security</a>
+        <span class="spacer"></span>
+        <div class="themer">
+          <button id="m-dark" onclick="setMode('dark')">Dark</button
+          ><button id="m-light" class="on" onclick="setMode('light')">Light</button>
+          <span style="width: 1px; height: 15px; background: var(--border)"></span>
+          <span
+            class="sw on"
+            id="a-oxblood"
+            style="background: #8a323d"
+            onclick="setAccent('oxblood')"
+          ></span>
+          <span
+            class="sw"
+            id="a-violet"
+            style="background: #5d4ee8"
+            onclick="setAccent('violet')"
+          ></span>
+          <span
+            class="sw"
+            id="a-teal"
+            style="background: #0e8a75"
+            onclick="setAccent('teal')"
+          ></span>
+        </div>
+        <a class="btn ghost" href="#">Sign in</a><a class="btn accent" href="#">Start free</a>
+      </div>
+    </nav>
+
+    <!-- EDITORIAL HERO -->
+    <div class="hero">
+      <div class="wrap">
+        <div class="kick">iPhone Safari · on demand</div>
+        <h1>Indistinguishable <em>iPhone Safari.</em> Programmable from any language.</h1>
+        <p class="sub">
+          A real iPhone browser in the cloud that every website treats as a genuine iPhone — never a
+          bot, never an emulator. Built for scraping, testing, and automation that has to pass as a
+          real mobile user.
+        </p>
+        <div class="cta">
+          <a class="btn accent" href="#">Start free</a
+          ><a class="btn ghost" href="#">Compare the alternatives →</a>
+        </div>
+        <p class="finep">One profile · 20-minute sessions · no card required.</p>
+      </div>
+    </div>
+
+    <!-- PROOF row -->
+    <div class="proof wrap" style="padding: 0">
+      <div><b>Real WebKit</b><span>The engine every iPhone ships</span></div>
+      <div><b>iOS 18.7 / 26.x</b><span>Safari versions Apple still ships</span></div>
+      <div><b>3 SDKs</b><span>TypeScript · Python · Go</span></div>
+      <div><b>SOCKS5 + VPN</b><span>UDP / WebRTC / QUIC, per profile</span></div>
+    </div>
+
+    <!-- 01 The product -->
+    <section>
+      <div class="wrap">
+        <span class="secnum">01</span>
+        <h2>The real thing, not a disguise.</h2>
+        <p class="lede">
+          Anti-detect browsers patch a desktop browser to lie about itself. Driftstack runs actual
+          WebKit on Apple-shipped iOS versions, wearing a complete, coherent iPhone identity — so
+          there's nothing to detect.
+        </p>
+        <div class="split">
+          <ul class="featlist">
+            <li>
+              <span class="n">a</span>
+              <div>
+                <b>Pick an iPhone profile</b>
+                <p>
+                  A complete iPhone identity — hardware, iOS, Safari, fonts, canvas, TLS —
+                  consistent for the profile's lifetime.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span class="n">b</span>
+              <div>
+                <b>Start a session</b>
+                <p>
+                  One API call or one click boots a real WebKit browser in the cloud, routed through
+                  your proxy.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span class="n">c</span>
+              <div>
+                <b>Drive it your way</b>
+                <p>
+                  Live over WebRTC, scripted from TypeScript / Python / Go, or delegated to the AI
+                  agent with your own Anthropic key.
+                </p>
+              </div>
+            </li>
+          </ul>
+          <div class="codewin">
+            <div class="codechrome">
+              <span class="pip"></span><span class="pip"></span><span class="pip"></span>
+            </div>
+            <pre><span class="k">import</span> { Driftstack } <span class="k">from</span> <span class="s">'@driftstack/sdk'</span>;
+
+<span class="k">const</span> ds = <span class="k">new</span> <span class="f">Driftstack</span>({ apiKey: process.env.DRIFTSTACK_API_KEY });
+
+<span class="k">const</span> session = <span class="k">await</span> ds.sessions.<span class="f">create</span>({
+  archetype: <span class="s">'iphone17_ios18_7_safari26_4'</span>,
+  label: <span class="s">'target-flow'</span>,
+});
+
+<span class="k">await</span> ds.sessions.<span class="f">navigate</span>(session.id, { url: <span class="s">'https://target.example'</span> });
+<span class="k">await</span> ds.sessions.<span class="f">capture</span>(session.id, { kind: <span class="s">'screenshot'</span> });</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 use cases -->
+    <section class="rule">
+      <div class="wrap">
+        <span class="secnum">02</span>
+        <h2>Built for work that has to look human.</h2>
+        <div class="uses" style="margin-top: 36px">
+          <div class="use">
+            <span class="uc">QA + testing</span>
+            <h3>Mobile-Safari coverage</h3>
+            <p>Test on the browser your mobile users actually have — without a device farm.</p>
+          </div>
+          <div class="use">
+            <span class="uc">Data collection</span>
+            <h3>Mobile-first scraping</h3>
+            <p>
+              Mobile pages, prices and flows, collected from a browser sites classify as a genuine
+              iPhone.
+            </p>
+          </div>
+          <div class="use">
+            <span class="uc">Account workflows</span>
+            <h3>Multi-account operations</h3>
+            <p>
+              Isolated persistent profiles — separate cookies, storage and fingerprints per account.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 egress -->
+    <section class="rule">
+      <div class="wrap">
+        <span class="secnum">03</span>
+        <h2>Your traffic exits where you say it does.</h2>
+        <p class="lede">
+          SOCKS5, OpenVPN (.ovpn) and WireGuard (.conf) per profile — and unlike the others, UDP,
+          WebRTC and QUIC go through the tunnel too. Locale and timezone follow the exit geo
+          automatically.
+        </p>
+        <table class="vs">
+          <tr>
+            <th>Capability</th>
+            <th>Typical anti-detect</th>
+            <th>Driftstack</th>
+          </tr>
+          <tr>
+            <td>Mobile fingerprint</td>
+            <td class="n">spoofed desktop UA</td>
+            <td class="y">real WebKit, bit-exact iPhone</td>
+          </tr>
+          <tr>
+            <td>Where it runs</td>
+            <td class="n">your machine</td>
+            <td class="y">cloud + live WebRTC control</td>
+          </tr>
+          <tr>
+            <td>Your data</td>
+            <td class="n">trust-us policy</td>
+            <td class="y">sealed profiles — unreadable to us</td>
+          </tr>
+          <tr>
+            <td>Egress protocols</td>
+            <td class="n">HTTP / SOCKS only</td>
+            <td class="y">+ OpenVPN, WireGuard, UDP/QUIC</td>
+          </tr>
+          <tr>
+            <td>Automation</td>
+            <td class="n">clunky local RPA</td>
+            <td class="y">3 SDKs · AI agent · webhooks</td>
+          </tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- 04 privacy manifesto -->
+    <section class="rule">
+      <div class="wrap">
+        <div class="manifesto">
+          <span class="secnum">04</span>
+          <h2>We built it so we can't read your data.</h2>
+          <div class="grid">
+            <div>
+              <span class="ok">✓</span> Profiles client-encrypted (AES-256-GCM) — servers store
+              opaque bytes
+            </div>
+            <div>
+              <span class="ok">✓</span> Per-tenant key isolation — wrong account can't decrypt, by
+              math
+            </div>
+            <div>
+              <span class="ok">✓</span> No employee can read your profiles or watch your sessions
+            </div>
+            <div>
+              <span class="ok">✓</span> Audited secret access · export or delete your data anytime
+            </div>
+          </div>
+          <blockquote>
+            The question isn't whether you trust us. It's that the architecture makes trust
+            unnecessary.
+            <footer>— the Driftstack security model</footer>
+          </blockquote>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 pricing -->
+    <section class="rule">
+      <div class="wrap">
+        <span class="secnum">05</span>
+        <h2>One free tier to start.</h2>
+        <p class="lede">
+          Manual plans for the desktop app, API plans for automation. Start on the free tier first
+          to see which feels right.
+        </p>
+        <div class="ptiers">
+          <div class="pt">
+            <div class="t">Free</div>
+            <div class="amt">$0</div>
+            <div class="cc">1 concurrent · forever · no card</div>
+          </div>
+          <div class="pt">
+            <div class="t">Personal</div>
+            <div class="amt">$79<small>/mo</small></div>
+            <div class="cc">1 concurrent</div>
+          </div>
+          <div class="pt hot">
+            <div class="t" style="color: var(--accent)">Team</div>
+            <div class="amt">$249<small>/mo</small></div>
+            <div class="cc">3 concurrent · workspace</div>
+          </div>
+          <div class="pt">
+            <div class="t">Agency</div>
+            <div class="amt">$699<small>/mo</small></div>
+            <div class="cc">8 concurrent</div>
+          </div>
+        </div>
+        <div class="apis">
+          <span><b>API Starter</b> $149/mo · 2 concurrent</span
+          ><span><b>API Builder</b> $499/mo · 8</span><span><b>API Scale</b> $1,499/mo · 24</span
+          ><span><b>Enterprise</b> custom · SLA</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- final -->
+    <div class="cta-final rule">
+      <div class="wrap">
+        <span class="secnum">06</span>
+        <h2>A real iPhone is one call away.</h2>
+        <p class="lede" style="margin: 0 auto 30px; text-align: center">
+          Start on the free tier — one profile, real sessions, no card.
+        </p>
+        <a class="btn accent" href="#" style="font-size: 15px; padding: 13px 28px">Start free</a>
+      </div>
+    </div>
+
+    <footer class="site">
+      <div class="wrap">
+        <span class="logo"><span class="mark">⌇</span> Driftstack</span>
+        <span class="spacer"></span>
+        <a class="l" href="#">Pricing</a><a class="l" href="#">Security</a
+        ><a class="l" href="#">Trust</a><a class="l" href="#">Legal</a
+        ><a class="l" href="#">Status</a>
+      </div>
+    </footer>
+
+    <script>
+      function setMode(m) {
+        document.documentElement.dataset.mode = m;
+        document.getElementById('m-dark').classList.toggle('on', m === 'dark');
+        document.getElementById('m-light').classList.toggle('on', m === 'light');
+      }
+      function setAccent(a) {
+        document.documentElement.dataset.accent = a;
+        ['oxblood', 'violet', 'teal'].forEach((x) =>
+          document.getElementById('a-' + x).classList.toggle('on', x === a),
+        );
+      }
+    </script>
+  </body>
+</html>
