@@ -29,9 +29,11 @@ describe('customer-dashboard styles/base content parity', () => {
     expect(body).toMatch(/@tailwind utilities;/);
   });
 
-  it("Dark-mode-first posture pinned: 'Dark-mode-first dashboard surface' + color-scheme: dark. Drift to dropping the dark-mode framing would break the cross-app brand consistency with marketing-site (also dark-mode-first)", () => {
-    expect(body).toMatch(/Dark-mode-first dashboard surface/);
-    expect(body).toMatch(/color-scheme: dark;/);
+  it('Fleet two-axis posture pinned: light+violet default + mode-axis color-scheme. Cross-app brand consistency with marketing-site (same token layer)', () => {
+    expect(body).toMatch(
+      /Fleet two-axis dashboard surface \(light\+violet default, 2026-06-12 rework\)\./,
+    );
+    expect(body).toMatch(/color-scheme: light;/);
   });
 
   it("tokens-shared-with-marketing commitment pinned: 'Tokens shared with apps/marketing-site/src/styles/base.css. Keep synchronised — customer experience reads as one product.' — drift would let the two apps drift visually apart", () => {
@@ -55,7 +57,7 @@ describe('customer-dashboard styles/base content parity', () => {
     expect(body).toMatch(/font-feature-settings: 'cv11', 'ss01';/);
   });
 
-  it('::selection bg-oxblood-700 pinned: brand-accent color for text selection. Drift to a different selection color would break cross-app brand recognition on selection', () => {
-    expect(body).toMatch(/::selection \{\s*\n?\s*@apply bg-oxblood-700 text-white;\s*\n?\s*\}/);
+  it('::selection bg-tk-accent pinned: brand-accent color for text selection. Drift to a different selection color would break cross-app brand recognition on selection', () => {
+    expect(body).toMatch(/::selection \{\s*\n?\s*@apply bg-tk-accent text-white;\s*\n?\s*\}/);
   });
 });

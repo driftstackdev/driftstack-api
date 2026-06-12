@@ -143,7 +143,7 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
 
   it("No-token guard: 'Sign in to view audit log.' inline <li> + loadMore hidden — pinned so unauthenticated visitors see a clear sign-in prompt embedded in the list (drift to a banner-only approach would leave the static 'Loading audit log…' placeholder stuck forever)", () => {
     expect(body).toMatch(
-      /<li class="px-6 py-4 text-sm text-ink-muted">Sign in to view audit log\.<\/li>/,
+      /<li class="px-6 py-4 text-sm text-tk-ink-3">Sign in to view audit log\.<\/li>/,
     );
   });
 

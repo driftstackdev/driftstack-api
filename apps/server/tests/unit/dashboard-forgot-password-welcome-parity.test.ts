@@ -109,13 +109,13 @@ describe('W739 dashboard forgot-password + welcome page parity', () => {
     const w = read(WELCOME);
 
     // Free card.
-    expect(w).toMatch(/<h2 class="text-lg font-semibold text-ink-primary">Start free<\/h2>/);
+    expect(w).toMatch(/<h2 class="text-lg font-semibold text-tk-ink">Start free<\/h2>/);
     expect(w).toMatch(/\$0 · no card/);
     expect(w).toMatch(/Your account is already on the free plan: 1 profile, 1 concurrent/);
     expect(w).toMatch(/<a href="\/first-session" class="btn-primary/);
 
     // Paid-tier card.
-    expect(w).toMatch(/<h2 class="text-lg font-semibold text-ink-primary">Pick a tier<\/h2>/);
+    expect(w).toMatch(/<h2 class="text-lg font-semibold text-tk-ink">Pick a tier<\/h2>/);
     expect(w).toMatch(/<a href="\/select-tier" class="btn-secondary/);
   });
 

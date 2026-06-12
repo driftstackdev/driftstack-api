@@ -59,7 +59,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         status pill. Replaces the single-line "Agent session / id"
         treatment that read as a debug page. */}
     <header class="border-b border-slate-800 bg-gradient-to-r from-slate-950 to-slate-900 px-6 py-4 flex items-center gap-6">
-      <a href="/agent-sessions" class="flex items-center gap-1 text-sm text-ink-muted hover:text-ink-primary">
+      <a href="/agent-sessions" class="flex items-center gap-1 text-sm text-tk-ink-3 hover:text-tk-ink">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M19 12H5M12 19l-7-7 7-7" />
         </svg>
@@ -67,12 +67,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       </a>
       <div class="flex-1 min-w-0">
         <div class="flex items-baseline gap-3">
-          <h1 class="text-lg font-semibold text-ink-primary">AI agent workbench</h1>
+          <h1 class="text-lg font-semibold text-tk-ink">AI agent workbench</h1>
           <button
             type="button"
             data-copy-session-id
             data-id={id}
-            class="group inline-flex items-center gap-1 text-xs text-ink-muted font-mono truncate hover:text-glow-red"
+            class="group inline-flex items-center gap-1 text-xs text-tk-ink-3 font-mono truncate hover:text-tk-accent"
             title="Copy session id"
             aria-label="Copy session id"
           >
@@ -83,18 +83,18 @@ const apiBaseUrl = resolveApiBaseUrl();
             </svg>
           </button>
         </div>
-        <p class="mt-0.5 text-xs text-ink-muted">
+        <p class="mt-0.5 text-xs text-tk-ink-3">
           Plain-English tasks → agent plans intents → your browser drives them, in real time
         </p>
       </div>
       <div class="flex items-center gap-3 text-xs">
-        <div class="flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised/40 px-3 py-1.5">
-          <span class="text-ink-muted">Cost</span>
-          <span class="font-mono text-ink-primary" data-header-cost>$0.0000</span>
+        <div class="flex items-center gap-1.5 rounded-md border border-tk-border bg-tk-surface/40 px-3 py-1.5">
+          <span class="text-tk-ink-3">Cost</span>
+          <span class="font-mono text-tk-ink" data-header-cost>$0.0000</span>
         </div>
-        <div class="flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised/40 px-3 py-1.5">
-          <span class="text-ink-muted">Turns</span>
-          <span class="font-mono text-ink-primary" data-header-turns>0</span>
+        <div class="flex items-center gap-1.5 rounded-md border border-tk-border bg-tk-surface/40 px-3 py-1.5">
+          <span class="text-tk-ink-3">Turns</span>
+          <span class="font-mono text-tk-ink" data-header-turns>0</span>
         </div>
         {/* 2026-05-22 — always-visible model badge (was hidden until
             first turn). Shows the default Claude model the agent
@@ -103,14 +103,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             billing for tokens. */}
         <div
           data-header-model
-          class="flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised/40 px-3 py-1.5"
+          class="flex items-center gap-1.5 rounded-md border border-tk-border bg-tk-surface/40 px-3 py-1.5"
           title="Claude Opus 4-7 is Driftstack's default agent model — strongest reasoning + tool-use accuracy. Per-session model selection (Sonnet / Haiku for cost-sensitive workloads) ships in v1.1."
         >
-          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
-          <span class="text-ink-muted">Model</span>
-          <span class="font-mono text-ink-primary text-[10px]" data-header-model-name>Opus 4-7</span>
+          <span class="text-tk-ink-3">Model</span>
+          <span class="font-mono text-tk-ink text-[10px]" data-header-model-name>Opus 4-7</span>
           <span
             data-header-byok-pill
             class="hidden font-mono text-[9px] text-emerald-300"
@@ -123,15 +123,15 @@ const apiBaseUrl = resolveApiBaseUrl();
             workbench session runs as. Sits beside the model badge so the
             customer sees both "which brain" + "which device" at a glance. */}
         <div
-          class="flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-raised/40 px-3 py-1.5"
+          class="flex items-center gap-1.5 rounded-md border border-tk-border bg-tk-surface/40 px-3 py-1.5"
           title={`Sessions run on ${LOCKED_ARCHETYPE_DISPLAY_LABEL} — real WebKit, real iPhone fingerprint surface.`}
         >
-          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
             <rect x="6" y="2" width="12" height="20" rx="2.5" />
             <circle cx="12" cy="18" r="0.75" fill="currentColor" />
           </svg>
-          <span class="text-ink-muted">Device</span>
-          <span class="font-mono text-ink-primary text-[10px]">{LOCKED_ARCHETYPE_DISPLAY_LABEL}</span>
+          <span class="text-tk-ink-3">Device</span>
+          <span class="font-mono text-tk-ink text-[10px]">{LOCKED_ARCHETYPE_DISPLAY_LABEL}</span>
         </div>
         <div data-status-pill class="rounded-md bg-slate-800 px-3 py-1.5 font-mono uppercase tracking-wide text-slate-300">
           Loading…
@@ -156,7 +156,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         aria-label="Live browser preview"
       >
         <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-          <p class="text-xs uppercase tracking-wide text-ink-muted font-medium">
+          <p class="text-xs uppercase tracking-wide text-tk-ink-3 font-medium">
             Live preview
           </p>
           {/* 2026-05-22 — connection pill. Drives `data-preview-state`
@@ -197,7 +197,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             class="pointer-events-none absolute inset-0 overflow-hidden"
           >
             <div
-              class="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-glow-red/40 to-transparent"
+              class="absolute inset-x-0 h-px bg-gradient-to-r from-transparent via-tk-accent/40 to-transparent"
               style="animation: workbench-scan 6s linear infinite;"
             ></div>
           </div>
@@ -219,16 +219,16 @@ const apiBaseUrl = resolveApiBaseUrl();
               animation + dynamic status text. Replaced by the LiveKit
               video element when the harness lands. */}
           <div class="text-center px-6" data-preview-placeholder>
-            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-xl bg-glow-red/10 ring-1 ring-glow-red/30">
-              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-xl bg-tk-accent/10 ring-1 ring-tk-accent/30">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
                 <rect x="2" y="3" width="20" height="14" rx="2" />
                 <path d="M8 21h8M12 17v4" />
               </svg>
             </div>
-            <p class="mt-4 text-sm font-medium text-ink-primary">
+            <p class="mt-4 text-sm font-medium text-tk-ink">
               Provisioning live preview
             </p>
-            <p class="mt-1 text-xs text-ink-muted max-w-[18rem]">
+            <p class="mt-1 text-xs text-tk-ink-3 max-w-[18rem]">
               The agent's iPhone Safari stream appears here once the
               session spawns. You'll see clicks, scrolls, and form
               fills in real time.
@@ -265,7 +265,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           >
             <button
               data-mode="manual"
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-slate-400 hover:text-ink-primary data-[active=true]:bg-slate-700 data-[active=true]:text-ink-primary"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-slate-400 hover:text-tk-ink data-[active=true]:bg-slate-700 data-[active=true]:text-tk-ink"
               aria-checked="false"
               role="radio"
               title="You drive — agent doesn't plan or act"
@@ -277,7 +277,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             </button>
             <button
               data-mode="ai"
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-slate-400 hover:text-ink-primary data-[active=true]:bg-slate-700 data-[active=true]:text-ink-primary"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-slate-400 hover:text-tk-ink data-[active=true]:bg-slate-700 data-[active=true]:text-tk-ink"
               data-active="true"
               aria-checked="true"
               role="radio"
@@ -290,7 +290,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             </button>
             <button
               data-mode="pair"
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-slate-400 hover:text-ink-primary data-[active=true]:bg-slate-700 data-[active=true]:text-ink-primary"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-slate-400 hover:text-tk-ink data-[active=true]:bg-slate-700 data-[active=true]:text-tk-ink"
               aria-checked="false"
               role="radio"
               title="Agent suggests; you approve each step"
@@ -303,7 +303,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               Pair
             </button>
           </div>
-          <div class="ml-auto flex items-center gap-2 text-xs text-ink-muted">
+          <div class="ml-auto flex items-center gap-2 text-xs text-tk-ink-3">
             <span class="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true"></span>
             <span data-component="ModeStatus">
               AI is driving
@@ -321,7 +321,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           aria-live="polite"
         >
           <div class="flex flex-col items-center justify-center gap-4 py-12 text-center" data-empty>
-            <div class="flex h-12 w-12 items-center justify-center rounded-md bg-glow-red/10 text-glow-red">
+            <div class="flex h-12 w-12 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent">
               <svg
                 viewBox="0 0 24 24"
                 width="24"
@@ -337,8 +337,8 @@ const apiBaseUrl = resolveApiBaseUrl();
               </svg>
             </div>
             <div class="space-y-1">
-              <p class="text-sm font-medium text-ink-primary">No turns yet</p>
-              <p class="max-w-xs text-xs text-ink-muted">
+              <p class="text-sm font-medium text-tk-ink">No turns yet</p>
+              <p class="max-w-xs text-xs text-tk-ink-3">
                 Type a task in plain English below — the agent plans the steps, your browser
                 drives the actions. <span class="font-mono">⌘+Enter</span> sends.
               </p>
@@ -347,21 +347,21 @@ const apiBaseUrl = resolveApiBaseUrl();
               <button
                 type="button"
                 data-empty-suggestion="Take a screenshot of the current page and describe what's on it."
-                class="rounded-md border border-white/10 bg-surface-raised/50 px-3 py-2 text-xs text-ink-secondary hover:border-glow-red/40 hover:text-ink-primary"
+                class="rounded-md border border-tk-border bg-tk-surface/50 px-3 py-2 text-xs text-tk-ink-2 hover:border-tk-accent/40 hover:text-tk-ink"
               >
                 📸 Screenshot + describe the page
               </button>
               <button
                 type="button"
                 data-empty-suggestion="Sign in with the credentials you'll get from me in the next message."
-                class="rounded-md border border-white/10 bg-surface-raised/50 px-3 py-2 text-xs text-ink-secondary hover:border-glow-red/40 hover:text-ink-primary"
+                class="rounded-md border border-tk-border bg-tk-surface/50 px-3 py-2 text-xs text-tk-ink-2 hover:border-tk-accent/40 hover:text-tk-ink"
               >
                 🔐 Log in with credentials I'll provide
               </button>
               <button
                 type="button"
                 data-empty-suggestion="Fill the contact form with placeholder text and submit it."
-                class="rounded-md border border-white/10 bg-surface-raised/50 px-3 py-2 text-xs text-ink-secondary hover:border-glow-red/40 hover:text-ink-primary"
+                class="rounded-md border border-tk-border bg-tk-surface/50 px-3 py-2 text-xs text-tk-ink-2 hover:border-tk-accent/40 hover:text-tk-ink"
               >
                 ✍️ Fill the contact form
               </button>
@@ -380,17 +380,17 @@ const apiBaseUrl = resolveApiBaseUrl();
           data-disabled-when-mode="manual"
           autocomplete="off"
         >
-          <div class="rounded-lg border border-slate-800 bg-slate-900 focus-within:border-glow-red/50 focus-within:ring-1 focus-within:ring-glow-red/20 transition-colors">
+          <div class="rounded-lg border border-slate-800 bg-slate-900 focus-within:border-tk-accent/50 focus-within:ring-1 focus-within:ring-tk-accent/20 transition-colors">
             <textarea
               name="message"
               rows="3"
               maxlength="8000"
               placeholder="Tell the agent what to do…
 e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite acknowledgement'"
-              class="w-full resize-none bg-transparent px-4 py-3 text-sm text-ink-primary placeholder-slate-500 focus:outline-none"
+              class="w-full resize-none bg-transparent px-4 py-3 text-sm text-tk-ink placeholder-slate-500 focus:outline-none"
             ></textarea>
             <div class="flex items-center justify-between gap-3 border-t border-slate-800 px-4 py-2">
-              <div class="flex items-center gap-2 text-[10px] text-ink-muted">
+              <div class="flex items-center gap-2 text-[10px] text-tk-ink-3">
                 <kbd class="rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 font-mono">⌘</kbd>
                 <kbd class="rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 font-mono">↵</kbd>
                 <span>to send</span>
@@ -404,13 +404,13 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
                 <button
                   type="button"
                   data-action="save-recipe"
-                  class="hidden items-center gap-1.5 rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-ink-secondary hover:border-slate-600 hover:text-ink-primary disabled:cursor-not-allowed disabled:opacity-50"
+                  class="hidden items-center gap-1.5 rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-tk-ink-2 hover:border-slate-600 hover:text-tk-ink disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Save recipe
                 </button>
                 <button
                   type="submit"
-                  class="inline-flex items-center gap-1.5 rounded-md bg-glow-red px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-glow-red/90 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed"
+                  class="inline-flex items-center gap-1.5 rounded-md bg-tk-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-tk-accent/90 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed"
                 >
                   Send
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -429,16 +429,16 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         to /v1/recipes. */}
     <dialog
       data-component="SaveRecipeDialog"
-      class="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-0 text-ink-primary backdrop:bg-black/60"
+      class="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-0 text-tk-ink backdrop:bg-black/60"
     >
       <form method="dialog" data-recipe-form class="p-6">
         <h2 class="text-lg font-semibold tracking-tight">Save as recipe</h2>
-        <p class="mt-1 text-sm text-ink-muted">
+        <p class="mt-1 text-sm text-tk-ink-3">
           Save this session's executed intent sequence as a reusable recipe you can
           re-run later.
         </p>
 
-        <label class="mt-4 block text-sm font-medium text-ink-secondary" for="recipe-label">
+        <label class="mt-4 block text-sm font-medium text-tk-ink-2" for="recipe-label">
           Name
         </label>
         <input
@@ -448,11 +448,11 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
           required
           maxlength="120"
           placeholder="e.g. Gmail reply flow"
-          class="mt-1 block w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:border-glow-red/50 focus:outline-none focus:ring-1 focus:ring-glow-red/20"
+          class="mt-1 block w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:border-tk-accent/50 focus:outline-none focus:ring-1 focus:ring-tk-accent/20"
         />
 
-        <label class="mt-4 block text-sm font-medium text-ink-secondary" for="recipe-description">
-          Description <span class="text-ink-muted">(optional)</span>
+        <label class="mt-4 block text-sm font-medium text-tk-ink-2" for="recipe-description">
+          Description <span class="text-tk-ink-3">(optional)</span>
         </label>
         <textarea
           id="recipe-description"
@@ -460,7 +460,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
           rows="2"
           maxlength="2000"
           placeholder="What does this recipe do?"
-          class="mt-1 block w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:border-glow-red/50 focus:outline-none focus:ring-1 focus:ring-glow-red/20"
+          class="mt-1 block w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm focus:border-tk-accent/50 focus:outline-none focus:ring-1 focus:ring-tk-accent/20"
         ></textarea>
 
         <p data-recipe-status class="mt-3 hidden text-sm" role="status"></p>
@@ -469,14 +469,14 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
           <button
             type="button"
             data-action="recipe-cancel"
-            class="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-ink-secondary hover:border-slate-600 hover:text-ink-primary"
+            class="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-tk-ink-2 hover:border-slate-600 hover:text-tk-ink"
           >
             Cancel
           </button>
           <button
             type="submit"
             data-action="recipe-submit"
-            class="rounded-md bg-glow-red px-4 py-2 text-sm font-medium text-white hover:bg-glow-red/90 disabled:cursor-not-allowed disabled:opacity-50"
+            class="rounded-md bg-tk-accent px-4 py-2 text-sm font-medium text-white hover:bg-tk-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Save recipe
           </button>
@@ -840,7 +840,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       avatar.className =
         'shrink-0 flex h-8 w-8 items-center justify-center rounded-full text-xs font-mono ' +
         (role === 'agent'
-          ? 'bg-glow-red/15 text-glow-red ring-1 ring-glow-red/30'
+          ? 'bg-tk-accent/15 text-tk-accent ring-1 ring-tk-accent/30'
           : 'bg-slate-700 text-slate-200');
       avatar.textContent = role === 'agent' ? 'AI' : 'You';
       avatar.setAttribute('aria-hidden', 'true');
@@ -853,10 +853,10 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       const label = document.createElement('span');
       label.className =
         'text-xs font-medium ' +
-        (role === 'agent' ? 'text-glow-red' : 'text-ink-secondary');
+        (role === 'agent' ? 'text-tk-accent' : 'text-tk-ink-2');
       label.textContent = role === 'agent' ? 'Driftstack agent' : 'You';
       const time = document.createElement('time');
-      time.className = 'text-[10px] font-mono text-ink-muted';
+      time.className = 'text-[10px] font-mono text-tk-ink-3';
       time.dataset.turnAge = String(ts);
       time.dateTime = new Date(ts).toISOString();
       time.textContent = 'now';
@@ -871,8 +871,8 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       bubble.className =
         'group whitespace-pre-wrap break-words rounded-lg px-4 py-3 text-sm relative border ' +
         (role === 'agent'
-          ? 'bg-glow-red/5 border-glow-red/20 text-ink-primary'
-          : 'bg-slate-800/60 border-slate-700/60 text-ink-primary');
+          ? 'bg-tk-accent/5 border-tk-accent/20 text-tk-ink'
+          : 'bg-slate-800/60 border-slate-700/60 text-tk-ink');
       // 2026-05-21 — inline-code rendering for agent turns. Matches
       // single-backtick `code` spans and wraps them in <code> with
       // a subtle background. HTML-safe: we re-encode the body before
@@ -888,7 +888,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
       if (role === 'agent' && /`[^`]+`/.test(body)) {
         bubble.innerHTML = escHtml(body).replace(
           /`([^`]+)`/g,
-          '<code class="rounded bg-white/10 px-1 py-px font-mono text-[12px]">$1</code>',
+          '<code class="rounded bg-tk-hover px-1 py-px font-mono text-[12px]">$1</code>',
         );
       } else {
         bubble.textContent = body;
@@ -901,9 +901,9 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
         copyBtn.className =
-          'absolute top-1 right-1 hidden rounded bg-surface-base/60 px-1.5 py-0.5 ' +
-          'font-mono text-[10px] text-ink-muted opacity-0 transition group-hover:block ' +
-          'group-hover:opacity-100 hover:text-ink-primary';
+          'absolute top-1 right-1 hidden rounded bg-tk-bg/60 px-1.5 py-0.5 ' +
+          'font-mono text-[10px] text-tk-ink-3 opacity-0 transition group-hover:block ' +
+          'group-hover:opacity-100 hover:text-tk-ink';
         copyBtn.textContent = 'copy';
         copyBtn.addEventListener('click', async () => {
           if (!navigator.clipboard) return;
@@ -964,9 +964,9 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
         if (bub) {
           bub.innerHTML =
             '<span class="inline-flex items-center gap-1" aria-label="agent is thinking">' +
-            '<span class="inline-block h-2 w-2 rounded-full bg-glow-red animate-pulse"></span>' +
-            '<span class="inline-block h-2 w-2 rounded-full bg-glow-red animate-pulse" style="animation-delay:200ms"></span>' +
-            '<span class="inline-block h-2 w-2 rounded-full bg-glow-red animate-pulse" style="animation-delay:400ms"></span>' +
+            '<span class="inline-block h-2 w-2 rounded-full bg-tk-accent animate-pulse"></span>' +
+            '<span class="inline-block h-2 w-2 rounded-full bg-tk-accent animate-pulse" style="animation-delay:200ms"></span>' +
+            '<span class="inline-block h-2 w-2 rounded-full bg-tk-accent animate-pulse" style="animation-delay:400ms"></span>' +
             '</span>';
         }
       }
@@ -1047,7 +1047,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
                 li.className =
                   'flex items-start gap-2 rounded-md border border-white/5 ' +
                   (ok
-                    ? 'bg-emerald-500/5 text-ink-primary'
+                    ? 'bg-emerald-500/5 text-tk-ink'
                     : 'bg-rose-500/10 text-rose-200') +
                   ' px-2.5 py-1.5 text-xs';
                 const num = document.createElement('span');
@@ -1059,7 +1059,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
                 const body2 = document.createElement('div');
                 body2.className = 'min-w-0 flex-1';
                 const verb = document.createElement('p');
-                verb.className = 'font-mono text-[11px] uppercase tracking-wide text-ink-muted';
+                verb.className = 'font-mono text-[11px] uppercase tracking-wide text-tk-ink-3';
                 verb.textContent = String((idx + 1).toString() + '. ' + (it.verb ?? 'step'));
                 const summary = document.createElement('p');
                 summary.className = 'mt-0.5 break-words';
@@ -1107,7 +1107,7 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
           const tokTotal = inTok + outTok;
           if (cents !== null || tokTotal > 0) {
             const meta = document.createElement('p');
-            meta.className = 'mt-1 text-[10px] font-mono text-ink-muted';
+            meta.className = 'mt-1 text-[10px] font-mono text-tk-ink-3';
             const parts = [];
             if (cents !== null) parts.push('$' + (cents / 100).toFixed(4));
             if (tokTotal > 0) parts.push(tokTotal.toString() + ' tokens');
@@ -1297,9 +1297,9 @@ e.g. 'Open my Gmail and reply to messages from contact@example.com with a polite
 
       function setStatus(message, kind) {
         if (!statusEl) return;
-        statusEl.classList.remove('hidden', 'text-emerald-400', 'text-red-400', 'text-ink-muted');
+        statusEl.classList.remove('hidden', 'text-emerald-400', 'text-red-400', 'text-tk-ink-3');
         statusEl.classList.add(
-          kind === 'success' ? 'text-emerald-400' : kind === 'error' ? 'text-red-400' : 'text-ink-muted',
+          kind === 'success' ? 'text-emerald-400' : kind === 'error' ? 'text-red-400' : 'text-tk-ink-3',
         );
         statusEl.textContent = message;
       }

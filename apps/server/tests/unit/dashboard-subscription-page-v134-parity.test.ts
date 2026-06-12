@@ -76,11 +76,11 @@ describe('W758 dashboard /subscription page V-134 parity', () => {
     expect(p).toMatch(/\{entry\.from_tier === null && ': '\}/);
   });
 
-  it('CRITICAL 3-status invoice STATUS visual map pinned — paid/open/void. paid → bg-emerald (success), open → bg-glow-red (action needed), void → bg-surface-raised (gray-cancelled). Drift to identical styling would lose the visual cue.', () => {
+  it('CRITICAL 3-status invoice STATUS visual map pinned — paid/open/void. paid → bg-emerald (success), open → bg-tk-accent (action needed), void → bg-tk-surface (gray-cancelled). Drift to identical styling would lose the visual cue.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /invoice\.status === 'paid'\s*\n\s+\? 'bg-emerald-400\/10 text-emerald-300'\s*\n\s+: invoice\.status === 'open'\s*\n\s+\? 'bg-glow-red\/10 text-glow-red'\s*\n\s+: 'bg-surface-raised text-ink-secondary',/,
+      /invoice\.status === 'paid'\s*\n\s+\? 'bg-emerald-400\/10 text-emerald-300'\s*\n\s+: invoice\.status === 'open'\s*\n\s+\? 'bg-tk-accent\/10 text-tk-accent'\s*\n\s+: 'bg-tk-surface text-tk-ink-2',/,
     );
   });
 
@@ -104,7 +104,7 @@ describe('W758 dashboard /subscription page V-134 parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /<a href="\/billing" class="text-glow-red hover:underline">← Back to billing<\/a>/,
+      /<a href="\/billing" class="text-tk-accent hover:underline">← Back to billing<\/a>/,
     );
   });
 
@@ -112,7 +112,7 @@ describe('W758 dashboard /subscription page V-134 parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /For\s*\n\s+quick subscription state see <a href="\/billing" class="text-glow-red underline">\/billing<\/a>\./,
+      /For\s*\n\s+quick subscription state see <a href="\/billing" class="text-tk-accent underline">\/billing<\/a>\./,
     );
   });
 
@@ -138,7 +138,7 @@ describe('W758 dashboard /subscription page V-134 parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /<a href=\{invoice\.pdf_url\} class="text-sm text-glow-red hover:underline">\s*\n\s+Download PDF\s*\n\s+<\/a>/,
+      /<a href=\{invoice\.pdf_url\} class="text-sm text-tk-accent hover:underline">\s*\n\s+Download PDF\s*\n\s+<\/a>/,
     );
   });
 

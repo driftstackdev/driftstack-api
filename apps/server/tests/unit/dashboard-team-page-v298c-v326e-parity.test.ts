@@ -133,11 +133,11 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     );
   });
 
-  it('CRITICAL member-row admin-role badge color contrast pinned. admin → bg-blue-50/text-blue-700; member → bg-surface-raised/text-ink-secondary. Drift to identical styling would lose the visual role distinction.', () => {
+  it('CRITICAL member-row admin-role badge color contrast pinned. admin → bg-blue-50/text-blue-700; member → bg-tk-surface/text-tk-ink-2. Drift to identical styling would lose the visual role distinction.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /m\.role === 'admin' \? 'bg-blue-50 text-blue-700' : 'bg-surface-raised text-ink-secondary'/,
+      /m\.role === 'admin' \? 'bg-blue-50 text-blue-700' : 'bg-tk-surface text-tk-ink-2'/,
     );
   });
 
@@ -149,11 +149,11 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     );
   });
 
-  it('CRITICAL pending badge uses bg-glow-red/text-glow-red color contrast. The brand-color pending state is visually distinct from the gray empty state.', () => {
+  it('CRITICAL pending badge uses bg-tk-accent/text-tk-accent color contrast. The brand-color pending state is visually distinct from the gray empty state.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /'<span class="inline-flex shrink-0 rounded-full bg-glow-red\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-glow-red">pending<\/span>'/,
+      /'<span class="inline-flex shrink-0 rounded-full bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent">pending<\/span>'/,
     );
   });
 
@@ -167,10 +167,10 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /'<li class="px-6 py-4 text-sm text-ink-muted">Sign in to see team members\.<\/li>'/,
+      /'<li class="px-6 py-4 text-sm text-tk-ink-3">Sign in to see team members\.<\/li>'/,
     );
     expect(p).toMatch(
-      /'<li class="px-6 py-4 text-sm text-ink-muted">Sign in to see pending invites\.<\/li>'/,
+      /'<li class="px-6 py-4 text-sm text-tk-ink-3">Sign in to see pending invites\.<\/li>'/,
     );
   });
 
@@ -195,7 +195,7 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /<a href="https:\/\/docs\.driftstack\.dev\/api\/team" class="text-glow-red underline" target="_blank" rel="noopener noreferrer">docs\.driftstack\.dev\/api\/team<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.dev\/api\/team" class="text-tk-accent underline" target="_blank" rel="noopener noreferrer">docs\.driftstack\.dev\/api\/team<\/a>/,
     );
   });
 

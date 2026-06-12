@@ -253,7 +253,7 @@ describe('W755 dashboard /audit-log page V-216 + V-297 + V-354 + V-484 parity', 
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /'<li class="px-6 py-4 text-sm text-ink-muted">Sign in to view audit log\.<\/li>'/,
+      /'<li class="px-6 py-4 text-sm text-tk-ink-3">Sign in to view audit log\.<\/li>'/,
     );
   });
 

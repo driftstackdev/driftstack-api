@@ -18,22 +18,22 @@ const apiBaseUrl = resolveApiBaseUrl();
   <div class="relative overflow-hidden">
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-2xl px-6 py-16" data-page="first-session">
-    <p class="font-mono text-xs uppercase tracking-widest text-glow-red">First session</p>
-    <h1 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
+    <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">First session</p>
+    <h1 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">
       Create your first session.
     </h1>
-    <p class="mt-3 text-sm text-ink-secondary">
+    <p class="mt-3 text-sm text-tk-ink-2">
       A session is an iPhone Safari browser running in the cloud —
       every website it visits sees a genuine iPhone, not a bot.
       Give it a label so you can find it later.
     </p>
-    <p class="mt-2 text-sm text-ink-secondary">
+    <p class="mt-2 text-sm text-tk-ink-2">
       <strong>Archetype</strong> defines the iPhone model, iOS version,
       and Safari build your session runs as. You're starting with
       <strong>{LOCKED_ARCHETYPE_DISPLAY_LABEL}</strong> — our standard
       reference profile. Higher tiers unlock more archetypes.
     </p>
-    <p class="mt-2 text-xs text-ink-muted">
+    <p class="mt-2 text-xs text-tk-ink-3">
       We'll create your first <strong>API key</strong> in the background —
       a secret token your code uses to call the SDK. It's shown once on
       the next page; copy it somewhere safe (1Password, a git-ignored
@@ -55,14 +55,14 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <div
       data-banner
-      class="mt-6 hidden rounded-lg border border-glow-red/30 bg-glow-red/10 px-4 py-3 text-sm text-glow-red-soft"
+      class="mt-6 hidden rounded-lg border border-tk-accent/30 bg-tk-accent/10 px-4 py-3 text-sm text-tk-accent-soft"
       role="status"
     >
     </div>
 
     <form data-form="first-session" class="mt-8 space-y-4">
       <div>
-        <label class="block text-sm font-medium text-ink-secondary" for="session-label">Label</label>
+        <label class="block text-sm font-medium text-tk-ink-2" for="session-label">Label</label>
         <input
           id="session-label"
           name="label"
@@ -70,7 +70,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           required
           maxlength="120"
           placeholder="my-first-session"
-          class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
+          class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm"
         />
       </div>
       {/* 2026-05-24 — arrow icon on submit + busy state. */}
@@ -90,8 +90,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       </button>
     </form>
 
-    <p class="mt-8 text-xs text-ink-muted">
-      Skip this step? <a href="/" class="text-glow-red underline">Go to dashboard</a>.
+    <p class="mt-8 text-xs text-tk-ink-3">
+      Skip this step? <a href="/" class="text-tk-accent underline">Go to dashboard</a>.
     </p>
     </div>
   </div>

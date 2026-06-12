@@ -154,15 +154,15 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
 
   it('Ambient radial-glow background only renders when withSidebar={false} (auth + onboarding pages); the sidebar pages have plenty of UI chrome so the ambient glow would be visually noisy. Drift would either flood every dashboard page with glow OR leave onboarding pages bare', () => {
     expect(body).toMatch(
-      /\{!withSidebar && \(\s*\n?\s*<div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">\s*\n?\s*<div class="absolute inset-x-0 top-0 h-\[600px\] bg-glow-radial-red" \/>\s*\n?\s*<div class="absolute inset-x-0 bottom-0 h-\[400px\] bg-glow-radial-red-soft" \/>\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
+      /\{!withSidebar && \(\s*\n?\s*<div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">\s*\n?\s*<div class="absolute inset-x-0 top-0 h-\[600px\] bg-glow-radial-accent" \/>\s*\n?\s*<div class="absolute inset-x-0 bottom-0 h-\[400px\] bg-glow-radial-accent-soft" \/>\s*\n?\s*<\/div>\s*\n?\s*\)\}/,
     );
   });
 
-  it("active-link styling pinned: pathname matching → highlighted (bg-glow-red/10 + text-glow-red + shadow-inset-divider). 2026-05-21 — exact match for '/' (so Overview doesn't highlight on every nested route) + prefix match for the rest. font-medium applied on BOTH active + inactive (constant width prevents click-induced layout shift).", () => {
+  it("active-link styling pinned: pathname matching → highlighted (bg-tk-accent/10 + text-tk-accent + shadow-inset-divider). 2026-05-21 — exact match for '/' (so Overview doesn't highlight on every nested route) + prefix match for the rest. font-medium applied on BOTH active + inactive (constant width prevents click-induced layout shift).", () => {
     expect(body).toMatch(
       /item\.href === '\/'\s*\n?\s*\?\s*pathname === '\/'\s*\n?\s*:\s*pathname === item\.href \|\|\s*\n?\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
-    expect(body).toMatch(/'bg-glow-red\/10 text-glow-red shadow-inset-divider'/);
+    expect(body).toMatch(/'bg-tk-accent\/10 text-tk-accent shadow-inset-divider'/);
     expect(body).toMatch(/text-sm font-medium transition-colors/);
   });
 });

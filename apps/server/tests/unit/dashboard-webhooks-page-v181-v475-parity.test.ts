@@ -73,7 +73,7 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     // 2026-05-23 — h2 wrapped with icon (rotate-arrow); pin loosened
     // to label-presence + heading shape.
     expect(p).toMatch(/Signing secret rotated/);
-    expect(p).toMatch(/text-lg font-semibold text-glow-red-soft/);
+    expect(p).toMatch(/text-lg font-semibold text-tk-accent-soft/);
     expect(p).toMatch(/data-rotate-endpoint-id/);
     expect(p).toMatch(/data-rotate-secret/);
     expect(p).toMatch(/data-rotate-grace-expires/);

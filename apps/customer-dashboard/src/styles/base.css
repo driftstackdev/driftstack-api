@@ -2,17 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Dark-mode-first dashboard surface. Tokens shared with apps/marketing-
+/* Fleet two-axis dashboard surface (light+violet default, 2026-06-12 rework).
+   Tokens shared with apps/marketing-
    site/src/styles/base.css. Keep synchronised — customer experience
    reads as one product. */
 
 @layer base {
   :root {
-    color-scheme: dark;
+    /* Fleet rework: color-scheme follows the data-mode axis (token layer below). */
   }
 
   html {
-    @apply bg-surface-base text-ink-primary;
+    @apply bg-tk-bg text-tk-ink;
     font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
     font-feature-settings: 'cv11', 'ss01';
     -webkit-font-smoothing: antialiased;
@@ -45,7 +46,7 @@
   }
 
   ::selection {
-    @apply bg-oxblood-700 text-white;
+    @apply bg-tk-accent text-white;
   }
 }
 
@@ -53,11 +54,11 @@
   /* Primary CTA — oxblood base with a red glow ring + lift on hover. */
   .btn-primary {
     @apply relative inline-flex items-center justify-center rounded-md
-           bg-oxblood-700 px-5 py-2.5 text-sm font-medium text-white
-           shadow-glow-red transition-all duration-200
-           hover:bg-oxblood-600 hover:shadow-glow-red-lg hover:-translate-y-0.5
+           bg-tk-accent px-5 py-2.5 text-sm font-medium text-white
+           shadow-glow-accent transition-all duration-200
+           hover:bg-tk-accent-strong hover:shadow-glow-accent hover:-translate-y-0.5
            focus-visible:outline focus-visible:outline-2
-           focus-visible:outline-offset-2 focus-visible:outline-glow-red
+           focus-visible:outline-offset-2 focus-visible:outline-tk-accent
            active:translate-y-0
            disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0;
   }
@@ -65,78 +66,74 @@
   /* Secondary CTA — glass-on-dark with subtle border + soft hover. */
   .btn-secondary {
     @apply inline-flex items-center justify-center rounded-md
-           border border-white/10 bg-white/5 px-5 py-2.5 text-sm
-           font-medium text-ink-primary backdrop-blur-sm
+           border border-tk-border bg-tk-hover px-5 py-2.5 text-sm
+           font-medium text-tk-ink backdrop-blur-sm
            transition-all duration-200
-           hover:border-white/20 hover:bg-white/10
+           hover:border-tk-ink-3/40 hover:bg-tk-hover
            focus-visible:outline focus-visible:outline-2
-           focus-visible:outline-offset-2 focus-visible:outline-glow-red;
+           focus-visible:outline-offset-2 focus-visible:outline-tk-accent;
   }
 
   /* Nav link — muted by default, accent on hover. */
   .nav-link {
-    @apply text-sm text-ink-secondary transition-colors hover:text-glow-red;
+    @apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent;
   }
 
   /* Dashboard card — used on overview metrics + page sections. */
   .dashboard-card {
-    @apply rounded-xl border border-white/10 bg-surface-raised/60
+    @apply rounded-xl border border-tk-border bg-tk-surface/60
            backdrop-blur-sm p-6 shadow-inset-divider transition-all
-           duration-300 hover:border-glow-red/30 hover:bg-surface-raised/80;
+           duration-300 hover:border-tk-accent/30 hover:bg-tk-surface/80;
   }
 
   /* Form input — dark surface, clean focus state. */
   .form-input {
-    @apply w-full rounded-md bg-surface-inset px-3.5 py-2.5 text-sm
-           text-ink-primary placeholder:text-ink-muted
-           border border-white/10
+    @apply w-full rounded-md bg-tk-bg px-3.5 py-2.5 text-sm
+           text-tk-ink placeholder:text-tk-ink-3
+           border border-tk-border
            transition-all duration-200
-           hover:border-white/20
-           focus:border-glow-red focus:bg-surface-base focus:outline-none
-           focus:ring-2 focus:ring-glow-red/20
+           hover:border-tk-ink-3/40
+           focus:border-tk-accent focus:bg-tk-bg focus:outline-none
+           focus:ring-2 focus:ring-tk-accent/20
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   /* Form label */
   .form-label {
-    @apply block text-sm font-medium text-ink-primary mb-1.5;
+    @apply block text-sm font-medium text-tk-ink mb-1.5;
   }
 
   /* Form helper / error text */
   .form-helper {
-    @apply mt-1.5 text-xs text-ink-muted;
+    @apply mt-1.5 text-xs text-tk-ink-3;
   }
 
   /* Banner — used for inline notices on auth pages. */
   .banner-info {
-    @apply rounded-lg border border-white/10 bg-white/5 px-4 py-3
-           text-sm text-ink-secondary backdrop-blur-sm;
+    @apply rounded-lg border border-tk-border bg-tk-hover px-4 py-3
+           text-sm text-tk-ink-2 backdrop-blur-sm;
   }
   .banner-warn {
-    @apply rounded-lg border border-glow-red/30 bg-glow-red/10 px-4 py-3
-           text-sm text-glow-red-soft backdrop-blur-sm;
+    @apply rounded-lg border border-tk-accent/30 bg-tk-accent/10 px-4 py-3
+           text-sm text-tk-accent-soft backdrop-blur-sm;
   }
 
   /* Bracketed section label — mono + glow accent. */
   .section-label {
     @apply inline-flex items-center font-mono text-xs uppercase
-           tracking-[0.2em] text-glow-red;
+           tracking-[0.2em] text-tk-accent;
   }
   .section-label::before {
-    content: '[ ';
-    @apply text-ink-muted;
-  }
-  .section-label::after {
-    content: ' ]';
-    @apply text-ink-muted;
+    content: '// ';
+    @apply text-tk-ink-3;
   }
 
   /* Auth-card — the panel that wraps each auth form. Centered,
      glass-morphism, with a soft red glow above. */
   .auth-card {
-    @apply relative w-full rounded-xl border border-white/10
-           bg-surface-raised/70 backdrop-blur-md
-           shadow-glow-red px-7 py-8 sm:px-8 sm:py-10;
+    @apply relative w-full rounded-xl border border-tk-border
+           bg-tk-surface/70 backdrop-blur-md
+           shadow-glow-accent px-7 py-8 sm:px-8 sm:py-10;
   }
   .auth-card::before {
     content: '';
@@ -214,4 +211,88 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ── Fleet design-system token layer (2026-06-12 rework; contract:
+   docs/internal/2026-06-12-design-system-spec.md). Two axes on <html>:
+   data-mode (light|dark) × data-accent (violet|oxblood|teal). Same
+   blocks as marketing-site so the surfaces stay in lockstep. */
+[data-accent='violet'] {
+  --accent-rgb: 109 94 252;
+  --accent-2-rgb: 139 125 255;
+  --accent-strong-rgb: 88 71 224;
+  --accent: #6d5efc;
+  --accent-2: #8b7dff;
+  --accent-strong: #5847e0;
+  --accent-ink: #fff;
+  --accent-soft: rgba(109, 94, 252, 0.13);
+  --glow: rgba(109, 94, 252, 0.32);
+}
+[data-accent='oxblood'] {
+  --accent-rgb: 155 59 70;
+  --accent-2-rgb: 192 75 88;
+  --accent-strong-rgb: 114 47 55;
+  --accent: #9b3b46;
+  --accent-2: #c04b58;
+  --accent-strong: #722f37;
+  --accent-ink: #fff;
+  --accent-soft: rgba(155, 59, 70, 0.13);
+  --glow: rgba(155, 59, 70, 0.32);
+}
+[data-accent='teal'] {
+  --accent-rgb: 16 154 130;
+  --accent-2-rgb: 27 199 168;
+  --accent-strong-rgb: 12 125 105;
+  --accent: #109a82;
+  --accent-2: #1bc7a8;
+  --accent-strong: #0c7d69;
+  --accent-ink: #fff;
+  --accent-soft: rgba(16, 154, 130, 0.13);
+  --glow: rgba(16, 154, 130, 0.28);
+}
+[data-mode='light'] {
+  color-scheme: light;
+  --bg-rgb: 242 243 246;
+  --surface-rgb: 255 255 255;
+  --raised-rgb: 255 255 255;
+  --hover-rgb: 241 242 245;
+  --ink-rgb: 15 16 20;
+  --ink-2-rgb: 71 74 85;
+  --ink-3-rgb: 138 141 153;
+  --border-rgb: 228 230 236;
+  --ready-rgb: 12 154 93;
+  --busy-rgb: 201 138 18;
+  --err-rgb: 216 69 60;
+  --bg: #f2f3f6;
+  --surface: #fff;
+  --raised: #fff;
+  --hover: #f1f2f5;
+  --ink: #0f1014;
+  --ink-2: #474a55;
+  --ink-3: #8a8d99;
+  --border: #e4e6ec;
+  --code-bg: #16171c;
+}
+[data-mode='dark'] {
+  color-scheme: dark;
+  --bg-rgb: 6 6 8;
+  --surface-rgb: 14 14 18;
+  --raised-rgb: 21 21 27;
+  --hover-rgb: 34 35 44;
+  --ink-rgb: 245 245 247;
+  --ink-2-rgb: 176 176 187;
+  --ink-3-rgb: 115 115 127;
+  --border-rgb: 30 30 38;
+  --ready-rgb: 47 227 154;
+  --busy-rgb: 255 194 77;
+  --err-rgb: 255 107 97;
+  --bg: #060608;
+  --surface: #0e0e12;
+  --raised: #15151b;
+  --hover: #22232c;
+  --ink: #f5f5f7;
+  --ink-2: #b0b0bb;
+  --ink-3: #73737f;
+  --border: #1e1e26;
+  --code-bg: #0c0c11;
 }

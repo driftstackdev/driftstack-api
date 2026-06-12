@@ -70,23 +70,23 @@ const apiBaseUrl = resolveApiBaseUrl();
   <div class="mx-auto max-w-5xl px-6 py-10" data-page="profiles">
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
+      class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
       role="status"
     >
     </div>
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-ink-muted" data-field="tier-line">{MOCK_USAGE_SUMMARY.tier} tier</p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Profiles</h1>
-        <p class="mt-2 max-w-prose text-sm text-ink-muted">
+        <p class="text-sm text-tk-ink-3" data-field="tier-line">{MOCK_USAGE_SUMMARY.tier} tier</p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Profiles</h1>
+        <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
           Persistent identity slots that survive across sessions. Each profile carries its own
           cookies, localStorage, and last-used timestamp. Sessions can be created against a profile
           or anonymously.
         </p>
         {/* 2026-05-24 — device chip surfaces the archetype profiles run as. */}
-        <p class="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-surface-raised px-2.5 py-1 text-xs text-ink-secondary">
-          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+        <p class="mt-3 inline-flex items-center gap-1.5 rounded-full border border-tk-border bg-tk-surface px-2.5 py-1 text-xs text-tk-ink-2">
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
             <rect x="6" y="2" width="12" height="20" rx="2.5" />
             <circle cx="12" cy="18" r="0.75" fill="currentColor" />
           </svg>
@@ -99,9 +99,9 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
     </header>
 
-    <p class="mb-6 text-sm text-ink-muted" data-field="usage-line">
-      <strong class="font-medium text-ink-primary" data-field="count">{profileCount}</strong> of
-      <strong class="font-medium text-ink-primary" data-field="limit">{limitDisplay}</strong>
+    <p class="mb-6 text-sm text-tk-ink-3" data-field="usage-line">
+      <strong class="font-medium text-tk-ink" data-field="count">{profileCount}</strong> of
+      <strong class="font-medium text-tk-ink" data-field="limit">{limitDisplay}</strong>
       profile slots used.
       {atLimit && <span class="text-red-700"> · tier limit reached</span>}
     </p>
@@ -114,26 +114,26 @@ const apiBaseUrl = resolveApiBaseUrl();
     -->
     <div
       data-snapshot-form-wrap
-      class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6"
+      class="mb-8 hidden rounded-lg border border-tk-border bg-tk-surface p-6"
     >
-      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
             <circle cx="12" cy="13" r="4" />
           </svg>
         </span>
-        <span class="text-ink-primary">Capture snapshot of <span data-snapshot-source-name class="font-mono"></span></span>
+        <span class="text-tk-ink">Capture snapshot of <span data-snapshot-source-name class="font-mono"></span></span>
       </h2>
-      <p class="mt-2 text-sm text-ink-muted">
+      <p class="mt-2 text-sm text-tk-ink-3">
         Snapshots are immutable point-in-time copies. The original profile
         keeps evolving; the snapshot is frozen. Restore from
-        <a href="/snapshots" class="text-glow-red underline">/snapshots</a>
+        <a href="/snapshots" class="text-tk-accent underline">/snapshots</a>
         later.
       </p>
       <form data-snapshot-form class="mt-4 space-y-4">
         <div>
-          <label for="snapshot-label" class="block text-sm font-medium text-ink-secondary">
+          <label for="snapshot-label" class="block text-sm font-medium text-tk-ink-2">
             Snapshot label
           </label>
           <input
@@ -142,15 +142,15 @@ const apiBaseUrl = resolveApiBaseUrl();
             type="text"
             required
             placeholder='e.g. "before-migration", "post-login-state"'
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm"
           />
-          <p class="mt-1 text-xs text-ink-muted">
+          <p class="mt-1 text-xs text-tk-ink-3">
             Surface why you captured this. Useful when a profile has many
             snapshots and you're picking one to restore.
           </p>
         </div>
         <div>
-          <label for="snapshot-description" class="block text-sm font-medium text-ink-secondary">
+          <label for="snapshot-description" class="block text-sm font-medium text-tk-ink-2">
             Description (optional)
           </label>
           <input
@@ -158,14 +158,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             data-snapshot-description-input
             type="text"
             placeholder="What state was the profile in?"
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm"
           />
         </div>
         <div class="flex items-center gap-3 pt-2">
           <button type="submit" class="btn-primary" data-snapshot-submit>Capture snapshot</button>
           <button
             type="button"
-            class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base"
+            class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
             data-snapshot-cancel
           >
             Cancel
@@ -181,10 +181,10 @@ const apiBaseUrl = resolveApiBaseUrl();
     -->
     <div
       data-import-form-wrap
-      class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6"
+      class="mb-8 hidden rounded-lg border border-tk-border bg-tk-surface p-6"
     >
-      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="7 10 12 15 17 10" />
@@ -193,14 +193,14 @@ const apiBaseUrl = resolveApiBaseUrl();
         </span>
         Import profile from JSON
       </h2>
-      <p class="mt-2 text-sm text-ink-muted">
+      <p class="mt-2 text-sm text-tk-ink-3">
         Paste a v1 envelope (from another profile's Export action) or upload a
         <code class="font-mono text-xs">.json</code> file. Tier-cap + name-conflict
         rules match creating a fresh profile.
       </p>
       <form data-import-form class="mt-4 space-y-4">
         <div>
-          <label for="import-file" class="block text-sm font-medium text-ink-secondary">
+          <label for="import-file" class="block text-sm font-medium text-tk-ink-2">
             Upload envelope (.json)
           </label>
           <input
@@ -208,11 +208,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             data-import-file-input
             type="file"
             accept="application/json,.json"
-            class="mt-1 block text-sm text-ink-secondary file:mr-3 file:rounded-md file:border-0 file:bg-surface-raised file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-ink-secondary hover:file:bg-surface-elevated"
+            class="mt-1 block text-sm text-tk-ink-2 file:mr-3 file:rounded-md file:border-0 file:bg-tk-surface file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-tk-ink-2 hover:file:bg-tk-raised"
           />
         </div>
         <div>
-          <label for="import-text" class="block text-sm font-medium text-ink-secondary">
+          <label for="import-text" class="block text-sm font-medium text-tk-ink-2">
             Or paste envelope JSON
           </label>
           <textarea
@@ -220,11 +220,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             data-import-text-input
             rows="6"
             placeholder='{"version":1,"exported_at":"…","source_profile_id":"prof_…","source_account_id":"…","profile":{"name":"…","archetype":"…","description":null}}'
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 font-mono text-xs"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 font-mono text-xs"
           ></textarea>
         </div>
         <div>
-          <label for="import-name-override" class="block text-sm font-medium text-ink-secondary">
+          <label for="import-name-override" class="block text-sm font-medium text-tk-ink-2">
             Rename on import (optional)
           </label>
           <input
@@ -232,14 +232,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             data-import-name-override-input
             type="text"
             placeholder="leave blank to keep the envelope's name"
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm"
           />
         </div>
         <div class="flex items-center gap-3 pt-2">
           <button type="submit" class="btn-primary" data-import-submit>Import</button>
           <button
             type="button"
-            class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base"
+            class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
             data-import-cancel
           >
             Cancel
@@ -252,10 +252,10 @@ const apiBaseUrl = resolveApiBaseUrl();
     <!-- V-284 — Create form, hidden by default -->
     <div
       data-create-form-wrap
-      class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6"
+      class="mb-8 hidden rounded-lg border border-tk-border bg-tk-surface p-6"
     >
-      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="9" cy="7" r="4" />
             <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
@@ -269,9 +269,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             MATRIX, not one device; the customer-selectable catalogue derives
             from ARCHETYPE_REGISTRY (status launch|available) so more devices
             appear here automatically as their fingerprint atlases land. */}
-        <div class="rounded-md border border-white/10 bg-surface-base p-3" data-archetype-card>
+        <div class="rounded-md border border-tk-border bg-tk-bg p-3" data-archetype-card>
           <div class="flex items-center gap-3">
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <rect x="5" y="2" width="14" height="20" rx="2.5" />
                 <circle cx="12" cy="18" r="0.75" fill="currentColor" />
@@ -281,14 +281,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             <div class="min-w-0 flex-1">
               <label
                 for="profile-archetype"
-                class="font-mono text-xs uppercase tracking-widest text-ink-muted"
+                class="font-mono text-xs uppercase tracking-widest text-tk-ink-3"
                 >Device archetype</label
               >
               <select
                 id="profile-archetype"
                 name="archetype"
                 data-archetype-select
-                class="mt-1 w-full rounded-md border border-white/10 bg-surface-base px-3 py-2 text-sm text-ink-primary focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red"
+                class="mt-1 w-full rounded-md border border-tk-border bg-tk-bg px-3 py-2 text-sm text-tk-ink focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-glow-red"
               >
                 {
                   SELECTABLE_ARCHETYPES.map((a) => (
@@ -300,28 +300,28 @@ const apiBaseUrl = resolveApiBaseUrl();
               </select>
             </div>
           </div>
-          <p class="mt-2 text-xs text-ink-muted">
+          <p class="mt-2 text-xs text-tk-ink-3">
             The iPhone/iOS/Safari fingerprint sessions on this profile emulate.
             More devices roll out here as their fingerprint profiles land.
           </p>
         </div>
         <div>
-          <label for="profile-name" class="block text-sm font-medium text-ink-secondary">Name</label>
+          <label for="profile-name" class="block text-sm font-medium text-tk-ink-2">Name</label>
           <input
             id="profile-name"
             name="name"
             type="text"
             required
             placeholder="e.g. shopper-account-1, signup-test"
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm"
           />
-          <p class="mt-1 text-xs text-ink-muted">
+          <p class="mt-1 text-xs text-tk-ink-3">
             Unique within your account. Use a name that surfaces purpose ("shopper-acctA",
             "staging-smoke") for easier triage later.
           </p>
         </div>
         <div>
-          <label for="profile-description" class="block text-sm font-medium text-ink-secondary"
+          <label for="profile-description" class="block text-sm font-medium text-tk-ink-2"
             >Description (optional)</label
           >
           <input
@@ -329,7 +329,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             name="description"
             type="text"
             placeholder="Returning-visitor profile for the checkout flow"
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm"
           />
         </div>
         {/* 2026-05-24 — default proxy selection. Pulls from saved /v1/proxies;
@@ -337,30 +337,30 @@ const apiBaseUrl = resolveApiBaseUrl();
             will call a server-side reachability + UDP-ASSOCIATE check when
             the endpoint lands; for now opens the proxies page in a new tab. */}
         <div>
-          <label for="profile-proxy" class="block text-sm font-medium text-ink-secondary">
+          <label for="profile-proxy" class="block text-sm font-medium text-tk-ink-2">
             Default proxy (optional)
           </label>
           <div class="mt-1 flex flex-wrap items-stretch gap-2">
             <select
               id="profile-proxy"
               name="default_proxy_id"
-              class="flex-1 min-w-[14rem] rounded-md border border-white/10 bg-surface-raised px-3 py-2 text-sm"
+              class="flex-1 min-w-[14rem] rounded-md border border-tk-border bg-tk-surface px-3 py-2 text-sm"
               data-create-proxy-picker
             >
               <option value="">— none (attach per-session) —</option>
             </select>
             <button
               type="button"
-              class="rounded-md border border-white/10 bg-surface-raised px-3 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base disabled:opacity-50"
+              class="rounded-md border border-tk-border bg-tk-surface px-3 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-bg disabled:opacity-50"
               data-create-proxy-test
               disabled
             >
               Test proxy
             </button>
           </div>
-          <p class="mt-1 text-xs text-ink-muted" data-create-proxy-hint>
+          <p class="mt-1 text-xs text-tk-ink-3" data-create-proxy-hint>
             Saved proxies attach automatically when a session is created against this
-            profile. Manage saved configs from <a href="/proxies" class="text-glow-red underline">/proxies</a>.
+            profile. Manage saved configs from <a href="/proxies" class="text-tk-accent underline">/proxies</a>.
           </p>
           <p class="mt-2 hidden text-xs" data-create-proxy-result role="status"></p>
         </div>
@@ -368,7 +368,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           <button type="submit" class="btn-primary" data-create-submit>Create profile</button>
           <button
             type="button"
-            class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base"
+            class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
             data-create-cancel
           >
             Cancel
@@ -395,12 +395,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         data-profiles-search
         placeholder="Search profiles by name…  ( /  to focus)"
         aria-label="Search profiles by name"
-        class="w-full rounded-md border border-white/10 bg-surface-base px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red"
+        class="w-full rounded-md border border-tk-border bg-tk-bg px-3 py-2 text-sm text-tk-ink placeholder:text-tk-ink-3 focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-glow-red"
       />
     </div>
     <ul
       data-list
-      class="divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
+      class="divide-y divide-slate-200 rounded-lg border border-tk-border bg-tk-surface"
     >
       {[0, 1, 2].map(() => (
         <li
@@ -409,11 +409,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           aria-hidden="true"
         >
           <div class="min-w-0 flex-1 space-y-2">
-            <div class="h-4 w-40 animate-pulse rounded bg-white/10" />
-            <div class="h-3 w-60 animate-pulse rounded bg-white/5" />
-            <div class="h-3 w-32 animate-pulse rounded bg-white/5" />
+            <div class="h-4 w-40 animate-pulse rounded bg-tk-hover" />
+            <div class="h-3 w-60 animate-pulse rounded bg-tk-hover" />
+            <div class="h-3 w-32 animate-pulse rounded bg-tk-hover" />
           </div>
-          <div class="h-8 w-24 shrink-0 animate-pulse rounded bg-white/5" />
+          <div class="h-8 w-24 shrink-0 animate-pulse rounded bg-tk-hover" />
         </li>
       ))}
     </ul>
@@ -422,7 +422,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         data-empty "no profiles yet" state, which would be misleading). */}
     <p
       data-no-matches
-      class="mt-4 hidden rounded-lg border border-dashed border-white/10 bg-surface-base px-6 py-8 text-center text-sm text-ink-muted"
+      class="mt-4 hidden rounded-lg border border-dashed border-tk-border bg-tk-bg px-6 py-8 text-center text-sm text-tk-ink-3"
     >
       No profiles match your search.
     </p>
@@ -431,11 +431,11 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div
       data-empty
       class:list={[
-        'flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-white/10 bg-surface-base px-8 py-16 text-center',
+        'flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-tk-border bg-tk-bg px-8 py-16 text-center',
         profileCount === 0 ? '' : 'hidden',
       ]}
     >
-      <div class="flex h-12 w-12 items-center justify-center rounded-md bg-glow-red/10 text-glow-red">
+      <div class="flex h-12 w-12 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent">
         <svg
           width="24"
           height="24"
@@ -452,15 +452,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         </svg>
       </div>
       <div class="flex flex-col gap-1">
-        <h3 class="text-base font-medium tracking-tight text-ink-primary">No profiles yet</h3>
-        <p class="max-w-md text-sm text-ink-secondary">
+        <h3 class="text-base font-medium tracking-tight text-tk-ink">No profiles yet</h3>
+        <p class="max-w-md text-sm text-tk-ink-2">
           A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across
           sessions. Bind a session to a profile to keep login state, returning-visitor signals, and
           stealth fingerprints stable between runs.
         </p>
       </div>
       <button type="button" class="btn-primary" data-show-create>Create your first profile</button>
-      <p class="text-xs text-ink-muted">
+      <p class="text-xs text-tk-ink-3">
         Sessions without a profile start ephemeral — fresh state every run.
       </p>
     </div>
@@ -470,18 +470,18 @@ const apiBaseUrl = resolveApiBaseUrl();
         a bar showing your current spot in the ladder. The active
         tier is hydrated client-side from /v1/account/me; default
         until then is no highlight. */}
-    <section class="mt-12 rounded-xl border border-white/10 bg-surface-raised/40 p-6">
+    <section class="mt-12 rounded-xl border border-tk-border bg-tk-surface/40 p-6">
       <div class="flex items-center justify-between">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Profile limits</p>
-          <h2 class="mt-2 text-lg font-semibold tracking-tight text-ink-primary">Per-tier ceiling</h2>
-          <p class="mt-1 max-w-prose text-sm text-ink-muted">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Profile limits</p>
+          <h2 class="mt-2 text-lg font-semibold tracking-tight text-tk-ink">Per-tier ceiling</h2>
+          <p class="mt-1 max-w-prose text-sm text-tk-ink-3">
             Enforced server-side at session creation. Upgrade if you need more headroom.
           </p>
         </div>
         <a
           href="/select-tier"
-          class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-glow-red/40 bg-glow-red/10 px-3 py-1.5 text-sm font-medium text-glow-red hover:bg-glow-red/20"
+          class="hidden sm:inline-flex items-center gap-1.5 rounded-md border border-tk-accent/40 bg-tk-accent/10 px-3 py-1.5 text-sm font-medium text-tk-accent hover:bg-tk-accent/20"
         >
           Compare tiers →
         </a>
@@ -491,22 +491,22 @@ const apiBaseUrl = resolveApiBaseUrl();
           TIER_DISPLAY_ORDER.map((entry) => (
             <div
               data-tier-card={entry.id}
-              class="rounded-lg border border-white/10 bg-surface-base p-4 transition-colors"
+              class="rounded-lg border border-tk-border bg-tk-bg p-4 transition-colors"
             >
-              <p class="font-mono text-[10px] uppercase tracking-widest text-ink-muted">
+              <p class="font-mono text-[10px] uppercase tracking-widest text-tk-ink-3">
                 {entry.label}
               </p>
-              <p class="mt-2 text-2xl font-semibold text-ink-primary">
+              <p class="mt-2 text-2xl font-semibold text-tk-ink">
                 {fmtLimit(PROFILES_PER_TIER[entry.id])}
               </p>
-              <p class="text-xs text-ink-muted">profiles</p>
+              <p class="text-xs text-tk-ink-3">profiles</p>
             </div>
           ))
         }
       </div>
-      <p class="mt-4 text-xs text-ink-muted">
+      <p class="mt-4 text-xs text-tk-ink-3">
         Enterprise tier offers custom per-workload limits —{' '}
-        <a href="mailto:sales@driftstack.dev" class="text-glow-red hover:underline">
+        <a href="mailto:sales@driftstack.dev" class="text-tk-accent hover:underline">
           contact sales
         </a>.
       </p>
@@ -572,16 +572,16 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(((p.name || '') + ' ' + (p.description || '')).toLowerCase()) +
           '" class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
-          '<p class="text-base font-medium text-ink-primary">' +
+          '<p class="text-base font-medium text-tk-ink">' +
           escapeHtml(p.name) +
           '</p>' +
-          '<p class="mt-1 font-mono text-xs text-ink-muted">' +
+          '<p class="mt-1 font-mono text-xs text-tk-ink-3">' +
           escapeHtml(p.id) +
           '</p>' +
           (p.description
-            ? '<p class="mt-2 text-sm text-ink-secondary">' + escapeHtml(p.description) + '</p>'
+            ? '<p class="mt-2 text-sm text-tk-ink-2">' + escapeHtml(p.description) + '</p>'
             : '') +
-          '<p class="mt-2 text-xs text-ink-muted">Archetype: ' +
+          '<p class="mt-2 text-xs text-tk-ink-3">Archetype: ' +
           escapeHtml(archetypeLabel(p.archetype)) +
           ' · last used ' +
           escapeHtml(fmtIso(p.last_used_at)) +
@@ -598,17 +598,17 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(p.id) +
           '" data-launch-name="' +
           escapeHtml(p.name) +
-          '" class="text-sm font-medium text-glow-red hover:underline">Launch</button>' +
+          '" class="text-sm font-medium text-tk-accent hover:underline">Launch</button>' +
           '<button type="button" data-clone="' +
           escapeHtml(p.id) +
           '" data-clone-name="' +
           escapeHtml(p.name) +
-          '" class="text-sm text-glow-red hover:underline">Clone</button>' +
+          '" class="text-sm text-tk-accent hover:underline">Clone</button>' +
           '<button type="button" data-export="' +
           escapeHtml(p.id) +
           '" data-export-name="' +
           escapeHtml(p.name) +
-          '" class="text-sm text-glow-red hover:underline">Export</button>' +
+          '" class="text-sm text-tk-accent hover:underline">Export</button>' +
           // 2026-05-22 — V-666 transfer-to-account. Recipient pastes
           // their account_id from /settings; this profile moves to
           // them (delete from source on success).
@@ -616,12 +616,12 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(p.id) +
           '" data-transfer-name="' +
           escapeHtml(p.name) +
-          '" class="text-sm text-glow-red hover:underline">Transfer</button>' +
+          '" class="text-sm text-tk-accent hover:underline">Transfer</button>' +
           '<button type="button" data-snapshot="' +
           escapeHtml(p.id) +
           '" data-snapshot-name="' +
           escapeHtml(p.name) +
-          '" class="text-sm text-glow-red hover:underline">Snapshot</button>' +
+          '" class="text-sm text-tk-accent hover:underline">Snapshot</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(p.id) +
           '" data-delete-name="' +
@@ -669,12 +669,12 @@ const apiBaseUrl = resolveApiBaseUrl();
                   '[data-tier-card="' + me.tier + '"]',
                 );
                 if (card instanceof HTMLElement) {
-                  card.classList.remove('border-white/10', 'bg-surface-base');
+                  card.classList.remove('border-tk-border', 'bg-tk-bg');
                   card.classList.add(
-                    'border-glow-red/50',
-                    'bg-glow-red/5',
+                    'border-tk-accent/50',
+                    'bg-tk-accent/5',
                     'ring-1',
-                    'ring-glow-red/30',
+                    'ring-tk-accent/30',
                   );
                   const label = card.querySelector('p:first-child');
                   if (label) label.textContent += ' · current';
@@ -1100,7 +1100,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                     escapeHtml(sessionId) +
                     '. <a href="' +
                     escapeHtml(deepLink) +
-                    '" class="font-medium text-glow-red underline">Open in desktop client</a>.';
+                    '" class="font-medium text-tk-accent underline">Open in desktop client</a>.';
                   banner.classList.remove('hidden');
                 } else {
                   showBanner('Launched "' + name + '" → session ' + (sessionId || '(?)') + '.');
@@ -1191,7 +1191,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (items.length === 0) {
             if (proxyHint) {
               proxyHint.innerHTML =
-                'No saved proxies yet. <a href="/proxies" class="text-glow-red underline">Add a SOCKS5 / OpenVPN / WireGuard config →</a>';
+                'No saved proxies yet. <a href="/proxies" class="text-tk-accent underline">Add a SOCKS5 / OpenVPN / WireGuard config →</a>';
             }
             return;
           }
@@ -1220,7 +1220,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (!proxyPicker || proxyPicker.value === '' || !proxyResult) return;
           proxyTestBtn.disabled = true;
           proxyResult.classList.remove('hidden');
-          proxyResult.className = 'mt-2 text-xs text-ink-muted';
+          proxyResult.className = 'mt-2 text-xs text-tk-ink-3';
           proxyResult.textContent = 'Testing reachability from a Mac-fleet node…';
           // EG-API-1.7 — POST /v1/proxies/:id/test. Runs DNS + UDP-ASSOCIATE
           // + latency from a Mac-fleet node (authentic egress path). Pre-
@@ -1240,13 +1240,13 @@ const apiBaseUrl = resolveApiBaseUrl();
                 (typeof body.latency_ms === 'number' ? ' · ' + body.latency_ms + 'ms' : '');
             } else {
               const err = await res.json().catch(() => ({}));
-              proxyResult.className = 'mt-2 text-xs text-ink-muted';
+              proxyResult.className = 'mt-2 text-xs text-tk-ink-3';
               proxyResult.textContent =
                 err.detail ||
                 'Reachability testing runs from a Mac-fleet node and is not yet wired on this server.';
             }
           } catch (_e) {
-            proxyResult.className = 'mt-2 text-xs text-glow-red-soft';
+            proxyResult.className = 'mt-2 text-xs text-tk-accent-soft';
             proxyResult.textContent = 'Could not reach the test endpoint. Try again.';
           } finally {
             proxyTestBtn.disabled = false;

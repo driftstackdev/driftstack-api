@@ -82,11 +82,11 @@ describe('W374.C customer-dashboard /subscription page content parity', () => {
 
   it('back-link to /billing for at-a-glance view pinned', () => {
     expect(body).toMatch(
-      /<a href="\/billing" class="text-glow-red hover:underline">← Back to billing<\/a>/,
+      /<a href="\/billing" class="text-tk-accent hover:underline">← Back to billing<\/a>/,
     );
     expect(existsSync(BILLING_PAGE)).toBe(true);
     // Body also cross-links to /billing in the descriptor.
-    expect(body).toMatch(/<a href="\/billing" class="text-glow-red underline">\/billing<\/a>/);
+    expect(body).toMatch(/<a href="\/billing" class="text-tk-accent underline">\/billing<\/a>/);
   });
 
   it('3 plan-management CTAs pinned (Upgrade / Downgrade / Stripe portal)', () => {
@@ -99,8 +99,10 @@ describe('W374.C customer-dashboard /subscription page content parity', () => {
     expect(body).toMatch(
       /invoice\.status === 'paid'\s*\n?\s*\?\s*'bg-emerald-400\/10 text-emerald-300'/,
     );
-    expect(body).toMatch(/invoice\.status === 'open'\s*\n?\s*\?\s*'bg-glow-red\/10 text-glow-red'/);
-    expect(body).toMatch(/'bg-surface-raised text-ink-secondary'/);
+    expect(body).toMatch(
+      /invoice\.status === 'open'\s*\n?\s*\?\s*'bg-tk-accent\/10 text-tk-accent'/,
+    );
+    expect(body).toMatch(/'bg-tk-surface text-tk-ink-2'/);
   });
 
   it('invoice table columns: Date / Invoice / Amount / Status / (download)', () => {

@@ -118,8 +118,8 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
   it('CRITICAL Capture breakdown by-kind section pinned — Screenshots + DOM snapshots. The 2-row dl threads the same totals as the combined tile.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/<dt class="text-sm text-ink-muted">Screenshots<\/dt>/);
-    expect(p).toMatch(/<dt class="text-sm text-ink-muted">DOM snapshots<\/dt>/);
+    expect(p).toMatch(/<dt class="text-sm text-tk-ink-3">Screenshots<\/dt>/);
+    expect(p).toMatch(/<dt class="text-sm text-tk-ink-3">DOM snapshots<\/dt>/);
   });
 
   it('CRITICAL deterministic-mock-series framing pinned. The "Generated deterministically (no Math.random) so the rendered SVG is stable across page loads at scaffolding time — easier to spot real-data integration regressions later" wording explains WHY mock series uses sin() + seed.', () => {

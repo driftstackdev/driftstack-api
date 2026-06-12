@@ -59,9 +59,9 @@ describe('W344.B /billing STATUS_BADGE_CLASS ↔ SubscriptionStatusSchema parity
     expect(block![1]!).toMatch(/unpaid:\s*'[^']*red[^']*'/);
   });
 
-  it('trialing/incomplete use glow-red (transient/needs-action state, R2 dark migration)', () => {
-    expect(block![1]!).toMatch(/trialing:\s*'[^']*glow-red[^']*'/);
-    expect(block![1]!).toMatch(/incomplete:\s*'[^']*glow-red[^']*'/);
+  it('trialing/incomplete use tk-accent (transient/needs-action state, R2 dark migration)', () => {
+    expect(block![1]!).toMatch(/trialing:\s*'[^']*tk-accent[^']*'/);
+    expect(block![1]!).toMatch(/incomplete:\s*'[^']*tk-accent[^']*'/);
   });
 
   it("page falls back to 'no_subscription' when MOCK_SUBSCRIPTION is null", () => {

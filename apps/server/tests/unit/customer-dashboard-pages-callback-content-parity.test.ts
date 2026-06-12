@@ -51,7 +51,7 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
 
   it("Check-your-inbox copy pinned: 'We sent a confirmation link to <span data-merge-email…> to verify both accounts belong to you. Click the link in that email to finish linking your <span data-merge-provider…>IDP</span> account. The link expires in <span data-merge-window…>60 minutes</span>.' — pinned so the 60-minute-default expiry text + 'finish linking your IDP' copy contract stays documented", () => {
     expect(body).toMatch(
-      /We sent a confirmation link to <span data-merge-email class="font-mono text-glow-red-soft"><\/span>\s*\n?\s*to verify both accounts belong to you\. Click the link in that email to finish linking your\s*\n?\s*<span data-merge-provider class="font-mono">IDP<\/span> account\./,
+      /We sent a confirmation link to <span data-merge-email class="font-mono text-tk-accent-soft"><\/span>\s*\n?\s*to verify both accounts belong to you\. Click the link in that email to finish linking your\s*\n?\s*<span data-merge-provider class="font-mono">IDP<\/span> account\./,
     );
     expect(body).toMatch(
       /The link expires in <span data-merge-window class="font-mono">60 minutes<\/span>\./,

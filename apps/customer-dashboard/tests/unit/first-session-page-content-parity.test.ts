@@ -118,7 +118,7 @@ describe('W373.B customer-dashboard /first-session page content parity', () => {
 
   it('"Skip this step" escape hatch points at root /', () => {
     expect(body).toMatch(
-      /Skip this step\?\s*<a href="\/" class="text-glow-red underline">Go to dashboard<\/a>/,
+      /Skip this step\?\s*<a href="\/" class="text-tk-accent underline">Go to dashboard<\/a>/,
     );
   });
 

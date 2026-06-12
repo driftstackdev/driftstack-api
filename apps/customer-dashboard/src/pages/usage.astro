@@ -73,12 +73,12 @@ const SPARK_H = 48;
 <DashboardLayout title="Usage">
   <div class="mx-auto max-w-5xl px-6 py-10" data-page="usage">
     <header class="mb-10">
-      <p class="text-sm text-ink-muted" data-field="period">
+      <p class="text-sm text-tk-ink-3" data-field="period">
         {fmtIsoDay(MOCK_USAGE_SUMMARY.period_start)} → {fmtIsoDay(MOCK_USAGE_SUMMARY.period_end)} ·
         <span data-field="tier">{MOCK_USAGE_SUMMARY.tier}</span> tier
       </p>
-      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Usage</h1>
-      <p class="mt-2 max-w-prose text-sm text-ink-muted">
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Usage</h1>
+      <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
         Per-resource counts for the current billing period. None of these
         are billed individually — concurrent cap is the only meter. These
         numbers help you spot abnormal traffic early.
@@ -92,7 +92,7 @@ const SPARK_H = 48;
     -->
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
+      class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
       role="status"
     ></div>
 
@@ -100,19 +100,19 @@ const SPARK_H = 48;
     <section class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <div class="dashboard-card">
         <div class="flex items-center justify-between gap-2">
-          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Session minutes</p>
-          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Session minutes</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
             </svg>
           </span>
         </div>
-        <p class="mt-3 text-3xl font-semibold text-ink-primary" data-stat="session_minute">
+        <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="session_minute">
           {MOCK_USAGE_SUMMARY.totals.session_minute.toLocaleString('en-US')}
         </p>
         <svg
           viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
-          class="mt-3 h-10 w-full text-glow-red"
+          class="mt-3 h-10 w-full text-tk-accent"
           aria-hidden="true"
         >
           <path
@@ -126,19 +126,19 @@ const SPARK_H = 48;
       </div>
       <div class="dashboard-card">
         <div class="flex items-center justify-between gap-2">
-          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Navigates</p>
-          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Navigates</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="9 18 15 12 9 6" />
             </svg>
           </span>
         </div>
-        <p class="mt-3 text-3xl font-semibold text-ink-primary" data-stat="navigate">
+        <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="navigate">
           {MOCK_USAGE_SUMMARY.totals.navigate.toLocaleString('en-US')}
         </p>
         <svg
           viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
-          class="mt-3 h-10 w-full text-glow-red"
+          class="mt-3 h-10 w-full text-tk-accent"
           aria-hidden="true"
         >
           <path
@@ -152,19 +152,19 @@ const SPARK_H = 48;
       </div>
       <div class="dashboard-card">
         <div class="flex items-center justify-between gap-2">
-          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Interacts</p>
-          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Interacts</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M14 2a4 4 0 0 0-4 4v6.5a3.5 3.5 0 1 0 7 0V6" />
             </svg>
           </span>
         </div>
-        <p class="mt-3 text-3xl font-semibold text-ink-primary" data-stat="interact">
+        <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="interact">
           {MOCK_USAGE_SUMMARY.totals.interact.toLocaleString('en-US')}
         </p>
         <svg
           viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
-          class="mt-3 h-10 w-full text-glow-red"
+          class="mt-3 h-10 w-full text-tk-accent"
           aria-hidden="true"
         >
           <path
@@ -178,14 +178,14 @@ const SPARK_H = 48;
       </div>
       <div class="dashboard-card">
         <div class="flex items-center justify-between gap-2">
-          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Captures</p>
-          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Captures</p>
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" />
             </svg>
           </span>
         </div>
-        <p class="mt-3 text-3xl font-semibold text-ink-primary" data-stat="captures_total">
+        <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="captures_total">
           {(
             MOCK_USAGE_SUMMARY.totals.state_capture +
             MOCK_USAGE_SUMMARY.totals.screenshot_capture
@@ -193,7 +193,7 @@ const SPARK_H = 48;
         </p>
         <svg
           viewBox={`0 0 ${SPARK_W.toString()} ${SPARK_H.toString()}`}
-          class="mt-3 h-10 w-full text-glow-red"
+          class="mt-3 h-10 w-full text-tk-accent"
           aria-hidden="true"
         >
           <path
@@ -211,29 +211,29 @@ const SPARK_H = 48;
     <!-- Capture breakdown -->
     <section class="mt-10 dashboard-card">
       <div class="flex items-start gap-3">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
             <circle cx="12" cy="13" r="4" />
           </svg>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
             Capture breakdown
           </p>
-          <h2 class="mt-2 text-xl font-semibold tracking-tight text-ink-primary">Captures by kind</h2>
+          <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Captures by kind</h2>
         </div>
       </div>
       <dl class="mt-6 grid gap-6 md:grid-cols-2">
         <div class="flex justify-between border-b border-slate-100 pb-3">
-          <dt class="text-sm text-ink-muted">Screenshots</dt>
-          <dd class="font-mono text-sm text-ink-primary" data-stat="screenshot_capture">
+          <dt class="text-sm text-tk-ink-3">Screenshots</dt>
+          <dd class="font-mono text-sm text-tk-ink" data-stat="screenshot_capture">
             {MOCK_USAGE_SUMMARY.totals.screenshot_capture.toLocaleString('en-US')}
           </dd>
         </div>
         <div class="flex justify-between border-b border-slate-100 pb-3">
-          <dt class="text-sm text-ink-muted">DOM snapshots</dt>
-          <dd class="font-mono text-sm text-ink-primary" data-stat="state_capture">
+          <dt class="text-sm text-tk-ink-3">DOM snapshots</dt>
+          <dd class="font-mono text-sm text-tk-ink" data-stat="state_capture">
             {MOCK_USAGE_SUMMARY.totals.state_capture.toLocaleString('en-US')}
           </dd>
         </div>
@@ -247,23 +247,23 @@ const SPARK_H = 48;
         skeleton; the inline script populates rows on fetch. */}
     <section class="mt-10 dashboard-card" data-section="rate-limits">
       <div class="flex items-start gap-3">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4" />
             <circle cx="12" cy="12" r="3" />
           </svg>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Rate limits</p>
-          <h2 class="mt-2 text-xl font-semibold tracking-tight text-ink-primary">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Rate limits</p>
+          <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">
             Per-bucket caps for your account
           </h2>
-          <p class="mt-1 max-w-prose text-sm text-ink-muted">
+          <p class="mt-1 max-w-prose text-sm text-tk-ink-3">
             Anti-abuse token buckets — not the pricing meter. Staff-granted
             overrides show with their auto-revert time. Full semantics in the
             <a
               href="https://docs.driftstack.dev/reference/rate-limits/"
-              class="text-glow-red hover:underline">rate-limit reference</a
+              class="text-tk-accent hover:underline">rate-limit reference</a
             >.
           </p>
         </div>
@@ -271,7 +271,7 @@ const SPARK_H = 48;
       <div class="mt-6 overflow-x-auto">
         <table class="w-full text-left text-sm">
           <thead>
-            <tr class="border-b border-white/10 font-mono text-xs uppercase tracking-widest text-ink-muted">
+            <tr class="border-b border-tk-border font-mono text-xs uppercase tracking-widest text-tk-ink-3">
               <th scope="col" class="pb-2 pr-4">Bucket</th>
               <th scope="col" class="pb-2 pr-4">Capacity</th>
               <th scope="col" class="pb-2 pr-4">Refill / s</th>
@@ -280,7 +280,7 @@ const SPARK_H = 48;
           </thead>
           <tbody data-rate-limit-rows>
             <tr class="border-b border-white/5">
-              <td colspan="4" class="py-3 text-ink-muted" data-rate-limit-placeholder>
+              <td colspan="4" class="py-3 text-tk-ink-3" data-rate-limit-placeholder>
                 Sign in to see your live per-bucket caps.
               </td>
             </tr>
@@ -289,7 +289,7 @@ const SPARK_H = 48;
       </div>
     </section>
 
-    <p class="mt-8 text-xs text-ink-muted">
+    <p class="mt-8 text-xs text-tk-ink-3">
       None of these counters drive billing. Concurrent caps are the only meter
       per ADR-004. We surface counts so you can spot pipeline regressions —
       e.g. a sudden 10× spike in navigates may indicate a runaway script.
@@ -461,17 +461,17 @@ const SPARK_H = 48;
                   : 'tier default';
                 return (
                   '<tr class="border-b border-white/5">' +
-                  '<td class="py-2 pr-4 font-mono text-xs text-ink-primary">' +
+                  '<td class="py-2 pr-4 font-mono text-xs text-tk-ink">' +
                   escapeHtml(b.bucket_key) +
                   '</td>' +
-                  '<td class="py-2 pr-4 text-ink-primary">' +
+                  '<td class="py-2 pr-4 text-tk-ink">' +
                   escapeHtml(Number(b.capacity).toLocaleString('en-US')) +
                   '</td>' +
-                  '<td class="py-2 pr-4 text-ink-primary">' +
+                  '<td class="py-2 pr-4 text-tk-ink">' +
                   escapeHtml(String(b.refill_per_second)) +
                   '</td>' +
                   '<td class="py-2 ' +
-                  (override ? 'text-glow-red' : 'text-ink-muted') +
+                  (override ? 'text-tk-accent' : 'text-tk-ink-3') +
                   '">' +
                   src +
                   '</td>' +

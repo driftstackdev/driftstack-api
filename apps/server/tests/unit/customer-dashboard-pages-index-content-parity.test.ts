@@ -50,13 +50,13 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
 
   it("3-tile metric grid: 'Concurrent sessions' (active / cap) + 'Profiles' (count / cap) + 'API keys' (active count) — pinned so the at-a-glance dashboard metrics stay 3-tile (drift to dropping a tile would force customers to navigate to detail pages for the most-common questions: am I at concurrent cap? am I at profile cap?)", () => {
     expect(body).toMatch(
-      /<p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Concurrent sessions<\/p>/,
+      /<p class="text-xs font-mono uppercase tracking-widest text-tk-ink-3">Concurrent sessions<\/p>/,
     );
     expect(body).toMatch(
-      /<p class="text-xs font-mono uppercase tracking-widest text-ink-muted">Profiles<\/p>/,
+      /<p class="text-xs font-mono uppercase tracking-widest text-tk-ink-3">Profiles<\/p>/,
     );
     expect(body).toMatch(
-      /<p class="text-xs font-mono uppercase tracking-widest text-ink-muted">API keys<\/p>/,
+      /<p class="text-xs font-mono uppercase tracking-widest text-tk-ink-3">API keys<\/p>/,
     );
     expect(body).toMatch(/data-stat-concurrent>—<\/span>/);
     expect(body).toMatch(/data-stat-concurrent-cap>—<\/span>/);

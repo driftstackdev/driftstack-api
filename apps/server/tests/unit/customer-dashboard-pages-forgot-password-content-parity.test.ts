@@ -87,7 +87,7 @@ describe('W491.C apps/customer-dashboard/src/pages/forgot-password.astro content
   it("Page chrome: withSidebar={false} layout + 'Remembered it? Sign in.' fallback link to /login — pinned so the no-sidebar auth-page convention stays consistent + the sign-in escape hatch survives for customers who realize they remember their password mid-flow", () => {
     expect(body).toMatch(/<DashboardLayout title="Forgot password" withSidebar=\{false\}>/);
     expect(body).toMatch(
-      /Remembered it\? <a\s*\n?\s*href="\/login"\s*\n?\s*class="text-glow-red[^"]*"\s*\n?\s*>\s*Sign in\s*<\/a\s*\n?\s*>/,
+      /Remembered it\? <a\s*\n?\s*href="\/login"\s*\n?\s*class="text-tk-accent[^"]*"\s*\n?\s*>\s*Sign in\s*<\/a\s*\n?\s*>/,
     );
   });
 

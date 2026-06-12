@@ -21,10 +21,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       data-page="signup"
     >
     <p class="section-label">Create account</p>
-    <h1 class="mt-5 text-4xl font-semibold tracking-tight text-ink-primary" style="letter-spacing: -0.02em;">
+    <h1 class="mt-5 text-4xl font-semibold tracking-tight text-tk-ink" style="letter-spacing: -0.02em;">
       Sign up
     </h1>
-    <p class="mt-3 text-sm text-ink-secondary">
+    <p class="mt-3 text-sm text-tk-ink-2">
       Create your Driftstack account. After signup we'll email you a verification code; one signup
       per email.
     </p>
@@ -75,10 +75,10 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       <!-- F-7 — divider between password + IDP signup paths. Same
            shape as /login so the surfaces feel uniform. -->
-      <div class="mt-6 flex items-center gap-3 text-xs text-ink-muted">
-        <span class="h-px flex-1 bg-white/10"></span>
+      <div class="mt-6 flex items-center gap-3 text-xs text-tk-ink-3">
+        <span class="h-px flex-1 bg-tk-hover"></span>
         <span>or</span>
-        <span class="h-px flex-1 bg-white/10"></span>
+        <span class="h-px flex-1 bg-tk-hover"></span>
       </div>
 
       <!-- V-667.C — sign-up-with-IDP. Same /v1/auth/oauth-client/start
@@ -143,11 +143,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         </button>
       </div>
 
-      <p class="mt-6 text-xs text-ink-muted">
+      <p class="mt-6 text-xs text-tk-ink-3">
         Already have an account? <a
           data-login-link
           href="/login"
-          class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft">Sign in</a
+          class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft">Sign in</a
         >.
       </p>
     </div>

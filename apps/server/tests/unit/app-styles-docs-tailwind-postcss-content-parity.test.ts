@@ -40,32 +40,33 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/admin-panel/src/styles/base.css'))).toBe(true);
   });
 
-  it('customer-dashboard src/styles/base.css (R2 dark refactor): dark color-scheme + surface-base bg + glass btn-primary with shadow-glow-red + form-input/form-label/banner-warn/auth-card + section-label [BRACKETED] mono + dashboard-card glass — tokens-shared-with-marketing-site framing pinned', () => {
+  it('customer-dashboard src/styles/base.css (Fleet rework): mode-axis color-scheme + tk token bg + btn-primary on accent tokens + form-input/form-label/banner-warn/auth-card + section-label mono + dashboard-card glass — tokens-shared-with-marketing-site framing pinned', () => {
     const body = read('apps/customer-dashboard/src/styles/base.css');
     expect(body).toMatch(/^@tailwind base;$/m);
     expect(body).toMatch(/^@tailwind components;$/m);
     expect(body).toMatch(/^@tailwind utilities;$/m);
-    expect(body).toMatch(/Dark-mode-first dashboard surface\./);
+    expect(body).toMatch(
+      /Fleet two-axis dashboard surface \(light\+violet default, 2026-06-12 rework\)\./,
+    );
     expect(body).toMatch(/Tokens shared with apps\/marketing-/);
-    expect(body).toMatch(/color-scheme: dark;/);
-    expect(body).toMatch(/@apply bg-surface-base text-ink-primary;/);
+    expect(body).toMatch(/color-scheme: light;/);
+    expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*color-scheme: dark;/);
+    expect(body).toMatch(/@apply bg-tk-bg text-tk-ink;/);
     expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
     expect(body).toMatch(/font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;/);
-    expect(body).toMatch(/@apply bg-oxblood-700 text-white;/);
+    expect(body).toMatch(/@apply bg-tk-accent text-white;/);
     expect(body).toMatch(/\.btn-primary \{/);
-    expect(body).toMatch(/bg-oxblood-700/);
-    expect(body).toMatch(/shadow-glow-red/);
-    expect(body).toMatch(/hover:bg-oxblood-600/);
+    expect(body).toMatch(/bg-tk-accent/);
+    expect(body).toMatch(/shadow-glow-accent/);
+    expect(body).toMatch(/hover:bg-tk-accent-strong/);
     expect(body).toMatch(/hover:-translate-y-0\.5/);
     expect(body).toMatch(/\.btn-secondary \{/);
-    expect(body).toMatch(/border border-white\/10/);
+    expect(body).toMatch(/border border-tk-border/);
     expect(body).toMatch(/backdrop-blur-sm/);
     expect(body).toMatch(/\.nav-link \{/);
-    expect(body).toMatch(
-      /@apply text-sm text-ink-secondary transition-colors hover:text-glow-red;/,
-    );
+    expect(body).toMatch(/@apply text-sm text-tk-ink-2 transition-colors hover:text-tk-accent;/);
     expect(body).toMatch(/\.dashboard-card \{/);
-    expect(body).toMatch(/rounded-xl border border-white\/10/);
+    expect(body).toMatch(/rounded-xl border border-tk-border/);
     expect(body).toMatch(/\.form-input \{/);
     expect(body).toMatch(/\.form-label \{/);
     expect(body).toMatch(/\.form-helper \{/);
@@ -74,10 +75,10 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(body).toMatch(/\.section-label \{/);
     expect(body).toMatch(/font-mono text-xs uppercase/);
     expect(body).toMatch(/\.section-label::before \{/);
-    expect(body).toMatch(/content: '\[ ';/);
+    expect(body).toMatch(/content: '\/\/ ';/);
     expect(body).toMatch(/\.auth-card \{/);
-    expect(body).toMatch(/bg-surface-raised\/70 backdrop-blur-md/);
-    expect(body).toMatch(/shadow-glow-red/);
+    expect(body).toMatch(/bg-tk-surface\/70 backdrop-blur-md/);
+    expect(body).toMatch(/shadow-glow-accent/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/src/styles/base.css'))).toBe(
       true,
     );

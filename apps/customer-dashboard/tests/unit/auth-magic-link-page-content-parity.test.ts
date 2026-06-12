@@ -100,7 +100,7 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
 
   it('"Signing you in…" intro copy pinned (status surface during auto-submit)', () => {
     expect(body).toMatch(
-      /<h1 class="[^"]*text-4xl[^"]*text-ink-primary[^"]*"[^>]*>\s*Signing you in…\s*<\/h1>/,
+      /<h1 class="[^"]*text-4xl[^"]*text-tk-ink[^"]*"[^>]*>\s*Signing you in…\s*<\/h1>/,
     );
     expect(body).toMatch(/intro\.textContent = 'Signing you in…'/);
   });

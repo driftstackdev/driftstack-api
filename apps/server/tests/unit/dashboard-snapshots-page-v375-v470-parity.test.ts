@@ -162,7 +162,7 @@ describe('W756 dashboard /snapshots page V-375 + V-470 parity', () => {
   it("CRITICAL empty-state framing pinned — 'No snapshots yet' headline + /profiles link. 2026-05-23 — restructured with icon + structured headline/body; pin loosened to assert anchor commitments without HTML coupling.", () => {
     const p = read(PAGE);
     expect(p).toMatch(/No snapshots yet/);
-    expect(p).toMatch(/<a href="\/profiles" class="text-glow-red underline">\/profiles<\/a>/);
+    expect(p).toMatch(/<a href="\/profiles" class="text-tk-accent underline">\/profiles<\/a>/);
   });
 
   it('CRITICAL refresh() guards on no-token — `if (!token) return;`. Drift to firing without a token would let unauthed customers see a generic 401 error banner instead of the empty-state.', () => {

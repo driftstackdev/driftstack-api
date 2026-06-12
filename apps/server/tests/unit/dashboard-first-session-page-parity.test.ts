@@ -138,7 +138,7 @@ describe('W741 dashboard first-session V-184a + V-501 parity', () => {
   it("CRITICAL Skip-this-step escape pinned. The 'Skip this step? Go to dashboard' link lets impatient customers escape; drift to removing would force-funnel customers through session-create.", () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /Skip this step\? <a href="\/" class="text-glow-red underline">Go to dashboard<\/a>/,
+      /Skip this step\? <a href="\/" class="text-tk-accent underline">Go to dashboard<\/a>/,
     );
   });
 

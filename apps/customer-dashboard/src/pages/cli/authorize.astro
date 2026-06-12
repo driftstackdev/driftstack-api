@@ -27,64 +27,64 @@ const apiBaseUrl = resolveApiBaseUrl();
 <DashboardLayout title="Authorize desktop client" withSidebar={false}>
   <div class="mx-auto max-w-md px-6 py-16" data-page="cli-authorize">
     <header class="text-center">
-      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Desktop client</p>
-      <h1 class="mt-2 text-2xl font-semibold tracking-tight text-ink-primary">
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Desktop client</p>
+      <h1 class="mt-2 text-2xl font-semibold tracking-tight text-tk-ink">
         Authorize this device?
       </h1>
     </header>
 
     <div
       data-state="loading"
-      class="mt-8 flex justify-center py-8 text-sm text-ink-muted"
+      class="mt-8 flex justify-center py-8 text-sm text-tk-ink-3"
     >
       Checking authorization request…
     </div>
 
     <div data-state="missing" class="mt-8 hidden">
-      <div class="rounded-lg border border-glow-red/30 bg-glow-red/10 px-4 py-3 text-sm text-glow-red-soft">
+      <div class="rounded-lg border border-tk-accent/30 bg-tk-accent/10 px-4 py-3 text-sm text-tk-accent-soft">
         This page expects an authorization code in the URL. Open it from the Driftstack
         desktop app's "Sign in with browser" button.
       </div>
-      <a href="/" class="mt-6 block text-center text-sm text-glow-red underline">
+      <a href="/" class="mt-6 block text-center text-sm text-tk-accent underline">
         Return to dashboard
       </a>
     </div>
 
     <div data-state="needs-signin" class="mt-8 hidden">
-      <p class="text-sm text-ink-secondary">
+      <p class="text-sm text-tk-ink-2">
         Sign in to your Driftstack account to authorize this desktop client.
       </p>
       <div class="mt-6 grid grid-cols-2 gap-3">
         <a
           data-signup-link
           href="/signup"
-          class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-center text-sm font-medium text-ink-secondary hover:bg-surface-base"
+          class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-center text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
           >Create account</a
         >
         <a data-signin-link href="/login" class="btn-primary text-center">Sign in</a>
       </div>
-      <p class="mt-3 text-xs text-ink-muted text-center">
+      <p class="mt-3 text-xs text-tk-ink-3 text-center">
         You'll be brought back to this page automatically.
       </p>
     </div>
 
     <div data-state="confirm" class="mt-8 hidden">
-      <p class="text-sm text-ink-secondary">
+      <p class="text-sm text-tk-ink-2">
         The Driftstack desktop client on this device is requesting an API key bound to
         your account. The key gives the desktop app the same access as your web session
-        and remains active until you revoke it from <a href="/api-keys" class="text-glow-red underline">API keys</a>.
+        and remains active until you revoke it from <a href="/api-keys" class="text-tk-accent underline">API keys</a>.
       </p>
-      <div class="mt-6 rounded-md border border-white/10 bg-surface-base px-4 py-3">
-        <div class="flex items-center justify-between gap-4 text-xs text-ink-muted">
+      <div class="mt-6 rounded-md border border-tk-border bg-tk-bg px-4 py-3">
+        <div class="flex items-center justify-between gap-4 text-xs text-tk-ink-3">
           <span>Authorization code</span>
-          <span class="font-mono text-ink-secondary" data-code-preview></span>
+          <span class="font-mono text-tk-ink-2" data-code-preview></span>
         </div>
       </div>
       <div class="mt-6 grid grid-cols-2 gap-3">
         <button
           type="button"
           data-cancel
-          class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base"
+          class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
         >
           Cancel
         </button>
@@ -92,7 +92,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           Authorize
         </button>
       </div>
-      <p class="mt-4 text-xs text-ink-muted">
+      <p class="mt-4 text-xs text-tk-ink-3">
         Authorizing will mint a new API key named "Desktop client" with the same scope
         as your dashboard session.
       </p>
@@ -105,11 +105,11 @@ const apiBaseUrl = resolveApiBaseUrl();
           Returning you to the Driftstack desktop app…
         </p>
       </div>
-      <p class="mt-4 text-center text-xs text-ink-muted" data-fallback-hint>
+      <p class="mt-4 text-center text-xs text-tk-ink-3" data-fallback-hint>
         The desktop app should reopen automatically. If it doesn't, switch back to it
         manually — it will pick up the credentials on the next poll.
       </p>
-      <a href="/api-keys" class="mt-6 block text-center text-sm text-glow-red underline">
+      <a href="/api-keys" class="mt-6 block text-center text-sm text-tk-accent underline">
         View your API keys
       </a>
     </div>
@@ -142,7 +142,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <button type="button" data-legal-accept-all class="btn-primary">
           Accept all and authorize
         </button>
-        <span data-legal-status class="text-xs text-ink-muted"></span>
+        <span data-legal-status class="text-xs text-tk-ink-3"></span>
       </div>
     </div>
   </div>

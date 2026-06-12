@@ -71,7 +71,7 @@ describe('W493.B apps/customer-dashboard/src/pages/subscription.astro content pa
 
   it("Invoice-status 3-tone: paid → emerald-50 / open → amber-50 / void → slate-100 (nested ternary, paid first since it's the common case) — pinned so the visual urgency of unpaid (open) invoices stays distinct from paid + voided states (drift to dropping void would render as no-style when Stripe marks invoices void)", () => {
     expect(body).toMatch(
-      /invoice\.status === 'paid'\s*\n?\s*\? 'bg-emerald-400\/10 text-emerald-300'\s*\n?\s*: invoice\.status === 'open'\s*\n?\s*\? 'bg-glow-red\/10 text-glow-red'\s*\n?\s*: 'bg-surface-raised text-ink-secondary',/,
+      /invoice\.status === 'paid'\s*\n?\s*\? 'bg-emerald-400\/10 text-emerald-300'\s*\n?\s*: invoice\.status === 'open'\s*\n?\s*\? 'bg-tk-accent\/10 text-tk-accent'\s*\n?\s*: 'bg-tk-surface text-tk-ink-2',/,
     );
   });
 

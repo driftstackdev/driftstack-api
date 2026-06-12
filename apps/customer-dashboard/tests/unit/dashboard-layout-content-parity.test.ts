@@ -100,7 +100,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/`ds_act_as_account` for the\s*\n?\s*\/\/\s*optional team-owner override/);
   });
 
-  it('R15 brand mark (/driftstack-mark.svg <img>) appears in both withSidebar=true sidebar + withSidebar=false header branches — replaces the prior bg-gradient-accent + shadow-glow-red D chip with the real iPhone-D SVG brand asset', () => {
+  it('R15 brand mark (/driftstack-mark.svg <img>) appears in both withSidebar=true sidebar + withSidebar=false header branches — replaces the prior bg-gradient-accent + shadow-glow-accent D chip with the real iPhone-D SVG brand asset', () => {
     const markMatches = body.match(/src="\/driftstack-mark\.svg(\?v=\d+)?"/g);
     expect(markMatches).not.toBeNull();
     expect(markMatches!.length).toBeGreaterThanOrEqual(2);
@@ -115,7 +115,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
   it('V-331 "Acting as" picker: hidden by default + label + select element', () => {
     expect(body).toMatch(/V-331 — "Acting as" picker/);
     expect(body).toMatch(/data-act-as-picker-wrap/);
-    expect(body).toMatch(/class="hidden border-b border-white\/10 px-4 py-3"/);
+    expect(body).toMatch(/class="hidden border-b border-tk-border px-4 py-3"/);
     expect(body).toMatch(/<label\s*\n?\s*for="act-as-picker"/);
     expect(body).toMatch(/Acting as\s*\n?\s*<\/label>/);
     expect(body).toMatch(/<select\s*\n?\s*id="act-as-picker"\s*\n?\s*data-act-as-picker/);
@@ -163,19 +163,19 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
       /W211 — these pages live on the marketing-site at\s*\n?\s*[\s\S]*?driftstack\.dev/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/privacy" class="hover:text-glow-red">Privacy<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/privacy" class="hover:text-tk-accent">Privacy<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/terms" class="hover:text-glow-red">Terms<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/terms" class="hover:text-tk-accent">Terms<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/dpa" class="hover:text-glow-red">DPA<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/dpa" class="hover:text-tk-accent">DPA<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/aup" class="hover:text-glow-red">AUP<\/a>/,
+      /<a href="https:\/\/driftstack\.dev\/legal\/aup" class="hover:text-tk-accent">AUP<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/trust\/sub-processors" class="hover:text-glow-red"\s*\n?\s*>Sub-processors<\/a\s*>/,
+      /<a href="https:\/\/driftstack\.dev\/trust\/sub-processors" class="hover:text-tk-accent"\s*\n?\s*>Sub-processors<\/a\s*>/,
     );
   });
 
@@ -221,7 +221,7 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(
       /item\.href === '\/'\s*\n?\s*\?\s*pathname === '\/'\s*\n?\s*:\s*pathname === item\.href \|\|\s*\n?\s*pathname\.startsWith\(item\.href \+ '\/'\)/,
     );
-    expect(body).toMatch(/'bg-glow-red\/10 text-glow-red shadow-inset-divider'/);
+    expect(body).toMatch(/'bg-tk-accent\/10 text-tk-accent shadow-inset-divider'/);
     // font-medium is now applied unconditionally on the <a> base class.
     expect(body).toMatch(/text-sm font-medium transition-colors/);
   });

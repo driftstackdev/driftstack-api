@@ -72,13 +72,13 @@ describe('W497.A apps/customer-dashboard/src/pages/profiles.astro content parity
 
   it('4-button row per profile pinned. Re-enabled by slice 219 after verifying Clone/Export/Snapshot/Delete data-attrs all exist at profiles.astro:415-434', () => {
     expect(body).toMatch(
-      /data-clone-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-glow-red hover:underline">Clone<\/button>'/,
+      /data-clone-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-tk-accent hover:underline">Clone<\/button>'/,
     );
     expect(body).toMatch(
-      /data-export-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-glow-red hover:underline">Export<\/button>'/,
+      /data-export-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-tk-accent hover:underline">Export<\/button>'/,
     );
     expect(body).toMatch(
-      /data-snapshot-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-glow-red hover:underline">Snapshot<\/button>'/,
+      /data-snapshot-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-tk-accent hover:underline">Snapshot<\/button>'/,
     );
     expect(body).toMatch(
       /data-delete-name="' \+\s*\n?\s*escapeHtml\(p\.name\) \+\s*\n?\s*'" class="text-sm text-rose-700 hover:underline">Delete<\/button>'/,

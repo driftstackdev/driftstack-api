@@ -33,7 +33,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
 
   it('Start-free card framing pinned: $0 · no card + already-on-free-plan + create-first-session CTA', () => {
     expect(body).toMatch(
-      /<span class="font-mono text-sm text-glow-red-soft">\$0 · no card<\/span>/,
+      /<span class="font-mono text-sm text-tk-accent-soft">\$0 · no card<\/span>/,
     );
     expect(body).toMatch(
       /Your account is already on the free plan: 1 profile, 1 concurrent\s*\n?\s*session of up to 20 minutes\. No subscription, no expiry/,
@@ -45,7 +45,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
 
   it("Monthly-tiers framing (R6 plain language): '$79–$1,499 / mo' + Personal for hand-driven sessions / API Scale", () => {
     expect(body).toMatch(
-      /<span class="font-mono text-sm text-ink-muted">\$79–\$1,499 \/ mo<\/span>/,
+      /<span class="font-mono text-sm text-tk-ink-3">\$79–\$1,499 \/ mo<\/span>/,
     );
     expect(body).toMatch(
       /Upgrade to a paid plan for more concurrency, more profiles, and API\s*\n?\s*access — Personal for hand-\s*\n?\s*driven sessions, all the way up to API Scale for high-volume\s*\n?\s*automation\. Cancel anytime\./,
@@ -76,7 +76,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
       /We'll create your first API key automatically\. You can revoke\s*\n?\s*or rotate it any time on the API keys page\./,
     );
     // The numbered-circle visual treatment: glow-red bordered round badges 1/2/3.
-    expect(body).toMatch(/rounded-full border border-glow-red\/40 bg-glow-red\/10/);
+    expect(body).toMatch(/rounded-full border border-tk-accent\/40 bg-tk-accent\/10/);
   });
 
   it("Defensive redirect: localStorage.getItem('ds_web_session_token') === null → window.location.replace('/signup')", () => {
@@ -88,7 +88,7 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
   it("Skip-to-dashboard escape: 'Already know what you want? Skip to dashboard' link to '/'", () => {
     expect(body).toMatch(/Already know what you want\?/);
     expect(body).toMatch(
-      /<a\s*\n?\s*href="\/"\s*\n?\s*class="text-glow-red[^"]*"\s*\n?\s*>\s*Skip to dashboard\s*<\/a>/,
+      /<a\s*\n?\s*href="\/"\s*\n?\s*class="text-tk-accent[^"]*"\s*\n?\s*>\s*Skip to dashboard\s*<\/a>/,
     );
   });
 

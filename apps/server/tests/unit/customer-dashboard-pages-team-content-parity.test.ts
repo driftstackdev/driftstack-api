@@ -71,15 +71,15 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
     );
   });
 
-  it('Role badge styling: admin → bg-blue-50 text-blue-700 / member → bg-surface-raised text-ink-secondary — pinned so admin visually pops over member (admins have write power, customers should be able to tell at a glance who can take destructive actions); drift to identical styling would hide the role distinction', () => {
+  it('Role badge styling: admin → bg-blue-50 text-blue-700 / member → bg-tk-surface text-tk-ink-2 — pinned so admin visually pops over member (admins have write power, customers should be able to tell at a glance who can take destructive actions); drift to identical styling would hide the role distinction', () => {
     expect(body).toMatch(
-      /m\.role === 'admin' \? 'bg-blue-50 text-blue-700' : 'bg-surface-raised text-ink-secondary';/,
+      /m\.role === 'admin' \? 'bg-blue-50 text-blue-700' : 'bg-tk-surface text-tk-ink-2';/,
     );
   });
 
-  it("Pending invite badge: bg-glow-red/10 text-glow-red + uppercase 'pending' — pinned so pending invites have visual urgency (glow-red = needs action, distinct from member emerald/slate) so admins can see at a glance who hasn't accepted yet", () => {
+  it("Pending invite badge: bg-tk-accent/10 text-tk-accent + uppercase 'pending' — pinned so pending invites have visual urgency (glow-red = needs action, distinct from member emerald/slate) so admins can see at a glance who hasn't accepted yet", () => {
     expect(body).toMatch(
-      /<span class="inline-flex shrink-0 rounded-full bg-glow-red\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-glow-red">pending<\/span>/,
+      /<span class="inline-flex shrink-0 rounded-full bg-tk-accent\/10 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-accent">pending<\/span>/,
     );
   });
 
@@ -96,10 +96,10 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
 
   it("No-token member-list state: 'Sign in to see team members.' + 'Sign in to see pending invites.' — pinned so unauthenticated visitors see explicit sign-in prompts in BOTH lists rather than the static 'Loading…' placeholder which would never resolve (drift to silent bail would leave both lists stuck at 'Loading…' indefinitely)", () => {
     expect(body).toMatch(
-      /<li class="px-6 py-4 text-sm text-ink-muted">Sign in to see team members\.<\/li>/,
+      /<li class="px-6 py-4 text-sm text-tk-ink-3">Sign in to see team members\.<\/li>/,
     );
     expect(body).toMatch(
-      /<li class="px-6 py-4 text-sm text-ink-muted">Sign in to see pending invites\.<\/li>/,
+      /<li class="px-6 py-4 text-sm text-tk-ink-3">Sign in to see pending invites\.<\/li>/,
     );
   });
 

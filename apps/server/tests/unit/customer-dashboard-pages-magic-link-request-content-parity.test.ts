@@ -45,7 +45,7 @@ describe('customer-dashboard/pages/auth/magic-link-request content parity', () =
       /\/\/\s+4\. Dev convenience: when AUTH_EXPOSE_DEBUG_TOKEN=true on the server,\s*\n?\s*\/\/\s+a `debug_token` field is surfaced as a paste-into link\./,
     );
     expect(body).toMatch(
-      /<span class="font-mono uppercase tracking-wide text-glow-red">Dev mode:<\/span>/,
+      /<span class="font-mono uppercase tracking-wide text-tk-accent">Dev mode:<\/span>/,
     );
     expect(body).toMatch(
       /debugLink\.setAttribute\(\s*\n?\s*'href',\s*\n?\s*'\/auth\/magic-link\?token=' \+ encodeURIComponent\(body\.debug_token\),\s*\n?\s*\);/,
@@ -63,7 +63,7 @@ describe('customer-dashboard/pages/auth/magic-link-request content parity', () =
 
   it("Check-your-inbox card copy pinned: 'If <span data-success-email…> matches a Driftstack account, a one-shot sign-in link is on the way. The link expires in <span data-success-window…>15 minutes</span>.' — pinned so the 15-minute-default expiry text + 'if matches' anti-enumeration phrasing (NOT 'we sent to') contract stays documented", () => {
     expect(body).toMatch(
-      /If <span data-success-email class="font-mono text-glow-red-soft"><\/span> matches a Driftstack\s*\n?\s*account, a one-shot sign-in link is on the way\. The link expires in <span\s*\n?\s*data-success-window\s*\n?\s*class="font-mono">15 minutes<\/span\s*\n?\s*>\./,
+      /If <span data-success-email class="font-mono text-tk-accent-soft"><\/span> matches a Driftstack\s*\n?\s*account, a one-shot sign-in link is on the way\. The link expires in <span\s*\n?\s*data-success-window\s*\n?\s*class="font-mono">15 minutes<\/span\s*\n?\s*>\./,
     );
   });
 

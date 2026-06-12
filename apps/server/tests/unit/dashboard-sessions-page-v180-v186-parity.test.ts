@@ -55,10 +55,10 @@ describe('W749 dashboard /sessions page V-180 + V-186 parity', () => {
     const p = read(PAGE);
 
     // The map is declared twice: once in TS frontmatter, once in inline script.
-    expect((p.match(/creating: 'bg-glow-red\/10 text-glow-red'/g) ?? []).length).toBe(2);
+    expect((p.match(/creating: 'bg-tk-accent\/10 text-tk-accent'/g) ?? []).length).toBe(2);
     expect((p.match(/ready: 'bg-emerald-400\/10 text-emerald-300'/g) ?? []).length).toBe(2);
     expect((p.match(/busy: 'bg-blue-50 text-blue-700'/g) ?? []).length).toBe(2);
-    expect((p.match(/destroyed: 'bg-surface-raised text-ink-secondary'/g) ?? []).length).toBe(2);
+    expect((p.match(/destroyed: 'bg-tk-surface text-tk-ink-2'/g) ?? []).length).toBe(2);
     expect((p.match(/errored: 'bg-red-50 text-red-700'/g) ?? []).length).toBe(2);
   });
 
@@ -184,7 +184,7 @@ describe('W749 dashboard /sessions page V-180 + V-186 parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /#detail-' \+\s*\n\s+escapeHtml\(s\.id\) \+\s*\n\s+'" class="text-sm text-glow-red hover:underline">Open<\/a>'/,
+      /#detail-' \+\s*\n\s+escapeHtml\(s\.id\) \+\s*\n\s+'" class="text-sm text-tk-accent hover:underline">Open<\/a>'/,
     );
     expect(p).toMatch(
       /#destroy-' \+\s*\n\s+escapeHtml\(s\.id\) \+\s*\n\s+'" class="text-sm text-red-700 hover:underline">Destroy<\/a>'/,
@@ -194,7 +194,7 @@ describe('W749 dashboard /sessions page V-180 + V-186 parity', () => {
   it("CRITICAL Recent list view-action — single 'View recording' link. Matches /sessions read-only-recordings-on-dashboard convention.", () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /#replay-' \+\s*\n\s+escapeHtml\(s\.id\) \+\s*\n\s+'" class="text-sm text-glow-red hover:underline">View recording<\/a>'/,
+      /#replay-' \+\s*\n\s+escapeHtml\(s\.id\) \+\s*\n\s+'" class="text-sm text-tk-accent hover:underline">View recording<\/a>'/,
     );
   });
 

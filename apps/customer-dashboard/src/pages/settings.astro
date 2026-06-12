@@ -62,17 +62,17 @@ const EMAIL_EVENTS = [
   <div class="mx-auto max-w-3xl px-6 py-10" data-page="settings">
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
+      class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
       role="status"
     >
     </div>
 
     <header class="mb-10">
-      <p class="text-sm text-ink-muted" data-field="header-account">
+      <p class="text-sm text-tk-ink-3" data-field="header-account">
         Account · {MOCK_ACCOUNT.id.slice(0, 16)}…
       </p>
-      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Settings</h1>
-      <p class="mt-2 max-w-prose text-sm text-ink-muted">
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Settings</h1>
+      <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
         Account profile, security, and the danger zone. Changes here affect
         all sessions, profiles, and webhooks under this account.
       </p>
@@ -81,8 +81,8 @@ const EMAIL_EVENTS = [
     {/* 2026-05-23 — icon on the Profile + Security section headers. */}
     <!-- Profile -->
     <section class="dashboard-card">
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="7" r="4" />
             <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
@@ -90,34 +90,34 @@ const EMAIL_EVENTS = [
         </span>
         Profile
       </h2>
-      <p class="mt-2 text-sm text-ink-muted">
+      <p class="mt-2 text-sm text-tk-ink-3">
         Display name + email shown on invoices and webhook delivery audit logs.
       </p>
       <div class="mt-6 space-y-4">
         <div>
-          <label class="block text-sm font-medium text-ink-secondary" for="name">Name</label>
+          <label class="block text-sm font-medium text-tk-ink-2" for="name">Name</label>
           <input
             id="name"
             type="text"
             value={MOCK_ACCOUNT.name ?? ''}
-            class="mt-1 block w-full rounded-md border border-white/10 px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            class="mt-1 block w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
         </div>
         <div>
-          <label class="block text-sm font-medium text-ink-secondary" for="email">Email</label>
+          <label class="block text-sm font-medium text-tk-ink-2" for="email">Email</label>
           <input
             id="email"
             type="email"
             value={MOCK_ACCOUNT.email}
-            class="mt-1 block w-full rounded-md border border-white/10 px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            class="mt-1 block w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
-          <p class="mt-1 text-xs text-ink-muted">
+          <p class="mt-1 text-xs text-tk-ink-3">
             Verified {fmtIso(MOCK_ACCOUNT.emailVerifiedAt)}. Changing email
             triggers re-verification.
           </p>
         </div>
         <button class="btn-primary mt-2">Save changes</button>
-        <p class="text-xs text-ink-muted">
+        <p class="text-xs text-tk-ink-3">
           Profile editing endpoint lands as a follow-up slice; saves are
           currently no-op.
         </p>
@@ -126,8 +126,8 @@ const EMAIL_EVENTS = [
 
     <!-- Security -->
     <section class="dashboard-card mt-6">
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="3" y="11" width="18" height="11" rx="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
@@ -135,12 +135,12 @@ const EMAIL_EVENTS = [
         </span>
         Security
       </h2>
-      <p class="mt-2 text-sm text-ink-muted">Password + recovery options.</p>
+      <p class="mt-2 text-sm text-tk-ink-3">Password + recovery options.</p>
       <div class="mt-6 space-y-3">
         <button type="button" data-action="change-password" class="btn-secondary inline-flex">
           Change password
         </button>
-        <p class="text-xs text-ink-muted">
+        <p class="text-xs text-tk-ink-3">
           We email you a magic link to confirm. The link expires after 15
           minutes; old sessions stay signed in until they naturally expire.
         </p>
@@ -151,8 +151,8 @@ const EMAIL_EVENTS = [
     <section class="dashboard-card mt-6" data-region="mfa">
       <div class="flex items-start justify-between gap-6">
         <div>
-          <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
-            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+          <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z" />
                 <path d="M9 12l2 2 4-4" />
@@ -160,7 +160,7 @@ const EMAIL_EVENTS = [
             </span>
             Two-factor authentication
           </h2>
-          <p class="mt-2 max-w-prose text-sm text-ink-muted">
+          <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
             Add a TOTP code from your authenticator app on top of your password.
             Recovery codes are issued at enrollment — store them somewhere safe;
             without your authenticator AND your recovery codes, account access
@@ -169,7 +169,7 @@ const EMAIL_EVENTS = [
         </div>
         <span
           data-field="mfa-status-badge"
-          class="shrink-0 rounded-full bg-surface-raised px-2 py-1 text-xs font-medium text-ink-secondary"
+          class="shrink-0 rounded-full bg-tk-surface px-2 py-1 text-xs font-medium text-tk-ink-2"
         >
           loading…
         </span>
@@ -177,7 +177,7 @@ const EMAIL_EVENTS = [
 
       <!-- Enroll flow (hidden when already enrolled). -->
       <div class="mt-6 hidden space-y-4" data-section="mfa-enroll">
-        <p class="text-sm text-ink-secondary">
+        <p class="text-sm text-tk-ink-2">
           Click <strong>Set up</strong> to generate a fresh secret. Scan the QR
           (or paste the manual-entry secret into your authenticator app), then
           enter the 6-digit code to confirm.
@@ -187,33 +187,33 @@ const EMAIL_EVENTS = [
         </button>
 
         <!-- Hidden until /enroll fires. -->
-        <div class="hidden space-y-4 rounded-lg border border-white/10 bg-surface-base p-4" data-section="mfa-enroll-step">
-          <p class="text-sm text-ink-secondary">
+        <div class="hidden space-y-4 rounded-lg border border-tk-border bg-tk-bg p-4" data-section="mfa-enroll-step">
+          <p class="text-sm text-tk-ink-2">
             Open your authenticator app (1Password, Authy, Google Authenticator, etc.)
             and either scan the QR or paste the manual secret.
           </p>
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
             <div
-              class="flex h-44 w-44 shrink-0 items-center justify-center rounded-md border border-white/10 bg-surface-raised p-2"
+              class="flex h-44 w-44 shrink-0 items-center justify-center rounded-md border border-tk-border bg-tk-surface p-2"
               data-field="mfa-qr"
             >
-              <span class="text-xs text-ink-muted">QR will render here</span>
+              <span class="text-xs text-tk-ink-3">QR will render here</span>
             </div>
             <div class="min-w-0 flex-1">
-              <label class="block text-xs font-medium uppercase tracking-wide text-ink-muted"
+              <label class="block text-xs font-medium uppercase tracking-wide text-tk-ink-3"
                 >Manual secret</label>
               <code
                 data-field="mfa-secret-base32"
-                class="mt-1 block break-all rounded bg-surface-raised px-2 py-1 font-mono text-xs text-ink-primary ring-1 ring-slate-200"
+                class="mt-1 block break-all rounded bg-tk-surface px-2 py-1 font-mono text-xs text-tk-ink ring-1 ring-slate-200"
               >—</code>
-              <p class="mt-2 text-xs text-ink-muted">
+              <p class="mt-2 text-xs text-tk-ink-3">
                 SHA-1 / 30s / 6-digit (RFC 6238 defaults; every authenticator app
                 supports).
               </p>
             </div>
           </div>
-          <div class="border-t border-white/10 pt-3">
-            <label class="block text-sm font-medium text-ink-secondary" for="mfa-verify-code">
+          <div class="border-t border-tk-border pt-3">
+            <label class="block text-sm font-medium text-tk-ink-2" for="mfa-verify-code">
               Enter the 6-digit code from your app to confirm
             </label>
             <div class="mt-2 flex items-center gap-2">
@@ -225,7 +225,7 @@ const EMAIL_EVENTS = [
                 pattern="\d{6}"
                 maxlength="6"
                 placeholder="123456"
-                class="w-32 rounded-md border border-white/10 px-3 py-2 font-mono text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+                class="w-32 rounded-md border border-tk-border px-3 py-2 font-mono text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
               />
               <button type="button" data-button="mfa-verify" class="btn-primary text-sm">
                 Confirm + finish
@@ -239,17 +239,17 @@ const EMAIL_EVENTS = [
         </div>
 
         <!-- Hidden until /verify returns 10 recovery codes. -->
-        <div class="hidden rounded-lg border border-glow-red/30 bg-glow-red/10 p-4" data-section="mfa-recovery">
-          <p class="text-sm font-medium text-glow-red-soft">
+        <div class="hidden rounded-lg border border-tk-accent/30 bg-tk-accent/10 p-4" data-section="mfa-recovery">
+          <p class="text-sm font-medium text-tk-accent-soft">
             Save your recovery codes — these are shown ONCE
           </p>
-          <p class="mt-1 text-xs text-glow-red-soft">
+          <p class="mt-1 text-xs text-tk-accent-soft">
             Each code works once. Store them somewhere safe (password manager,
             printed copy, secure note). Without your authenticator AND these
             codes, account access requires support intervention.
           </p>
           <ul
-            class="mt-3 grid grid-cols-2 gap-2 font-mono text-sm text-glow-red-soft"
+            class="mt-3 grid grid-cols-2 gap-2 font-mono text-sm text-tk-accent-soft"
             data-list="mfa-recovery-codes"
           ></ul>
           <div class="mt-3 flex flex-wrap gap-2">
@@ -281,12 +281,12 @@ const EMAIL_EVENTS = [
       <!-- Enrolled-state controls (hidden when not enrolled). -->
       <div class="mt-6 hidden space-y-4" data-section="mfa-enrolled">
         <dl class="grid grid-cols-2 gap-3 text-sm">
-          <dt class="text-ink-muted">Enrolled</dt>
-          <dd class="font-mono text-xs text-ink-secondary" data-field="mfa-enrolled-at">—</dd>
-          <dt class="text-ink-muted">Last used</dt>
-          <dd class="font-mono text-xs text-ink-secondary" data-field="mfa-last-used">—</dd>
-          <dt class="text-ink-muted">Recovery codes</dt>
-          <dd class="text-xs text-ink-secondary">
+          <dt class="text-tk-ink-3">Enrolled</dt>
+          <dd class="font-mono text-xs text-tk-ink-2" data-field="mfa-enrolled-at">—</dd>
+          <dt class="text-tk-ink-3">Last used</dt>
+          <dd class="font-mono text-xs text-tk-ink-2" data-field="mfa-last-used">—</dd>
+          <dt class="text-tk-ink-3">Recovery codes</dt>
+          <dd class="text-xs text-tk-ink-2">
             <span data-field="mfa-recovery-remaining">—</span> unused of 10
           </dd>
         </dl>
@@ -298,14 +298,14 @@ const EMAIL_EVENTS = [
             Disable two-factor
           </button>
         </div>
-        <p class="text-xs text-ink-muted">
+        <p class="text-xs text-tk-ink-3">
           Disabling clears your TOTP secret + invalidates all recovery codes.
           Requires a fresh authenticator code (step-up reauth) to confirm.
         </p>
       </div>
 
       <!-- Step-up reauth modal-ish prompt. -->
-      <div class="mt-6 hidden rounded-lg border border-glow-red/30 bg-glow-red/10 p-4" data-section="mfa-step-up">
+      <div class="mt-6 hidden rounded-lg border border-tk-accent/30 bg-tk-accent/10 p-4" data-section="mfa-step-up">
         <p class="text-sm font-medium text-oxblood-900">
           Confirm with your authenticator
         </p>
@@ -320,7 +320,7 @@ const EMAIL_EVENTS = [
             maxlength="11"
             placeholder="123456 or recovery"
             aria-label="MFA step-up code"
-            class="w-44 rounded-md border border-glow-red/40 px-3 py-2 font-mono text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            class="w-44 rounded-md border border-tk-accent/40 px-3 py-2 font-mono text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
           <button type="button" data-button="mfa-step-up-submit" class="btn-primary text-sm">
             Confirm
@@ -338,27 +338,27 @@ const EMAIL_EVENTS = [
 
     <!-- Sessions / devices (V-355) -->
     <section class="dashboard-card mt-6" data-region="web-sessions">
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
           </svg>
         </span>
         Active sign-ins
       </h2>
-      <p class="mt-2 text-sm text-ink-muted">
+      <p class="mt-2 text-sm text-tk-ink-3">
         Browser sessions where you're signed in to the dashboard. Distinct
         from your driver sessions on /sessions.
       </p>
       <ul class="mt-6 divide-y divide-slate-100" data-list="web-sessions">
-        <li class="py-3 text-sm text-ink-muted" data-field="web-sessions-empty">
+        <li class="py-3 text-sm text-tk-ink-3" data-field="web-sessions-empty">
           Sign in to load your active sessions.
         </li>
       </ul>
       <div class="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
         <p
           data-field="web-sessions-status"
-          class="text-xs text-ink-muted"
+          class="text-xs text-tk-ink-3"
         ></p>
         <button
           type="button"
@@ -369,7 +369,7 @@ const EMAIL_EVENTS = [
           Sign out everywhere else
         </button>
       </div>
-      <p class="mt-3 text-xs text-ink-muted">
+      <p class="mt-3 text-xs text-tk-ink-3">
         IP omitted for privacy. The "current" session is the one you're using
         right now and can't be revoked from this list — sign out from the menu
         instead.
@@ -378,15 +378,15 @@ const EMAIL_EVENTS = [
 
     <!-- Profile basics (V-352 — name + timezone) -->
     <section class="dashboard-card mt-6" data-region="profile">
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="7" r="4" /><path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
           </svg>
         </span>
         Profile
       </h2>
-      <p class="mt-2 text-sm text-ink-muted">
+      <p class="mt-2 text-sm text-tk-ink-3">
         Display name + timezone. Used by the dashboard + outbound emails to
         render timestamps in your local time.
       </p>
@@ -395,7 +395,7 @@ const EMAIL_EVENTS = [
         <div class="flex items-center gap-4">
           <div
             data-field="avatar-preview"
-            class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-surface-raised text-xs text-ink-muted"
+            class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-tk-border bg-tk-surface text-xs text-tk-ink-3"
           >
             no avatar
           </div>
@@ -423,7 +423,7 @@ const EMAIL_EVENTS = [
                 Remove
               </button>
             </div>
-            <p class="text-xs text-ink-muted">
+            <p class="text-xs text-tk-ink-3">
               PNG, JPEG, or WebP. Max 2 MB. Stored on Cloudflare R2 (EU).
             </p>
             <p
@@ -433,7 +433,7 @@ const EMAIL_EVENTS = [
           </div>
         </div>
         <div>
-          <label class="block text-sm font-medium text-ink-secondary" for="profile-name">
+          <label class="block text-sm font-medium text-tk-ink-2" for="profile-name">
             Display name
           </label>
           <input
@@ -441,11 +441,11 @@ const EMAIL_EVENTS = [
             data-field="profile-name"
             type="text"
             placeholder="Optional — leave blank to use your email"
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
         </div>
         <div>
-          <label class="block text-sm font-medium text-ink-secondary" for="profile-timezone">
+          <label class="block text-sm font-medium text-tk-ink-2" for="profile-timezone">
             Timezone (IANA)
           </label>
           <input
@@ -453,15 +453,15 @@ const EMAIL_EVENTS = [
             data-field="profile-timezone"
             type="text"
             placeholder="Europe/Amsterdam"
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
-          <p class="mt-1 text-xs text-ink-muted">
+          <p class="mt-1 text-xs text-tk-ink-3">
             IANA name like <code class="font-mono">Europe/Amsterdam</code> or
             <code class="font-mono">America/Los_Angeles</code>. Leave blank for UTC.
           </p>
         </div>
         <div>
-          <label class="block text-sm font-medium text-ink-secondary" for="profile-slug">
+          <label class="block text-sm font-medium text-tk-ink-2" for="profile-slug">
             Account handle (slug)
           </label>
           <input
@@ -471,32 +471,32 @@ const EMAIL_EVENTS = [
             inputmode="text"
             autocomplete="off"
             placeholder="acme-corp"
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 font-mono text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 font-mono text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
-          <p class="mt-1 text-xs text-ink-muted">
+          <p class="mt-1 text-xs text-tk-ink-3">
             Lowercase a-z, 0-9, and hyphen. 3-32 chars. Used as a stable
             handle on support tickets, billing references, and audit
             entries. Leave blank to keep using the account UUID.
           </p>
         </div>
         <div>
-          <label class="block text-sm font-medium text-ink-secondary" for="profile-region">
+          <label class="block text-sm font-medium text-tk-ink-2" for="profile-region">
             Data-residency region (preference)
           </label>
           <select
             id="profile-region"
             data-field="profile-region"
-            class="mt-1 w-full rounded-md border border-white/10 bg-surface-raised px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            class="mt-1 w-full rounded-md border border-tk-border bg-tk-surface px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           >
             <option value="">— no preference —</option>
             <option value="us">us — Americas</option>
             <option value="eu">eu — Europe</option>
             <option value="apac">apac — Asia-Pacific</option>
           </select>
-          <p class="mt-1 text-xs text-ink-muted">
+          <p class="mt-1 text-xs text-tk-ink-3">
             Customer-stated preference. Currently informational; physical
             region routing of compute and storage is governed by the
-            sub-processor list (see <a href="https://driftstack.dev/trust/sub-processors" class="text-glow-red underline">driftstack.dev/trust/sub-processors</a>).
+            sub-processor list (see <a href="https://driftstack.dev/trust/sub-processors" class="text-tk-accent underline">driftstack.dev/trust/sub-processors</a>).
           </p>
         </div>
         <p
@@ -504,7 +504,7 @@ const EMAIL_EVENTS = [
           class="hidden rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
         ></p>
         <div class="flex items-center justify-between border-t border-slate-100 pt-4">
-          <span data-field="profile-status" class="text-xs text-ink-muted"></span>
+          <span data-field="profile-status" class="text-xs text-tk-ink-3"></span>
           <button
             type="submit"
             data-button="profile-save"
@@ -528,8 +528,8 @@ const EMAIL_EVENTS = [
       the owner.
     */}
     <section class="dashboard-card mt-6" data-region="byok-anthropic">
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="9" cy="12" r="7" />
             <path d="M16 12h6M19 9v6" />
@@ -537,23 +537,23 @@ const EMAIL_EVENTS = [
         </span>
         Anthropic API key (BYOK)
       </h2>
-      <p class="mt-2 text-sm text-ink-muted">
+      <p class="mt-2 text-sm text-tk-ink-3">
         Bring your own Anthropic key so AI agent turns bill to your Anthropic console.
         Stored encrypted at rest; we never read or log the plaintext after you submit
         it. <a
           href="https://console.anthropic.com/settings/keys"
           target="_blank"
           rel="noopener noreferrer"
-          class="text-glow-red hover:underline"
+          class="text-tk-accent hover:underline"
         >Generate a key →</a>
       </p>
 
-      <div data-byok-state="loading" class="mt-6 text-sm text-ink-muted">
+      <div data-byok-state="loading" class="mt-6 text-sm text-tk-ink-3">
         Checking key status…
       </div>
 
       <div data-byok-state="empty" class="mt-6 hidden">
-        <p class="text-sm text-ink-secondary">No key on file. Agent sessions fall back to the bundled key (if enabled on your tier).</p>
+        <p class="text-sm text-tk-ink-2">No key on file. Agent sessions fall back to the bundled key (if enabled on your tier).</p>
       </div>
 
       <div data-byok-state="set" class="mt-6 hidden space-y-2">
@@ -561,14 +561,14 @@ const EMAIL_EVENTS = [
           <span class="rounded-full bg-emerald-400/10 px-2 py-0.5 font-mono text-xs uppercase tracking-wide text-emerald-300">
             Active
           </span>
-          <span class="text-sm text-ink-secondary">
+          <span class="text-sm text-tk-ink-2">
             Key set <time data-byok-set-at>—</time>; prefix
-            <code class="font-mono text-xs text-ink-primary" data-byok-prefix>—</code>
+            <code class="font-mono text-xs text-tk-ink" data-byok-prefix>—</code>
           </span>
         </div>
       </div>
 
-      <div data-byok-error class="mt-6 hidden rounded-md bg-glow-red/10 px-3 py-2 text-sm text-glow-red"></div>
+      <div data-byok-error class="mt-6 hidden rounded-md bg-tk-accent/10 px-3 py-2 text-sm text-tk-accent"></div>
 
       <form data-byok-form class="mt-6 flex flex-wrap items-center gap-3" autocomplete="off">
         <label for="byok-key" class="sr-only">Anthropic API key</label>
@@ -579,7 +579,7 @@ const EMAIL_EVENTS = [
           placeholder="sk-ant-..."
           autocomplete="off"
           spellcheck="false"
-          class="flex-1 min-w-[260px] rounded-md border border-white/10 bg-surface-inset px-3 py-2 font-mono text-sm text-ink-primary placeholder-ink-muted focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+          class="flex-1 min-w-[260px] rounded-md border border-tk-border bg-tk-bg px-3 py-2 font-mono text-sm text-tk-ink placeholder-ink-muted focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
         />
         <button type="submit" class="btn-primary">Save key</button>
         <button type="button" data-byok-test class="btn-secondary">Test</button>
@@ -588,7 +588,7 @@ const EMAIL_EVENTS = [
         </button>
       </form>
 
-      <p class="mt-3 text-xs text-ink-muted">
+      <p class="mt-3 text-xs text-tk-ink-3">
         Test sends a 1-token completion to verify Anthropic accepts the key. Clear
         removes the stored ciphertext; agent turns immediately fall back to the
         bundled key (if available).
@@ -597,15 +597,15 @@ const EMAIL_EVENTS = [
 
     <!-- Email notifications (V-204 — live-wired) -->
     <section class="dashboard-card mt-6" data-region="email-prefs">
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><polyline points="22,6 12,13 2,6" />
           </svg>
         </span>
         Email notifications
       </h2>
-      <p class="mt-2 text-sm text-ink-muted">
+      <p class="mt-2 text-sm text-tk-ink-3">
         Security + financial emails (signup verification, password reset,
         billing failure, subscription cancellation, support replies) always
         go out. Below are the optional lifecycle emails — toggle off any
@@ -622,30 +622,30 @@ const EMAIL_EVENTS = [
                 class="mt-0.5"
                 disabled
               />
-              <span class="text-sm text-ink-secondary">
-                <strong class="block font-medium text-ink-primary">{event.label}</strong>
+              <span class="text-sm text-tk-ink-2">
+                <strong class="block font-medium text-tk-ink">{event.label}</strong>
                 {event.description}
               </span>
             </label>
           ))
         }
       </div>
-      <p class="mt-4 text-xs text-ink-muted" data-field="email-prefs-status">
+      <p class="mt-4 text-xs text-tk-ink-3" data-field="email-prefs-status">
         Sign in to load live preferences.
       </p>
     </section>
 
     <!-- Connected accounts (V-667.C-followup — live-wired) -->
     <section class="dashboard-card mt-6" data-region="oauth-links">
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
           </svg>
         </span>
         Connected accounts
       </h2>
-      <p class="mt-2 text-sm text-ink-muted">
+      <p class="mt-2 text-sm text-tk-ink-3">
         IDPs (Google / GitHub) linked to your account. Each link lets you
         sign in via that provider. Revoking the link on the provider side
         (e.g. Google → Security → Third-party access) automatically marks
@@ -653,11 +653,11 @@ const EMAIL_EVENTS = [
         continues to work either way.
       </p>
       <ul class="mt-6 divide-y divide-slate-100" data-list="oauth-links">
-        <li class="py-3 text-sm text-ink-muted" data-field="oauth-links-empty">
+        <li class="py-3 text-sm text-tk-ink-3" data-field="oauth-links-empty">
           Sign in to load your linked accounts.
         </li>
       </ul>
-      <p class="mt-3 text-xs text-ink-muted" data-field="oauth-links-disabled" hidden>
+      <p class="mt-3 text-xs text-tk-ink-3" data-field="oauth-links-disabled" hidden>
         Sign-in-with-Google / GitHub isn't configured on this server.
         Password sign-in continues to work.
       </p>
@@ -665,20 +665,20 @@ const EMAIL_EVENTS = [
 
     <!-- Audit log (V-216 — live-wired) -->
     <section class="dashboard-card mt-6" data-region="audit-log">
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
           </svg>
         </span>
         Recent activity
       </h2>
-      <p class="mt-2 text-sm text-ink-muted">
+      <p class="mt-2 text-sm text-tk-ink-3">
         API key mints + revokes, session lifecycle events, and other account
         changes. Newest first; filtered to your own account.
       </p>
       <ul class="mt-6 divide-y divide-slate-100" data-list="audit-log">
-        <li class="py-3 text-sm text-ink-muted" data-field="audit-empty">
+        <li class="py-3 text-sm text-tk-ink-3" data-field="audit-empty">
           Sign in to load recent activity.
         </li>
       </ul>
@@ -1067,30 +1067,30 @@ const EMAIL_EVENTS = [
         if (!auditList) return;
         if (entries.length === 0) {
           auditList.innerHTML =
-            '<li class="py-3 text-sm text-ink-muted">No recent activity yet — your first key mint, session create, or other account event will appear here.</li>';
+            '<li class="py-3 text-sm text-tk-ink-3">No recent activity yet — your first key mint, session create, or other account event will appear here.</li>';
           return;
         }
         auditList.innerHTML = entries
           .map((entry) => {
             const targetFrag = entry.target_resource_id
-              ? '<p class="mt-1 font-mono text-[11px] text-ink-muted">' +
+              ? '<p class="mt-1 font-mono text-[11px] text-tk-ink-3">' +
                 escapeHtml(entry.target_resource_id) +
                 '</p>'
               : '';
             return (
               '<li class="flex items-start justify-between gap-4 py-3">' +
               '<div class="min-w-0">' +
-              '<p class="font-mono text-xs text-ink-muted">' +
+              '<p class="font-mono text-xs text-tk-ink-3">' +
               escapeHtml(fmtIso(entry.timestamp)) +
               '</p>' +
-              '<p class="mt-1 text-sm text-ink-primary">' +
-              '<code class="font-mono text-xs text-glow-red">' +
+              '<p class="mt-1 text-sm text-tk-ink">' +
+              '<code class="font-mono text-xs text-tk-accent">' +
               escapeHtml(entry.action) +
               '</code>' +
               '</p>' +
               targetFrag +
               '</div>' +
-              '<span class="text-xs text-ink-muted">' +
+              '<span class="text-xs text-tk-ink-3">' +
               escapeHtml(fmtAction(entry.actor_type)) +
               '</span></li>'
             );
@@ -1138,7 +1138,7 @@ const EMAIL_EVENTS = [
         if (!oauthLinksList) return;
         if (links.length === 0) {
           oauthLinksList.innerHTML =
-            '<li class="py-3 text-sm text-ink-muted">No third-party sign-in linked yet. Sign in with Google or GitHub from /login to link.</li>';
+            '<li class="py-3 text-sm text-tk-ink-3">No third-party sign-in linked yet. Sign in with Google or GitHub from /login to link.</li>';
           return;
         }
         oauthLinksList.innerHTML = links
@@ -1153,17 +1153,17 @@ const EMAIL_EVENTS = [
             const manageFrag = manageUrl
               ? '<a href="' +
                 escapeHtml(manageUrl) +
-                '" target="_blank" rel="noopener noreferrer" class="shrink-0 text-xs text-glow-red underline underline-offset-4 hover:text-glow-red-soft">Manage on ' +
+                '" target="_blank" rel="noopener noreferrer" class="shrink-0 text-xs text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft">Manage on ' +
                 escapeHtml(providerLabel(link.provider)) +
                 ' ↗</a>'
               : '';
             return (
               '<li class="flex items-start justify-between gap-4 py-3">' +
               '<div class="min-w-0">' +
-              '<p class="text-sm font-medium text-ink-primary">' +
+              '<p class="text-sm font-medium text-tk-ink">' +
               escapeHtml(providerLabel(link.provider)) +
               '</p>' +
-              '<p class="mt-1 text-xs text-ink-muted">' +
+              '<p class="mt-1 text-xs text-tk-ink-3">' +
               escapeHtml(link.provider_email || '(email withheld by provider)') +
               ' · linked ' +
               escapeHtml(fmtIso(link.linked_at)) +
@@ -1227,7 +1227,7 @@ const EMAIL_EVENTS = [
         if (!webSessionsList) return;
         if (sessions.length === 0) {
           webSessionsList.innerHTML =
-            '<li class="py-3 text-sm text-ink-muted">No active sign-ins.</li>';
+            '<li class="py-3 text-sm text-tk-ink-3">No active sign-ins.</li>';
           if (webSessionsRevokeAllBtn) webSessionsRevokeAllBtn.hidden = true;
           if (webSessionsStatus) webSessionsStatus.textContent = '';
           return;
@@ -1288,9 +1288,9 @@ const EMAIL_EVENTS = [
                 '">Revoke</button>';
             return (
               '<li class="flex items-start justify-between gap-6 py-3">' +
-              '<div><p class="text-sm font-medium text-ink-primary">' +
+              '<div><p class="text-sm font-medium text-tk-ink">' +
               label +
-              '</p><p class="mt-1 text-xs text-ink-muted">' +
+              '</p><p class="mt-1 text-xs text-tk-ink-3">' +
               meta +
               '</p></div>' +
               action +
@@ -1492,11 +1492,11 @@ const EMAIL_EVENTS = [
         if (mfaStatusBadge) {
           if (status.enrolled) {
             mfaStatusBadge.textContent = 'enrolled';
-            mfaStatusBadge.classList.remove('bg-surface-raised', 'text-ink-secondary');
+            mfaStatusBadge.classList.remove('bg-tk-surface', 'text-tk-ink-2');
             mfaStatusBadge.classList.add('bg-emerald-400/10', 'text-emerald-300');
           } else {
             mfaStatusBadge.textContent = 'not enrolled';
-            mfaStatusBadge.classList.add('bg-surface-raised', 'text-ink-secondary');
+            mfaStatusBadge.classList.add('bg-tk-surface', 'text-tk-ink-2');
             mfaStatusBadge.classList.remove('bg-emerald-400/10', 'text-emerald-300');
           }
         }
@@ -1572,7 +1572,7 @@ const EMAIL_EVENTS = [
               mfaRecoveryList.innerHTML = (body.recovery_codes || [])
                 .map(
                   (c) =>
-                    '<li class="rounded bg-surface-raised px-2 py-1 ring-1 ring-amber-200">' +
+                    '<li class="rounded bg-tk-surface px-2 py-1 ring-1 ring-amber-200">' +
                     escapeHtml(c) +
                     '</li>',
                 )
@@ -1709,7 +1709,7 @@ const EMAIL_EVENTS = [
               mfaRecoveryList.innerHTML = (body.recovery_codes || [])
                 .map(
                   (c) =>
-                    '<li class="rounded bg-surface-raised px-2 py-1 ring-1 ring-amber-200">' +
+                    '<li class="rounded bg-tk-surface px-2 py-1 ring-1 ring-amber-200">' +
                     escapeHtml(c) +
                     '</li>',
                 )

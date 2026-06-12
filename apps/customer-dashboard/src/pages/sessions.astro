@@ -36,10 +36,10 @@ function fmtDuration(ms: number | null): string {
 }
 
 const STATUS_BADGE_CLASS: Record<string, string> = {
-  creating: 'bg-glow-red/10 text-glow-red',
+  creating: 'bg-tk-accent/10 text-tk-accent',
   ready: 'bg-emerald-400/10 text-emerald-300',
   busy: 'bg-blue-50 text-blue-700',
-  destroyed: 'bg-surface-raised text-ink-secondary',
+  destroyed: 'bg-tk-surface text-tk-ink-2',
   errored: 'bg-red-50 text-red-700',
 };
 
@@ -73,25 +73,25 @@ const ARCHETYPE_LABELS = Object.fromEntries(
     -->
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
+      class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
       role="status"
     ></div>
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-ink-muted" data-field="header-summary">
+        <p class="text-sm text-tk-ink-3" data-field="header-summary">
           <span data-field="header-now">{MOCK_USAGE_SUMMARY.concurrent_now}</span> active · <span
             data-field="header-cap">{MOCK_USAGE_SUMMARY.concurrent_limit}</span> concurrent cap
         </p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">Sessions</h1>
-        <p class="mt-2 max-w-prose text-sm text-ink-muted">
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Sessions</h1>
+        <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
           Live sessions you're driving plus recent destroyed/errored ones.
           Sessions are the only billing meter — you pay for concurrent caps,
           not duration or per-call.
         </p>
         {/* 2026-05-24 — device chip surfaces the archetype every session runs as. */}
-        <p class="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-surface-raised px-2.5 py-1 text-xs text-ink-secondary">
-          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+        <p class="mt-3 inline-flex items-center gap-1.5 rounded-full border border-tk-border bg-tk-surface px-2.5 py-1 text-xs text-tk-ink-2">
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
             <rect x="6" y="2" width="12" height="20" rx="2.5" />
             <circle cx="12" cy="18" r="0.75" fill="currentColor" />
           </svg>
@@ -119,31 +119,31 @@ const ARCHETYPE_LABELS = Object.fromEntries(
     <!-- Concurrent meter -->
     <div class="mb-10 dashboard-card">
       <div class="flex items-center justify-between">
-        <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">
+        <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
           Concurrent capacity
         </p>
-        <span class="flex h-8 w-8 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+        <span class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
           </svg>
         </span>
       </div>
       <div class="mt-4 flex items-center gap-4">
-        <p class="font-mono text-3xl font-semibold text-ink-primary">
+        <p class="font-mono text-3xl font-semibold text-tk-ink">
           <span data-field="meter-now">{MOCK_USAGE_SUMMARY.concurrent_now}</span>
-          <span class="text-base font-normal text-ink-muted">
+          <span class="text-base font-normal text-tk-ink-3">
             / <span data-field="meter-cap">{MOCK_USAGE_SUMMARY.concurrent_limit}</span>
           </span>
         </p>
-        <div class="h-2 flex-1 overflow-hidden rounded bg-surface-raised">
+        <div class="h-2 flex-1 overflow-hidden rounded bg-tk-surface">
           <div
             data-field="meter-bar"
-            class="h-full bg-oxblood-700"
+            class="h-full bg-tk-accent"
             style={`width: ${((MOCK_USAGE_SUMMARY.concurrent_now / MOCK_USAGE_SUMMARY.concurrent_limit) * 100).toString()}%`}
           />
         </div>
       </div>
-      <p class="mt-3 text-xs text-ink-muted">
+      <p class="mt-3 text-xs text-tk-ink-3">
         Once this hits your tier cap, new session creates return 429 with a
         retry-after hint. Upgrade your tier to lift the cap.
       </p>
@@ -179,12 +179,12 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       </p>
       <pre
         data-first-key-plaintext
-        class="mt-4 overflow-x-auto rounded border border-emerald-400/30 bg-surface-raised px-4 py-3 font-mono text-sm text-ink-primary"></pre>
+        class="mt-4 overflow-x-auto rounded border border-emerald-400/30 bg-tk-surface px-4 py-3 font-mono text-sm text-tk-ink"></pre>
       <div class="mt-4 flex flex-wrap items-center gap-3">
         <button type="button" class="btn-primary" data-first-key-copy>Copy to clipboard</button>
         <button
           type="button"
-          class="rounded-md border border-emerald-400/40 bg-surface-raised px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-100"
+          class="rounded-md border border-emerald-400/40 bg-tk-surface px-4 py-2 text-sm font-medium text-emerald-200 hover:bg-emerald-100"
           data-first-key-dismiss
         >
           Dismiss — I've saved it
@@ -212,29 +212,29 @@ const ARCHETYPE_LABELS = Object.fromEntries(
     {/* 2026-05-23 — icon on Next-steps onboarding panel. */}
     <div
       data-next-steps
-      class="mb-8 hidden rounded-lg border border-glow-red/30 bg-glow-red/5 p-6"
+      class="mb-8 hidden rounded-lg border border-tk-accent/30 bg-tk-accent/5 p-6"
     >
-      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/15 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/15 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M5 12h14M13 5l7 7-7 7" />
           </svg>
         </span>
         Next steps — your account is ready to drive
       </h2>
-      <p class="mt-2 text-sm text-ink-secondary">
+      <p class="mt-2 text-sm text-tk-ink-2">
         Your first session is live and your API key is saved. Pick one of
         these to take the next step:
       </p>
-      <ul class="mt-4 space-y-3 text-sm text-ink-secondary">
+      <ul class="mt-4 space-y-3 text-sm text-tk-ink-2">
         <li class="flex items-start gap-3">
-          <span class="mt-0.5 font-mono text-xs text-glow-red">→</span>
+          <span class="mt-0.5 font-mono text-xs text-tk-accent">→</span>
           <span>
             <a
               href="https://docs.driftstack.dev/quickstart/"
               target="_blank"
               rel="noopener noreferrer"
-              class="font-medium text-ink-primary underline underline-offset-4 hover:text-glow-red"
+              class="font-medium text-tk-ink underline underline-offset-4 hover:text-tk-accent"
             >
               SDK quickstart
             </a>
@@ -243,11 +243,11 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           </span>
         </li>
         <li class="flex items-start gap-3">
-          <span class="mt-0.5 font-mono text-xs text-glow-red">→</span>
+          <span class="mt-0.5 font-mono text-xs text-tk-accent">→</span>
           <span>
             <a
               href="/usage"
-              class="font-medium text-ink-primary underline underline-offset-4 hover:text-glow-red"
+              class="font-medium text-tk-ink underline underline-offset-4 hover:text-tk-accent"
             >
               Track usage
             </a>
@@ -256,13 +256,13 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           </span>
         </li>
         <li class="flex items-start gap-3">
-          <span class="mt-0.5 font-mono text-xs text-glow-red">→</span>
+          <span class="mt-0.5 font-mono text-xs text-tk-accent">→</span>
           <span>
             <a
               href="https://docs.driftstack.dev/api/"
               target="_blank"
               rel="noopener noreferrer"
-              class="font-medium text-ink-primary underline underline-offset-4 hover:text-glow-red"
+              class="font-medium text-tk-ink underline underline-offset-4 hover:text-tk-accent"
             >
               API reference
             </a>
@@ -274,7 +274,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       <div class="mt-4 flex items-center gap-3">
         <button
           type="button"
-          class="rounded-md border border-white/15 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:border-white/25 hover:text-ink-primary"
+          class="rounded-md border border-white/15 bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink-2 hover:border-white/25 hover:text-tk-ink"
           data-next-steps-dismiss
         >
           Got it — dismiss
@@ -286,12 +286,12 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         header to signal liveness. */}
     <!-- Active sessions -->
     <section>
-      <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-primary">
+      <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
         <span class="relative flex h-2 w-2" aria-hidden="true">
           <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
           <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-400"></span>
         </span>
-        <span class="text-ink-primary">Active (<span data-count="active">{activeSessions.length.toString()}</span>)</span>
+        <span class="text-tk-ink">Active (<span data-count="active">{activeSessions.length.toString()}</span>)</span>
       </h2>
       {/*
         2026-05-21 — list renders skeleton placeholders SSR; JS
@@ -302,10 +302,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         MOCK_SESSIONS.filter() variables stay intact so the W786 parity
         pin keeps matching; they're just no longer used to render <li>.
       */}
-      <p data-empty="active" class="hidden text-sm text-ink-muted">No sessions running.</p>
+      <p data-empty="active" class="hidden text-sm text-tk-ink-3">No sessions running.</p>
       <ul
         data-list="active"
-        class="divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
+        class="divide-y divide-slate-200 rounded-lg border border-tk-border bg-tk-surface"
       >
         {[0, 1].map(() => (
           <li
@@ -314,10 +314,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             aria-hidden="true"
           >
             <div class="min-w-0 flex-1 space-y-2">
-              <div class="h-4 w-56 animate-pulse rounded bg-white/10" />
-              <div class="h-3 w-72 animate-pulse rounded bg-white/5" />
+              <div class="h-4 w-56 animate-pulse rounded bg-tk-hover" />
+              <div class="h-3 w-72 animate-pulse rounded bg-tk-hover" />
             </div>
-            <div class="h-8 w-16 shrink-0 animate-pulse rounded bg-white/5" />
+            <div class="h-8 w-16 shrink-0 animate-pulse rounded bg-tk-hover" />
           </li>
         ))}
       </ul>
@@ -325,14 +325,14 @@ const ARCHETYPE_LABELS = Object.fromEntries(
 
     <!-- Recent closed -->
     <section class="mt-12">
-      <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-primary">
+      <h2 class="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
         <span class="inline-block h-2 w-2 rounded-full bg-slate-500" aria-hidden="true"></span>
-        <span class="text-ink-primary">Recent (<span data-count="recent">{recentClosedSessions.length.toString()}</span>)</span>
+        <span class="text-tk-ink">Recent (<span data-count="recent">{recentClosedSessions.length.toString()}</span>)</span>
       </h2>
-      <p data-empty="recent" class="hidden text-sm text-ink-muted">No recent sessions.</p>
+      <p data-empty="recent" class="hidden text-sm text-tk-ink-3">No recent sessions.</p>
       <ul
         data-list="recent"
-        class="divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
+        class="divide-y divide-slate-200 rounded-lg border border-tk-border bg-tk-surface"
       >
         {[0, 1].map(() => (
           <li
@@ -341,16 +341,16 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             aria-hidden="true"
           >
             <div class="min-w-0 flex-1 space-y-2">
-              <div class="h-4 w-56 animate-pulse rounded bg-white/10" />
-              <div class="h-3 w-64 animate-pulse rounded bg-white/5" />
+              <div class="h-4 w-56 animate-pulse rounded bg-tk-hover" />
+              <div class="h-3 w-64 animate-pulse rounded bg-tk-hover" />
             </div>
-            <div class="h-4 w-24 shrink-0 animate-pulse rounded bg-white/5" />
+            <div class="h-4 w-24 shrink-0 animate-pulse rounded bg-tk-hover" />
           </li>
         ))}
       </ul>
     </section>
 
-    <p class="mt-8 text-xs text-ink-muted">
+    <p class="mt-8 text-xs text-tk-ink-3">
       Recordings retained 90 days hot, archived to R2 after that. Admin-only
       access initially per ADR-006; customer-facing recording UI lands when
       the V-040 R2 mirror ships.
@@ -436,10 +436,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
       })();
 
       const STATUS_BADGE_CLASS = {
-        creating: 'bg-glow-red/10 text-glow-red',
+        creating: 'bg-tk-accent/10 text-tk-accent',
         ready: 'bg-emerald-400/10 text-emerald-300',
         busy: 'bg-blue-50 text-blue-700',
-        destroyed: 'bg-surface-raised text-ink-secondary',
+        destroyed: 'bg-tk-surface text-tk-ink-2',
         errored: 'bg-red-50 text-red-700',
       };
 
@@ -504,7 +504,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
           '<div class="flex items-center gap-3">' +
-          '<p class="font-mono text-sm font-medium text-ink-primary">' +
+          '<p class="font-mono text-sm font-medium text-tk-ink">' +
           escapeHtml(s.id) +
           '</p>' +
           '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
@@ -514,7 +514,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           '</span>' +
           warningBadge +
           '</div>' +
-          '<p class="mt-1 text-xs text-ink-muted">Archetype <code class="font-mono">' +
+          '<p class="mt-1 text-xs text-tk-ink-3">Archetype <code class="font-mono">' +
           escapeHtml(archetypeLabel(s.archetype)) +
           '</code> · started ' +
           escapeHtml(fmtIso(s.created_at)) +
@@ -523,7 +523,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           '<div class="flex shrink-0 flex-col items-end gap-2">' +
           '<a href="#detail-' +
           escapeHtml(s.id) +
-          '" class="text-sm text-glow-red hover:underline">Open</a>' +
+          '" class="text-sm text-tk-accent hover:underline">Open</a>' +
           '<a href="#destroy-' +
           escapeHtml(s.id) +
           '" class="text-sm text-red-700 hover:underline">Destroy</a>' +
@@ -556,7 +556,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           '<li class="flex items-start justify-between gap-6 px-6 py-4">' +
           '<div class="min-w-0">' +
           '<div class="flex items-center gap-3">' +
-          '<p class="font-mono text-sm text-ink-secondary">' +
+          '<p class="font-mono text-sm text-tk-ink-2">' +
           escapeHtml(s.id) +
           '</p>' +
           '<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
@@ -566,14 +566,14 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           '</span>' +
           warningBadge +
           '</div>' +
-          '<p class="mt-1 text-xs text-ink-muted">Ran ' +
+          '<p class="mt-1 text-xs text-tk-ink-3">Ran ' +
           escapeHtml(fmtDuration(durationMs)) +
           ' · destroyed ' +
           escapeHtml(fmtIso(s.destroyed_at)) +
           '</p></div>' +
           '<a href="#replay-' +
           escapeHtml(s.id) +
-          '" class="text-sm text-glow-red hover:underline">View recording</a>' +
+          '" class="text-sm text-tk-accent hover:underline">View recording</a>' +
           '</li>'
         );
       }

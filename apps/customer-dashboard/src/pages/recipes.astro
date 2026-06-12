@@ -23,17 +23,17 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div class="relative mx-auto max-w-5xl px-6 py-10" data-page="recipes">
       <div
         data-banner
-        class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
+        class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
         role="status"
       >
       </div>
 
       <header class="mb-10">
-        <h1 class="text-3xl font-semibold tracking-tight text-ink-primary">Recipes</h1>
-        <p class="mt-2 max-w-prose text-sm text-ink-muted">
+        <h1 class="text-3xl font-semibold tracking-tight text-tk-ink">Recipes</h1>
+        <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
           Saved snapshots of a finished agent-session's intent log. Capture one from an <a
             href="/agent-sessions"
-            class="text-glow-red underline">agent session</a
+            class="text-tk-accent underline">agent session</a
           > to replay the same flow later without re-paying the planning cost. Delete a recipe
           here when you no longer need it.
         </p>
@@ -41,7 +41,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       <ul
         data-list
-        class="mb-6 hidden divide-y divide-slate-200 rounded-lg border border-white/10 bg-surface-raised"
+        class="mb-6 hidden divide-y divide-slate-200 rounded-lg border border-tk-border bg-tk-surface"
       >
       </ul>
 
@@ -50,22 +50,22 @@ const apiBaseUrl = resolveApiBaseUrl();
         <button
           type="button"
           data-more
-          class="rounded-lg border border-white/10 bg-surface-raised px-4 py-2 text-sm text-ink-secondary hover:text-ink-primary"
+          class="rounded-lg border border-tk-border bg-tk-surface px-4 py-2 text-sm text-tk-ink-2 hover:text-tk-ink"
           >Load more</button
         >
       </div>
 
       <div
         data-empty
-        class="mb-10 rounded-lg border border-dashed border-white/10 bg-surface-raised px-6 py-16 text-center text-sm text-ink-muted"
+        class="mb-10 rounded-lg border border-dashed border-tk-border bg-tk-surface px-6 py-16 text-center text-sm text-tk-ink-3"
       >
-        <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+        <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 16 16" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 2.5h8v11l-4-2.5-4 2.5Z" />
           </svg>
         </div>
-        <p class="text-ink-primary font-medium">No recipes yet</p>
-        <p class="mt-1">Save one from an <a href="/agent-sessions" class="text-glow-red underline">agent session</a>.</p>
+        <p class="text-tk-ink font-medium">No recipes yet</p>
+        <p class="mt-1">Save one from an <a href="/agent-sessions" class="text-tk-accent underline">agent session</a>.</p>
       </div>
     </div>
   </div>
@@ -142,16 +142,16 @@ const apiBaseUrl = resolveApiBaseUrl();
           // or deleting it.
           '<a href="/recipes/' +
           encodeURIComponent(r.id) +
-          '" class="text-base font-medium text-ink-primary hover:text-glow-red hover:underline">' +
+          '" class="text-base font-medium text-tk-ink hover:text-tk-accent hover:underline">' +
           escapeHtml(r.label || '(no label)') +
           '</a>' +
-          '<p class="mt-1 font-mono text-xs text-ink-muted">' +
+          '<p class="mt-1 font-mono text-xs text-tk-ink-3">' +
           escapeHtml(r.id) +
           '</p>' +
           (r.description
-            ? '<p class="mt-2 text-sm text-ink-secondary">' + escapeHtml(r.description) + '</p>'
+            ? '<p class="mt-2 text-sm text-tk-ink-2">' + escapeHtml(r.description) + '</p>'
             : '') +
-          '<p class="mt-2 text-xs text-ink-muted">' +
+          '<p class="mt-2 text-xs text-tk-ink-3">' +
           intents +
           ' · ' +
           source +

@@ -6,7 +6,8 @@
 
 export default {
   content: ['./src/**/*.{astro,html,js,jsx,md,mdx,ts,tsx}'],
-  darkMode: 'class',
+  // Fleet rework: dark: variants follow the data-mode axis.
+  darkMode: ['selector', '[data-mode="dark"]'],
   theme: {
     extend: {
       colors: {
@@ -58,6 +59,27 @@ export default {
           'red-soft': '#f25366',
           'red-deep': '#a8202d',
         },
+        // Fleet token namespace (2026-06-12 rework — see
+        // docs/internal/2026-06-12-design-system-spec.md); same mapping as
+        // marketing-site so the two surfaces stay in lockstep.
+        tk: {
+          bg: 'rgb(var(--bg-rgb) / <alpha-value>)',
+          surface: 'rgb(var(--surface-rgb) / <alpha-value>)',
+          raised: 'rgb(var(--raised-rgb) / <alpha-value>)',
+          hover: 'rgb(var(--hover-rgb) / <alpha-value>)',
+          ink: 'rgb(var(--ink-rgb) / <alpha-value>)',
+          'ink-2': 'rgb(var(--ink-2-rgb) / <alpha-value>)',
+          'ink-3': 'rgb(var(--ink-3-rgb) / <alpha-value>)',
+          border: 'rgb(var(--border-rgb) / <alpha-value>)',
+          accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
+          'accent-2': 'rgb(var(--accent-2-rgb) / <alpha-value>)',
+          'accent-strong': 'rgb(var(--accent-strong-rgb) / <alpha-value>)',
+          'accent-ink': 'var(--accent-ink)',
+          'accent-soft': 'var(--accent-soft)',
+          ready: 'rgb(var(--ready-rgb) / <alpha-value>)',
+          busy: 'rgb(var(--busy-rgb) / <alpha-value>)',
+          err: 'rgb(var(--err-rgb) / <alpha-value>)',
+        },
       },
       fontFamily: {
         sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
@@ -68,12 +90,18 @@ export default {
       },
       boxShadow: {
         'glow-red': '0 0 0 1px rgba(226, 56, 71, 0.3), 0 6px 20px -8px rgba(226, 56, 71, 0.35)',
+        // Fleet: accent-aware glow following the data-accent axis.
+        'glow-accent': '0 0 0 1px var(--accent), 0 0 26px var(--glow)',
         'glow-red-lg': '0 0 0 1px rgba(226, 56, 71, 0.4), 0 12px 40px -12px rgba(226, 56, 71, 0.5)',
         'inset-divider': 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
       },
       backgroundImage: {
         'glow-radial-red':
           'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(226, 56, 71, 0.18), transparent 70%)',
+        'glow-radial-accent':
+          'radial-gradient(ellipse 70% 50% at 50% 0%, var(--glow), transparent 70%)',
+        'glow-radial-accent-soft':
+          'radial-gradient(ellipse 60% 40% at 50% 100%, var(--accent-soft), transparent 75%)',
         'glow-radial-red-soft':
           'radial-gradient(ellipse 60% 40% at 50% 100%, rgba(114, 47, 55, 0.22), transparent 75%)',
         'gradient-accent': 'linear-gradient(135deg, #722F37 0%, #e23847 100%)',

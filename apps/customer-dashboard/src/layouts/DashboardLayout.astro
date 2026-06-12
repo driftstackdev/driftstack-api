@@ -94,7 +94,7 @@ const navSections: NavSection[] = [
 ---
 
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en" data-mode="light" data-accent="violet">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -209,7 +209,7 @@ const navSections: NavSection[] = [
     {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR users skip the sidebar nav. */}
     <a
       href="#main-content"
-      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-glow-red focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-tk-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
     >
       Skip to main content
     </a>
@@ -230,19 +230,19 @@ const navSections: NavSection[] = [
         ambient glow would be visually noisy. */}
     {!withSidebar && (
       <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10">
-        <div class="absolute inset-x-0 top-0 h-[600px] bg-glow-radial-red" />
-        <div class="absolute inset-x-0 bottom-0 h-[400px] bg-glow-radial-red-soft" />
+        <div class="absolute inset-x-0 top-0 h-[600px] bg-glow-radial-accent" />
+        <div class="absolute inset-x-0 bottom-0 h-[400px] bg-glow-radial-accent-soft" />
       </div>
     )}
 
     <div class="flex min-h-screen flex-col">
       {
         !withSidebar && (
-          <header class="border-b border-white/10 bg-surface-base/70 backdrop-blur-md">
+          <header class="border-b border-tk-border bg-tk-bg/70 backdrop-blur-md">
             <div class="mx-auto flex max-w-6xl items-center px-6 py-4">
               <a
                 href="/"
-                class="group flex items-center gap-2.5 font-mono text-base font-semibold text-ink-primary"
+                class="group flex items-center gap-2.5 font-mono text-base font-semibold text-tk-ink"
               >
                 <img
                   src="/driftstack-mark.svg?v=2"
@@ -264,11 +264,11 @@ const navSections: NavSection[] = [
           `hidden md:block` keeps it collapsed).  */}
       {withSidebar && (
         <header
-          class="flex items-center justify-between border-b border-white/10 bg-surface-base/70 px-4 py-3 backdrop-blur-md md:hidden"
+          class="flex items-center justify-between border-b border-tk-border bg-tk-bg/70 px-4 py-3 backdrop-blur-md md:hidden"
         >
           <a
             href="/"
-            class="flex items-center gap-2 font-mono text-base font-semibold text-ink-primary"
+            class="flex items-center gap-2 font-mono text-base font-semibold text-tk-ink"
           >
             <img
               src="/driftstack-mark.svg?v=2"
@@ -284,7 +284,7 @@ const navSections: NavSection[] = [
             data-mobile-nav-toggle
             aria-label="Toggle navigation"
             aria-expanded="false"
-            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 text-ink-secondary hover:text-ink-primary"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 hover:text-tk-ink"
           >
             <svg
               data-mobile-nav-icon="closed"
@@ -319,11 +319,11 @@ const navSections: NavSection[] = [
       <div class="flex flex-1">
         {
           withSidebar && (
-            <aside data-mobile-nav class="hidden w-60 shrink-0 border-r border-white/10 bg-surface-raised/40 backdrop-blur-md md:block">
-              <div class="flex h-16 items-center px-6 border-b border-white/10">
+            <aside data-mobile-nav class="hidden w-60 shrink-0 border-r border-tk-border bg-tk-surface/40 backdrop-blur-md md:block">
+              <div class="flex h-16 items-center px-6 border-b border-tk-border">
                 <a
                   href="/"
-                  class="group flex items-center gap-2.5 font-mono text-base font-semibold text-ink-primary"
+                  class="group flex items-center gap-2.5 font-mono text-base font-semibold text-tk-ink"
                 >
                   <img
                     src="/driftstack-mark.svg?v=2"
@@ -350,18 +350,18 @@ const navSections: NavSection[] = [
               <div
                 data-act-as-picker-wrap
                 data-act-as-picker-wrap-reserved
-                class="hidden border-b border-white/10 px-4 py-3"
+                class="hidden border-b border-tk-border px-4 py-3"
               >
                 <label
                   for="act-as-picker"
-                  class="block text-[10px] font-mono uppercase tracking-widest text-ink-muted"
+                  class="block text-[10px] font-mono uppercase tracking-widest text-tk-ink-3"
                 >
                   Acting as
                 </label>
                 <select
                   id="act-as-picker"
                   data-act-as-picker
-                  class="mt-1 w-full rounded-md border border-white/10 bg-surface-inset px-2 py-1.5 text-sm text-ink-primary focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+                  class="mt-1 w-full rounded-md border border-tk-border bg-tk-bg px-2 py-1.5 text-sm text-tk-ink focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
                 ></select>
               </div>
               {/* 2026-05-19 — signed-in identity badge. Avatar (from R2
@@ -370,31 +370,31 @@ const navSections: NavSection[] = [
                   /account/me to avoid empty-state flash. */}
               <div
                 data-signed-in-as
-                class="invisible border-b border-white/10 px-4 py-4"
+                class="invisible border-b border-tk-border px-4 py-4"
               >
                 <div class="flex items-center gap-3">
                   <div
                     data-signed-in-avatar
-                    class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-surface-raised text-[11px] text-ink-muted"
+                    class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-tk-border bg-tk-surface text-[11px] text-tk-ink-3"
                   >
                     —
                   </div>
                   <div class="min-w-0 flex-1">
                     <p
                       data-signed-in-name
-                      class="truncate text-sm font-medium text-ink-primary"
+                      class="truncate text-sm font-medium text-tk-ink"
                     >
                       —
                     </p>
-                    <div class="flex items-center gap-2 text-[11px] text-ink-muted">
-                      <a href="/settings" class="hover:text-ink-primary">
+                    <div class="flex items-center gap-2 text-[11px] text-tk-ink-3">
+                      <a href="/settings" class="hover:text-tk-ink">
                         Account settings
                       </a>
                       <span aria-hidden="true">·</span>
                       <button
                         type="button"
                         data-signout
-                        class="hover:text-ink-primary"
+                        class="hover:text-tk-ink"
                       >
                         Sign out
                       </button>
@@ -405,7 +405,7 @@ const navSections: NavSection[] = [
               <nav class="px-3 py-4">
                 {navSections.map((section) => (
                   <div class="mb-3">
-                    <div class="px-3 pb-1 pt-2 text-[10px] font-mono uppercase tracking-widest text-ink-muted">
+                    <div class="px-3 pb-1 pt-2 text-[10px] font-mono uppercase tracking-widest text-tk-ink-3">
                       {section.label}
                     </div>
                     <ul class="space-y-px">
@@ -430,8 +430,8 @@ const navSections: NavSection[] = [
                                 // by bg + text color + inset divider only.
                                 'group flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150',
                                 active
-                                  ? 'bg-glow-red/10 text-glow-red shadow-inset-divider'
-                                  : 'text-ink-secondary hover:bg-white/5 hover:text-ink-primary',
+                                  ? 'bg-tk-accent/10 text-tk-accent shadow-inset-divider'
+                                  : 'text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',
                               ]}
                             >
                               <svg
@@ -462,8 +462,8 @@ const navSections: NavSection[] = [
                                     // → no width jump when the badge appears.
                                     'shrink-0 rounded px-1.5 py-px font-mono text-[10px] opacity-0 transition-opacity',
                                     active
-                                      ? 'bg-glow-red/20 text-glow-red'
-                                      : 'bg-white/5 text-ink-muted group-hover:text-ink-secondary',
+                                      ? 'bg-tk-accent/20 text-tk-accent'
+                                      : 'bg-tk-hover text-tk-ink-3 group-hover:text-tk-ink-2',
                                   ]}
                                   >&nbsp;</span>
                               )}
@@ -487,12 +487,12 @@ const navSections: NavSection[] = [
               */}
               <div
                 data-admin-shortcut
-                class="hidden border-t border-white/10 px-4 py-3"
+                class="hidden border-t border-tk-border px-4 py-3"
               >
                 <a
                   href="#"
                   data-admin-shortcut-link
-                  class="flex items-center gap-2 rounded-md bg-glow-red/5 px-3 py-1.5 text-sm font-medium text-glow-red hover:bg-glow-red/10"
+                  class="flex items-center gap-2 rounded-md bg-tk-accent/5 px-3 py-1.5 text-sm font-medium text-tk-accent hover:bg-tk-accent/10"
                 >
                   <svg
                     viewBox="0 0 16 16"
@@ -526,7 +526,7 @@ const navSections: NavSection[] = [
                ds_act_as_account selection differs from self. -->
           <div
             data-act-as-banner
-            class="hidden border-b border-glow-red/30 bg-glow-red/10 px-6 py-3 text-sm text-glow-red-soft backdrop-blur-sm"
+            class="hidden border-b border-tk-accent/30 bg-tk-accent/10 px-6 py-3 text-sm text-tk-accent-soft backdrop-blur-sm"
             role="status"
           >
             <div class="mx-auto flex max-w-6xl items-center justify-between gap-4">
@@ -537,7 +537,7 @@ const navSections: NavSection[] = [
               <button
                 type="button"
                 data-act-as-clear
-                class="rounded border border-glow-red/40 bg-surface-raised px-3 py-1 text-xs font-medium text-ink-primary hover:bg-glow-red/20"
+                class="rounded border border-tk-accent/40 bg-tk-surface px-3 py-1 text-xs font-medium text-tk-ink hover:bg-tk-accent/20"
               >
                 Switch back to self
               </button>
@@ -552,7 +552,7 @@ const navSections: NavSection[] = [
                script below toggles on incoming events. -->
           <div
             data-notification-banner
-            class="hidden border-b border-glow-red/40 bg-glow-red/10 backdrop-blur-sm"
+            class="hidden border-b border-tk-accent/40 bg-tk-accent/10 backdrop-blur-sm"
             role="status"
             aria-live="polite"
           >
@@ -562,18 +562,18 @@ const navSections: NavSection[] = [
               <div class="min-w-0 flex-1">
                 <p
                   data-notification-title
-                  class="text-sm font-medium text-ink-primary"
+                  class="text-sm font-medium text-tk-ink"
                 ></p>
                 <p
                   data-notification-body
-                  class="mt-0.5 text-xs text-ink-secondary"
+                  class="mt-0.5 text-xs text-tk-ink-2"
                 ></p>
               </div>
               <button
                 type="button"
                 data-notification-dismiss
                 aria-label="Dismiss notification"
-                class="shrink-0 rounded p-1 text-ink-muted hover:bg-glow-red/20 hover:text-ink-primary"
+                class="shrink-0 rounded p-1 text-tk-ink-3 hover:bg-tk-accent/20 hover:text-tk-ink"
               >
                 ✕
               </button>
@@ -586,11 +586,11 @@ const navSections: NavSection[] = [
                default; the inline script below toggles + populates. -->
           <div
             data-legal-banner
-            class="hidden border-b border-glow-red/40 bg-glow-red/15 backdrop-blur-sm"
+            class="hidden border-b border-tk-accent/40 bg-tk-accent/15 backdrop-blur-sm"
             role="alert"
           >
             <div class="mx-auto max-w-6xl px-6 py-4">
-              <p class="text-sm font-medium text-ink-primary">
+              <p class="text-sm font-medium text-tk-ink">
                 Before you can mint API keys or create sessions, please review and accept the
                 following:
               </p>
@@ -601,11 +601,11 @@ const navSections: NavSection[] = [
                 <button
                   type="button"
                   data-legal-accept-all
-                  class="rounded border border-glow-red/40 bg-surface-raised px-4 py-1.5 text-sm font-medium text-ink-primary hover:bg-glow-red/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="rounded border border-tk-accent/40 bg-tk-surface px-4 py-1.5 text-sm font-medium text-tk-ink hover:bg-tk-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Accept all and continue
                 </button>
-                <span data-legal-status class="text-xs text-ink-muted"></span>
+                <span data-legal-status class="text-xs text-tk-ink-3"></span>
               </div>
             </div>
           </div>
@@ -625,24 +625,24 @@ const navSections: NavSection[] = [
         aria-modal="true"
         aria-labelledby="ds-confirm-message"
       >
-        <div class="w-full max-w-md rounded-xl border border-white/10 bg-surface-raised p-6 shadow-2xl">
+        <div class="w-full max-w-md rounded-xl border border-tk-border bg-tk-surface p-6 shadow-2xl">
           <p
             data-ds-confirm-message
             id="ds-confirm-message"
-            class="whitespace-pre-line text-sm text-ink-primary"
+            class="whitespace-pre-line text-sm text-tk-ink"
           >
           </p>
           <div class="mt-6 flex justify-end gap-3">
             <button
               type="button"
               data-ds-confirm-cancel
-              class="rounded-lg border border-white/10 px-4 py-2 text-sm text-ink-secondary hover:text-ink-primary"
+              class="rounded-lg border border-tk-border px-4 py-2 text-sm text-tk-ink-2 hover:text-tk-ink"
               >Cancel</button
             >
             <button
               type="button"
               data-ds-confirm-ok
-              class="rounded-lg bg-glow-red px-4 py-2 text-sm font-medium text-white hover:bg-glow-red/90"
+              class="rounded-lg bg-tk-accent px-4 py-2 text-sm font-medium text-white hover:bg-tk-accent/90"
               >Confirm</button
             >
           </div>
@@ -717,29 +717,29 @@ const navSections: NavSection[] = [
         aria-modal="true"
         aria-labelledby="ds-prompt-message"
       >
-        <div class="w-full max-w-md rounded-xl border border-white/10 bg-surface-raised p-6 shadow-2xl">
+        <div class="w-full max-w-md rounded-xl border border-tk-border bg-tk-surface p-6 shadow-2xl">
           <p
             data-ds-prompt-message
             id="ds-prompt-message"
-            class="whitespace-pre-line text-sm text-ink-primary"
+            class="whitespace-pre-line text-sm text-tk-ink"
           >
           </p>
           <input
             type="text"
             data-ds-prompt-input
-            class="mt-4 w-full rounded-lg border border-white/10 bg-surface-base px-3 py-2 text-sm text-ink-primary placeholder:text-ink-muted focus:border-glow-red focus:outline-none"
+            class="mt-4 w-full rounded-lg border border-tk-border bg-tk-bg px-3 py-2 text-sm text-tk-ink placeholder:text-tk-ink-3 focus:border-tk-accent focus:outline-none"
           />
           <div class="mt-6 flex justify-end gap-3">
             <button
               type="button"
               data-ds-prompt-cancel
-              class="rounded-lg border border-white/10 px-4 py-2 text-sm text-ink-secondary hover:text-ink-primary"
+              class="rounded-lg border border-tk-border px-4 py-2 text-sm text-tk-ink-2 hover:text-tk-ink"
               >Cancel</button
             >
             <button
               type="button"
               data-ds-prompt-ok
-              class="rounded-lg bg-glow-red px-4 py-2 text-sm font-medium text-white hover:bg-glow-red/90"
+              class="rounded-lg bg-tk-accent px-4 py-2 text-sm font-medium text-white hover:bg-tk-accent/90"
               >OK</button
             >
           </div>
@@ -932,7 +932,7 @@ const navSections: NavSection[] = [
                       : (parts[0] || '?').slice(0, 2).toUpperCase();
                   saAvatar.textContent = initials;
                   saAvatar.className =
-                    'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-glow-red/10 text-xs font-medium text-glow-red';
+                    'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-tk-border bg-tk-accent/10 text-xs font-medium text-tk-accent';
                 }
                 // 2026-05-21 — block is rendered `invisible` (CSS
                 // visibility:hidden) in SSR so the sidebar nav below it
@@ -1306,16 +1306,16 @@ const navSections: NavSection[] = [
                 const li = document.createElement('li');
                 li.className = 'flex items-center gap-2';
                 const dot = document.createElement('span');
-                dot.className = 'inline-block size-1.5 rounded-full bg-glow-red';
+                dot.className = 'inline-block size-1.5 rounded-full bg-tk-accent';
                 const a = document.createElement('a');
                 const slug = DOC_URL_SLUG[doc.document_key] || doc.document_key;
                 a.href = 'https://driftstack.dev/legal/' + slug + '/';
                 a.target = '_blank';
                 a.rel = 'noopener noreferrer';
-                a.className = 'text-glow-red underline underline-offset-4 hover:text-glow-red-soft';
+                a.className = 'text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft';
                 a.textContent = DOC_LABEL[doc.document_key] || doc.title || doc.document_key;
                 const ver = document.createElement('span');
-                ver.className = 'text-xs text-ink-muted';
+                ver.className = 'text-xs text-tk-ink-3';
                 ver.textContent = '(v' + doc.current_version + ')';
                 li.append(dot, a, ver);
                 list.append(li);
@@ -1364,9 +1364,9 @@ const navSections: NavSection[] = [
             });
         })();
       </script>
-      <footer class="border-t border-white/10 bg-surface-base/70 backdrop-blur-md">
+      <footer class="border-t border-tk-border bg-tk-bg/70 backdrop-blur-md">
         <div
-          class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4 text-xs text-ink-muted"
+          class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4 text-xs text-tk-ink-3"
         >
           <span>Driftstack</span>
           {/* W211 — these pages live on the marketing-site at
@@ -1375,11 +1375,11 @@ const navSections: NavSection[] = [
               relative paths would 404 against the Cloudflare Pages
               project that serves the dashboard. */}
           <nav class="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <a href="https://driftstack.dev/legal/privacy" class="hover:text-glow-red">Privacy</a>
-            <a href="https://driftstack.dev/legal/terms" class="hover:text-glow-red">Terms</a>
-            <a href="https://driftstack.dev/legal/dpa" class="hover:text-glow-red">DPA</a>
-            <a href="https://driftstack.dev/legal/aup" class="hover:text-glow-red">AUP</a>
-            <a href="https://driftstack.dev/trust/sub-processors" class="hover:text-glow-red"
+            <a href="https://driftstack.dev/legal/privacy" class="hover:text-tk-accent">Privacy</a>
+            <a href="https://driftstack.dev/legal/terms" class="hover:text-tk-accent">Terms</a>
+            <a href="https://driftstack.dev/legal/dpa" class="hover:text-tk-accent">DPA</a>
+            <a href="https://driftstack.dev/legal/aup" class="hover:text-tk-accent">AUP</a>
+            <a href="https://driftstack.dev/trust/sub-processors" class="hover:text-tk-accent"
               >Sub-processors</a
             >
           </nav>

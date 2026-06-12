@@ -84,7 +84,7 @@ describe('apps/customer-dashboard/src/pages/recipes.astro content parity', () =>
   it("Empty-state: 'No recipes yet' headline + 'Save one from an agent session' next-step CTA pointing at /agent-sessions — pinned so the zero-state guides the customer to the capture flow (recipes are only created from agent sessions)", () => {
     expect(body).toMatch(/No recipes yet/);
     expect(body).toMatch(
-      /Save one from an <a href="\/agent-sessions" class="text-glow-red underline">agent session<\/a>/,
+      /Save one from an <a href="\/agent-sessions" class="text-tk-accent underline">agent session<\/a>/,
     );
   });
 

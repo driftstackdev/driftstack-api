@@ -54,7 +54,7 @@ describe('W496.A apps/customer-dashboard/src/pages/sessions.astro content parity
 
   it('STATUS_BADGE_CLASS 5-state catalog: creating amber / ready emerald / busy blue / destroyed slate / errored red — pinned so the session-lifecycle vocabulary stays complete and color-mapped (drift to dropping creating would render the most-common transient state with no styling; drift to swapping busy/ready would hide which sessions are actively serving traffic)', () => {
     expect(body).toMatch(
-      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*\n?\s*creating: 'bg-glow-red\/10 text-glow-red',\s*\n?\s*ready: 'bg-emerald-400\/10 text-emerald-300',\s*\n?\s*busy: 'bg-blue-50 text-blue-700',\s*\n?\s*destroyed: 'bg-surface-raised text-ink-secondary',\s*\n?\s*errored: 'bg-red-50 text-red-700',\s*\n?\s*\};/,
+      /const STATUS_BADGE_CLASS: Record<string, string> = \{\s*\n?\s*creating: 'bg-tk-accent\/10 text-tk-accent',\s*\n?\s*ready: 'bg-emerald-400\/10 text-emerald-300',\s*\n?\s*busy: 'bg-blue-50 text-blue-700',\s*\n?\s*destroyed: 'bg-tk-surface text-tk-ink-2',\s*\n?\s*errored: 'bg-red-50 text-red-700',\s*\n?\s*\};/,
     );
   });
 

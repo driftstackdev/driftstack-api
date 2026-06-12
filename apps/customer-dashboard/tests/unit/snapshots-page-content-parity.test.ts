@@ -79,7 +79,7 @@ describe('W364.B customer-dashboard /snapshots page content parity', () => {
     expect(body).toContain('<a href="/profiles"');
     expect(body).toMatch(/Capture from <a\s+href="\/profiles"/);
     expect(body).toMatch(/No snapshots yet/);
-    expect(body).toMatch(/<a href="\/profiles" class="text-glow-red underline">\/profiles<\/a>/);
+    expect(body).toMatch(/<a href="\/profiles" class="text-tk-accent underline">\/profiles<\/a>/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/profiles.astro'))).toBe(
       true,
     );

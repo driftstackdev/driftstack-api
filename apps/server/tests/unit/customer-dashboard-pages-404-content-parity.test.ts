@@ -33,7 +33,7 @@ describe('W491.A apps/customer-dashboard/src/pages/404.astro content parity', ()
 
   it("404 eyebrow + 'Page not found.' headline + 'The page you were looking for has moved or doesn't exist.' — pinned so the customer-facing copy stays gentler than the admin-panel version (drift to harsher 'no page at this path' phrasing would mismatch the customer-dashboard voice)", () => {
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-glow-red">404<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent">404<\/p>/,
     );
     expect(body).toMatch(/Page not found\./);
     expect(body).toMatch(/The page you were looking for has moved or doesn't exist\./);

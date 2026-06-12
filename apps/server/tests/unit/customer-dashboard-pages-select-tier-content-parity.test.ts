@@ -108,7 +108,7 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
 
   it("Enterprise framing: 'Enterprise tier (~$4,000/mo, custom) — contact sales' with mailto:sales@driftstack.dev — pinned so the enterprise tier surfaces as a sales-only path (no self-serve checkout for ~$4k/mo) and the contact email stays canonical", () => {
     expect(body).toMatch(
-      /Enterprise tier \(~\$4,000\/mo, custom\) — <a href="mailto:sales@driftstack\.dev" class="text-glow-red underline">contact sales<\/a>\./,
+      /Enterprise tier \(~\$4,000\/mo, custom\) — <a href="mailto:sales@driftstack\.dev" class="text-tk-accent underline">contact sales<\/a>\./,
     );
   });
 

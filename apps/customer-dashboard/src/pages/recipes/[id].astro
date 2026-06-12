@@ -25,63 +25,63 @@ const apiBaseUrl = resolveApiBaseUrl();
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-3xl px-6 py-10" data-page="recipe-detail">
       <div class="mb-6">
-        <a href="/recipes" class="text-sm text-ink-muted hover:text-glow-red hover:underline"
+        <a href="/recipes" class="text-sm text-tk-ink-3 hover:text-tk-accent hover:underline"
           >← Recipes</a
         >
       </div>
 
       <div
         data-banner
-        class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
+        class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
         role="status"
       >
       </div>
 
       {/* Loading — visible on first paint until the fetch resolves. */}
-      <div data-state="loading" class="rounded-lg border border-white/10 bg-surface-raised px-6 py-16 text-center text-sm text-ink-muted">
+      <div data-state="loading" class="rounded-lg border border-tk-border bg-tk-surface px-6 py-16 text-center text-sm text-tk-ink-3">
         Loading recipe…
       </div>
 
       {/* Needs sign-in. */}
-      <div data-state="needs-signin" class="hidden rounded-lg border border-white/10 bg-surface-raised px-6 py-16 text-center text-sm text-ink-muted">
-        <p class="text-ink-primary font-medium">Sign in to view this recipe</p>
-        <p class="mt-1"><a data-signin-link href="/login" class="text-glow-red underline">Sign in</a></p>
+      <div data-state="needs-signin" class="hidden rounded-lg border border-tk-border bg-tk-surface px-6 py-16 text-center text-sm text-tk-ink-3">
+        <p class="text-tk-ink font-medium">Sign in to view this recipe</p>
+        <p class="mt-1"><a data-signin-link href="/login" class="text-tk-accent underline">Sign in</a></p>
       </div>
 
       {/* Not found (404 or cross-account). */}
-      <div data-state="not-found" class="hidden rounded-lg border border-dashed border-white/10 bg-surface-raised px-6 py-16 text-center text-sm text-ink-muted">
-        <p class="text-ink-primary font-medium">Recipe not found</p>
-        <p class="mt-1">It may have been deleted, or it belongs to another account. <a href="/recipes" class="text-glow-red underline">Back to recipes</a>.</p>
+      <div data-state="not-found" class="hidden rounded-lg border border-dashed border-tk-border bg-tk-surface px-6 py-16 text-center text-sm text-tk-ink-3">
+        <p class="text-tk-ink font-medium">Recipe not found</p>
+        <p class="mt-1">It may have been deleted, or it belongs to another account. <a href="/recipes" class="text-tk-accent underline">Back to recipes</a>.</p>
       </div>
 
       {/* Generic error. */}
-      <div data-state="error" class="hidden rounded-lg border border-white/10 bg-surface-raised px-6 py-16 text-center text-sm text-ink-muted">
-        <p class="text-ink-primary font-medium">Couldn't load this recipe</p>
+      <div data-state="error" class="hidden rounded-lg border border-tk-border bg-tk-surface px-6 py-16 text-center text-sm text-tk-ink-3">
+        <p class="text-tk-ink font-medium">Couldn't load this recipe</p>
         <p data-error-detail class="mt-1"></p>
       </div>
 
       {/* Loaded. */}
       <div data-state="loaded" class="hidden">
         <header class="mb-6">
-          <h1 data-recipe-label class="text-3xl font-semibold tracking-tight text-ink-primary"></h1>
-          <p data-recipe-id class="mt-1 font-mono text-xs text-ink-muted"></p>
-          <p data-recipe-description class="mt-3 hidden max-w-prose text-sm text-ink-secondary"></p>
+          <h1 data-recipe-label class="text-3xl font-semibold tracking-tight text-tk-ink"></h1>
+          <p data-recipe-id class="mt-1 font-mono text-xs text-tk-ink-3"></p>
+          <p data-recipe-description class="mt-3 hidden max-w-prose text-sm text-tk-ink-2"></p>
         </header>
 
-        <dl class="mb-8 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-xs text-ink-muted">
+        <dl class="mb-8 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-xs text-tk-ink-3">
           <dt>Source session</dt>
-          <dd data-recipe-source class="font-mono text-ink-primary">—</dd>
+          <dd data-recipe-source class="font-mono text-tk-ink">—</dd>
           <dt>Steps</dt>
-          <dd data-recipe-intent-count class="text-ink-primary">—</dd>
+          <dd data-recipe-intent-count class="text-tk-ink">—</dd>
           <dt>Created</dt>
-          <dd data-recipe-created class="text-ink-primary">—</dd>
+          <dd data-recipe-created class="text-tk-ink">—</dd>
           <dt>Updated</dt>
-          <dd data-recipe-updated class="text-ink-primary">—</dd>
+          <dd data-recipe-updated class="text-tk-ink">—</dd>
         </dl>
 
-        <h2 class="mb-3 text-lg font-semibold tracking-tight text-ink-primary">Intent steps</h2>
+        <h2 class="mb-3 text-lg font-semibold tracking-tight text-tk-ink">Intent steps</h2>
         <ol data-intent-list class="mb-8 space-y-2"></ol>
-        <p data-intent-empty class="mb-8 hidden text-sm text-ink-muted">
+        <p data-intent-empty class="mb-8 hidden text-sm text-tk-ink-3">
           This recipe has no recorded intent steps (it was captured from a manual-only
           session).
         </p>
@@ -204,15 +204,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           list.innerHTML = log
             .map(
               (it, i) =>
-                '<li class="flex items-start gap-3 rounded-lg border border-white/10 bg-surface-raised px-4 py-3">' +
-                '<span class="mt-0.5 shrink-0 font-mono text-xs text-ink-muted">' +
+                '<li class="flex items-start gap-3 rounded-lg border border-tk-border bg-tk-surface px-4 py-3">' +
+                '<span class="mt-0.5 shrink-0 font-mono text-xs text-tk-ink-3">' +
                 (i + 1) +
                 '</span>' +
                 '<div class="min-w-0">' +
-                '<span class="rounded bg-surface-base px-2 py-0.5 font-mono text-xs text-ink-secondary">' +
+                '<span class="rounded bg-tk-bg px-2 py-0.5 font-mono text-xs text-tk-ink-2">' +
                 escapeHtml(intentKind(it)) +
                 '</span>' +
-                '<p class="mt-1 text-sm text-ink-primary">' +
+                '<p class="mt-1 text-sm text-tk-ink">' +
                 intentSummary(it) +
                 '</p></div></li>',
             )

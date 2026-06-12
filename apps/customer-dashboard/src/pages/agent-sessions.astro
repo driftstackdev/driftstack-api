@@ -25,23 +25,23 @@ const apiBaseUrl = resolveApiBaseUrl();
         form lives below, but this hero is the first thing customers
         see and tells them clearly what the agent can do. */}
     <header class="mb-8 text-center">
-      <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-glow-red/10 ring-1 ring-glow-red/30">
-        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+      <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-tk-accent/10 ring-1 ring-tk-accent/30">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
           <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
         </svg>
       </div>
-      <h1 class="mt-4 text-3xl font-semibold tracking-tight text-ink-primary">
+      <h1 class="mt-4 text-3xl font-semibold tracking-tight text-tk-ink">
         What can I help you automate?
       </h1>
-      <p class="mt-2 max-w-prose text-sm text-ink-muted mx-auto">
+      <p class="mt-2 max-w-prose text-sm text-tk-ink-3 mx-auto">
         Describe a task in plain English. The AI plans the steps; your remote browser
         carries them out, live. Take over with one click whenever you want.
       </p>
       {/* 2026-05-24 — device chip surfaces the archetype the session will
           run under so the customer sees "this is a real iPhone" not "some
           remote thing". */}
-      <p class="mt-4 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-surface-raised px-2.5 py-1 text-xs text-ink-secondary">
-        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+      <p class="mt-4 inline-flex items-center gap-1.5 rounded-full border border-tk-border bg-tk-surface px-2.5 py-1 text-xs text-tk-ink-2">
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
           <rect x="6" y="2" width="12" height="20" rx="2.5" />
           <circle cx="12" cy="18" r="0.75" fill="currentColor" />
         </svg>
@@ -77,7 +77,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <div
       data-banner-unauthenticated
-      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
+      class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
       role="status"
     >
       Sign in to start an agent session.
@@ -96,38 +96,38 @@ const apiBaseUrl = resolveApiBaseUrl();
         <button
           type="button"
           data-prompt-suggestion="Log in to my Gmail and reply to messages from contact@example.com with a polite acknowledgement."
-          class="rounded-lg border border-white/10 bg-surface-raised/50 p-4 text-left hover:border-glow-red/40 hover:bg-surface-raised"
+          class="rounded-lg border border-tk-border bg-tk-surface/50 p-4 text-left hover:border-tk-accent/40 hover:bg-tk-surface"
         >
           <p class="text-2xl">📧</p>
-          <p class="mt-2 text-sm font-medium text-ink-primary">Triage email</p>
-          <p class="mt-1 text-xs text-ink-muted">Reply to messages from a specific sender.</p>
+          <p class="mt-2 text-sm font-medium text-tk-ink">Triage email</p>
+          <p class="mt-1 text-xs text-tk-ink-3">Reply to messages from a specific sender.</p>
         </button>
         <button
           type="button"
           data-prompt-suggestion="Take a full-page screenshot of https://example.com/dashboard and describe what's visible on it."
-          class="rounded-lg border border-white/10 bg-surface-raised/50 p-4 text-left hover:border-glow-red/40 hover:bg-surface-raised"
+          class="rounded-lg border border-tk-border bg-tk-surface/50 p-4 text-left hover:border-tk-accent/40 hover:bg-tk-surface"
         >
           <p class="text-2xl">📸</p>
-          <p class="mt-2 text-sm font-medium text-ink-primary">Audit a page</p>
-          <p class="mt-1 text-xs text-ink-muted">Screenshot + describe what the agent sees.</p>
+          <p class="mt-2 text-sm font-medium text-tk-ink">Audit a page</p>
+          <p class="mt-1 text-xs text-tk-ink-3">Screenshot + describe what the agent sees.</p>
         </button>
         <button
           type="button"
           data-prompt-suggestion="Fill the contact form at https://example.com/contact with name 'Casey Demo', email 'casey@example.com', and message 'Test from Driftstack', then submit."
-          class="rounded-lg border border-white/10 bg-surface-raised/50 p-4 text-left hover:border-glow-red/40 hover:bg-surface-raised"
+          class="rounded-lg border border-tk-border bg-tk-surface/50 p-4 text-left hover:border-tk-accent/40 hover:bg-tk-surface"
         >
           <p class="text-2xl">✍️</p>
-          <p class="mt-2 text-sm font-medium text-ink-primary">Fill a form</p>
-          <p class="mt-1 text-xs text-ink-muted">Multi-field form completion + submit.</p>
+          <p class="mt-2 text-sm font-medium text-tk-ink">Fill a form</p>
+          <p class="mt-1 text-xs text-tk-ink-3">Multi-field form completion + submit.</p>
         </button>
         <button
           type="button"
           data-prompt-suggestion="Navigate to my LinkedIn inbox and tell me how many unread messages I have."
-          class="rounded-lg border border-white/10 bg-surface-raised/50 p-4 text-left hover:border-glow-red/40 hover:bg-surface-raised"
+          class="rounded-lg border border-tk-border bg-tk-surface/50 p-4 text-left hover:border-tk-accent/40 hover:bg-tk-surface"
         >
           <p class="text-2xl">🔍</p>
-          <p class="mt-2 text-sm font-medium text-ink-primary">Quick lookup</p>
-          <p class="mt-1 text-xs text-ink-muted">Navigate + report what's there.</p>
+          <p class="mt-2 text-sm font-medium text-tk-ink">Quick lookup</p>
+          <p class="mt-1 text-xs text-tk-ink-3">Navigate + report what's there.</p>
         </button>
       </div>
     </section>
@@ -138,7 +138,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     <section data-section="composer" class="mb-6">
       <form
         data-form="create-session"
-        class="rounded-2xl border border-white/10 bg-surface-raised shadow-lg shadow-glow-red/5 focus-within:border-glow-red/40 focus-within:ring-1 focus-within:ring-glow-red/20 transition-colors"
+        class="rounded-2xl border border-tk-border bg-tk-surface shadow-lg shadow-glow-accent/5 focus-within:border-tk-accent/40 focus-within:ring-1 focus-within:ring-tk-accent/20 transition-colors"
       >
         <div class="px-5 pt-4">
           {/* Mode chip-bar (was the radio form below; now inline).
@@ -147,29 +147,29 @@ const apiBaseUrl = resolveApiBaseUrl();
               section, just inline now. */}
           <div
             data-section="mode-selector"
-            class="inline-flex rounded-md border border-white/10 bg-surface-base p-0.5 text-xs"
+            class="inline-flex rounded-md border border-tk-border bg-tk-bg p-0.5 text-xs"
             role="radiogroup"
             aria-label="Session mode"
           >
             <label class="cursor-pointer">
               <input type="radio" name="mode" value="ai" class="peer sr-only" />
-              <span class="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-ink-muted peer-checked:bg-glow-red/15 peer-checked:text-glow-red">
+              <span class="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-tk-ink-3 peer-checked:bg-tk-accent/15 peer-checked:text-tk-accent">
                 <span class="text-[10px] uppercase tracking-wide">AI</span>
               </span>
             </label>
             <label class="cursor-pointer">
               <input type="radio" name="mode" value="pair" class="peer sr-only" checked />
-              <span class="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-ink-muted peer-checked:bg-glow-red/15 peer-checked:text-glow-red">
+              <span class="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-tk-ink-3 peer-checked:bg-tk-accent/15 peer-checked:text-tk-accent">
                 <span class="text-[10px] uppercase tracking-wide">Pair</span>
               </span>
             </label>
             <label class="cursor-pointer">
               <input type="radio" name="mode" value="manual" class="peer sr-only" />
-              <span class="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-ink-muted peer-checked:bg-glow-red/15 peer-checked:text-glow-red">
+              <span class="inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-tk-ink-3 peer-checked:bg-tk-accent/15 peer-checked:text-tk-accent">
                 <span class="text-[10px] uppercase tracking-wide">Manual</span>
               </span>
             </label>
-            <span class="ml-2 inline-flex items-center text-[10px] text-ink-muted">
+            <span class="ml-2 inline-flex items-center text-[10px] text-tk-ink-3">
               <span data-mode-hint>Pair · AI plans, you can take over anytime</span>
             </span>
           </div>
@@ -185,18 +185,18 @@ const apiBaseUrl = resolveApiBaseUrl();
                 body; the server records it on the agent_session + bills
                 the per-model rate. */}
             <label
-              class="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-surface-base/60 px-2.5 py-1"
+              class="inline-flex items-center gap-1.5 rounded-md border border-tk-border bg-tk-bg/60 px-2.5 py-1"
               title="Pick the Claude model your agent session runs on. Opus 4.7 = strongest reasoning + tool-use accuracy; Sonnet 4.6 / Haiku 4.5 = lower cost for simpler workloads."
             >
-              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
               </svg>
-              <span class="text-ink-muted">Model</span>
+              <span class="text-tk-ink-3">Model</span>
               <select
                 name="model"
                 data-create-model-select
                 aria-label="Agent model"
-                class="bg-transparent font-mono text-ink-primary text-[10px] focus:outline-none"
+                class="bg-transparent font-mono text-tk-ink text-[10px] focus:outline-none"
               >
                 <option value="claude-opus-4-7">Claude Opus 4.7</option>
                 <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
@@ -214,7 +214,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               href="https://docs.driftstack.dev/api/byok-anthropic"
               target="_blank"
               rel="noopener"
-              class="ml-auto text-ink-muted hover:text-glow-red"
+              class="ml-auto text-tk-ink-3 hover:text-tk-accent"
             >
               Manage key (API) →
             </a>
@@ -226,17 +226,17 @@ const apiBaseUrl = resolveApiBaseUrl();
           maxlength="8000"
           placeholder="Describe what you want the agent to do…
 e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgement'"
-          class="w-full resize-none bg-transparent px-5 py-4 text-base text-ink-primary placeholder-slate-500 focus:outline-none"
+          class="w-full resize-none bg-transparent px-5 py-4 text-base text-tk-ink placeholder-slate-500 focus:outline-none"
         ></textarea>
         <div class="flex items-center justify-between gap-3 border-t border-white/5 px-5 py-3">
-          <div class="flex items-center gap-2 text-[11px] text-ink-muted">
+          <div class="flex items-center gap-2 text-[11px] text-tk-ink-3">
             <kbd class="rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 font-mono">⌘</kbd>
             <kbd class="rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 font-mono">↵</kbd>
             <span>to start the session</span>
           </div>
           <button
             type="submit"
-            class="inline-flex items-center gap-1.5 rounded-md bg-glow-red px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-glow-red/90"
+            class="inline-flex items-center gap-1.5 rounded-md bg-tk-accent px-5 py-2 text-sm font-medium text-white shadow-sm hover:bg-tk-accent/90"
           >
             Start session
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -245,9 +245,9 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
           </button>
         </div>
       </form>
-      <p class="mt-3 text-center text-xs text-ink-muted">
+      <p class="mt-3 text-center text-xs text-tk-ink-3">
         Sessions live for 24h by default · billed only while active · cancel
-        anytime · <a href="/select-tier" class="text-glow-red hover:underline">tier limits</a>
+        anytime · <a href="/select-tier" class="text-tk-accent hover:underline">tier limits</a>
       </p>
     </section>
 
@@ -260,32 +260,32 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
       class="mb-10 hidden"
     >
       <div class="mb-3 flex items-center justify-between">
-        <h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-ink-muted">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+        <h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-tk-ink-3">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 7v5l3 2" />
           </svg>
           Recent sessions
         </h2>
-        <span data-recent-count class="text-xs text-ink-muted">—</span>
+        <span data-recent-count class="text-xs text-tk-ink-3">—</span>
       </div>
       <ul data-recent-list class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {/* 2026-05-24 — skeleton cards for hydrate-state polish. Rows
             rendered by JS — see the script section. */}
-        <li class="rounded-lg border border-white/10 bg-surface-raised p-4" data-recent-skeleton>
-          <div class="h-3 w-32 animate-pulse rounded bg-white/10"></div>
-          <div class="mt-3 h-3 w-48 animate-pulse rounded bg-white/10"></div>
-          <div class="mt-2 h-2 w-24 animate-pulse rounded bg-white/10"></div>
+        <li class="rounded-lg border border-tk-border bg-tk-surface p-4" data-recent-skeleton>
+          <div class="h-3 w-32 animate-pulse rounded bg-tk-hover"></div>
+          <div class="mt-3 h-3 w-48 animate-pulse rounded bg-tk-hover"></div>
+          <div class="mt-2 h-2 w-24 animate-pulse rounded bg-tk-hover"></div>
         </li>
-        <li class="rounded-lg border border-white/10 bg-surface-raised p-4" data-recent-skeleton>
-          <div class="h-3 w-28 animate-pulse rounded bg-white/10"></div>
-          <div class="mt-3 h-3 w-40 animate-pulse rounded bg-white/10"></div>
-          <div class="mt-2 h-2 w-20 animate-pulse rounded bg-white/10"></div>
+        <li class="rounded-lg border border-tk-border bg-tk-surface p-4" data-recent-skeleton>
+          <div class="h-3 w-28 animate-pulse rounded bg-tk-hover"></div>
+          <div class="mt-3 h-3 w-40 animate-pulse rounded bg-tk-hover"></div>
+          <div class="mt-2 h-2 w-20 animate-pulse rounded bg-tk-hover"></div>
         </li>
-        <li class="rounded-lg border border-white/10 bg-surface-raised p-4 sm:hidden lg:block" data-recent-skeleton>
-          <div class="h-3 w-36 animate-pulse rounded bg-white/10"></div>
-          <div class="mt-3 h-3 w-44 animate-pulse rounded bg-white/10"></div>
-          <div class="mt-2 h-2 w-16 animate-pulse rounded bg-white/10"></div>
+        <li class="rounded-lg border border-tk-border bg-tk-surface p-4 sm:hidden lg:block" data-recent-skeleton>
+          <div class="h-3 w-36 animate-pulse rounded bg-tk-hover"></div>
+          <div class="mt-3 h-3 w-44 animate-pulse rounded bg-tk-hover"></div>
+          <div class="mt-2 h-2 w-16 animate-pulse rounded bg-tk-hover"></div>
         </li>
       </ul>
     </section>
@@ -302,13 +302,13 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
              when the dashboard creates / selects a session. -->
         <div
           data-section="active-session"
-          class="hidden rounded-lg border border-white/10 bg-surface-raised p-5"
+          class="hidden rounded-lg border border-tk-border bg-tk-surface p-5"
         >
           <div class="flex items-center justify-between gap-4">
-            <p class="font-mono text-xs text-ink-secondary" data-field="active-session-id">—</p>
+            <p class="font-mono text-xs text-tk-ink-2" data-field="active-session-id">—</p>
             <span
               data-field="pair-mode-state"
-              class="inline-flex rounded-full bg-white/5 px-2 py-0.5 text-xs font-medium text-ink-secondary"
+              class="inline-flex rounded-full bg-tk-hover px-2 py-0.5 text-xs font-medium text-tk-ink-2"
             ></span>
           </div>
 
@@ -317,14 +317,14 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
             <button
               data-action="takeover"
               type="button"
-              class="hidden rounded-md border border-glow-red/30 bg-glow-red/10 px-4 py-2 text-sm font-medium text-glow-red hover:bg-glow-red/20"
+              class="hidden rounded-md border border-tk-accent/30 bg-tk-accent/10 px-4 py-2 text-sm font-medium text-tk-accent hover:bg-tk-accent/20"
             >
               Take over
             </button>
             <button
               data-action="handback"
               type="button"
-              class="hidden rounded-md border border-white/10 bg-surface-base px-4 py-2 text-sm font-medium text-ink-primary hover:bg-surface-raised"
+              class="hidden rounded-md border border-tk-border bg-tk-bg px-4 py-2 text-sm font-medium text-tk-ink hover:bg-tk-surface"
             >
               Hand back
             </button>
@@ -333,11 +333,11 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
           <!-- 8.27 TranscriptStream slot -->
           <ul
             data-list="transcript"
-            class="mt-4 max-h-96 space-y-2 overflow-y-auto rounded border border-white/10 bg-surface-base p-3"
+            class="mt-4 max-h-96 space-y-2 overflow-y-auto rounded border border-tk-border bg-tk-bg p-3"
             aria-live="polite"
             aria-label="Agent session transcript"
           >
-            <li class="text-xs italic text-ink-muted">Transcript will appear here…</li>
+            <li class="text-xs italic text-tk-ink-3">Transcript will appear here…</li>
           </ul>
 
           <!-- 8.28.b MessageComposer slot -->
@@ -347,11 +347,11 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
               name="user_message"
               placeholder="Tell the AI what to do…"
               aria-label="Message to the AI agent"
-              class="flex-1 rounded-md border border-white/10 bg-surface-base px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+              class="flex-1 rounded-md border border-tk-border bg-tk-bg px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
             />
             <button
               type="submit"
-              class="rounded-md bg-glow-red px-4 py-2 text-sm font-medium text-white hover:bg-glow-red/90"
+              class="rounded-md bg-tk-accent px-4 py-2 text-sm font-medium text-white hover:bg-tk-accent/90"
             >
               Send
             </button>
@@ -361,29 +361,29 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
 
       <!-- 8.28 BundledLlmStatusPanel slot (right rail) -->
       <aside class="space-y-4" data-section="bundled-llm-status">
-        <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
-          <h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-ink-muted">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-5">
+          <h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-tk-ink-3">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
             Bundled LLM status
           </h2>
           <dl class="mt-3 space-y-2 text-sm">
             <div class="flex items-center justify-between">
-              <dt class="text-ink-muted">Consent</dt>
-              <dd data-field="consent" class="font-mono text-xs text-ink-secondary">—</dd>
+              <dt class="text-tk-ink-3">Consent</dt>
+              <dd data-field="consent" class="font-mono text-xs text-tk-ink-2">—</dd>
             </div>
             <div class="flex items-center justify-between">
-              <dt class="text-ink-muted">Monthly cap</dt>
-              <dd data-field="cap" class="font-mono text-xs text-ink-secondary">—</dd>
+              <dt class="text-tk-ink-3">Monthly cap</dt>
+              <dd data-field="cap" class="font-mono text-xs text-tk-ink-2">—</dd>
             </div>
             <div class="flex items-center justify-between">
-              <dt class="text-ink-muted">Used this month</dt>
-              <dd data-field="used" class="font-mono text-xs text-ink-secondary">—</dd>
+              <dt class="text-tk-ink-3">Used this month</dt>
+              <dd data-field="used" class="font-mono text-xs text-tk-ink-2">—</dd>
             </div>
             <div class="flex items-center justify-between">
-              <dt class="text-ink-muted">Remaining</dt>
-              <dd data-field="remaining" class="font-mono text-xs text-ink-secondary">—</dd>
+              <dt class="text-tk-ink-3">Remaining</dt>
+              <dd data-field="remaining" class="font-mono text-xs text-tk-ink-2">—</dd>
             </div>
           </dl>
         </div>
@@ -396,39 +396,39 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
           create when the response carries the `livekit` field.
         -->
         <div
-          class="hidden rounded-lg border border-white/10 bg-surface-raised p-5"
+          class="hidden rounded-lg border border-tk-border bg-tk-surface p-5"
           data-section="livekit-info"
         >
-          <h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-ink-muted">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-glow-red" aria-hidden="true">
+          <h2 class="flex items-center gap-2 text-sm font-semibold uppercase tracking-widest text-tk-ink-3">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" class="text-tk-accent" aria-hidden="true">
               <polygon points="23 7 16 12 23 17 23 7" />
               <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
             </svg>
             Live video
           </h2>
-          <p class="mt-3 text-xs text-ink-secondary">
+          <p class="mt-3 text-xs text-tk-ink-2">
             This session publishes its browser video stream to a per-Mac
             LiveKit room. Subscribe from the desktop GUI client or via
             <a
               href="https://docs.driftstack.dev/guides/live-video/"
-              class="underline hover:text-glow-red"
+              class="underline hover:text-tk-accent"
               target="_blank"
               rel="noopener noreferrer">livekit-client</a
             >.
           </p>
           <dl class="mt-3 space-y-1.5 text-xs">
             <div class="flex flex-col">
-              <dt class="text-ink-muted">Room</dt>
+              <dt class="text-tk-ink-3">Room</dt>
               <dd
                 data-field="livekit-room"
-                class="overflow-x-auto whitespace-nowrap font-mono text-ink-secondary"
+                class="overflow-x-auto whitespace-nowrap font-mono text-tk-ink-2"
               ></dd>
             </div>
             <div class="flex flex-col">
-              <dt class="text-ink-muted">WebSocket URL</dt>
+              <dt class="text-tk-ink-3">WebSocket URL</dt>
               <dd
                 data-field="livekit-ws-url"
-                class="overflow-x-auto whitespace-nowrap font-mono text-ink-secondary"
+                class="overflow-x-auto whitespace-nowrap font-mono text-tk-ink-2"
               ></dd>
             </div>
           </dl>
@@ -555,9 +555,9 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
                 '<li>' +
                 '<a href="/agent-sessions/' +
                 id +
-                '" class="block rounded-lg border border-white/10 bg-surface-raised/50 p-3 hover:border-glow-red/40 hover:bg-surface-raised">' +
+                '" class="block rounded-lg border border-tk-border bg-tk-surface/50 p-3 hover:border-tk-accent/40 hover:bg-tk-surface">' +
                 '<div class="flex items-center justify-between gap-2">' +
-                '<span class="inline-flex items-center rounded-full bg-glow-red/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-glow-red">' +
+                '<span class="inline-flex items-center rounded-full bg-tk-accent/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-tk-accent">' +
                 mode +
                 '</span>' +
                 '<span class="inline-flex items-center rounded-full ' +
@@ -566,10 +566,10 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
                 status +
                 '</span>' +
                 '</div>' +
-                '<p class="mt-2 font-mono text-xs text-ink-muted truncate">' +
+                '<p class="mt-2 font-mono text-xs text-tk-ink-3 truncate">' +
                 id +
                 '</p>' +
-                '<p class="mt-1 text-xs text-ink-muted">' +
+                '<p class="mt-1 text-xs text-tk-ink-3">' +
                 age +
                 ' · ' +
                 tokens +
@@ -774,7 +774,7 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
             ? 'bg-red-500/10 border-red-500/30 text-red-200'
             : kind === 'warn'
               ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
-              : 'bg-white/5 border-white/10 text-ink-secondary';
+              : 'bg-tk-hover border-tk-border text-tk-ink-2';
         toast.className =
           'pointer-events-auto rounded-md border px-4 py-2 text-sm shadow-lg ' + bg;
         toast.setAttribute('data-toast', kind);
@@ -923,19 +923,19 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
           // definition explicitly says "dashboard UI branches on this so
           // manual-driven turns render distinctly" — a pre-2026-05-19
           // version of this handler fell through to the unknown-role
-          // bg-white/5 styling for operator entries, which contradicted
+          // bg-tk-hover styling for operator entries, which contradicted
           // the type contract. Operator turns now get their own slate-
           // toned chip so manual-mode actions are visually distinct
           // from agent-driven ones.
           li.className =
             'rounded px-2 py-1 text-xs ' +
             (role === 'user'
-              ? 'self-end bg-glow-red/10 text-ink-primary'
+              ? 'self-end bg-tk-accent/10 text-tk-ink'
               : role === 'agent'
                 ? 'bg-amber-500/5 text-amber-200'
                 : role === 'operator'
                   ? 'bg-sky-500/10 text-sky-200'
-                  : 'bg-white/5 text-ink-secondary');
+                  : 'bg-tk-hover text-tk-ink-2');
           li.dataset.role = role;
           li.textContent = '[' + role + '] ' + (entry.body || '');
           transcriptList.appendChild(li);
@@ -947,7 +947,7 @@ e.g. 'Open my Gmail and reply to support@example.com with a polite acknowledgeme
           // EventSource auto-reconnect handle re-establishment.
           if (transcriptList && transcriptList.lastElementChild) {
             const note = document.createElement('li');
-            note.className = 'text-xs italic text-ink-muted';
+            note.className = 'text-xs italic text-tk-ink-3';
             note.textContent = '(stream reconnecting…)';
             transcriptList.appendChild(note);
           }

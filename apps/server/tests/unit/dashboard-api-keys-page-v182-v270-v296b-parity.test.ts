@@ -86,7 +86,7 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     for (const legend of ['Sessions', 'Profiles', 'Webhooks', 'API keys', 'Billing', 'Audit']) {
       expect(p, `${legend} legend`).toMatch(
         new RegExp(
-          `<legend class="font-mono text-xs uppercase tracking-wide text-ink-muted">\\s*\\n\\s+${legend.replace(/\s+/g, '\\s+')}\\s*\\n\\s+</legend>`,
+          `<legend class="font-mono text-xs uppercase tracking-wide text-tk-ink-3">\\s*\\n\\s+${legend.replace(/\s+/g, '\\s+')}\\s*\\n\\s+</legend>`,
         ),
       );
     }
@@ -228,11 +228,11 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     );
   });
 
-  it("CRITICAL key-row 'grace ends' inline annotation pinned. When a key has expires_at set (post-rotation), the row shows ' · <span class=\"text-glow-red\">grace ends <iso>' as inline metadata. Drift would hide the grace-deadline from the customer.", () => {
+  it("CRITICAL key-row 'grace ends' inline annotation pinned. When a key has expires_at set (post-rotation), the row shows ' · <span class=\"text-tk-accent\">grace ends <iso>' as inline metadata. Drift would hide the grace-deadline from the customer.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /\(k\.expires_at\s*\n\s+\? ' · <span class="text-glow-red">grace ends ' \+\s*\n\s+escapeHtml\(fmtIso\(k\.expires_at\)\) \+\s*\n\s+'<\/span>'\s*\n\s+: ''\)/,
+      /\(k\.expires_at\s*\n\s+\? ' · <span class="text-tk-accent">grace ends ' \+\s*\n\s+escapeHtml\(fmtIso\(k\.expires_at\)\) \+\s*\n\s+'<\/span>'\s*\n\s+: ''\)/,
     );
   });
 
@@ -241,7 +241,7 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
 
     expect(p).toMatch(/const isRevoked = k\.revoked_at !== null && k\.revoked_at !== undefined;/);
     expect(p).toMatch(
-      /'<span class="rounded-full bg-surface-raised px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-ink-secondary">revoked '/,
+      /'<span class="rounded-full bg-tk-surface px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">revoked '/,
     );
   });
 

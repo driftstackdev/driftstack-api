@@ -123,7 +123,7 @@ describe('W492.C apps/customer-dashboard/src/pages/first-session.astro content p
     expect(body).toMatch(/<DashboardLayout title="First session" withSidebar=\{false\}>/);
     expect(body).toMatch(/maxlength="120"/);
     expect(body).toMatch(
-      /Skip this step\? <a href="\/" class="text-glow-red underline">Go to dashboard<\/a>/,
+      /Skip this step\? <a href="\/" class="text-tk-accent underline">Go to dashboard<\/a>/,
     );
   });
 

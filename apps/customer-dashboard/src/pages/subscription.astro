@@ -56,13 +56,13 @@ const apiBaseUrl = resolveApiBaseUrl();
 <DashboardLayout title="Subscription">
   <div class="mx-auto max-w-4xl px-6 py-10">
     <header class="mb-10">
-      <p class="text-sm text-ink-muted">
-        <a href="/billing" class="text-glow-red hover:underline">← Back to billing</a>
+      <p class="text-sm text-tk-ink-3">
+        <a href="/billing" class="text-tk-accent hover:underline">← Back to billing</a>
       </p>
-      <h1 class="mt-2 text-3xl font-semibold tracking-tight text-ink-primary">Subscription</h1>
-      <p class="mt-2 max-w-prose text-sm text-ink-muted">
+      <h1 class="mt-2 text-3xl font-semibold tracking-tight text-tk-ink">Subscription</h1>
+      <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
         Plan history, change-plan preview, and the full invoice list. For
-        quick subscription state see <a href="/billing" class="text-glow-red underline">/billing</a>.
+        quick subscription state see <a href="/billing" class="text-tk-accent underline">/billing</a>.
       </p>
     </header>
 
@@ -70,22 +70,22 @@ const apiBaseUrl = resolveApiBaseUrl();
     <!-- Current plan -->
     <section class="dashboard-card">
       <div class="flex items-start gap-3">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="2" y="5" width="20" height="14" rx="2" />
             <path d="M2 10h20" />
           </svg>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Current plan</p>
-          <h2 class="mt-2 text-2xl font-semibold text-ink-primary" data-field="sub-tier">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Current plan</p>
+          <h2 class="mt-2 text-2xl font-semibold text-tk-ink" data-field="sub-tier">
             {MOCK_SUBSCRIPTION ? MOCK_SUBSCRIPTION.tier : 'No subscription'}
           </h2>
         </div>
       </div>
       {
         MOCK_SUBSCRIPTION && (
-          <p class="mt-2 text-sm text-ink-secondary" data-field="sub-summary">
+          <p class="mt-2 text-sm text-tk-ink-2" data-field="sub-summary">
             Status <span class="font-mono">{MOCK_SUBSCRIPTION.status}</span> · renews{' '}
             {MOCK_SUBSCRIPTION.current_period_end
               ? fmtIsoDay(MOCK_SUBSCRIPTION.current_period_end)
@@ -98,7 +98,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <a href="#downgrade" class="btn-secondary">Downgrade plan</a>
         <a href="#portal" class="btn-secondary">Open Stripe portal</a>
       </div>
-      <p class="mt-4 text-xs text-ink-muted">
+      <p class="mt-4 text-xs text-tk-ink-3">
         Upgrades take effect immediately and prorate your remaining period.
         Downgrades take effect at the end of the current period — you keep
         your current cap until renewal.
@@ -109,15 +109,15 @@ const apiBaseUrl = resolveApiBaseUrl();
     <!-- Plan history -->
     <section class="dashboard-card mt-6">
       <div class="flex items-start gap-3">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 7v5l3 2" />
           </svg>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Plan history</p>
-          <h2 class="mt-2 text-xl font-semibold tracking-tight text-ink-primary">Tier changes</h2>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Plan history</p>
+          <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Tier changes</h2>
         </div>
       </div>
       <ol class="mt-6 space-y-3">
@@ -126,11 +126,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             .reverse()
             .map((entry) => (
               <li class="flex items-start gap-4 border-b border-slate-100 pb-3 last:border-b-0">
-                <time class="shrink-0 font-mono text-xs text-ink-muted" datetime={entry.date}>
+                <time class="shrink-0 font-mono text-xs text-tk-ink-3" datetime={entry.date}>
                   {fmtIsoDay(entry.date)}
                 </time>
-                <p class="text-sm text-ink-secondary">
-                  <span class="font-medium text-ink-primary">{REASON_LABEL[entry.reason]}</span>
+                <p class="text-sm text-tk-ink-2">
+                  <span class="font-medium text-tk-ink">{REASON_LABEL[entry.reason]}</span>
                   {entry.from_tier !== null && (
                     <>
                       : <code class="font-mono">{entry.from_tier}</code> →{' '}
@@ -149,7 +149,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     <!-- Invoices -->
     <section class="dashboard-card mt-6">
       <div class="flex items-start gap-3">
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red mt-1">
+        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent mt-1">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <path d="M14 2v6h6" />
@@ -157,14 +157,14 @@ const apiBaseUrl = resolveApiBaseUrl();
           </svg>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-ink-muted">Invoices</p>
-          <h2 class="mt-2 text-xl font-semibold tracking-tight text-ink-primary">All invoices</h2>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Invoices</p>
+          <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">All invoices</h2>
         </div>
       </div>
       <div class="mt-6 overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="border-b border-white/10 text-left text-xs font-medium uppercase tracking-wide text-ink-muted">
+            <tr class="border-b border-tk-border text-left text-xs font-medium uppercase tracking-wide text-tk-ink-3">
               <th class="py-2 pr-4">Date</th>
               <th class="py-2 pr-4">Invoice</th>
               <th class="py-2 pr-4">Amount</th>
@@ -176,9 +176,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             {
               INVOICES.map((invoice) => (
                 <tr>
-                  <td class="py-3 pr-4 text-ink-secondary">{fmtIsoDay(invoice.date)}</td>
-                  <td class="py-3 pr-4 font-mono text-xs text-ink-secondary">{invoice.id}</td>
-                  <td class="py-3 pr-4 font-mono text-ink-primary">
+                  <td class="py-3 pr-4 text-tk-ink-2">{fmtIsoDay(invoice.date)}</td>
+                  <td class="py-3 pr-4 font-mono text-xs text-tk-ink-2">{invoice.id}</td>
+                  <td class="py-3 pr-4 font-mono text-tk-ink">
                     {fmtUsd(invoice.amount_cents)}
                   </td>
                   <td class="py-3 pr-4">
@@ -188,15 +188,15 @@ const apiBaseUrl = resolveApiBaseUrl();
                         invoice.status === 'paid'
                           ? 'bg-emerald-400/10 text-emerald-300'
                           : invoice.status === 'open'
-                            ? 'bg-glow-red/10 text-glow-red'
-                            : 'bg-surface-raised text-ink-secondary',
+                            ? 'bg-tk-accent/10 text-tk-accent'
+                            : 'bg-tk-surface text-tk-ink-2',
                       ]}
                     >
                       {invoice.status}
                     </span>
                   </td>
                   <td class="py-3 text-right">
-                    <a href={invoice.pdf_url} class="text-sm text-glow-red hover:underline">
+                    <a href={invoice.pdf_url} class="text-sm text-tk-accent hover:underline">
                       Download PDF
                     </a>
                   </td>
@@ -206,7 +206,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           </tbody>
         </table>
       </div>
-      <p class="mt-4 text-xs text-ink-muted">
+      <p class="mt-4 text-xs text-tk-ink-3">
         Invoice PDFs hosted by Stripe with permanent URLs. Bookmark for
         accounting; we don't expire them.
       </p>

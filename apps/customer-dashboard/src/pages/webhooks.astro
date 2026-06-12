@@ -57,19 +57,19 @@ const apiBaseUrl = resolveApiBaseUrl();
   <div class="mx-auto max-w-5xl px-6 py-10" data-page="webhooks">
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-white/10 bg-surface-base px-4 py-3 text-sm text-ink-secondary"
+      class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
       role="status"
     ></div>
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-ink-muted">
+        <p class="text-sm text-tk-ink-3">
           HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance
         </p>
-        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink-primary">
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">
           Webhook endpoints
         </h1>
-        <p class="mt-2 max-w-prose text-sm text-ink-muted">
+        <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
           Subscribe to session lifecycle + quota events. Each endpoint gets
           its own signing secret; verify with the SDK's
           <code class="font-mono">verifyWebhookSignature</code> helper.
@@ -84,9 +84,9 @@ const apiBaseUrl = resolveApiBaseUrl();
  success the secret is shown ONCE — same pattern as the
       api-key reveal pane.
     -->
-    <div data-create-wrap class="mb-8 hidden rounded-lg border border-white/10 bg-surface-raised p-6">
-      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+    <div data-create-wrap class="mb-8 hidden rounded-lg border border-tk-border bg-tk-surface p-6">
+      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
           </svg>
@@ -95,7 +95,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       </h2>
       <form data-create-form class="mt-4 space-y-4">
         <div>
-          <label class="block text-sm font-medium text-ink-secondary" for="webhook-url">
+          <label class="block text-sm font-medium text-tk-ink-2" for="webhook-url">
             URL
           </label>
           <input
@@ -104,80 +104,80 @@ const apiBaseUrl = resolveApiBaseUrl();
             type="url"
             required
             placeholder="https://hooks.example.com/driftstack"
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
-          <p class="mt-1 text-xs text-ink-muted">
+          <p class="mt-1 text-xs text-tk-ink-3">
             HTTPS required. The endpoint must respond 2xx within 10s for delivery to count
             as successful.
           </p>
         </div>
         <div>
-          <span class="block text-sm font-medium text-ink-secondary">Events to subscribe to</span>
-          <div class="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-ink-secondary">
+          <span class="block text-sm font-medium text-tk-ink-2">Events to subscribe to</span>
+          <div class="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-tk-ink-2">
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.completed" checked
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">session.completed</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.failed"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">session.failed</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="api_key.revoked"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">api_key.revoked</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="quota.warning_80pct"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">quota.warning_80pct</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="quota.exceeded"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">quota.exceeded</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.egress_capability_changed"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">session.egress_capability_changed</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="crypto.order.paid"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">crypto.order.paid</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="crypto.order.failed"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">crypto.order.failed</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.challenge_detected"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">session.challenge_detected</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.profile_save_failed"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">session.profile_save_failed</span>
             </label>
           </div>
         </div>
         <div>
-          <label class="block text-sm font-medium text-ink-secondary" for="webhook-description">
+          <label class="block text-sm font-medium text-tk-ink-2" for="webhook-description">
             Description (optional)
           </label>
           <input
@@ -185,7 +185,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             name="description"
             type="text"
             placeholder="production hook for the EU region"
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
         </div>
         <p
@@ -196,7 +196,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           <button
             type="button"
             data-create-cancel
-            class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base"
+            class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
           >
             Cancel
           </button>
@@ -235,7 +235,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       </p>
       <pre
         data-reveal-secret
-        class="mt-3 overflow-x-auto rounded border border-emerald-400/30 bg-surface-raised px-3 py-2 font-mono text-xs text-ink-primary"
+        class="mt-3 overflow-x-auto rounded border border-emerald-400/30 bg-tk-surface px-3 py-2 font-mono text-xs text-tk-ink"
       ></pre>
       <button
         type="button"
@@ -254,10 +254,10 @@ const apiBaseUrl = resolveApiBaseUrl();
     -->
     <div
       data-rotate-reveal
-      class="mb-8 hidden rounded-lg border border-glow-red/40 bg-glow-red/10 p-6"
+      class="mb-8 hidden rounded-lg border border-tk-accent/40 bg-tk-accent/10 p-6"
     >
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-glow-red-soft">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/15 ring-1 ring-glow-red/40">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-accent-soft">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/15 ring-1 ring-tk-accent/40">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polyline points="1 4 1 10 7 10" />
             <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
@@ -265,7 +265,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </span>
         Signing secret rotated
       </h2>
-      <p class="mt-1 text-sm text-glow-red-soft">
+      <p class="mt-1 text-sm text-tk-accent-soft">
         Copy the new secret now — it won't be shown again. The old secret stays
         valid for the grace window below; roll your verifier forward before
         then or the next delivery will fail signature check.
@@ -273,18 +273,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
         Endpoint
       </p>
-      <p data-rotate-endpoint-id class="mt-1 font-mono text-xs text-ink-primary"></p>
+      <p data-rotate-endpoint-id class="mt-1 font-mono text-xs text-tk-ink"></p>
       <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
         New secret
       </p>
       <pre
         data-rotate-secret
-        class="mt-1 overflow-x-auto rounded border border-glow-red/30 bg-surface-raised px-3 py-2 font-mono text-xs text-ink-primary"
+        class="mt-1 overflow-x-auto rounded border border-tk-accent/30 bg-tk-surface px-3 py-2 font-mono text-xs text-tk-ink"
       ></pre>
       <p class="mt-3 text-xs font-mono uppercase tracking-widest text-amber-800">
         Old secret valid until
       </p>
-      <p data-rotate-grace-expires class="mt-1 text-sm text-ink-primary"></p>
+      <p data-rotate-grace-expires class="mt-1 text-sm text-tk-ink"></p>
       <div class="mt-4 flex flex-wrap gap-2">
         <button type="button" data-rotate-copy class="btn-primary text-sm">
           Copy secret
@@ -304,18 +304,18 @@ const apiBaseUrl = resolveApiBaseUrl();
       data-edit-wrap
       class="mb-8 hidden rounded-lg border border-blue-200 bg-blue-50/30 p-6"
     >
-      <h2 class="flex items-center gap-2 text-lg font-semibold text-ink-primary">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <h2 class="flex items-center gap-2 text-lg font-semibold text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
         </span>
-        Edit endpoint <span data-edit-id class="font-mono text-xs text-ink-muted"></span>
+        Edit endpoint <span data-edit-id class="font-mono text-xs text-tk-ink-3"></span>
       </h2>
       <form data-edit-form class="mt-4 space-y-4">
         <div>
-          <label class="block text-sm font-medium text-ink-secondary" for="edit-webhook-url">
+          <label class="block text-sm font-medium text-tk-ink-2" for="edit-webhook-url">
             URL
           </label>
           <input
@@ -323,92 +323,92 @@ const apiBaseUrl = resolveApiBaseUrl();
             name="url"
             type="url"
             required
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
         </div>
         <div>
-          <span class="block text-sm font-medium text-ink-secondary">Events to subscribe to</span>
-          <div class="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-ink-secondary">
+          <span class="block text-sm font-medium text-tk-ink-2">Events to subscribe to</span>
+          <div class="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-sm text-tk-ink-2">
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.completed"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">session.completed</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.failed"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">session.failed</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="api_key.revoked"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">api_key.revoked</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="quota.warning_80pct"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">quota.warning_80pct</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="quota.exceeded"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">quota.exceeded</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.egress_capability_changed"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">session.egress_capability_changed</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="crypto.order.paid"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">crypto.order.paid</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="crypto.order.failed"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">crypto.order.failed</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.challenge_detected"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">session.challenge_detected</span>
             </label>
             <label class="inline-flex items-center gap-2">
               <input type="checkbox" name="event" value="session.profile_save_failed"
-                class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+                class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
               />
               <span class="font-mono text-xs">session.profile_save_failed</span>
             </label>
           </div>
         </div>
         <div>
-          <label class="block text-sm font-medium text-ink-secondary" for="edit-webhook-description">
+          <label class="block text-sm font-medium text-tk-ink-2" for="edit-webhook-description">
             Description
           </label>
           <input
             id="edit-webhook-description"
             name="description"
             type="text"
-            class="mt-1 w-full rounded-md border border-white/10 px-3 py-2 text-sm shadow-sm focus:border-glow-red focus:outline-none focus:ring-1 focus:ring-glow-red/30"
+            class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
         </div>
         <div>
-          <label class="inline-flex items-center gap-2 text-sm text-ink-secondary">
+          <label class="inline-flex items-center gap-2 text-sm text-tk-ink-2">
             <input
               type="checkbox"
               name="active"
               data-edit-active
-              class="rounded border-white/10 text-glow-red focus:ring-glow-red/30"
+              class="rounded border-tk-border text-tk-accent focus:ring-tk-accent/30"
             />
             Active (uncheck to pause delivery without deleting)
           </label>
@@ -421,7 +421,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           <button
             type="button"
             data-edit-cancel
-            class="rounded-md border border-white/10 bg-surface-raised px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-base"
+            class="rounded-md border border-tk-border bg-tk-surface px-4 py-2 text-sm font-medium text-tk-ink-2 hover:bg-tk-bg"
           >
             Cancel
           </button>
@@ -447,13 +447,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         pattern as the workbench empty hint; visual anchor before
         the CTA so the card doesn't feel like a dead end. */}
     <div data-empty class="dashboard-card hidden text-center">
-      <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-glow-red/10 ring-1 ring-glow-red/30 text-glow-red">
+      <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
         </svg>
       </div>
-      <h2 class="text-lg font-semibold tracking-tight text-ink-primary">No webhook endpoints yet</h2>
-      <p class="mx-auto mt-2 max-w-prose text-sm text-ink-muted">
+      <h2 class="text-lg font-semibold tracking-tight text-tk-ink">No webhook endpoints yet</h2>
+      <p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">
         Subscribe to events when sessions complete, fail, crypto orders settle,
         or quota thresholds trip. POST + URL + event list = endpoint.
       </p>
@@ -464,22 +464,22 @@ const apiBaseUrl = resolveApiBaseUrl();
         <li data-skeleton="true" class="dashboard-card" aria-hidden="true">
           <div class="flex items-start justify-between gap-6">
             <div class="min-w-0 flex-1 space-y-2">
-              <div class="h-4 w-72 animate-pulse rounded bg-white/10" />
-              <div class="h-3 w-64 animate-pulse rounded bg-white/5" />
-              <div class="h-3 w-56 animate-pulse rounded bg-white/5" />
+              <div class="h-4 w-72 animate-pulse rounded bg-tk-hover" />
+              <div class="h-3 w-64 animate-pulse rounded bg-tk-hover" />
+              <div class="h-3 w-56 animate-pulse rounded bg-tk-hover" />
             </div>
-            <div class="h-6 w-16 shrink-0 animate-pulse rounded bg-white/5" />
+            <div class="h-6 w-16 shrink-0 animate-pulse rounded bg-tk-hover" />
           </div>
           <div class="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4">
-            <div class="h-6 animate-pulse rounded bg-white/5" />
-            <div class="h-6 animate-pulse rounded bg-white/5" />
-            <div class="h-6 animate-pulse rounded bg-white/5" />
+            <div class="h-6 animate-pulse rounded bg-tk-hover" />
+            <div class="h-6 animate-pulse rounded bg-tk-hover" />
+            <div class="h-6 animate-pulse rounded bg-tk-hover" />
           </div>
         </li>
       ))}
     </ul>
 
-    <p class="mt-8 text-xs text-ink-muted">
+    <p class="mt-8 text-xs text-tk-ink-3">
       Failed deliveries retry 5× with exponential backoff before landing in
       the DLQ. DLQ entries are admin-replayable; no auto-retry past the
       initial attempts to avoid storm-on-recovery patterns.
@@ -636,21 +636,21 @@ const apiBaseUrl = resolveApiBaseUrl();
         const events = (e.events || [])
           .map(
             (ev) =>
-              '<span class="rounded bg-surface-raised px-2 py-0.5 font-mono text-xs text-ink-secondary">' +
+              '<span class="rounded bg-tk-surface px-2 py-0.5 font-mono text-xs text-tk-ink-2">' +
               escapeHtml(ev) +
               '</span>',
           )
           .join('');
         const description = e.description
-          ? '<p class="mt-2 text-sm text-ink-secondary">' + escapeHtml(e.description) + '</p>'
+          ? '<p class="mt-2 text-sm text-tk-ink-2">' + escapeHtml(e.description) + '</p>'
           : '';
         const activeBadge =
           'inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
-          (e.active ? 'bg-emerald-400/10 text-emerald-300' : 'bg-surface-raised text-ink-secondary');
+          (e.active ? 'bg-emerald-400/10 text-emerald-300' : 'bg-tk-surface text-tk-ink-2');
         // V-185 — aggregate delivery counts now in /v1/webhooks
         // response. Falls back to zeros if missing.
         const counts = e.delivery_counts || { delivered: 0, failed: 0, dlq: 0 };
-        const dlqClass = counts.dlq > 0 ? 'text-red-700' : 'text-ink-muted';
+        const dlqClass = counts.dlq > 0 ? 'text-red-700' : 'text-tk-ink-3';
         const requeueLink =
           counts.dlq > 0
             ? '<a href="#requeue-' +
@@ -664,7 +664,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<div class="flex items-start justify-between gap-6">' +
           '<div class="min-w-0">' +
           '<div class="flex items-center gap-3">' +
-          '<p class="truncate font-mono text-sm text-ink-primary">' +
+          '<p class="truncate font-mono text-sm text-tk-ink">' +
           escapeHtml(e.url) +
           '</p>' +
           '<span class="' +
@@ -677,13 +677,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           // know how long they have to roll the new secret across
           // their verifier infra.
           (e.rotation_grace_expires_at
-            ? '<span class="rounded-full bg-glow-red/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-800" title="Old secret stays valid until this time. Roll your verifier forward before then.">rotating · ends ' +
+            ? '<span class="rounded-full bg-tk-accent/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-amber-800" title="Old secret stays valid until this time. Roll your verifier forward before then.">rotating · ends ' +
               escapeHtml(fmtIsoDay(e.rotation_grace_expires_at)) +
               '</span>'
             : '') +
           '</div>' +
           description +
-          '<p class="mt-2 font-mono text-xs text-ink-muted">' +
+          '<p class="mt-2 font-mono text-xs text-tk-ink-3">' +
           escapeHtml(e.id) +
           ' · created ' +
           escapeHtml(fmtIsoDay(e.created_at)) +
@@ -704,13 +704,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<div class="flex shrink-0 flex-col items-end gap-2">' +
           '<button type="button" data-edit="' +
           escapeHtml(e.id) +
-          '" class="text-sm text-glow-red hover:underline">Edit</button>' +
+          '" class="text-sm text-tk-accent hover:underline">Edit</button>' +
           '<button type="button" data-test="' +
           escapeHtml(e.id) +
-          '" class="text-sm text-glow-red hover:underline">Send test</button>' +
+          '" class="text-sm text-tk-accent hover:underline">Send test</button>' +
           '<button type="button" data-rotate="' +
           escapeHtml(e.id) +
-          '" class="text-sm text-glow-red hover:underline">Rotate secret</button>' +
+          '" class="text-sm text-tk-accent hover:underline">Rotate secret</button>' +
           '<button type="button" data-delete="' +
           escapeHtml(e.id) +
           '" class="text-sm text-red-700 hover:underline">Delete</button>' +
@@ -719,15 +719,15 @@ const apiBaseUrl = resolveApiBaseUrl();
           events +
           '</div>' +
           '<dl class="mt-4 grid grid-cols-3 gap-2 border-t border-slate-100 pt-4 text-center">' +
-          '<div><dt class="text-xs text-ink-muted">Delivered</dt>' +
+          '<div><dt class="text-xs text-tk-ink-3">Delivered</dt>' +
           '<dd class="mt-1 font-mono text-lg font-medium text-emerald-300">' +
           counts.delivered.toLocaleString('en-US') +
           '</dd></div>' +
-          '<div><dt class="text-xs text-ink-muted">Failed</dt>' +
-          '<dd class="mt-1 font-mono text-lg font-medium text-glow-red">' +
+          '<div><dt class="text-xs text-tk-ink-3">Failed</dt>' +
+          '<dd class="mt-1 font-mono text-lg font-medium text-tk-accent">' +
           counts.failed.toLocaleString('en-US') +
           '</dd></div>' +
-          '<div><dt class="text-xs text-ink-muted">DLQ</dt>' +
+          '<div><dt class="text-xs text-tk-ink-3">DLQ</dt>' +
           '<dd class="mt-1 font-mono text-lg font-medium ' +
           dlqClass +
           '">' +
@@ -737,13 +737,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<div class="mt-4 flex items-center justify-between">' +
           '<button type="button" data-toggle-deliveries="' +
           escapeHtml(e.id) +
-          '" class="text-sm text-glow-red hover:underline">View delivery log →</button>' +
+          '" class="text-sm text-tk-accent hover:underline">View delivery log →</button>' +
           requeueLink +
           '</div>' +
           '<div data-deliveries="' +
           escapeHtml(e.id) +
           '" class="hidden mt-4 border-t border-slate-100 pt-4">' +
-          '<p class="text-sm text-ink-muted">Loading deliveries…</p>' +
+          '<p class="text-sm text-tk-ink-3">Loading deliveries…</p>' +
           '</div>' +
           '</li>'
         );
@@ -761,7 +761,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           d.status === 'delivered'
             ? statusBadge + 'bg-emerald-400/10 text-emerald-300'
             : d.status === 'pending' || d.status === 'in_flight'
-              ? statusBadge + 'bg-glow-red/10 text-glow-red'
+              ? statusBadge + 'bg-tk-accent/10 text-tk-accent'
               : d.status === 'failed'
                 ? statusBadge + 'bg-orange-50 text-orange-700'
                 : statusBadge + 'bg-red-50 text-red-700';
@@ -769,7 +769,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           d.status === 'failed' || d.status === 'dlq' || d.status === 'delivered'
             ? '<button type="button" data-replay="' +
               escapeHtml(d.id) +
-              '" class="text-xs text-glow-red hover:underline">Replay</button>'
+              '" class="text-xs text-tk-accent hover:underline">Replay</button>'
             : '';
         return (
           '<li class="flex items-start justify-between gap-3 py-2 text-sm">' +
@@ -780,10 +780,10 @@ const apiBaseUrl = resolveApiBaseUrl();
           '">' +
           escapeHtml(d.status) +
           '</span>' +
-          '<span class="font-mono text-xs text-ink-secondary">' +
+          '<span class="font-mono text-xs text-tk-ink-2">' +
           escapeHtml(d.event_type) +
           '</span>' +
-          '<span class="text-xs text-ink-muted">' +
+          '<span class="text-xs text-tk-ink-3">' +
           escapeHtml(fmtIsoMin(d.created_at)) +
           '</span>' +
           '</div>' +
@@ -807,7 +807,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function buildFilterBar(endpointId, status) {
         return (
-          '<div class="mb-3 flex items-center gap-2 text-xs text-ink-muted">' +
+          '<div class="mb-3 flex items-center gap-2 text-xs text-tk-ink-3">' +
           '<label for="status-' +
           escapeHtml(endpointId) +
           '">Filter:</label>' +
@@ -815,7 +815,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           escapeHtml(endpointId) +
           '" data-deliveries-filter="' +
           escapeHtml(endpointId) +
-          '" class="rounded-md border border-white/10 px-2 py-1 text-xs">' +
+          '" class="rounded-md border border-tk-border px-2 py-1 text-xs">' +
           ['', 'pending', 'in_flight', 'delivered', 'failed', 'dlq']
             .map((s) => {
               const sel = s === (status || '') ? ' selected' : '';
@@ -832,7 +832,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         let body;
         if (state.items.length === 0) {
           body =
-            '<p class="text-sm text-ink-muted">No deliveries' +
+            '<p class="text-sm text-tk-ink-3">No deliveries' +
             (state.status ? ' with status "' + escapeHtml(state.status) + '"' : '') +
             '.</p>';
         } else {
@@ -843,7 +843,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           const moreBtn = state.cursor
             ? '<button type="button" data-load-more-deliveries="' +
               escapeHtml(endpointId) +
-              '" class="mt-3 text-sm text-glow-red hover:underline">Load more</button>'
+              '" class="mt-3 text-sm text-tk-accent hover:underline">Load more</button>'
             : '';
           body = list + moreBtn;
         }
@@ -871,7 +871,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         const queryParts = ['limit=20'];
         if (status) queryParts.push('status=' + encodeURIComponent(status));
         container.innerHTML =
-          buildFilterBar(endpointId, status) + '<p class="text-sm text-ink-muted">Loading…</p>';
+          buildFilterBar(endpointId, status) + '<p class="text-sm text-tk-ink-3">Loading…</p>';
         const sel = container.querySelector('[data-deliveries-filter]');
         if (sel) {
           sel.addEventListener('change', () => {

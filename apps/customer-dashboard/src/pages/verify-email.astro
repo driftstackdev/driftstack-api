@@ -14,11 +14,11 @@ const apiBaseUrl = resolveApiBaseUrl();
     data-page="verify-email"
   >
     <p class="section-label">Step 2 of 4</p>
-    <h1 class="mt-5 text-4xl font-semibold tracking-tight text-ink-primary" style="letter-spacing: -0.02em;">
+    <h1 class="mt-5 text-4xl font-semibold tracking-tight text-tk-ink" style="letter-spacing: -0.02em;">
       Verify your email
     </h1>
-    <p class="mt-3 text-sm text-ink-secondary" data-field="intro">
-      We sent a verification link to <span data-field="email" class="font-mono text-glow-red-soft"
+    <p class="mt-3 text-sm text-tk-ink-2" data-field="intro">
+      We sent a verification link to <span data-field="email" class="font-mono text-tk-accent-soft"
         >your email</span
       >. Click it to activate your account.
     </p>
@@ -52,17 +52,17 @@ const apiBaseUrl = resolveApiBaseUrl();
            ?token= URL path is mid-submit. Replaced by the form on
            failure or by the redirect on success. -->
       <div data-field="auto-verify-spinner" class="text-center" hidden>
-        <p class="text-sm text-ink-secondary">
+        <p class="text-sm text-tk-ink-2">
           <span class="inline-block animate-pulse">●</span> Verifying your account…
         </p>
       </div>
 
-      <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-ink-muted">
+      <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-tk-ink-3">
         <span>Token expired or never arrived?</span>
         <button
           type="button"
           data-action="resend"
-          class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft disabled:cursor-not-allowed disabled:text-ink-muted disabled:no-underline"
+          class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft disabled:cursor-not-allowed disabled:text-tk-ink-3 disabled:no-underline"
         >
           Resend verification email
         </button>
@@ -70,7 +70,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <span
           >or <a
             href="/signup"
-            class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft"
+            class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft"
             >restart signup</a
           >.</span
         >
