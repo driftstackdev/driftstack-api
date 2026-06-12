@@ -188,8 +188,24 @@ positioned _above_ the anti-detect category, not inside it.
 ## 6. Deliverables + status
 
 - [x] This plan.
-- [ ] **Demo gallery** (`docs/internal/visual-demos/`): theme-switchable mockups.
-      Shipping the GUI-hub demo first (this wave); marketing home + profile-create + dashboard to follow, iterating on the founder's picks.
+- [x] **Demo gallery** (`docs/internal/visual-demos/`): theme-switchable mockups —
+      all FOUR customer surfaces the founder asked for are now LIVE and visually
+      verified (headless-screenshot, dark+light × oxblood/violet/teal):
+  - [x] **Marketing home** (`marketing-home.html`) — hero w/ live iPhone, "above the
+        anti-detect category" comparison, feature grid, sealed-data privacy section,
+        SDK snippet, pricing.
+  - [x] **GUI — Profiles Hub** (`gui-profiles-hub.html`) — folders sidebar, profile
+        grid w/ status+tags+country+proxy, Quick Session, bulk actions, team workspace.
+  - [x] **iPhone simulator — live session** (`iphone-simulator.html`) — floating
+        device (Driftstack toolbar + iOS status strip + streamed page) beside a session
+        cockpit: live status/latency, manual-control toggle, identity-coherence ring,
+        BYO-key AI agent chat, network/egress, challenge alerts.
+  - [x] **Dashboard** (`dashboard.html`) — overview (usage stats, recent sessions,
+        session-hours chart, plan) + front-and-center "Your data is sealed" trust
+        surface (encryption status, what staff can/can't see, export/delete + audit).
+  - [ ] **GUI — Profile create/edit** — remaining mock; tabbed configurator
+        (Identity · Proxy · Storage · Behavior · Notes), live identity preview,
+        templates, Quick Session. Lands after the founder picks directions.
 - [ ] Locked design-system spec (after the founder picks a direction).
 - [ ] Token layer + Tailwind unification (build phase).
 - [ ] Per-surface re-skin + the GUI feature buildout (incremental, w/ backend).

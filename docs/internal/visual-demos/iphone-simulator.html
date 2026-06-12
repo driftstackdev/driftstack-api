@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="en" data-mode="dark" data-accent="oxblood">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Driftstack — iPhone Simulator (visual demo)</title>
+    <!--
+  THROWAWAY VISUAL DEMO (2026-06-12, A2) — the floating-iPhone simulator window
+  reimagined as a premium "session cockpit": the device (Driftstack toolbar +
+  iOS status strip + live screen) PLUS a control rail (status, manual control,
+  AI agent, network, challenge alerts, recording, latency). Theme-switchable.
+  Self-contained. NOTE: the "screen" is a static mockup of a streamed page.
+-->
+    <style>
+      :root {
+        --radius: 14px;
+        --radius-sm: 9px;
+        --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+        --mono: 'SF Mono', ui-monospace, Menlo, monospace;
+      }
+      [data-accent='oxblood'] {
+        --accent: #9b3b46;
+        --accent-strong: #722f37;
+        --accent-ink: #fff;
+        --accent-soft: rgba(155, 59, 70, 0.16);
+      }
+      [data-accent='violet'] {
+        --accent: #6d5efc;
+        --accent-strong: #5847e0;
+        --accent-ink: #fff;
+        --accent-soft: rgba(109, 94, 252, 0.18);
+      }
+      [data-accent='teal'] {
+        --accent: #109a82;
+        --accent-strong: #0c7d69;
+        --accent-ink: #fff;
+        --accent-soft: rgba(16, 154, 130, 0.18);
+      }
+      [data-mode='dark'] {
+        --bg: #0a0a0d;
+        --surface: #131318;
+        --raised: #1b1b22;
+        --hover: #22232c;
+        --ink: #f4f4f6;
+        --ink-2: #b7b7c2;
+        --ink-3: #7d7d8a;
+        --border: #26262f;
+        --ready: #34d399;
+        --busy: #fbbf24;
+        --err: #f87171;
+        --sync: #60a5fa;
+      }
+      [data-mode='light'] {
+        --bg: #eef0f4;
+        --surface: #fff;
+        --raised: #fff;
+        --hover: #f1f2f5;
+        --ink: #15161a;
+        --ink-2: #4a4c57;
+        --ink-3: #8a8d99;
+        --border: #e6e8ee;
+        --ready: #0f9d58;
+        --busy: #c77700;
+        --err: #d33;
+        --sync: #2563eb;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+        font-size: 14px;
+        min-height: 100vh;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 22px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .brand {
+        font-weight: 700;
+        letter-spacing: -0.2px;
+      }
+      .brand .mark {
+        color: var(--accent);
+      }
+      .spacer {
+        flex: 1;
+      }
+      .themer {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+      }
+      .themer button {
+        border: 0;
+        background: transparent;
+        color: var(--ink-3);
+        cursor: pointer;
+        border-radius: 999px;
+        padding: 5px 10px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .themer button.on {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .sw {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        border: 2px solid transparent;
+        cursor: pointer;
+      }
+      .sw.on {
+        border-color: var(--ink);
+      }
+
+      .stage {
+        display: flex;
+        gap: 34px;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 40px 24px;
+      }
+
+      /* ---- the floating device ---- */
+      .device {
+        width: 330px;
+      }
+      .dtoolbar {
+        height: 36px;
+        background: var(--raised);
+        border: 1px solid var(--border);
+        border-bottom: 0;
+        border-radius: 14px 14px 0 0;
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        gap: 8px;
+        position: relative;
+      }
+      .traffic {
+        display: flex;
+        gap: 7px;
+      }
+      .tl {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .tl.r {
+        background: #ff5f57;
+      }
+      .tl.y {
+        background: #febc2e;
+      }
+      .dtitle {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--ink-2);
+      }
+      .dtitle .mark {
+        color: var(--accent);
+      }
+      .dacts {
+        margin-left: auto;
+        display: flex;
+        gap: 4px;
+        color: var(--ink-3);
+      }
+      .dacts button {
+        border: 0;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 6px;
+      }
+      .dacts button:hover {
+        background: var(--hover);
+        color: var(--ink);
+      }
+      .dacts button.on {
+        color: var(--accent);
+      }
+      .bezel {
+        background: #0b0b0d;
+        border: 1px solid var(--border);
+        border-top: 0;
+        border-radius: 0 0 40px 40px;
+        padding: 10px;
+      }
+      .screen {
+        border-radius: 30px;
+        overflow: hidden;
+        background: #000;
+        position: relative;
+      }
+      .statusstrip {
+        height: 38px;
+        background: #000;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 22px;
+        position: relative;
+      }
+      .island {
+        position: absolute;
+        left: 50%;
+        top: 8px;
+        transform: translateX(-50%);
+        width: 86px;
+        height: 24px;
+        border-radius: 999px;
+        background: #060607;
+      }
+      .statusstrip .t {
+        font-size: 13px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .statusstrip .ic {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+      }
+      /* mock streamed page */
+      .page {
+        height: 486px;
+        background: linear-gradient(180deg, #fff, #f4f5f7);
+        color: #15161a;
+        overflow: hidden;
+      }
+      .ptop {
+        background: #fff;
+        border-bottom: 1px solid #eaeaec;
+        padding: 12px 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 700;
+        color: #111;
+      }
+      .ppill {
+        margin-left: auto;
+        font-size: 11px;
+        color: #666;
+        background: #f1f1f3;
+        border-radius: 999px;
+        padding: 4px 9px;
+      }
+      .hero {
+        padding: 18px 16px;
+        background: linear-gradient(135deg, #111, #333);
+        color: #fff;
+      }
+      .hero h3 {
+        margin: 0 0 6px;
+        font-size: 20px;
+      }
+      .hero p {
+        margin: 0;
+        opacity: 0.8;
+        font-size: 12px;
+      }
+      .pgrid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        padding: 14px;
+      }
+      .pcard {
+        background: #fff;
+        border: 1px solid #ececef;
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .pthumb {
+        height: 74px;
+        background: linear-gradient(135deg, #dfe3ea, #c7cdd8);
+      }
+      .pcard .pb {
+        padding: 8px 10px;
+      }
+      .pcard .pn {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .pcard .pp {
+        font-size: 12px;
+        color: #0a7;
+      }
+      .pcta {
+        margin: 4px 14px 0;
+        background: #111;
+        color: #fff;
+        border-radius: 10px;
+        text-align: center;
+        padding: 11px;
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .tapring {
+        position: absolute;
+        width: 30px;
+        height: 30px;
+        border: 2px solid var(--accent);
+        border-radius: 50%;
+        left: 60%;
+        top: 300px;
+        animation: tap 1.6s infinite;
+      }
+      @keyframes tap {
+        0% {
+          transform: scale(0.5);
+          opacity: 1;
+        }
+        70% {
+          transform: scale(1.4);
+          opacity: 0;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+
+      /* ---- the session cockpit (A2's fancy addition) ---- */
+      .cockpit {
+        width: 330px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px 16px;
+      }
+      .panel h4 {
+        margin: 0 0 10px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: var(--ink-3);
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 13px;
+        margin: 7px 0;
+      }
+      .row .k {
+        color: var(--ink-3);
+        min-width: 96px;
+      }
+      .row b {
+        font-weight: 600;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .toggle {
+        margin-left: auto;
+        width: 38px;
+        height: 22px;
+        border-radius: 999px;
+        background: var(--accent);
+        position: relative;
+        cursor: pointer;
+      }
+      .toggle::after {
+        content: '';
+        position: absolute;
+        right: 3px;
+        top: 3px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #fff;
+      }
+      .toggle.off {
+        background: var(--hover);
+      }
+      .toggle.off::after {
+        left: 3px;
+        right: auto;
+      }
+      .pills {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .pbtn {
+        flex: 1;
+        min-width: 84px;
+        border: 1px solid var(--border);
+        background: var(--raised);
+        color: var(--ink-2);
+        border-radius: var(--radius-sm);
+        padding: 9px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .pbtn:hover {
+        background: var(--hover);
+        color: var(--ink);
+      }
+      .pbtn.primary {
+        background: var(--accent);
+        color: var(--accent-ink);
+        border-color: transparent;
+      }
+      .coh {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .ring {
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        background: conic-gradient(var(--ready) 0 96%, var(--border) 96% 100%);
+        display: grid;
+        place-items: center;
+      }
+      .ring i {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: var(--surface);
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 13px;
+        font-style: normal;
+      }
+      .agent {
+        background: var(--raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 10px;
+        font-size: 12px;
+        color: var(--ink-2);
+      }
+      .agent .me {
+        color: var(--ink);
+        margin-bottom: 6px;
+      }
+      .agent .ai {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .alert {
+        display: flex;
+        gap: 9px;
+        align-items: flex-start;
+        background: var(--accent-soft);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 10px;
+        font-size: 12px;
+      }
+      .net {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ink-3);
+        line-height: 1.7;
+      }
+      .net .ok {
+        color: var(--ready);
+      }
+      .hint {
+        color: var(--ink-3);
+        font-size: 12px;
+        margin-top: 18px;
+        text-align: center;
+      }
+      svg {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <span class="brand"><span class="mark">⌇</span> Driftstack</span>
+      <span style="color: var(--ink-3); font-size: 13px"
+        >iPhone simulator — premium session cockpit (concept)</span
+      >
+      <span class="spacer"></span>
+      <div class="themer">
+        <button id="m-dark" class="on" onclick="setMode('dark')">Dark</button>
+        <button id="m-light" onclick="setMode('light')">Light</button>
+        <span style="width: 1px; height: 18px; background: var(--border)"></span>
+        <span
+          class="sw on"
+          id="a-oxblood"
+          style="background: #9b3b46"
+          onclick="setAccent('oxblood')"
+        ></span>
+        <span
+          class="sw"
+          id="a-violet"
+          style="background: #6d5efc"
+          onclick="setAccent('violet')"
+        ></span>
+        <span class="sw" id="a-teal" style="background: #109a82" onclick="setAccent('teal')"></span>
+      </div>
+    </div>
+
+    <div class="stage">
+      <!-- device -->
+      <div class="device">
+        <div class="dtoolbar">
+          <div class="traffic"><span class="tl r"></span><span class="tl y"></span></div>
+          <div class="dtitle">
+            <span class="mark">⌇</span> Amsterdam Shopper
+            <span style="color: var(--ink-3); font-weight: 500">· iPhone 17</span>
+          </div>
+          <div class="dacts">
+            <button class="on" title="Pinned on top">📌</button>
+            <button title="Screenshot">⤓</button>
+            <button title="Rotate">⟳</button>
+          </div>
+        </div>
+        <div class="bezel">
+          <div class="screen">
+            <div class="statusstrip">
+              <div class="island"></div>
+              <span class="t">9:41</span>
+              <span class="ic">
+                <svg width="17" height="11" viewBox="0 0 18 12" fill="#fff">
+                  <rect x="0" y="8" width="3" height="4" rx="1" />
+                  <rect x="5" y="6" width="3" height="6" rx="1" />
+                  <rect x="10" y="3" width="3" height="9" rx="1" />
+                  <rect x="15" y="0" width="3" height="12" rx="1" />
+                </svg>
+                <svg width="15" height="11" viewBox="0 0 16 12" fill="#fff">
+                  <path
+                    d="M8 2.4c2.6 0 5 1 6.8 2.7l-1.5 1.6C11.9 5.4 10 4.6 8 4.6s-3.9.8-5.3 2.1L1.2 5.1C3 3.4 5.4 2.4 8 2.4z"
+                  />
+                  <circle cx="8" cy="10.5" r="1.3" />
+                </svg>
+                <svg width="24" height="12" viewBox="0 0 25 12" fill="none">
+                  <rect
+                    x="0.5"
+                    y="0.5"
+                    width="21"
+                    height="11"
+                    rx="3"
+                    stroke="#fff"
+                    stroke-opacity=".5"
+                  />
+                  <rect x="2" y="2" width="18" height="8" rx="1.5" fill="#fff" />
+                </svg>
+              </span>
+            </div>
+            <div class="page">
+              <div class="ptop">shop.example.com <span class="ppill">🔒 secure</span></div>
+              <div class="hero">
+                <h3>Summer drop</h3>
+                <p>Free shipping over €50 · ends tonight</p>
+              </div>
+              <div class="pgrid">
+                <div class="pcard">
+                  <div class="pthumb"></div>
+                  <div class="pb">
+                    <div class="pn">Linen Tote</div>
+                    <div class="pp">€39</div>
+                  </div>
+                </div>
+                <div class="pcard">
+                  <div class="pthumb"></div>
+                  <div class="pb">
+                    <div class="pn">Canvas Cap</div>
+                    <div class="pp">€24</div>
+                  </div>
+                </div>
+              </div>
+              <div class="pcta">Add to cart</div>
+            </div>
+            <div class="tapring"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- cockpit -->
+      <div class="cockpit">
+        <div class="panel">
+          <h4>Session</h4>
+          <div class="row">
+            <span class="k">Status</span
+            ><b style="color: var(--ready)"
+              ><span class="dot" style="background: var(--ready)"></span> Live · controlling</b
+            >
+          </div>
+          <div class="row">
+            <span class="k">Latency</span><b>38 ms</b
+            ><span style="color: var(--ink-3); font-size: 12px">· 30 fps</span>
+          </div>
+          <div class="row">
+            <span class="k">Manual control</span
+            ><span class="toggle" title="You drive the device"></span>
+          </div>
+          <div class="pills" style="margin-top: 12px">
+            <button class="pbtn">⏸ Pause</button>
+            <button class="pbtn">● Record</button>
+            <button class="pbtn primary">⤓ Snapshot</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h4>Identity coherence</h4>
+          <div class="coh">
+            <div class="ring"><i>96</i></div>
+            <div style="font-size: 12px; color: var(--ink-2)">
+              <div><b style="color: var(--ink)">Bit-exact iPhone 17</b></div>
+              <div>Canvas ✓ · WebGL ✓ · fonts ✓ · TLS/JA4 ✓</div>
+              <div style="color: var(--ready)">0 detection lies · CreepJS clean</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h4>
+            AI agent
+            <span style="color: var(--ink-3); text-transform: none; letter-spacing: 0"
+              >· bring-your-own-key</span
+            >
+          </h4>
+          <div class="agent">
+            <div class="me">▸ "add the linen tote to cart and go to checkout"</div>
+            <div>
+              <span class="ai">Drift</span> tapped <i>Add to cart</i> → navigating to /checkout…
+              <span style="color: var(--ready)">✓ 2 steps</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h4>Network · egress</h4>
+          <div class="net">
+            <div>proxy <span class="ok">🇳🇱 Amsterdam · SOCKS5 · UDP ✓</span></div>
+            <div>tls <span class="ok">1.3 · JA4=iPhone · h2+h3</span></div>
+            <div>locale nl-NL · tz Europe/Amsterdam</div>
+          </div>
+        </div>
+
+        <div class="panel" style="border-color: var(--accent)">
+          <h4 style="color: var(--accent)">⚠ Challenge detected</h4>
+          <div class="alert">
+            <span>🛡️</span>
+            <div>
+              Tokyo Drop hit a DataDome check — auto-paused.
+              <a href="#" style="color: var(--accent); font-weight: 600">Resolve →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="hint">
+      ⌘K command palette · drag the toolbar to move · unpin to make it a normal window · everything
+      themes with the GUI
+    </div>
+
+    <script>
+      function setMode(m) {
+        document.documentElement.dataset.mode = m;
+        document.getElementById('m-dark').classList.toggle('on', m === 'dark');
+        document.getElementById('m-light').classList.toggle('on', m === 'light');
+      }
+      function setAccent(a) {
+        document.documentElement.dataset.accent = a;
+        ['oxblood', 'violet', 'teal'].forEach((x) =>
+          document.getElementById('a-' + x).classList.toggle('on', x === a),
+        );
+      }
+    </script>
+  </body>
+</html>
