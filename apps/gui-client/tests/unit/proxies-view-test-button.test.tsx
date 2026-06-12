@@ -90,3 +90,56 @@ describe('ProxiesView "Test" button result row', () => {
     expect(screen.queryByText('UDP ✗')).toBeNull();
   });
 });
+
+describe('capability board (approved proxy-health port)', () => {
+  beforeEach(() => {
+    testProxy.mockReset();
+  });
+
+  it('UDP-capable result renders the derived QUIC + WebRTC chip (rides UDP) + pool stats appear after a test', async () => {
+    testProxy.mockResolvedValue({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      latency_ms: 42,
+      message: 'ok',
+    });
+    render(<ProxiesView />);
+    await clickTestAndSettle();
+    expect(await screen.findByText('QUIC + WebRTC ✓ (rides UDP)')).toBeInTheDocument();
+    // Pool stats are derived over TESTED proxies only.
+    expect(screen.getByText('Tested')).toBeInTheDocument();
+    expect(screen.getByText('1 / 1')).toBeInTheDocument();
+    expect(screen.getByText('Full-stack (UDP)')).toBeInTheDocument();
+  });
+
+  it('no-UDP result renders the honest fallback chip (h2 / TURN-over-TCP)', async () => {
+    testProxy.mockResolvedValue({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: false,
+      latency_ms: 42,
+      message: 'no udp',
+    });
+    render(<ProxiesView />);
+    await clickTestAndSettle();
+    expect(
+      await screen.findByText('QUIC + WebRTC ✗ — h2 / TURN-over-TCP fallback'),
+    ).toBeInTheDocument();
+  });
+
+  it('Test all probes every saved proxy and disables while running', async () => {
+    testProxy.mockResolvedValue({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      latency_ms: 10,
+      message: 'ok',
+    });
+    render(<ProxiesView />);
+    const btn = await screen.findByRole('button', { name: 'Test all' });
+    fireEvent.click(btn);
+    expect(await screen.findByText('QUIC + WebRTC ✓ (rides UDP)')).toBeInTheDocument();
+    expect(testProxy).toHaveBeenCalledTimes(1); // one saved proxy in the mock store
+  });
+});

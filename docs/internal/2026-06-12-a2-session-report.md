@@ -166,3 +166,20 @@ server stores (migration 0076 — reaches prod with the founder-gated 0072+
 deploy). Pre-0076 prod is safe against every piece. Tauri rebuild for the
 founder's walkthrough is load-gated (box at 60-120 from the A1 fork rebuild;
 watcher armed, builds when <10).
+
+## Addendum (~18:05) — recordings gallery in production + founder verdicts
+
+Founder reviewed the proposal demos: recordings-gallery APPROVED as-is;
+proxy-health approved after r2 (wanted per-exit protocol capabilities — r2
+added the TCP/UDP-ASSOCIATE/QUIC-h3/WebRTC capability matrix + impact cards).
+Fresh GUI installed to /Applications (17:46 build; DMG step flaked —
+distribution-only).
+
+The gallery is now PORTED to production (RecordingsView): thumbnail grid +
+facts rail, all behavior pins preserved. The port surfaced two real issues,
+both fixed in the same commit: (1) BUG — persisted recordings were unplayable
+after an app restart (Open disabled on the in-memory frames check even though
+the player hydrates from disk on mount); (2) STALE COPY — the UI still said
+disk persistence "lands in a follow-up phase" after that phase shipped.
+Next port: proxy-health capability board → ProxiesView (UI first; the probe
+backend is its own design).

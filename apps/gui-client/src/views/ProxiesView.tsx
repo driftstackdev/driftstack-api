@@ -113,6 +113,32 @@ export function ProxiesView(): JSX.Element {
     }
   }
 
+  // Capability-board port (approved proxy-health demo, 2026-06-12):
+  // probe ALL saved proxies sequentially. Sequential by design — the
+  // native probe opens real sockets; parallel probes through consumer
+  // egress endpoints skew each other's latency numbers.
+  const [testingAll, setTestingAll] = useState(false);
+  async function handleTestAll(): Promise<void> {
+    setTestingAll(true);
+    try {
+      for (const p of state.proxies) {
+        await handleTest(p);
+      }
+    } finally {
+      setTestingAll(false);
+    }
+  }
+
+  const tested = state.proxies.filter((p) => testResults[p.id] !== undefined);
+  const healthy = tested.filter((p) => {
+    const r = testResults[p.id];
+    return r !== undefined && r.reachable && r.auth_ok;
+  });
+  const udpCapable = tested.filter((p) => {
+    const r = testResults[p.id];
+    return r !== undefined && r.udp_associate;
+  });
+
   const editing =
     editor.kind === 'edit' ? (state.proxies.find((p) => p.id === editor.id) ?? null) : null;
 
@@ -130,10 +156,32 @@ export function ProxiesView(): JSX.Element {
             <span className="mono">proxy</span> field.
           </p>
         </div>
-        <button type="button" className="btn-primary" onClick={() => setEditor({ kind: 'add' })}>
-          New proxy
-        </button>
+        <div className="flex gap-2">
+          {state.proxies.length > 0 && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void handleTestAll()}
+              disabled={testingAll || testingId !== null}
+            >
+              {testingAll ? 'Testing all…' : 'Test all'}
+            </button>
+          )}
+          <button type="button" className="btn-primary" onClick={() => setEditor({ kind: 'add' })}>
+            New proxy
+          </button>
+        </div>
       </header>
+
+      {/* Pool summary — capability-board port. Counts are over TESTED
+          proxies only (no fabricated health for never-probed entries). */}
+      {tested.length > 0 && (
+        <div data-component="proxy-pool-stats" className="grid grid-cols-3 gap-3">
+          <PoolStat k="Tested" v={`${String(tested.length)} / ${String(state.proxies.length)}`} />
+          <PoolStat k="Healthy" v={String(healthy.length)} tone="ok" />
+          <PoolStat k="Full-stack (UDP)" v={String(udpCapable.length)} tone="ok" />
+        </div>
+      )}
 
       {state.error !== null && (
         <ErrorBanner
@@ -317,6 +365,27 @@ function ProxyTable({
                             {result.udp_associate ? 'UDP ✓' : 'UDP ✗'}
                           </span>
                         )}
+                        {result.reachable && (
+                          // QUIC + WebRTC ride the UDP relay — derived from
+                          // the probed UDP ASSOCIATE result, not separately
+                          // probed (honest label, no fake independent check).
+                          <span
+                            className={`rounded-sm px-1 py-0.5 ${
+                              result.udp_associate
+                                ? 'bg-status-success/20'
+                                : 'bg-surface-divider text-ink-muted'
+                            }`}
+                            title={
+                              result.udp_associate
+                                ? 'UDP ASSOCIATE works — sessions can speak h3 and gather WebRTC candidates through this exit.'
+                                : 'No UDP relay — sessions fall back to h2 and TURN-over-TCP through this exit.'
+                            }
+                          >
+                            {result.udp_associate
+                              ? 'QUIC + WebRTC ✓ (rides UDP)'
+                              : 'QUIC + WebRTC ✗ — h2 / TURN-over-TCP fallback'}
+                          </span>
+                        )}
                         <span className="text-ink-secondary">{result.message}</span>
                       </div>
                     </td>
@@ -448,6 +517,21 @@ function Field({
       {children}
       {error !== undefined && <span className="text-2xs text-status-error">{error}</span>}
     </label>
+  );
+}
+
+function PoolStat({ k, v, tone }: { k: string; v: string; tone?: 'ok' }): JSX.Element {
+  return (
+    <div className="rounded border border-surface-divider bg-surface-raised px-3 py-2">
+      <p className="section-label">{k}</p>
+      <p
+        className={`mono text-lg font-semibold ${
+          tone === 'ok' ? 'text-status-success' : 'text-ink-primary'
+        }`}
+      >
+        {v}
+      </p>
+    </div>
   );
 }
 
