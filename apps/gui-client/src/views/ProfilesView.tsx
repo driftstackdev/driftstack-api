@@ -85,6 +85,20 @@ interface ProfilesState {
   error: string | null;
 }
 
+/** Friendly device label for the simulator toolbar, derived from the archetype
+ *  slug: "iphone17_ios18_7_safari26_4" → "iPhone 17", "iphone16pro_…" → "iPhone
+ *  16 Pro". Falls back to the raw first segment (or "iPhone") for an
+ *  unrecognised shape, so a future archetype never renders blank. */
+export function formatDeviceName(archetype: string): string {
+  const seg = archetype.split('_')[0] ?? archetype;
+  const m = /^iphone(\d+)(pro)?(max)?(e)?$/i.exec(seg);
+  if (m === null) return seg || 'iPhone';
+  const [, num, pro, max, e] = m;
+  return ['iPhone', `${num}${e ? 'e' : ''}`, pro ? 'Pro' : '', max ? 'Max' : '']
+    .filter(Boolean)
+    .join(' ');
+}
+
 export interface ProfilesViewProps {
   onGoToSettings: () => void;
   /** Open the live-session view for a specific session id. */
@@ -234,7 +248,13 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       setWatchSource({ profileId, agentSessionId });
       // Open the floating-iPhone simulator window (the standard experience).
       // Falls back to the in-app overlay when not under Tauri (browser preview).
-      const opened = await openSimulatorWindow({ sessionId: agentSessionId, info });
+      const opened = await openSimulatorWindow({
+        sessionId: agentSessionId,
+        info,
+        deviceName: formatDeviceName(
+          state.profiles.find((p) => p.id === profileId)?.archetype ?? '',
+        ),
+      });
       if (!opened) setWatchInfo(info);
     } catch (err) {
       // W638 — a profile bound to a CLOSED agent session 403s here ("Cannot
@@ -343,6 +363,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
         const opened = await openSimulatorWindow({
           sessionId: created.id,
           info: created.livekit,
+          deviceName: formatDeviceName(profile.archetype),
         });
         if (!opened) setWatchInfo(created.livekit);
       } else {

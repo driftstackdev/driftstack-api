@@ -53,6 +53,32 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(screen?.querySelector('[data-component="simulator-statusbar"]')).not.toBeNull();
   });
 
+  it('renders the Driftstack control toolbar above the device: device name + close/minimize + screenshot/rotate', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
+    const { container } = render(<SimulatorWindow />);
+    const toolbar = container.querySelector('[data-component="simulator-toolbar"]');
+    expect(toolbar).not.toBeNull();
+    // Device name (from the ?name= query) shows in the toolbar.
+    expect(toolbar?.textContent).toContain('iPhone 17');
+    // Window controls + actions present (the window is borderless, so close/
+    // minimize live here). aria-labels are the stable contract.
+    for (const label of ['Close', 'Minimize', 'Screenshot']) {
+      expect(toolbar?.querySelector(`[aria-label="${label}"]`), label).not.toBeNull();
+    }
+    // Rotate toggles its label between portrait/landscape — match either.
+    expect(
+      toolbar?.querySelector(
+        '[aria-label="Rotate to landscape"], [aria-label="Rotate to portrait"]',
+      ),
+    ).not.toBeNull();
+    // The toolbar is a drag-region (drag the window by it); the button clusters
+    // opt out so clicks land.
+    expect(toolbar?.getAttribute('data-tauri-drag-region')).toBe('true');
+    // It sits above the device in the shell (not inside the bezel).
+    const shell = container.querySelector('[data-component="simulator-shell"]');
+    expect(shell?.firstElementChild).toBe(toolbar);
+  });
+
   it('shows a no-session hint (no device frame) when the query lacks ws/token', () => {
     window.history.pushState({}, '', '/?window=simulator');
     const { container } = render(<SimulatorWindow />);

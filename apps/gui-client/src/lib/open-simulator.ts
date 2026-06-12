@@ -12,13 +12,17 @@
 import type { LiveKitInfo } from '@driftstack/sdk';
 
 /** Phone-ish window size (px). The bezel + screen fill the window; the panel
- *  object-contains the stream so exact aspect isn't load-bearing. */
+ *  object-contains the stream so exact aspect isn't load-bearing. SIM_HEIGHT
+ *  includes the ~34px Driftstack control toolbar above the device. */
 const SIM_WIDTH = 330;
-const SIM_HEIGHT = 684;
+const SIM_HEIGHT = 684 + 34;
 
 export interface OpenSimulatorArgs {
   sessionId: string;
   info: LiveKitInfo;
+  /** Human device label shown in the toolbar (e.g. "iPhone 17"), derived from
+   *  the profile's archetype. Defaults to "iPhone" when omitted. */
+  deviceName?: string;
 }
 
 /** Open (or focus) the floating-iPhone window for a session. Returns true when
@@ -27,6 +31,7 @@ export interface OpenSimulatorArgs {
 export async function openSimulatorWindow({
   sessionId,
   info,
+  deviceName,
 }: OpenSimulatorArgs): Promise<boolean> {
   // Tauri-only — guard so a browser preview doesn't throw on the dynamic import.
   if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return false;
@@ -48,6 +53,8 @@ export async function openSimulatorWindow({
     token: info.token,
     // room_name is informational; include when present for the title/debug.
     room: (info as unknown as { room_name?: string }).room_name ?? '',
+    // Device label for the toolbar (e.g. "iPhone 17").
+    name: deviceName ?? 'iPhone',
   });
 
   const win = new WebviewWindow(label, {

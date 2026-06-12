@@ -1,30 +1,47 @@
 // Floating-iPhone simulator window (founder 2026-06-11: "really only an iPhone
 // on your screen, with its frames... drag around... exactly like the Xcode
-// Simulator").
+// Simulator") + a Driftstack-styled control toolbar above the device (founder
+// 2026-06-12: "the thing above with the mac icons, to close, minimize, name of
+// the phone, screenshot, rotate... more personalized to driftstack").
 //
-// This renders in a SEPARATE borderless + transparent Tauri window (opened by
-// lib/open-simulator.ts), so the only thing painted on the desktop is the
-// device: a dark iPhone bezel with a dynamic island, the live session video as
-// the screen, and direct control (click/type drives the real device via the
-// LK.6.d input-capture). The bezel is a `data-tauri-drag-region`, so dragging
-// the frame moves the window around the desktop — the screen itself is NOT a
-// drag region (clicks there go to the device).
+// Renders in a SEPARATE borderless + transparent Tauri window (opened by
+// lib/open-simulator.ts). Layout = a slim toolbar on top (window controls +
+// device name + actions) and the device below (dark iPhone bezel with a dynamic
+// island, the live session video as the screen, direct tap/type control via the
+// LK.6.d input-capture). The toolbar + bezel are `data-tauri-drag-region` so
+// dragging either moves the window; the screen + the toolbar buttons opt out so
+// clicks reach them.
 //
-// Session join info (LiveKit ws_url + token) arrives via the window URL query
-// — the opener encodes it when creating the window.
+// Session join info (LiveKit ws_url + token) + the device label arrive via the
+// window URL query — the opener encodes them when creating the window.
 
 import { useEffect, useState } from 'react';
+import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 
-function infoFromQuery(): LiveKitInfo | null {
+function infoFromQuery(): { info: LiveKitInfo | null; deviceName: string } {
   const q = new URLSearchParams(window.location.search);
   const ws_url = q.get('ws');
   const token = q.get('token');
-  if (ws_url === null || token === null || ws_url === '' || token === '') return null;
+  const deviceName = q.get('name') ?? 'iPhone';
+  if (ws_url === null || token === null || ws_url === '' || token === '') {
+    return { info: null, deviceName };
+  }
   // LiveKitInfo carries ws_url + token (the only fields the panel/connect read);
   // room_name is informational. Cast is safe — the panel reads ws_url/token only.
-  return { ws_url, token, room_name: q.get('room') ?? '' } as unknown as LiveKitInfo;
+  return {
+    info: { ws_url, token, room_name: q.get('room') ?? '' } as unknown as LiveKitInfo,
+    deviceName,
+  };
+}
+
+/** Tauri-only window ops, dynamically imported on use so the jsdom tests (no
+ *  Tauri) never load the native module. No-op outside Tauri. */
+async function withCurrentWindow(fn: (w: WebviewWindow) => Promise<void>): Promise<void> {
+  if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return;
+  const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+  await fn(getCurrentWebviewWindow());
 }
 
 /** iOS-style h:mm (12-hour, no leading zero, no AM/PM — matches the iOS status
@@ -35,8 +52,6 @@ function formatStatusTime(d: Date): string {
   return `${hour}:${minute}`;
 }
 
-/** Live wall-clock for the status bar, refreshed well within a minute so the
- *  displayed minute is never visibly stale. */
 function useStatusClock(): string {
   const [time, setTime] = useState(() => formatStatusTime(new Date()));
   useEffect(() => {
@@ -46,14 +61,129 @@ function useStatusClock(): string {
   return time;
 }
 
+/** Capture the current live video frame to a PNG download. The <video> is the
+ *  device screen rendered by AgentSessionPanel; we grab its natural-resolution
+ *  pixels. No-op until a frame with real dimensions is playing. */
+function captureScreenshot(deviceName: string): void {
+  const video = document.querySelector('video');
+  if (video === null || video.videoWidth === 0 || video.videoHeight === 0) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  if (ctx === null) return;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const slug = deviceName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `driftstack-${slug || 'device'}.png`;
+  a.click();
+}
+
 /**
- * Cosmetic iOS status bar — live clock on the left, cellular/Wi-Fi/battery
- * glyphs on the right, flanking the centered dynamic island (Xcode-Simulator
- * style). The bar IS a `data-tauri-drag-region` so you can grab the window by
- * the status strip (founder ask) — the inner clock/glyphs are
- * `pointer-events-none` so a click anywhere on the strip falls through to the
- * bar and drags (the same bezel/dynamic-island pattern). A faint drop-shadow
- * keeps the white glyphs legible over arbitrary web content.
+ * Driftstack control toolbar — the bar above the device (founder's "thing above
+ * with the mac icons"). Personalized to Driftstack, not a literal Simulator
+ * copy: a close + minimize control on the left, the device name centered, and
+ * screenshot + rotate actions on the right. The bar is a drag-region (drag the
+ * window by it); the button clusters opt out so clicks land.
+ */
+function DeviceToolbar({
+  deviceName,
+  landscape,
+  onToggleRotate,
+}: {
+  deviceName: string;
+  landscape: boolean;
+  onToggleRotate: () => void;
+}): JSX.Element {
+  return (
+    <div
+      data-tauri-drag-region
+      data-component="simulator-toolbar"
+      className="flex h-[34px] w-full shrink-0 items-center justify-between rounded-t-[14px] bg-[#161618] px-3 ring-1 ring-white/10"
+    >
+      {/* Left — window controls (the window is borderless, so these ARE the
+          only way to close/minimize it). */}
+      <div data-tauri-drag-region="false" className="flex items-center gap-2">
+        <button
+          type="button"
+          aria-label="Close"
+          title="Close"
+          onClick={() => void withCurrentWindow((w) => w.close())}
+          className="h-3 w-3 rounded-full bg-[#ff5f57] ring-1 ring-black/20 transition hover:brightness-110"
+        />
+        <button
+          type="button"
+          aria-label="Minimize"
+          title="Minimize"
+          onClick={() => void withCurrentWindow((w) => w.minimize())}
+          className="h-3 w-3 rounded-full bg-[#febc2e] ring-1 ring-black/20 transition hover:brightness-110"
+        />
+      </div>
+      {/* Center — device name (from the launched archetype). */}
+      <div
+        data-tauri-drag-region
+        className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-2xs font-semibold tracking-tight text-ink-secondary"
+      >
+        {deviceName}
+      </div>
+      {/* Right — actions. */}
+      <div data-tauri-drag-region="false" className="flex items-center gap-1.5 text-ink-muted">
+        <button
+          type="button"
+          aria-label="Screenshot"
+          title="Save a screenshot"
+          onClick={() => captureScreenshot(deviceName)}
+          className="rounded p-1 transition hover:bg-white/10 hover:text-ink-primary"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          aria-label={landscape ? 'Rotate to portrait' : 'Rotate to landscape'}
+          title="Rotate"
+          onClick={onToggleRotate}
+          className={`rounded p-1 transition hover:bg-white/10 hover:text-ink-primary ${landscape ? 'text-accent' : ''}`}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M23 4v6h-6" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Cosmetic iOS status bar — live clock + cellular/Wi-Fi/battery glyphs flanking
+ * the dynamic island. Drag-region (drag the window by the strip); inner content
+ * pointer-events-none so a click on the strip falls through to drag. Founder
+ * 2026-06-12 confirmed keeping this alongside the new toolbar.
  */
 function IosStatusBar(): JSX.Element {
   const time = useStatusClock();
@@ -101,7 +231,25 @@ function IosStatusBar(): JSX.Element {
 }
 
 export function SimulatorWindow(): JSX.Element {
-  const info = infoFromQuery();
+  const { info, deviceName } = infoFromQuery();
+  const [landscape, setLandscape] = useState(false);
+
+  // Rotate: swap the window's width/height so the bezel reflows to the new
+  // orientation (the screen object-contains, so the video re-letterboxes). The
+  // device-side orientation change is a harness follow-up; this is the window/
+  // frame rotate. No-op outside Tauri.
+  const toggleRotate = (): void => {
+    const next = !landscape;
+    setLandscape(next);
+    void withCurrentWindow(async (w) => {
+      const { LogicalSize } = await import('@tauri-apps/api/dpi');
+      const size = await w.innerSize();
+      const factor = await w.scaleFactor();
+      const lw = size.width / factor;
+      const lh = size.height / factor;
+      await w.setSize(new LogicalSize(Math.round(lh), Math.round(lw)));
+    });
+  };
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-transparent">
@@ -110,31 +258,37 @@ export function SimulatorWindow(): JSX.Element {
           No session — open this window from a launched profile.
         </div>
       ) : (
-        // Device body — the bezel. data-tauri-drag-region makes the whole frame
-        // a window-drag handle; the inner screen overrides it so taps reach the
-        // device. h-full/w-full fills the (phone-aspect-sized) window.
-        <div
-          data-tauri-drag-region
-          data-component="simulator-device"
-          className="relative flex h-full w-full flex-col rounded-[2.75rem] bg-[#0b0b0d] p-[10px] shadow-2xl ring-1 ring-white/10"
-        >
-          {/* Dynamic island — purely cosmetic; sits over the top of the screen. */}
-          <div
-            aria-hidden="true"
-            data-tauri-drag-region
-            className="pointer-events-none absolute left-1/2 top-[18px] z-10 h-[26px] w-[88px] -translate-x-1/2 rounded-full bg-black"
+        <div data-component="simulator-shell" className="flex h-full w-full flex-col">
+          <DeviceToolbar
+            deviceName={deviceName}
+            landscape={landscape}
+            onToggleRotate={toggleRotate}
           />
-          {/* Screen — the live video. NOT a drag region (taps control the
-              device). object-contain inside the panel letterboxes if needed. */}
+          {/* Device body — the bezel. data-tauri-drag-region makes the frame a
+              window-drag handle; the inner screen overrides it so taps reach the
+              device. flex-1 fills the height below the toolbar. */}
           <div
-            data-tauri-drag-region="false"
-            data-component="simulator-screen"
-            className="relative flex-1 overflow-hidden rounded-[2.1rem] bg-black"
+            data-tauri-drag-region
+            data-component="simulator-device"
+            className="relative flex min-h-0 flex-1 w-full flex-col rounded-b-[2.75rem] bg-[#0b0b0d] p-[10px] shadow-2xl ring-1 ring-white/10"
           >
-            {/* iOS status bar overlay (cosmetic; the web video has none of its
-                own). pointer-events-none → taps still reach the device. */}
-            <IosStatusBar />
-            <AgentSessionPanel info={info} interactive />
+            {/* Dynamic island — purely cosmetic; sits over the top of the screen. */}
+            <div
+              aria-hidden="true"
+              data-tauri-drag-region
+              className="pointer-events-none absolute left-1/2 top-[18px] z-10 h-[26px] w-[88px] -translate-x-1/2 rounded-full bg-black"
+            />
+            {/* Screen — the live video. NOT a drag region (taps control the device). */}
+            <div
+              data-tauri-drag-region="false"
+              data-component="simulator-screen"
+              className="relative flex-1 overflow-hidden rounded-[2.1rem] bg-black"
+            >
+              {/* iOS status bar overlay (cosmetic; the web video has none of its
+                  own). pointer-events-none → taps still reach the device. */}
+              <IosStatusBar />
+              <AgentSessionPanel info={info} interactive />
+            </div>
           </div>
         </div>
       )}
