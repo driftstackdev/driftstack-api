@@ -196,6 +196,12 @@ export const adminAuditAction = pgEnum('admin_audit_action', [
   'mac_node.livekit_registered',
   // owner price edit — pricing-as-data master-owner cockpit (migration 0068).
   'pricing.updated',
+  // Admin-cockpit secrets Phase A slice 2 (migration 0075): owner
+  // secrets-management lifecycle; `secret.revealed` audits every decrypt.
+  'secret.created',
+  'secret.updated',
+  'secret.deleted',
+  'secret.revealed',
 ]);
 
 // ───────────────────────────────────────────────────────────────────────────

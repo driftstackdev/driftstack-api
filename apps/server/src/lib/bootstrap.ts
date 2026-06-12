@@ -47,6 +47,7 @@ import { DrizzleAdminAuditLogRepo } from '../db/admin-audit-repo.js';
 import { DrizzleAccountsAdminRepo } from '../db/admin-accounts-repo.js';
 import { DrizzleAdminBillingRepo } from '../db/admin-billing-repo.js';
 import { DrizzlePricingRepo } from '../db/pricing-repo.js';
+import { DrizzlePlatformSecretsRepo } from '../db/platform-secrets-repo.js';
 import { DrizzleEmailPreferencesRepo } from '../db/email-preferences-repo.js';
 import { EmailPreferencesService } from '../services/email-preferences.js';
 import { DrizzleAccountAuditRepo } from '../db/account-audit-repo.js';
@@ -99,6 +100,7 @@ import { AdminAuditService } from '../services/admin-audit.js';
 import { AccountsAdminService } from '../services/admin-accounts.js';
 import { AdminBillingService } from '../services/admin-billing.js';
 import { PricingService } from '../services/pricing.js';
+import { PlatformSecretsService } from '../services/platform-secrets.js';
 import { IncidentsService } from '../services/incidents.js';
 import { DrizzleIncidentsRepo } from '../db/incidents-repo.js';
 import { DrizzleIncidentUpdateNotificationsRepo } from '../db/incident-update-notifications-repo.js';
@@ -530,6 +532,13 @@ export async function createProductionDeps(
   );
   const adminBillingService = new AdminBillingService(adminBillingRepo);
   const pricingService = new PricingService(new DrizzlePricingRepo(dbHandle));
+  // Secrets Phase A (migration 0074): owner platform-secret store, encrypted
+  // under the shared MFA_ENCRYPTION_KEY (Q1-verdict reuse, same as BYOK/MFA).
+  // Key unset -> service constructs DISABLED (list works; set/reveal throw).
+  const platformSecretsService = new PlatformSecretsService(
+    new DrizzlePlatformSecretsRepo(dbHandle),
+    config.mfaEncryptionKey ?? null,
+  );
   const rateLimitOverridesService = new RateLimitOverridesService(
     rateLimitOverridesRepo,
     authCache,
@@ -1323,6 +1332,7 @@ export async function createProductionDeps(
     accountsAdminService,
     adminBillingService,
     pricingService,
+    platformSecretsService,
     incidentsService,
     statusSubscribersService,
     incidentEventBus,

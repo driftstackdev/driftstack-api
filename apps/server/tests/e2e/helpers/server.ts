@@ -30,6 +30,8 @@ import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { AdminBillingService } from '../../../src/services/admin-billing.js';
 import { PricingService } from '../../../src/services/pricing.js';
 import { DrizzlePricingRepo } from '../../../src/db/pricing-repo.js';
+import { DrizzlePlatformSecretsRepo } from '../../../src/db/platform-secrets-repo.js';
+import { PlatformSecretsService } from '../../../src/services/platform-secrets.js';
 import { RateLimitOverridesService } from '../../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../../src/services/legal.js';
 import { buildLegalCatalog } from '../../../src/services/legal-catalog.js';
@@ -186,6 +188,10 @@ export async function startTestServer(): Promise<TestServer> {
   const accountsAdminService = new AccountsAdminService(accountsAdminRepo, authCache);
   const adminBillingService = new AdminBillingService(new DrizzleAdminBillingRepo(database));
   const pricingService = new PricingService(new DrizzlePricingRepo(database));
+  const platformSecretsService = new PlatformSecretsService(
+    new DrizzlePlatformSecretsRepo(database),
+    Buffer.alloc(32).toString('base64'),
+  );
 
   const rateLimitOverridesRepo = new DrizzleRateLimitOverridesRepo(database);
   const rateLimitOverridesService = new RateLimitOverridesService(
@@ -397,6 +403,7 @@ export async function startTestServer(): Promise<TestServer> {
     accountsAdminService,
     adminBillingService,
     pricingService,
+    platformSecretsService,
     rateLimitOverridesService,
     legalService,
     emailPreferencesService,

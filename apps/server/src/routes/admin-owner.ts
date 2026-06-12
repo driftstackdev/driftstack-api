@@ -21,8 +21,9 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { AccountTier } from '@driftstack/api-types';
 import type { PricingService } from '../services/pricing.js';
+import type { PlatformSecretsService } from '../services/platform-secrets.js';
 import type { AdminAuditService } from '../services/admin-audit.js';
-import { ValidationError } from '../lib/errors.js';
+import { NotFoundError, ValidationError } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
 import { TIER_MONTHLY_PRICE_CENTS } from '../lib/cost-defaults.js';
 
@@ -41,9 +42,16 @@ export interface AdminOwnerRoutesOptions {
   /**
    * Admin audit recorder. The owner price-edit route writes a
    * `pricing.updated` admin_audit_log row before returning (D-025:
-   * audit-before-response, on both success AND failure).
+   * audit-before-response, on both success AND failure); the secrets routes
+   * write `secret.created|updated|deleted|revealed` the same way.
    */
   audit: AdminAuditService;
+  /**
+   * Platform-secrets service (secrets Phase A, migration 0074). Encrypted
+   * at rest (BYOK blob pattern under MFA_ENCRYPTION_KEY); list is metadata-
+   * only, reveal is the single decrypt path and ALWAYS audited.
+   */
+  secrets: PlatformSecretsService;
 }
 
 // Only the priced tiers are editable — the pricing table + PricingService
@@ -56,6 +64,21 @@ const EditPricingParamsSchema = z.object({ tier: z.enum(EDITABLE_TIERS) });
 // bound; the service re-validates as a backstop.
 const EditPricingBodySchema = z.object({
   monthly_cents: z.number().int().positive().max(1_000_000),
+});
+
+// Secrets Phase A slice 2. The route layer re-validates what the service also
+// enforces (slug + bounds) so a bad request 400s before touching the service;
+// the service stays the backstop for non-route callers.
+const SecretNameParamsSchema = z.object({
+  name: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[a-z0-9](?:[a-z0-9_]{0,62}[a-z0-9])?$/, 'lowercase snake_case slug'),
+});
+const SetSecretBodySchema = z.object({
+  value: z.string().min(1).max(8192),
+  description: z.string().max(256).nullable().optional(),
 });
 
 export function registerAdminOwnerRoutes(
@@ -138,6 +161,149 @@ export function registerAdminOwnerRoutes(
         });
         throw err;
       }
+    },
+  );
+
+  // ── Secrets Phase A slice 2 — owner-only platform-secret management. ──
+  // Encrypted at rest (migration 0074); list NEVER returns values; reveal is
+  // the single decrypt path and is ALWAYS audited (D-025: audit before
+  // returning, success AND error — a reveal you can't account for is the
+  // failure mode this surface exists to prevent).
+
+  app.get(
+    '/v1/admin/owner/secrets',
+    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    async () => {
+      const metas = await opts.secrets.list();
+      return {
+        enabled: opts.secrets.enabled,
+        secrets: metas.map((m) => ({
+          name: m.name,
+          description: m.description,
+          created_at: m.createdAt.toISOString(),
+          updated_at: m.updatedAt.toISOString(),
+        })),
+      };
+    },
+  );
+
+  app.put<{ Params: { name: string }; Body: unknown }>(
+    '/v1/admin/owner/secrets/:name',
+    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    async (req, reply) => {
+      const ctx = req.account;
+      if (!ctx) throw new Error('account context missing after requireOwner');
+      const params = SecretNameParamsSchema.safeParse(req.params);
+      if (!params.success) throw new ValidationError(params.error.flatten());
+      const body = SetSecretBodySchema.safeParse(req.body);
+      if (!body.success) throw new ValidationError(body.error.flatten());
+
+      // created vs updated for the audit action — a metadata read, no decrypt.
+      const existing = await opts.secrets.list();
+      const isUpdate = existing.some((m) => m.name === params.data.name);
+      const action = isUpdate ? ('secret.updated' as const) : ('secret.created' as const);
+      try {
+        await opts.secrets.set({
+          name: params.data.name,
+          value: body.data.value,
+          description: body.data.description ?? null,
+          updatedByKeyId: ctx.apiKey.id,
+        });
+        await opts.audit.record({
+          adminAccountId: ctx.account.id,
+          adminKeyId: ctx.apiKey.id,
+          action,
+          targetResourceId: params.data.name,
+          // NEVER the value — name + description only (D-025 + the taint rule).
+          inputPayload: { name: params.data.name, description: body.data.description ?? null },
+          result: 'success',
+          ipAddress: readClientIp(req),
+        });
+        void reply.code(isUpdate ? 200 : 201);
+        return { name: params.data.name, status: isUpdate ? 'updated' : 'created' };
+      } catch (err) {
+        const code =
+          err instanceof Error && err.name
+            ? err.name.toLowerCase().replace(/error$/, '')
+            : 'unknown';
+        await opts.audit.record({
+          adminAccountId: ctx.account.id,
+          adminKeyId: ctx.apiKey.id,
+          action,
+          targetResourceId: params.data.name,
+          inputPayload: { name: params.data.name },
+          result: `error: ${code}`,
+          ipAddress: readClientIp(req),
+        });
+        throw err;
+      }
+    },
+  );
+
+  app.post<{ Params: { name: string } }>(
+    '/v1/admin/owner/secrets/:name/reveal',
+    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    async (req) => {
+      const ctx = req.account;
+      if (!ctx) throw new Error('account context missing after requireOwner');
+      const params = SecretNameParamsSchema.safeParse(req.params);
+      if (!params.success) throw new ValidationError(params.error.flatten());
+      try {
+        const value = await opts.secrets.reveal(params.data.name);
+        if (value === null) throw new NotFoundError(`Secret ${params.data.name} not found.`);
+        await opts.audit.record({
+          adminAccountId: ctx.account.id,
+          adminKeyId: ctx.apiKey.id,
+          action: 'secret.revealed',
+          targetResourceId: params.data.name,
+          inputPayload: { name: params.data.name },
+          result: 'success',
+          ipAddress: readClientIp(req),
+        });
+        // The one place plaintext crosses the API boundary — owner-only,
+        // audited above BEFORE the response leaves.
+        return { name: params.data.name, value: value as string };
+      } catch (err) {
+        if (!(err instanceof NotFoundError)) {
+          const code =
+            err instanceof Error && err.name
+              ? err.name.toLowerCase().replace(/error$/, '')
+              : 'unknown';
+          await opts.audit.record({
+            adminAccountId: ctx.account.id,
+            adminKeyId: ctx.apiKey.id,
+            action: 'secret.revealed',
+            targetResourceId: params.data.name,
+            inputPayload: { name: params.data.name },
+            result: `error: ${code}`,
+            ipAddress: readClientIp(req),
+          });
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.delete<{ Params: { name: string } }>(
+    '/v1/admin/owner/secrets/:name',
+    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    async (req, reply) => {
+      const ctx = req.account;
+      if (!ctx) throw new Error('account context missing after requireOwner');
+      const params = SecretNameParamsSchema.safeParse(req.params);
+      if (!params.success) throw new ValidationError(params.error.flatten());
+      const removed = await opts.secrets.remove(params.data.name);
+      if (!removed) throw new NotFoundError(`Secret ${params.data.name} not found.`);
+      await opts.audit.record({
+        adminAccountId: ctx.account.id,
+        adminKeyId: ctx.apiKey.id,
+        action: 'secret.deleted',
+        targetResourceId: params.data.name,
+        inputPayload: { name: params.data.name },
+        result: 'success',
+        ipAddress: readClientIp(req),
+      });
+      return reply.code(204).send();
     },
   );
 }

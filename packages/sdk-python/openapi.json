@@ -2441,7 +2441,11 @@
               "status_subscriber.purged",
               "status_subscriber.force_subscribed",
               "mac_node.livekit_registered",
-              "pricing.updated"
+              "pricing.updated",
+              "secret.created",
+              "secret.updated",
+              "secret.deleted",
+              "secret.revealed"
             ]
           },
           "target_account_id": {
@@ -8217,7 +8221,11 @@
                 "status_subscriber.purged",
                 "status_subscriber.force_subscribed",
                 "mac_node.livekit_registered",
-                "pricing.updated"
+                "pricing.updated",
+                "secret.created",
+                "secret.updated",
+                "secret.deleted",
+                "secret.revealed"
               ]
             },
             "required": false,
@@ -8322,7 +8330,11 @@
                               "status_subscriber.purged",
                               "status_subscriber.force_subscribed",
                               "mac_node.livekit_registered",
-                              "pricing.updated"
+                              "pricing.updated",
+                              "secret.created",
+                              "secret.updated",
+                              "secret.deleted",
+                              "secret.revealed"
                             ]
                           },
                           "target_account_id": {

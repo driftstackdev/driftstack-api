@@ -1,0 +1,203 @@
+// Behavioral coverage for the owner secrets-management routes (secrets Phase A
+// slice 2): GET /v1/admin/owner/secrets (metadata only) + PUT /:name (create/
+// update) + POST /:name/reveal (the audited decrypt) + DELETE /:name. Proves
+// the full glue: owner-gated -> PlatformSecretsService (encrypt-at-rest) ->
+// D-025 audit rows for every lifecycle action — and that the plaintext value
+// NEVER appears in the list response or any audit payload (the taint rule).
+// Mirrors the admin-owner-pricing-edit harness (hit-cache token -> ctx).
+
+import { describe, expect, it } from 'vitest';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { randomBytes } from 'node:crypto';
+import authPlugin from '../../src/middleware/auth.js';
+import { registerErrorHandler } from '../../src/middleware/error-handler.js';
+import { registerAdminOwnerRoutes } from '../../src/routes/admin-owner.js';
+import { PlatformSecretsService } from '../../src/services/platform-secrets.js';
+import { InMemoryPlatformSecretsRepo } from './_helpers/in-memory-platform-secrets-repo.js';
+import { PricingService } from '../../src/services/pricing.js';
+import { AdminAuditService } from '../../src/services/admin-audit.js';
+import { InMemoryPricingRepo } from './_helpers/in-memory-pricing-repo.js';
+import { InMemoryAdminAuditLogRepo } from './_helpers/in-memory-admin-audit-repo.js';
+import type { AccountAuthRepo, AccountContext } from '../../src/services/auth.js';
+import { type AuthCache, sha256Hex } from '../../src/services/auth-cache.js';
+
+const OWNER_EMAIL = 'owner@driftstack.test';
+const OWNER_TOKEN = 'ds_live_oooooooooooooooooooooooooooooooo';
+const STAFF_TOKEN = 'ds_live_ssssssssssssssssssssssssssssssss';
+const SECRET_VALUE = 'sk-live-SUPERSECRET-AAA';
+
+function makeRepo(): AccountAuthRepo {
+  return { findApiKeyByPrefix: () => Promise.resolve(null) } as unknown as AccountAuthRepo;
+}
+
+function ctxFor(id: string, email: string): AccountContext {
+  return {
+    account: {
+      id,
+      email,
+      name: null,
+      tier: 'api_builder',
+      status: 'active',
+      timezone: null,
+      avatarR2Key: null,
+      slug: null,
+      region: null,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    },
+    apiKey: {
+      id: `key-${id}`,
+      accountId: id,
+      name: 'web-session',
+      keyPrefix: 'web_session',
+      keyHash: '',
+      scopes: ['read', 'write', 'account_owner', 'driftstack_internal_admin'],
+      lastUsedAt: null,
+      revokedAt: null,
+      expiresAt: null,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    },
+    rateLimitOverrides: {},
+    teams: [],
+    webSession: { id: 'ws-1', mfaSatisfiedAt: null },
+  };
+}
+
+function makeCache(): AuthCache {
+  const ownerSha = sha256Hex(OWNER_TOKEN);
+  const staffSha = sha256Hex(STAFF_TOKEN);
+  const owner = ctxFor('acc-owner', OWNER_EMAIL);
+  const staff = ctxFor('acc-staff', 'staff@driftstack.test');
+  return {
+    get: (sha: string) =>
+      Promise.resolve(sha === ownerSha ? owner : sha === staffSha ? staff : null),
+    set: () => Promise.resolve(),
+    invalidateKey: () => Promise.resolve(),
+    invalidateAccount: () => Promise.resolve(),
+  };
+}
+
+async function buildApp(): Promise<{ app: FastifyInstance; auditRepo: InMemoryAdminAuditLogRepo }> {
+  const app = Fastify();
+  registerErrorHandler(app);
+  await app.register(authPlugin, {
+    authRepo: makeRepo(),
+    authCache: makeCache(),
+    authCoalescer: null,
+    ownerEmail: OWNER_EMAIL,
+  });
+  app.decorate('rateLimit', () => async () => {});
+  const auditRepo = new InMemoryAdminAuditLogRepo();
+  registerAdminOwnerRoutes(app, {
+    platformStatus: {
+      billing: false,
+      livekit: false,
+      crypto: false,
+      oauth_client: false,
+      sentry: false,
+      permissive_cors: false,
+    },
+    pricing: new PricingService(new InMemoryPricingRepo()),
+    secrets: new PlatformSecretsService(
+      new InMemoryPlatformSecretsRepo(),
+      randomBytes(32).toString('base64'),
+    ),
+    audit: new AdminAuditService(auditRepo),
+  });
+  await app.ready();
+  return { app, auditRepo };
+}
+
+describe('owner secrets-management routes (secrets Phase A slice 2)', () => {
+  it('full lifecycle: create(201) -> list(meta only) -> reveal(audited) -> update(200) -> delete(204) -> reveal 404; every action audited; plaintext NEVER in list or audit', async () => {
+    const { app, auditRepo } = await buildApp();
+    const h = { authorization: `Bearer ${OWNER_TOKEN}` };
+
+    const create = await app.inject({
+      method: 'PUT',
+      url: '/v1/admin/owner/secrets/stripe_secret_key',
+      headers: h,
+      payload: { value: SECRET_VALUE, description: 'Stripe live key' },
+    });
+    expect(create.statusCode).toBe(201);
+    expect(create.json()).toEqual({ name: 'stripe_secret_key', status: 'created' });
+
+    const list = await app.inject({ method: 'GET', url: '/v1/admin/owner/secrets', headers: h });
+    expect(list.statusCode).toBe(200);
+    const listBody = list.json<{ enabled: boolean; secrets: Array<{ name: string }> }>();
+    expect(listBody.enabled).toBe(true);
+    expect(listBody.secrets).toHaveLength(1);
+    expect(list.body).not.toContain(SECRET_VALUE);
+
+    const reveal = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/owner/secrets/stripe_secret_key/reveal',
+      headers: h,
+    });
+    expect(reveal.statusCode).toBe(200);
+    expect(reveal.json()).toEqual({ name: 'stripe_secret_key', value: SECRET_VALUE });
+
+    const update = await app.inject({
+      method: 'PUT',
+      url: '/v1/admin/owner/secrets/stripe_secret_key',
+      headers: h,
+      payload: { value: 'sk-live-ROTATED' },
+    });
+    expect(update.statusCode).toBe(200);
+    expect(update.json()).toEqual({ name: 'stripe_secret_key', status: 'updated' });
+
+    const del = await app.inject({
+      method: 'DELETE',
+      url: '/v1/admin/owner/secrets/stripe_secret_key',
+      headers: h,
+    });
+    expect(del.statusCode).toBe(204);
+
+    const gone = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/owner/secrets/stripe_secret_key/reveal',
+      headers: h,
+    });
+    expect(gone.statusCode).toBe(404);
+
+    // D-025: the four lifecycle actions are all audited, in order.
+    const actions = auditRepo.getAll().map((r) => r.action);
+    expect(actions).toEqual([
+      'secret.created',
+      'secret.revealed',
+      'secret.updated',
+      'secret.deleted',
+    ]);
+    // The taint rule: no audit payload ever contains a secret value.
+    expect(JSON.stringify(auditRepo.getAll())).not.toContain(SECRET_VALUE);
+    expect(JSON.stringify(auditRepo.getAll())).not.toContain('sk-live-ROTATED');
+  });
+
+  it('staff-admin (non-owner) gets 403 on every secrets route; bad slug 400s; no audit rows from rejected calls', async () => {
+    const { app, auditRepo } = await buildApp();
+    const staff = { authorization: `Bearer ${STAFF_TOKEN}` };
+    for (const [method, url] of [
+      ['GET', '/v1/admin/owner/secrets'],
+      ['PUT', '/v1/admin/owner/secrets/some_key'],
+      ['POST', '/v1/admin/owner/secrets/some_key/reveal'],
+      ['DELETE', '/v1/admin/owner/secrets/some_key'],
+    ] as const) {
+      const res = await app.inject({
+        method,
+        url,
+        headers: staff,
+        ...(method === 'PUT' ? { payload: { value: 'v' } } : {}),
+      });
+      expect(res.statusCode, `${method} ${url}`).toBe(403);
+    }
+    const owner = { authorization: `Bearer ${OWNER_TOKEN}` };
+    const bad = await app.inject({
+      method: 'PUT',
+      url: '/v1/admin/owner/secrets/Not-A-Slug',
+      headers: owner,
+      payload: { value: 'v' },
+    });
+    expect(bad.statusCode).toBe(400);
+    expect(auditRepo.getAll()).toHaveLength(0);
+  });
+});

@@ -199,6 +199,11 @@ export const AdminAuditActionSchema = z.enum([
   'mac_node.livekit_registered',
   // owner price edit — pricing-as-data master-owner cockpit (migration 0068).
   'pricing.updated',
+  // Admin-cockpit secrets Phase A slice 2 (migration 0075).
+  'secret.created',
+  'secret.updated',
+  'secret.deleted',
+  'secret.revealed',
 ]);
 export type AdminAuditAction = z.infer<typeof AdminAuditActionSchema>;
 

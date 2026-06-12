@@ -40,7 +40,13 @@ export type AdminAuditAction =
   // LK.2: per-Mac LiveKit credential registration (migration 0057).
   | 'mac_node.livekit_registered'
   // owner price edit — pricing-as-data master-owner cockpit (migration 0068).
-  | 'pricing.updated';
+  | 'pricing.updated'
+  // Admin-cockpit secrets Phase A slice 2 (migration 0075) — owner
+  // secrets-management; every reveal (decrypt) is audited.
+  | 'secret.created'
+  | 'secret.updated'
+  | 'secret.deleted'
+  | 'secret.revealed';
 
 export interface AdminAuditLogRow {
   id: string;

@@ -131,9 +131,11 @@ describe('W936 D-025 admin-audit cross-source invariant', () => {
     expect(p).toMatch(/\| 'mac_node\.livekit_registered'/);
   });
 
-  it('CRITICAL pricing anchor — pricing.updated is the union terminator (migration 0068). The 1-action pricing group covers the master-owner price editor (pricing-as-data Phase A) recording each tier price change.', () => {
+  it('CRITICAL pricing + secrets anchors — pricing.updated (migration 0068) covers the master-owner price editor; secret.revealed is the union terminator (migration 0075, the secrets-manager lifecycle incl. the audited decrypt).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-audit.ts'));
-    expect(p).toMatch(/\| 'pricing\.updated';/);
+    expect(p).toMatch(/\| 'pricing\.updated'/);
+    expect(p).toMatch(/\| 'secret\.created'/);
+    expect(p).toMatch(/\| 'secret\.revealed';/);
   });
 
   // ─── AdminAuditLogRow 10-field shape ─────────────────────────

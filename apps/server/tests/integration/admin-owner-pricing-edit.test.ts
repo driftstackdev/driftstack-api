@@ -16,6 +16,8 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import authPlugin from '../../src/middleware/auth.js';
 import { registerErrorHandler } from '../../src/middleware/error-handler.js';
 import { registerAdminOwnerRoutes } from '../../src/routes/admin-owner.js';
+import { PlatformSecretsService } from '../../src/services/platform-secrets.js';
+import { InMemoryPlatformSecretsRepo } from './_helpers/in-memory-platform-secrets-repo.js';
 import { PricingService } from '../../src/services/pricing.js';
 import { AdminAuditService } from '../../src/services/admin-audit.js';
 import { InMemoryPricingRepo } from './_helpers/in-memory-pricing-repo.js';
@@ -108,6 +110,7 @@ async function buildApp(): Promise<Harness> {
       permissive_cors: false,
     },
     pricing,
+    secrets: new PlatformSecretsService(new InMemoryPlatformSecretsRepo(), null),
     audit: new AdminAuditService(auditRepo),
   });
   await app.ready();

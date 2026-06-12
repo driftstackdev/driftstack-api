@@ -25,7 +25,9 @@ import { AdminAuditService } from '../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../src/services/admin-accounts.js';
 import { AdminBillingService } from '../../src/services/admin-billing.js';
 import { PricingService } from '../../src/services/pricing.js';
+import { PlatformSecretsService } from '../../src/services/platform-secrets.js';
 import { InMemoryPricingRepo } from './_helpers/in-memory-pricing-repo.js';
+import { InMemoryPlatformSecretsRepo } from './_helpers/in-memory-platform-secrets-repo.js';
 import { RateLimitOverridesService } from '../../src/services/rate-limit-overrides.js';
 import { LegalService } from '../../src/services/legal.js';
 import { buildLegalCatalogFromContent } from '../../src/services/legal-catalog.js';
@@ -262,6 +264,10 @@ describe('auth cache — graceful degradation', () => {
     );
     const adminBillingService = new AdminBillingService(new InMemoryAdminBillingRepo());
     const pricingService = new PricingService(new InMemoryPricingRepo());
+    const platformSecretsService = new PlatformSecretsService(
+      new InMemoryPlatformSecretsRepo(),
+      null,
+    );
     const rateLimitOverridesService = new RateLimitOverridesService(
       new InMemoryRateLimitOverridesRepo(authRepo),
       null,
@@ -281,6 +287,7 @@ describe('auth cache — graceful degradation', () => {
       accountsAdminService,
       adminBillingService,
       pricingService,
+      platformSecretsService,
       rateLimitOverridesService,
       legalService: new LegalService(
         buildLegalCatalogFromContent([
@@ -373,6 +380,10 @@ describe('auth cache — graceful degradation', () => {
     );
     const adminBillingService = new AdminBillingService(new InMemoryAdminBillingRepo());
     const pricingService = new PricingService(new InMemoryPricingRepo());
+    const platformSecretsService = new PlatformSecretsService(
+      new InMemoryPlatformSecretsRepo(),
+      null,
+    );
     const rateLimitOverridesService = new RateLimitOverridesService(
       new InMemoryRateLimitOverridesRepo(authRepo),
       null,
@@ -392,6 +403,7 @@ describe('auth cache — graceful degradation', () => {
       accountsAdminService,
       adminBillingService,
       pricingService,
+      platformSecretsService,
       rateLimitOverridesService,
       legalService: new LegalService(
         buildLegalCatalogFromContent([

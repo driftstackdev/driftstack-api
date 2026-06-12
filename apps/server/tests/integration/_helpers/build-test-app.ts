@@ -48,7 +48,9 @@ import { AdminAuditService } from '../../../src/services/admin-audit.js';
 import { AccountsAdminService } from '../../../src/services/admin-accounts.js';
 import { AdminBillingService } from '../../../src/services/admin-billing.js';
 import { PricingService } from '../../../src/services/pricing.js';
+import { PlatformSecretsService } from '../../../src/services/platform-secrets.js';
 import { InMemoryPricingRepo } from './in-memory-pricing-repo.js';
+import { InMemoryPlatformSecretsRepo } from './in-memory-platform-secrets-repo.js';
 import { IncidentsService } from '../../../src/services/incidents.js';
 import { InMemoryIncidentsRepo } from './in-memory-incidents-repo.js';
 import { InMemoryIncidentUpdateNotificationsRepo } from './in-memory-incident-update-notifications-repo.js';
@@ -488,6 +490,7 @@ export interface TestAppFixture {
   /** Pricing-as-data Phase A — exposed so tests can setPrice() and assert
    *  the owner-edited price flows through the quote + charge reads. */
   pricingService: PricingService;
+  platformSecretsService: PlatformSecretsService;
   /** V-820 — fleet-node registry (register a node's Ed25519 pubkey so a
    *  signed JWT verifies). Always present; only consulted by the live
    *  route when `enableFleetControlPlane` wired it into AppDeps. */
@@ -964,6 +967,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   );
   const adminBillingService = new AdminBillingService(new InMemoryAdminBillingRepo());
   const pricingService = new PricingService(new InMemoryPricingRepo());
+  // Secrets Phase A — enabled with a fixed test key so route tests can
+  // exercise set/reveal end-to-end (32 zero bytes, base64).
+  const platformSecretsService = new PlatformSecretsService(
+    new InMemoryPlatformSecretsRepo(),
+    Buffer.alloc(32).toString('base64'),
+  );
   // Legal-acceptance plumbing — uses an in-memory catalog with a fixed
   // canned document set (one per documentKey) so tests don't depend on
   // file-system reads.
@@ -1272,6 +1281,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountsAdminService,
     adminBillingService,
     pricingService,
+    platformSecretsService,
     incidentsService,
     statusSubscribersService,
     incidentEventBus,
@@ -1464,6 +1474,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     cryptoOrdersService,
     cryptoOrdersRepo,
     pricingService,
+    platformSecretsService,
     oauthLinksRepo,
     plaintext,
     accountId,
