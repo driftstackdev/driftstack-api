@@ -156,3 +156,13 @@ in apps/server/tests/unit AND apps/<app>/tests/unit AND the cross-app rollups
 BEFORE the commit (`grep -rln '<changed-file-basename>' apps/server/tests/unit
 apps/<app>/tests`). Swept 'are patchable' across both dirs — no third
 location. Slice now 05a3b1e8, gate 4 in flight.
+
+## Addendum (~17:45) — organization arc complete across all three surfaces
+
+Phase 2 (GUI sync, de2a6759) and Phase 3 (dashboard chips, gating) landed on
+top of the backend slice (05a3b1e8). End state: GUI organizes (write-through
+PATCH + seed-down), dashboard displays (read-only chips, search haystack),
+server stores (migration 0076 — reaches prod with the founder-gated 0072+
+deploy). Pre-0076 prod is safe against every piece. Tauri rebuild for the
+founder's walkthrough is load-gated (box at 60-120 from the A1 fork rebuild;
+watcher armed, builds when <10).

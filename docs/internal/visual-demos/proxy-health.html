@@ -98,7 +98,7 @@
       }
       .pool {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(5, 1fr);
         gap: 12px;
         margin-bottom: 18px;
       }
@@ -254,6 +254,62 @@
         cursor: pointer;
         white-space: nowrap;
       }
+      .caps {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      .cap {
+        font-family: var(--mono);
+        font-size: 9px;
+        letter-spacing: 0.4px;
+        border-radius: 5px;
+        padding: 2.5px 6px;
+        border: 1px solid var(--border);
+        color: var(--ink-3);
+        white-space: nowrap;
+      }
+      .cap.yes {
+        color: var(--ready);
+        border-color: var(--ready);
+        background: color-mix(in srgb, var(--ready) 7%, transparent);
+      }
+      .cap.no {
+        color: var(--bad);
+        border-color: var(--bad);
+        opacity: 0.75;
+        text-decoration: line-through;
+      }
+      .cap.unk {
+        font-style: italic;
+      }
+      .impact {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 18px;
+      }
+      .impact .card {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        padding: 12px 15px;
+        font-size: 11.5px;
+        color: var(--ink-2);
+      }
+      .impact .card b {
+        display: block;
+        font-size: 12px;
+        color: var(--ink);
+        margin-bottom: 3px;
+      }
+      .impact .card .k {
+        font-family: var(--mono);
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--accent);
+      }
       .foot {
         margin-top: 14px;
         font-size: 11.5px;
@@ -287,6 +343,10 @@
           <div class="k">Geo-coherent</div>
           <div class="v">5<small> / 6</small></div>
         </div>
+        <div class="stat">
+          <div class="k">Full-stack (UDP)</div>
+          <div class="v">4<small> / 6</small></div>
+        </div>
       </div>
 
       <div class="callout">
@@ -306,6 +366,7 @@
             <th>Status</th>
             <th>Latency (24h)</th>
             <th>Exit geo</th>
+            <th>Capabilities</th>
             <th>Pinned profiles</th>
             <th>Last check</th>
             <th></th>
@@ -324,6 +385,12 @@
               ></span>
             </td>
             <td class="geo">NL · Amsterdam</td>
+            <td>
+              <span class="caps"
+                ><span class="cap yes">TCP</span><span class="cap yes">UDP</span
+                ><span class="cap yes">QUIC</span><span class="cap yes">WebRTC</span></span
+              >
+            </td>
             <td class="profiles">amsterdam-shopper +2</td>
             <td class="lat">2m ago</td>
             <td class="rowact">Test now</td>
@@ -340,6 +407,12 @@
               ></span>
             </td>
             <td class="geo" style="color: var(--warn)">DE · Frankfurt ←</td>
+            <td>
+              <span class="caps"
+                ><span class="cap yes">TCP</span><span class="cap yes">UDP</span
+                ><span class="cap yes">QUIC</span><span class="cap yes">WebRTC</span></span
+              >
+            </td>
             <td class="profiles">nl-banking +2</td>
             <td class="lat">1m ago</td>
             <td class="rowact">Test now</td>
@@ -356,6 +429,12 @@
               ></span>
             </td>
             <td class="geo">US · New York</td>
+            <td>
+              <span class="caps"
+                ><span class="cap yes">TCP</span><span class="cap no">UDP</span
+                ><span class="cap no">QUIC</span><span class="cap no">WebRTC</span></span
+              >
+            </td>
             <td class="profiles">us-retail-qa +4</td>
             <td class="lat">2m ago</td>
             <td class="rowact">Test now</td>
@@ -372,6 +451,12 @@
               ></span>
             </td>
             <td class="geo">UK · London</td>
+            <td>
+              <span class="caps"
+                ><span class="cap yes">TCP</span><span class="cap yes">UDP</span
+                ><span class="cap yes">QUIC</span><span class="cap yes">WebRTC</span></span
+              >
+            </td>
             <td class="profiles">uk-checkout</td>
             <td class="lat">3m ago</td>
             <td class="rowact">Test now</td>
@@ -388,6 +473,12 @@
               ></span>
             </td>
             <td class="geo">JP · Tokyo</td>
+            <td>
+              <span class="caps"
+                ><span class="cap yes">TCP</span><span class="cap yes">UDP</span
+                ><span class="cap yes">QUIC</span><span class="cap no">WebRTC</span></span
+              >
+            </td>
             <td class="profiles">jp-market</td>
             <td class="lat">2m ago</td>
             <td class="rowact">Test now</td>
@@ -406,6 +497,12 @@
               ></span>
             </td>
             <td class="geo">DE · —</td>
+            <td>
+              <span class="caps"
+                ><span class="cap unk">TCP ?</span><span class="cap unk">UDP ?</span
+                ><span class="cap unk">QUIC ?</span><span class="cap unk">WebRTC ?</span></span
+              >
+            </td>
             <td class="profiles">de-pricing</td>
             <td class="lat">30s ago · retrying</td>
             <td class="rowact">Test now</td>
@@ -413,10 +510,35 @@
         </tbody>
       </table>
 
+      <div class="impact">
+        <div class="card">
+          <span class="k">UDP ASSOCIATE</span>
+          <b>The full-stack gate</b>
+          SOCKS5 UDP relay is what carries everything below. Probed with a real ASSOCIATE handshake
+          + echo round-trip — not just the advertised auth method. No UDP = TCP-only exit.
+        </div>
+        <div class="card">
+          <span class="k">QUIC / HTTP-3</span>
+          <b>Protocol coherence</b>
+          Real iPhones speak h3 to half the web. Through a UDP-capable exit, sessions negotiate h3
+          natively; on a TCP-only exit they fall back to h2 — functional, but a flat-h2 profile is a
+          quieter, older-looking client. Prefer full-stack exits for high-trust targets.
+        </div>
+        <div class="card">
+          <span class="k">WebRTC</span>
+          <b>Media + ICE posture</b>
+          STUN/TURN need UDP through the same exit, or calls and webcam checks degrade to
+          TURN-over-TCP. The probe walks a real ICE gather through the relay and confirms the
+          reflexive address matches the exit geo.
+        </div>
+      </div>
+
       <p class="foot">
-        Checks run from the fleet, through each proxy, against a neutral endpoint — reachability,
-        round-trip latency and exit-IP geolocation. Sessions never launch through an unreachable
-        exit; geo drift warns before a profile's story stops matching its network.
+        Checks run from the fleet, through each proxy, against neutral endpoints — reachability,
+        round-trip latency, exit-IP geolocation, and a capability probe per protocol (TCP CONNECT ·
+        UDP ASSOCIATE echo · h3 handshake · ICE gather). Sessions never launch through an
+        unreachable exit; geo drift warns before a profile's story stops matching its network;
+        capability results are re-probed daily and greyed (?) while an exit is unreachable.
       </p>
     </div>
   </body>
