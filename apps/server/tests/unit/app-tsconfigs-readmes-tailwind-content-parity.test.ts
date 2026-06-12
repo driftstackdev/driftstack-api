@@ -185,37 +185,41 @@ describe('W624 app tsconfigs + READMEs + tailwind content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/gui-client/PACKAGING.md'))).toBe(true);
   });
 
-  it('apps/gui-client/tailwind.config.ts: locked brand identity file 128 + Config TS-import + content [index.html + src/**/*.{ts,tsx}] + darkMode class + 4 colors namespaces (surface{base/raised/elevated/inset/divider}, ink{primary/secondary/muted/inverted}, accent oxblood + status{ready/busy/error/idle}) + fontFamily sans=Geist + mono=Berkeley + 2xs fontSize + ringWidth DEFAULT=1px pinned', () => {
+  it('apps/gui-client/tailwind.config.ts: Fleet token palette (2026-06-12 rework) — Config TS-import + content [index.html + src/**/*.{ts,tsx}] + darkMode [data-mode=dark] selector + 4 semantic namespaces resolving to the two-axis CSS vars (rgb()/<alpha-value> form) incl the status.success/.warning latent-no-op fix + fontFamily sans=Geist + mono=Berkeley + 2xs fontSize + ringWidth DEFAULT=1px pinned', () => {
     const body = read('apps/gui-client/tailwind.config.ts');
     expect(body).toMatch(/^import type \{ Config \} from 'tailwindcss';$/m);
     expect(body).toMatch(/\/\/ Driftstack brand identity \(locked per file 128\)\./);
     expect(body).toMatch(/Oxblood accent: the only highlight color/);
     expect(body).toMatch(/Geist Sans for body \/ UI; Berkeley Mono for technical accents/);
     expect(body).toMatch(/content: \['\.\/index\.html', '\.\/src\/\*\*\/\*\.\{ts,tsx\}'\],/);
-    expect(body).toMatch(/darkMode: 'class',/);
+    expect(body).toMatch(/darkMode: \['selector', '\[data-mode="dark"\]'\],/);
     expect(body).toMatch(/^\s+surface: \{$/m);
-    expect(body).toMatch(/base: '#0b0f14',/);
-    expect(body).toMatch(/raised: '#111722',/);
-    expect(body).toMatch(/elevated: '#1a2230',/);
-    expect(body).toMatch(/inset: '#070a0e',/);
-    expect(body).toMatch(/divider: '#1f2937',/);
+    expect(body).toMatch(/base: 'rgb\(var\(--surface-base-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/raised: 'rgb\(var\(--surface-raised-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/elevated: 'rgb\(var\(--surface-elevated-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/inset: 'rgb\(var\(--surface-inset-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/divider: 'rgb\(var\(--surface-divider-rgb\) \/ <alpha-value>\)',/);
     expect(body).toMatch(/^\s+ink: \{$/m);
-    expect(body).toMatch(/primary: '#e5e7eb',/);
-    expect(body).toMatch(/secondary: '#9ca3af',/);
-    expect(body).toMatch(/muted: '#6b7280',/);
-    expect(body).toMatch(/inverted: '#0b0f14',/);
+    expect(body).toMatch(/primary: 'rgb\(var\(--ink-primary-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/secondary: 'rgb\(var\(--ink-secondary-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/muted: 'rgb\(var\(--ink-muted-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/inverted: 'rgb\(var\(--ink-inverted-rgb\) \/ <alpha-value>\)',/);
     expect(body).toMatch(/^\s+accent: \{$/m);
-    expect(body).toMatch(/\/\/ Oxblood — locked\. Sole accent color\./);
-    expect(body).toMatch(/DEFAULT: '#722f37',/);
-    expect(body).toMatch(/hover: '#823942',/);
-    expect(body).toMatch(/active: '#5e252c',/);
-    expect(body).toMatch(/subtle: '#3a1a1f',/);
-    expect(body).toMatch(/ring: 'rgba\(114, 47, 55, 0\.4\)',/);
+    expect(body).toMatch(/\/\/ Follows the data-accent axis \(violet default per the rework\)\./);
+    expect(body).toMatch(/DEFAULT: 'rgb\(var\(--accent-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/hover: 'rgb\(var\(--accent-hover-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/active: 'rgb\(var\(--accent-active-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(
+      /subtle: 'rgb\(var\(--accent-subtle-rgb\) \/ var\(--accent-subtle-alpha\)\)',/,
+    );
+    expect(body).toMatch(/ring: 'var\(--accent-ring\)',/);
     expect(body).toMatch(/^\s+status: \{$/m);
-    expect(body).toMatch(/ready: '#34d399',/);
-    expect(body).toMatch(/busy: '#fbbf24',/);
-    expect(body).toMatch(/error: '#f87171',/);
-    expect(body).toMatch(/idle: '#6b7280',/);
+    expect(body).toMatch(/ready: 'rgb\(var\(--status-ready-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/busy: 'rgb\(var\(--status-busy-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/error: 'rgb\(var\(--status-error-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/idle: 'rgb\(var\(--status-idle-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/success: 'rgb\(var\(--status-ready-rgb\) \/ <alpha-value>\)',/);
+    expect(body).toMatch(/warning: 'rgb\(var\(--status-busy-rgb\) \/ <alpha-value>\)',/);
     expect(body).toMatch(/sans: \[/);
     expect(body).toMatch(/'Geist Sans',/);
     expect(body).toMatch(/mono: \[/);
