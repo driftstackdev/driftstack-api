@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-mode="dark" data-accent="oxblood">
+<html lang="en" data-mode="light" data-accent="violet">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -252,17 +252,17 @@
         <h1>Driftstack — logo concepts</h1>
         <span class="spacer"></span>
         <div class="themer">
-          <button id="m-dark" class="on" onclick="setMode('dark')">Dark</button
-          ><button id="m-light" onclick="setMode('light')">Light</button>
+          <button id="m-dark" onclick="setMode('dark')">Dark</button
+          ><button id="m-light" class="on" onclick="setMode('light')">Light</button>
           <span style="width: 1px; height: 15px; background: var(--border)"></span>
           <span
-            class="sw on"
+            class="sw"
             id="a-oxblood"
             style="background: #9b3b46"
             onclick="setAccent('oxblood')"
           ></span>
           <span
-            class="sw"
+            class="sw on"
             id="a-violet"
             style="background: #6d5efc"
             onclick="setAccent('violet')"
@@ -276,11 +276,345 @@
         </div>
       </div>
       <p class="lede">
-        Six directions for the mark. Each row: the mark · the lockup · app icon (Dock/GUI) · favicon
-        scale · then the mark living in a real nav. Flip mode + accent — every concept is built from
-        theme tokens so it works in any combination. Pick one (or "mark of 3 with the wordmark of
-        5").
+        <b>Round 2 (your feedback):</b> bold-caps wordmark treatments first (W1–W6), then Drift
+        Layers variants (L1–L6), then the original six concepts below for reference. Default = your
+        white + violet pick. Mix freely: "W2 wordmark + L3 mark".
       </p>
+
+      <!-- 0 WORDMARKS — founder: large caps, BOLD, maybe italic -->
+      <div class="concept">
+        <div class="hd">
+          <span class="tag">W</span>
+          <h2>Wordmark — DRIFTSTACK, heavy caps</h2>
+        </div>
+        <p class="why">
+          Six typographic treatments. All system-font heavy weights here so you judge the SHAPE; the
+          picked one gets a proper brand typeface pass (e.g. Inter Display Black / Söhne Breit /
+          custom cuts).
+        </p>
+        <div style="display: grid; gap: 14px">
+          <div class="cell" style="min-height: 78px">
+            <div class="cellinner">
+              <span style="font-weight: 900; font-size: 34px; letter-spacing: -1.2px"
+                >DRIFTSTACK<span style="color: var(--accent)">.</span></span
+              >
+              <span class="cap">W1 · Black, tight, accent period</span>
+            </div>
+          </div>
+          <div class="cell" style="min-height: 78px">
+            <div class="cellinner">
+              <span
+                style="font-weight: 900; font-size: 34px; letter-spacing: -1px; font-style: italic"
+                >DRIFT<span style="color: var(--accent)">STACK</span></span
+              >
+              <span class="cap">W2 · Black italic, two-tone split</span>
+            </div>
+          </div>
+          <div class="cell" style="min-height: 78px">
+            <div class="cellinner">
+              <span style="font-weight: 800; font-size: 26px; letter-spacing: 7px">DRIFTSTACK</span>
+              <span class="cap">W3 · Extended tracking, quiet luxury</span>
+            </div>
+          </div>
+          <div class="cell" style="min-height: 78px">
+            <div class="cellinner">
+              <span style="font-weight: 900; font-size: 32px; letter-spacing: -0.8px"
+                >DRIFT<span style="color: var(--accent); font-style: italic">/</span>STACK</span
+              >
+              <span class="cap">W4 · Accent slash divider</span>
+            </div>
+          </div>
+          <div class="cell" style="min-height: 78px">
+            <div class="cellinner">
+              <span
+                style="
+                  position: relative;
+                  font-weight: 900;
+                  font-size: 34px;
+                  letter-spacing: -1.2px;
+                  display: inline-block;
+                "
+              >
+                <span
+                  aria-hidden="true"
+                  style="
+                    position: absolute;
+                    left: 4px;
+                    top: 3px;
+                    color: transparent;
+                    -webkit-text-stroke: 1.3px var(--accent);
+                    opacity: 0.45;
+                  "
+                  >DRIFTSTACK</span
+                >
+                <span style="position: relative">DRIFTSTACK</span></span
+              >
+              <span class="cap">W5 · Drift-shadow outline (ties to Drift Layers)</span>
+            </div>
+          </div>
+          <div class="cell" style="min-height: 78px">
+            <div class="cellinner">
+              <span
+                style="
+                  font-family: var(--mono);
+                  font-weight: 800;
+                  font-size: 28px;
+                  letter-spacing: -0.5px;
+                "
+                >DRIFTSTACK<span style="color: var(--accent)">_</span></span
+              >
+              <span class="cap">W6 · Mono terminal, cursor</span>
+            </div>
+          </div>
+        </div>
+        <div class="ctx">
+          <span
+            style="font-weight: 900; font-size: 15px; letter-spacing: -0.4px; font-style: italic"
+            >DRIFT<span style="color: var(--accent)">STACK</span></span
+          ><span class="lk">Pricing</span><span class="lk">Docs</span
+          ><span class="lk">Security</span><span class="cta">Start free</span>
+        </div>
+      </div>
+
+      <!-- 0b DRIFT LAYERS VARIANTS — founder: "probably looks good, needs more variance" -->
+      <div class="concept">
+        <div class="hd">
+          <span class="tag">L</span>
+          <h2>Drift Layers — six variants</h2>
+        </div>
+        <p class="why">
+          Variations on the fanned-identities mark you liked: fill vs outline, layer count, fan
+          angle and direction. Each works with any W wordmark above.
+        </p>
+        <div class="row" style="grid-template-columns: repeat(6, 1fr)">
+          <div class="cell">
+            <div class="cellinner">
+              <svg width="50" height="50" viewBox="0 0 48 48" fill="none">
+                <rect
+                  x="8"
+                  y="6"
+                  width="22"
+                  height="36"
+                  rx="6"
+                  stroke="var(--ink-3)"
+                  stroke-width="2.4"
+                  opacity=".35"
+                  transform="rotate(-8 19 24)"
+                />
+                <rect
+                  x="12"
+                  y="6"
+                  width="22"
+                  height="36"
+                  rx="6"
+                  stroke="var(--ink-2)"
+                  stroke-width="2.4"
+                  opacity=".6"
+                  transform="rotate(-4 23 24)"
+                />
+                <rect
+                  x="17"
+                  y="6"
+                  width="22"
+                  height="36"
+                  rx="6"
+                  stroke="var(--accent)"
+                  stroke-width="2.8"
+                />
+              </svg>
+              <span class="cap">L1 · Original</span>
+            </div>
+          </div>
+          <div class="cell">
+            <div class="cellinner">
+              <svg width="50" height="50" viewBox="0 0 48 48" fill="none">
+                <rect
+                  x="10"
+                  y="6"
+                  width="22"
+                  height="36"
+                  rx="6"
+                  stroke="var(--ink-2)"
+                  stroke-width="2.4"
+                  opacity=".5"
+                  transform="rotate(-6 21 24)"
+                />
+                <rect x="16" y="6" width="22" height="36" rx="6" fill="var(--accent)" />
+                <circle cx="27" cy="36" r="2" fill="#fff" />
+              </svg>
+              <span class="cap">L2 · Filled front</span>
+            </div>
+          </div>
+          <div class="cell">
+            <div class="cellinner">
+              <svg width="50" height="50" viewBox="0 0 48 48" fill="none">
+                <rect
+                  x="11"
+                  y="7"
+                  width="22"
+                  height="36"
+                  rx="6"
+                  stroke="var(--ink-2)"
+                  stroke-width="2.6"
+                  opacity=".5"
+                  transform="rotate(-7 22 25)"
+                />
+                <rect
+                  x="16"
+                  y="5"
+                  width="22"
+                  height="36"
+                  rx="6"
+                  stroke="var(--accent)"
+                  stroke-width="3"
+                />
+              </svg>
+              <span class="cap">L3 · Two-layer minimal</span>
+            </div>
+          </div>
+          <div class="cell">
+            <div class="cellinner">
+              <svg width="50" height="50" viewBox="0 0 48 48" fill="none">
+                <rect
+                  x="6"
+                  y="7"
+                  width="20"
+                  height="34"
+                  rx="6"
+                  stroke="var(--ink-3)"
+                  stroke-width="2"
+                  opacity=".25"
+                  transform="rotate(-12 16 24)"
+                />
+                <rect
+                  x="9"
+                  y="7"
+                  width="20"
+                  height="34"
+                  rx="6"
+                  stroke="var(--ink-3)"
+                  stroke-width="2"
+                  opacity=".45"
+                  transform="rotate(-8 19 24)"
+                />
+                <rect
+                  x="13"
+                  y="7"
+                  width="20"
+                  height="34"
+                  rx="6"
+                  stroke="var(--ink-2)"
+                  stroke-width="2.2"
+                  opacity=".7"
+                  transform="rotate(-4 23 24)"
+                />
+                <rect
+                  x="18"
+                  y="7"
+                  width="20"
+                  height="34"
+                  rx="6"
+                  stroke="var(--accent)"
+                  stroke-width="2.6"
+                />
+              </svg>
+              <span class="cap">L4 · Four-layer deep fan</span>
+            </div>
+          </div>
+          <div class="cell">
+            <div class="cellinner">
+              <svg width="50" height="50" viewBox="0 0 48 48" fill="none">
+                <rect
+                  x="6"
+                  y="10"
+                  width="20"
+                  height="32"
+                  rx="6"
+                  stroke="var(--ink-3)"
+                  stroke-width="2.2"
+                  opacity=".35"
+                />
+                <rect
+                  x="12"
+                  y="8"
+                  width="20"
+                  height="32"
+                  rx="6"
+                  stroke="var(--ink-2)"
+                  stroke-width="2.2"
+                  opacity=".6"
+                />
+                <rect
+                  x="18"
+                  y="6"
+                  width="20"
+                  height="32"
+                  rx="6"
+                  stroke="var(--accent)"
+                  stroke-width="2.8"
+                />
+              </svg>
+              <span class="cap">L5 · Stair slide (no rotation)</span>
+            </div>
+          </div>
+          <div class="cell">
+            <div class="cellinner">
+              <span class="appicon" style="width: 54px; height: 54px; border-radius: 13px">
+                <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                  <rect
+                    x="10"
+                    y="8"
+                    width="20"
+                    height="32"
+                    rx="6"
+                    stroke="rgba(255,255,255,.5)"
+                    stroke-width="2.6"
+                    transform="rotate(-6 20 24)"
+                  />
+                  <rect
+                    x="17"
+                    y="8"
+                    width="20"
+                    height="32"
+                    rx="6"
+                    stroke="#fff"
+                    stroke-width="3"
+                  /></svg
+              ></span>
+              <span class="cap">L6 · Squircle app-icon</span>
+            </div>
+          </div>
+        </div>
+        <div class="ctx">
+          <span class="lockup" style="font-size: 14.5px; gap: 9px"
+            ><svg width="20" height="20" viewBox="0 0 48 48" fill="none">
+              <rect
+                x="11"
+                y="7"
+                width="22"
+                height="36"
+                rx="6"
+                stroke="var(--ink-2)"
+                stroke-width="2.6"
+                opacity=".5"
+                transform="rotate(-7 22 25)"
+              />
+              <rect
+                x="16"
+                y="5"
+                width="22"
+                height="36"
+                rx="6"
+                stroke="var(--accent)"
+                stroke-width="3"
+              /></svg
+            ><span style="font-weight: 900; letter-spacing: -0.4px; font-style: italic"
+              >DRIFT<span style="color: var(--accent)">STACK</span></span
+            ></span
+          ><span class="lk">Pricing</span><span class="lk">Docs</span
+          ><span class="lk">Security</span><span class="cta">Start free</span>
+        </div>
+      </div>
 
       <!-- 1 DRIFT LAYERS -->
       <div class="concept">

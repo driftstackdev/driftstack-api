@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-mode="dark" data-accent="oxblood">
+<html lang="en" data-mode="light" data-accent="violet">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -56,7 +56,6 @@
         --surface: #fff;
         --raised: #fff;
         --ink: #0f1014;
-        --ink-2: #45485290;
         --ink-2: #474a55;
         --ink-3: #8a8d99;
         --border: #e4e6ec;
@@ -762,17 +761,17 @@
         ><a class="l" href="#">/security</a><a class="l" href="#">/status</a>
         <span class="spacer"></span>
         <div class="themer">
-          <button id="m-dark" class="on" onclick="setMode('dark')">Dark</button
-          ><button id="m-light" onclick="setMode('light')">Light</button>
+          <button id="m-dark" onclick="setMode('dark')">Dark</button
+          ><button id="m-light" class="on" onclick="setMode('light')">Light</button>
           <span style="width: 1px; height: 15px; background: var(--border)"></span>
           <span
-            class="sw on"
+            class="sw"
             id="a-oxblood"
             style="background: #a83e4a"
             onclick="setAccent('oxblood')"
           ></span>
           <span
-            class="sw"
+            class="sw on"
             id="a-violet"
             style="background: #6d5efc"
             onclick="setAccent('violet')"
