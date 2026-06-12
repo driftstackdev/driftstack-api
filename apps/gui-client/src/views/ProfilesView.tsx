@@ -1010,11 +1010,15 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                       {busy ? 'Launching…' : 'Launch'}
                     </button>
                   )}
+                  {/* cap-first operand order ON PURPOSE: duplicate CREATES a
+                      profile so cap-gating is correct here — but the pinned
+                      free-tier regression guard bans the `busy || atProfileCap`
+                      form (the Launch bug pattern); keep this order. */}
                   <button
                     type="button"
                     className="text-xs text-ink-muted hover:text-ink-primary"
                     onClick={() => void handleDuplicate(profile)}
-                    disabled={busy || atProfileCap}
+                    disabled={atProfileCap || busy}
                     title={
                       atProfileCap
                         ? 'Profile cap reached — delete a profile or upgrade to duplicate'

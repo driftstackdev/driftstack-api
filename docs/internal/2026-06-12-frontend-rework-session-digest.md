@@ -37,6 +37,19 @@ anything sits between doctype and the tag (axes never reached the DOM) · the
 docs suite went light-on-light via a stale `dark:` class hookup · GUI
 status-success/warning classes never existed (silent no-ops).
 
+## Afternoon arc (post-digest, all live/landed)
+
+Homepage rounds 3-5: fleet hero w/ enriched wall ("Command a fleet of real
+iPhones."), GUI cockpit showcase (replaced the live-preview implication),
+copy strengthening, the console section (Wardrobe/Replay/Warm-up rows with
+load-bearing Roadmap chips), Human-by-design behavioural section. GUI
+features shipped: theme switcher · Quick Session · grid/list toggle ·
+folders/tags/notes (client store) · cockpit info overlay · ⌘K palette ·
+Duplicate (real backend clone). Dashboard: the sealed-data trust surface.
+Demos extended ahead of production (palette/toast/onboarding mocks).
+Founder retest: control input verified end-to-end twice; fork
+browser_crashed reproduced 2x (A3's fix pending — bus-noted).
+
 ## Elevation queue (continuing on autopilot)
 
 Pricing tier-cards visual structure → comparison/docs-landing/faq passes →
