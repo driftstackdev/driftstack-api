@@ -69,3 +69,16 @@ sendResponse` (`bad_optional_access`, empty `optional<unsigned int>`). Exact sta
 
 Helper-app bundle (per-window Dock identity) = decided post-launch v1.x. Retest plan
 once A3's fork fix lands: launch → window-beside-GUI + pin + tap/type in one pass.
+
+## Addendum (~15:55) — founder live-retest telemetry (simulator control)
+
+Two sessions observed via the armed daemon monitor: BOTH show the full
+input chain healthy (INPUT-RX up → injection enabled → FIRST DataChannel
+input received — the GUI publish path + harness receiver verified under
+the founder's real usage). Session agt_f93eab82 then reaped
+`browser_crashed` — the KNOWN fork-side bad_optional_access crash (A3's
+fix in flight; fork = A3 scope per founder routing). agt_927565e5 live at
+time of writing. Transient "0 frames published" warnings resolve as
+capture starts. → A3: the crash class reproduced under founder retest at
+~15:54; input-side confirmed NOT the trigger path (input flowed before
+the crash on f93e).
