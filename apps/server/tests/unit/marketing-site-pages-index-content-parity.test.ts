@@ -177,9 +177,6 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/they're just people on\s*\n?\s*phones\./);
     expect(body).toMatch(/fingerprint coherence <b class="text-tk-ready">verified<\/b>/);
     expect(body).toMatch(/detection flags <b class="text-tk-ready">0<\/b>/);
-    // honest-claims guard: the demo's CONCEPT features must NOT ship until built
-    expect(body).not.toMatch(/Session Replay/);
-    expect(body).not.toMatch(/Warm-up Scheduler/);
     expect(body).not.toMatch(/CreepJS/);
   });
 
@@ -199,6 +196,18 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/Curved touch paths, momentum flicks, variable dwell/);
     expect(body).toMatch(/Per-character rhythm with natural pauses/);
     expect(body).toMatch(/consistent motion signature across\s*\n?\s*sessions/);
+  });
+
+  it("Console section pinned (founder 2026-06-12: 'mainly the reason I chose this template'): 'Run identities like infrastructure.' + the 5 rows — Identity Wardrobe (Rolling out chip) / Session Replay + Warm-up Scheduler (ROADMAP chips: the honesty device — unbuilt features MUST carry the badge) / egress / Sealed by architecture", () => {
+    expect(body).toMatch(/Run identities like infrastructure\./);
+    expect(body).toMatch(/The Identity Wardrobe/);
+    // the honesty chips are load-bearing: Replay + Warm-up are unbuilt and
+    // MUST be visibly badged Roadmap until they exist.
+    expect(body).toMatch(/Session Replay\s*\n?\s*<span[^>]*>Roadmap<\/span>/);
+    expect(body).toMatch(/Warm-up Scheduler\s*\n?\s*<span[^>]*>Roadmap<\/span>/);
+    expect(body).toMatch(/Exit anywhere\. Leak nowhere\./);
+    expect(body).toMatch(/Sealed by architecture\./);
+    expect(body).toMatch(/Nobody at\s*\n?\s*Driftstack can watch your sessions\./);
   });
 
   it('file exists at canonical path', () => {
