@@ -259,6 +259,26 @@
   }
 }
 
+/* Fleet motion: live-status dots breathe (the demo's livepulse). Opacity/
+   shadow only — no transform/repaint thrash; disabled for reduced motion. */
+@keyframes livepulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--ready-rgb) / 0.45);
+  }
+  55% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+.live-dot {
+  animation: livepulse 2.4s ease-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none;
+  }
+}
+
 /* ── Fleet design-system token layer (2026-06-12 rework; the LOCKED contract
    is docs/internal/2026-06-12-design-system-spec.md). Two independent axes on
    <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal). ADDITIVE
