@@ -17,6 +17,7 @@ import { useConnectionStatus } from './lib/use-connection-status';
 import { ConnectivityView } from './views/ConnectivityView';
 import { FirstRunWizard } from './views/FirstRunWizard';
 import { LiveSessionView } from './views/LiveSessionView';
+import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { ProfilesView } from './views/ProfilesView';
 import { ProxiesView } from './views/ProxiesView';
 import { RecordingPlayerView } from './views/RecordingPlayerView';
@@ -55,6 +56,60 @@ function Shell(): JSX.Element {
   // 2026-05-20 — Profiles is the new default landing view (antidetect-
   // browser-style); Sessions/etc are diagnostics-tier.
   const [view, setView] = useState<View>({ kind: 'profiles' });
+  // ⌘K command palette (demo-concepts arc) — global hotkey, view navigation.
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const paletteActions: PaletteAction[] = [
+    {
+      id: 'nav-profiles',
+      label: 'Go to Profiles',
+      kind: 'view',
+      glyph: '◎',
+      keywords: ['nav'],
+      run: () => setView({ kind: 'profiles' }),
+    },
+    {
+      id: 'nav-sessions',
+      label: 'Go to Sessions',
+      kind: 'view',
+      glyph: '⊟',
+      keywords: ['nav'],
+      run: () => setView({ kind: 'sessions' }),
+    },
+    {
+      id: 'nav-recordings',
+      label: 'Go to Recordings',
+      kind: 'view',
+      glyph: '◉',
+      keywords: ['nav'],
+      run: () => setView({ kind: 'recordings' }),
+    },
+    {
+      id: 'nav-proxies',
+      label: 'Go to Proxies',
+      kind: 'view',
+      glyph: '⇄',
+      keywords: ['nav'],
+      run: () => setView({ kind: 'proxies' }),
+    },
+    {
+      id: 'nav-settings',
+      label: 'Go to Settings',
+      kind: 'view',
+      glyph: '⚙',
+      keywords: ['nav', 'appearance', 'theme'],
+      run: () => setView({ kind: 'settings' }),
+    },
+  ];
   // V-244 — track wizard state. Customer with no apiKey on boot
   // sees the wizard; once apiKey is set (via wizard or any other
   // path) the regular shell takes over. `wizardDismissed` lets the
@@ -164,6 +219,11 @@ function Shell(): JSX.Element {
         </main>
       </div>
       <StatusFooter />
+      <CommandPalette
+        open={paletteOpen}
+        actions={paletteActions}
+        onClose={() => setPaletteOpen(false)}
+      />
     </div>
   );
 }
