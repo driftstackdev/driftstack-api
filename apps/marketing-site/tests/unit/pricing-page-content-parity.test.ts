@@ -110,18 +110,14 @@ describe('W372.A marketing-site /pricing page content parity', () => {
   });
 
   it('mini-FAQ teaser with 4 questions + /faq cross-link', () => {
+    expect(body).toMatch(/<h3 class="font-medium text-tk-ink">Manual or API — which one\?<\/h3>/);
     expect(body).toMatch(
-      /<h3 class="font-medium text-ink-primary">Manual or API — which one\?<\/h3>/,
+      /<h3 class="font-medium text-tk-ink">Why concurrent caps and not hours\?<\/h3>/,
     );
     expect(body).toMatch(
-      /<h3 class="font-medium text-ink-primary">Why concurrent caps and not hours\?<\/h3>/,
+      /<h3 class="font-medium text-tk-ink">Can I switch tiers mid-month\?<\/h3>/,
     );
-    expect(body).toMatch(
-      /<h3 class="font-medium text-ink-primary">Can I switch tiers mid-month\?<\/h3>/,
-    );
-    expect(body).toMatch(
-      /<h3 class="font-medium text-ink-primary">Does the free tier expire\?<\/h3>/,
-    );
+    expect(body).toMatch(/<h3 class="font-medium text-tk-ink">Does the free tier expire\?<\/h3>/);
     expect(body).toMatch(/<a href="\/faq" class="btn-secondary">See full FAQ<\/a>/);
   });
 
@@ -142,7 +138,7 @@ describe('W372.A marketing-site /pricing page content parity', () => {
   it('cross-link to /pricing/comparison per-tier side-by-side pinned', () => {
     // Astro source splits the closing `>` to next line; tolerate WS.
     expect(body).toMatch(
-      /<a href="\/pricing\/comparison" class="font-medium text-glow-red underline"\s*>/,
+      /<a href="\/pricing\/comparison" class="font-medium text-tk-accent underline"\s*>/,
     );
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing/comparison.astro')),
@@ -152,6 +148,6 @@ describe('W372.A marketing-site /pricing page content parity', () => {
   it("'Concurrent capacity bounded by your hardware, not by license' self-hosted teaser pinned", () => {
     expect(body).toMatch(/Concurrent capacity is bounded by your hardware, not by license\./);
     expect(body).toMatch(/Hardware procurement detail at\{' '\}/);
-    expect(body).toMatch(/<a href="\/self-hosted" class="text-glow-red underline">/);
+    expect(body).toMatch(/<a href="\/self-hosted" class="text-tk-accent underline">/);
   });
 });

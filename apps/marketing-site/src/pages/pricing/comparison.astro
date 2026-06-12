@@ -104,60 +104,60 @@ const DIMENSIONS = [
   title="Pricing comparison"
   description="Side-by-side comparison of every Driftstack tier: pricing, quotas, features, support. Pulled from the same data the live billing system uses, so you can quote it in evaluations."
 >
-  <section class="relative overflow-hidden bg-gradient-to-b from-surface-base to-surface-raised">
+  <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
     {/* 2026-05-23 — hero-glow + gradient h1 matches family. */}
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-6xl px-6 pb-12 pt-20 md:pt-24">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
         Pricing · Comparison
       </p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-ink-primary">Compare every tier, side-by-side.</h1>
-      <p class="mt-6 max-w-prose text-lg text-ink-secondary">
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-tk-ink">Compare every tier, side-by-side.</h1>
+      <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
         Every dimension that matters for a buyer evaluation, in one
         table. Numbers come from the same data file the live billing
         system uses — what you see here is what your invoice will say.
       </p>
-      <p class="mt-4 max-w-prose text-sm text-ink-muted">
+      <p class="mt-4 max-w-prose text-sm text-tk-ink-3">
         Looking for the glanceable view?
-        <a href="/pricing" class="text-oxblood-700 underline">/pricing</a>
+        <a href="/pricing" class="text-tk-accent underline">/pricing</a>
         has the headline cards.
       </p>
     </div>
   </section>
 
   {freeTier && (
-    <section class="border-t border-white/10 bg-surface-raised">
+    <section class="border-t border-tk-border bg-tk-surface">
       <div class="mx-auto max-w-6xl px-6 py-12">
-        <h2 class="text-xl font-semibold tracking-tight text-ink-primary">Free ({fmtUsd(freeTier.monthlyUsd)}, forever)</h2>
-        <p class="mt-2 max-w-prose text-sm text-ink-secondary">
+        <h2 class="text-xl font-semibold tracking-tight text-tk-ink">Free ({fmtUsd(freeTier.monthlyUsd)}, forever)</h2>
+        <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
           {freeTier.hoursLabel} — evaluation tier, no card required,
           before committing to a paid tier. {freeTier.archetypeAccess}.
         </p>
         <p class="mt-2 text-sm">
           <a
             href={freeTier.cta.href}
-            class="font-medium text-oxblood-700 underline">{freeTier.cta.label} →</a>
+            class="font-medium text-tk-accent underline">{freeTier.cta.label} →</a>
         </p>
       </div>
     </section>
   )}
 
-  <section class="border-t border-white/10 bg-surface-raised/40">
+  <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-6xl px-6 py-12">
       <div class="overflow-x-auto">
         <table class="min-w-full border-separate border-spacing-0 text-sm">
           <thead>
             <tr>
               <th
-                class="sticky left-0 z-10 border-b border-white/10 bg-surface-raised/40 py-3 pl-2 pr-4 text-left text-xs font-medium uppercase tracking-wider text-ink-muted"
+                class="sticky left-0 z-10 border-b border-tk-border bg-tk-surface/40 py-3 pl-2 pr-4 text-left text-xs font-medium uppercase tracking-wider text-tk-ink-3"
               >
                 Dimension
               </th>
               {paidTiers.map((t) => (
                 <th
                   scope="col"
-                  class={`border-b border-white/10 bg-surface-raised/40 py-3 px-4 text-left text-xs font-medium uppercase tracking-wider ${
-                    t.highlight ? 'text-oxblood-700' : 'text-ink-muted'
+                  class={`border-b border-tk-border bg-tk-surface/40 py-3 px-4 text-left text-xs font-medium uppercase tracking-wider ${
+                    t.highlight ? 'text-tk-accent' : 'text-tk-ink-3'
                   }`}
                 >
                   {t.name}{t.highlight && ' ★'}
@@ -171,22 +171,22 @@ const DIMENSIONS = [
                 <tr>
                   <td
                     colspan={paidTiers.length + 1}
-                    class="bg-surface-raised pt-6 pb-2 pl-2 text-xs font-semibold uppercase tracking-widest text-oxblood-700"
+                    class="bg-tk-surface pt-6 pb-2 pl-2 text-xs font-semibold uppercase tracking-widest text-tk-accent"
                   >
                     {group.heading}
                   </td>
                 </tr>
                 {group.rows.map((row) => (
-                  <tr class="bg-surface-raised">
+                  <tr class="bg-tk-surface">
                     <td
-                      class="sticky left-0 z-10 border-b border-white/10 bg-surface-raised py-2 pl-2 pr-4 text-sm font-medium text-ink-secondary"
+                      class="sticky left-0 z-10 border-b border-tk-border bg-tk-surface py-2 pl-2 pr-4 text-sm font-medium text-tk-ink-2"
                     >
                       {row.label}
                     </td>
                     {paidTiers.map((t) => (
                       <td
-                        class={`border-b border-white/10 py-2 px-4 text-sm align-top ${
-                          t.highlight ? 'text-oxblood-700' : 'text-ink-secondary'
+                        class={`border-b border-tk-border py-2 px-4 text-sm align-top ${
+                          t.highlight ? 'text-tk-accent' : 'text-tk-ink-2'
                         }`}
                       >
                         {row.get(t)}
@@ -199,55 +199,55 @@ const DIMENSIONS = [
           </tbody>
         </table>
       </div>
-      <p class="mt-4 text-xs text-ink-muted">
+      <p class="mt-4 text-xs text-tk-ink-3">
         ★ = team's most popular tier in active evaluations. Not a sales
         push — just the current cohort signal.
       </p>
     </div>
   </section>
 
-  <section class="border-t border-white/10 bg-surface-raised">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">How tier-switching works</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">How tier-switching works</h2>
       <div class="mt-6 grid gap-6 md:grid-cols-2">
-        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
-          <h3 class="text-base font-semibold text-ink-primary">
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
+          <h3 class="text-base font-semibold text-tk-ink">
             Upgrade mid-month
           </h3>
-          <p class="mt-2 text-sm text-ink-secondary">
+          <p class="mt-2 text-sm text-tk-ink-2">
             Switching to a higher tier is immediate. We prorate the
             remaining billing-period at the new tier's rate; the next
             invoice reflects the upgrade. No interruption to running
             sessions.
           </p>
         </div>
-        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
-          <h3 class="text-base font-semibold text-ink-primary">
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
+          <h3 class="text-base font-semibold text-tk-ink">
             Downgrade at renewal
           </h3>
-          <p class="mt-2 text-sm text-ink-secondary">
+          <p class="mt-2 text-sm text-tk-ink-2">
             Downgrades take effect at the end of the current billing
             period — you keep the higher tier's quotas until renewal,
             then drop to the lower tier. Profile counts above the new
             tier's cap stay readable but become uncreatable.
           </p>
         </div>
-        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
-          <h3 class="text-base font-semibold text-ink-primary">
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
+          <h3 class="text-base font-semibold text-tk-ink">
             Cancel any time
           </h3>
-          <p class="mt-2 text-sm text-ink-secondary">
+          <p class="mt-2 text-sm text-tk-ink-2">
             Cancellation takes effect at the end of the current billing
             period. API access stops at renewal; we keep your data for
             30 days post-cancel for grace-period recovery, then delete
             per our DPA terms.
           </p>
         </div>
-        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
-          <h3 class="text-base font-semibold text-ink-primary">
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
+          <h3 class="text-base font-semibold text-tk-ink">
             Annual vs monthly
           </h3>
-          <p class="mt-2 text-sm text-ink-secondary">
+          <p class="mt-2 text-sm text-tk-ink-2">
             Annual billing is ~20% off the monthly rate, paid up-front.
             You can switch monthly → annual at any time (instant
             renewal); annual → monthly takes effect at the annual
@@ -258,12 +258,12 @@ const DIMENSIONS = [
     </div>
   </section>
 
-  <section class="border-t border-white/10 bg-surface-raised/40">
+  <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="flex flex-col items-start gap-6 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">Need a custom quote?</h2>
-          <p class="mt-3 max-w-prose text-ink-secondary">
+          <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Need a custom quote?</h2>
+          <p class="mt-3 max-w-prose text-tk-ink-2">
             Volume above the published tiers, longer-than-30-day data
             retention, or contractual SLA terms — email us with the
             shape of your usage and we'll quote in one business day.

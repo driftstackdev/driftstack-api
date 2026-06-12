@@ -86,16 +86,16 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
 
   it('tier-switching 4-card explainer pinned (Upgrade / Downgrade / Cancel / Annual-vs-monthly)', () => {
     expect(body).toMatch(
-      /<h3 class="text-base font-semibold text-ink-primary">\s*Upgrade mid-month\s*<\/h3>/,
+      /<h3 class="text-base font-semibold text-tk-ink">\s*Upgrade mid-month\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /<h3 class="text-base font-semibold text-ink-primary">\s*Downgrade at renewal\s*<\/h3>/,
+      /<h3 class="text-base font-semibold text-tk-ink">\s*Downgrade at renewal\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /<h3 class="text-base font-semibold text-ink-primary">\s*Cancel any time\s*<\/h3>/,
+      /<h3 class="text-base font-semibold text-tk-ink">\s*Cancel any time\s*<\/h3>/,
     );
     expect(body).toMatch(
-      /<h3 class="text-base font-semibold text-ink-primary">\s*Annual vs monthly\s*<\/h3>/,
+      /<h3 class="text-base font-semibold text-tk-ink">\s*Annual vs monthly\s*<\/h3>/,
     );
   });
 
@@ -129,7 +129,7 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
   });
 
   it('cross-link back to /pricing glanceable view pinned (companion-page framing)', () => {
-    expect(body).toMatch(/<a href="\/pricing" class="text-oxblood-700 underline">\/pricing<\/a>/);
+    expect(body).toMatch(/<a href="\/pricing" class="text-tk-accent underline">\/pricing<\/a>/);
     expect(body).toMatch(/Looking for the glanceable view\?/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro'))).toBe(
       true,
