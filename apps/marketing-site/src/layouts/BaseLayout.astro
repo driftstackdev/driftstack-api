@@ -87,7 +87,12 @@ const structuredData = {
 ---
 
 <!doctype html>
-<html lang="en" class="dark">
+{/* Fleet token axes (2026-06-12 rework): data-mode/data-accent drive the
+    tk-* token classes (styles/base.css). dark+oxblood = today's look, so
+    this is a no-op until pages adopt tk-*; the index Fleet port flips the
+    default to light+violet (founder-locked). class="dark" stays for the
+    legacy darkMode:'class' variants until the last page is ported. */}
+<html lang="en" class="dark" data-mode="dark" data-accent="oxblood">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

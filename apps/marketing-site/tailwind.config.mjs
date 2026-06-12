@@ -64,6 +64,29 @@ export default {
           'red-soft': '#f25366',
           'red-deep': '#a8202d',
         },
+        // Fleet token namespace (2026-06-12 rework — see
+        // docs/internal/2026-06-12-design-system-spec.md). Resolves to the
+        // two-axis CSS custom properties in styles/base.css, so tk-* classes
+        // flip with <html data-mode>/<html data-accent>. New Fleet markup
+        // uses these; legacy palettes above stay until each page is ported.
+        tk: {
+          bg: 'var(--bg)',
+          surface: 'var(--surface)',
+          raised: 'var(--raised)',
+          hover: 'var(--hover)',
+          ink: 'var(--ink)',
+          'ink-2': 'var(--ink-2)',
+          'ink-3': 'var(--ink-3)',
+          border: 'var(--border)',
+          accent: 'var(--accent)',
+          'accent-2': 'var(--accent-2)',
+          'accent-strong': 'var(--accent-strong)',
+          'accent-ink': 'var(--accent-ink)',
+          'accent-soft': 'var(--accent-soft)',
+          ready: 'var(--ready)',
+          busy: 'var(--busy)',
+          err: 'var(--err)',
+        },
       },
       fontFamily: {
         sans: ['Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
@@ -76,6 +99,8 @@ export default {
         // Red-glow ring used on primary CTAs + accent borders.
         'glow-red': '0 0 0 1px rgba(226, 56, 71, 0.3), 0 6px 20px -8px rgba(226, 56, 71, 0.35)',
         'glow-red-lg': '0 0 0 1px rgba(226, 56, 71, 0.4), 0 12px 40px -12px rgba(226, 56, 71, 0.5)',
+        // Fleet: accent-aware glow that follows the data-accent axis.
+        'glow-accent': '0 0 0 1px var(--accent), 0 0 26px var(--glow)',
         'inset-divider': 'inset 0 1px 0 rgba(255, 255, 255, 0.06)',
       },
       backgroundImage: {

@@ -77,6 +77,13 @@ describe('W525.B apps/marketing-site/tailwind.config.mjs content parity', () => 
     expect(body).toMatch(/maxWidth: \{\s*\n?\s*prose: '65ch',\s*\n?\s*\},/);
   });
 
+  it("Fleet tk token namespace + glow-accent shadow pinned (2026-06-12 rework): tk.* resolves to the two-axis CSS custom properties (styles/base.css) so tk-* classes flip with <html data-mode>/<html data-accent>; 'glow-accent' shadow follows the accent axis — ADDITIVE next to the legacy palettes until each page ports", () => {
+    expect(body).toMatch(/tk: \{\s*\n\s*bg: 'var\(--bg\)',/);
+    expect(body).toMatch(/accent: 'var\(--accent\)',/);
+    expect(body).toMatch(/'accent-strong': 'var\(--accent-strong\)',/);
+    expect(body).toMatch(/'glow-accent': '0 0 0 1px var\(--accent\), 0 0 26px var\(--glow\)',/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

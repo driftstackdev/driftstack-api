@@ -109,7 +109,9 @@ describe('W523.A apps/marketing-site/src/layouts/BaseLayout.astro content parity
 
   it('doctype + viewport + canonical-link + Header/Footer-slot framing pinned: \'<!doctype html>\' + \'<html lang="en">\' + \'meta name="viewport" content="width=device-width, initial-scale=1"\' + \'link rel="canonical" href={canonical}\' + Header + main flex-1 + slot + Footer — pinned so the doctype + lang=en + viewport + canonical-link + Header/Footer-shell + main-slot commitment survives', () => {
     expect(body).toMatch(/<!doctype html>/);
-    expect(body).toMatch(/<html lang="en" class="dark">/);
+    // Fleet token axes (2026-06-12 rework): dark+oxblood defaults = today's
+    // look until the index Fleet port flips to light+violet (founder-locked).
+    expect(body).toMatch(/<html lang="en" class="dark" data-mode="dark" data-accent="oxblood">/);
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
     expect(body).toMatch(/<link rel="canonical" href=\{canonical\} \/>/);
     expect(body).toMatch(/import Header from '\.\.\/components\/Header\.astro';/);
