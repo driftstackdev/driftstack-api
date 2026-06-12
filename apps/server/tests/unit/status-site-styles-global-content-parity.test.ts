@@ -1,5 +1,5 @@
 // Drift guard for apps/status-site/src/styles/global.css. Pins the
-// R13 dark-mode-synced framing + the F-1 mobile-scroll prevention.
+// Fleet two-axis framing + the F-1 mobile-scroll prevention.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -25,13 +25,14 @@ describe('status-site styles/global content parity', () => {
     expect(body).toMatch(/@import 'tailwindcss';/);
   });
 
-  it("R13 dark-mode-synced framing pinned: 'Customers checking status during an incident shouldn't experience a brand-jarring light theme when the rest of the product is dark.' Drift to a different theme would create a brand-jarring mid-incident UX", () => {
-    expect(body).toMatch(/R13 — status-site dark surface synced with marketing-site \+/);
-    expect(body).toMatch(/customer-dashboard \+ docs/);
+  it("Fleet two-axis framing pinned: status synced with the light-first product — 'Customers checking status during an incident see the same brand surface as driftstack.dev.' Drift to a different theme would create a brand-jarring mid-incident UX", () => {
+    expect(body).toMatch(/Fleet rework \(2026-06-12\) — status-site synced with marketing-site \+/);
+    expect(body).toMatch(/customer-dashboard: light\+violet default/);
     expect(body).toMatch(
-      /Customers checking status during an\s*\n?\s*incident shouldn't experience a brand-jarring light theme when\s*\n?\s*the rest of the product is dark\./,
+      /Customers\s*\n?\s*checking status during an incident see the same brand surface as\s*\n?\s*driftstack\.dev\./,
     );
-    expect(body).toMatch(/color-scheme: dark;/);
+    expect(body).toMatch(/color-scheme: light;/);
+    expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*color-scheme: dark;/);
   });
 
   it('Geist font + bg-surface-base/text-ink-primary tokens pinned: cross-app shared brand tokens. Drift would break consistency with the other 3 dark-mode apps', () => {

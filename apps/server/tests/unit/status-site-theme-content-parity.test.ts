@@ -8,7 +8,7 @@
 // the palette/font/prose tokens are `--color-*`/`--font-*`/`--container-*` vars).
 // The brand VALUES are unchanged — this guard now pins them in their v4 home.
 //
-// R13 — the status-site dark surface MUST stay synced with marketing-
+// Fleet — the status-site surface MUST stay synced with marketing-
 // site/customer-dashboard/docs. Customers checking status during an
 // incident shouldn't experience a brand-jarring light theme when the
 // rest of the product is dark.
@@ -133,17 +133,18 @@ describe('W794 status-site theme content parity', () => {
     const p = read(GLOBAL_CSS);
 
     expect(p).toMatch(
-      /\/\* R13 — status-site dark surface synced with marketing-site \+\s*\n\s+customer-dashboard \+ docs\./,
+      /\/\* Fleet rework \(2026-06-12\) — status-site synced with marketing-site \+\s*\n\s+customer-dashboard: light\+violet default/,
     );
     expect(p).toMatch(
-      /Customers checking status during an\s*\n\s+incident shouldn't experience a brand-jarring light theme when\s*\n\s+the rest of the product is dark\./,
+      /Customers\s*\n\s+checking status during an incident see the same brand surface as\s*\n\s+driftstack\.dev\./,
     );
   });
 
-  it('CRITICAL :root color-scheme:dark pinned. Drift to color-scheme:light would let macOS/iOS form-control widgets render in light mode.', () => {
+  it('CRITICAL mode-axis color-scheme pinned: :root light + [data-mode=dark] override — form-control widgets follow the axis.', () => {
     const p = read(GLOBAL_CSS);
 
-    expect(p).toMatch(/:root \{\s*\n\s+color-scheme: dark;\s*\n\s+\}/);
+    expect(p).toMatch(/:root \{\s*\n\s+color-scheme: light;\s*\n\s+\}/);
+    expect(p).toMatch(/\[data-mode='dark'\] \{\s*\n\s+color-scheme: dark;\s*\n\s+\}/);
   });
 
   it('CRITICAL html font-family + base @apply pinned. Geist + ui-sans-serif fallback chain + bg-surface-base + text-ink-primary @apply matches cross-app base-style contract. F-1 also adds overflow-x:clip to prevent iPhone Safari horizontal scroll.', () => {

@@ -61,7 +61,7 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
 
   it('R13 header: "Driftstack" wordmark + middot + "status" subtitle — using dark-theme ink tokens (text-ink-primary / text-ink-muted) after the status-site dark migration', () => {
     expect(body).toMatch(
-      /<span class="text-base font-semibold tracking-tight text-ink-primary">Driftstack<\/span>/,
+      /<span class="text-base font-black italic tracking-tight text-ink-primary">DRIFT<span class="text-glow-red">STACK<\/span><\/span>/,
     );
     expect(body).toMatch(/<span class="text-ink-muted">·<\/span>/);
     expect(body).toMatch(/<span class="text-ink-muted">status<\/span>/);
@@ -101,7 +101,7 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
   });
 
   it('R13 html lang="en" + dark header + min-h-screen body — replaces the prior bg-white header + bg-slate-50 body split after the status-site dark migration', () => {
-    expect(body).toMatch(/<html lang="en">/);
+    expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="violet">/);
     expect(body).toMatch(/<header class="border-b border-white\/10 bg-surface-raised">/);
     expect(body).toMatch(/<body class="min-h-screen">/);
   });

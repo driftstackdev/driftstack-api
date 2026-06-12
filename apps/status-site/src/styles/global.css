@@ -42,6 +42,12 @@
   --color-glow-red-soft: #f25366;
   --color-glow-red-deep: #a8202d;
 
+  /* Fleet rework (2026-06-12): the accent + surface/ink values below are
+     OVERRIDDEN by the two-axis token blocks at the end of this file —
+     light+violet default, dark preserved under [data-mode='dark']. */
+  --color-accent: #6d5efc;
+  --color-accent-strong: #5847e0;
+
   --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
   --font-mono: Berkeley Mono, ui-monospace, SFMono-Regular, monospace;
 
@@ -66,13 +72,17 @@
   }
 }
 
-/* R13 — status-site dark surface synced with marketing-site +
-   customer-dashboard + docs. Customers checking status during an
-   incident shouldn't experience a brand-jarring light theme when
-   the rest of the product is dark. */
+/* Fleet rework (2026-06-12) — status-site synced with marketing-site +
+   customer-dashboard: light+violet default (the rest of the product is
+   now light-first), dark preserved under [data-mode='dark']. Customers
+   checking status during an incident see the same brand surface as
+   driftstack.dev. */
 
 @layer base {
   :root {
+    color-scheme: light;
+  }
+  [data-mode='dark'] {
     color-scheme: dark;
   }
   html {
@@ -113,4 +123,43 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ── Fleet two-axis token values (2026-06-12 rework; contract:
+   docs/internal/2026-06-12-design-system-spec.md). Tailwind v4 utilities
+   resolve --color-* at use-time, so redefining them per axis flips the
+   whole site with ZERO markup changes. Defaults (on :root) = light. */
+:root,
+[data-mode='light'] {
+  --color-surface-base: #f2f3f6;
+  --color-surface-raised: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-inset: #ebecf0;
+  --color-surface-divider: #e4e6ec;
+  --color-ink-primary: #0f1014;
+  --color-ink-secondary: #474a55;
+  --color-ink-muted: #8a8d99;
+  --color-ink-inverted: #ffffff;
+  /* accent: glow-red names stay (markup unchanged) but resolve violet */
+  --color-glow-red: #6d5efc;
+  --color-glow-red-soft: #8b7dff;
+  --color-glow-red-deep: #5847e0;
+  --color-oxblood-700: #6d5efc;
+  --color-oxblood-600: #5847e0;
+}
+[data-mode='dark'] {
+  --color-surface-base: #0f172a;
+  --color-surface-raised: #1e293b;
+  --color-surface-elevated: #334155;
+  --color-surface-inset: #020617;
+  --color-surface-divider: #475569;
+  --color-ink-primary: #f8fafc;
+  --color-ink-secondary: #cbd5e1;
+  --color-ink-muted: #94a3b8;
+  --color-ink-inverted: #0f172a;
+  --color-glow-red: #e23847;
+  --color-glow-red-soft: #f25366;
+  --color-glow-red-deep: #a8202d;
+  --color-oxblood-700: #722f37;
+  --color-oxblood-600: #8d2c3e;
 }

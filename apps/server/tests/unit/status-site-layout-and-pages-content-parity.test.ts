@@ -54,7 +54,7 @@ describe('W790 status-site src content parity bundle', () => {
 
     expect(p).toMatch(/<img\s*\n\s+src="\/driftstack-mark\.svg\?v=2"\s*\n\s+alt="Driftstack"/);
     expect(p).toMatch(
-      /<span class="text-base font-semibold tracking-tight text-ink-primary">Driftstack<\/span>\s*\n\s+<span class="text-ink-muted">·<\/span>\s*\n\s+<span class="text-ink-muted">status<\/span>/,
+      /<span class="text-base font-black italic tracking-tight text-ink-primary">DRIFT<span class="text-glow-red">STACK<\/span><\/span>\s*\n\s+<span class="text-ink-muted">·<\/span>\s*\n\s+<span class="text-ink-muted">status<\/span>/,
     );
   });
 
