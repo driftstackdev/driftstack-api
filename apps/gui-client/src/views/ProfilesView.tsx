@@ -2163,6 +2163,15 @@ function FolderPicker({
 }): JSX.Element {
   const isCustom = value.length > 0 && !folders.includes(value);
   const [mode, setMode] = useState<'pick' | 'new'>(isCustom ? 'new' : 'pick');
+  // External clears (bulk apply resets value to '') drop back to the
+  // select — otherwise the picker strands on an empty 'new' input.
+  useEffect(() => {
+    if (value === '' && mode === 'new') setMode('pick');
+    // NOTE: deliberately depends on `value` only — `mode` is the state
+    // this effect manages; depending on it would re-close user-opened
+    // 'new' inputs (this workspace doesn't enable react-hooks lint rules,
+    // so no disable directive is needed or valid here).
+  }, [value]);
   return (
     <span className="inline-flex items-center gap-1">
       {mode === 'pick' ? (

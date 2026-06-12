@@ -29,6 +29,7 @@ vi.mock('../../src/lib/proxies', () => ({
   updateProxy: vi.fn(() => Promise.resolve({})),
   validateDraft: () => ({ ok: true, errors: {} }),
   testProxy: (input: unknown) => testProxy(input),
+  probeProxyExit: () => Promise.resolve(null),
 }));
 
 const { ProxiesView } = await import('../../src/views/ProxiesView');

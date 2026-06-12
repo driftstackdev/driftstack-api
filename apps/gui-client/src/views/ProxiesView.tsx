@@ -22,6 +22,7 @@ import {
   type ProxyTestResult,
 } from '../lib/proxies';
 import { saveProbeResult } from '../lib/proxy-probe-cache';
+import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
 
 interface ListState {
   proxies: ProxyConfig[];
@@ -46,6 +47,9 @@ export function ProxiesView(): JSX.Element {
   // Native SOCKS5 probe per saved proxy — reachability + UDP-associate
   // support. Keyed by proxy id so each row keeps its own last result.
   const [testingId, setTestingId] = useState<string | null>(null);
+  // E-2 exit-geo: per-proxy echo result (null entry = probed but
+  // unavailable — native command or server endpoint not live yet).
+  const [exitResults, setExitResults] = useState<Record<string, ProxyExitProbeResult | null>>({});
   const [testResults, setTestResults] = useState<Record<string, ProxyTestResult>>({});
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -101,6 +105,17 @@ export function ProxiesView(): JSX.Element {
       // Night-arc B: persist so profile cards can render egress
       // capability (UDP badge) without re-probing. Best-effort.
       void saveProbeResult(p.id, result, Date.now()).catch(() => undefined);
+      // E-2: exit-geo through the proxy (graceful null pre-deploy /
+      // pre-native-command — renders 'geo unavailable').
+      if (result.reachable && result.auth_ok) {
+        const exit = await probeProxyExit({
+          host: p.host,
+          port: p.port,
+          username: p.username,
+          password: p.password,
+        });
+        setExitResults((r) => ({ ...r, [p.id]: exit }));
+      }
     } catch (err) {
       setTestResults((r) => ({
         ...r,
@@ -202,6 +217,7 @@ export function ProxiesView(): JSX.Element {
           busyId={busyId}
           testingId={testingId}
           testResults={testResults}
+          exitResults={exitResults}
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
           onTest={(p) => void handleTest(p)}
@@ -263,6 +279,7 @@ function ProxyTable({
   busyId,
   testingId,
   testResults,
+  exitResults,
   onEdit,
   onRemove,
   onTest,
@@ -271,6 +288,7 @@ function ProxyTable({
   busyId: string | null;
   testingId: string | null;
   testResults: Record<string, ProxyTestResult>;
+  exitResults: Record<string, ProxyExitProbeResult | null>;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   onTest: (p: ProxyConfig) => void;
@@ -388,6 +406,19 @@ function ProxyTable({
                             {result.udp_associate
                               ? 'QUIC + WebRTC ✓ (rides UDP)'
                               : 'QUIC + WebRTC ✗ — h2 / TURN-over-TCP fallback'}
+                          </span>
+                        )}
+                        {result.reachable && p.id in exitResults && (
+                          <span className="rounded-sm bg-surface-inset px-1 py-0.5 text-ink-secondary">
+                            {exitResults[p.id] !== null && exitResults[p.id] !== undefined ? (
+                              <>
+                                exit {exitResults[p.id]?.ip}
+                                {exitResults[p.id]?.country !== null &&
+                                  ` · ${exitResults[p.id]?.country ?? ''}`}
+                              </>
+                            ) : (
+                              'exit geo unavailable (server update pending)'
+                            )}
                           </span>
                         )}
                         <span className="text-ink-secondary">{result.message}</span>

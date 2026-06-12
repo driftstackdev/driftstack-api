@@ -163,6 +163,34 @@ export interface ProxyTestResult {
  *  (see `src-tauri` `proxy_test`). Resolves to a structured result even
  *  when the proxy is unreachable — `reachable: false` carries the
  *  diagnostic in `message` rather than throwing. */
+/** Result of the native `proxy_exit_probe` command (E-2). */
+export interface ProxyExitProbeResult {
+  ip: string;
+  country: string | null;
+}
+
+/** Exit-geo probe: native Rust fetches /v1/egress/echo THROUGH the proxy
+ *  (design doc build-order 2). Returns null when the native command isn't
+ *  built yet OR the echo endpoint isn't live on the server (pre-deploy) —
+ *  callers render an honest 'geo unavailable' state, never a guess. */
+export async function probeProxyExit(input: {
+  host: string;
+  port: number;
+  username: string | null;
+  password: string | null;
+}): Promise<ProxyExitProbeResult | null> {
+  try {
+    return await invoke<ProxyExitProbeResult>('proxy_exit_probe', {
+      host: input.host,
+      port: input.port,
+      username: input.username,
+      password: input.password,
+    });
+  } catch {
+    return null;
+  }
+}
+
 export async function testProxy(input: {
   host: string;
   port: number;
