@@ -741,6 +741,18 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           </button>
         </div>
       )}
+      {state.profiles.length > 0 && (
+        <div data-component="hub-stats" className="grid grid-cols-4 gap-3">
+          <HubStat n={String(state.profiles.length)} l="Profiles" />
+          <HubStat
+            n={String(state.profiles.filter((p) => boundSession(p.id) !== null).length)}
+            l="Running now"
+            tone="ok"
+          />
+          <HubStat n={String(proxies.length)} l="Proxies" />
+          <HubStat n={String(folderList(profilesMeta).length)} l="Folders" />
+        </div>
+      )}
       {!onboardingDismissed && (
         <OnboardingChecklist
           steps={[
@@ -2176,6 +2188,19 @@ function FolderPicker({
         </>
       )}
     </span>
+  );
+}
+
+function HubStat({ n, l, tone }: { n: string; l: string; tone?: 'ok' }): JSX.Element {
+  return (
+    <div className="rounded-md border border-surface-divider bg-surface-raised px-3 py-2">
+      <p
+        className={`text-lg font-semibold ${tone === 'ok' ? 'text-status-ready' : 'text-ink-primary'}`}
+      >
+        {n}
+      </p>
+      <p className="text-2xs text-ink-muted">{l}</p>
+    </div>
   );
 }
 

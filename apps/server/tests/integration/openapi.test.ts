@@ -224,6 +224,8 @@ describe('OpenAPI spec generation', () => {
         '/v1/recipes/{id}',
         // V-820 — operator-only fleet event stream
         '/v1/fleet/events',
+        // Proxy-probe exit-IP echo (unauthenticated by design - F1)
+        '/v1/egress/echo',
         // V-459 public status surface
         '/v1/status',
         '/v1/status/incidents',
@@ -357,6 +359,10 @@ describe('OpenAPI spec generation', () => {
       // V-459 — /v1/status/* is also public-by-design (status pages
       // and uptime monitors must work without an API key).
       if (path.startsWith('/v1/status')) continue;
+      // Proxy-probe echo - unauthenticated by design (F1: exit IPs
+      // never tied to accounts; the GUI probe calls it THROUGH the
+      // customer's proxy). IP-rate-limited instead.
+      if (path === '/v1/egress/echo') continue;
       // V-820 — /v1/fleet/* uses signed Ed25519 JWT in a custom
       // header at WebSocket handshake (gated by mTLS at the edge),
       // not customer-API Bearer. Operator-only surface; not
