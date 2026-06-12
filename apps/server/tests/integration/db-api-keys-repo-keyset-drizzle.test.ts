@@ -62,6 +62,16 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   () => {
     it('pages a same-timestamp tie group larger than the page size WITHOUT dropping rows (accountId-scoped, deterministic)', async () => {
       if (!dbReachable || !client) {
+        // Local dev without DATABASE_URL: skip quietly. In CI the DB
+        // service + migrate step are part of the job — an unreachable or
+        // unmigrated DB must FAIL the test, not vacuous-pass (this exact
+        // silent skip hid a from-birth Date-bind crash in every one of
+        // these tests until 2026-06-12).
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
         return;
       }
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;

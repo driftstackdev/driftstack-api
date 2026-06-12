@@ -65,6 +65,16 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
   () => {
     it('pages a same-createdAt tie group larger than the page size WITHOUT dropping rows', async () => {
       if (!dbReachable || !client) {
+        // Local dev without DATABASE_URL: skip quietly. In CI the DB
+        // service + migrate step are part of the job — an unreachable or
+        // unmigrated DB must FAIL the test, not vacuous-pass (this exact
+        // silent skip hid a from-birth Date-bind crash in every one of
+        // these tests until 2026-06-12).
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
         return;
       }
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
@@ -83,10 +93,13 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         { ts: new Date(base), n: 2 },
       ];
       const inserted: string[] = [];
-      // created_at bound as ISO string: postgres-js 3.4.9 (dependabot bump
-      // while CI was down) rejects a raw Date param on this prepared path
-      // ("argument must be of type string or Buffer"); the ISO form is
-      // version-robust and timestamptz-exact.
+      // created_at bound as ISO string. CORRECTED ATTRIBUTION (the first
+      // version of this note blamed a postgres-js bump — wrong): raw Date
+      // params crash postgres-js's Bind step, a class this codebase already
+      // documents (scheduled-jobs-repo W441 note). These tests carried the
+      // crash FROM BIRTH but CI's missing migrate step made the dbReachable
+      // guard vacuous-pass them — first real execution was 2026-06-12
+      // locally. ISO string binds are timestamptz-exact and robust.
       let nameSeq = 0;
       for (const g of groups) {
         for (let i = 0; i < g.n; i++) {
@@ -141,6 +154,16 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
     // null-clears folder semantics.
     it('round-trips folder + jsonb tags through insert/update/findById (0076)', async () => {
       if (!dbReachable || !client) {
+        // Local dev without DATABASE_URL: skip quietly. In CI the DB
+        // service + migrate step are part of the job — an unreachable or
+        // unmigrated DB must FAIL the test, not vacuous-pass (this exact
+        // silent skip hid a from-birth Date-bind crash in every one of
+        // these tests until 2026-06-12).
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
         return;
       }
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
@@ -199,6 +222,16 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
 
     it('serialises N concurrent creates so exactly `limit` succeed (no over-create past the cap)', async () => {
       if (!dbReachable || !client) {
+        // Local dev without DATABASE_URL: skip quietly. In CI the DB
+        // service + migrate step are part of the job — an unreachable or
+        // unmigrated DB must FAIL the test, not vacuous-pass (this exact
+        // silent skip hid a from-birth Date-bind crash in every one of
+        // these tests until 2026-06-12).
+        if (process.env.CI) {
+          throw new Error(
+            'real-PG keyset test: database unreachable/unmigrated in CI — vacuous pass is forbidden',
+          );
+        }
         return;
       }
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;

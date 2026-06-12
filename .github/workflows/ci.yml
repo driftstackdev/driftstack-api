@@ -81,6 +81,16 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      - name: Migrate database schema
+        # Without this the real-PG integration tests (db-*-keyset-drizzle)
+        # probe `SELECT 1 FROM profiles`, find no schema, and silently
+        # vacuous-pass via their dbReachable guard — they had NEVER
+        # actually executed anywhere until 2026-06-12 (found when a local
+        # DATABASE_URL run crashed on a raw Date bind the tests carried
+        # since birth). Migrating makes them real; their guards now also
+        # fail loudly under CI when the DB is unusable.
+        run: npm run db:migrate -w apps/server
+
       - name: Test (unit + integration) with coverage thresholds
         # V-107: vitest.config.ts enforces coverage thresholds (lines,
         # statements, functions, branches). CI fails if coverage drops
