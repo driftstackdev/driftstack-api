@@ -44,6 +44,22 @@ So the full path (staging soak → atomic prod swap → rollback-on-fail) is ope
 pre-deploy operational blocker — go-live reduces to running `deploy-bridge.sh prod` when the
 founder is ready.
 
+### Env / boot-safety — verified 2026-06-12 (no new required env in the delta)
+
+A deploy fails the staging soak if the new code can't boot — e.g. it needs an env var that's
+unset. Verified the `73f70d02..5b974638` delta adds NONE:
+
+- `apps/server/src/lib/config.ts` (the env-validation source-of-truth) + `index.ts` are
+  **unchanged** in the delta → no new boot-required env. The prod env that boots `73f70d02`
+  boots `5b974638` too.
+- The only `bootstrap.ts` change (+10/-1) is benign: a `new SessionPageStateStore()` (in-memory
+  `Map`, no env/external dependency, constructed only behind `FLEET_CONTROL_PLANE_ENABLED`) + the
+  archetype-default string flip (iphone16pro→iphone17, the cutover). No new boot dependency.
+
+⟹ The deploy will boot cleanly on the existing prod env (no missing-env soak failure). Combined
+with migration 0072 = metadata-only-safe and staging = healthy, the go-live is de-risked on all
+three axes the deploy touches: **boot, schema, and the soak target.**
+
 ## Remaining to go-live (per the cutover memory)
 
 Correction after cross-checking the cutover memory: the frontend + GUI steps are **already
