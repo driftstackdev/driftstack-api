@@ -206,3 +206,24 @@ dependency regressions — repo Settings → Actions needs the look.**
 
 GUI rebuilt + reinstalled to /Applications (both approved ports included);
 founder notified.
+
+## Addendum (~18:40) — CORRECTION + the real (worse) finding: vacuous real-PG tests
+
+The previous addendum's attribution was WRONG and is hereby corrected:
+postgres-js 3.4.9 has been installed since repo scaffolding (lockfile
+history), and raw-Date-bind crashes were already a documented class here
+(scheduled-jobs W441 note). The Date-bind crash in the keyset tests was
+there FROM BIRTH (2026-05-26).
+
+The real finding: **CI's build-test job never migrates the schema** — the
+postgres service is empty, so every db-\*-keyset-drizzle test's
+`dbReachable` probe fails and the test silently vacuous-passes. The 7 (a
+7th, rate-limit-overrides, was missed yesterday) "real Postgres" tests had
+never executed anywhere until the local DATABASE_URL run. Shipped: ci.yml
+migrate step before vitest; all 7 guards now THROW under CI
+(vacuous-pass forbidden) while keeping the quiet local skip; the 7th
+file's two Date binds fixed; the wrong in-source attribution corrected.
+
+Founder takeaway softened accordingly: the Actions outage didn't mask a
+dependency regression — but reviving CI is still what makes these tests
+(and the new loud guards) actually bite.
