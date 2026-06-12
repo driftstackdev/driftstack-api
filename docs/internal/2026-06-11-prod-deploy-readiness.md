@@ -31,11 +31,23 @@ So the DB step of the deploy is trivial + safe. The deploy mechanism (`scripts/d
 prod`) additionally runs a migration-immutability + journal-integrity pre-gate, a staging soak,
 an atomic swap, and rollback — see [[2026-06-09-go-live-runbook]].
 
-## Remaining to go-live (per the cutover memory, founder-gated)
+## Remaining to go-live (per the cutover memory)
 
-1. **Prod API deploy** — `deploy-bridge.sh prod` (runs 0072; ships the delta above). ← this note covers it.
-2. **Dashboard + marketing frontend redeploy** (wrangler) — pick up iphone17 hero/copy.
-3. **Tauri GUI rebuild + swap** — pick up the simulator + touch control (done locally for the
-   founder's machine per the simulator memory; the distributed build is the remaining piece).
+Correction after cross-checking the cutover memory: the frontend + GUI steps are **already
+done** — only the prod API deploy is genuinely pending.
 
-Nothing here is auto-doable (all founder-gated release actions). Surfaced for the go-live call.
+1. **Prod API deploy — THE ONE REMAINING STEP (founder-gated).** `DEPLOY_VIA_BUNDLE=1
+./scripts/deploy-bridge.sh prod` (runs 0072; ships the delta above). Server-deploy is
+   tag-triggered (`server-v*`), not push-triggered, so the accumulated main does NOT auto-ship —
+   it's an explicit founder release action. Prod already accepts explicit `iphone17`
+   (`ArchetypeSchema` is free-form) so GUI/dashboard iphone17 sessions already work; 0072 only
+   flips the _omitted_ default.
+2. ✅ **Web frontends** (customer-dashboard / marketing / docs / admin) — already deployed
+   manually via `scripts/deploy-frontend.sh` at the cutover (~18:30 2026-06-11; recent commits
+   are server-side / gui-client, so no frontend redeploy is needed for them).
+3. ✅ **Tauri GUI** — rebuilt + swapped on the founder's machine at the cutover; only the
+   _distributed_ build (customer download) remains, which is a distribution concern, not an
+   API-go-live blocker.
+
+So: the API go-live reduces to one safe, founder-gated `deploy-bridge.sh prod`. Nothing
+auto-doable.
