@@ -50,18 +50,18 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
   });
 
   it('GDPR Article 28 row: status "In place" + DPA cross-link', () => {
-    expect(body).toMatch(/<span class="font-medium text-ink-primary">GDPR Article 28<\/span>/);
+    expect(body).toMatch(/<span class="font-medium text-tk-ink">GDPR Article 28<\/span>/);
     // Astro splits the closing `</span\n>` across lines; allow WS.
     expect(body).toMatch(
       /<span[\s\S]{0,40}class="inline-block rounded-full bg-emerald-50[\s\S]{0,80}>\s*In place\s*<\/span\s*>/,
     );
     expect(body).toMatch(
-      /<a href="\/legal\/dpa" class="text-oxblood-700 underline">\/legal\/dpa<\/a>/,
+      /<a href="\/legal\/dpa" class="text-tk-accent underline">\/legal\/dpa<\/a>/,
     );
   });
 
   it('SOC 2 Type I: status "In progress" + "Q3 2026 (audit window)"', () => {
-    expect(body).toMatch(/<span class="font-medium text-ink-primary">SOC 2 Type I<\/span>/);
+    expect(body).toMatch(/<span class="font-medium text-tk-ink">SOC 2 Type I<\/span>/);
     expect(body).toMatch(
       /<span[\s\S]{0,40}class="inline-block rounded-full bg-amber-50[\s\S]{0,80}>\s*In progress\s*<\/span\s*>/,
     );
@@ -69,15 +69,15 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
   });
 
   it('SOC 2 Type II: status "Planned" + "Q1 2027"', () => {
-    expect(body).toMatch(/<span class="font-medium text-ink-primary">SOC 2 Type II<\/span>/);
+    expect(body).toMatch(/<span class="font-medium text-tk-ink">SOC 2 Type II<\/span>/);
     expect(body).toMatch(
-      /<span[\s\S]{0,40}class="inline-block rounded-full bg-surface-elevated[\s\S]{0,80}>\s*Planned\s*<\/span\s*>/,
+      /<span[\s\S]{0,40}class="inline-block rounded-full bg-tk-raised[\s\S]{0,80}>\s*Planned\s*<\/span\s*>/,
     );
     expect(body).toMatch(/Q1 2027/);
   });
 
   it('Independent pen-test: status "Scheduled" + "First engagement Q3 2026"', () => {
-    expect(body).toMatch(/<span class="font-medium text-ink-primary">Independent pen-test<\/span>/);
+    expect(body).toMatch(/<span class="font-medium text-tk-ink">Independent pen-test<\/span>/);
     expect(body).toMatch(
       /<span[\s\S]{0,40}class="inline-block rounded-full bg-amber-50[\s\S]{0,80}>\s*Scheduled\s*<\/span\s*>/,
     );
@@ -126,18 +126,16 @@ describe('W375.C marketing-site /trust/compliance page content parity', () => {
   });
 
   it('audit-log retention 3-tier taxonomy: customer-facing / admin (365d) / access logs (90 hot + 1y cold)', () => {
-    expect(body).toMatch(
-      /<span class="font-medium text-ink-primary">Customer-facing audit log<\/span>/,
-    );
-    expect(body).toMatch(/<span class="font-medium text-ink-primary">Admin audit log<\/span>/);
+    expect(body).toMatch(/<span class="font-medium text-tk-ink">Customer-facing audit log<\/span>/);
+    expect(body).toMatch(/<span class="font-medium text-tk-ink">Admin audit log<\/span>/);
     expect(body).toMatch(/internal-only retention of 365 days for every privileged\s+admin action/);
-    expect(body).toMatch(/<span class="font-medium text-ink-primary">Access logs<\/span>/);
+    expect(body).toMatch(/<span class="font-medium text-tk-ink">Access logs<\/span>/);
     expect(body).toMatch(/90 days hot, 1 year cold for forensic timeline reconstruction/);
   });
 
   it('audit-log retention cross-references ADR-006 + /docs/audit-log', () => {
     expect(body).toMatch(/Per ADR-006:/);
-    expect(body).toMatch(/<a href="\/docs\/audit-log" class="text-oxblood-700 underline"/);
+    expect(body).toMatch(/<a href="\/docs\/audit-log" class="text-tk-accent underline"/);
   });
 
   it('hero copy pinned: "Compliance posture & disclosure"', () => {

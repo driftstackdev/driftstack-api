@@ -51,7 +51,7 @@ describe('W379.C marketing-site /500.astro content parity', () => {
 
   it('support@driftstack.dev escape-hatch CTA inline + "URL you were on" framing', () => {
     expect(body).toMatch(
-      /<a href="mailto:support@driftstack\.dev" class="text-glow-red[^"]*">support@driftstack\.dev<\/a>/,
+      /<a href="mailto:support@driftstack\.dev" class="text-tk-accent[^"]*">support@driftstack\.dev<\/a>/,
     );
     expect(body).toMatch(/with the URL you were on/);
     expect(body).toMatch(/If this is blocking something time-sensitive, email/);

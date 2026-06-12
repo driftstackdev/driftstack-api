@@ -53,14 +53,12 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
     expect(body).toMatch(/case 'added':\s*\n?\s*return 'bg-emerald-100 text-emerald-800';/);
     expect(body).toMatch(/case 'removed':\s*\n?\s*return 'bg-red-100 text-red-800';/);
     expect(body).toMatch(/case 'material_change':\s*\n?\s*return 'bg-amber-100 text-amber-800';/);
-    expect(body).toMatch(
-      /case 'register_published':\s*\n?\s*return 'bg-slate-200 text-ink-secondary';/,
-    );
+    expect(body).toMatch(/case 'register_published':\s*\n?\s*return 'bg-slate-200 text-tk-ink-2';/);
   });
 
   it("Article 28(2) GDPR + 30-day-notice + /legal/dpa Annex 3 cross-reference framing pinned: 'This page is the customer-facing source of truth for sub-processor changes. Adding or removing an entry triggers a 30-day notice to all customers per Article 28(2) of the GDPR; the same content also lives in Annex 3 of the Data Processing Agreement' — pinned so the source-of-truth + Article 28(2) + 30-day-notice + DPA-Annex-3 4-state framing survives (drift to dropping Article 28(2) would lose the GDPR-anchored legal basis; drift to dropping the Annex 3 cross-reference would let the customer view drift from the contractual register)", () => {
     expect(body).toMatch(
-      /This page is the customer-facing source of truth for sub-processor\s*\n?\s*changes\. Adding or removing an entry triggers a 30-day notice to all\s*\n?\s*customers per Article 28\(2\) of the GDPR; the same content also lives\s*\n?\s*in <a href="\/legal\/dpa" class="text-oxblood-700 underline"\s*\n?\s*>Annex 3 of the Data Processing Agreement<\/a\s*\n?\s*>/,
+      /This page is the customer-facing source of truth for sub-processor\s*\n?\s*changes\. Adding or removing an entry triggers a 30-day notice to all\s*\n?\s*customers per Article 28\(2\) of the GDPR; the same content also lives\s*\n?\s*in <a href="\/legal\/dpa" class="text-tk-accent underline"\s*\n?\s*>Annex 3 of the Data Processing Agreement<\/a\s*\n?\s*>/,
     );
   });
 
@@ -69,13 +67,11 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
   });
 
   it("4-column register table: Sub-processor + Region + Purpose + Transfer mechanism — pinned so the per-sub-processor 4-attribute disclosure stays consistent (drift to dropping 'Transfer mechanism' would hide the SCC / adequacy-decision basis that EU customers rely on; drift to dropping 'Region' would obscure where data is processed)", () => {
+    expect(body).toMatch(/<th class="py-4 pr-4 font-medium text-tk-ink-2">Sub-processor<\/th>/);
+    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-tk-ink-2">Region<\/th>/);
+    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-tk-ink-2">Purpose<\/th>/);
     expect(body).toMatch(
-      /<th class="py-4 pr-4 font-medium text-ink-secondary">Sub-processor<\/th>/,
-    );
-    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-ink-secondary">Region<\/th>/);
-    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-ink-secondary">Purpose<\/th>/);
-    expect(body).toMatch(
-      /<th class="px-4 py-4 font-medium text-ink-secondary">Transfer mechanism<\/th>/,
+      /<th class="px-4 py-4 font-medium text-tk-ink-2">Transfer mechanism<\/th>/,
     );
   });
 
@@ -115,7 +111,7 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
 
   it('Privacy contact pinned: mailto:privacy@driftstack.dev — pinned so the privacy-channel routing stays consistent (drift to dropping or changing the address would orphan customer questions about the register; drift to support@ would lose the privacy-team routing tag)', () => {
     expect(body).toMatch(
-      /<a href="mailto:privacy@driftstack\.dev" class="text-oxblood-700 underline"\s*\n?\s*>privacy@driftstack\.dev<\/a\s*\n?\s*>/,
+      /<a href="mailto:privacy@driftstack\.dev" class="text-tk-accent underline"\s*\n?\s*>privacy@driftstack\.dev<\/a\s*\n?\s*>/,
     );
   });
 

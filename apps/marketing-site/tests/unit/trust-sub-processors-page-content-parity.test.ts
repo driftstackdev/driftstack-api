@@ -57,9 +57,7 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
     expect(body).toMatch(/case 'added':\s*\n?\s*return 'bg-emerald-100 text-emerald-800';/);
     expect(body).toMatch(/case 'removed':\s*\n?\s*return 'bg-red-100 text-red-800';/);
     expect(body).toMatch(/case 'material_change':\s*\n?\s*return 'bg-amber-100 text-amber-800';/);
-    expect(body).toMatch(
-      /case 'register_published':\s*\n?\s*return 'bg-slate-200 text-ink-secondary';/,
-    );
+    expect(body).toMatch(/case 'register_published':\s*\n?\s*return 'bg-slate-200 text-tk-ink-2';/);
   });
 
   it('"region preference vs region routing" honesty framing pinned', () => {
@@ -82,10 +80,10 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
   it('/legal/dpa Annex 3 cross-link pinned + DPA file exists', () => {
     // Astro wraps the closing `>` onto a new line; tolerate whitespace.
     expect(body).toMatch(
-      /<a href="\/legal\/dpa" class="text-oxblood-700 underline"\s*>\s*Annex 3 of the Data Processing Agreement\s*<\/a\s*>/,
+      /<a href="\/legal\/dpa" class="text-tk-accent underline"\s*>\s*Annex 3 of the Data Processing Agreement\s*<\/a\s*>/,
     );
     // Article 28(2) reference cross-link.
-    expect(body).toMatch(/<a href="\/legal\/dpa" class="text-oxblood-700 underline">DPA<\/a>/);
+    expect(body).toMatch(/<a href="\/legal\/dpa" class="text-tk-accent underline">DPA<\/a>/);
     expect(body).toMatch(/\(Article 28\(2\) — Sub-processor amendment\)/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/dpa.md'))).toBe(true);
   });
@@ -106,13 +104,11 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
   });
 
   it('table renders 4 columns (Sub-processor / Region / Purpose / Transfer mechanism)', () => {
+    expect(body).toMatch(/<th class="py-4 pr-4 font-medium text-tk-ink-2">Sub-processor<\/th>/);
+    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-tk-ink-2">Region<\/th>/);
+    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-tk-ink-2">Purpose<\/th>/);
     expect(body).toMatch(
-      /<th class="py-4 pr-4 font-medium text-ink-secondary">Sub-processor<\/th>/,
-    );
-    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-ink-secondary">Region<\/th>/);
-    expect(body).toMatch(/<th class="px-4 py-4 font-medium text-ink-secondary">Purpose<\/th>/);
-    expect(body).toMatch(
-      /<th class="px-4 py-4 font-medium text-ink-secondary">Transfer mechanism<\/th>/,
+      /<th class="px-4 py-4 font-medium text-tk-ink-2">Transfer mechanism<\/th>/,
     );
   });
 

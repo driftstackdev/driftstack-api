@@ -21,7 +21,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'What\'s the difference between Manual and API?',
-        a: 'Manual is for humans clicking in the GUI client — solo operators, account managers, agencies juggling many profiles. API is for code — SDK access, programmatic session creation, scale-out automation. Same engine, same fingerprints, same fidelity. Different access surface, different concurrent caps. Each Driftstack account holds one subscription. If you need both Manual and API access — for example, your team running profiles in the GUI client AND your engineering team running automation — run two accounts. Most customers find one path is enough; if you outgrow it, the second account is straightforward to provision. See <a href="/pricing#manual" class="text-glow-red underline">Manual pricing</a> or <a href="/pricing#api" class="text-glow-red underline">API pricing</a>.',
+        a: 'Manual is for humans clicking in the GUI client — solo operators, account managers, agencies juggling many profiles. API is for code — SDK access, programmatic session creation, scale-out automation. Same engine, same fingerprints, same fidelity. Different access surface, different concurrent caps. Each Driftstack account holds one subscription. If you need both Manual and API access — for example, your team running profiles in the GUI client AND your engineering team running automation — run two accounts. Most customers find one path is enough; if you outgrow it, the second account is straightforward to provision. See <a href="/pricing#manual" class="text-tk-accent underline">Manual pricing</a> or <a href="/pricing#api" class="text-tk-accent underline">API pricing</a>.',
       },
       {
         q: 'How does this compare to Chromium-cloud stealth services?',
@@ -83,7 +83,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'How does Enterprise pricing work?',
-        a: 'Enterprise is custom — from $4,000/mo on annual contracts only. Actual pricing depends on concurrent capacity, profile count, archetype customisation, BYOK + bundled-LLM mix, and any compliance requirements (custom DPA terms, data-handling addendums). Email <a href="mailto:sales@driftstack.dev" class="text-glow-red underline">sales@driftstack.dev</a> with workload shape and team context.',
+        a: 'Enterprise is custom — from $4,000/mo on annual contracts only. Actual pricing depends on concurrent capacity, profile count, archetype customisation, BYOK + bundled-LLM mix, and any compliance requirements (custom DPA terms, data-handling addendums). Email <a href="mailto:sales@driftstack.dev" class="text-tk-accent underline">sales@driftstack.dev</a> with workload shape and team context.',
       },
     ],
   },
@@ -104,11 +104,11 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'Can I pay in crypto?',
-        a: 'Yes — via NowPayments on tiers where crypto checkout is enabled. Open the crypto checkout from the billing dashboard, send the displayed amount in the displayed currency, and the order moves through pending → confirming → paid as on-chain confirmations land. The webhook contract is documented in our <a href="/docs/cost-monitoring" class="text-glow-red underline">cost-monitoring docs</a>. <strong>Crypto payments are non-refundable</strong> — you can cancel anytime, which stops future billing, but the current period is not refunded (see <a href="/legal/refunds" class="text-glow-red underline">refund policy</a>). Most customers use Stripe; crypto is a fallback for jurisdictions where card payments are awkward.',
+        a: 'Yes — via NowPayments on tiers where crypto checkout is enabled. Open the crypto checkout from the billing dashboard, send the displayed amount in the displayed currency, and the order moves through pending → confirming → paid as on-chain confirmations land. The webhook contract is documented in our <a href="/docs/cost-monitoring" class="text-tk-accent underline">cost-monitoring docs</a>. <strong>Crypto payments are non-refundable</strong> — you can cancel anytime, which stops future billing, but the current period is not refunded (see <a href="/legal/refunds" class="text-tk-accent underline">refund policy</a>). Most customers use Stripe; crypto is a fallback for jurisdictions where card payments are awkward.',
       },
       {
         q: 'How can I tell how much I\'ve spent this month?',
-        a: 'GET <code class="font-mono">/v1/account/cost</code> returns a per-component breakdown (compute, storage, egress, email, LLM) plus the total in integer cents. The GUI client surfaces the same data as a Cost panel. There\'s a threshold-state field — under-soft / between / over-hard — that indicates whether your usage is on track or approaching the cap configured for your tier. See <a href="/docs/cost-monitoring" class="text-glow-red underline">cost-monitoring docs</a>.',
+        a: 'GET <code class="font-mono">/v1/account/cost</code> returns a per-component breakdown (compute, storage, egress, email, LLM) plus the total in integer cents. The GUI client surfaces the same data as a Cost panel. There\'s a threshold-state field — under-soft / between / over-hard — that indicates whether your usage is on track or approaching the cap configured for your tier. See <a href="/docs/cost-monitoring" class="text-tk-accent underline">cost-monitoring docs</a>.',
       },
       {
         q: 'What if I cross my tier\'s cap?',
@@ -125,11 +125,11 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'What is the bundled LLM?',
-        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model — useful for natural-language test specifications, automated screenshot diffing, or LLM-driven flow exploration. On Builder / Scale / Enterprise, you have two options: <strong>BYOK</strong> (bring your own API key — get one from your model provider, e.g. <a href="https://console.anthropic.com" class="text-glow-red underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>; your model spend goes to your provider account, not Driftstack), or use the bundled rate (Driftstack proxies the calls and bills you on one invoice at a markup over the published per-token price).',
+        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model — useful for natural-language test specifications, automated screenshot diffing, or LLM-driven flow exploration. On Builder / Scale / Enterprise, you have two options: <strong>BYOK</strong> (bring your own API key — get one from your model provider, e.g. <a href="https://console.anthropic.com" class="text-tk-accent underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>; your model spend goes to your provider account, not Driftstack), or use the bundled rate (Driftstack proxies the calls and bills you on one invoice at a markup over the published per-token price).',
       },
       {
         q: 'How do agent sessions work?',
-        a: 'An <strong>agent session</strong> layers a chat-style decompose-and-execute loop on top of a regular driver session. You send a user message (e.g. <span class="font-mono">"open https://example.com and capture a screenshot"</span>); the decomposer translates it into structured intents (<span class="font-mono">navigate</span>, <span class="font-mono">interact</span>, <span class="font-mono">wait</span>, <span class="font-mono">capture</span>); the runtime executes them. Three modes: <strong>AI</strong> (default — every message goes through decompose), <strong>manual</strong> (pass-through for clients driving via their own UI), and <strong>pair</strong> (interactive takeover — AI drives by default, the customer can take over and hand back). Live transcript via Server-Sent Events. Full reference at <a href="https://docs.driftstack.dev/api/agent-sessions/" class="text-glow-red underline">docs.driftstack.dev/api/agent-sessions</a>.',
+        a: 'An <strong>agent session</strong> layers a chat-style decompose-and-execute loop on top of a regular driver session. You send a user message (e.g. <span class="font-mono">"open https://example.com and capture a screenshot"</span>); the decomposer translates it into structured intents (<span class="font-mono">navigate</span>, <span class="font-mono">interact</span>, <span class="font-mono">wait</span>, <span class="font-mono">capture</span>); the runtime executes them. Three modes: <strong>AI</strong> (default — every message goes through decompose), <strong>manual</strong> (pass-through for clients driving via their own UI), and <strong>pair</strong> (interactive takeover — AI drives by default, the customer can take over and hand back). Live transcript via Server-Sent Events. Full reference at <a href="https://docs.driftstack.dev/api/agent-sessions/" class="text-tk-accent underline">docs.driftstack.dev/api/agent-sessions</a>.',
       },
       {
         q: 'What\'s the BYOK markup?',
@@ -146,15 +146,15 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'Where is my data stored?',
-        a: 'Customer data is hosted in the EU. Compute, database, and object storage are all EU-resident. Session execution may run in supported regions outside the EU under standard contractual clauses (SCCs) and the EU-US Data Privacy Framework. Our complete sub-processor list, with locations and contractual basis, is published at <a href="/trust/sub-processors" class="text-glow-red underline">/trust/sub-processors</a> and in the <a href="/legal/dpa" class="text-glow-red underline">Data Processing Agreement</a>.',
+        a: 'Customer data is hosted in the EU. Compute, database, and object storage are all EU-resident. Session execution may run in supported regions outside the EU under standard contractual clauses (SCCs) and the EU-US Data Privacy Framework. Our complete sub-processor list, with locations and contractual basis, is published at <a href="/trust/sub-processors" class="text-tk-accent underline">/trust/sub-processors</a> and in the <a href="/legal/dpa" class="text-tk-accent underline">Data Processing Agreement</a>.',
       },
       {
         q: 'Can I pick which region my data is stored in?',
-        a: 'You can state a region preference (US / EU / APAC) from <span class="font-mono">/settings → Region</span>; for v1 it\'s informational only. Every customer\'s data sits on EU-jurisdiction infrastructure today regardless of preference selected. The preference exists so we can route you to the matching region automatically once the multi-region rollout lands; we\'ll give you 30 days\' notice under the DPA Article 28 sub-processor amendment process before any of your data is migrated, with the right to keep your data in the EU or terminate the affected portion of the service. The trust page at <a href="/trust/sub-processors" class="text-glow-red underline">/trust/sub-processors</a> covers this in the same plain language as the dashboard.',
+        a: 'You can state a region preference (US / EU / APAC) from <span class="font-mono">/settings → Region</span>; for v1 it\'s informational only. Every customer\'s data sits on EU-jurisdiction infrastructure today regardless of preference selected. The preference exists so we can route you to the matching region automatically once the multi-region rollout lands; we\'ll give you 30 days\' notice under the DPA Article 28 sub-processor amendment process before any of your data is migrated, with the right to keep your data in the EU or terminate the affected portion of the service. The trust page at <a href="/trust/sub-processors" class="text-tk-accent underline">/trust/sub-processors</a> covers this in the same plain language as the dashboard.',
       },
       {
         q: 'What does my team see when I add them to my account?',
-        a: 'Team members with the <em>member</em> role see read-only views of your sessions, profiles, API keys, webhooks, audit log, and usage. Members with the <em>admin</em> role can also create/update/delete those resources. They never see your billing, your password, or your MFA recovery codes. When a member acts on your account, the audit log records both the action AND the calling member\'s account id (so you can see who on your team did what without correlating across separate identity systems). The audit log entry also captures IP/user-agent context for sign-in/sign-out events; that context is visible to both you and to any team member with read access on your account, so don\'t add team members you wouldn\'t share that level of detail with. Full reference: <a href="https://docs.driftstack.dev/api/team/" class="text-glow-red underline">docs.driftstack.dev/api/team</a>.',
+        a: 'Team members with the <em>member</em> role see read-only views of your sessions, profiles, API keys, webhooks, audit log, and usage. Members with the <em>admin</em> role can also create/update/delete those resources. They never see your billing, your password, or your MFA recovery codes. When a member acts on your account, the audit log records both the action AND the calling member\'s account id (so you can see who on your team did what without correlating across separate identity systems). The audit log entry also captures IP/user-agent context for sign-in/sign-out events; that context is visible to both you and to any team member with read access on your account, so don\'t add team members you wouldn\'t share that level of detail with. Full reference: <a href="https://docs.driftstack.dev/api/team/" class="text-tk-accent underline">docs.driftstack.dev/api/team</a>.',
       },
       {
         q: 'Are you GDPR-compliant?',
@@ -182,11 +182,11 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'Does Driftstack work with Playwright / Selenium / Puppeteer?',
-        a: 'Driftstack exposes a CDP-compatible WebSocket endpoint per session, so any tool that speaks Chrome DevTools Protocol works — Playwright connects via <span class="font-mono">connectOverCDP()</span>, Puppeteer via <span class="font-mono">puppeteer.connect()</span>. Selenium is supported via WebDriver BiDi; the Driftstack Selenium driver wraps the WebDriver session against the underlying CDP endpoint. SDK quickstarts at <a href="https://docs.driftstack.dev/sdk/typescript-quickstart" class="text-glow-red underline">/sdk/typescript-quickstart</a>, <a href="https://docs.driftstack.dev/sdk/python-quickstart" class="text-glow-red underline">/sdk/python-quickstart</a>, <a href="https://docs.driftstack.dev/sdk/go-quickstart" class="text-glow-red underline">/sdk/go-quickstart</a>.',
+        a: 'Driftstack exposes a CDP-compatible WebSocket endpoint per session, so any tool that speaks Chrome DevTools Protocol works — Playwright connects via <span class="font-mono">connectOverCDP()</span>, Puppeteer via <span class="font-mono">puppeteer.connect()</span>. Selenium is supported via WebDriver BiDi; the Driftstack Selenium driver wraps the WebDriver session against the underlying CDP endpoint. SDK quickstarts at <a href="https://docs.driftstack.dev/sdk/typescript-quickstart" class="text-tk-accent underline">/sdk/typescript-quickstart</a>, <a href="https://docs.driftstack.dev/sdk/python-quickstart" class="text-tk-accent underline">/sdk/python-quickstart</a>, <a href="https://docs.driftstack.dev/sdk/go-quickstart" class="text-tk-accent underline">/sdk/go-quickstart</a>.',
       },
       {
         q: 'Where do my sessions actually run?',
-        a: 'EU production runs single-region. Customer data — accounts, profiles, audit logs, session recordings — stays in the EU. The <a href="/trust/sub-processors" class="text-glow-red underline">sub-processor list</a> has the full breakdown with each provider\'s region. Latency from EU customer locations is typically &lt;30ms to the API control plane and &lt;100ms session round-trip on the data plane. US/APAC customers see proportionally higher session round-trip from the EU origin.',
+        a: 'EU production runs single-region. Customer data — accounts, profiles, audit logs, session recordings — stays in the EU. The <a href="/trust/sub-processors" class="text-tk-accent underline">sub-processor list</a> has the full breakdown with each provider\'s region. Latency from EU customer locations is typically &lt;30ms to the API control plane and &lt;100ms session round-trip on the data plane. US/APAC customers see proportionally higher session round-trip from the EU origin.',
       },
     ],
   },
@@ -198,7 +198,7 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'Migrating from Browserless / Bright Data / ScrapingBee / Browserbase?',
-        a: 'Most CDP-based migrations are a one-line endpoint change in your SDK init — point Playwright/Puppeteer at the Driftstack WebSocket URL instead of the previous vendor\'s. The fingerprint surface changes (you go from Chromium to real WebKit), so any test or production flow that depended on Chrome-specific behaviours (e.g. a specific user-agent string, Chrome-only DevTools commands, Blink-specific CSS bugs) needs adjustment. The <a href="/comparison" class="text-glow-red underline">comparison page</a> covers feature-by-feature differences; the <a href="https://docs.driftstack.dev" class="text-glow-red underline">docs</a> include a migration recipe per vendor. Email <a href="mailto:support@driftstack.dev" class="text-glow-red underline">support@driftstack.dev</a> if you want a hand reviewing your test suite for Chrome-specific assertions before you cut over.',
+        a: 'Most CDP-based migrations are a one-line endpoint change in your SDK init — point Playwright/Puppeteer at the Driftstack WebSocket URL instead of the previous vendor\'s. The fingerprint surface changes (you go from Chromium to real WebKit), so any test or production flow that depended on Chrome-specific behaviours (e.g. a specific user-agent string, Chrome-only DevTools commands, Blink-specific CSS bugs) needs adjustment. The <a href="/comparison" class="text-tk-accent underline">comparison page</a> covers feature-by-feature differences; the <a href="https://docs.driftstack.dev" class="text-tk-accent underline">docs</a> include a migration recipe per vendor. Email <a href="mailto:support@driftstack.dev" class="text-tk-accent underline">support@driftstack.dev</a> if you want a hand reviewing your test suite for Chrome-specific assertions before you cut over.',
       },
       {
         q: 'Can I run a side-by-side comparison before committing?',
@@ -215,7 +215,7 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'Is X allowed? (sneaker bots / scraping / ad fraud / etc.)',
-        a: 'The full Acceptable Use Policy is at <a href="/legal/aup" class="text-glow-red underline">/legal/aup</a> — read it before signing up if you\'re unsure. Short version: Driftstack is built for legitimate automation — QA, accessibility testing, market research, regulated-industry compliance testing, agency multi-client management, AI-agent-driven flows. We don\'t allow attacks on third-party systems, fraud (ad fraud, fake-account creation, payment fraud), CSAM or other illegal content, large-scale scraping that violates target ToS in a way that bypasses authentication or reasonable rate limits, or operating sneaker bots / ticket bots against vendors who have publicly prohibited bot purchasing. Suspected abuse triggers an account review under the AUP escalation flow; persistent violations terminate the account.',
+        a: 'The full Acceptable Use Policy is at <a href="/legal/aup" class="text-tk-accent underline">/legal/aup</a> — read it before signing up if you\'re unsure. Short version: Driftstack is built for legitimate automation — QA, accessibility testing, market research, regulated-industry compliance testing, agency multi-client management, AI-agent-driven flows. We don\'t allow attacks on third-party systems, fraud (ad fraud, fake-account creation, payment fraud), CSAM or other illegal content, large-scale scraping that violates target ToS in a way that bypasses authentication or reasonable rate limits, or operating sneaker bots / ticket bots against vendors who have publicly prohibited bot purchasing. Suspected abuse triggers an account review under the AUP escalation flow; persistent violations terminate the account.',
       },
       {
         q: 'What happens if Driftstack as a business goes away?',
@@ -228,7 +228,7 @@ const groups: FaqGroup[] = [
     entries: [
       {
         q: 'How do I contact support?',
-        a: 'Email <a href="mailto:support@driftstack.dev" class="text-glow-red underline">support@driftstack.dev</a>. Reply target is 48h business-time across every tier — replies are written, not template-blasted, so they take honest time. Slack Connect is available on request once a paid subscription is active.',
+        a: 'Email <a href="mailto:support@driftstack.dev" class="text-tk-accent underline">support@driftstack.dev</a>. Reply target is 48h business-time across every tier — replies are written, not template-blasted, so they take honest time. Slack Connect is available on request once a paid subscription is active.',
       },
       {
         q: 'What if a session fails?',
@@ -236,7 +236,7 @@ const groups: FaqGroup[] = [
       },
       {
         q: 'What\'s the uptime target?',
-        a: 'Best-effort 99.5% across all tiers. There is no formal SLA with credits — Driftstack is a small operation and a tiered uptime ladder would be theatre rather than a real obligation we can stand behind. The <a href="https://status.driftstack.dev" class="text-glow-red underline">status page</a> publishes incidents with timestamps + RCAs. If an incident hurts your workload meaningfully, email <a href="mailto:support@driftstack.dev" class="text-glow-red underline">support@driftstack.dev</a> with concrete impact and we will work out a credit in good faith.',
+        a: 'Best-effort 99.5% across all tiers. There is no formal SLA with credits — Driftstack is a small operation and a tiered uptime ladder would be theatre rather than a real obligation we can stand behind. The <a href="https://status.driftstack.dev" class="text-tk-accent underline">status page</a> publishes incidents with timestamps + RCAs. If an incident hurts your workload meaningfully, email <a href="mailto:support@driftstack.dev" class="text-tk-accent underline">support@driftstack.dev</a> with concrete impact and we will work out a credit in good faith.',
       },
     ],
   },
@@ -247,48 +247,48 @@ const groups: FaqGroup[] = [
   title="FAQ"
   description="Common questions about Driftstack pricing, the free tier, tier upgrades, the bundled LLM, EU data residency, and support."
 >
-  <section class="relative overflow-hidden bg-gradient-to-b from-surface-base to-surface-raised">
+  <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
     {/* 2026-05-22 — hero-glow atmosphere matches the rest of the site. */}
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-4xl px-6 py-20">
-      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">FAQ</p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-ink-primary">Frequently asked.</h1>
-      <p class="mt-6 max-w-prose text-lg text-ink-secondary">
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">FAQ</p>
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-tk-ink">Frequently asked.</h1>
+      <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
         If your question isn't answered here, email
-        <a href="mailto:support@driftstack.dev" class="text-glow-red underline"
+        <a href="mailto:support@driftstack.dev" class="text-tk-accent underline"
           >support@driftstack.dev</a
         > or
-        <a href="mailto:sales@driftstack.dev" class="text-glow-red underline"
+        <a href="mailto:sales@driftstack.dev" class="text-tk-accent underline"
           >sales@driftstack.dev</a
         > — we answer everything in writing.
       </p>
     </div>
   </section>
 
-  <section class="border-t border-white/10 bg-surface-raised">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
       {
         groups.map((group) => (
           <div class="mb-16">
-            <h2 class="text-2xl font-semibold text-ink-primary">
+            <h2 class="text-2xl font-semibold text-tk-ink">
                 {group.title}
               </h2>
             <div class="mt-6 space-y-6">
               {group.entries.map((entry) => (
                 <details
-                  class="group rounded-lg border border-white/10 bg-surface-raised p-5 open:border-oxblood-700 open:shadow-sm"
+                  class="group rounded-lg border border-tk-border bg-tk-surface p-5 open:border-tk-accent open:shadow-sm"
                 >
                   <summary class="flex cursor-pointer items-center justify-between gap-4 text-left">
-                    <span class="font-medium text-ink-primary">{entry.q}</span>
+                    <span class="font-medium text-tk-ink">{entry.q}</span>
                     <span
-                      class="font-mono text-xs text-glow-red group-open:rotate-180 transition-transform"
+                      class="font-mono text-xs text-tk-accent group-open:rotate-180 transition-transform"
                       aria-hidden="true"
                     >
                       ▼
                     </span>
                   </summary>
                   <div
-                    class="mt-3 text-sm leading-relaxed text-ink-secondary"
+                    class="mt-3 text-sm leading-relaxed text-tk-ink-2"
                     set:html={entry.a}
                   />
                 </details>

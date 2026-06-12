@@ -56,7 +56,7 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
       /Compute, database, object storage, and email all run in\s*\n?\s*the EU\. Single-region — no silent transatlantic data\s*\n?\s*flows\./,
     );
     expect(body).toMatch(
-      /<a href="\/trust\/sub-processors" class="text-glow-red underline">\/trust\/sub-processors<\/a>/,
+      /<a href="\/trust\/sub-processors" class="text-tk-accent underline">\/trust\/sub-processors<\/a>/,
     );
     // Vendor names must not appear in the about-page splash strip
     // (still appear in security.astro and /trust/sub-processors, both
@@ -134,15 +134,11 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
   });
 
   it("R9 Company facts 6-entry dl: Entity Dutch BV (legal entity, kept) + Headquarters Netherlands + Focus 'One product, deliberately narrow' + Funding 'Independent — customer-funded' + Sub-processors link + Contact hello@driftstack.dev — replaces 'Team Solo founder + contractors' + 'Bootstrapped — no VC' which read as indie-builder framing; capability + funding-model surfaces stay legitimate", () => {
-    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Dutch BV<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Netherlands<\/dd>/);
-    expect(body).toMatch(
-      /<dd class="text-sm text-ink-primary">One product, deliberately narrow<\/dd>/,
-    );
-    expect(body).toMatch(
-      /<dd class="text-sm text-ink-primary">Independent — customer-funded<\/dd>/,
-    );
-    expect(body).toMatch(/<dd class="text-sm text-ink-primary">hello@driftstack\.dev<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-tk-ink">Dutch BV<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-tk-ink">Netherlands<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-tk-ink">One product, deliberately narrow<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-tk-ink">Independent — customer-funded<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-tk-ink">hello@driftstack\.dev<\/dd>/);
   });
 
   it("Free-tier bottom CTA: 'Want to try it?' + 'Start free — one profile, 20-minute sessions on real iPhone Safari, no card required. Perpetual, no expiry.' + 'Start free' button → /pricing#free — pinned so the free-tier value-prop (one profile / 20-minute / no card / perpetual) + the CTA destination all survive (drift would re-introduce the retired trial-pack framing)", () => {

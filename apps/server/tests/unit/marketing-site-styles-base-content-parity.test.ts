@@ -9,10 +9,10 @@
 //   • Dark mode by default: color-scheme: dark; surface-base bg.
 //   • Geist + Berkeley Mono font-family with system-stack fallback.
 //   • Radial-glow body background (oxblood top + soft bottom).
-//   • ::selection bg-oxblood-700 text-white.
-//   • btn-primary: bg-oxblood-700 + shadow-glow-red + hover lift.
-//   • btn-secondary: glass border-white/10 + bg-white/5 + backdrop-blur.
-//   • nav-link: text-ink-secondary + hover:text-glow-red.
+//   • ::selection bg-tk-accent text-white.
+//   • btn-primary: bg-tk-accent + shadow-glow-accent + hover lift.
+//   • btn-secondary: glass border-tk-border + bg-tk-hover + backdrop-blur.
+//   • nav-link: text-tk-ink-2 + hover:text-tk-accent.
 //   • section-label: mono [BRACKETED] glow-red accent.
 //   • card: rounded-xl glass surface with red-tinted top edge on hover.
 //   • code-preview: monospace dark inset with window-chrome pip header.

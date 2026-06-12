@@ -9,8 +9,8 @@
 //   • frontmatter-description fallback chain: ... ?? 'Driftstack legal documents.'.
 //   • 5-item legalLinks: /legal/terms + /legal/privacy + /legal/dpa +
 //     /legal/aup + /trust/sub-processors.
-//   • prose styling: prose-h1:hidden + prose-a:text-oxblood-700 +
-//     prose-blockquote:border-l-oxblood-300.
+//   • prose styling: prose-h1:hidden + prose-a:text-tk-accent +
+//     prose-blockquote:border-l-tk-accent.
 //   • aria-label="Other legal documents" navigation label.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -59,37 +59,37 @@ describe('W523.B apps/marketing-site/src/layouts/LegalLayout.astro content parit
   it("BaseLayout wrap + header section framing pinned: '<BaseLayout title={title} description={description}>' + 'Legal' mono-uppercase eyebrow + title h1 (3xl→4xl on md) + optional description prose-paragraph — pinned so the BaseLayout-pass-through + Legal-eyebrow + responsive-h1 + conditional-description commitment survives", () => {
     expect(body).toMatch(/<BaseLayout title=\{title\} description=\{description\}>/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Legal<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Legal<\/p>/,
     );
     // 2026-05-22 — h1 keeps the same size classes; ink-primary
     // color moved onto a gradient-text span (matches the rest of
     // the marketing site visual family).
     expect(body).toMatch(/<h1[\s\S]*?\{title\}[\s\S]*?<\/h1>/);
     expect(body).toMatch(
-      /\{description \? <p class="mt-4 max-w-prose text-base text-ink-secondary">\{description\}<\/p> : null\}/,
+      /\{description \? <p class="mt-4 max-w-prose text-base text-tk-ink-2">\{description\}<\/p> : null\}/,
     );
   });
 
-  it("Prose styling framing pinned (dark-theme): 'prose prose-invert max-w-none' + 'prose-h1:hidden' + 'prose-a:text-oxblood-300 prose-a:no-underline hover:prose-a:underline hover:prose-a:text-oxblood-200' + 'prose-blockquote:border-l-oxblood-300 prose-blockquote:not-italic prose-blockquote:text-ink-secondary' — 2026-05-XX prose theme switched to prose-invert with oxblood-300 anchors to match the dark surface-base/raised page background.", () => {
-    expect(body).toMatch(/prose prose-invert max-w-none/);
+  it("Prose styling framing pinned (dark-theme): 'prose max-w-none' + 'prose-h1:hidden' + 'prose-a:text-tk-accent prose-a:no-underline hover:prose-a:underline hover:prose-a:text-tk-accent-2' + 'prose-blockquote:border-l-tk-accent prose-blockquote:not-italic prose-blockquote:text-tk-ink-2' — Fleet rework: prose-invert dropped (light default) + token anchors.", () => {
+    expect(body).toMatch(/prose max-w-none/);
     expect(body).toMatch(/prose-h1:hidden/);
-    expect(body).toMatch(/prose-a:text-oxblood-300/);
+    expect(body).toMatch(/prose-a:text-tk-accent-2/);
     expect(body).toMatch(/prose-a:no-underline/);
     expect(body).toMatch(/hover:prose-a:underline/);
-    expect(body).toMatch(/hover:prose-a:text-oxblood-200/);
-    expect(body).toMatch(/prose-blockquote:border-l-oxblood-300/);
+    expect(body).toMatch(/hover:prose-a:text-tk-accent-2/);
+    expect(body).toMatch(/prose-blockquote:border-l-tk-accent/);
     expect(body).toMatch(/prose-blockquote:not-italic/);
-    expect(body).toMatch(/prose-blockquote:text-ink-secondary/);
+    expect(body).toMatch(/prose-blockquote:text-tk-ink-2/);
   });
 
-  it("Other-legal-documents nav framing pinned: 'aria-label=\"Other legal documents\"' + 'Other legal documents' eyebrow paragraph + 'mt-3 grid gap-1 sm:grid-cols-2' ul + 'text-sm text-oxblood-700 hover:underline' link styling — pinned so the cross-doc-nav + aria-label + 2-col-on-sm-and-up grid + oxblood-link-styling commitment survives", () => {
+  it("Other-legal-documents nav framing pinned: 'aria-label=\"Other legal documents\"' + 'Other legal documents' eyebrow paragraph + 'mt-3 grid gap-1 sm:grid-cols-2' ul + 'text-sm text-tk-accent hover:underline' link styling — pinned so the cross-doc-nav + aria-label + 2-col-on-sm-and-up grid + oxblood-link-styling commitment survives", () => {
     expect(body).toMatch(/aria-label="Other legal documents"/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-ink-muted">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
     );
     expect(body).toMatch(/<ul class="mt-3 grid gap-1 sm:grid-cols-2">/);
     expect(body).toMatch(
-      /<a href=\{l\.href\} class="text-sm text-oxblood-700 hover:underline">\{l\.label\}<\/a>/,
+      /<a href=\{l\.href\} class="text-sm text-tk-accent hover:underline">\{l\.label\}<\/a>/,
     );
   });
 

@@ -101,15 +101,9 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
   });
 
   it("When NOT Driftstack 3-card: Desktop-only targets + Pure HTML scraping + IP-pool-as-product — pinned so the honest-anti-recommendation 3-card list survives (drift to dropping would hide the where-Driftstack-isn't-the-fit guidance the V-472 doc-comment commits to)", () => {
-    expect(body).toMatch(
-      /<h3 class="text-lg font-medium text-ink-primary">Desktop-only targets<\/h3>/,
-    );
-    expect(body).toMatch(
-      /<h3 class="text-lg font-medium text-ink-primary">Pure HTML scraping<\/h3>/,
-    );
-    expect(body).toMatch(
-      /<h3 class="text-lg font-medium text-ink-primary">IP-pool-as-product<\/h3>/,
-    );
+    expect(body).toMatch(/<h3 class="text-lg font-medium text-tk-ink">Desktop-only targets<\/h3>/);
+    expect(body).toMatch(/<h3 class="text-lg font-medium text-tk-ink">Pure HTML scraping<\/h3>/);
+    expect(body).toMatch(/<h3 class="text-lg font-medium text-tk-ink">IP-pool-as-product<\/h3>/);
   });
 
   it("Freshness stamp: 'Last reviewed 2026-05-10' + drift-correction mailto:support@driftstack.dev — pinned so the page-staleness signal + the customer-driven correction channel survive (drift to dropping the timestamp would let competitor rows go stale without a reviewer signal)", () => {

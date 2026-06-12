@@ -44,7 +44,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           Cumulative rig methodology.
         
       </h1>
-      <p class="mt-6 max-w-prose text-lg text-ink-secondary leading-relaxed">
+      <p class="mt-6 max-w-prose text-lg text-tk-ink-2 leading-relaxed">
         The cumulative rig is the full set of measurable signals a
         detection system can read from a browser session. Driftstack's
         product claim — indistinguishable from a real iPhone — is only
@@ -52,7 +52,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         reference phone sends. This page documents what we measure,
         how, and against which reference.
       </p>
-      <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
+      <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
         The table below shows the rig run against <strong>iPhone 16 Pro
         · iOS 18.7 · Safari 26.4</strong> as a worked example. The
         same methodology runs against every launch archetype — iPhone
@@ -66,11 +66,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   </section>
 
   <!-- Why the rig is "cumulative" -->
-  <section class="border-t border-white/10">
+  <section class="border-t border-tk-border">
     <div class="mx-auto max-w-5xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Why cumulative</p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">Any single signal is easy. Every signal at once is the hard part.</h2>
-      <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed">
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Why cumulative</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">Any single signal is easy. Every signal at once is the hard part.</h2>
+      <p class="mt-6 max-w-prose text-base text-tk-ink-2 leading-relaxed">
         A stealth Chromium tool can spoof the user-agent string in five
         minutes. It can fake the screen size in another five. But the
         canvas hash, the WebGL renderer, the AudioContext fingerprint,
@@ -78,7 +78,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         — those leak the underlying Chromium engine in the next layer
         of measurement.
       </p>
-      <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
+      <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
         Detection systems combine many signals into one score. A
         single mismatch — UA says iPhone, canvas hash says Blink —
         flags the session as inauthentic. Driftstack's claim isn't
@@ -89,16 +89,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   </section>
 
   <!-- The signal table -->
-  <section class="border-t border-white/10 bg-surface-raised">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Measured signals</p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">Signal-by-signal table.</h2>
-      <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Measured signals</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">Signal-by-signal table.</h2>
+      <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
         Each row is a signal a detection system can read. The
         "Driftstack" column is what an iPhone 16 Pro returns; the
         "Stealth Chromium" column is what a representative
         Chromium-with-stealth-plugin tool returns. Cells marked
-        <code class="font-mono text-glow-red">unique-per-session</code>
+        <code class="font-mono text-tk-accent">unique-per-session</code>
         are the load-bearing leak: a real iPhone returns the same
         value as millions of other iPhones, so any tool that returns
         a hash unique to its own session has already given itself
@@ -108,96 +108,96 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <div class="mt-10 overflow-x-auto">
         <table class="w-full min-w-[700px] border-collapse text-sm">
           <thead>
-            <tr class="border-b-2 border-oxblood-700">
+            <tr class="border-b-2 border-tk-accent">
               <th
-                class="sticky left-0 bg-surface-raised px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-ink-muted"
+                class="sticky left-0 bg-tk-surface px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-tk-ink-3"
               >
                 Signal
               </th>
-              <th class="px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-ink-muted">
+              <th class="px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-tk-ink-3">
                 Stealth Chromium
               </th>
-              <th class="px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-glow-red">
+              <th class="px-4 py-3 text-left font-mono text-xs uppercase tracking-widest text-tk-accent">
                 Driftstack (iPhone 16 Pro · iOS 18.7)
               </th>
             </tr>
           </thead>
           <tbody class="divide-y divide-white/5">
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">navigator.userAgent</td>
-              <td class="px-4 py-3 text-ink-muted">spoofed string</td>
-              <td class="px-4 py-3 font-mono text-glow-red">iPhone Safari UA (unmodified)</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">navigator.userAgent</td>
+              <td class="px-4 py-3 text-tk-ink-3">spoofed string</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">iPhone Safari UA (unmodified)</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">navigator.platform</td>
-              <td class="px-4 py-3 text-ink-muted">spoofed</td>
-              <td class="px-4 py-3 font-mono text-glow-red">"iPhone"</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">navigator.platform</td>
+              <td class="px-4 py-3 text-tk-ink-3">spoofed</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">"iPhone"</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">Canvas 2D hash</td>
-              <td class="px-4 py-3 text-ink-muted">unique-per-session (Skia)</td>
-              <td class="px-4 py-3 font-mono text-glow-red">population-stable (Core Graphics)</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Canvas 2D hash</td>
+              <td class="px-4 py-3 text-tk-ink-3">unique-per-session (Skia)</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">population-stable (Core Graphics)</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">WebGL renderer</td>
-              <td class="px-4 py-3 text-ink-muted">"ANGLE / SwiftShader"</td>
-              <td class="px-4 py-3 font-mono text-glow-red">"Apple GPU"</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">WebGL renderer</td>
+              <td class="px-4 py-3 text-tk-ink-3">"ANGLE / SwiftShader"</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">"Apple GPU"</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">WebGL hash</td>
-              <td class="px-4 py-3 text-ink-muted">unique-per-session</td>
-              <td class="px-4 py-3 font-mono text-glow-red">population-stable</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">WebGL hash</td>
+              <td class="px-4 py-3 text-tk-ink-3">unique-per-session</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">population-stable</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">AudioContext fingerprint</td>
-              <td class="px-4 py-3 text-ink-muted">Blink audio backend</td>
-              <td class="px-4 py-3 font-mono text-glow-red">iOS audio backend</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">AudioContext fingerprint</td>
+              <td class="px-4 py-3 text-tk-ink-3">Blink audio backend</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">iOS audio backend</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">Font metric outputs</td>
-              <td class="px-4 py-3 text-ink-muted">Linux / desktop fonts</td>
-              <td class="px-4 py-3 font-mono text-glow-red">iOS Core Text metrics</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Font metric outputs</td>
+              <td class="px-4 py-3 text-tk-ink-3">Linux / desktop fonts</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">iOS Core Text metrics</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">JavaScript engine timing</td>
-              <td class="px-4 py-3 text-ink-muted">V8 latency profile</td>
-              <td class="px-4 py-3 font-mono text-glow-red">JSCore latency profile</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">JavaScript engine timing</td>
+              <td class="px-4 py-3 text-tk-ink-3">V8 latency profile</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">JSCore latency profile</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">TLS ClientHello fingerprint</td>
-              <td class="px-4 py-3 text-ink-muted">Chrome / Edge profile</td>
-              <td class="px-4 py-3 font-mono text-glow-red">iOS Safari profile</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">TLS ClientHello fingerprint</td>
+              <td class="px-4 py-3 text-tk-ink-3">Chrome / Edge profile</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">iOS Safari profile</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">Touch-event support flag</td>
-              <td class="px-4 py-3 text-ink-muted">absent or spoofed</td>
-              <td class="px-4 py-3 font-mono text-glow-red">native</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Touch-event support flag</td>
+              <td class="px-4 py-3 text-tk-ink-3">absent or spoofed</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">native</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">Screen dimensions + DPR</td>
-              <td class="px-4 py-3 text-ink-muted">configurable</td>
-              <td class="px-4 py-3 font-mono text-glow-red">393x852 @ 3x (iPhone 16 Pro)</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Screen dimensions + DPR</td>
+              <td class="px-4 py-3 text-tk-ink-3">configurable</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">393x852 @ 3x (iPhone 16 Pro)</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">CSS @media (hover) value</td>
-              <td class="px-4 py-3 text-ink-muted">"hover"</td>
-              <td class="px-4 py-3 font-mono text-glow-red">"none" (touch device)</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">CSS @media (hover) value</td>
+              <td class="px-4 py-3 text-tk-ink-3">"hover"</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">"none" (touch device)</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">requestIdleCallback presence</td>
-              <td class="px-4 py-3 text-ink-muted">present (Chromium)</td>
-              <td class="px-4 py-3 font-mono text-glow-red">absent (Safari)</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">requestIdleCallback presence</td>
+              <td class="px-4 py-3 text-tk-ink-3">present (Chromium)</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">absent (Safari)</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-ink-primary">Hash uniqueness across sessions</td>
-              <td class="px-4 py-3 text-ink-muted">100% unique</td>
-              <td class="px-4 py-3 font-mono text-glow-red">population-stable</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Hash uniqueness across sessions</td>
+              <td class="px-4 py-3 text-tk-ink-3">100% unique</td>
+              <td class="px-4 py-3 font-mono text-tk-accent">population-stable</td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <p class="mt-6 max-w-prose text-sm text-ink-muted">
+      <p class="mt-6 max-w-prose text-sm text-tk-ink-3">
         14 signals shown above. The internal rig measures 60+ signals
         across every session built; the published subset is the
         load-bearing ones that flip categorical-detection decisions.
@@ -206,11 +206,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   </section>
 
   <!-- Launch-blocker policy -->
-  <section class="border-t border-white/10">
+  <section class="border-t border-tk-border">
     <div class="mx-auto max-w-5xl px-6 py-16">
-      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Launch-blocker policy</p>
-      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">Any drift from the reference is a launch-blocking bug.</h2>
-      <p class="mt-6 max-w-prose text-base text-ink-secondary leading-relaxed">
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Launch-blocker policy</p>
+      <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">Any drift from the reference is a launch-blocking bug.</h2>
+      <p class="mt-6 max-w-prose text-base text-tk-ink-2 leading-relaxed">
         Every Driftstack engine build runs the cumulative rig against
         the reference iPhone. If any signal differs from what the
         reference returns, the build does not ship. We don't paper
@@ -218,7 +218,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         approach every stealth-plugin tool takes, and it's exactly
         what the rig catches.
       </p>
-      <p class="mt-4 max-w-prose text-base text-ink-secondary leading-relaxed">
+      <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
         When iOS releases a new Safari version, the reference moves
         and the engine has to catch up. Until it does, the prior
         reference stays the customer-facing archetype; the engine
@@ -228,21 +228,21 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   </section>
 
   <!-- Cross-references -->
-  <section class="border-t border-white/10 bg-surface-raised">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-5xl px-6 py-12">
-      <p class="font-mono text-xs uppercase tracking-widest text-glow-red">Related</p>
-      <ul class="mt-4 space-y-2 text-sm text-ink-secondary">
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Related</p>
+      <ul class="mt-4 space-y-2 text-sm text-tk-ink-2">
         <li>
-          <a href="/trust/security-overview" class="text-glow-red underline underline-offset-4"
+          <a href="/trust/security-overview" class="text-tk-accent underline underline-offset-4"
             >/trust/security-overview</a
           > — the live security posture across the four shipped pillars.
         </li>
         <li>
-          <a href="/comparison" class="text-glow-red underline underline-offset-4">/comparison</a> —
+          <a href="/comparison" class="text-tk-accent underline underline-offset-4">/comparison</a> —
           how Driftstack's fingerprint posture compares to other browser-API vendors.
         </li>
         <li>
-          <a href="/security" class="text-glow-red underline underline-offset-4">/security</a> — TLS
+          <a href="/security" class="text-tk-accent underline underline-offset-4">/security</a> — TLS
           posture, scrypt-hashed keys, HMAC webhooks, no-customer-data-access enforcement.
         </li>
       </ul>

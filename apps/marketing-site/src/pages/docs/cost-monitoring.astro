@@ -11,15 +11,15 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   title="Cost monitoring"
   description="How Driftstack computes per-account spend, what each cost component represents, and how to interpret the GET /v1/account/cost endpoint."
 >
-  <section class="relative overflow-hidden bg-gradient-to-b from-surface-base to-surface-raised">
+  <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
     {/* 2026-05-24 — hero-glow atmosphere matches site family. */}
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-4xl px-6 pb-12 pt-20 md:pt-24">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
         Docs · Cost monitoring
       </p>
-      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-ink-primary">Knowing what you're spending.</h1>
-      <p class="mt-6 max-w-prose text-lg text-ink-secondary">
+      <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-tk-ink">Knowing what you're spending.</h1>
+      <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
         Driftstack pricing is metered. Compute, storage, egress, email,
         and bundled LLM each have a per-unit rate. This page explains
         how the rates are applied, what counts as "this billing cycle",
@@ -29,10 +29,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </div>
   </section>
 
-  <section class="border-t border-white/10 bg-surface-raised">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">Cost components</h2>
-      <p class="mt-3 max-w-prose text-ink-secondary">
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Cost components</h2>
+      <p class="mt-3 max-w-prose text-tk-ink-2">
         Each component is metered separately and shows up as a line on
         your monthly invoice. The breakdown returned by
         <code class="font-mono">/v1/account/cost</code> mirrors the
@@ -41,8 +41,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       <dl class="mt-8 space-y-6">
         <div>
-          <dt class="text-sm font-medium text-ink-primary">Compute (session-minutes)</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
+          <dt class="text-sm font-medium text-tk-ink">Compute (session-minutes)</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
             Wall-clock time a session occupies a Mac mini slot. Charged
             per minute. A 15-minute session counts as 15 session-minutes
             regardless of how active you are within it — the slot is
@@ -50,8 +50,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-ink-primary">Storage (R2 GB-months)</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
+          <dt class="text-sm font-medium text-tk-ink">Storage (R2 GB-months)</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
             Captures (screenshots, DOM dumps, PDFs, recordings) and
             profile state live in Cloudflare R2. We charge per
             GB-month, prorated to the second. Retention defaults are
@@ -60,16 +60,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-ink-primary">Egress (TURN GB)</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
+          <dt class="text-sm font-medium text-tk-ink">Egress (TURN GB)</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
             WebRTC stream bandwidth that traverses our TURN relay.
             Sessions where the customer's network can do direct
             peer-to-peer don't accumulate this line.
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-ink-primary">Email (Postmark sends)</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
+          <dt class="text-sm font-medium text-tk-ink">Email (Postmark sends)</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
             Transactional emails fired against your account (signup
             verification, billing receipts, incident notifications).
             Capped at the volume implied by your tier; one cent per
@@ -77,8 +77,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-ink-primary">LLM tokens</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
+          <dt class="text-sm font-medium text-tk-ink">LLM tokens</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
             When the bundled-LLM agent feature is enabled and you're
             on the pass-through pricing model, this line is the
             input + output tokens consumed × the sub-processor's rate
@@ -90,10 +90,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </div>
   </section>
 
-  <section class="border-t border-white/10 bg-surface-raised/40">
+  <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">Threshold state</h2>
-      <p class="mt-3 max-w-prose text-ink-secondary">
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Threshold state</h2>
+      <p class="mt-3 max-w-prose text-tk-ink-2">
         Every cost response includes a
         <code class="font-mono">thresholdState</code> field with one
         of three values:
@@ -104,7 +104,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             class="inline-block rounded-full bg-emerald-50 px-2 py-0.5 font-mono text-xs font-medium text-emerald-700"
             >under-soft</span
           >
-          <p class="mt-2 text-sm text-ink-secondary">
+          <p class="mt-2 text-sm text-tk-ink-2">
             Spend is below the soft warning threshold for your tier.
             The dashboard shows an "on track" indicator. No
             email-based alerts fire.
@@ -115,7 +115,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             class="inline-block rounded-full bg-amber-50 px-2 py-0.5 font-mono text-xs font-medium text-amber-700"
             >between-soft-and-hard</span
           >
-          <p class="mt-2 text-sm text-ink-secondary">
+          <p class="mt-2 text-sm text-tk-ink-2">
             Spend is above the soft warning and below the hard cap.
             You receive an "approaching limit" email the first time
             this transition happens in a cycle. The dashboard shows
@@ -127,7 +127,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             class="inline-block rounded-full bg-rose-50 px-2 py-0.5 font-mono text-xs font-medium text-rose-700"
             >over-hard</span
           >
-          <p class="mt-2 text-sm text-ink-secondary">
+          <p class="mt-2 text-sm text-tk-ink-2">
             Spend has crossed the hard cap configured for your tier
             (or the per-account override your account-team set). The
             dashboard surfaces a red indicator + an "over limit"
@@ -135,7 +135,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           </p>
         </li>
       </ul>
-      <p class="mt-6 max-w-prose text-sm text-ink-secondary">
+      <p class="mt-6 max-w-prose text-sm text-tk-ink-2">
         Threshold numeric values are not part of the customer
         response (they're operator-tuned configuration). What you see
         in the response is your spend and the categorical state — the
@@ -144,10 +144,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </div>
   </section>
 
-  <section class="border-t border-white/10 bg-surface-raised">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">Reading the endpoint</h2>
-      <p class="mt-3 max-w-prose text-ink-secondary">
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Reading the endpoint</h2>
+      <p class="mt-3 max-w-prose text-tk-ink-2">
         Endpoint:
         <code class="font-mono">GET /v1/account/cost?billing_cycle=YYYY-MM</code>.
         Omit the parameter for the current cycle. Returns 200 with a
@@ -171,7 +171,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   }
 }
 `}</code></pre>
-      <p class="mt-6 max-w-prose text-sm text-ink-secondary">
+      <p class="mt-6 max-w-prose text-sm text-tk-ink-2">
         All amounts are integer cents. Format with your locale of
         choice (the GUI client defaults to EUR; see
         <code class="font-mono">cost-panel.ts</code> for the
@@ -180,12 +180,12 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     </div>
   </section>
 
-  <section class="border-t border-white/10 bg-surface-raised/40">
+  <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">FAQs</h2>
-      <div class="mt-6 space-y-6 text-sm text-ink-secondary">
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">FAQs</h2>
+      <div class="mt-6 space-y-6 text-sm text-tk-ink-2">
         <div>
-          <p class="font-medium text-ink-primary">
+          <p class="font-medium text-tk-ink">
             Is the response real-time?
           </p>
           <p class="mt-1">
@@ -197,7 +197,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           </p>
         </div>
         <div>
-          <p class="font-medium text-ink-primary">
+          <p class="font-medium text-tk-ink">
             Why are LLM tokens 0 even though I'm using the agent?
           </p>
           <p class="mt-1">
@@ -209,7 +209,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           </p>
         </div>
         <div>
-          <p class="font-medium text-ink-primary">
+          <p class="font-medium text-tk-ink">
             What happens if I cross the hard cap?
           </p>
           <p class="mt-1">

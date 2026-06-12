@@ -13,18 +13,18 @@ import StatusBadge from '../../components/StatusBadge.astro';
   description="Driftstack trust center: security architecture, sub-processors, legal agreements, incident history, and live platform status. One bookmark for everything compliance-relevant."
 >
   <!-- Hero -->
-  <section class="relative overflow-hidden bg-gradient-to-b from-surface-base to-surface-raised">
+  <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="mx-auto max-w-6xl px-6 pb-16 pt-20 md:pt-24">
       <div class="flex flex-wrap items-start justify-between gap-6">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
             Trust center
           </p>
           <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl">
             One bookmark for everything compliance-relevant.
           </h1>
-          <p class="mt-6 max-w-prose text-lg text-ink-secondary">
+          <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
             Security architecture, sub-processor list, legal agreements,
             and incident history — published in one place. Buyer
             evaluations and ongoing GDPR/DPA reviews can start here without
@@ -37,52 +37,52 @@ import StatusBadge from '../../components/StatusBadge.astro';
   </section>
 
   <!-- Cards -->
-  <section class="border-t border-white/10 bg-surface-raised">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="grid gap-6 md:grid-cols-2">
         <a
           href="/security"
-          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-tk-border bg-tk-surface p-6 transition hover:border-tk-accent-2 hover:shadow-sm"
         >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 2L4 5v6c0 5.5 3.8 10.7 8 11.8 4.2-1.1 8-6.3 8-11.8V5l-8-3z" />
             </svg>
           </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
             Security
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
             Architecture + posture →
           </h2>
-          <p class="mt-3 text-sm text-ink-secondary">
+          <p class="mt-3 text-sm text-tk-ink-2">
             Five pillars shipped today: scrypt-hashed API keys at rest,
             HMAC-signed webhooks, no-customer-data-access enforcement,
             EU-resident infrastructure, and customer-configurable
             egress per profile (SOCKS5 with UDP/QUIC/WebRTC, plus
             OpenVPN + WireGuard). See
             <a href="/trust/security-overview"
-              class="text-oxblood-700 underline">/trust/security-overview</a>
+              class="text-tk-accent underline">/trust/security-overview</a>
             for the live posture across each pillar.
           </p>
         </a>
 
         <a
           href="/trust/sub-processors"
-          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-tk-border bg-tk-surface p-6 transition hover:border-tk-accent-2 hover:shadow-sm"
         >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M9 4v16" />
             </svg>
           </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
             Sub-processors
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
             Live list + regions →
           </h2>
-          <p class="mt-3 text-sm text-ink-secondary">
+          <p class="mt-3 text-sm text-tk-ink-2">
             Every organisation that processes customer data on Driftstack's
             behalf, with region, purpose, and transfer mechanism. Source of
             truth for Article 28(2) amendment notices; mirrored in DPA
@@ -92,20 +92,20 @@ import StatusBadge from '../../components/StatusBadge.astro';
 
         <a
           href="/trust/incidents"
-          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-tk-border bg-tk-surface p-6 transition hover:border-tk-accent-2 hover:shadow-sm"
         >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
             </svg>
           </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
             Incident history
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
             Past events + post-mortems →
           </h2>
-          <p class="mt-3 text-sm text-ink-secondary">
+          <p class="mt-3 text-sm text-tk-ink-2">
             Customer-impacting outages and security incidents, with
             timestamps, customer impact, root cause, and the remediation
             we applied. Live status badge above for current platform
@@ -115,20 +115,20 @@ import StatusBadge from '../../components/StatusBadge.astro';
 
         <a
           href="/legal/dpa"
-          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-tk-border bg-tk-surface p-6 transition hover:border-tk-accent-2 hover:shadow-sm"
         >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" />
             </svg>
           </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
             Legal
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
             DPA · Privacy · Terms · AUP →
           </h2>
-          <p class="mt-3 text-sm text-ink-secondary">
+          <p class="mt-3 text-sm text-tk-ink-2">
             Standard agreements ready to sign on the customer side: Data
             Processing Agreement (Article 28 + SCCs), Privacy Policy
             (Article 13–15 disclosures), Terms of Service, Acceptable Use
@@ -138,20 +138,20 @@ import StatusBadge from '../../components/StatusBadge.astro';
 
         <a
           href="/trust/compliance"
-          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-tk-border bg-tk-surface p-6 transition hover:border-tk-accent-2 hover:shadow-sm"
         >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M9 11l3 3 8-8" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
             </svg>
           </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
             Compliance
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
             Certifications + pen-test + disclosure →
           </h2>
-          <p class="mt-3 text-sm text-ink-secondary">
+          <p class="mt-3 text-sm text-tk-ink-2">
             Honest current state: certifications in place + in progress,
             pen-test access workflow, vulnerability-disclosure policy +
             safe-harbour, sub-processor change SLA, audit-log retention.
@@ -160,20 +160,20 @@ import StatusBadge from '../../components/StatusBadge.astro';
 
         <a
           href="/trust/security-overview"
-          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-tk-border bg-tk-surface p-6 transition hover:border-tk-accent-2 hover:shadow-sm"
         >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
             </svg>
           </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
             Security overview
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
             Evaluator's checklist →
           </h2>
-          <p class="mt-3 text-sm text-ink-secondary">
+          <p class="mt-3 text-sm text-tk-ink-2">
             Every security claim mapped to the code path, test, or
             doc that backs it up. The page a prospect's CISO skims
             before scheduling a vendor review call.
@@ -182,20 +182,20 @@ import StatusBadge from '../../components/StatusBadge.astro';
 
         <a
           href="/trust/cumulative-rig"
-          class="group rounded-lg border border-white/10 bg-surface-raised p-6 transition hover:border-oxblood-300 hover:shadow-sm"
+          class="group rounded-lg border border-tk-border bg-tk-surface p-6 transition hover:border-tk-accent-2 hover:shadow-sm"
         >
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /><path d="M7 8h10M7 12h4" />
             </svg>
           </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
             Cumulative rig
           </p>
-          <h2 class="mt-3 text-xl font-semibold text-ink-primary group-hover:text-oxblood-700">
+          <h2 class="mt-3 text-xl font-semibold text-tk-ink group-hover:text-tk-accent">
             Signal-by-signal methodology →
           </h2>
-          <p class="mt-3 text-sm text-ink-secondary">
+          <p class="mt-3 text-sm text-tk-ink-2">
             The full set of fingerprint signals Driftstack measures
             against the reference iPhone, with Stealth-Chromium-vs-
             Driftstack contrast values. The methodology behind the
@@ -207,43 +207,43 @@ import StatusBadge from '../../components/StatusBadge.astro';
   </section>
 
   <!-- Quick-reference strip -->
-  <section class="border-t border-white/10 bg-surface-raised/40">
+  <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-6xl px-6 py-12">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
         Quick reference
       </p>
-      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-ink-primary">The questions buyer evaluations always ask.</h2>
+      <h2 class="mt-3 text-2xl font-semibold tracking-tight text-tk-ink">The questions buyer evaluations always ask.</h2>
       <dl class="mt-8 grid gap-x-8 gap-y-6 md:grid-cols-2">
         <div>
-          <dt class="text-sm font-medium text-ink-primary">Where is data hosted?</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
+          <dt class="text-sm font-medium text-tk-ink">Where is data hosted?</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
             EU only. Compute (Hetzner Nuremberg), database (Neon Frankfurt),
             object storage (Cloudflare R2 EU jurisdiction). Full list at
-            <a href="/trust/sub-processors" class="text-oxblood-700 underline"
+            <a href="/trust/sub-processors" class="text-tk-accent underline"
               >/trust/sub-processors</a
             >.
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-ink-primary">Do you see our destination URLs?</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
+          <dt class="text-sm font-medium text-tk-ink">Do you see our destination URLs?</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
             No. Session traffic exits through your egress (the SOCKS5 /
             OpenVPN / WireGuard proxies you configure). Driftstack
             orchestrates the session; the proxy carries the bytes.
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-ink-primary">Are API keys recoverable by staff?</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
+          <dt class="text-sm font-medium text-tk-ink">Are API keys recoverable by staff?</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
             No. Keys are scrypt-hashed at rest. A database breach surfaces
             hashes, not keys. If a key leaks, rotate via the dashboard's
             24-hour grace flow.
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-ink-primary">How do we get a DPA on file?</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
-            The DPA at <a href="/legal/dpa" class="text-oxblood-700 underline"
+          <dt class="text-sm font-medium text-tk-ink">How do we get a DPA on file?</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
+            The DPA at <a href="/legal/dpa" class="text-tk-accent underline"
               >/legal/dpa</a
             > is pre-signed by Driftstack; counter-signing acceptance closes
             on the customer side. Standard SCCs apply for any non-EU
@@ -251,20 +251,20 @@ import StatusBadge from '../../components/StatusBadge.astro';
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-ink-primary">What's the incident-response SLA?</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
+          <dt class="text-sm font-medium text-tk-ink">What's the incident-response SLA?</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
             Self-serve tiers operate without a contractual uptime SLA —
             we publish incidents at
-            <a href="/trust/incidents" class="text-oxblood-700 underline"
+            <a href="/trust/incidents" class="text-tk-accent underline"
               >/trust/incidents</a
             > and the live status above. Self-hosted SKUs and Enterprise
             tiers carry contractual SLA terms.
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-ink-primary">How do we get a security questionnaire answered?</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
-            Email <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline"
+          <dt class="text-sm font-medium text-tk-ink">How do we get a security questionnaire answered?</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
+            Email <a href="mailto:support@driftstack.dev" class="text-tk-accent underline"
               >support@driftstack.dev</a
             > with the document; we'll fill it line-by-line. CAIQ /
             VSAQ / vendor portals all welcome.
@@ -275,17 +275,17 @@ import StatusBadge from '../../components/StatusBadge.astro';
   </section>
 
   <!-- CTA -->
-  <section class="border-t border-white/10 bg-surface-raised">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-6xl px-6 py-16">
       <div class="flex flex-col items-start gap-6 md:flex-row md:items-end md:justify-between">
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
             Compliance review
           </p>
-          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-ink-primary">
+          <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">
             Bring the questionnaire. We'll fill it.
           </h2>
-          <p class="mt-3 max-w-prose text-ink-secondary">
+          <p class="mt-3 max-w-prose text-tk-ink-2">
             CAIQ, VSAQ, custom enterprise vendor questionnaires — all
             welcome. Most answers come out of the pages linked above; the
             rest we write line-by-line within a working day.

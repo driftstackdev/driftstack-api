@@ -95,14 +95,14 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
 
   it('customer-configurable egress SHIPPED (✓ emerald) per planning 133 Phase 1. 2026-05-22 — flipped from amber ○ "(roadmap)" to emerald ✓ "(per profile)" after the SocksProxyBackend impl + bootstrap wire landed.', () => {
     expect(body).toMatch(
-      /<span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100[^>]*>✓<\/span>\s*\n?\s*<div>\s*\n?\s*<p class="font-medium text-ink-primary">Customer-configurable egress \(per profile\)<\/p>/,
+      /<span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100[^>]*>✓<\/span>\s*\n?\s*<div>\s*\n?\s*<p class="font-medium text-tk-ink">Customer-configurable egress \(per profile\)<\/p>/,
     );
     expect(body).toMatch(/SOCKS5 with full\s*\n?\s*UDP\/WebRTC\/QUIC tunnelling/);
     expect(body).toMatch(/OpenVPN \(\.ovpn\)/);
   });
 
   it('EU-only data plane: Hetzner Nuremberg / Neon Frankfurt / R2 EU jurisdiction', () => {
-    expect(body).toMatch(/<p class="font-medium text-ink-primary">EU-only data plane<\/p>/);
+    expect(body).toMatch(/<p class="font-medium text-tk-ink">EU-only data plane<\/p>/);
     expect(body).toMatch(
       /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s+object storage \(Cloudflare R2 EU jurisdiction\)/,
     );
@@ -131,7 +131,7 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
 
   it('cross-link to /security architecture deep-dive pinned', () => {
     expect(body).toMatch(
-      /<a href="\/security" class="text-oxblood-700 underline">architecture deep-dive at \/security<\/a>/,
+      /<a href="\/security" class="text-tk-accent underline">architecture deep-dive at \/security<\/a>/,
     );
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/security.astro'))).toBe(
       true,

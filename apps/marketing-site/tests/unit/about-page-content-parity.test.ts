@@ -36,13 +36,11 @@ describe('W367.A marketing-site /about page content parity', () => {
   const body = read(PAGE);
 
   it('posture 3-card section pinned: EU-resident / no-behavioural-data / honest-scope', () => {
+    expect(body).toMatch(/<h3 class="font-semibold text-tk-ink">EU-resident, by default<\/h3>/);
     expect(body).toMatch(
-      /<h3 class="font-semibold text-ink-primary">EU-resident, by default<\/h3>/,
+      /<h3 class="font-semibold text-tk-ink">No behavioural data collection<\/h3>/,
     );
-    expect(body).toMatch(
-      /<h3 class="font-semibold text-ink-primary">No behavioural data collection<\/h3>/,
-    );
-    expect(body).toMatch(/<h3 class="font-semibold text-ink-primary">Honest scope<\/h3>/);
+    expect(body).toMatch(/<h3 class="font-semibold text-tk-ink">Honest scope<\/h3>/);
   });
 
   it('F-5 (Issue 6) EU stack reframed: vendor names moved to /trust/sub-processors. Page commits to the residency posture ("Compute, database, object storage, and email all run in the EU") without naming vendors on the about-page splash. Vendor migration discussions belong on the dedicated sub-processor page.', () => {
@@ -113,14 +111,10 @@ describe('W367.A marketing-site /about page content parity', () => {
   });
 
   it('R9 company facts: Dutch BV (legal entity, kept for legitimate transparency) / Netherlands HQ / "One product, deliberately narrow" focus / "Independent — customer-funded" — replaces the prior solo-founder/no-VC framing which read as indie-builder rather than enterprise-grade', () => {
-    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Dutch BV<\/dd>/);
-    expect(body).toMatch(/<dd class="text-sm text-ink-primary">Netherlands<\/dd>/);
-    expect(body).toMatch(
-      /<dd class="text-sm text-ink-primary">One product, deliberately narrow<\/dd>/,
-    );
-    expect(body).toMatch(
-      /<dd class="text-sm text-ink-primary">Independent — customer-funded<\/dd>/,
-    );
+    expect(body).toMatch(/<dd class="text-sm text-tk-ink">Dutch BV<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-tk-ink">Netherlands<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-tk-ink">One product, deliberately narrow<\/dd>/);
+    expect(body).toMatch(/<dd class="text-sm text-tk-ink">Independent — customer-funded<\/dd>/);
     expect(body).toContain('hello@driftstack.dev');
   });
 

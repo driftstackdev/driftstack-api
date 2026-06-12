@@ -50,7 +50,7 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
 
   it("CATEGORY_COLOR 6-entry styling map: launch oxblood / sdk slate-900 / docs slate-200 / security red / pricing amber / self-hosted emerald — pinned so each category has a visually-distinct badge color (drift to dropping any would render that category's badge with no styling; drift to duplicating would lose the 'launch is the loud one, security is alarm-red' visual hierarchy)", () => {
     expect(body).toMatch(
-      /const CATEGORY_COLOR: Record<ChangelogEntry\['category'\], string> = \{\s*\n?\s*launch: 'bg-oxblood-700 text-white',\s*\n?\s*sdk: 'bg-surface-inset text-white',\s*\n?\s*docs: 'bg-surface-elevated text-ink-primary',\s*\n?\s*security: 'bg-red-100 text-red-900',\s*\n?\s*pricing: 'bg-amber-100 text-glow-red-soft',\s*\n?\s*'self-hosted': 'bg-emerald-100 text-emerald-200',\s*\n?\s*\};/,
+      /const CATEGORY_COLOR: Record<ChangelogEntry\['category'\], string> = \{\s*\n?\s*launch: 'bg-tk-accent text-white',\s*\n?\s*sdk: 'bg-tk-bg text-white',\s*\n?\s*docs: 'bg-tk-raised text-tk-ink',\s*\n?\s*security: 'bg-red-100 text-red-900',\s*\n?\s*pricing: 'bg-amber-100 text-tk-accent-soft',\s*\n?\s*'self-hosted': 'bg-emerald-100 text-emerald-200',\s*\n?\s*\};/,
     );
   });
 

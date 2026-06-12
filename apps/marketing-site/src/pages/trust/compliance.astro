@@ -12,16 +12,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   title="Compliance & disclosure"
   description="Driftstack compliance posture, pen-test access, vulnerability disclosure policy, and sub-processor change SLA. Honest current state — no certifications we don't have."
 >
-  <section class="relative overflow-hidden bg-gradient-to-b from-surface-base to-surface-raised">
+  <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="mx-auto max-w-4xl px-6 pb-12 pt-20 md:pt-24">
-      <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
         Trust center · Compliance
       </p>
       <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl">
         Compliance posture &amp; disclosure
       </h1>
-      <p class="mt-6 max-w-prose text-lg text-ink-secondary">
+      <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
         Where we are today, where we're going, and how to engage the
         platform if you've found a vulnerability or need pen-test
         evidence for a security review.
@@ -30,10 +30,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   </section>
 
   <!-- Current certifications -->
-  <section class="border-t border-white/10 bg-surface-raised">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">Certifications &amp; attestations</h2>
-      <p class="mt-3 max-w-prose text-ink-secondary">
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Certifications &amp; attestations</h2>
+      <p class="mt-3 max-w-prose text-tk-ink-2">
         We list certifications that are either in place or actively in
         progress. We don't list certifications we have no plans to
         pursue — silence on a certification means "not on the current
@@ -42,17 +42,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       <table class="mt-8 w-full text-sm">
         <thead>
-          <tr class="border-b border-white/10 text-left">
-            <th class="py-2 pr-4 font-medium text-ink-primary">Standard</th>
-            <th class="py-2 pr-4 font-medium text-ink-primary">Status</th>
-            <th class="py-2 font-medium text-ink-primary">Expected</th>
+          <tr class="border-b border-tk-border text-left">
+            <th class="py-2 pr-4 font-medium text-tk-ink">Standard</th>
+            <th class="py-2 pr-4 font-medium text-tk-ink">Status</th>
+            <th class="py-2 font-medium text-tk-ink">Expected</th>
           </tr>
         </thead>
         <tbody>
-          <tr class="border-b border-white/10">
+          <tr class="border-b border-tk-border">
             <td class="py-3 pr-4 align-top">
-              <span class="font-medium text-ink-primary">GDPR Article 28</span><br />
-              <span class="text-xs text-ink-muted">DPA with SCCs ready to sign</span>
+              <span class="font-medium text-tk-ink">GDPR Article 28</span><br />
+              <span class="text-xs text-tk-ink-3">DPA with SCCs ready to sign</span>
             </td>
             <td class="py-3 pr-4 align-top">
               <span
@@ -60,14 +60,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
                 >In place</span
               >
             </td>
-            <td class="py-3 align-top text-ink-secondary">Today — see
-              <a href="/legal/dpa" class="text-oxblood-700 underline">/legal/dpa</a>
+            <td class="py-3 align-top text-tk-ink-2">Today — see
+              <a href="/legal/dpa" class="text-tk-accent underline">/legal/dpa</a>
             </td>
           </tr>
-          <tr class="border-b border-white/10">
+          <tr class="border-b border-tk-border">
             <td class="py-3 pr-4 align-top">
-              <span class="font-medium text-ink-primary">SOC 2 Type I</span><br />
-              <span class="text-xs text-ink-muted">Trust Services Criteria (security)</span>
+              <span class="font-medium text-tk-ink">SOC 2 Type I</span><br />
+              <span class="text-xs text-tk-ink-3">Trust Services Criteria (security)</span>
             </td>
             <td class="py-3 pr-4 align-top">
               <span
@@ -75,25 +75,25 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
                 >In progress</span
               >
             </td>
-            <td class="py-3 align-top text-ink-secondary">Q3 2026 (audit window)</td>
+            <td class="py-3 align-top text-tk-ink-2">Q3 2026 (audit window)</td>
           </tr>
-          <tr class="border-b border-white/10">
+          <tr class="border-b border-tk-border">
             <td class="py-3 pr-4 align-top">
-              <span class="font-medium text-ink-primary">SOC 2 Type II</span><br />
-              <span class="text-xs text-ink-muted">After 6-month observation window</span>
+              <span class="font-medium text-tk-ink">SOC 2 Type II</span><br />
+              <span class="text-xs text-tk-ink-3">After 6-month observation window</span>
             </td>
             <td class="py-3 pr-4 align-top">
               <span
-                class="inline-block rounded-full bg-surface-elevated px-2 py-0.5 text-xs font-medium text-ink-secondary"
+                class="inline-block rounded-full bg-tk-raised px-2 py-0.5 text-xs font-medium text-tk-ink-2"
                 >Planned</span
               >
             </td>
-            <td class="py-3 align-top text-ink-secondary">Q1 2027</td>
+            <td class="py-3 align-top text-tk-ink-2">Q1 2027</td>
           </tr>
           <tr>
             <td class="py-3 pr-4 align-top">
-              <span class="font-medium text-ink-primary">Independent pen-test</span><br />
-              <span class="text-xs text-ink-muted">Annual external assessment</span>
+              <span class="font-medium text-tk-ink">Independent pen-test</span><br />
+              <span class="text-xs text-tk-ink-3">Annual external assessment</span>
             </td>
             <td class="py-3 pr-4 align-top">
               <span
@@ -101,7 +101,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
                 >Scheduled</span
               >
             </td>
-            <td class="py-3 align-top text-ink-secondary">First engagement Q3 2026</td>
+            <td class="py-3 align-top text-tk-ink-2">First engagement Q3 2026</td>
           </tr>
         </tbody>
       </table>
@@ -109,10 +109,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   </section>
 
   <!-- Pen-test access -->
-  <section class="border-t border-white/10 bg-surface-raised/40">
+  <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">Pen-test report access</h2>
-      <p class="mt-3 max-w-prose text-ink-secondary">
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Pen-test report access</h2>
+      <p class="mt-3 max-w-prose text-tk-ink-2">
         The most recent pen-test executive summary is publicly
         downloadable below. The full report — with remediation status
         per finding and unredacted methodology — is available under NDA
@@ -120,46 +120,46 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </p>
 
       <div class="mt-8 grid gap-6 md:grid-cols-2">
-        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <path d="M14 2v6h6" />
               <path d="M9 13h6M9 17h4" />
             </svg>
           </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
             Public summary
           </p>
-          <h3 class="mt-2 text-lg font-semibold text-ink-primary">
+          <h3 class="mt-2 text-lg font-semibold text-tk-ink">
             Executive summary (PDF)
           </h3>
-          <p class="mt-2 text-sm text-ink-secondary">
+          <p class="mt-2 text-sm text-tk-ink-2">
             Findings count by severity, remediation status, scope of
             the engagement. No sensitive technical detail.
           </p>
           <p class="mt-4 text-sm">
-            <span class="inline-block rounded bg-surface-elevated px-2 py-1 font-mono text-xs text-ink-secondary">
+            <span class="inline-block rounded bg-tk-raised px-2 py-1 font-mono text-xs text-tk-ink-2">
               Available after first engagement (Q3 2026)
             </span>
           </p>
         </div>
-        <div class="rounded-lg border border-white/10 bg-surface-raised p-6">
-          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+        <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
+          <div class="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="3" y="11" width="18" height="11" rx="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
           </div>
-          <p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-accent">
             Full report (NDA-gated)
           </p>
-          <h3 class="mt-2 text-lg font-semibold text-ink-primary">
+          <h3 class="mt-2 text-lg font-semibold text-tk-ink">
             Request under NDA
           </h3>
-          <p class="mt-2 text-sm text-ink-secondary">
+          <p class="mt-2 text-sm text-tk-ink-2">
             Email
-            <a href="mailto:security@driftstack.dev" class="text-oxblood-700 underline"
+            <a href="mailto:security@driftstack.dev" class="text-tk-accent underline"
               >security@driftstack.dev</a
             > with your company name and use case. We respond within
             one business day with the NDA. Approved requests receive a
@@ -171,10 +171,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   </section>
 
   <!-- Vulnerability disclosure -->
-  <section class="border-t border-white/10 bg-surface-raised">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">Vulnerability disclosure policy</h2>
-      <p class="mt-3 max-w-prose text-ink-secondary">
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Vulnerability disclosure policy</h2>
+      <p class="mt-3 max-w-prose text-tk-ink-2">
         Found a security issue? Please report it privately. We
         triage every disclosure within one business day and update
         you through to resolution.
@@ -182,17 +182,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
       <dl class="mt-8 space-y-6">
         <div>
-          <dt class="text-sm font-medium text-ink-primary">Where to report</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
-            <a href="mailto:security@driftstack.dev" class="text-oxblood-700 underline"
+          <dt class="text-sm font-medium text-tk-ink">Where to report</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
+            <a href="mailto:security@driftstack.dev" class="text-tk-accent underline"
               >security@driftstack.dev</a
             >. Use PGP if your finding involves customer data exposure
             (key fingerprint published on this page once available).
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-ink-primary">What we commit to</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
+          <dt class="text-sm font-medium text-tk-ink">What we commit to</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
             <ul class="list-inside list-disc space-y-1">
               <li>Acknowledge receipt within 2 business days.</li>
               <li>Triage + initial severity within 5 business days.</li>
@@ -211,8 +211,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           </dd>
         </div>
         <div>
-          <dt class="text-sm font-medium text-ink-primary">Safe-harbour</dt>
-          <dd class="mt-1 text-sm text-ink-secondary">
+          <dt class="text-sm font-medium text-tk-ink">Safe-harbour</dt>
+          <dd class="mt-1 text-sm text-tk-ink-2">
             We won't pursue legal action against good-faith security
             research on the platform's public surface (api.driftstack.dev,
             driftstack.dev, app.driftstack.dev) provided you:
@@ -228,20 +228,20 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   </section>
 
   <!-- Sub-processor change SLA -->
-  <section class="border-t border-white/10 bg-surface-raised/40">
+  <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">Sub-processor change SLA</h2>
-      <p class="mt-3 max-w-prose text-ink-secondary">
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Sub-processor change SLA</h2>
+      <p class="mt-3 max-w-prose text-tk-ink-2">
         Per GDPR Article 28(2) and DPA Annex 3, we provide 30 calendar
         days' notice for any material change to the sub-processor list
         (additions or replacements). Customers can object via email to
-        <a href="mailto:support@driftstack.dev" class="text-oxblood-700 underline"
+        <a href="mailto:support@driftstack.dev" class="text-tk-accent underline"
           >support@driftstack.dev</a
         > during the notice window.
       </p>
-      <p class="mt-4 max-w-prose text-ink-secondary">
+      <p class="mt-4 max-w-prose text-tk-ink-2">
         The live list is published at
-        <a href="/trust/sub-processors" class="text-oxblood-700 underline"
+        <a href="/trust/sub-processors" class="text-tk-accent underline"
           >/trust/sub-processors</a
         > and material changes are emitted as an RSS feed (subscribe
         from the same page when V-550.A lands).
@@ -250,17 +250,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
   </section>
 
   <!-- Audit-log retention -->
-  <section class="border-t border-white/10 bg-surface-raised">
+  <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-ink-primary">Audit log retention</h2>
-      <p class="mt-3 max-w-prose text-ink-secondary">
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Audit log retention</h2>
+      <p class="mt-3 max-w-prose text-tk-ink-2">
         Per ADR-006:
       </p>
-      <ul class="mt-4 max-w-prose list-inside list-disc space-y-2 text-ink-secondary">
+      <ul class="mt-4 max-w-prose list-inside list-disc space-y-2 text-tk-ink-2">
         <li>
-          <span class="font-medium text-ink-primary">Customer-facing audit log</span> —
+          <span class="font-medium text-tk-ink">Customer-facing audit log</span> —
           retained per the customer's tier (see
-          <a href="/docs/audit-log" class="text-oxblood-700 underline"
+          <a href="/docs/audit-log" class="text-tk-accent underline"
             >/docs/audit-log</a>),
           surfaced via the dashboard +
           <code class="font-mono">GET /v1/account/audit-log</code>.
@@ -268,13 +268,13 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           key mints, profile creates, billing changes).
         </li>
         <li>
-          <span class="font-medium text-ink-primary">Admin audit log</span> —
+          <span class="font-medium text-tk-ink">Admin audit log</span> —
           internal-only retention of 365 days for every privileged
           admin action. Customer access requires legal process or
           explicit customer consent.
         </li>
         <li>
-          <span class="font-medium text-ink-primary">Access logs</span> —
+          <span class="font-medium text-tk-ink">Access logs</span> —
           90 days hot, 1 year cold for forensic timeline reconstruction.
           Read-restricted to the on-call engineer + compliance lead.
         </li>

@@ -43,7 +43,7 @@ describe('W498.B apps/marketing-site/src/pages/500.astro content parity', () => 
 
   it("'This is on us, not you. The error has been captured; we'll look at it. If this is blocking something time-sensitive, email support@driftstack.dev with the URL you were on.' framing pinned — pinned so the explicit blame-claim + the captured-error reassurance + the URL-required escape-hatch all survive (drift to dropping 'with the URL you were on' would force support to play 20 questions to find which page failed)", () => {
     expect(body).toMatch(
-      /This is on us, not you\. The error has been captured and we'll look\s*\n?\s*into it\. If this is blocking something time-sensitive, email\s*\n?\s*<a href="mailto:support@driftstack\.dev" class="text-glow-red[^"]*">support@driftstack\.dev<\/a>\s*\n?\s*with the URL you were on\b/,
+      /This is on us, not you\. The error has been captured and we'll look\s*\n?\s*into it\. If this is blocking something time-sensitive, email\s*\n?\s*<a href="mailto:support@driftstack\.dev" class="text-tk-accent[^"]*">support@driftstack\.dev<\/a>\s*\n?\s*with the URL you were on\b/,
     );
   });
 

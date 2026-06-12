@@ -97,7 +97,7 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
 
   it("4-step process: Contact sales (01) → Procure hardware (02) → Onboard (03) → Run (04) — pinned so the customer-facing onboarding sequence stays consistent (drift to dropping 'Procure hardware' would hide the customer-purchased model; drift to dropping 'Onboard joint smoke test' would lose the hands-on commitment that justifies the higher SKU price)", () => {
     expect(body).toMatch(
-      /Contact sales<\/h3>\s*\n?\s*<p class="mt-2 text-sm text-ink-secondary">\s*\n?\s*Email <a href="mailto:sales@driftstack\.dev"/,
+      /Contact sales<\/h3>\s*\n?\s*<p class="mt-2 text-sm text-tk-ink-2">\s*\n?\s*Email <a href="mailto:sales@driftstack\.dev"/,
     );
     expect(body).toMatch(/Procure hardware<\/h3>/);
     expect(body).toMatch(/Onboard<\/h3>/);

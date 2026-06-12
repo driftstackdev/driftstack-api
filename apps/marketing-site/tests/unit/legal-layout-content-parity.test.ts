@@ -73,7 +73,7 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
 
   it('hero strip: mono-uppercase "Legal" chip + H1 from {title}. 2026-05-22 — H1 size/weight pinned; ink color moved onto gradient span (visual family with rest of site).', () => {
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-oxblood-700">Legal<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-accent">Legal<\/p>/,
     );
     expect(body).toMatch(/<h1 class="mt-3 text-3xl font-semibold tracking-tight md:text-4xl">/);
     expect(body).toMatch(/\{title\}/);
@@ -83,13 +83,13 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
     expect(body).toMatch(/prose-h1:hidden/);
   });
 
-  it('prose link styling: oxblood-300 + hover-underline (dark-theme prose-invert variant; 2026-05-XX dark surface migration)', () => {
-    expect(body).toMatch(/prose-a:text-oxblood-300 prose-a:no-underline hover:prose-a:underline/);
+  it('prose link styling: tk-accent + hover-underline (Fleet light tokens; prose-invert dropped with the light default)', () => {
+    expect(body).toMatch(/prose-a:text-tk-accent prose-a:no-underline hover:prose-a:underline/);
   });
 
   it('prose code styling: surface-inset background + mono + rounded + ink-primary text + no before/after pseudo-content', () => {
     expect(body).toMatch(
-      /prose-code:rounded prose-code:bg-surface-inset prose-code:px-1\.5 prose-code:py-0\.5 prose-code:font-mono prose-code:text-sm prose-code:text-ink-primary prose-code:before:content-none prose-code:after:content-none/,
+      /prose-code:rounded prose-code:bg-tk-bg prose-code:px-1\.5 prose-code:py-0\.5 prose-code:font-mono prose-code:text-sm prose-code:text-tk-ink prose-code:before:content-none prose-code:after:content-none/,
     );
   });
 
@@ -100,13 +100,13 @@ describe('W381.A marketing-site LegalLayout.astro content parity', () => {
   it('aria-label="Other legal documents" + "Other legal documents" heading', () => {
     expect(body).toMatch(/aria-label="Other legal documents"/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-ink-muted">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">\s*\n?\s*Other legal documents\s*\n?\s*<\/p>/,
     );
   });
 
   it('secondary nav renders 2-column grid + oxblood-700 hover-underline links', () => {
     expect(body).toMatch(/grid gap-1 sm:grid-cols-2/);
-    expect(body).toMatch(/text-sm text-oxblood-700 hover:underline/);
+    expect(body).toMatch(/text-sm text-tk-accent hover:underline/);
     expect(body).toMatch(/legalLinks\.map\(\(l\)/);
   });
 

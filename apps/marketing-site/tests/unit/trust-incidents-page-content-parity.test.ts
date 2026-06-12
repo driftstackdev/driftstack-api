@@ -63,23 +63,21 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
 
   it('4 "What we publish" bar entries pinned (downtime / security / sub-processor / maintenance)', () => {
     expect(body).toMatch(
-      /<p class="text-sm font-medium text-ink-primary">\s*Customer-impacting downtime\s*<\/p>/,
+      /<p class="text-sm font-medium text-tk-ink">\s*Customer-impacting downtime\s*<\/p>/,
+    );
+    expect(body).toMatch(/<p class="text-sm font-medium text-tk-ink">\s*Security events\s*<\/p>/);
+    expect(body).toMatch(
+      /<p class="text-sm font-medium text-tk-ink">\s*Sub-processor incidents\s*<\/p>/,
     );
     expect(body).toMatch(
-      /<p class="text-sm font-medium text-ink-primary">\s*Security events\s*<\/p>/,
-    );
-    expect(body).toMatch(
-      /<p class="text-sm font-medium text-ink-primary">\s*Sub-processor incidents\s*<\/p>/,
-    );
-    expect(body).toMatch(
-      /<p class="text-sm font-medium text-ink-primary">\s*Maintenance windows\s*<\/p>/,
+      /<p class="text-sm font-medium text-tk-ink">\s*Maintenance windows\s*<\/p>/,
     );
   });
 
   it('72-hour-advance maintenance window notice claim pinned', () => {
     expect(body).toMatch(/Notice at least 72 hours in advance/);
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/settings"\s*\n?\s*class="text-oxblood-700 underline">\/settings → email preferences<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.dev\/settings"\s*\n?\s*class="text-tk-accent underline">\/settings → email preferences<\/a>/,
     );
   });
 

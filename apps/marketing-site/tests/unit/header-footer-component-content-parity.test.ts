@@ -112,7 +112,7 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     expect(body).toMatch(/rel=\{item\.external \? 'noopener noreferrer' : undefined\}/);
   });
 
-  it('active-route highlighting: pathname === item.href → text-tk-accent (Fleet token; was text-glow-red). 2026-05-21 — font-medium moved from active-only to the base class (constant width prevents click-induced horizontal nudge as the active text bolds; same fix as the dashboard 50b0dd7a + admin-panel 3331f410 sidebars).', () => {
+  it('active-route highlighting: pathname === item.href → text-tk-accent (Fleet token; was text-tk-accent). 2026-05-21 — font-medium moved from active-only to the base class (constant width prevents click-induced horizontal nudge as the active text bolds; same fix as the dashboard 50b0dd7a + admin-panel 3331f410 sidebars).', () => {
     expect(body).toMatch(/pathname === item\.href && 'text-tk-accent'/);
     expect(body).toMatch(/'nav-link font-medium'/);
   });
@@ -144,10 +144,10 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     }
     // Trust + Legal sub-headed columns must NOT exist any more.
     expect(body).not.toMatch(
-      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Trust<\/h3>/,
+      /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Trust<\/h3>/,
     );
     expect(body).not.toMatch(
-      /<h3 class="font-medium text-ink-primary text-xs uppercase tracking-widest">Legal<\/h3>/,
+      /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Legal<\/h3>/,
     );
   });
 

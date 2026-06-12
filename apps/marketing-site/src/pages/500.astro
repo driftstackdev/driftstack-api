@@ -4,27 +4,27 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 <BaseLayout title="500 · Driftstack" description="Something went wrong on our end.">
   <section class="relative overflow-hidden">
-    <div class="absolute inset-0 bg-glow-radial-red opacity-60" aria-hidden="true"></div>
+    <div class="absolute inset-0 bg-glow-radial-accent opacity-60" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-3xl px-6 py-32 text-center animate-fade-up">
       <p class="section-label">500</p>
       <h1
-        class="mt-6 text-5xl font-semibold tracking-tight text-ink-primary md:text-6xl"
+        class="mt-6 text-5xl font-semibold tracking-tight text-tk-ink md:text-6xl"
         style="letter-spacing: -0.03em;"
       >
         Something went wrong on our end.
       </h1>
-      <p class="mt-6 max-w-prose mx-auto text-ink-secondary leading-relaxed">
+      <p class="mt-6 max-w-prose mx-auto text-tk-ink-2 leading-relaxed">
         This is on us, not you. The error has been captured and we'll look
         into it. If this is blocking something time-sensitive, email
-        <a href="mailto:support@driftstack.dev" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft">support@driftstack.dev</a>
+        <a href="mailto:support@driftstack.dev" class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft">support@driftstack.dev</a>
         with the URL you were on and we'll get back to you.
       </p>
       <div class="mt-10 flex flex-wrap justify-center gap-4">
         <a href="/" class="btn-primary">Back home</a>
         <a href="https://status.driftstack.dev" class="btn-secondary">See status</a>
       </div>
-      <p class="mt-8 text-xs text-ink-muted">
-        Live status: <a href="https://status.driftstack.dev" class="text-glow-red underline underline-offset-4 hover:text-glow-red-soft">status.driftstack.dev</a>.
+      <p class="mt-8 text-xs text-tk-ink-3">
+        Live status: <a href="https://status.driftstack.dev" class="text-tk-accent underline underline-offset-4 hover:text-tk-accent-soft">status.driftstack.dev</a>.
       </p>
     </div>
   </section>
