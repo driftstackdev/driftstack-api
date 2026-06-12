@@ -129,6 +129,7 @@ function DeviceToolbar({
   pinned,
   onToggleRotate,
   onTogglePinned,
+  onToggleInfo,
 }: {
   deviceName: string;
   profileName: string;
@@ -136,6 +137,7 @@ function DeviceToolbar({
   pinned: boolean;
   onToggleRotate: () => void;
   onTogglePinned: () => void;
+  onToggleInfo: () => void;
 }): JSX.Element {
   return (
     <div
@@ -195,6 +197,15 @@ function DeviceToolbar({
             strokeLinejoin="round"
           >
             <path d="M12 17v5" />
+            <button
+              type="button"
+              aria-label="Session info"
+              title="Session info"
+              onClick={onToggleInfo}
+              className="grid h-4 w-4 place-items-center rounded text-[10px] text-ink-muted transition hover:text-ink-primary"
+            >
+              ⓘ
+            </button>
             <path d="M9 3h6l-1 7 3 3H7l3-3z" />
           </svg>
         </button>
@@ -314,6 +325,8 @@ export function SimulatorWindow(): JSX.Element {
   // macOS allows inside one app (a per-window Dock icon needs a helper app
   // bundle — scoped as a post-launch item).
   const [pinned, setPinned] = useState(true);
+  // Cockpit info overlay (demo-concepts arc): session facts at a glance.
+  const [infoOpen, setInfoOpen] = useState(false);
   const togglePinned = (): void => {
     const next = !pinned;
     setPinned(next);
@@ -376,6 +389,7 @@ export function SimulatorWindow(): JSX.Element {
             pinned={pinned}
             onToggleRotate={toggleRotate}
             onTogglePinned={togglePinned}
+            onToggleInfo={() => setInfoOpen((v) => !v)}
           />
           {/* Device body — the bezel. data-tauri-drag-region makes the frame a
               window-drag handle; the inner screen overrides it so taps reach the
@@ -394,6 +408,19 @@ export function SimulatorWindow(): JSX.Element {
               className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black"
             >
               <IosStatusBar />
+              {infoOpen && (
+                <div
+                  data-component="simulator-info-overlay"
+                  className="absolute right-2 top-12 z-10 w-52 rounded-lg border border-white/15 bg-black/80 p-3 font-mono text-[10px] leading-relaxed text-white/80 backdrop-blur"
+                >
+                  <div className="mb-1 font-sans text-[11px] font-semibold text-white">Session</div>
+                  {profileName !== '' && <div className="truncate">profile {profileName}</div>}
+                  <div className="truncate">device {deviceName}</div>
+                  <div className="truncate">
+                    link {info ? new URL(info.ws_url).host : 'not connected'}
+                  </div>
+                </div>
+              )}
               <div className="relative min-h-0 flex-1">
                 <AgentSessionPanel
                   info={info}
