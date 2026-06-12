@@ -98,6 +98,40 @@ export async function saveProfileMeta(
   return all;
 }
 
+/** Bulk variant: apply the same partial to MANY profiles in one load/save
+ *  round-trip (the bulk-select bar's move-to-folder / add-tag actions).
+ *  `mode` controls tag semantics: 'merge' unions tags into each profile's
+ *  existing set; 'replace' overwrites fields verbatim (folder always
+ *  overwrites — a profile lives in one folder). */
+export async function saveProfilesMetaBulk(
+  profileIds: string[],
+  meta: Partial<ProfileMeta>,
+  mode: 'merge' | 'replace' = 'merge',
+  liveProfileIds?: string[],
+): Promise<ProfilesMetaMap> {
+  const all = await loadProfilesMeta();
+  for (const id of profileIds) {
+    if (id.length === 0) continue;
+    const current = all[id] ?? { folder: '', tags: [], note: '' };
+    const nextTags =
+      mode === 'merge' && meta.tags ? [...current.tags, ...meta.tags] : (meta.tags ?? current.tags);
+    all[id] = cleanEntry({
+      ...current,
+      ...meta,
+      tags: nextTags,
+    });
+  }
+  if (liveProfileIds) {
+    const live = new Set(liveProfileIds);
+    for (const id of Object.keys(all)) {
+      if (!live.has(id)) delete all[id];
+    }
+  }
+  await getStore().set(META_KEY, all);
+  await getStore().save();
+  return all;
+}
+
 /** Distinct folder names across the map, sorted, excluding unfiled. */
 export function folderList(meta: ProfilesMetaMap): string[] {
   const set = new Set<string>();

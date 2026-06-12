@@ -93,6 +93,19 @@ describe('profiles-meta store', () => {
     expect(await loadProfilesMeta()).toEqual({});
   });
 
+  it('bulk: merge unions tags + folder overwrites; replace overwrites tags', async () => {
+    const { saveProfilesMetaBulk } = await import('../../src/lib/profiles-meta');
+    await saveProfileMeta('a', { tags: ['x'], folder: 'Old' });
+    await saveProfilesMetaBulk(['a', 'b'], { folder: 'New', tags: ['y'] }, 'merge');
+    let all = await loadProfilesMeta();
+    expect(all['a']).toEqual({ folder: 'New', tags: ['x', 'y'], note: '' });
+    expect(all['b']).toEqual({ folder: 'New', tags: ['y'], note: '' });
+    await saveProfilesMetaBulk(['a'], { tags: ['z'] }, 'replace');
+    all = await loadProfilesMeta();
+    expect(all['a']!.tags).toEqual(['z']);
+    expect(all['a']!.folder).toBe('New');
+  });
+
   it('folderList: distinct, sorted, unfiled excluded', () => {
     expect(
       folderList({

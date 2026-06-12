@@ -13,6 +13,7 @@ import {
   folderList,
   loadProfilesMeta,
   saveProfileMeta,
+  saveProfilesMetaBulk,
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
@@ -164,6 +165,10 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   const [profilesMeta, setProfilesMeta] = useState<ProfilesMetaMap>({});
   const [folderFilter, setFolderFilter] = useState<string>('all');
   const [organizeId, setOrganizeId] = useState<string | null>(null);
+  // Increment 3 — bulk select: client-side organize actions over a selection.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkFolder, setBulkFolder] = useState('');
+  const [bulkTag, setBulkTag] = useState('');
   // Onboarding checklist dismissal — webview localStorage persists per
   // install. Guarded: some embeddings/test environments stub storage out.
   const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
@@ -498,6 +503,33 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     setOrganizeId(null);
   }
 
+  function toggleSelected(id: string): void {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleBulkApply(): Promise<void> {
+    if (selectedIds.size === 0) return;
+    const meta: { folder?: string; tags?: string[] } = {};
+    if (bulkFolder.trim().length > 0) meta.folder = bulkFolder.trim();
+    if (bulkTag.trim().length > 0) meta.tags = [bulkTag.trim()];
+    if (meta.folder === undefined && meta.tags === undefined) return;
+    const next = await saveProfilesMetaBulk(
+      [...selectedIds],
+      meta,
+      'merge',
+      state.profiles.map((p) => p.id),
+    );
+    setProfilesMeta(next);
+    setSelectedIds(new Set());
+    setBulkFolder('');
+    setBulkTag('');
+  }
+
   async function handleStop(profile: Profile): Promise<void> {
     if (!client) return;
     const bound = boundSession(profile.id);
@@ -747,6 +779,45 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
         )}
       </header>
 
+      {selectedIds.size > 0 && (
+        <div
+          data-component="bulk-bar"
+          className="flex flex-wrap items-center gap-2 rounded-md border border-surface-divider bg-surface-raised px-3 py-2"
+        >
+          <span className="text-xs font-medium text-ink-primary">
+            {selectedIds.size.toString()} selected
+          </span>
+          <input
+            aria-label="Bulk folder"
+            placeholder="Move to folder…"
+            className="w-36 rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
+            value={bulkFolder}
+            onChange={(e) => setBulkFolder(e.target.value)}
+          />
+          <input
+            aria-label="Bulk tag"
+            placeholder="Add tag…"
+            className="w-32 rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
+            value={bulkTag}
+            onChange={(e) => setBulkTag(e.target.value)}
+          />
+          <button
+            type="button"
+            className="btn-primary px-2.5 py-1 text-xs"
+            onClick={() => void handleBulkApply()}
+            disabled={bulkFolder.trim().length === 0 && bulkTag.trim().length === 0}
+          >
+            Apply
+          </button>
+          <button
+            type="button"
+            className="text-xs text-ink-muted hover:text-ink-primary"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Clear
+          </button>
+        </div>
+      )}
       {state.error !== null && (
         <ErrorBanner
           message={state.error}
@@ -925,6 +996,13 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                         running ? 'bg-emerald-500' : 'bg-ink-muted/40'
                       }`}
                       aria-label={running ? 'Running' : 'Idle'}
+                    />
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${profile.name}`}
+                      className="h-3.5 w-3.5 accent-[var(--accent)]"
+                      checked={selectedIds.has(profile.id)}
+                      onChange={() => toggleSelected(profile.id)}
                     />
                     <p className="text-sm font-medium text-ink-primary">{profile.name}</p>
                     {(profilesMeta[profile.id]?.folder ?? '') !== '' && (
