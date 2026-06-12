@@ -219,6 +219,20 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     return () => window.clearInterval(id);
   }, [refresh]);
 
+  async function handleDuplicate(profile: Profile): Promise<void> {
+    if (!client || busyId !== null) return;
+    setBusyId(profile.id);
+    try {
+      // Backend clone: server-side copy of the profile's sealed state +
+      // archetype under a fresh identity (POST /v1/profiles/:id/clone).
+      await client.profiles.clone(profile.id);
+      await refresh(false);
+      await refreshAccountMe();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handleDelete(id: string): Promise<void> {
     if (!client) return;
     setBusyId(id);
@@ -996,6 +1010,19 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                       {busy ? 'Launching…' : 'Launch'}
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="text-xs text-ink-muted hover:text-ink-primary"
+                    onClick={() => void handleDuplicate(profile)}
+                    disabled={busy || atProfileCap}
+                    title={
+                      atProfileCap
+                        ? 'Profile cap reached — delete a profile or upgrade to duplicate'
+                        : 'Server-side copy: same archetype + state, fresh identity'
+                    }
+                  >
+                    Duplicate
+                  </button>
                   <button
                     type="button"
                     className="text-xs text-ink-muted hover:text-status-error"
