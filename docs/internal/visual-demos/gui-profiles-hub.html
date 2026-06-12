@@ -879,6 +879,48 @@
         );
       }
     </script>
+    <!-- (3) onboarding checklist — first-run guidance card (proposal) -->
+    <div
+      style="
+        position: fixed;
+        left: 18px;
+        bottom: 18px;
+        width: 290px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 14px 16px;
+        box-shadow: 0 18px 50px -18px rgb(0 0 0 / 0.3);
+      "
+    >
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-weight: 600;
+          font-size: 13px;
+        "
+      >
+        <span>Get set up</span>
+        <span style="font-family: var(--mono); font-size: 10px; color: var(--ink-3)">2/4</span>
+      </div>
+      <div style="margin-top: 8px; display: grid; gap: 5px; font-size: 12px">
+        <div style="color: var(--ink-3)">
+          <span style="color: var(--ready, #0c9a5d)">✓</span> Connect your account
+        </div>
+        <div style="color: var(--ink-3)">
+          <span style="color: var(--ready, #0c9a5d)">✓</span> Create your first profile
+        </div>
+        <div style="color: var(--ink)">
+          <span style="color: var(--accent)">→</span> Launch a session
+        </div>
+        <div style="color: var(--ink-3)">○ Try the AI agent</div>
+      </div>
+      <div style="margin-top: 10px; height: 4px; border-radius: 99px; background: var(--hover)">
+        <div style="width: 50%; height: 100%; border-radius: 99px; background: var(--accent)"></div>
+      </div>
+    </div>
     <!-- PROPOSAL MOCKS (2026-06-12, founder mandate: extend demos ahead of production) -->
     <!-- (1) ⌘K command palette — navigate, launch, quick-session from anywhere -->
     <div
