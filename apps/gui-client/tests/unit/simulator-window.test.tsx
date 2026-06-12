@@ -34,6 +34,22 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(screen?.getAttribute('data-tauri-drag-region')).toBe('false');
   });
 
+  it('renders the iOS status bar (live clock + glyphs) over the screen, taps still pass through', () => {
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok');
+    const { container } = render(<SimulatorWindow />);
+    const statusBar = container.querySelector('[data-component="simulator-statusbar"]');
+    expect(statusBar).not.toBeNull();
+    // Live clock in iOS h:mm shape (no leading-zero hour, no AM/PM).
+    expect(statusBar?.textContent).toMatch(/^\d{1,2}:\d{2}$/);
+    // Cellular / Wi-Fi / battery glyphs.
+    expect(statusBar?.querySelectorAll('svg').length).toBe(3);
+    // Cosmetic overlay — must NOT intercept taps meant for the device screen.
+    expect(statusBar?.className).toContain('pointer-events-none');
+    // It lives inside the screen (over the video), not the bezel.
+    const screen = container.querySelector('[data-component="simulator-screen"]');
+    expect(screen?.querySelector('[data-component="simulator-statusbar"]')).not.toBeNull();
+  });
+
   it('shows a no-session hint (no device frame) when the query lacks ws/token', () => {
     window.history.pushState({}, '', '/?window=simulator');
     const { container } = render(<SimulatorWindow />);
