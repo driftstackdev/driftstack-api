@@ -169,6 +169,21 @@ export class FleetControlConnection {
           this.onProfileSaveFailed?.(frame);
           break;
         // heartbeat / capabilityReport / errorEvent: accepted, not yet consumed.
+        //
+        // FORWARD-GUARD (A3 bus W1859): an `errorEvent` (summary/detail) and an
+        // errored `sessionStatus.detail` can carry the Mac fleet NODE's real IP on
+        // an egress-leak diagnostic — detail like "proxied=<customer-proxy-exit>
+        // direct=<node-ip>", where `direct=` is the node's own IP (the value the
+        // proxy exists to hide; surfacing it to a customer is infra deanonymisation).
+        // These are node-local OPS diagnostics ONLY. Today no node IP reaches a
+        // customer: errorEvent is ignored here, and the consumed errored
+        // `sessionStatus` is prefix-filtered to `intent_dispatch_no_session` in
+        // onSessionError (so the egress-leak detail never matches). If a future
+        // consumer is wired here (or in onSessionError) that relays any of these to
+        // a CUSTOMER surface (webhook / SDK error / dashboard), it MUST scrub the
+        // `direct=` node IP from the detail/summary first. Do not widen this without
+        // that scrub. (A3 already scrubs the customer-facing ErrorEvent.summary
+        // harness-side; this guard keeps the CP-side relay boundary honest too.)
       }
     } catch {
       // A handler threw on a valid frame — swallow so the node's receive loop (and
