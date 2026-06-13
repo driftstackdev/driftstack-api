@@ -32,7 +32,7 @@ const navItems = [
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-mode="light" data-accent="violet">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -40,13 +40,13 @@ const navItems = [
     <meta name="description" content={description} />
     <!-- Admin panel must NEVER be indexed; staff-only surface. -->
     <meta name="robots" content="noindex,nofollow" />
-    <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=2" />
+    <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=3" />
   </head>
-  <body class="bg-slate-50 text-slate-900">
+  <body class="bg-tk-bg text-tk-ink">
     {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR operators skip the nav. */}
     <a
       href="#main-content"
-      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-oxblood-700 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-tk-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white"
     >
       Skip to main content
     </a>
@@ -66,22 +66,22 @@ const navItems = [
       }
     </style>
     <header
-      class="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 md:hidden"
+      class="flex items-center justify-between border-b border-tk-border bg-tk-surface px-4 py-3 md:hidden"
     >
       {/* 2026-05-23 — group hover-scale on logo. */}
       <a
         href="/"
-        class="group flex items-center gap-2 font-mono text-base font-semibold text-slate-900"
+        class="group flex items-center gap-2 font-mono text-base font-semibold text-tk-ink"
       >
         <img
-          src="/driftstack-mark.svg?v=2"
+          src="/driftstack-mark.svg?v=3"
           alt="Driftstack"
           width="28"
           height="28"
           class="inline-block h-7 w-7 transition-transform duration-300 group-hover:scale-110"
         />
-        <span>driftstack</span>
-        <span class="ml-2 rounded-full bg-oxblood-50 px-2 py-0.5 font-mono text-xs uppercase tracking-wide text-oxblood-700">
+        <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK</span></span>
+        <span class="ml-2 rounded-full bg-tk-accent/10 px-2 py-0.5 font-mono text-xs uppercase tracking-wide text-tk-accent">
           admin
         </span>
       </a>
@@ -90,7 +90,7 @@ const navItems = [
         data-mobile-nav-toggle
         aria-label="Toggle navigation"
         aria-expanded="false"
-        class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:text-slate-900"
+        class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-tk-border text-tk-ink-2 hover:text-tk-ink"
       >
         <svg
           data-mobile-nav-icon="closed"
@@ -122,28 +122,28 @@ const navItems = [
       </button>
     </header>
     <div class="flex min-h-screen">
-      <aside data-mobile-nav class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">
+      <aside data-mobile-nav class="hidden w-56 shrink-0 border-r border-tk-border bg-tk-surface md:block">
         {/*
-          V-219* — D-badge + lowercase font-mono "driftstack" wordmark
-          matches the marketing-site Header pattern. The "admin" pill
+          V-219* / Fleet port — W2 wordmark (DRIFTSTACK black-italic two-tone)
+          matches the marketing-site Header brand. The "admin" pill
           stays alongside as the staff-context indicator.
         */}
-        <div class="flex h-16 items-center justify-between gap-3 px-6 border-b border-slate-200">
+        <div class="flex h-16 items-center justify-between gap-3 px-6 border-b border-tk-border">
           <a
             href="/"
-            class="group flex items-center gap-2 font-mono text-base font-semibold text-slate-900"
+            class="group flex items-center gap-2 font-mono text-base font-semibold text-tk-ink"
           >
             <img
-              src="/driftstack-mark.svg?v=2"
+              src="/driftstack-mark.svg?v=3"
               alt="Driftstack"
               width="28"
               height="28"
               class="inline-block h-7 w-7 transition-transform duration-300 group-hover:scale-110"
             />
-            <span>driftstack</span>
+            <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK</span></span>
           </a>
           <span
-            class="rounded-full bg-oxblood-50 px-2 py-0.5 font-mono text-xs uppercase tracking-wide text-oxblood-700"
+            class="rounded-full bg-tk-accent/10 px-2 py-0.5 font-mono text-xs uppercase tracking-wide text-tk-accent"
           >
             admin
           </span>
@@ -166,8 +166,8 @@ const navItems = [
                       // DashboardLayout 50b0dd7a.
                       'block rounded-md px-3 py-2 text-sm font-medium transition-colors',
                       pathname === item.href || pathname.startsWith(item.href + '/')
-                        ? 'bg-oxblood-50 text-oxblood-700'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                        ? 'bg-tk-accent/10 text-tk-accent'
+                        : 'text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink',
                     ]}
                   >
                     {item.label}
@@ -177,12 +177,12 @@ const navItems = [
             }
           </ul>
         </nav>
-        <div class="border-t border-slate-200 px-6 py-4 text-xs text-slate-500">
+        <div class="border-t border-tk-border px-6 py-4 text-xs text-tk-ink-3">
           <p>Staff-only surface. All actions audit-logged.</p>
           <button
             type="button"
             data-signout
-            class="mt-2 text-slate-500 hover:text-oxblood-700"
+            class="mt-2 text-tk-ink-3 hover:text-tk-accent"
           >
             Sign out
           </button>
@@ -211,10 +211,10 @@ const navItems = [
       aria-modal="true"
       aria-labelledby="ds-confirm-message"
     >
-      <div class="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
-        <p data-ds-confirm-message id="ds-confirm-message" class="whitespace-pre-line text-sm text-slate-900"></p>
+      <div class="w-full max-w-md rounded-lg border border-tk-border bg-tk-surface p-6 shadow-xl">
+        <p data-ds-confirm-message id="ds-confirm-message" class="whitespace-pre-line text-sm text-tk-ink"></p>
         <div class="mt-6 flex justify-end gap-3">
-          <button type="button" data-ds-confirm-cancel class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="button" data-ds-confirm-cancel class="rounded-md border border-tk-border px-4 py-2 text-sm text-tk-ink-2 hover:bg-tk-bg">Cancel</button>
           <button type="button" data-ds-confirm-ok class="rounded-md bg-red-700 px-4 py-2 text-sm font-medium text-white hover:bg-red-800">Confirm</button>
         </div>
       </div>
@@ -226,12 +226,12 @@ const navItems = [
       aria-modal="true"
       aria-labelledby="ds-prompt-message"
     >
-      <div class="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
-        <p data-ds-prompt-message id="ds-prompt-message" class="whitespace-pre-line text-sm text-slate-900"></p>
-        <input type="text" data-ds-prompt-input class="mt-4 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-oxblood-700 focus:outline-none" />
+      <div class="w-full max-w-md rounded-lg border border-tk-border bg-tk-surface p-6 shadow-xl">
+        <p data-ds-prompt-message id="ds-prompt-message" class="whitespace-pre-line text-sm text-tk-ink"></p>
+        <input type="text" data-ds-prompt-input class="mt-4 w-full rounded-md border border-tk-border bg-tk-surface px-3 py-2 text-sm text-tk-ink placeholder:text-tk-ink-3 focus:border-tk-accent focus:outline-none" />
         <div class="mt-6 flex justify-end gap-3">
-          <button type="button" data-ds-prompt-cancel class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" data-ds-prompt-ok class="rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white hover:bg-oxblood-800">OK</button>
+          <button type="button" data-ds-prompt-cancel class="rounded-md border border-tk-border px-4 py-2 text-sm text-tk-ink-2 hover:bg-tk-bg">Cancel</button>
+          <button type="button" data-ds-prompt-ok class="rounded-md bg-tk-accent px-4 py-2 text-sm font-medium text-white hover:bg-tk-accent-hover">OK</button>
         </div>
       </div>
     </div>

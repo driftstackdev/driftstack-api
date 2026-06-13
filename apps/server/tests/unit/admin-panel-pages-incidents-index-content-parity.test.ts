@@ -88,13 +88,13 @@ describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity
 
   it("Open empty-state framing: 'No open incidents. All systems operational.' — pinned so a zero-open-incidents state reads as positive ('all systems operational') rather than a neutral 'no entries' message (operators glancing at this page should see 'good' vs 'bad' at a glance)", () => {
     expect(body).toMatch(
-      /<div class="dashboard-card text-center text-sm text-slate-500">\s*\n?\s*No open incidents\. All systems operational\.\s*\n?\s*<\/div>/,
+      /<div class="dashboard-card text-center text-sm text-tk-ink-3">\s*\n?\s*No open incidents\. All systems operational\.\s*\n?\s*<\/div>/,
     );
   });
 
   it("rebuild() open-list render: checks open.length === 0 → renders the 'No open incidents. All systems operational.' card + sets data-open-count text; non-empty → maps to openLi rows — pinned so the live-replacement path matches the SSG path's empty-state copy + count-tracking", () => {
     expect(body).toMatch(
-      /if \(open\.length === 0\) \{\s*\n?\s*html \+=\s*\n?\s*'<div class="dashboard-card text-center text-sm text-slate-500">No open incidents\. All systems operational\.<\/div>';\s*\n?\s*\} else \{\s*\n?\s*html \+= '<ul class="space-y-3">' \+ open\.map\(openLi\)\.join\(''\) \+ '<\/ul>';\s*\n?\s*\}/,
+      /if \(open\.length === 0\) \{\s*\n?\s*html \+=\s*\n?\s*'<div class="dashboard-card text-center text-sm text-tk-ink-3">No open incidents\. All systems operational\.<\/div>';\s*\n?\s*\} else \{\s*\n?\s*html \+= '<ul class="space-y-3">' \+ open\.map\(openLi\)\.join\(''\) \+ '<\/ul>';\s*\n?\s*\}/,
     );
   });
 

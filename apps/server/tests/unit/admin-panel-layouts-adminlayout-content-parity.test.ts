@@ -61,13 +61,14 @@ describe('admin-panel layouts/AdminLayout content parity', () => {
     expect(body).toMatch(/<meta name="robots" content="noindex,nofollow" \/>/);
   });
 
-  it('V-219 brand framing pinned: D-badge + lowercase font-mono "driftstack" wordmark + "admin" pill (staff-context indicator). Drift to dropping the admin pill would let staff confuse the admin surface with the customer dashboard at a glance', () => {
-    expect(body).toMatch(/V-219\* — D-badge \+ lowercase font-mono "driftstack" wordmark/);
-    expect(body).toMatch(/staff-context indicator/);
-    expect(body).toMatch(/<span>driftstack<\/span>/);
-    expect(body).toMatch(
-      /class="rounded-full bg-oxblood-50 px-2 py-0\.5 font-mono text-xs uppercase tracking-wide text-oxblood-700"\s*\n?\s*>\s*\n?\s*admin/,
+  it('V-219/Fleet brand pinned: L2 mark + W2 wordmark (DRIFTSTACK black-italic two-tone) + "admin" pill (staff-context indicator). Drift to dropping the admin pill would let staff confuse the admin surface with the customer dashboard at a glance', () => {
+    expect(body).toContain(
+      '<span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK</span></span>',
     );
+    expect(body).toMatch(
+      /rounded-full bg-tk-accent\/10 px-2 py-0\.5 font-mono text-xs uppercase tracking-wide text-tk-accent/,
+    );
+    expect(body).toMatch(/admin\s*<\/span>/);
   });
 
   it("11-item admin nav pinned (Overview / Accounts / Cost / Audit log / Incidents / Status subs / Leads / Sessions / API keys / Webhook DLQ / Rate limits). Drift to dropping any would break admin's at-a-glance nav for an operational surface staff use daily", () => {

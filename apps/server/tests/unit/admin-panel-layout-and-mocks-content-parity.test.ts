@@ -73,25 +73,26 @@ describe('W789 admin-panel AdminLayout + mocks content parity', () => {
   it('CRITICAL V-219* D-badge + lowercase \'driftstack\' wordmark framing pinned. The \'V-219* — D-badge + lowercase font-mono "driftstack" wordmark matches the marketing-site Header pattern. The "admin" pill stays alongside as the staff-context indicator\' wording threads the brand consistency anchor.', () => {
     const p = read(LAYOUT);
 
-    expect(p).toMatch(/V-219\* — D-badge \+ lowercase font-mono "driftstack" wordmark/);
-    expect(p).toMatch(/matches the marketing-site Header pattern\. The "admin" pill/);
+    expect(p).toMatch(/V-219\* \/ Fleet port — W2 wordmark \(DRIFTSTACK black-italic two-tone\)/);
+    expect(p).toMatch(/matches the marketing-site Header brand\./);
+    expect(p).toMatch(/The "admin" pill\s*\n?\s*stays alongside as the staff-context indicator/);
     expect(p).toMatch(/stays alongside as the staff-context indicator\./);
   });
 
-  it('CRITICAL driftstack-mark.svg favicon + brand mark with cache-bust v=2 pinned. Drift to dropping the cache-bust would let old logos persist on staff browsers.', () => {
+  it('CRITICAL driftstack-mark.svg favicon + brand mark with cache-bust v=3 pinned (v3 = L2 rebrand bytes). Drift to dropping the cache-bust would let old logos persist on staff browsers.', () => {
     const p = read(LAYOUT);
 
     expect(p).toMatch(
-      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=2" \/>/,
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=3" \/>/,
     );
-    expect(p).toMatch(/src="\/driftstack-mark\.svg\?v=2"/);
+    expect(p).toMatch(/src="\/driftstack-mark\.svg\?v=3"/);
   });
 
-  it("CRITICAL 'admin' pill styling pinned — bg-oxblood-50 + text-oxblood-700 + font-mono uppercase. The oxblood-50 background distinguishes admin from customer-side blue palettes.", () => {
+  it("CRITICAL 'admin' pill styling pinned — bg-tk-accent/10 + text-tk-accent + font-mono uppercase. The oxblood-50 background distinguishes admin from customer-side blue palettes.", () => {
     const p = read(LAYOUT);
 
     expect(p).toMatch(
-      /class="rounded-full bg-oxblood-50 px-2 py-0\.5 font-mono text-xs uppercase tracking-wide text-oxblood-700"/,
+      /class="rounded-full bg-tk-accent\/10 px-2 py-0\.5 font-mono text-xs uppercase tracking-wide text-tk-accent"/,
     );
     expect(p).toMatch(/>\s*\n\s+admin\s*\n\s+<\/span>/);
   });
@@ -100,9 +101,9 @@ describe('W789 admin-panel AdminLayout + mocks content parity', () => {
     const p = read(LAYOUT);
 
     expect(p).toMatch(
-      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n\s+\? 'bg-oxblood-50 text-oxblood-700'/,
+      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n\s+\? 'bg-tk-accent\/10 text-tk-accent'/,
     );
-    expect(p).toMatch(/: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'/);
+    expect(p).toMatch(/: 'text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink'/);
     expect(p).toMatch(/text-sm font-medium transition-colors/);
   });
 
@@ -112,17 +113,17 @@ describe('W789 admin-panel AdminLayout + mocks content parity', () => {
     expect(p).toMatch(/<p>Staff-only surface\. All actions audit-logged\.<\/p>/);
   });
 
-  it('CRITICAL light-theme body pinned — bg-slate-50 + text-slate-900. The admin uses inverted palette vs customer dashboard which is dark.', () => {
+  it('CRITICAL light-theme body pinned — bg-tk-bg + text-tk-ink. The admin uses inverted palette vs customer dashboard which is dark.', () => {
     const p = read(LAYOUT);
 
-    expect(p).toMatch(/<body class="bg-slate-50 text-slate-900">/);
+    expect(p).toMatch(/<body class="bg-tk-bg text-tk-ink">/);
   });
 
   it('CRITICAL desktop-only sidebar pinned — hidden + md:block on w-56 aside. Drift to mobile-visible would leak admin nav on phones. 2026-05-21 — aside also carries `data-mobile-nav` so the md:hidden hamburger can flip it to a fullscreen overlay via html[data-mobile-nav-open=true] CSS. hidden+md:block default still holds for desktop posture.', () => {
     const p = read(LAYOUT);
 
     expect(p).toMatch(
-      /<aside data-mobile-nav class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">/,
+      /<aside data-mobile-nav class="hidden w-56 shrink-0 border-r border-tk-border bg-tk-surface md:block">/,
     );
   });
 

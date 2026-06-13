@@ -91,7 +91,7 @@ describe('W489.C apps/admin-panel/src/pages/api-keys.astro content parity', () =
 
   it("Revoked-row visual treatment: SSG row class:list with opacity-60 when revokedAt !== null + inline rowHtml opacityClass = revoked ? 'opacity-60' : '' — pinned so revoked keys stay visible but visually de-emphasized (drift to hiding revoked keys would lose audit-history visibility) and drift between SSG + inline opacity-class would cause a hydrate flash", () => {
     expect(body).toMatch(
-      /class:list=\{\['hover:bg-slate-50', key\.revokedAt !== null && 'opacity-60'\]\}/,
+      /class:list=\{\['hover:bg-tk-bg', key\.revokedAt !== null && 'opacity-60'\]\}/,
     );
     expect(body).toMatch(
       /const revoked = k\.revoked_at !== null;\s*\n?\s*const opacityClass = revoked \? 'opacity-60' : '';/,
@@ -100,10 +100,10 @@ describe('W489.C apps/admin-panel/src/pages/api-keys.astro content parity', () =
 
   it('Status-badge 2-tone duplicated: revoked → slate-100/slate-600 + active → emerald-50/emerald-700 (SSG ternary + inline statusBadge const) — pinned so the active/revoked binary stays visually distinct + drift between the two render paths would cause a hydrate flash', () => {
     expect(body).toMatch(
-      /\{key\.revokedAt !== null \? \(\s*\n?\s*<span class="inline-flex rounded-full bg-slate-100 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-slate-600">\s*\n?\s*revoked\s*\n?\s*<\/span>\s*\n?\s*\) : \(\s*\n?\s*<span class="inline-flex rounded-full bg-emerald-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-emerald-700">\s*\n?\s*active\s*\n?\s*<\/span>\s*\n?\s*\)\}/,
+      /\{key\.revokedAt !== null \? \(\s*\n?\s*<span class="inline-flex rounded-full bg-tk-hover px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">\s*\n?\s*revoked\s*\n?\s*<\/span>\s*\n?\s*\) : \(\s*\n?\s*<span class="inline-flex rounded-full bg-emerald-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-emerald-700">\s*\n?\s*active\s*\n?\s*<\/span>\s*\n?\s*\)\}/,
     );
     expect(body).toMatch(
-      /const statusBadge = revoked\s*\n?\s*\? '<span class="inline-flex rounded-full bg-slate-100 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-slate-600">revoked<\/span>'\s*\n?\s*: '<span class="inline-flex rounded-full bg-emerald-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-emerald-700">active<\/span>';/,
+      /const statusBadge = revoked\s*\n?\s*\? '<span class="inline-flex rounded-full bg-tk-hover px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">revoked<\/span>'\s*\n?\s*: '<span class="inline-flex rounded-full bg-emerald-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-emerald-700">active<\/span>';/,
     );
   });
 

@@ -43,7 +43,7 @@ function fmtIso(iso: string | null): string {
 const STATUS_BADGE: Record<string, string> = {
   active: 'bg-emerald-50 text-emerald-700',
   suspended: 'bg-amber-50 text-amber-700',
-  deleted: 'bg-slate-100 text-slate-600',
+  deleted: 'bg-tk-hover text-tk-ink-2',
 };
 
 import { resolveApiBaseUrl } from '../../lib/api-base-url';
@@ -59,24 +59,24 @@ const accountId = account.id;
   >
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
       role="status"
     >
     </div>
 
     <header class="mb-10">
-      <p class="text-sm text-slate-500">
-        <a href="/accounts" class="text-oxblood-700 hover:underline">← Back to accounts</a>
+      <p class="text-sm text-tk-ink-3">
+        <a href="/accounts" class="text-tk-accent hover:underline">← Back to accounts</a>
       </p>
       <div class="mt-2 flex items-start justify-between gap-6">
         <div>
           <h1
-            class="text-3xl font-semibold tracking-tight text-slate-900"
+            class="text-3xl font-semibold tracking-tight text-tk-ink"
             data-field="title-name"
           >{account.name ?? account.email}</h1>
           <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true"></div>
-          <p class="mt-1 text-sm text-slate-500" data-field="title-email">{account.email}</p>
-          <p class="mt-2 font-mono text-xs text-slate-500">acc_{account.id}</p>
+          <p class="mt-1 text-sm text-tk-ink-3" data-field="title-email">{account.email}</p>
+          <p class="mt-2 font-mono text-xs text-tk-ink-3">acc_{account.id}</p>
         </div>
         <span
           data-field="status-badge"
@@ -94,8 +94,8 @@ const accountId = account.id;
     {/* 2026-05-23 — icon on Account facts card. */}
     <section class="dashboard-card">
       <div class="flex items-start justify-between">
-        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Account</p>
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+        <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Account</p>
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="7" r="4" />
             <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
@@ -104,22 +104,22 @@ const accountId = account.id;
       </div>
       <dl class="mt-4 grid gap-4 md:grid-cols-2">
         <div class="flex justify-between border-b border-slate-100 pb-2">
-          <dt class="text-sm text-slate-500">Tier</dt>
-          <dd class="font-mono text-sm text-slate-900" data-field="tier">{account.tier}</dd>
+          <dt class="text-sm text-tk-ink-3">Tier</dt>
+          <dd class="font-mono text-sm text-tk-ink" data-field="tier">{account.tier}</dd>
         </div>
         <div class="flex justify-between border-b border-slate-100 pb-2">
-          <dt class="text-sm text-slate-500">Status</dt>
-          <dd class="font-mono text-sm text-slate-900" data-field="status">{account.status}</dd>
+          <dt class="text-sm text-tk-ink-3">Status</dt>
+          <dd class="font-mono text-sm text-tk-ink" data-field="status">{account.status}</dd>
         </div>
         <div class="flex justify-between border-b border-slate-100 pb-2">
-          <dt class="text-sm text-slate-500">Created</dt>
-          <dd class="font-mono text-sm text-slate-900" data-field="created">
+          <dt class="text-sm text-tk-ink-3">Created</dt>
+          <dd class="font-mono text-sm text-tk-ink" data-field="created">
             {fmtIso(account.createdAt)}
           </dd>
         </div>
         <div class="flex justify-between border-b border-slate-100 pb-2">
-          <dt class="text-sm text-slate-500">Last updated</dt>
-          <dd class="font-mono text-sm text-slate-900" data-field="updated">
+          <dt class="text-sm text-tk-ink-3">Last updated</dt>
+          <dd class="font-mono text-sm text-tk-ink" data-field="updated">
             {fmtIso(account.lastSeenAt)}
           </dd>
         </div>
@@ -130,19 +130,19 @@ const accountId = account.id;
     <!-- Admin actions -->
     <section class="dashboard-card mt-6">
       <div class="flex items-start gap-3">
-        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700 mt-1">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent mt-1">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M14.7 6.3l-1.4 1.4 4 4-1.4 1.4-4-4-1.4 1.4 4 4-7 7H3v-4l9-9-4-4 1.4-1.4 4 4 1.4-1.4z" />
           </svg>
         </span>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
             Admin actions
           </p>
-          <h2 class="mt-2 text-xl font-semibold tracking-tight text-slate-900">Manual operations</h2>
+          <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Manual operations</h2>
         </div>
       </div>
-      <p class="mt-2 text-sm text-slate-500">
+      <p class="mt-2 text-sm text-tk-ink-3">
         All actions audit-logged with admin id + reason. Tier change applies
         immediately; suspend revokes all sessions + keys until unsuspend.
       </p>
@@ -197,26 +197,26 @@ const accountId = account.id;
       -->
       <form
         data-field="override-form"
-        class="mt-6 hidden rounded-lg border border-slate-200 bg-slate-50 p-4"
+        class="mt-6 hidden rounded-lg border border-tk-border bg-tk-bg p-4"
       >
         {/* 2026-05-23 — icon on Rate-limit override form. */}
         <div class="flex items-center gap-2">
-          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="9" />
               <path d="M12 7v5l3 2" />
             </svg>
           </span>
-          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">
             Rate-limit override
           </p>
         </div>
         <div class="mt-3 grid gap-3 md:grid-cols-2">
           <label class="block text-sm">
-            <span class="text-slate-700">Bucket</span>
+            <span class="text-tk-ink-2">Bucket</span>
             <select
               name="bucket_key"
-              class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+              class="mt-1 block w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
             >
               <option value="global">global</option>
               <option value="session_create">session_create</option>
@@ -224,7 +224,7 @@ const accountId = account.id;
             </select>
           </label>
           <label class="block text-sm">
-            <span class="text-slate-700">Capacity (token bucket size)</span>
+            <span class="text-tk-ink-2">Capacity (token bucket size)</span>
             <input
               type="number"
               name="capacity"
@@ -232,11 +232,11 @@ const accountId = account.id;
               step="1"
               required
               placeholder="200"
-              class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+              class="mt-1 block w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
             />
           </label>
           <label class="block text-sm">
-            <span class="text-slate-700">Refill / sec</span>
+            <span class="text-tk-ink-2">Refill / sec</span>
             <input
               type="number"
               name="refill_per_second"
@@ -244,29 +244,29 @@ const accountId = account.id;
               step="0.01"
               required
               placeholder="10"
-              class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+              class="mt-1 block w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
             />
           </label>
           <label class="block text-sm">
-            <span class="text-slate-700">Duration (seconds, default 14d)</span>
+            <span class="text-tk-ink-2">Duration (seconds, default 14d)</span>
             <input
               type="number"
               name="duration_seconds"
               min="60"
               step="60"
               value="1209600"
-              class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+              class="mt-1 block w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
             />
           </label>
         </div>
         <label class="mt-3 block text-sm">
-          <span class="text-slate-700">Reason (audit row)</span>
+          <span class="text-tk-ink-2">Reason (audit row)</span>
           <textarea
             name="reason"
             rows="2"
             required
             placeholder="e.g. Migrating off legacy hours-meter; needs headroom during cutover."
-            class="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"></textarea>
+            class="mt-1 block w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"></textarea>
         </label>
         <div class="mt-4 flex flex-wrap gap-3">
           <button type="submit" class="btn-primary text-sm">Apply override</button>
@@ -283,15 +283,15 @@ const accountId = account.id;
     {/* 2026-05-23 — icons on Spend + Audit slice cards. */}
     <section class="dashboard-card mt-6" data-section="account-cost">
       <div class="flex items-start gap-3">
-        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700 mt-1">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent mt-1">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <line x1="12" y1="1" x2="12" y2="23" />
             <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
           </svg>
         </span>
         <div class="flex-1">
-          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Spend (this cycle)</p>
-          <h2 class="mt-2 text-xl font-semibold tracking-tight text-slate-900">Cost breakdown</h2>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Spend (this cycle)</p>
+          <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Cost breakdown</h2>
         </div>
       </div>
       <div data-account-cost-body class="mt-4">
@@ -316,7 +316,7 @@ const accountId = account.id;
     <!-- Per-account audit slice -->
     <section class="dashboard-card mt-6">
       <div class="flex items-start gap-3">
-        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700 mt-1">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent mt-1">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <path d="M14 2v6h6" />
@@ -324,22 +324,22 @@ const accountId = account.id;
           </svg>
         </span>
         <div class="flex-1">
-          <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Audit slice</p>
-          <h2 class="mt-2 text-xl font-semibold tracking-tight text-slate-900">Admin actions on this account</h2>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Audit slice</p>
+          <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Admin actions on this account</h2>
         </div>
       </div>
       <ul class="mt-4 divide-y divide-slate-100" data-list="account-audit">
         {
           auditSlice.length === 0 ? (
-            <li class="py-3 text-sm text-slate-500">No admin actions on record.</li>
+            <li class="py-3 text-sm text-tk-ink-3">No admin actions on record.</li>
           ) : (
             auditSlice.map((entry) => (
               <li class="flex items-start justify-between gap-4 py-3">
                 <div class="min-w-0">
-                  <p class="font-mono text-xs text-slate-500">{fmtIso(entry.ts)}</p>
-                  <p class="mt-1 text-sm text-slate-900">
-                    <span class="font-mono text-xs text-slate-700">{entry.adminEmail}</span>{' '}
-                    <code class="font-mono text-xs text-oxblood-700">{entry.action}</code>
+                  <p class="font-mono text-xs text-tk-ink-3">{fmtIso(entry.ts)}</p>
+                  <p class="mt-1 text-sm text-tk-ink">
+                    <span class="font-mono text-xs text-tk-ink-2">{entry.adminEmail}</span>{' '}
+                    <code class="font-mono text-xs text-tk-accent">{entry.action}</code>
                   </p>
                 </div>
                 <span
@@ -359,7 +359,7 @@ const accountId = account.id;
       </ul>
       <a
         href={`/audit-log?account=acc_${account.id}`}
-        class="mt-4 inline-flex text-sm text-oxblood-700 hover:underline"
+        class="mt-4 inline-flex text-sm text-tk-accent hover:underline"
       >
         Full audit log for this account →
       </a>
@@ -384,7 +384,7 @@ const accountId = account.id;
       const STATUS_BADGE = {
         active: 'bg-emerald-50 text-emerald-700',
         suspended: 'bg-amber-50 text-amber-700',
-        deleted: 'bg-slate-100 text-slate-600',
+        deleted: 'bg-tk-hover text-tk-ink-2',
       };
 
       function showBanner(text) {
@@ -475,7 +475,7 @@ const accountId = account.id;
         if (!list) return;
         if (entries.length === 0) {
           list.innerHTML =
-            '<li class="py-3 text-sm text-slate-500">No admin actions on record.</li>';
+            '<li class="py-3 text-sm text-tk-ink-3">No admin actions on record.</li>';
           return;
         }
         list.innerHTML = entries
@@ -487,14 +487,14 @@ const accountId = account.id;
             return (
               '<li class="flex items-start justify-between gap-4 py-3">' +
               '<div class="min-w-0">' +
-              '<p class="font-mono text-xs text-slate-500">' +
+              '<p class="font-mono text-xs text-tk-ink-3">' +
               escapeHtml(fmtIso(entry.timestamp)) +
               '</p>' +
-              '<p class="mt-1 text-sm text-slate-900">' +
-              '<span class="font-mono text-xs text-slate-700">' +
+              '<p class="mt-1 text-sm text-tk-ink">' +
+              '<span class="font-mono text-xs text-tk-ink-2">' +
               escapeHtml(entry.admin_account_id) +
               '</span> ' +
-              '<code class="font-mono text-xs text-oxblood-700">' +
+              '<code class="font-mono text-xs text-tk-accent">' +
               escapeHtml(entry.action) +
               '</code></p></div>' +
               '<span class="inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ' +
@@ -541,7 +541,7 @@ const accountId = account.id;
           .then((b) => {
             if (!costBody) return;
             if (!b || !b.breakdown) {
-              costBody.innerHTML = '<p class="text-sm text-slate-500">No cost data this cycle yet.</p>';
+              costBody.innerHTML = '<p class="text-sm text-tk-ink-3">No cost data this cycle yet.</p>';
               return;
             }
             const br = b.breakdown;
@@ -553,11 +553,11 @@ const accountId = account.id;
               const pct = Math.max(4, Math.round((v / total) * 100));
               return (
                 '<div class="flex items-center gap-3 text-xs">' +
-                '<span class="w-24 shrink-0 text-slate-600">' + label + '</span>' +
-                '<div class="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden">' +
-                '<div class="h-full bg-oxblood-700/70" style="width: ' + pct + '%"></div>' +
+                '<span class="w-24 shrink-0 text-tk-ink-2">' + label + '</span>' +
+                '<div class="flex-1 h-3 rounded-full bg-tk-hover overflow-hidden">' +
+                '<div class="h-full bg-tk-accent/70" style="width: ' + pct + '%"></div>' +
                 '</div>' +
-                '<span class="font-mono w-16 text-right text-slate-900">' + cents(v) + '</span>' +
+                '<span class="font-mono w-16 text-right text-tk-ink">' + cents(v) + '</span>' +
                 '</div>'
               );
             };
@@ -566,10 +566,10 @@ const accountId = account.id;
               'between-soft-and-hard': 'bg-amber-100 text-amber-800',
               'over-hard': 'bg-rose-100 text-rose-800',
             };
-            const stateCls = STATE_BADGE[br.thresholdState] || 'bg-slate-100 text-slate-600';
+            const stateCls = STATE_BADGE[br.thresholdState] || 'bg-tk-hover text-tk-ink-2';
             costBody.innerHTML =
               '<div class="flex items-baseline justify-between mb-3">' +
-              '<p class="text-2xl font-semibold text-slate-900">' + cents(br.totalCents) + '</p>' +
+              '<p class="text-2xl font-semibold text-tk-ink">' + cents(br.totalCents) + '</p>' +
               '<span class="inline-flex items-center rounded-full ' + stateCls + ' px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide">' + (br.thresholdState || '—') + '</span>' +
               '</div>' +
               '<div class="space-y-2">' +
@@ -578,10 +578,10 @@ const accountId = account.id;
               bar('Egress', br.egressCents) +
               bar('Sub-processor', subprocessor) +
               '</div>' +
-              '<p class="mt-3 text-xs text-slate-500">Cycle: ' + (b.billing_cycle || b.billingCycle || '—') + '</p>';
+              '<p class="mt-3 text-xs text-tk-ink-3">Cycle: ' + (b.billing_cycle || b.billingCycle || '—') + '</p>';
           })
           .catch(() => {
-            if (costBody) costBody.innerHTML = '<p class="text-sm text-slate-500">Cost data not available.</p>';
+            if (costBody) costBody.innerHTML = '<p class="text-sm text-tk-ink-3">Cost data not available.</p>';
           });
 
         Promise.all([accountP, auditP])

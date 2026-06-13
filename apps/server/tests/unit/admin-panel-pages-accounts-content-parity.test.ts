@@ -40,10 +40,10 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
 
   it("STATUS_BADGE 3-tone duplicated across Astro frontmatter Record + inline-script const: active (emerald-50) / suspended (amber-50) / deleted (slate-100) — pinned so the SSG-rendered initial table + the inline-script's live-replacement use the same colour vocabulary (drift between the two would cause a flash-of-mismatched-badges when the script hydrates)", () => {
     expect(body).toMatch(
-      /const STATUS_BADGE: Record<string, string> = \{\s*\n?\s*active: 'bg-emerald-50 text-emerald-700',\s*\n?\s*suspended: 'bg-amber-50 text-amber-700',\s*\n?\s*deleted: 'bg-slate-100 text-slate-600',\s*\n?\s*\};/,
+      /const STATUS_BADGE: Record<string, string> = \{\s*\n?\s*active: 'bg-emerald-50 text-emerald-700',\s*\n?\s*suspended: 'bg-amber-50 text-amber-700',\s*\n?\s*deleted: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*\};/,
     );
     expect(body).toMatch(
-      /const STATUS_BADGE = \{\s*\n?\s*active: 'bg-emerald-50 text-emerald-700',\s*\n?\s*suspended: 'bg-amber-50 text-amber-700',\s*\n?\s*deleted: 'bg-slate-100 text-slate-600',\s*\n?\s*\};/,
+      /const STATUS_BADGE = \{\s*\n?\s*active: 'bg-emerald-50 text-emerald-700',\s*\n?\s*suspended: 'bg-amber-50 text-amber-700',\s*\n?\s*deleted: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*\};/,
     );
   });
 
@@ -71,7 +71,7 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
   it("Account row /accounts/{id} link: encodeURIComponent on stripped (acc_ prefix removed via .replace(/^acc_/, '')) — pinned so the per-account-detail href doesn't break on UUIDs with reserved URL chars + the route stays consistent with the underlying admin-routes that expect the raw UUID without prefix", () => {
     expect(body).toMatch(/const stripped = a\.id\.replace\(\/\^acc_\/, ''\);/);
     expect(body).toMatch(
-      /'<a href="\/accounts\/' \+\s*\n?\s*encodeURIComponent\(stripped\) \+\s*\n?\s*'" class="text-sm text-oxblood-700 hover:underline">Open<\/a>'/,
+      /'<a href="\/accounts\/' \+\s*\n?\s*encodeURIComponent\(stripped\) \+\s*\n?\s*'" class="text-sm text-tk-accent hover:underline">Open<\/a>'/,
     );
   });
 
@@ -86,19 +86,19 @@ describe('W488.B apps/admin-panel/src/pages/accounts.astro content parity', () =
 
   it("Empty-filter-result branch: 'No accounts match the current filter.' colspan=6 cell — pinned so the 6-column table's empty-after-filter state spans full width and the cell count matches the header (Account/Tier/Status/Created/Last updated/Open = 6 columns; drift to colspan=5 would visually misalign)", () => {
     expect(body).toMatch(
-      /<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-slate-500">No accounts match the current filter\.<\/td><\/tr>/,
+      /<tr><td colspan="6" class="px-4 py-8 text-center text-sm text-tk-ink-3">No accounts match the current filter\.<\/td><\/tr>/,
     );
   });
 
   it("Account row 'Account' column structure: name ?? email primary line + email subtitle (only when name exists) + account.id in mono small text — pinned so the per-account triple-line layout stays consistent and accounts without a name still surface their email as the primary identifier", () => {
     expect(body).toMatch(
-      /<p class="font-medium text-slate-900">\{account\.name \?\? account\.email\}<\/p>/,
+      /<p class="font-medium text-tk-ink">\{account\.name \?\? account\.email\}<\/p>/,
     );
     expect(body).toMatch(
-      /\{account\.name !== null && \(\s*\n?\s*<p class="mt-0\.5 text-xs text-slate-500">\{account\.email\}<\/p>\s*\n?\s*\)\}/,
+      /\{account\.name !== null && \(\s*\n?\s*<p class="mt-0\.5 text-xs text-tk-ink-3">\{account\.email\}<\/p>\s*\n?\s*\)\}/,
     );
     expect(body).toMatch(
-      /<p class="mt-0\.5 font-mono text-\[11px\] text-slate-400">\{account\.id\}<\/p>/,
+      /<p class="mt-0\.5 font-mono text-\[11px\] text-tk-ink-3">\{account\.id\}<\/p>/,
     );
   });
 

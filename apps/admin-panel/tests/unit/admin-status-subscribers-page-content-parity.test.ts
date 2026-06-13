@@ -75,7 +75,7 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
       /<span class="rounded-full bg-amber-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-amber-700">pending<\/span>/,
     );
     expect(body).toMatch(
-      /'<span class="rounded-full bg-slate-100 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-slate-600">unsubscribed '/,
+      /'<span class="rounded-full bg-tk-hover px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">unsubscribed '/,
     );
   });
 

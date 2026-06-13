@@ -91,7 +91,7 @@ describe('W488.C apps/admin-panel/src/pages/webhook-dlq.astro content parity', (
       /<span class="rounded-full bg-red-100 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-red-800">/,
     );
     expect(body).toMatch(
-      /<div class="mt-4 rounded border border-red-200 bg-white px-3 py-2">\s*\n?\s*<p class="font-mono text-xs text-red-900">/,
+      /<div class="mt-4 rounded border border-red-200 bg-tk-surface px-3 py-2">\s*\n?\s*<p class="font-mono text-xs text-red-900">/,
     );
   });
 

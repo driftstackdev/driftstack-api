@@ -43,15 +43,15 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
 
   it("4-tile grid layout: Active accounts (data-field='active-accounts') / Suspended (data-field='suspended-accounts') / Open incidents (data-field='incidents-open', REAL — from /v1/admin/incidents) / DLQ depth (data-field='dlq-depth' default '0') — pinned so the at-a-glance health surface keeps the 4 canonical metrics. 2026-06-03: the 3rd tile was swapped from the former mock 'Open leads' to a real 'Open incidents' count (count of non-resolved incidents), removing the last fabricated number from the grid; drift back to a mock tile would reintroduce fake data.", () => {
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">Active accounts<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Active accounts<\/p>/,
     );
     expect(body).toMatch(/data-field="active-accounts"/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">Suspended<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Suspended<\/p>/,
     );
     expect(body).toMatch(/data-field="suspended-accounts"/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">Open incidents<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Open incidents<\/p>/,
     );
     // Honest SSR placeholder (no fabricated number) — hydrates to the real count.
     expect(body).toMatch(/data-field="incidents-open">—<\/p>/);
@@ -59,17 +59,17 @@ describe('W487.C apps/admin-panel/src/pages/index.astro content parity', () => {
     expect(body).not.toMatch(/Open leads/);
     expect(body).not.toMatch(/leads endpoint TBD/);
     expect(body).toMatch(
-      /<p class="font-mono text-xs uppercase tracking-widest text-slate-500">DLQ depth<\/p>/,
+      /<p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">DLQ depth<\/p>/,
     );
     expect(body).toMatch(/data-field="dlq-depth">0<\/p>/);
   });
 
   it("Recent admin activity card: 'See full log →' link to /audit-log (canonical audit-log page route — drift to /admin-audit or /logs would 404) + 'No admin actions recorded yet.' empty-state — pinned so the see-more link points to the real subpage. 2026-05-21 — 2c24750f wrapped the link in a text-xs flex row alongside the live-indicator + Refresh-now button; size class inherits from the row so text-sm dropped off the link itself.", () => {
     expect(body).toMatch(
-      /<a href="\/audit-log" class="text-oxblood-700 hover:underline">\s*\n?\s*See full log →\s*\n?\s*<\/a>/,
+      /<a href="\/audit-log" class="text-tk-accent hover:underline">\s*\n?\s*See full log →\s*\n?\s*<\/a>/,
     );
     expect(body).toMatch(
-      /<li class="py-3 text-sm text-slate-500">No admin actions recorded yet\.<\/li>/,
+      /<li class="py-3 text-sm text-tk-ink-3">No admin actions recorded yet\.<\/li>/,
     );
   });
 

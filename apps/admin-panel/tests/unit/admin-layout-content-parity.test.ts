@@ -81,26 +81,30 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
 
   it('active-route highlighting: exact match OR startsWith href+"/" → oxblood-50 + oxblood-700. 2026-05-21 — font-medium moved from active-only to the base class (constant width prevents click-induced layout shift; same fix as DashboardLayout 50b0dd7a).', () => {
     expect(body).toMatch(
-      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n?\s*\?\s*'bg-oxblood-50 text-oxblood-700'/,
+      /pathname === item\.href \|\| pathname\.startsWith\(item\.href \+ '\/'\)\s*\n?\s*\?\s*'bg-tk-accent\/10 text-tk-accent'/,
     );
     expect(body).toMatch(/text-sm font-medium transition-colors/);
   });
 
-  it('R15 brand mark: /driftstack-mark.svg <img> (iPhone-D logo) — replaces the prior bg-oxblood-700 + text-white "D" chip placeholder with the real SVG brand asset', () => {
-    expect(body).toMatch(/V-219\* — D-badge \+ lowercase font-mono "driftstack" wordmark/);
+  it('R15 brand mark: /driftstack-mark.svg <img> (iPhone-D logo) — replaces the prior bg-tk-accent + text-white "D" chip placeholder with the real SVG brand asset', () => {
+    expect(body).toMatch(
+      /V-219\* \/ Fleet port — W2 wordmark \(DRIFTSTACK black-italic two-tone\)/,
+    );
     expect(body).toMatch(
       /<img\s*\n?\s*src="\/driftstack-mark\.svg(\?v=\d+)?"\s*\n?\s*alt="Driftstack"/,
     );
   });
 
-  it('"driftstack" wordmark in lowercase font-mono. 2026-05-23 — wrapped with group/hover scale; class now includes "group" prefix.', () => {
-    expect(body).toMatch(/font-mono text-base font-semibold text-slate-900/);
-    expect(body).toMatch(/<span>driftstack<\/span>/);
+  it('W2 wordmark (Fleet port): DRIFTSTACK black-italic two-tone; link keeps the group/hover-scale wrap.', () => {
+    expect(body).toMatch(/font-mono text-base font-semibold text-tk-ink/);
+    expect(body).toContain(
+      '<span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK</span></span>',
+    );
   });
 
   it('"admin" staff-context pill (oxblood-50 bg + oxblood-700 text + mono uppercase)', () => {
     expect(body).toMatch(
-      /<span\s*\n?\s*class="rounded-full bg-oxblood-50 px-2 py-0\.5 font-mono text-xs uppercase tracking-wide text-oxblood-700"\s*\n?\s*>\s*\n?\s*admin\s*\n?\s*<\/span>/,
+      /<span\s*\n?\s*class="rounded-full bg-tk-accent\/10 px-2 py-0\.5 font-mono text-xs uppercase tracking-wide text-tk-accent"\s*\n?\s*>\s*\n?\s*admin\s*\n?\s*<\/span>/,
     );
   });
 
@@ -110,7 +114,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
 
   it('sidebar hidden on mobile (hidden + md:block) — opt-in mobile overlay via data-mobile-nav', () => {
     expect(body).toMatch(
-      /<aside data-mobile-nav class="hidden w-56 shrink-0 border-r border-slate-200 bg-white md:block">/,
+      /<aside data-mobile-nav class="hidden w-56 shrink-0 border-r border-tk-border bg-tk-surface md:block">/,
     );
   });
 
@@ -130,7 +134,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
   });
 
   it('html lang="en" + charset UTF-8 + viewport meta', () => {
-    expect(body).toMatch(/<html lang="en">/);
+    expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="violet">/);
     expect(body).toMatch(/<meta charset="UTF-8" \/>/);
     expect(body).toMatch(/<meta name="viewport" content="width=device-width, initial-scale=1" \/>/);
   });

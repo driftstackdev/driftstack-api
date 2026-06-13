@@ -31,7 +31,7 @@ describe('W487.A apps/admin-panel/src/pages/leads.astro content parity', () => {
   const body = read(LIB);
 
   it("Page-header framing: 'Leads' h1 + 'Pre-signup interest captured…' subhead. 2026-05-23 — h1 wrapped in oxblood gradient span (admin-panel visual unification); pin loosened to label-presence + subhead anchor.", () => {
-    expect(body).toMatch(/<h1 class="text-3xl font-semibold tracking-tight text-slate-900">/);
+    expect(body).toMatch(/<h1 class="text-3xl font-semibold tracking-tight text-tk-ink">/);
     expect(body).toMatch(/>Leads</);
     expect(body).toMatch(
       /Pre-signup interest captured from the marketing site, docs, and inbound\s*\n?\s*email\. Convert to account or archive once contacted\./,
@@ -40,7 +40,7 @@ describe('W487.A apps/admin-panel/src/pages/leads.astro content parity', () => {
 
   it("SOURCE_BADGE + SOURCE_LABEL 4-key catalogue: pricing_cta ('Pricing CTA' / oxblood-50) / docs_signup ('Docs signup' / blue-50) / email_inbound ('Email inbound' / emerald-50) / other ('Other' / slate-100) — pinned so the badge colour ↔ label mapping stays in sync (drift to a 3-key catalogue would silently grey out a real source when the lookup falls through)", () => {
     expect(body).toMatch(
-      /const SOURCE_BADGE: Record<string, string> = \{\s*\n?\s*pricing_cta: 'bg-oxblood-50 text-oxblood-700',\s*\n?\s*docs_signup: 'bg-blue-50 text-blue-700',\s*\n?\s*email_inbound: 'bg-emerald-50 text-emerald-700',\s*\n?\s*other: 'bg-slate-100 text-slate-600',\s*\n?\s*\};/,
+      /const SOURCE_BADGE: Record<string, string> = \{\s*\n?\s*pricing_cta: 'bg-tk-accent\/10 text-tk-accent',\s*\n?\s*docs_signup: 'bg-blue-50 text-blue-700',\s*\n?\s*email_inbound: 'bg-emerald-50 text-emerald-700',\s*\n?\s*other: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*\};/,
     );
     expect(body).toMatch(
       /const SOURCE_LABEL: Record<string, string> = \{\s*\n?\s*pricing_cta: 'Pricing CTA',\s*\n?\s*docs_signup: 'Docs signup',\s*\n?\s*email_inbound: 'Email inbound',\s*\n?\s*other: 'Other',\s*\n?\s*\};/,
@@ -49,10 +49,10 @@ describe('W487.A apps/admin-panel/src/pages/leads.astro content parity', () => {
 
   it("Per-row 3-action surface: Convert-to-account → href=#convert-{id} + Archive → href=#archive-{id} + Email reply → mailto:{email} — pinned so the action vocabulary stays consistent (convert / archive / email) and the email-reply path uses the customer's address as a true mailto: link (not an in-app composer that doesn't exist)", () => {
     expect(body).toMatch(
-      /<a href=\{`#convert-\$\{lead\.id\}`\} class="text-sm text-oxblood-700 hover:underline">\s*\n?\s*Convert to account →\s*\n?\s*<\/a>/,
+      /<a href=\{`#convert-\$\{lead\.id\}`\} class="text-sm text-tk-accent hover:underline">\s*\n?\s*Convert to account →\s*\n?\s*<\/a>/,
     );
     expect(body).toMatch(
-      /<a href=\{`#archive-\$\{lead\.id\}`\} class="text-sm text-slate-600 hover:underline">\s*\n?\s*Archive\s*\n?\s*<\/a>/,
+      /<a href=\{`#archive-\$\{lead\.id\}`\} class="text-sm text-tk-ink-2 hover:underline">\s*\n?\s*Archive\s*\n?\s*<\/a>/,
     );
     expect(body).toMatch(/href=\{`mailto:\$\{lead\.email\}`\}/);
   });

@@ -48,10 +48,10 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
 
   it("STATUS_BADGE 5-tone duplicated frontmatter + inline-script: creating (amber-50) / ready (emerald-50) / busy (blue-50) / destroyed (slate-100) / errored (red-50) — pinned so the session lifecycle 5-state vocabulary stays in sync with the type union AND with the inline-script's badge colors (drift between SSG + inline would cause a hydrate flash)", () => {
     expect(body).toMatch(
-      /const STATUS_BADGE: Record<string, string> = \{\s*\n?\s*creating: 'bg-amber-50 text-amber-700',\s*\n?\s*ready: 'bg-emerald-50 text-emerald-700',\s*\n?\s*busy: 'bg-blue-50 text-blue-700',\s*\n?\s*destroyed: 'bg-slate-100 text-slate-600',\s*\n?\s*errored: 'bg-red-50 text-red-700',\s*\n?\s*\};/,
+      /const STATUS_BADGE: Record<string, string> = \{\s*\n?\s*creating: 'bg-amber-50 text-amber-700',\s*\n?\s*ready: 'bg-emerald-50 text-emerald-700',\s*\n?\s*busy: 'bg-blue-50 text-blue-700',\s*\n?\s*destroyed: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*errored: 'bg-red-50 text-red-700',\s*\n?\s*\};/,
     );
     expect(body).toMatch(
-      /const STATUS_BADGE = \{\s*\n?\s*creating: 'bg-amber-50 text-amber-700',\s*\n?\s*ready: 'bg-emerald-50 text-emerald-700',\s*\n?\s*busy: 'bg-blue-50 text-blue-700',\s*\n?\s*destroyed: 'bg-slate-100 text-slate-600',\s*\n?\s*errored: 'bg-red-50 text-red-700',\s*\n?\s*\};/,
+      /const STATUS_BADGE = \{\s*\n?\s*creating: 'bg-amber-50 text-amber-700',\s*\n?\s*ready: 'bg-emerald-50 text-emerald-700',\s*\n?\s*busy: 'bg-blue-50 text-blue-700',\s*\n?\s*destroyed: 'bg-tk-hover text-tk-ink-2',\s*\n?\s*errored: 'bg-red-50 text-red-700',\s*\n?\s*\};/,
     );
   });
 
@@ -91,7 +91,7 @@ describe('W489.B apps/admin-panel/src/pages/sessions.astro content parity', () =
     expect(body).toMatch(/<th class="px-4 py-3">Status<\/th>/);
     expect(body).toMatch(/<th class="px-4 py-3">Started<\/th>/);
     expect(body).toMatch(
-      /<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">No sessions match the current filter\.<\/td><\/tr>/,
+      /<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">No sessions match the current filter\.<\/td><\/tr>/,
     );
   });
 

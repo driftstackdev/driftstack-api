@@ -7,10 +7,10 @@ function fmtIso(iso: string): string {
 }
 
 const SOURCE_BADGE: Record<string, string> = {
-  pricing_cta: 'bg-oxblood-50 text-oxblood-700',
+  pricing_cta: 'bg-tk-accent/10 text-tk-accent',
   docs_signup: 'bg-blue-50 text-blue-700',
   email_inbound: 'bg-emerald-50 text-emerald-700',
-  other: 'bg-slate-100 text-slate-600',
+  other: 'bg-tk-hover text-tk-ink-2',
 };
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -25,9 +25,9 @@ const SOURCE_LABEL: Record<string, string> = {
   <div class="mx-auto max-w-6xl px-6 py-10">
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <h1 class="text-3xl font-semibold tracking-tight text-slate-900">Leads</h1>
+        <h1 class="text-3xl font-semibold tracking-tight text-tk-ink">Leads</h1>
        <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true"></div>
-        <p class="mt-2 text-sm text-slate-500">
+        <p class="mt-2 text-sm text-tk-ink-3">
           Pre-signup interest captured from the marketing site, docs, and inbound
           email. Convert to account or archive once contacted.
         </p>
@@ -39,10 +39,10 @@ const SOURCE_LABEL: Record<string, string> = {
       <input
         type="search"
         placeholder="Filter by email or notes…"
-        class="w-72 rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+        class="w-72 rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
       />
       <select
-        class="rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+        class="rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
       >
         <option value="">All sources</option>
         <option value="pricing_cta">Pricing CTA</option>
@@ -56,15 +56,15 @@ const SOURCE_LABEL: Record<string, string> = {
       MOCK_LEADS.length === 0 ? (
         <div class="dashboard-card text-center">
           {/* 2026-05-23 — icon on empty state. */}
-          <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="8.5" cy="7" r="4" />
               <path d="M20 8v6M23 11h-6" />
             </svg>
           </div>
-          <h2 class="text-lg font-semibold tracking-tight text-slate-900">No leads yet</h2>
-          <p class="mx-auto mt-2 max-w-prose text-sm text-slate-500">
+          <h2 class="text-lg font-semibold tracking-tight text-tk-ink">No leads yet</h2>
+          <p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">
             Once the marketing site captures signup intent, leads land here for
             sales follow-up.
           </p>
@@ -75,13 +75,13 @@ const SOURCE_LABEL: Record<string, string> = {
             <li class="dashboard-card">
               <div class="flex items-start justify-between gap-6">
                 <div class="min-w-0">
-                  <p class="text-base font-medium text-slate-900">{lead.email}</p>
-                  <p class="mt-1 font-mono text-xs text-slate-500">{lead.id}</p>
-                  <p class="mt-1 text-xs text-slate-500">
+                  <p class="text-base font-medium text-tk-ink">{lead.email}</p>
+                  <p class="mt-1 font-mono text-xs text-tk-ink-3">{lead.id}</p>
+                  <p class="mt-1 text-xs text-tk-ink-3">
                     Captured {fmtIso(lead.capturedAt)}
                   </p>
                   {lead.notes !== null && (
-                    <p class="mt-3 text-sm text-slate-700">{lead.notes}</p>
+                    <p class="mt-3 text-sm text-tk-ink-2">{lead.notes}</p>
                   )}
                 </div>
                 <div class="flex shrink-0 flex-col items-end gap-2">
@@ -93,21 +93,21 @@ const SOURCE_LABEL: Record<string, string> = {
                   >
                     {SOURCE_LABEL[lead.source] ?? lead.source}
                   </span>
-                  <a href={`/leads/${lead.id}`} class="text-sm text-oxblood-700 hover:underline">
+                  <a href={`/leads/${lead.id}`} class="text-sm text-tk-accent hover:underline">
                     Open
                   </a>
                 </div>
               </div>
               <div class="mt-4 flex flex-wrap gap-3 border-t border-slate-100 pt-3">
-                <a href={`#convert-${lead.id}`} class="text-sm text-oxblood-700 hover:underline">
+                <a href={`#convert-${lead.id}`} class="text-sm text-tk-accent hover:underline">
                   Convert to account →
                 </a>
-                <a href={`#archive-${lead.id}`} class="text-sm text-slate-600 hover:underline">
+                <a href={`#archive-${lead.id}`} class="text-sm text-tk-ink-2 hover:underline">
                   Archive
                 </a>
                 <a
                   href={`mailto:${lead.email}`}
-                  class="text-sm text-slate-600 hover:underline"
+                  class="text-sm text-tk-ink-2 hover:underline"
                 >
                   Email reply
                 </a>
@@ -118,7 +118,7 @@ const SOURCE_LABEL: Record<string, string> = {
       )
     }
 
-    <p class="mt-8 text-xs text-slate-500">
+    <p class="mt-8 text-xs text-tk-ink-3">
       Conversion creates an account row + sends a magic-link signup email.
       Archive marks the lead resolved without account creation. All actions
       audit-logged.

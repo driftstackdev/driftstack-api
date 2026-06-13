@@ -77,3 +77,45 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ── Fleet token axes (ported verbatim from marketing base.css — keep synchronised) ── */
+/* ── Fleet design-system token layer (2026-06-12 rework; the LOCKED contract
+   is docs/internal/2026-06-12-design-system-spec.md). Two independent axes on
+   <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal). ADDITIVE
+   foundation — new Fleet markup consumes these via the `tk` Tailwind namespace;
+   legacy classes keep their baked palette until each page's port lands, so this
+   block changes NOTHING visually on its own. Default flips to light+violet with
+   the index.astro Fleet port (founder-locked direction). */
+[data-accent='violet'] {
+  --accent-rgb: 109 94 252;
+  --accent-2-rgb: 139 125 255;
+  --accent-strong-rgb: 88 71 224;
+  --accent: #6d5efc;
+  --accent-2: #8b7dff;
+  --accent-strong: #5847e0;
+  --accent-ink: #fff;
+  --accent-soft: rgba(109, 94, 252, 0.13);
+  --glow: rgba(109, 94, 252, 0.32);
+}
+[data-accent='oxblood'] {
+  --accent-rgb: 155 59 70;
+  --accent-2-rgb: 192 75 88;
+  --accent-strong-rgb: 114 47 55;
+  --accent: #9b3b46;
+  --accent-2: #c04b58;
+  --accent-strong: #722f37;
+  --accent-ink: #fff;
+  --accent-soft: rgba(155, 59, 70, 0.13);
+  --glow: rgba(155, 59, 70, 0.32);
+}
+[data-accent='teal'] {
+  --accent-rgb: 16 154 130;
+  --accent-2-rgb: 27 199 168;
+  --accent-strong-rgb: 12 125 105;
+  --accent: #109a82;
+  --accent-2: #1bc7a8;
+  --accent-strong: #0c7d69;
+  --accent-ink: #fff;
+  --accent-soft: rgba(16, 154, 130, 0.13);
+  --glow: rgba(16, 154, 130, 0.28);
+}

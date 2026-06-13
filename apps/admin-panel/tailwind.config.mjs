@@ -9,6 +9,24 @@ export default {
   theme: {
     extend: {
       colors: {
+        tk: {
+          bg: 'rgb(var(--bg-rgb) / <alpha-value>)',
+          surface: 'rgb(var(--surface-rgb) / <alpha-value>)',
+          raised: 'rgb(var(--raised-rgb) / <alpha-value>)',
+          hover: 'rgb(var(--hover-rgb) / <alpha-value>)',
+          ink: 'rgb(var(--ink-rgb) / <alpha-value>)',
+          'ink-2': 'rgb(var(--ink-2-rgb) / <alpha-value>)',
+          'ink-3': 'rgb(var(--ink-3-rgb) / <alpha-value>)',
+          border: 'rgb(var(--border-rgb) / <alpha-value>)',
+          accent: 'rgb(var(--accent-rgb) / <alpha-value>)',
+          'accent-2': 'rgb(var(--accent-2-rgb) / <alpha-value>)',
+          'accent-strong': 'rgb(var(--accent-strong-rgb) / <alpha-value>)',
+          'accent-ink': 'var(--accent-ink)',
+          'accent-soft': 'var(--accent-soft)',
+          ready: 'rgb(var(--ready-rgb) / <alpha-value>)',
+          busy: 'rgb(var(--busy-rgb) / <alpha-value>)',
+          err: 'rgb(var(--err-rgb) / <alpha-value>)',
+        },
         // Oxblood — locked accent per founder direction (#722F37).
         oxblood: {
           50: '#fbf3f4',

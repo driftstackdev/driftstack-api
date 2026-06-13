@@ -97,7 +97,7 @@ describe('W490.A apps/admin-panel/src/pages/incidents/[id].astro content parity'
 
   it("Private-incident badge: !incident.public → 'private' slate-100 badge alongside severity + status — pinned so internal-only incidents are visually distinguishable from public ones (operators need to know at-a-glance whether their actions affect the status page or stay internal)", () => {
     expect(body).toMatch(
-      /\{!incident\.public && \(\s*\n?\s*<span class="inline-flex rounded-full bg-slate-100 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-slate-600">\s*\n?\s*private\s*\n?\s*<\/span>\s*\n?\s*\)\}/,
+      /\{!incident\.public && \(\s*\n?\s*<span class="inline-flex rounded-full bg-tk-hover px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">\s*\n?\s*private\s*\n?\s*<\/span>\s*\n?\s*\)\}/,
     );
   });
 

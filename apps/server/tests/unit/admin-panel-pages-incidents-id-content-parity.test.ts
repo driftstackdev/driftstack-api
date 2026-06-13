@@ -53,7 +53,7 @@ describe('admin-panel incidents/[id] content parity', () => {
 
   it('Back-to-list link pinned: /incidents. Drift to a different path would orphan the navigation breadcrumb', () => {
     expect(body).toMatch(
-      /<a href="\/incidents" class="text-sm text-oxblood-700 hover:underline">← Back to incidents<\/a>/,
+      /<a href="\/incidents" class="text-sm text-tk-accent hover:underline">← Back to incidents<\/a>/,
     );
   });
 });

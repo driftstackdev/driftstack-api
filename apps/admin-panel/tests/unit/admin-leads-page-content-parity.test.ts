@@ -48,10 +48,10 @@ describe('W380.A admin-panel /leads.astro page content parity', () => {
   });
 
   it('4 SOURCE_BADGE color rows pinned (pricing_cta=oxblood / docs_signup=blue / email_inbound=emerald / other=slate)', () => {
-    expect(body).toMatch(/pricing_cta: 'bg-oxblood-50 text-oxblood-700'/);
+    expect(body).toMatch(/pricing_cta: 'bg-tk-accent\/10 text-tk-accent'/);
     expect(body).toMatch(/docs_signup: 'bg-blue-50 text-blue-700'/);
     expect(body).toMatch(/email_inbound: 'bg-emerald-50 text-emerald-700'/);
-    expect(body).toMatch(/other: 'bg-slate-100 text-slate-600'/);
+    expect(body).toMatch(/other: 'bg-tk-hover text-tk-ink-2'/);
   });
 
   it('4 SOURCE_LABEL strings pinned ("Pricing CTA" / "Docs signup" / "Email inbound" / "Other")', () => {
@@ -100,7 +100,7 @@ describe('W380.A admin-panel /leads.astro page content parity', () => {
 
   it('lead row exposes id (font-mono) + email + optional notes', () => {
     expect(body).toMatch(/\{lead\.email\}/);
-    expect(body).toMatch(/<p class="mt-1 font-mono text-xs text-slate-500">\{lead\.id\}<\/p>/);
+    expect(body).toMatch(/<p class="mt-1 font-mono text-xs text-tk-ink-3">\{lead\.id\}<\/p>/);
     expect(body).toMatch(/\{lead\.notes !== null && \(/);
   });
 

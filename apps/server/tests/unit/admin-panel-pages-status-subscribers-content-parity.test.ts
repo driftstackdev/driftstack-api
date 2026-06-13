@@ -48,7 +48,7 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
 
   it("Status-badge 3-tone: unsubscribed_at present → slate-100 'unsubscribed {ts}' / confirmed_at present → emerald-50 'confirmed' / fallback → amber-50 'pending' — pinned so the badge taxonomy mirrors the canonical lifecycle (pending → confirmed → unsubscribed) + tombstoned rows don't double-classify (unsubscribed_at takes precedence over confirmed_at)", () => {
     expect(body).toMatch(
-      /if \(sub\.unsubscribed_at\) \{\s*\n?\s*return '<span class="rounded-full bg-slate-100 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-slate-600">unsubscribed '/,
+      /if \(sub\.unsubscribed_at\) \{\s*\n?\s*return '<span class="rounded-full bg-tk-hover px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2">unsubscribed '/,
     );
     expect(body).toMatch(
       /if \(sub\.confirmed_at\) \{\s*\n?\s*return '<span class="rounded-full bg-emerald-50 px-2 py-0\.5 text-xs font-medium uppercase tracking-wide text-emerald-700">confirmed<\/span>';\s*\n?\s*\}/,
@@ -60,12 +60,12 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
 
   it("Force-unsubscribe gate: canForceUnsub = !sub.unsubscribed_at && sub.email — both required (already-unsubscribed rows + tombstoned rows with email=null both show 'no action' instead) — pinned so the button doesn't appear on rows where it would be a no-op or would crash on missing email", () => {
     expect(body).toMatch(/const canForceUnsub = !sub\.unsubscribed_at && sub\.email;/);
-    expect(body).toMatch(/<span class="text-xs text-slate-400">no action<\/span>/);
+    expect(body).toMatch(/<span class="text-xs text-tk-ink-3">no action<\/span>/);
   });
 
-  it("Tombstoned-row email display: sub.email present → escapeHtml(sub.email) else '<span class=\"font-mono text-xs text-slate-400\">(purged — V-295c3-tombstone)</span>' — pinned so the 90d-post-unsubscribe purge cron's null-email tombstone renders as an explicit '(purged)' marker referencing the V-295c3-tombstone slice (not a bare empty cell that looks broken)", () => {
+  it("Tombstoned-row email display: sub.email present → escapeHtml(sub.email) else '<span class=\"font-mono text-xs text-tk-ink-3\">(purged — V-295c3-tombstone)</span>' — pinned so the 90d-post-unsubscribe purge cron's null-email tombstone renders as an explicit '(purged)' marker referencing the V-295c3-tombstone slice (not a bare empty cell that looks broken)", () => {
     expect(body).toMatch(
-      /const emailDisplay = sub\.email\s*\n?\s*\? escapeHtml\(sub\.email\)\s*\n?\s*: '<span class="font-mono text-xs text-slate-400">\(purged — V-295c3-tombstone\)<\/span>';/,
+      /const emailDisplay = sub\.email\s*\n?\s*\? escapeHtml\(sub\.email\)\s*\n?\s*: '<span class="font-mono text-xs text-tk-ink-3">\(purged — V-295c3-tombstone\)<\/span>';/,
     );
   });
 

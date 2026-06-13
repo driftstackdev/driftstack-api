@@ -93,7 +93,7 @@ describe('W488.A apps/admin-panel/src/pages/audit-log.astro content parity', () 
 
   it("Empty-filter-result branch: 'No audit entries match the current filter.' colspan=5 cell — pinned so the empty-after-filter state is visually distinct (centered + slate-500 muted) from the no-data-yet state and operators can tell their filter is the cause", () => {
     expect(body).toMatch(
-      /<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-slate-500">No audit entries match the current filter\.<\/td><\/tr>/,
+      /<tr><td colspan="5" class="px-4 py-8 text-center text-sm text-tk-ink-3">No audit entries match the current filter\.<\/td><\/tr>/,
     );
   });
 

@@ -18,16 +18,16 @@ const apiBaseUrl = resolveApiBaseUrl();
   <div class="mx-auto max-w-6xl px-6 py-10" data-page="admin-cost">
     <div
       data-banner
-      class="mb-6 hidden rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+      class="mb-6 hidden rounded-lg border border-tk-border bg-tk-bg px-4 py-3 text-sm text-tk-ink-2"
       role="status"
     >
     </div>
 
     <header class="mb-10">
-      <p class="text-sm text-slate-500">Driftstack admin · staff-only</p>
-      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-slate-900">Cost (V-541)</h1>
+      <p class="text-sm text-tk-ink-3">Driftstack admin · staff-only</p>
+      <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Cost (V-541)</h1>
      <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true"></div>
-      <p class="mt-2 max-w-prose text-sm text-slate-500">
+      <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
         Per-account cost estimate for the current billing cycle. Numbers
         come from <code class="font-mono text-xs">/v1/admin/cost/*</code>;
         config tile shows the wired rate card so operators can sanity-check
@@ -38,7 +38,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     <!-- Config inspector tile -->
     <section class="mb-8 grid gap-4 md:grid-cols-2">
       <div class="dashboard-card">
-        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Rate card (per unit)</p>
+        <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Rate card (per unit)</p>
         <dl class="mt-4 space-y-3 text-sm" data-field="rate-card">
           {/* 2026-05-24 — skeleton rows for hydrate-state polish. */}
           <div class="flex items-center justify-between gap-4">
@@ -56,7 +56,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </dl>
       </div>
       <div class="dashboard-card">
-        <p class="font-mono text-xs uppercase tracking-widest text-slate-500">Tier thresholds</p>
+        <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Tier thresholds</p>
         <dl class="mt-4 space-y-3 text-sm" data-field="tier-thresholds">
           {/* 2026-05-24 — skeleton rows for hydrate-state polish. */}
           <div class="flex items-center justify-between gap-4">
@@ -74,8 +74,8 @@ const apiBaseUrl = resolveApiBaseUrl();
     {/* 2026-05-23 — icon header on cost sections. */}
     <!-- Per-account query -->
     <section class="mb-6">
-      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
-        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+      <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
+        <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="7" r="4" />
             <path d="M5 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2" />
@@ -88,27 +88,27 @@ const apiBaseUrl = resolveApiBaseUrl();
         class="mt-3 flex flex-wrap items-end gap-3"
       >
         <label class="flex flex-col text-sm">
-          <span class="text-slate-600">Account ID</span>
+          <span class="text-tk-ink-2">Account ID</span>
           <input
             type="text"
             name="account_id"
             placeholder="acc_… or raw UUID"
-            class="mt-1 w-72 rounded-md border border-slate-300 px-3 py-2 font-mono text-xs shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+            class="mt-1 w-72 rounded-md border border-tk-border px-3 py-2 font-mono text-xs shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
             required
           />
         </label>
         <label class="flex flex-col text-sm">
-          <span class="text-slate-600">Billing cycle</span>
+          <span class="text-tk-ink-2">Billing cycle</span>
           <input
             type="text"
             name="billing_cycle"
             placeholder="YYYY-MM (default current)"
-            class="mt-1 w-44 rounded-md border border-slate-300 px-3 py-2 font-mono text-xs shadow-sm focus:border-oxblood-700 focus:outline-none focus:ring-1 focus:ring-oxblood-700"
+            class="mt-1 w-44 rounded-md border border-tk-border px-3 py-2 font-mono text-xs shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent"
           />
         </label>
         <button
           type="submit"
-          class="rounded-md bg-oxblood-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-oxblood-800"
+          class="rounded-md bg-tk-accent px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-tk-accent-hover"
         >
           Query
         </button>
@@ -124,15 +124,15 @@ const apiBaseUrl = resolveApiBaseUrl();
     <section class="mb-6">
       <div class="flex items-end justify-between gap-3">
         <div>
-          <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-900">
-            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-oxblood-700/10 ring-1 ring-oxblood-700/20 text-oxblood-700">
+          <h2 class="flex items-center gap-2 text-lg font-semibold tracking-tight text-tk-ink">
+            <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/20 text-tk-accent">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
               </svg>
             </span>
             Top accounts by cost
           </h2>
-          <p class="mt-1 text-sm text-slate-500">
+          <p class="mt-1 text-sm text-tk-ink-3">
             Sorted descending by total cents in the current cycle. Fetches the
             first <code class="font-mono text-xs">limit=50</code> accounts then
             asks <code class="font-mono text-xs">/v1/admin/cost/overview</code>
@@ -143,7 +143,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           <button
             type="button"
             data-button="export-top-csv"
-            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm hover:bg-slate-50"
+            class="rounded-md border border-tk-border bg-tk-surface px-3 py-1.5 text-sm shadow-sm hover:bg-tk-bg"
             title="Download the currently-rendered top-accounts table as CSV"
           >
             Export CSV
@@ -151,7 +151,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           <button
             type="button"
             data-button="refresh-top"
-            class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm hover:bg-slate-50"
+            class="rounded-md border border-tk-border bg-tk-surface px-3 py-1.5 text-sm shadow-sm hover:bg-tk-bg"
           >
             Refresh
           </button>
@@ -161,11 +161,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         data-field="top-result"
         class="mt-4 dashboard-card"
       >
-        <p class="text-sm text-slate-500">Click Refresh to fetch the top accounts.</p>
+        <p class="text-sm text-tk-ink-3">Click Refresh to fetch the top accounts.</p>
       </div>
     </section>
 
-    <p class="mt-12 text-xs text-slate-500">
+    <p class="mt-12 text-xs text-tk-ink-3">
       Endpoints consumed:
       <code class="font-mono">{apiBaseUrl}/v1/admin/cost/config</code>,
       <code class="font-mono">{apiBaseUrl}/v1/admin/cost/accounts/:id</code>,
@@ -227,7 +227,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     rateCard.innerHTML = entries
       .map(
         ([label, key, unit]) =>
-          `<div class="flex justify-between gap-4"><dt class="text-slate-600">${escapeHtml(label)}</dt><dd class="font-mono text-xs text-slate-900">${escapeHtml(String(rates[key] ?? '—'))} <span class="text-slate-400">${escapeHtml(unit)}</span></dd></div>`,
+          `<div class="flex justify-between gap-4"><dt class="text-tk-ink-2">${escapeHtml(label)}</dt><dd class="font-mono text-xs text-tk-ink">${escapeHtml(String(rates[key] ?? '—'))} <span class="text-tk-ink-3">${escapeHtml(unit)}</span></dd></div>`,
       )
       .join('');
   }
@@ -240,12 +240,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       // `softWarningCents` / `hardCapCents` (a previous field-name
       // guess) silently rendered every tier as "$0.00".
       ([tier, t]) =>
-        `<div class="flex justify-between gap-4"><dt class="text-slate-600">${escapeHtml(tier)}</dt><dd class="font-mono text-xs text-slate-900">soft $${((t.softCents ?? 0) / 100).toFixed(2)} · hard $${((t.hardCents ?? 0) / 100).toFixed(2)}</dd></div>`,
+        `<div class="flex justify-between gap-4"><dt class="text-tk-ink-2">${escapeHtml(tier)}</dt><dd class="font-mono text-xs text-tk-ink">soft $${((t.softCents ?? 0) / 100).toFixed(2)} · hard $${((t.hardCents ?? 0) / 100).toFixed(2)}</dd></div>`,
     );
     tierThresholds.innerHTML =
       rows.length > 0
         ? rows.join('')
-        : '<div class="text-slate-500">No tier thresholds configured.</div>';
+        : '<div class="text-tk-ink-3">No tier thresholds configured.</div>';
   }
 
   function renderAccountSummary(body) {
@@ -279,11 +279,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       const pct = Math.max(4, Math.round((v / total) * 100));
       return (
         '<div class="flex items-center gap-3 text-xs">' +
-        `<span class="w-24 shrink-0 text-slate-600">${escapeHtml(label)}</span>` +
-        '<div class="flex-1 h-4 rounded-full bg-slate-100 overflow-hidden">' +
-        `<div class="h-full bg-oxblood-700/70" style="width: ${pct.toString()}%"></div>` +
+        `<span class="w-24 shrink-0 text-tk-ink-2">${escapeHtml(label)}</span>` +
+        '<div class="flex-1 h-4 rounded-full bg-tk-hover overflow-hidden">' +
+        `<div class="h-full bg-tk-accent/70" style="width: ${pct.toString()}%"></div>` +
         '</div>' +
-        `<span class="font-mono w-20 text-right text-slate-900">${cents(v)}</span>` +
+        `<span class="font-mono w-20 text-right text-tk-ink">${cents(v)}</span>` +
         '</div>'
       );
     }
@@ -293,12 +293,12 @@ const apiBaseUrl = resolveApiBaseUrl();
       'over-hard': 'bg-rose-100 text-rose-800',
     };
     const stateClass =
-      STATE_BADGE[breakdown.thresholdState] || 'bg-slate-100 text-slate-600';
+      STATE_BADGE[breakdown.thresholdState] || 'bg-tk-hover text-tk-ink-2';
     accountResult.innerHTML =
       '<div class="space-y-4">' +
-      `<p class="font-mono text-xs text-slate-500">account_id: ${escapeHtml(body.account_id ?? body.accountId ?? '—')} · cycle: ${escapeHtml(body.billing_cycle ?? body.billingCycle ?? '—')} · tier: ${escapeHtml(body.tier ?? '—')}</p>` +
+      `<p class="font-mono text-xs text-tk-ink-3">account_id: ${escapeHtml(body.account_id ?? body.accountId ?? '—')} · cycle: ${escapeHtml(body.billing_cycle ?? body.billingCycle ?? '—')} · tier: ${escapeHtml(body.tier ?? '—')}</p>` +
       '<div class="flex items-baseline justify-between">' +
-      `<p class="text-2xl font-semibold text-slate-900">${cents(breakdown.totalCents)}</p>` +
+      `<p class="text-2xl font-semibold text-tk-ink">${cents(breakdown.totalCents)}</p>` +
       `<span class="inline-flex items-center rounded-full ${stateClass} px-2 py-0.5 text-[10px] font-mono uppercase tracking-wide">${escapeHtml(breakdown.thresholdState ?? '—')}</span>` +
       '</div>' +
       '<div class="space-y-2">' +
@@ -307,7 +307,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       bar('Egress', breakdown.egressCents) +
       bar('Sub-processor', subprocessorCents) +
       '</div>' +
-      `<p class="text-xs text-slate-500">Soft warn ${cents(thresholds.softCents)} · hard cap ${cents(thresholds.hardCents)}</p>` +
+      `<p class="text-xs text-tk-ink-3">Soft warn ${cents(thresholds.softCents)} · hard cap ${cents(thresholds.hardCents)}</p>` +
       '</div>';
   }
 
@@ -341,7 +341,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     if (!topResult) return;
     const cents = (n) => '$' + (Number(n ?? 0) / 100).toFixed(2);
     if (!Array.isArray(rows) || rows.length === 0) {
-      topResult.innerHTML = '<p class="text-sm text-slate-500">No accounts with usage in the current cycle.</p>';
+      topResult.innerHTML = '<p class="text-sm text-tk-ink-3">No accounts with usage in the current cycle.</p>';
       return;
     }
     const top = rows.slice(0, 10);
@@ -351,7 +351,7 @@ const apiBaseUrl = resolveApiBaseUrl();
     // breakdown carries `thresholdState`.
     topResult.innerHTML =
       '<table class="w-full text-sm">' +
-      '<thead><tr class="text-left text-xs uppercase tracking-widest text-slate-500"><th class="py-1">Account</th><th>Tier</th><th class="text-right">Total</th><th class="text-right">Soft warn</th><th class="text-right">Hard cap</th><th>State</th></tr></thead>' +
+      '<thead><tr class="text-left text-xs uppercase tracking-widest text-tk-ink-3"><th class="py-1">Account</th><th>Tier</th><th class="text-right">Total</th><th class="text-right">Soft warn</th><th class="text-right">Hard cap</th><th>State</th></tr></thead>' +
       '<tbody>' +
       top
         .map((r) => {
@@ -374,7 +374,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
   async function loadTopAccounts() {
     if (!topResult) return;
-    topResult.innerHTML = '<p class="text-sm text-slate-500">Loading…</p>';
+    topResult.innerHTML = '<p class="text-sm text-tk-ink-3">Loading…</p>';
     try {
       // Step 1 — pull first 50 accounts.
       const accountsRes = await authedFetch('/v1/admin/accounts?limit=50');
@@ -387,7 +387,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         .map((a) => (a.id ?? '').startsWith('acc_') ? (a.id ?? '').slice(4) : a.id)
         .filter(Boolean);
       if (ids.length === 0) {
-        topResult.innerHTML = '<p class="text-sm text-slate-500">No accounts found.</p>';
+        topResult.innerHTML = '<p class="text-sm text-tk-ink-3">No accounts found.</p>';
         return;
       }
       // Step 2 — overview is already sorted by total cost desc.
