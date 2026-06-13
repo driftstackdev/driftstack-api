@@ -37,6 +37,19 @@ const KEYRING_USER: &str = "default";
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Single-instance guard (founder-hit 2026-06-13: two stacked
+        // instances wedged into a "not responding" window). MUST be the
+        // first plugin registered (tauri requirement). On a second launch,
+        // focus + unminimize the existing main window instead of spawning a
+        // duplicate.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            use tauri::Manager;
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = win.unminimize();
+                let _ = win.show();
+                let _ = win.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
@@ -54,9 +67,9 @@ pub fn run() {
         // hand off to this app immediately. The TypeScript side
         // listens via `@tauri-apps/plugin-deep-link.onOpenUrl`. Per-
         // OS registration (Info.plist on macOS, registry on Windows,
-        // .desktop on Linux) is declared in tauri.conf.json. The
-        // single-instance behavior keeps a second app launch from a
-        // deep-link from spawning a duplicate window.
+        // .desktop on Linux) is declared in tauri.conf.json. Duplicate
+        // launches are collapsed by the single-instance plugin above
+        // (which focuses the existing window).
         .plugin(tauri_plugin_deep_link::init())
         // W434 (founder W232 item b) — macOS WKWebView blank-until-redraw on the
         // Overlay-titlebar window: the packaged release `.app` mounts + polls the

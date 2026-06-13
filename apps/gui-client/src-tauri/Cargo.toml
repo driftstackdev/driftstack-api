@@ -42,6 +42,11 @@ tauri-plugin-process = "2.0"
 # v328-tauri-deep-link-test.md — needs per-OS bundle test before
 # release.
 tauri-plugin-deep-link = "2.0"
+# Single-instance guard: a second launch focuses the existing window
+# instead of spawning a duplicate (the comment at lib.rs claimed this but
+# the plugin was never wired → two instances could stack + wedge into a
+# "not responding" window — founder-hit 2026-06-13).
+tauri-plugin-single-instance = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # V-241 T3 #1 (D-2026-05-06-01): keyring-rs for cross-platform OS
