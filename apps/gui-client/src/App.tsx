@@ -323,7 +323,7 @@ function StatusFooter(): JSX.Element {
   // alongside sessions so the customer sees both caps at-a-glance
   // (matches the Sidebar's per-item count badges; the footer is the
   // always-visible mirror that survives across every view).
-  const { settings, client, accountMe } = useSettings();
+  const { settings, client, accountMe, activeWorkspace } = useSettings();
   const connected = client !== null;
   const atCap =
     accountMe !== null && accountMe.concurrent_session_active >= accountMe.concurrent_session_cap;
@@ -340,7 +340,13 @@ function StatusFooter(): JSX.Element {
       <div className="flex items-center gap-2">
         <span className={`status-pip ${connected ? 'bg-status-ready' : 'bg-status-idle'}`} />
         <span>{connected ? 'connected' : 'not connected'}</span>
-        {accountMe !== null && (
+        {/* account/me is self-scoped (it ignores X-Driftstack-Account), so
+            its tier + session/profile caps describe the SIGNED-IN account,
+            not the active team. In a team workspace those personal numbers
+            don't govern the work — profiles + sessions there count against
+            the owner's caps — so showing them would mislead. Surface the
+            workspace context instead; the personal caps return on Personal. */}
+        {accountMe !== null && activeWorkspace === null && (
           <>
             <span className="text-ink-muted">·</span>
             <span className="section-label">{accountMe.tier}</span>
@@ -351,6 +357,17 @@ function StatusFooter(): JSX.Element {
             <span className={atProfileCap ? 'mono text-status-error' : 'mono'}>
               {accountMe.profile_count}
               {accountMe.profile_cap !== null ? ` / ${accountMe.profile_cap}` : ''} profiles
+            </span>
+          </>
+        )}
+        {activeWorkspace !== null && (
+          <>
+            <span className="text-ink-muted">·</span>
+            <span
+              className="section-label"
+              title="In a team workspace, plan limits are managed by the workspace owner — your personal caps don't apply here."
+            >
+              team workspace
             </span>
           </>
         )}
