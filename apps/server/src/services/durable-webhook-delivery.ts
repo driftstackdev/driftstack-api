@@ -44,6 +44,7 @@ import type { WebhookEventType } from '@driftstack/api-types';
 import type { Database } from '../db/client.js';
 import { webhookDeliveries, webhookDeliveryAttempts, webhookEndpoints } from '../db/schema.js';
 import { METRIC_NAMES } from './metrics-registry.js';
+import { ssrfGuardedFetch } from '../lib/ssrf-guarded-fetch.js';
 
 /** Backoff schedule mirroring V-164 InMemoryWebhookDelivery. */
 export const BACKOFF_MS_BY_ATTEMPT: Record<number, number> = {
@@ -59,7 +60,7 @@ export const DEFAULT_MAX_ATTEMPTS = 6; // initial + 5 retries (backoff[5] = 60 m
 
 export interface DurableWebhookDeliveryDeps {
   database: Database;
-  /** Test seam — defaults to global fetch. */
+  /** Test seam — defaults to the SSRF-guarded fetch (connection-time DNS pin). */
   fetch?: typeof fetch;
   /** Test seam — defaults to () => Date.now(). */
   now?: () => number;
@@ -92,7 +93,13 @@ export interface DurableWebhookDeliveryHandles {
 export function createDurableWebhookDelivery(
   deps: DurableWebhookDeliveryDeps,
 ): DurableWebhookDeliveryHandles {
-  const fetchFn = deps.fetch ?? globalThis.fetch.bind(globalThis);
+  // SSRF-safe by default: the V-173 durable sender is the documented FORWARD
+  // path (header note). Defaulting to ssrfGuardedFetch — same as the live
+  // webhook-worker.ts poller — means a future cutover keeps the connection-time
+  // DNS-rebind pin without the wirer having to remember to inject it. A
+  // create/update-time guard (lib/webhook-target-guard) can't stop rebind; this
+  // is the connection-time layer. Tests inject deps.fetch and bypass it.
+  const fetchFn = deps.fetch ?? ssrfGuardedFetch;
   const now = deps.now ?? (() => Date.now());
 
   const deliveries = new DurableWebhookDeliveryService(deps.database, now);

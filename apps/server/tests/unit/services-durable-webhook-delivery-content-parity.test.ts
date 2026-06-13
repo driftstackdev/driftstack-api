@@ -179,20 +179,29 @@ describe('W404.A apps/server/src/services/durable-webhook-delivery.ts content pa
     );
   });
 
-  it('DurableWebhookDeliveryDeps: database + fetch? test seam (defaults to globalThis.fetch.bind) + now? test seam (defaults to Date.now)', () => {
+  it('DurableWebhookDeliveryDeps: database + fetch? test seam (defaults to ssrfGuardedFetch) + now? test seam (defaults to Date.now)', () => {
     expect(body).toMatch(/export interface DurableWebhookDeliveryDeps \{/);
     expect(body).toMatch(/database: Database;/);
     expect(body).toMatch(
-      /\/\*\* Test seam — defaults to global fetch\. \*\/\s*\n?\s*fetch\?: typeof fetch;/,
+      /\/\*\* Test seam — defaults to the SSRF-guarded fetch \(connection-time DNS pin\)\. \*\/\s*\n?\s*fetch\?: typeof fetch;/,
     );
     expect(body).toMatch(
       /\/\*\* Test seam — defaults to \(\) => Date\.now\(\)\. \*\/\s*\n?\s*now\?: \(\) => number;/,
     );
-    expect(body).toMatch(/const fetchFn = deps\.fetch \?\? globalThis\.fetch\.bind\(globalThis\);/);
     expect(body).toMatch(/const now = deps\.now \?\? \(\(\) => Date\.now\(\)\);/);
     // SSRF hardening — the outbound delivery fetch must NOT follow redirects
     // (a 3xx to an internal target would bypass the create-time https-only check).
     expect(body).toMatch(/redirect: 'error',/);
+  });
+
+  it('SSRF-safe-by-default invariant: the durable sender (V-173 FORWARD path) defaults its fetch to ssrfGuardedFetch — same connection-time DNS-rebind pin the live webhook-worker.ts poller uses — so a future cutover cannot silently lose the guard', () => {
+    // The import is wired (the guard lives in apps/server/src/lib).
+    expect(body).toMatch(/import \{ ssrfGuardedFetch \} from '\.\.\/lib\/ssrf-guarded-fetch\.js';/);
+    // The default is the guarded fetch — NOT bare globalThis.fetch (the
+    // create-time webhook-target-guard can't stop DNS rebind; this is the
+    // connection-time layer, and it must be the DEFAULT, not opt-in).
+    expect(body).toMatch(/const fetchFn = deps\.fetch \?\? ssrfGuardedFetch;/);
+    expect(body).not.toMatch(/const fetchFn = deps\.fetch \?\? globalThis\.fetch/);
   });
 
   it('imports: drizzle-orm helpers (and/asc/desc/eq/inArray/lt/or/sql) + signWebhookPayload + webhook-delivery package types + Database + schema', () => {
