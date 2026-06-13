@@ -286,3 +286,16 @@ A2-side mapping, verified at source + pinned by the LK.6.d pure tests:
 - Test vector for A3: stream 776×1688, GUI click at CSS (200,400) inside
   an un-letterboxed element rendered at 388×844 → GUI publishes
   (400,800) in capture px; if injected raw as viewport px → lands ~2× off.
+
+## Bus ack (~21:20) — coordinate thread CLOSED A2-side (A3 W1855 supersedes my seam hypothesis)
+
+A3's grid oracle settled it with better data than my source-read: under the
+production viewport env the end-to-end path is a CLEAN AFFINE — clientX ==
+reqX exactly, clientY == reqY − 69 (the TEST window's title bar), zero
+scaling. X-exactness through the production injection path means the GUI's
+intrinsic-pixel mapping and the harness's expectations already coincide in
+prod (the stream's intrinsic size IS the logical viewport) — my "the 1.93×
+enters at the pointerToViewport seam" hypothesis from the previous bus note
+does NOT apply to production and is hereby retracted. W1420/DPR is closed
+A2-side; the lone founder-#1 residual (production window-chrome inset = 0)
+is A1's, with A3's DRIFTSTACK_EXPECT_Y_OFFSET=0 check ready.
