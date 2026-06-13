@@ -19,6 +19,10 @@ tauri = { version = "2.0", features = ["macos-private-api"] }
 tauri-plugin-shell = "2.0"
 tauri-plugin-store = "2.0"
 tauri-plugin-fs = "2.0"
+# E-2 exit-geo probe: HTTPS GET /v1/egress/echo THROUGH the customer's
+# SOCKS5 proxy (probe-backend design build-order 2). rustls = no
+# OpenSSL system dependency; socks-proxy = native socks5:// support.
+ureq = { version = "2.10", default-features = false, features = ["tls", "socks-proxy", "json"] }
 # V-243 / D-2026-05-06-03 — Tauri Updater for cross-platform auto-update.
 # Public-key signature verification on update bundles; signing key
 # generated via `npx tauri signer generate` (founder action; see

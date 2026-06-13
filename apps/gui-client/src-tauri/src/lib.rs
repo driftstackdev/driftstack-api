@@ -85,6 +85,7 @@ pub fn run() {
             secret_load,
             secret_delete,
             proxy_test,
+            proxy_exit_probe,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -337,6 +338,52 @@ fn proxy_test(
             message,
         },
     }
+}
+
+/// E-2 exit-geo probe (probe-backend design, build-order 2): fetch the
+/// platform's exit-IP echo THROUGH the customer's SOCKS5 proxy — the
+/// response is the IP/country the world sees for sessions on this exit.
+/// Never throws to JS: any failure (proxy down, echo 404 pre-deploy,
+/// timeout) surfaces as an Err string the wrapper maps to null.
+#[derive(serde::Serialize)]
+struct ProxyExitProbeResult {
+    ip: String,
+    country: Option<String>,
+}
+
+#[tauri::command]
+fn proxy_exit_probe(
+    host: String,
+    port: u16,
+    username: Option<String>,
+    password: Option<String>,
+) -> Result<ProxyExitProbeResult, String> {
+    let auth = match (username.as_deref(), password.as_deref()) {
+        (Some(u), Some(p)) if !u.is_empty() => format!("{u}:{p}@"),
+        (Some(u), None) if !u.is_empty() => format!("{u}@"),
+        _ => String::new(),
+    };
+    let proxy_url = format!("socks5://{auth}{host}:{port}");
+    let proxy = ureq::Proxy::new(&proxy_url).map_err(|e| e.to_string())?;
+    let agent = ureq::AgentBuilder::new()
+        .proxy(proxy)
+        .timeout(std::time::Duration::from_secs(10))
+        .build();
+    let resp = agent
+        .get("https://api.driftstack.dev/v1/egress/echo")
+        .call()
+        .map_err(|e| e.to_string())?;
+    let body: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
+    let ip = body
+        .get("ip")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "echo response missing ip".to_string())?
+        .to_string();
+    let country = body
+        .get("country")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    Ok(ProxyExitProbeResult { ip, country })
 }
 
 #[cfg(test)]
