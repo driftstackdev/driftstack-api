@@ -4,7 +4,12 @@
 // while preserving the path + benign params. See lib/redact-url.ts.
 
 import { describe, expect, it } from 'vitest';
-import { redactUrlQueryTokens, redactQueryString, redactText } from '../../src/lib/redact-url.js';
+import {
+  redactUrlQueryTokens,
+  redactQueryString,
+  redactText,
+  redactUrlUserinfo,
+} from '../../src/lib/redact-url.js';
 
 describe('redactUrlQueryTokens', () => {
   it('redacts the SSE ds_token while keeping the path', () => {
@@ -114,5 +119,52 @@ describe('redactText — free-text (exception/breadcrumb/message) credential red
       'connection reset by peer (ECONNRESET)',
     );
     expect(redactText('')).toBe('');
+  });
+});
+
+describe('userinfo credential redaction (scheme://user:pass@host)', () => {
+  it('redacts user:pass@ userinfo in a full URL, keeping scheme + host', () => {
+    expect(redactUrlUserinfo('https://alice:hunter2@host.example/path')).toBe(
+      'https://[redacted]@host.example/path',
+    );
+    expect(redactUrlUserinfo('socks5://u:p@proxy.internal:1080')).toBe(
+      'socks5://[redacted]@proxy.internal:1080',
+    );
+  });
+
+  it('redacts a bare username-only userinfo too (over-redaction in logs is safe)', () => {
+    expect(redactUrlUserinfo('https://tokenish@host/x')).toBe('https://[redacted]@host/x');
+  });
+
+  it('leaves userinfo-free URLs + a query-embedded @ + mailto untouched', () => {
+    expect(redactUrlUserinfo('https://host/path?x=1')).toBe('https://host/path?x=1');
+    // a query-embedded @ (email) is NOT userinfo — the host's `/`/`?` stop the class
+    expect(redactUrlUserinfo('https://host/?email=a@b.com')).toBe('https://host/?email=a@b.com');
+    // mailto: has no `//` → not matched
+    expect(redactUrlUserinfo('mailto:user@host.com')).toBe('mailto:user@host.com');
+    expect(redactUrlUserinfo('')).toBe('');
+  });
+
+  it('redactText scrubs userinfo creds embedded in an error message, prose intact', () => {
+    const out = redactText(
+      'proxy connect failed for socks5://bob:s3cret@p.example:1080 (ETIMEDOUT)',
+    );
+    expect(out).not.toContain('s3cret');
+    expect(out).not.toContain('bob:s3cret');
+    expect(out).toContain('socks5://[redacted]@p.example:1080');
+    expect(out).toContain('ETIMEDOUT'); // prose intact
+  });
+
+  it('redactUrlQueryTokens redacts BOTH userinfo and a query token in one full URL', () => {
+    const out = redactUrlQueryTokens('https://u:p@host/cb?code=AUTH&state=ok');
+    expect(out).not.toContain('u:p@');
+    expect(out).not.toContain('AUTH');
+    expect(out).toContain('https://[redacted]@host/cb'); // userinfo: plain replace
+    expect(out).toContain('code=%5Bredacted%5D'); // query value: URL-encoded by URLSearchParams
+    expect(out).toContain('state=ok');
+  });
+
+  it('redactUrlQueryTokens redacts userinfo even with no query present', () => {
+    expect(redactUrlQueryTokens('https://u:p@host/path')).toBe('https://[redacted]@host/path');
   });
 });

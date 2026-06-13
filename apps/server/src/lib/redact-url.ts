@@ -55,17 +55,36 @@ export function redactQueryString(queryStr: string): string {
   return changed ? params.toString() : queryStr;
 }
 
+// Credentials embedded in URL userinfo — `scheme://user:pass@host`. Customer-
+// supplied URLs (webhook targets, navigate, oauth redirect_uri) can carry these,
+// and an error/log line echoing such a URL would otherwise leak them past the
+// query-param + bearer redaction (those only cover `?key=` and `Bearer …`).
+// Anchored on `scheme://`, the userinfo class `[^/?#\s@]+` stops before the
+// host's path/query/fragment, so a query-embedded `@` (e.g. `?email=a@b.com`)
+// is NOT matched, and a bare `mailto:user@host` (no `//`) is left alone. The
+// WHOLE userinfo is redacted (a bare username isn't secret, but over-redaction
+// in a log is harmless).
+const URL_USERINFO_RE = /([a-z][a-z0-9+.-]*:\/\/)[^/?#\s@]+@/gi;
+
+/** Redact `user:pass@` (or bare `user@`) userinfo from any `scheme://…@…` URL
+ *  in the string. No userinfo → unchanged. */
+export function redactUrlUserinfo(s: string): string {
+  if (typeof s !== 'string' || s.length === 0) return s;
+  return s.replace(URL_USERINFO_RE, '$1[redacted]@');
+}
+
 /**
- * Return `url` (a path+query string like Fastify's `req.url`, or a full
- * URL) with the value of any credential-bearing query parameter replaced.
- * No query → returned unchanged.
+ * Return `url` (a path+query string like Fastify's `req.url`, or a full URL)
+ * with the value of any credential-bearing query parameter replaced AND any
+ * `scheme://user:pass@` userinfo redacted. No credentials → returned unchanged.
  */
 export function redactUrlQueryTokens(url: string): string {
   if (typeof url !== 'string' || url.length === 0) return url;
-  const qIdx = url.indexOf('?');
-  if (qIdx === -1) return url;
-  const path = url.slice(0, qIdx);
-  const redacted = redactQueryString(url.slice(qIdx + 1));
+  const u = redactUrlUserinfo(url);
+  const qIdx = u.indexOf('?');
+  if (qIdx === -1) return u;
+  const path = u.slice(0, qIdx);
+  const redacted = redactQueryString(u.slice(qIdx + 1));
   return redacted.length > 0 ? `${path}?${redacted}` : path;
 }
 
@@ -91,5 +110,8 @@ const FREE_TEXT_BEARER_RE = /(bearer\s+)[A-Za-z0-9._-]+/gi;
 
 export function redactText(s: string): string {
   if (typeof s !== 'string' || s.length === 0) return s;
-  return s.replace(FREE_TEXT_TOKEN_RE, '$1[redacted]').replace(FREE_TEXT_BEARER_RE, '$1[redacted]');
+  return s
+    .replace(FREE_TEXT_TOKEN_RE, '$1[redacted]')
+    .replace(FREE_TEXT_BEARER_RE, '$1[redacted]')
+    .replace(URL_USERINFO_RE, '$1[redacted]@');
 }
