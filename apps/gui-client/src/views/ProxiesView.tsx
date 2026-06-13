@@ -21,7 +21,7 @@ import {
   type ProxyDraft,
   type ProxyTestResult,
 } from '../lib/proxies';
-import { saveExitResult, saveProbeResult } from '../lib/proxy-probe-cache';
+import { invalidateProbe, saveExitResult, saveProbeResult } from '../lib/proxy-probe-cache';
 import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
 
 interface ListState {
@@ -71,7 +71,25 @@ export function ProxiesView(): JSX.Element {
       if (editor.kind === 'add') {
         await addProxy(draft);
       } else if (editor.kind === 'edit') {
-        await updateProxy(editor.id, draft);
+        const editId = editor.id;
+        const prev = state.proxies.find((p) => p.id === editId);
+        await updateProxy(editId, draft);
+        // If the connection target changed, the cached probe (capability +
+        // exit-geo) no longer describes this proxy — drop it so cards fall
+        // back to the honest "untested" state until the next Test, rather
+        // than advertising the OLD endpoint's reachability/UDP/exit-geo.
+        // A label-only rename keeps the probe (same endpoint).
+        const connChanged =
+          prev === undefined ||
+          prev.host !== draft.host ||
+          prev.port !== draft.port ||
+          prev.username !== draft.username ||
+          prev.password !== draft.password;
+        if (connChanged) {
+          void invalidateProbe(editId).catch(() => undefined);
+          setTestResults((r) => dropKey(r, editId));
+          setExitResults((r) => dropKey(r, editId));
+        }
       }
       setEditor({ kind: 'idle' });
       await refresh();
@@ -84,6 +102,11 @@ export function ProxiesView(): JSX.Element {
     setBusyId(id);
     try {
       await removeProxy(id);
+      // Drop the cached probe too, else its exit-IP/geo orphans in the
+      // cache (and a future re-minted id could inherit stale geo).
+      void invalidateProbe(id).catch(() => undefined);
+      setTestResults((r) => dropKey(r, id));
+      setExitResults((r) => dropKey(r, id));
       await refresh();
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err) }));
@@ -596,4 +619,14 @@ function toDraft(p: ProxyConfig): ProxyDraft {
 function friendlyError(err: unknown): string {
   if (err instanceof Error) return err.message;
   return 'unknown error';
+}
+
+/** Return a copy of `rec` without `key` (same reference if absent, so React
+ *  state updates short-circuit). Used to evict a proxy's in-memory probe
+ *  results when its endpoint changes or it is deleted. */
+function dropKey<T>(rec: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in rec)) return rec;
+  const next = { ...rec };
+  delete next[key];
+  return next;
 }

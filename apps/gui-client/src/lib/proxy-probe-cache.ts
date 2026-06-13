@@ -117,3 +117,18 @@ export async function saveExitResult(
   await getStore().save();
   return all;
 }
+
+/** Drop a proxy's cached probe (capability + exit-geo). Called when the
+ *  proxy's connection details change — the cached reachability/UDP/exit-IP
+ *  no longer describes the live endpoint, so showing it on profile cards
+ *  would be dishonest — and when a proxy is deleted, so its entry can't
+ *  linger (and a future re-minted id can't inherit stale geo). Idempotent:
+ *  a no-op (no store write) when the proxy has no cached probe. */
+export async function invalidateProbe(proxyId: string): Promise<ProbeCacheMap> {
+  const all = await loadProbeCache();
+  if (all[proxyId] === undefined) return all;
+  delete all[proxyId];
+  await getStore().set(KEY, all);
+  await getStore().save();
+  return all;
+}

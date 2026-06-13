@@ -102,6 +102,25 @@ describe('proxy-probe-cache', () => {
     expect(reloaded['p1']?.exitCountry).toBeNull();
   });
 
+  it('invalidateProbe drops a proxy entry (capability + exit-geo), persists, is idempotent, and leaves other proxies untouched', async () => {
+    const { invalidateProbe, saveExitResult } = await import('../../src/lib/proxy-probe-cache');
+    await saveProbeResult('p1', OK, 1);
+    await saveExitResult('p1', '5.6.7.8', 'NL');
+    await saveProbeResult('p2', OK, 2);
+    // drops p1 entirely — result AND the attached exit-geo
+    let cache = await invalidateProbe('p1');
+    expect(cache['p1']).toBeUndefined();
+    expect(cache['p2']?.result.latency_ms).toBe(42);
+    // persisted to the store
+    const reloaded = await loadProbeCache();
+    expect(reloaded['p1']).toBeUndefined();
+    expect(reloaded['p2']).toBeDefined();
+    // idempotent — invalidating an already-absent id is a no-op
+    cache = await invalidateProbe('p1');
+    expect(cache['p1']).toBeUndefined();
+    expect(cache['p2']).toBeDefined();
+  });
+
   it('whole-store corruption degrades to empty', async () => {
     stores.set('proxy-probe-cache.json', new Map([['probes', 'garbage']]));
     expect(await loadProbeCache()).toEqual({});
