@@ -751,6 +751,35 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           />
           <HubStat n={String(proxies.length)} l="Proxies" />
           <HubStat n={String(folderList(profilesMeta).length)} l="Folders" />
+          {/* Team workspace indicator (hub demo, honest v1): memberships
+              from /v1/account/me. Workspace SWITCHING (X-Driftstack-Account
+              effective-account) is the named follow-up — this surfaces the
+              real memberships so the demo's team surface stops being
+              invisible. */}
+          {(accountMe?.teams?.length ?? 0) > 0 && (
+            <div
+              data-component="workspace-strip"
+              className="col-span-4 flex flex-wrap items-center gap-2 rounded-md border border-surface-divider bg-surface-raised px-3 py-2 text-xs"
+            >
+              <span className="section-label">Workspaces</span>
+              <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-ink-primary">
+                Personal
+              </span>
+              {(accountMe?.teams ?? []).map((t) => (
+                <span
+                  key={t.membership_id}
+                  className="rounded-full border border-surface-divider px-2 py-0.5 text-ink-secondary"
+                  title={`Owner account ${t.owner_account_id}`}
+                >
+                  Team · {t.role}
+                </span>
+              ))}
+              <span className="ml-auto text-2xs text-ink-muted">
+                Workspace switching coming to the GUI — available now via the API's
+                X-Driftstack-Account header.
+              </span>
+            </div>
+          )}
         </div>
       )}
       {!onboardingDismissed && (
