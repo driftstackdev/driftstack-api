@@ -67,9 +67,26 @@ decision; none is autonomously safe to flip.
    sole-writer/low-load window (attempted + cleanly reverted this wave). Detail:
    `2026-06-13-dep-vuln-delta-ws-prod-runtime.md`.
 
+6. **Content-Security-Policy on the frontends — deliberately deferred, a pre-launch
+   defense-in-depth decision.** The basic security headers ARE shipped (X-Frame-Options DENY +
+   X-Content-Type-Options nosniff + Referrer-Policy + Permissions-Policy, 5/5 CF-Pages apps;
+   API has @fastify/helmet). **CSP is the one missing layer** — no `Content-Security-Policy` on
+   the customer-data pages (dashboard/admin), so an XSS that slipped past escaping has no CSP
+   backstop. It's deferred because the apps use Astro `<script is:inline>` blocks everywhere,
+   which CSP can only allow via a **per-request nonce** (Astro doesn't auto-nonce them →
+   `'unsafe-inline'` would defeat the point). The analysis is done — a candidate policy is
+   drafted (`script-src 'self' 'nonce-{N}' js.sentry-cdn.com; connect-src 'self'
+api.driftstack.dev wss://*.driftstack.dev:* *.ingest.de.sentry.io; …`) in
+   `2026-05-20-csp-header-audit.md`. **The remaining work is a build-time/middleware nonce
+   mechanism + inline-script rewrite** (non-trivial frontend change, risks breaking pages if
+   wrong → not a safe autopilot flip; frontend is also direction-gated). Decision: invest in the
+   nonce+CSP rollout before launch, or accept no-CSP (relying on the audited-clean escaping + the
+   basic headers). Currently mitigated by the comprehensive XSS-escaping audits (dashboard + admin
+   both clean).
+
 ## Product / founder decision
 
-6. **Agent model registry refresh — `claude-opus-4-8` now available.** The per-session model
+7. **Agent model registry refresh — `claude-opus-4-8` now available.** The per-session model
    picker (`api-types/agent-models.ts CLAUDE_MODELS`) offers Opus 4.7 / Sonnet 4.6 / Haiku 4.5,
    with `DEFAULT_AGENT_MODEL = claude-opus-4-7`. **Opus 4.8 (`claude-opus-4-8`) is now released**
    — a "model version bump" per the registry's own "verify quarterly + on model version bumps"
