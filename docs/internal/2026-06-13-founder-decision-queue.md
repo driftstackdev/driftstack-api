@@ -67,6 +67,18 @@ decision; none is autonomously safe to flip.
    sole-writer/low-load window (attempted + cleanly reverted this wave). Detail:
    `2026-06-13-dep-vuln-delta-ws-prod-runtime.md`.
 
+## Product / founder decision
+
+6. **Agent model registry refresh — `claude-opus-4-8` now available.** The per-session model
+   picker (`api-types/agent-models.ts CLAUDE_MODELS`) offers Opus 4.7 / Sonnet 4.6 / Haiku 4.5,
+   with `DEFAULT_AGENT_MODEL = claude-opus-4-7`. **Opus 4.8 (`claude-opus-4-8`) is now released**
+   — a "model version bump" per the registry's own "verify quarterly + on model version bumps"
+   guidance. Adding it (AgentModelSchema + CLAUDE_MODELS with its verified Anthropic list-price
+   rate + whether it becomes the default) is a **product call** (which models to offer + any
+   bundled-tier implications), so surfaced not flipped. Opus 4.7 still works — this is a
+   freshness/curation decision, not a bug. The cost-accounting math + existing rates are verified
+   correct (cost-to-serve, not customer pricing) — see `project_llm_cost_rate_accounting_clean`.
+
 ## Minor / awaiting a nod
 
 - **`/Applications` has 11 stale `Driftstack.app.prev*` backups** (auto-created by the Tauri
