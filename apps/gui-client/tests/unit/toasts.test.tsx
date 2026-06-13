@@ -60,6 +60,18 @@ describe('ToastProvider', () => {
       useToasts();
       return null;
     }
-    expect(() => render(<Naked />)).toThrow(/requires <ToastProvider>/);
+    // React 18 also logs a caught render error to console.error on a later
+    // microtask ("The above error occurred… Consider adding an error boundary").
+    // Under full-suite concurrency that async log can surface while a different
+    // test file is the active one and trip vitest's unhandled-error detection —
+    // a file-order-dependent flake (failed the pre-push gate once 2026-06-13,
+    // passed in isolation). Silence console.error for just this intentional
+    // throw; the assertion still proves the hook throws without a provider.
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => render(<Naked />)).toThrow(/requires <ToastProvider>/);
+    } finally {
+      errSpy.mockRestore();
+    }
   });
 });
