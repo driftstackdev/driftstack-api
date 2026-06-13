@@ -337,6 +337,20 @@ describe('POST /v1/sessions/:id/wait', () => {
     const body = res.json<Record<string, unknown>>();
     expect(body.satisfied).toBe(true);
   });
+
+  it('403 when the key lacks write:sessions scope (read-only key) — wait is a driver write, not a read', async () => {
+    fx = await buildTestApp({ scopes: ['read'] });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions/ses_00000000-0000-0000-0000-000000000000/wait',
+      headers: auth(fx),
+      payload: { condition: { kind: 'time', ms: 0 } },
+    });
+    expect(res.statusCode).toBe(403);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.type).toBe(PROBLEM_TYPES.Forbidden);
+    expect(body.detail).toContain('write:sessions');
+  });
 });
 
 describe('GET /v1/sessions/:id/state', () => {

@@ -446,7 +446,10 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
   app.post<{ Params: { id: string } }>(
     '/v1/sessions/:id/wait',
     {
-      preHandler: [app.requireAuth, app.rateLimit('global')],
+      // wait is a state-mutating driver op (drives the live session, writes a
+      // `waited` event, and forces `errored` on timeout) — same write gate as
+      // navigate/interact, NOT a read. A read-only scope must NOT drive sessions.
+      preHandler: [app.requireAuth, app.requireScope('write:sessions'), app.rateLimit('global')],
     },
     async (request) => {
       const ctx = requireCtx(request);
