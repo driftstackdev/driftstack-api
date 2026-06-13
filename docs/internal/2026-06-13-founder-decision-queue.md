@@ -4,18 +4,26 @@ Supersedes `2026-06-10-autopilot-arc-briefing-and-decision-queue.md` (state move
 
 ## State (all verified against live prod this session)
 
-- **Prod is fully current** (`api.driftstack.dev` git_sha `507b690b` = origin HEAD) and
-  **operationally signed off**: `NRestarts=0`, 0 `level:error` / 500 / uncaught in the
-  journal, 0 "column/relation does not exist" (the 5 migrations 0072-0076 applied
-  cleanly + code matches schema). `driver:mock` is the expected pre-launch state.
+- **Prod is runtime-current** (`api.driftstack.dev` git_sha `4bcb4290`; origin HEAD is
+  later but the gap is **docs-only — no runtime delta**, verified via
+  `git diff 4bcb4290..origin -- apps/server/src packages '*.sql'`) and **operationally
+  signed off over its running period** (since 21:03 UTC): `NRestarts=0`, 0 error/500/uncaught,
+  0 "column/relation does not exist" (code matches schema). `driver:mock` = expected pre-launch.
 - **Code surface exhaustively audited clean** this session: authz (route-scope +
   resource-ownership + SSE ds_token), crypto (platform-secrets + profile key-hierarchy),
   URL-credential redaction (query/bearer/userinfo), error info-disclosure, CORS (verified
   secure in prod), input-bounds, account-scoping, migration DDL/index coverage.
-- **Shipped + live this session**: frontend-perfection punch-list (themes deployed across
-  docs/status/marketing/dashboard), session concurrency-limit TOCTOU fix, userinfo
-  log-redaction, fleet-control node-IP forward-guard, prod brought from 154-commits-behind
-  to current. Real finds: userinfo redaction + session TOCTOU (both fixed + deployed).
+- **Shipped + live this session**: frontend-perfection punch-list, session concurrency-limit
+  TOCTOU fix, userinfo log-redaction, fleet-control node-IP forward-guard, webhook durable-sender
+  SSRF-safe default, **OAuth-provider atomic single-use code-consume (`4bcb4290` — code-reuse
+  TOCTOU closed)**, prod brought from 154-behind to current. Real finds fixed+deployed: userinfo
+  redaction, session TOCTOU, OAuth code-consume TOCTOU.
+- **Audit coverage now COMPLETE** across the whole backend (services/lib/routes/db/middleware/
+  schemas/drivers all per-file covered) + frontend security (XSS-escaping, localStorage+bearer
+  token-storage, secret-in-bundle, Tauri IPC capabilities, security-response-headers). The
+  per-file / drift-guard / behavioral-test / doc-accuracy proactive veins are all confirmed
+  comprehensively-covered — remaining value is trigger-detection (see
+  `project_backend_layer_coverage_complete`).
 
 **The non-gated substantive work is genuinely exhausted.** Everything below needs a
 decision; none is autonomously safe to flip.
