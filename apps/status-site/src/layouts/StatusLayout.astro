@@ -16,7 +16,7 @@ const { title } = Astro.props;
     <meta name="generator" content={Astro.generator} />
     <meta name="robots" content="index, follow" />
     <title>{title}</title>
-    <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=2" />
+    <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=3" />
   </head>
   <body class="min-h-screen">
     {/* WCAG 2.4.1 Bypass Blocks — keyboard/SR users skip the header nav. */}
@@ -26,11 +26,11 @@ const { title } = Astro.props;
     >
       Skip to main content
     </a>
-    <header class="border-b border-white/10 bg-surface-raised">
+    <header class="border-b border-surface-divider bg-surface-raised">
       <div class="mx-auto flex max-w-3xl items-center justify-between px-6 py-5">
         <a href="/" class="flex items-center gap-2 text-sm">
           <img
-            src="/driftstack-mark.svg?v=2"
+            src="/driftstack-mark.svg?v=3"
             alt="Driftstack"
             width="24"
             height="24"
@@ -50,7 +50,7 @@ const { title } = Astro.props;
     <main id="main-content" tabindex="-1" class="mx-auto max-w-3xl px-6 py-10">
       <slot />
     </main>
-    <footer class="mt-12 border-t border-white/10 bg-surface-raised">
+    <footer class="mt-12 border-t border-surface-divider bg-surface-raised">
       <div
         class="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-xs text-ink-muted"
       >

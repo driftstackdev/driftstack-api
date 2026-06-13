@@ -17,7 +17,7 @@ const R2_FALLBACK_URL =
   <section id="overall" class="mb-8">
     <div
       id="overall-card"
-      class="rounded-lg border border-white/10 bg-surface-raised p-6 shadow-xs"
+      class="rounded-lg border border-surface-divider bg-surface-raised p-6 shadow-xs"
       data-state="loading"
     >
       <div class="flex items-center gap-3">
@@ -52,9 +52,9 @@ const R2_FALLBACK_URL =
     <div id="incidents-list" class="space-y-3">
       {/* 2026-05-24 — skeleton row for hydrate-state polish; JS replaces
           innerHTML on fetch (or surfaces the all-clear state). */}
-      <div class="rounded-lg border border-white/10 bg-surface-raised p-5">
-        <div class="h-3 w-40 animate-pulse rounded-sm bg-white/10"></div>
-        <div class="mt-3 h-3 w-64 animate-pulse rounded-sm bg-white/10"></div>
+      <div class="rounded-lg border border-surface-divider bg-surface-raised p-5">
+        <div class="h-3 w-40 animate-pulse rounded-sm bg-surface-divider"></div>
+        <div class="mt-3 h-3 w-64 animate-pulse rounded-sm bg-surface-divider"></div>
       </div>
     </div>
   </section>
@@ -63,13 +63,13 @@ const R2_FALLBACK_URL =
   <section class="mb-8 flex flex-wrap items-center gap-3 text-sm">
     <a
       href="/subscribe"
-      class="rounded-md border border-white/15 bg-surface-raised px-3 py-1.5 text-ink-secondary hover:bg-white/10"
+      class="rounded-md border border-surface-divider bg-surface-raised px-3 py-1.5 text-ink-secondary hover:bg-surface-inset"
     >
       Subscribe to incident emails
     </a>
     <a
       href="/history"
-      class="rounded-md border border-white/15 bg-surface-raised px-3 py-1.5 text-ink-secondary hover:bg-white/10"
+      class="rounded-md border border-surface-divider bg-surface-raised px-3 py-1.5 text-ink-secondary hover:bg-surface-inset"
     >
       Full incident history (90 days)
     </a>
@@ -152,7 +152,7 @@ const R2_FALLBACK_URL =
     const updates = (inc.updates ?? [])
       .map(
         (u) => `
-          <li class="relative pl-5 border-l border-white/10">
+          <li class="relative pl-5 border-l border-surface-divider">
             <span class="absolute left-[-5px] top-1 inline-block h-2 w-2 rounded-full bg-oxblood-700"></span>
             <div class="flex flex-wrap items-baseline gap-2">
               ${badge(u.status, STATUS_BADGE[u.status] ?? [])}
@@ -170,7 +170,7 @@ const R2_FALLBACK_URL =
     // the complete chronology + description.
     const detailHref = inc.id ? `/incident?id=${encodeURIComponent(inc.id)}` : '#';
     return `
-      <article class="rounded-lg border border-white/10 bg-surface-raised p-5 shadow-xs ${opacity}">
+      <article class="rounded-lg border border-surface-divider bg-surface-raised p-5 shadow-xs ${opacity}">
         <header class="mb-2">
           <div class="flex flex-wrap items-center gap-2">
             ${badge(inc.severity, SEVERITY_BADGE[inc.severity] ?? [])}
@@ -289,7 +289,7 @@ const R2_FALLBACK_URL =
 
       if (detailed.length === 0) {
         list.innerHTML = `
-          <div class="rounded-lg border border-white/10 bg-surface-raised p-5 text-sm text-ink-muted">
+          <div class="rounded-lg border border-surface-divider bg-surface-raised p-5 text-sm text-ink-muted">
             No incidents in the last 30 days.
           </div>
         `;

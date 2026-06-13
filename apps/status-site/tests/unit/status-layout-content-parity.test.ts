@@ -100,9 +100,9 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     expect(body).toMatch(/Skip to main content/);
   });
 
-  it('R13 html lang="en" + dark header + min-h-screen body — replaces the prior bg-white header + bg-slate-50 body split after the status-site dark migration', () => {
+  it('R13 html lang="en" + light+violet header (surface-divider border, not the old invisible white/10) + min-h-screen body — the Fleet light theme is applied via the data-mode/data-accent attributes and the page markup uses the adaptive surface/ink tokens', () => {
     expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="violet">/);
-    expect(body).toMatch(/<header class="border-b border-white\/10 bg-surface-raised">/);
+    expect(body).toMatch(/<header class="border-b border-surface-divider bg-surface-raised">/);
     expect(body).toMatch(/<body class="min-h-screen">/);
   });
 

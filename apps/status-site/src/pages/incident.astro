@@ -21,7 +21,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
   </nav>
 
   <section id="loading" class="mb-12">
-    <div class="rounded-lg border border-white/10 bg-surface-raised p-5 text-sm text-ink-muted">
+    <div class="rounded-lg border border-surface-divider bg-surface-raised p-5 text-sm text-ink-muted">
       Loading incident…
     </div>
   </section>
@@ -147,7 +147,7 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
     timeline.innerHTML = updates
       .map(
         (u) => `
-          <li class="relative pl-5 border-l border-white/10">
+          <li class="relative pl-5 border-l border-surface-divider">
             <span class="absolute left-[-5px] top-1 inline-block h-2 w-2 rounded-full bg-oxblood-700"></span>
             <div class="flex flex-wrap items-baseline gap-2">
               ${badge(u.status, STATUS_BADGE[u.status])}

@@ -7,7 +7,7 @@
 // check is preventive — drift between apps would erode brand
 // uniformity across customer surfaces.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -156,6 +156,38 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
         `horizontal.svg ${APPS_WITH_SVG[i]} byte-equals ${APPS_WITH_SVG[0]}`,
       ).toBe(true);
     }
+  });
+
+  it('CRITICAL all 5 apps reference the brand mark at the SAME ?v cache-bust version (lockstep edge-invalidation). The query version is the only signal the Cloudflare Pages edge has to refetch an updated asset; a per-app version skew is exactly what let app.driftstack.dev serve a STALE red mark from ?v=2 while the asset on disk was already violet (and left status-site a version behind on ?v=2 until 2026-06-13). Bump all 5 in lockstep when the mark changes.', () => {
+    const VERSION_RE = /driftstack-mark\.svg\?v=(\d+)/g;
+    const allVersions = new Set<string>();
+    for (const app of APPS_WITH_SVG) {
+      const srcDir = resolve(REPO_ROOT, `${app}/src`);
+      const entries = readdirSync(srcDir, { recursive: true }) as string[];
+      let refCount = 0;
+      for (const rel of entries) {
+        if (!/\.(astro|tsx|ts|jsx|js|html)$/.test(rel)) continue;
+        let body: string;
+        try {
+          body = readFileSync(resolve(srcDir, rel), 'utf8');
+        } catch {
+          continue; // directory entry or unreadable — skip
+        }
+        VERSION_RE.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = VERSION_RE.exec(body)) !== null) {
+          allVersions.add(m[1]!);
+          refCount++;
+        }
+      }
+      expect(refCount, `${app} references driftstack-mark.svg?v= at least once`).toBeGreaterThan(0);
+    }
+    // The union of every app's referenced versions must be exactly {3}: all
+    // apps on one version, and that version is the current v3.
+    expect(
+      [...allVersions].sort(),
+      'all 5 apps share ONE cache-bust version (currently v3) — bump them together',
+    ).toEqual(['3']);
   });
 
   it("CRITICAL driftstack-mark.svg shape pinned — 256×256 viewBox + aria-label 'Driftstack logo' + the L2 Drift Layers framing (founder-picked 2026-06-12: violet #6d5efc filled front layer + ink outline back layer, flat fills for favicon crispness). Drift to a different viewBox/aria would break responsive sizing + a11y.", () => {
