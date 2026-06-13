@@ -405,7 +405,14 @@ export function SimulatorWindow(): JSX.Element {
   // no LiveKit internals). null until the first full window.
   const [fps, setFps] = useState<number | null>(null);
   const fpsCounterRef = useRef({ frames: 0, windowStart: 0 });
+  // Guard: React ref callbacks re-fire on every parent re-render (inline
+  // identity), and the panel re-renders constantly while streaming — without
+  // this, multiple rVFC chains stack on the same element and fps reads
+  // multiplied (caught in the night distance-audit).
+  const fpsArmedElRef = useRef<HTMLVideoElement | null>(null);
   function armFpsCounter(el: HTMLVideoElement): void {
+    if (fpsArmedElRef.current === el) return;
+    fpsArmedElRef.current = el;
     const tick = (now: number): void => {
       const c = fpsCounterRef.current;
       if (c.windowStart === 0) c.windowStart = now;
