@@ -23,7 +23,7 @@ const canonical = new URL(pathname, Astro.site).toString();
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-mode="light" data-accent="violet">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -43,7 +43,7 @@ const canonical = new URL(pathname, Astro.site).toString();
     <meta name="twitter:title" content={fullTitle} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content="https://driftstack.dev/og-default.png" />
-    <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=2" />
+    <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=3" />
   </head>
   <body class="flex min-h-screen flex-col bg-surface-base text-ink-primary">
     <Header />

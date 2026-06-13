@@ -30,7 +30,7 @@ describe('docs components/Footer content parity', () => {
   });
 
   it("Brand wordmark pinned (smaller variant): font-mono 'driftstack' + 'docs' subtitle + 24x24 mark (vs Header's 28x28). Drift to a different brand mark would break cross-app consistency", () => {
-    expect(body).toMatch(/<span>driftstack<\/span>/);
+    expect(body).toContain('DRIFT<span class="text-ink-primary">STACK</span>');
     expect(body).toMatch(/<span class="ml-1 text-xs text-ink-muted">docs<\/span>/);
     expect(body).toMatch(/width="24"/);
   });

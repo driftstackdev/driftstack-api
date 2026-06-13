@@ -27,8 +27,8 @@ describe('docs components/Header content parity', () => {
     expect(body).toMatch(/for brand consistency/);
   });
 
-  it('Brand wordmark pinned: lowercase font-mono "driftstack" + "docs" subtitle. Drift to uppercase or different brand mark would break cross-app brand consistency', () => {
-    expect(body).toMatch(/<span>driftstack<\/span>/);
+  it('Brand wordmark pinned: W2 DRIFTSTACK two-tone (Fleet rebrand) + "docs" subtitle, matching marketing/admin/dashboard', () => {
+    expect(body).toContain('DRIFT<span class="text-ink-primary">STACK</span>');
     expect(body).toMatch(/<span class="ml-1 text-xs text-ink-muted">docs<\/span>/);
     expect(body).toMatch(/font-mono text-base font-semibold text-ink-primary/);
   });

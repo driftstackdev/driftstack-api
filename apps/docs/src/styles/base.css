@@ -5,17 +5,20 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --color-oxblood-50: #fbf3f4;
-  --color-oxblood-100: #f5e1e3;
-  --color-oxblood-200: #ebbfc4;
-  --color-oxblood-300: #dc939c;
-  --color-oxblood-400: #c8606e;
-  --color-oxblood-500: #a83b4d;
-  --color-oxblood-600: #8d2c3e;
-  --color-oxblood-700: #722f37;
-  --color-oxblood-800: #5e2730;
-  --color-oxblood-900: #4f242b;
-  --color-oxblood-950: #2b0f15;
+  /* Fleet rebrand: the 'oxblood' accent ramp now resolves VIOLET (the
+     locked light+violet direction). Token NAMES kept so markup + ~all
+     content-parity pins stay green; only the values flip. */
+  --color-oxblood-50: #f1effe;
+  --color-oxblood-100: #e6e1fd;
+  --color-oxblood-200: #cfc7fb;
+  --color-oxblood-300: #ada0f8;
+  --color-oxblood-400: #8b7dff;
+  --color-oxblood-500: #6d5efc;
+  --color-oxblood-600: #5847e0;
+  --color-oxblood-700: #4a39c4;
+  --color-oxblood-800: #3d2fa0;
+  --color-oxblood-900: #332a80;
+  --color-oxblood-950: #1f1a4d;
 
   --color-slate-50: #f8fafc;
   --color-slate-100: #f1f5f9;
@@ -29,20 +32,22 @@
   --color-slate-900: #0f172a;
   --color-slate-950: #020617;
 
-  --color-surface-base: #0f172a;
-  --color-surface-raised: #1e293b;
-  --color-surface-elevated: #334155;
-  --color-surface-inset: #020617;
-  --color-surface-divider: #475569;
+  /* Fleet light surfaces (match apps/marketing-site light+violet tokens). */
+  --color-surface-base: #f2f3f6;
+  --color-surface-raised: #ffffff;
+  --color-surface-elevated: #f1f2f5;
+  --color-surface-inset: #f2f3f6;
+  --color-surface-divider: #e4e6ec;
 
-  --color-ink-primary: #f8fafc;
-  --color-ink-secondary: #cbd5e1;
-  --color-ink-muted: #94a3b8;
-  --color-ink-inverted: #0f172a;
+  --color-ink-primary: #0f1014;
+  --color-ink-secondary: #474a55;
+  --color-ink-muted: #8a8d99;
+  --color-ink-inverted: #ffffff;
 
-  --color-glow-red: #e23847;
-  --color-glow-red-soft: #f25366;
-  --color-glow-red-deep: #a8202d;
+  /* glow-* accent now violet (was oxblood→red). */
+  --color-glow-red: #6d5efc;
+  --color-glow-red-soft: #8b7dff;
+  --color-glow-red-deep: #5847e0;
 
   --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
   --font-mono: Berkeley Mono, ui-monospace, SFMono-Regular, monospace;
@@ -96,16 +101,15 @@
   @apply text-sm text-ink-secondary transition-colors hover:text-glow-red;
 }
 
-/* R11 — dark-mode docs surface. Synced with the marketing-site +
-   customer-dashboard "graphite" palette so the product reads as one
-   site, not three. Code blocks land on slate-950 (surface.inset) for
-   high-contrast monospace readability — replaces the prior light
-   slate-100 prose-code background that the founder flagged as
-   "ugly extra white background, barely readable". */
+/* R11 / Fleet rebrand — light+violet docs surface. Synced with the
+   marketing-site + customer-dashboard + admin Fleet tokens (light
+   surfaces, violet accent) so the product reads as one site. The
+   'oxblood'/'glow-red' token NAMES are retained (values flipped to
+   violet) to keep markup + content-parity pins stable across the port. */
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   html {

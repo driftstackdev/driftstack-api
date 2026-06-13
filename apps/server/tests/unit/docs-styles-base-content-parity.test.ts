@@ -27,18 +27,18 @@ describe('docs styles/base content parity', () => {
     expect(body).toMatch(/@plugin '@tailwindcss\/typography';/);
   });
 
-  it("R11 dark-mode-synced-with-marketing posture pinned: 'Synced with the marketing-site + customer-dashboard graphite palette so the product reads as one site, not three.' Drift to a different palette would break cross-app brand consistency", () => {
-    expect(body).toMatch(/R11 — dark-mode docs surface\. Synced with the marketing-site \+/);
-    expect(body).toMatch(/customer-dashboard "graphite" palette so the product reads as one/);
-    expect(body).toMatch(/site, not three/);
-    expect(body).toMatch(/color-scheme: dark;/);
+  it("R11/Fleet light+violet-synced posture pinned: 'light+violet docs surface synced with marketing/dashboard/admin Fleet tokens so the product reads as one site.' Drift to a different palette would break cross-app brand consistency", () => {
+    expect(body).toMatch(/R11 \/ Fleet rebrand — light\+violet docs surface\. Synced with the/);
+    expect(body).toMatch(/marketing-site \+ customer-dashboard \+ admin Fleet tokens/);
+    expect(body).toMatch(/the product reads as one site/);
+    expect(body).toMatch(/color-scheme: light;/);
   });
 
-  it("Code-block surface-inset framing pinned: 'Code blocks land on slate-950 (surface.inset)' replacing the prior 'ugly extra white background' the founder flagged. Drift to a lighter pre background would re-introduce the readability bug", () => {
-    expect(body).toMatch(/Code blocks land on slate-950 \(surface\.inset\) for/);
-    expect(body).toMatch(/high-contrast monospace readability — replaces the prior light/);
-    expect(body).toMatch(/slate-100 prose-code background that the founder flagged as/);
-    expect(body).toMatch(/"ugly extra white background, barely readable"/);
+  it('F-1 code-overflow containment pinned: base.css keeps code/pre from pushing the page width (overflow-wrap:anywhere + pre overflow-x:auto) — the iPhone-Safari horizontal-scroll guard', () => {
+    expect(body).toMatch(/code blocks scroll internally rather than pushing page/);
+    expect(body).toMatch(/long unbreakable strings wrap or scroll internally/);
+    expect(body).toMatch(/overflow-wrap: anywhere;/);
+    expect(body).toMatch(/word-break: break-word;/);
   });
 
   it('F-1 iPhone-Safari horizontal-scroll prevention pinned: overflow-x:clip + max-width:100vw. Drift to overflow:hidden would break sticky positioning on docs pages', () => {

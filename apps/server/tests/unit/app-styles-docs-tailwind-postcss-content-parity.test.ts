@@ -84,14 +84,14 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     );
   });
 
-  it('R11 docs/src/styles/base.css: Tailwind base + dark color-scheme + bg-surface-base graphite body + Geist+Berkeley font stack + 3 brand atoms (btn-primary + btn-secondary + nav-link). The earlier light-theme baseline (color-scheme: light + bg-slate-50) was migrated to dark so the docs read as one product with driftstack.dev rather than the prior context switch', () => {
+  it('R11 docs/src/styles/base.css: Tailwind base + light color-scheme + bg-surface-base light body + Geist+Berkeley font stack + 3 brand atoms (btn-primary + btn-secondary + nav-link). Flipped to the Fleet light+violet palette (color-scheme: light) so the docs read as one product with driftstack.dev', () => {
     const body = read('apps/docs/src/styles/base.css');
     // W368 — Tailwind v4: @import + typography @plugin (was the 3-directive header);
     // component atoms are now @utility (was @layer components).
     expect(body).toMatch(/@import 'tailwindcss';/);
     expect(body).toMatch(/@plugin '@tailwindcss\/typography';/);
     expect(body).toMatch(/^@layer base \{$/m);
-    expect(body).toMatch(/color-scheme: dark;/);
+    expect(body).toMatch(/color-scheme: light;/);
     expect(body).toMatch(/@apply bg-surface-base text-ink-primary;/);
     expect(body).toMatch(/font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;/);
     expect(body).toMatch(/font-family: 'Berkeley Mono', ui-monospace, SFMono-Regular, monospace;/);
@@ -102,21 +102,21 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(existsSync(resolve(REPO_ROOT, 'apps/docs/src/styles/base.css'))).toBe(true);
   });
 
-  it('apps/docs/src/styles/base.css @theme (W368 — was tailwind.config.mjs, migrated to Tailwind v4 CSS-first): V-254 typography @plugin + locked oxblood palette (11-shade w/ #722f37 base at 700) + slate scale + Geist/Berkeley font vars + prose 65ch container. The v3 JS config (content glob, JS palette, plugins:[typography]) became @plugin + @theme --color-*/--font-*/--container-* tokens; values unchanged', () => {
+  it('apps/docs/src/styles/base.css @theme (W368 — was tailwind.config.mjs, migrated to Tailwind v4 CSS-first): V-254 typography @plugin + oxblood ramp flipped to violet (Fleet rebrand; #6d5efc base at 500) + slate scale + Geist/Berkeley font vars + prose 65ch container. The v3 JS config (content glob, JS palette, plugins:[typography]) became @plugin + @theme --color-*/--font-*/--container-* tokens; values unchanged', () => {
     const body = read('apps/docs/src/styles/base.css');
     expect(body).toMatch(/@plugin '@tailwindcss\/typography';/);
     // oxblood 11-shade palette (v4 @theme --color-* vars, lowercase hex)
-    expect(body).toMatch(/--color-oxblood-50: #fbf3f4;/);
-    expect(body).toMatch(/--color-oxblood-100: #f5e1e3;/);
-    expect(body).toMatch(/--color-oxblood-200: #ebbfc4;/);
-    expect(body).toMatch(/--color-oxblood-300: #dc939c;/);
-    expect(body).toMatch(/--color-oxblood-400: #c8606e;/);
-    expect(body).toMatch(/--color-oxblood-500: #a83b4d;/);
-    expect(body).toMatch(/--color-oxblood-600: #8d2c3e;/);
-    expect(body).toMatch(/--color-oxblood-700: #722f37;/); // base — primary accent, locked
-    expect(body).toMatch(/--color-oxblood-800: #5e2730;/);
-    expect(body).toMatch(/--color-oxblood-900: #4f242b;/);
-    expect(body).toMatch(/--color-oxblood-950: #2b0f15;/);
+    expect(body).toMatch(/--color-oxblood-50: #f1effe;/);
+    expect(body).toMatch(/--color-oxblood-100: #e6e1fd;/);
+    expect(body).toMatch(/--color-oxblood-200: #cfc7fb;/);
+    expect(body).toMatch(/--color-oxblood-300: #ada0f8;/);
+    expect(body).toMatch(/--color-oxblood-400: #8b7dff;/);
+    expect(body).toMatch(/--color-oxblood-500: #6d5efc;/);
+    expect(body).toMatch(/--color-oxblood-600: #5847e0;/);
+    expect(body).toMatch(/--color-oxblood-700: #4a39c4;/); // violet base (Fleet rebrand)
+    expect(body).toMatch(/--color-oxblood-800: #3d2fa0;/);
+    expect(body).toMatch(/--color-oxblood-900: #332a80;/);
+    expect(body).toMatch(/--color-oxblood-950: #1f1a4d;/);
     expect(body).toMatch(/--color-slate-50: #f8fafc;/);
     expect(body).toMatch(/--color-slate-950: #020617;/);
     expect(body).toMatch(/--font-sans: Geist, ui-sans-serif, system-ui, sans-serif;/);

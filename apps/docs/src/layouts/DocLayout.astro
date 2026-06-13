@@ -122,42 +122,39 @@ function isActive(href: string): boolean {
         }
       </nav>
     </aside>
-    <!-- R11 — prose styling rebuilt for the dark surface. Uses
-         `prose-invert` so the typography plugin's defaults flip to
-         light text on dark, then overrides the load-bearing tokens
-         explicitly:
-           - body copy: ink-secondary for soft readability
+    <!-- Fleet rebrand — prose styling for the LIGHT surface. Plain
+         `prose-slate` (NOT the dark-inverted variant) with the load-bearing tokens
+         overridden explicitly:
+           - body copy: ink-secondary (dark) on light surfaces
            - headings: ink-primary, semibold
-           - links: glow-red (the lighter brand-red reads against
-             slate-900; the locked oxblood-700 is too dark to be
-             readable on a dark surface)
-           - inline code: subtle white/8 chip with ink-primary text
-             so it pops against body copy without looking like a
+           - links: glow-* accent (now violet) — reads on light
+           - inline code: light violet chip (oxblood-100, now violet)
+             with ink-primary text so it pops without looking like a
              button
-           - fenced pre: surface-inset (slate-950) with a 1px
-             white/10 border + ink-secondary text — high-contrast
-             monospace replacement for the previous "ugly white
-             extra background" the founder flagged
-           - blockquote: oxblood-300 left rule + ink-secondary text
-           - tables: surface-raised header row + white/10 borders -->
+           - fenced pre: a DARK code surface (#16171c) with light text
+             (slate-100) — terminal-style, high-contrast; the founder
+             flagged light code backgrounds as "ugly / barely readable",
+             so fenced code stays dark even on the light docs theme
+           - blockquote: violet (oxblood-300, now violet) left rule
+           - tables/hr: surface-divider light borders -->
     <article
-      class="prose prose-invert prose-slate max-w-3xl flex-1
+      class="prose prose-slate max-w-3xl flex-1
              prose-headings:font-semibold prose-headings:text-ink-primary
              prose-p:text-ink-secondary prose-li:text-ink-secondary
              prose-strong:text-ink-primary
              prose-a:text-glow-red prose-a:no-underline prose-a:hover:underline
              prose-code:font-mono prose-code:text-[0.875em] prose-code:rounded-sm
-             prose-code:bg-white/10 prose-code:px-1.5 prose-code:py-0.5
+             prose-code:bg-oxblood-100 prose-code:px-1.5 prose-code:py-0.5
              prose-code:text-ink-primary prose-code:before:content-none
              prose-code:after:content-none
-             prose-pre:bg-surface-inset prose-pre:border prose-pre:border-white/10
-             prose-pre:text-ink-secondary prose-pre:shadow-inset-divider
+             prose-pre:bg-[#16171c] prose-pre:border prose-pre:border-black/10
+             prose-pre:text-slate-100 prose-pre:shadow-inset-divider
              prose-blockquote:border-l-oxblood-300 prose-blockquote:text-ink-secondary
              prose-blockquote:not-italic
              prose-th:bg-surface-raised prose-th:text-ink-primary
              prose-td:text-ink-secondary
-             prose-th:border-white/10 prose-td:border-white/10
-             prose-hr:border-white/10"
+             prose-th:border-surface-divider prose-td:border-surface-divider
+             prose-hr:border-surface-divider"
     >
       <slot />
     </article>

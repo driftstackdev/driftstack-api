@@ -73,7 +73,7 @@ describe('docs layouts/BaseLayout content parity', () => {
   it('Favicon + base.css imports pinned: drift would break the docs-site visual identity or strip the brand-mark from browser tabs', () => {
     expect(body).toMatch(/import '\.\.\/styles\/base\.css';/);
     expect(body).toMatch(
-      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=2" \/>/,
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=3" \/>/,
     );
   });
 });

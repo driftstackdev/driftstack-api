@@ -33,7 +33,7 @@ describe('W599 apps/docs foundation modules content parity', () => {
     );
     expect(body).toMatch(/\/\/ Cross-links back to marketing for the full company navigation\./);
     expect(body).toMatch(/^const year = new Date\(\)\.getUTCFullYear\(\);$/m);
-    expect(body).toMatch(/<span>driftstack<\/span>/);
+    expect(body).toMatch(/DRIFT<span class="text-ink-primary">STACK<\/span>/);
     expect(body).toMatch(/<span class="ml-1 text-xs text-ink-muted">docs<\/span>/);
     expect(body).toMatch(
       /Reference \+ guides for the Driftstack API, SDKs, and self-hosted client\./,
@@ -92,7 +92,7 @@ describe('W599 apps/docs foundation modules content parity', () => {
     expect(existsSync(BASE)).toBe(true);
   });
 
-  it('DocLayout.astro: V-254 wraps BaseLayout + sidebar nav (DOC_NAV) + content column with prose styling (oxblood links + font-mono code) + frontmatter contract (title required + optional description) pinned', () => {
+  it('DocLayout.astro: V-254 wraps BaseLayout + sidebar nav (DOC_NAV) + content column with prose styling (violet/accent links + dark fenced code) + frontmatter contract (title required + optional description) pinned', () => {
     const body = read(DOC);
     expect(body).toMatch(
       /\/\/ V-254 — doc-page layout\. Wraps BaseLayout with a sidebar nav \(from/,
@@ -118,11 +118,11 @@ describe('W599 apps/docs foundation modules content parity', () => {
     // tokens explicitly so links read against slate-900 (glow-red
     // not oxblood-700, which was too dark on the new graphite
     // surface) and code blocks land on surface-inset (slate-950).
-    expect(body).toMatch(/prose prose-invert prose-slate max-w-3xl flex-1/);
+    expect(body).toMatch(/prose prose-slate max-w-3xl flex-1/);
     expect(body).toMatch(/prose-a:text-glow-red/);
-    expect(body).toMatch(/prose-code:bg-white\/10/);
-    expect(body).toMatch(/prose-pre:bg-surface-inset/);
-    expect(body).toMatch(/prose-pre:text-ink-secondary/);
+    expect(body).toMatch(/prose-code:bg-oxblood-100/);
+    expect(body).toMatch(/prose-pre:bg-\[#16171c\]/);
+    expect(body).toMatch(/prose-pre:text-slate-100/);
     expect(existsSync(DOC)).toBe(true);
   });
 

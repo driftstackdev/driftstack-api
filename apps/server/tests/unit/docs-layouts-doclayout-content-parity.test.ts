@@ -55,10 +55,11 @@ describe('docs layouts/DocLayout content parity', () => {
     expect(body).toMatch(/pathname === href \|\| pathname === href\.replace\(\/\\\/\$\/, ''\)/);
   });
 
-  it('R11 prose-invert dark-surface styling pinned: drift to dropping the explicit token overrides would break the dark-surface readability (the founder explicitly flagged the prior "ugly white extra background" on fenced pre blocks)', () => {
-    expect(body).toMatch(/R11 — prose styling rebuilt for the dark surface/);
-    expect(body).toMatch(/prose prose-invert prose-slate/);
-    expect(body).toMatch(/prose-code:bg-white\/10/);
-    expect(body).toMatch(/prose-pre:bg-surface-inset/);
+  it('Fleet light prose styling pinned: plain prose-slate (no prose-invert) + DARK fenced code (#16171c) — the founder flagged light code backgrounds as ugly, so fenced code stays dark on the light docs theme', () => {
+    expect(body).toMatch(/Fleet rebrand — prose styling for the LIGHT surface/);
+    expect(body).toMatch(/prose prose-slate/);
+    expect(body).not.toMatch(/prose-invert/);
+    expect(body).toMatch(/prose-code:bg-oxblood-100/);
+    expect(body).toMatch(/prose-pre:bg-\[#16171c\]/);
   });
 });
