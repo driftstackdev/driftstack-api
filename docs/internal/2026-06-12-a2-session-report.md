@@ -299,3 +299,22 @@ enters at the pointerToViewport seam" hypothesis from the previous bus note
 does NOT apply to production and is hereby retracted. W1420/DPR is closed
 A2-side; the lone founder-#1 residual (production window-chrome inset = 0)
 is A1's, with A3's DRIFTSTACK_EXPECT_Y_OFFSET=0 check ready.
+
+## Addendum (2026-06-13 ~06:20) — workspace-switcher coherence: agent-sessions effective-account gap
+
+Tracing the just-shipped switcher against which hub-called routes honor
+X-Driftstack-Account: profiles (list/get) ✓, sessions create ✓ (admin-gated),
+but **agent-sessions create — the profile Launch path — does NOT** (hard-scopes
+to ctx.account.id + ships the profile's sealed DEK). So in a team workspace the
+cards correctly show the owner's profiles (read honors the header) but Launch
+would 404. Whether a member may launch an owner's profile AND receive its
+decryption DEK is a security-RBAC product decision → SURFACED to founder/server
+(agent-sessions deliberately omits resolveEffectiveAccount; self-scoping is the
+safe default), NOT flipped. GUI fix: Launch gated in a team workspace with a
+"launch from Personal" tooltip — no 404-on-click. Tauri app rebuilt + installed
+06:16 with the full workspace arc.
+
+**Founder/A-team decision queued:** should team members launch owner-workspace
+profiles? If yes, agent-sessions create needs effective-account + a DEK-release
+RBAC rule (member receives owner's profile DEK) — a deliberate security call,
+not an autopilot change.
