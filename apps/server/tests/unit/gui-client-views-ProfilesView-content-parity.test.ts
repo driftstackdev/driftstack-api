@@ -139,6 +139,13 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).toMatch(/Launching a team-workspace profile isn.t available yet/);
   });
 
+  it('Workspace recovery bar is ALWAYS rendered when activeWorkspace !== null — independent of profiles/accountMe load state (a revoked-membership persisted workspace 403s everything; the in-stats-row switcher is gated on profiles.length>0 AND accountMe.teams, so without this top-level Switch-to-Personal escape the hub would brick with no way back).', () => {
+    expect(body).toContain('data-component="workspace-recovery-bar"');
+    expect(body).toContain('{activeWorkspace !== null && (');
+    expect(body).toMatch(/↩ Switch to Personal/);
+    expect(body).toContain('onClick={() => setActiveWorkspace(null)}');
+  });
+
   it("W624 stop-actually-stops: boundSession resolves the profile's session by KIND (agt_ → agent, else live driver session) so an agent-backed profile counts as running AND its Stop closes the right thing — handleStop calls agentSessions.close(agt_) / sessions.destroy(ses_). The founder-hit bug: launch-with-LiveKit bound an agt_ id that the driver-only lookup never matched, so the profile showed idle and Stop no-op'd (the agent session kept running).", () => {
     expect(body).toMatch(
       /function boundSession\(profileId: string\): \{ id: string; kind: 'agent' \| 'driver' \} \| null \{/,

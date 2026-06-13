@@ -684,6 +684,31 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
+      {/* ALWAYS-RENDERED workspace recovery bar (independent of profiles/
+          accountMe load state). A persisted activeWorkspace pointing at a
+          team the user was REMOVED from 403s every request → profiles +
+          accountMe both empty → the in-stats-row switcher (gated on those)
+          never renders → the hub would be bricked with no way back. This
+          bar guarantees a Switch-to-Personal escape regardless of load
+          state. */}
+      {activeWorkspace !== null && (
+        <div
+          data-component="workspace-recovery-bar"
+          className="flex items-center gap-3 rounded-md border border-accent/40 bg-accent-subtle px-3 py-2 text-xs"
+        >
+          <span className="text-ink-primary">
+            Viewing a team workspace
+            <span className="mono ml-1.5 text-ink-muted">{activeWorkspace}</span>
+          </span>
+          <button
+            type="button"
+            className="ml-auto rounded-full border border-surface-divider bg-surface-raised px-2.5 py-0.5 font-medium text-ink-primary hover:border-accent"
+            onClick={() => setActiveWorkspace(null)}
+          >
+            ↩ Switch to Personal
+          </button>
+        </div>
+      )}
       {/* W625/W640 — heads-up about the real-browser path. The mock driver
           only affects the DIRECT (polling) viewer — it shows placeholder
           frames. A live browser comes from a connected WebKit worker (the
