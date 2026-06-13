@@ -46,4 +46,31 @@ linear-gradient(135deg,#722F37,#e23847)` is a HARDCODED oxblood→red gradient (
    on a non-ok re-test.
 10. **[cleanup-low] Removed proxy's exit IP orphaned in probe cache** (no delete cleanup).
 
+## Status — 2026-06-13 end-of-wave (all 10 addressed)
+
+| #   | Item                                         | Status                                                                                                                                           |
+| --- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Workspace switch data-loss                   | ✅ FIXED `bf9ccc80` (Personal-only prune guard + scopedMeta)                                                                                     |
+| 2   | Simulator buttons nested in `<svg>`          | ✅ FIXED `13b6c8de` (real toolbar siblings)                                                                                                      |
+| 3   | Dashboard "red at top" / old logo            | ✅ FIXED `6ac78024` — deployed + live (violet gradient + `?v=3`)                                                                                 |
+| 4   | Edited proxy keeps stale capability/exit-geo | ✅ FIXED `08a7e7b3` (`invalidateProbe` on connection-field change)                                                                               |
+| 5   | Marketing fabricated "coherence 96"          | ✅ FIXED `43a49cd4` (→ `OpenVPN`, matches sibling egress cards)                                                                                  |
+| 6   | apps/docs on old dark/oxblood theme          | ✅ FIXED `15bb2037` — deployed + **live** (light+violet, W2, `?v=3`, dark fenced code)                                                           |
+| 7   | Team-workspace footer shows personal caps    | ✅ FIXED `7f8e8622` (gated on `activeWorkspace === null` + team indicator)                                                                       |
+| 8   | `req.ip` CF-Connecting-IP spoof              | ⚠️ **SURFACED — confirmed exploitable** (SSH-verified). Ops/founder-gated; remediation in `2026-06-13-cf-connecting-ip-spoof-origin-exposure.md` |
+| 9   | Stale exit-geo next to "Auth failed"         | ✅ FIXED `67533b85` (render gated on `auth_ok` + evict on non-OK probe)                                                                          |
+| 10  | Removed proxy orphaned in probe cache        | ✅ FIXED `08a7e7b3` (`invalidateProbe` on delete)                                                                                                |
+
+**Bonus (beyond the original 10):** status-site was the one surface still
+running dark-theme `*-white/X` overlay utilities under the light theme (34
+invisible borders/fills across 7 files) → ported to adaptive surface/ink
+tokens + brought into `?v=3` brand-mark lockstep + added a cross-app drift
+guard so all five apps must share one cache-bust version (`102b593c`).
+
+**Only #8 remains open** — correctly founder/ops-gated (prod firewall + nginx
+real-ip; a wrong Cloudflare-range list = full outage). Everything else shipped
+
+- verified; the GUI fixes (#4/#7/#9/#10) ride into `/Applications` at the next
+  Tauri rebuild.
+
 ## "bunch of stuff to go over" — founder has more; await + sweep
