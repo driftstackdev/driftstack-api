@@ -78,12 +78,12 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     expect(l).toMatch(/label: 'Account',/);
   });
 
-  it('CRITICAL V-219* brand-alignment framing pinned. Sidebar header gets D-badge + lowercase font-mono "driftstack" wordmark matching marketing-site Header.astro pattern. The withSidebar:false branch gets a minimal horizontal header + ambient radial-glow background.', () => {
+  it('CRITICAL V-219* brand-alignment framing pinned. Sidebar header gets the L2 brand mark + the W2 DRIFTSTACK two-tone wordmark matching marketing-site Header.astro (Fleet rebrand). The withSidebar:false branch gets a minimal horizontal header + ambient radial-glow background.', () => {
     const l = read(LAYOUT);
 
     expect(l).toMatch(/V-219\* — brand alignment with marketing site:/);
     expect(l).toMatch(
-      /Sidebar header: D-badge \(gradient-accent\) \+ lowercase font-mono\s*\n\s+"driftstack" wordmark matches apps\/marketing-site\/src\/components\/\s*\n\s+Header\.astro pattern/,
+      /Sidebar header: L2 brand mark \(driftstack-mark\.svg\) \+ the W2\s*\n\s+DRIFTSTACK black-italic two-tone wordmark, matching\s*\n\s+apps\/marketing-site\/src\/components\/Header\.astro \(Fleet rebrand\)/,
     );
     expect(l).toMatch(/withSidebar=\{false\} branch: minimal horizontal header so onboarding/);
     expect(l).toMatch(/ambient radial-glow background so the auth surfaces feel cohesive/);
@@ -99,16 +99,16 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     );
   });
 
-  it('CRITICAL Driftstack favicon at /driftstack-mark.svg?v=2 (cache-busted v=2). Drift to dropping the version-qstring would let stale-favicon caches persist across deploys.', () => {
+  it('CRITICAL Driftstack favicon at /driftstack-mark.svg?v=3 (cache-busted v=3, L2 rebrand bytes). Drift to dropping the version-qstring would let stale-favicon caches persist across deploys.', () => {
     const l = read(LAYOUT);
 
     expect(l).toMatch(
-      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=2" \/>/,
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=3" \/>/,
     );
 
-    // 2 logo IMG references (sidebar + headerless-onboarding) both use v=2.
-    const logoCount = (l.match(/\/driftstack-mark\.svg\?v=2/g) ?? []).length;
-    expect(logoCount, 'driftstack-mark.svg?v=2 references').toBeGreaterThanOrEqual(2);
+    // 2 logo IMG references (sidebar + headerless-onboarding) both use v=3.
+    const logoCount = (l.match(/\/driftstack-mark\.svg\?v=3/g) ?? []).length;
+    expect(logoCount, 'driftstack-mark.svg?v=3 references').toBeGreaterThanOrEqual(2);
   });
 
   it('CRITICAL noindex robots meta pinned. The dashboard MUST NOT be indexed by search engines (per V-204+ standard for authenticated surfaces). Drift to dropping would let Google index customer URLs.', () => {

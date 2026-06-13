@@ -102,7 +102,7 @@ const navSections: NavSection[] = [
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     <meta name="robots" content="noindex" />
-    <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=2" />
+    <link rel="icon" type="image/svg+xml" href="/driftstack-mark.svg?v=3" />
     <style>
       /* 2026-05-21 — when the pre-paint script confirms the cached
        * `ds_is_team_user` flag, override the picker wrap's default
@@ -215,9 +215,9 @@ const navSections: NavSection[] = [
     </a>
     {/*
       V-219* — brand alignment with marketing site:
-        - Sidebar header: D-badge (gradient-accent) + lowercase font-mono
-          "driftstack" wordmark matches apps/marketing-site/src/components/
-          Header.astro pattern.
+        - Sidebar header: L2 brand mark (driftstack-mark.svg) + the W2
+          DRIFTSTACK black-italic two-tone wordmark, matching
+          apps/marketing-site/src/components/Header.astro (Fleet rebrand).
         - withSidebar={false} branch: minimal horizontal header so onboarding
           pages have brand presence (Gap 2 from the V-219* audit) +
           ambient radial-glow background so the auth surfaces feel cohesive
@@ -245,13 +245,13 @@ const navSections: NavSection[] = [
                 class="group flex items-center gap-2.5 font-mono text-base font-semibold text-tk-ink"
               >
                 <img
-                  src="/driftstack-mark.svg?v=2"
+                  src="/driftstack-mark.svg?v=3"
                   alt="Driftstack"
                   width="32"
                   height="32"
                   class="inline-block h-8 w-8 transition-transform duration-300 group-hover:scale-110"
                 />
-                <span class="tracking-tight">driftstack</span>
+                <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK</span></span>
               </a>
             </div>
           </header>
@@ -271,13 +271,13 @@ const navSections: NavSection[] = [
             class="flex items-center gap-2 font-mono text-base font-semibold text-tk-ink"
           >
             <img
-              src="/driftstack-mark.svg?v=2"
+              src="/driftstack-mark.svg?v=3"
               alt="Driftstack"
               width="28"
               height="28"
               class="inline-block h-7 w-7"
             />
-            <span class="tracking-tight">driftstack</span>
+            <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK</span></span>
           </a>
           <button
             type="button"
@@ -326,13 +326,13 @@ const navSections: NavSection[] = [
                   class="group flex items-center gap-2.5 font-mono text-base font-semibold text-tk-ink"
                 >
                   <img
-                    src="/driftstack-mark.svg?v=2"
+                    src="/driftstack-mark.svg?v=3"
                     alt="Driftstack"
                     width="32"
                     height="32"
                     class="inline-block h-8 w-8 transition-transform duration-300 group-hover:scale-110"
                   />
-                  <span class="tracking-tight">driftstack</span>
+                  <span class="font-sans font-black italic tracking-tight">DRIFT<span class="text-tk-accent">STACK</span></span>
                 </a>
               </div>
               {/*

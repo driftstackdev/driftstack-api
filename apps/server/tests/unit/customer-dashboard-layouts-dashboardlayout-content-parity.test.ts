@@ -106,9 +106,9 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     }
   });
 
-  it("V-219* brand-alignment framing pinned: '- Sidebar header: D-badge (gradient-accent) + lowercase font-mono \"driftstack\" wordmark matches apps/marketing-site/src/components/Header.astro pattern.' + '- withSidebar={false} branch: minimal horizontal header so onboarding pages have brand presence (Gap 2 from the V-219* audit) + ambient radial-glow background so the auth surfaces feel cohesive with the marketing landing.' + '- Footer (signed-in dashboard) with legal-doc links (Gap 7).' — pinned so the V-219* cross-app brand consistency + Gap 2 + Gap 7 references all survive", () => {
+  it("V-219* brand-alignment framing pinned: '- Sidebar header: L2 brand mark (driftstack-mark.svg) + the W2 DRIFTSTACK black-italic two-tone wordmark, matching apps/marketing-site/src/components/Header.astro (Fleet rebrand).' + '- withSidebar={false} branch: minimal horizontal header so onboarding pages have brand presence (Gap 2 from the V-219* audit) + ambient radial-glow background so the auth surfaces feel cohesive with the marketing landing.' + '- Footer (signed-in dashboard) with legal-doc links (Gap 7).' — pinned so the V-219* cross-app brand consistency + Gap 2 + Gap 7 references all survive", () => {
     expect(body).toMatch(
-      /V-219\* — brand alignment with marketing site:\s*\n?\s*- Sidebar header: D-badge \(gradient-accent\) \+ lowercase font-mono\s*\n?\s*"driftstack" wordmark matches apps\/marketing-site\/src\/components\/\s*\n?\s*Header\.astro pattern\./,
+      /V-219\* — brand alignment with marketing site:\s*\n?\s*- Sidebar header: L2 brand mark \(driftstack-mark\.svg\) \+ the W2\s*\n?\s*DRIFTSTACK black-italic two-tone wordmark, matching\s*\n?\s*apps\/marketing-site\/src\/components\/Header\.astro \(Fleet rebrand\)\./,
     );
     expect(body).toMatch(
       /- withSidebar=\{false\} branch: minimal horizontal header so onboarding\s*\n?\s*pages have brand presence \(Gap 2 from the V-219\* audit\) \+\s*\n?\s*ambient radial-glow background/,
@@ -120,10 +120,10 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack`;/);
   });
 
-  it('noindex meta robots pinned + favicon at /driftstack-mark.svg?v=2. Drift to indexed=yes would let Google crawl authenticated dashboard pages (privacy regression); drift to a different favicon version would break the cache-bust strategy', () => {
+  it('noindex meta robots pinned + favicon at /driftstack-mark.svg?v=3. Drift to indexed=yes would let Google crawl authenticated dashboard pages (privacy regression); drift to a different favicon version would break the cache-bust strategy', () => {
     expect(body).toMatch(/<meta name="robots" content="noindex" \/>/);
     expect(body).toMatch(
-      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=2"/,
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=3"/,
     );
   });
 
