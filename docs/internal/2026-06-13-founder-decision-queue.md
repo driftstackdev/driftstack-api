@@ -104,6 +104,23 @@ api.driftstack.dev wss://*.driftstack.dev:* *.ingest.de.sentry.io; …`) in
    freshness/curation decision, not a bug. The cost-accounting math + existing rates are verified
    correct (cost-to-serve, not customer pricing) — see `project_llm_cost_rate_accounting_clean`.
 
+8. **Bundled-LLM monthly soft-cap — concurrent-burst overrun (harden to hard cap, or accept?).**
+   Found by an adversarial billing-audit workflow. The bundled-LLM cap (protects Driftstack's
+   deployment Anthropic key — Driftstack pays Anthropic real $ for consenting no-BYOK accounts;
+   $20/mo default) is a **non-atomic check-then-act**: `POST /v1/agent-sessions/:id/message`
+   (agent-sessions.ts:1578) reads month spend → if `>= cap` rejects → else runs the full LLM turn →
+   posts the $0.10 cost row only AFTER (agent-runtime.ts:305). The message rate-limiter is a
+   token-bucket (cap 20 free..300 top), not a mutex, so a concurrent burst near the cap all read
+   the same pre-burst spend `< cap`, all pass, all consume the key → overrun by up to a full burst
+   (~$2 free / ~$30 top per account per cap-reset month, deliberate-burst-required). The cap is
+   EXPLICITLY a "soft-cap" (line 1571) — small overrun is by-design, but the design appears to
+   assume sequential turns, not concurrent bursts. **Decision: accept the bounded soft overrun, or
+   harden to a HARD cap** (per-account `pg_advisory_xact_lock` + a pre-turn reservation row inserted
+   under the cap check — the proven session-cap `insertWithLimit` pattern; adds a per-message lock +
+   reservation/reconcile-on-failure flow + latency). Not auto-flipped (soft→hard is a product
+   behavior change). Gated on the deployment Anthropic key being set (may be unset pre-launch → not
+   yet exploitable). Detail: `project_bundled_llm_softcap_burst_overrun_surfaced`.
+
 ## Minor / awaiting a nod
 
 - **`/Applications` has 11 stale `Driftstack.app.prev*` backups** (auto-created by the Tauri
