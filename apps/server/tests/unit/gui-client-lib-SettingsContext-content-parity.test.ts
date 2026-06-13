@@ -108,9 +108,9 @@ describe('W608.A apps/gui-client/src/lib/SettingsContext.tsx content parity', ()
     );
   });
 
-  it('Memoised SDK client — useMemo on [apiKey, baseUrl] specifically, not the whole settings object. A settings.theme change should not rebuild the client (avoids dropping in-flight requests when the user toggles the theme). Drift to [settings] would cause unnecessary client churn.', () => {
+  it('Memoised SDK client — useMemo on [apiKey, baseUrl, activeWorkspace] specifically, not the whole settings object. A settings.theme change must not rebuild the client; a WORKSPACE switch must (the SDK effectiveAccount option is constructor-time). Drift to [settings] would cause unnecessary client churn.', () => {
     expect(body).toMatch(
-      /const client = useMemo\(\s*\n\s*\(\) => buildClient\(settings\.apiKey, settings\.baseUrl\),\s*\n\s*\[settings\.apiKey, settings\.baseUrl\],\s*\n\s*\);/,
+      /const client = useMemo\(\s*\n?\s*\(\) => buildClient\(settings\.apiKey, settings\.baseUrl, activeWorkspace\),\s*\n?\s*\[settings\.apiKey, settings\.baseUrl, activeWorkspace\],\s*\n?\s*\);/,
     );
   });
 

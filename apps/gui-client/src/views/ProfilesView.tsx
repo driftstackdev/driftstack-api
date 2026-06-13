@@ -118,7 +118,8 @@ export interface ProfilesViewProps {
 }
 
 export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProps): JSX.Element {
-  const { client, settings, accountMe, refreshAccountMe } = useSettings();
+  const { client, settings, accountMe, refreshAccountMe, activeWorkspace, setActiveWorkspace } =
+    useSettings();
   // W625 — surface the connected server's session driver so we can warn up
   // front that a mock-driver deployment won't open a real browser on launch
   // (the recurring "I launched but nothing opened" confusion). Reuses the
@@ -762,22 +763,43 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
               className="col-span-4 flex flex-wrap items-center gap-2 rounded-md border border-surface-divider bg-surface-raised px-3 py-2 text-xs"
             >
               <span className="section-label">Workspaces</span>
-              <span className="rounded-full bg-accent-subtle px-2 py-0.5 text-ink-primary">
+              {/* The chips ARE the switcher (half-2): selecting rebuilds the
+                  client with the SDK effectiveAccount option; every list/
+                  action then runs against that workspace (writes need the
+                  admin role — server-enforced, surfaced via the role label). */}
+              <button
+                type="button"
+                aria-pressed={activeWorkspace === null}
+                className={`rounded-full px-2 py-0.5 ${
+                  activeWorkspace === null
+                    ? 'bg-accent-subtle font-medium text-ink-primary'
+                    : 'border border-surface-divider text-ink-secondary hover:border-ink-muted/40'
+                }`}
+                onClick={() => setActiveWorkspace(null)}
+              >
                 Personal
-              </span>
+              </button>
               {(accountMe?.teams ?? []).map((t) => (
-                <span
+                <button
                   key={t.membership_id}
-                  className="rounded-full border border-surface-divider px-2 py-0.5 text-ink-secondary"
+                  type="button"
+                  aria-pressed={activeWorkspace === t.owner_account_id}
+                  className={`rounded-full px-2 py-0.5 ${
+                    activeWorkspace === t.owner_account_id
+                      ? 'bg-accent-subtle font-medium text-ink-primary'
+                      : 'border border-surface-divider text-ink-secondary hover:border-ink-muted/40'
+                  }`}
                   title={`Owner account ${t.owner_account_id}`}
+                  onClick={() => setActiveWorkspace(t.owner_account_id)}
                 >
                   Team · {t.role}
-                </span>
+                </button>
               ))}
-              <span className="ml-auto text-2xs text-ink-muted">
-                Workspace switching coming to the GUI — available now via the API's
-                X-Driftstack-Account header.
-              </span>
+              {activeWorkspace !== null && (
+                <span className="ml-auto text-2xs text-ink-muted">
+                  Viewing a team workspace — writes need the admin role.
+                </span>
+              )}
             </div>
           )}
         </div>

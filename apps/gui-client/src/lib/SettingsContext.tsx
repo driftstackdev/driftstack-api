@@ -20,6 +20,11 @@ interface SettingsContextValue {
   settings: DriftstackSettings;
   loading: boolean;
   client: DriftstackClient | null;
+  /** Workspace half-2: active team workspace (owner account id) or null =
+   *  personal. Switching rebuilds the client with the SDK's
+   *  effectiveAccount option; persisted per-install in localStorage. */
+  activeWorkspace: string | null;
+  setActiveWorkspace: (ownerAccountId: string | null) => void;
   /** V-239 — current account's tier + caps + usage. Null while loading or unauthenticated. */
   accountMe: AccountSelfProfile | null;
   /** V-239 — manually trigger a re-fetch (e.g. after a create/destroy). */
@@ -71,9 +76,25 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
     [settings],
   );
 
+  const [activeWorkspace, setActiveWorkspaceState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('ds_active_workspace');
+    } catch {
+      return null;
+    }
+  });
+  const setActiveWorkspace = useCallback((ownerAccountId: string | null): void => {
+    setActiveWorkspaceState(ownerAccountId);
+    try {
+      if (ownerAccountId === null) localStorage.removeItem('ds_active_workspace');
+      else localStorage.setItem('ds_active_workspace', ownerAccountId);
+    } catch {
+      /* session-only persistence */
+    }
+  }, []);
   const client = useMemo(
-    () => buildClient(settings.apiKey, settings.baseUrl),
-    [settings.apiKey, settings.baseUrl],
+    () => buildClient(settings.apiKey, settings.baseUrl, activeWorkspace),
+    [settings.apiKey, settings.baseUrl, activeWorkspace],
   );
 
   // V-239 — fetch the AccountSelfProfile whenever the client (apiKey/
@@ -104,8 +125,26 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
   }, [refreshAccountMe]);
 
   const value = useMemo<SettingsContextValue>(
-    () => ({ settings, loading, client, accountMe, refreshAccountMe, update }),
-    [settings, loading, client, accountMe, refreshAccountMe, update],
+    () => ({
+      settings,
+      loading,
+      client,
+      activeWorkspace,
+      setActiveWorkspace,
+      accountMe,
+      refreshAccountMe,
+      update,
+    }),
+    [
+      settings,
+      loading,
+      client,
+      activeWorkspace,
+      setActiveWorkspace,
+      accountMe,
+      refreshAccountMe,
+      update,
+    ],
   );
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

@@ -54,13 +54,12 @@ describe('W461.C apps/gui-client/src/lib/client.ts content parity', () => {
     expect(body).toMatch(/export type DriftstackClient = Driftstack;/);
   });
 
-  it('buildClient(apiKey: string | null, baseUrl: string): null-or-empty apiKey → null early return; otherwise new Driftstack({apiKey, baseUrl trailing-slash-stripped, fetch: loggingFetch}) — W609 wires the Dev Logs fetch seam', () => {
-    expect(body).toMatch(
-      /export function buildClient\(apiKey: string \| null, baseUrl: string\): DriftstackClient \| null \{\s*\n?\s*if \(apiKey === null \|\| apiKey\.length === 0\) return null;/,
-    );
-    expect(body).toMatch(
-      /return new Driftstack\(\{\s*\n?\s*apiKey,\s*\n?\s*baseUrl: baseUrl\.replace\(\/\\\/\+\$\/, ''\),\s*\n?\s*fetch: loggingFetch,\s*\n?\s*\}\);/,
-    );
+  it('buildClient(apiKey, baseUrl, effectiveAccount=null): null-or-empty apiKey → null early return; otherwise new Driftstack({apiKey, baseUrl trailing-slash-stripped, fetch: loggingFetch, effectiveAccount when non-null}) — W609 Dev Logs fetch seam + workspace half-2 scoping', () => {
+    expect(body).toContain('effectiveAccount: string | null = null,');
+    expect(body).toContain('if (apiKey === null || apiKey.length === 0) return null;');
+    expect(body).toContain("baseUrl: baseUrl.replace(/\\/+$/, ''),");
+    expect(body).toContain('fetch: loggingFetch,');
+    expect(body).toContain('...(effectiveAccount !== null ? { effectiveAccount } : {}),');
   });
 
   it("W609 loggingFetch — Dev Logs productivity seam: non-ok responses record('error', ['[api] <method> <url> → <status>']) + network failures record + rethrow; successes NOT logged (the 2-fps frame poll would flood the 500-entry ring in ~4 min). Pinned so the panel keeps showing API failures (the founder-reported empty-Dev-Logs-during-error case)", () => {

@@ -36,11 +36,19 @@ function loggingFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Res
   );
 }
 
-export function buildClient(apiKey: string | null, baseUrl: string): DriftstackClient | null {
+export function buildClient(
+  apiKey: string | null,
+  baseUrl: string,
+  /** Workspace half-2: a team owner's account id scopes every request via
+   *  the SDK's effectiveAccount option (X-Driftstack-Account). Null =
+   *  personal workspace. */
+  effectiveAccount: string | null = null,
+): DriftstackClient | null {
   if (apiKey === null || apiKey.length === 0) return null;
   return new Driftstack({
     apiKey,
     baseUrl: baseUrl.replace(/\/+$/, ''),
     fetch: loggingFetch,
+    ...(effectiveAccount !== null ? { effectiveAccount } : {}),
   });
 }
