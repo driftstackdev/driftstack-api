@@ -47,6 +47,17 @@ decision; none is autonomously safe to flip.
    404s (no Prometheus scrape). To enable: wire the registry + set the token + stand up a
    scraper. Or accept inert pre-launch. Not a security/correctness bug.
 
+## Engineering-resolvable (founder input optional)
+
+4. **Cross-SDK retry-policy divergence on 5xx — MEDIUM, customer-facing.**
+   The TS SDK's built-in retry re-attempts 5xx; Python + Go do **not** (network + 429 only),
+   despite docstrings claiming they "mirror" TS. Plus Python's public `is_retryable()` helper
+   advertises 5xx as retryable while the built-in client never retries it. Latent: TS retrying
+   5xx on bare non-idempotent POSTs (no Idempotency-Key) = double-submit risk. Resolvable in a
+   low-load wave (no founder gate) — preferred fix = method/idempotency-aware retry aligned
+   across all 3 SDKs; pragmatic = align TS down to Python/Go. Detail + verification:
+   `2026-06-13-cross-sdk-retry-policy-5xx-divergence.md`.
+
 ## Minor / awaiting a nod
 
 - **`/Applications` has 11 stale `Driftstack.app.prev*` backups** (auto-created by the Tauri
