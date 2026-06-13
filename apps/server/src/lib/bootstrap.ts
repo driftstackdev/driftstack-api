@@ -21,7 +21,9 @@
 
 import { Redis } from 'ioredis';
 import { randomUUID } from 'node:crypto';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createDb, type Database } from '../db/client.js';
 import { DrizzleAccountAuthRepo } from '../db/auth-repo.js';
 import { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
@@ -179,6 +181,35 @@ export interface BootstrapResult {
   };
   /** Close everything in the right order; idempotent. */
   teardown: () => Promise<void>;
+}
+
+/**
+ * Resolve the repo root that holds `docs/legal/*.md`. Prod (the V-051
+ * Docker image) runs with cwd at the dir containing docs/legal, so
+ * cwd-first preserves that exact behavior. Local dev (`npm run dev -w
+ * apps/server`) runs with cwd=apps/server where docs/legal is absent —
+ * fall back to walking up from THIS module's location until docs/legal
+ * is found. Final fallback = cwd (unchanged from the original behavior,
+ * so a genuinely-missing catalog still fails loudly the same way).
+ */
+function resolveRepoRoot(): string {
+  const marker = 'docs/legal/terms-of-service.md';
+  const candidates: string[] = [resolve(process.cwd())];
+  try {
+    let dir = dirname(fileURLToPath(import.meta.url));
+    for (let i = 0; i < 8; i++) {
+      candidates.push(dir);
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  } catch {
+    /* import.meta unavailable (non-ESM test shim) — cwd candidate stands */
+  }
+  for (const c of candidates) {
+    if (existsSync(resolve(c, marker))) return c;
+  }
+  return resolve(process.cwd());
 }
 
 export async function createProductionDeps(
@@ -673,7 +704,7 @@ export async function createProductionDeps(
 
   // Legal catalog — reads docs/legal/*.md from the runtime image.
   // V-051 Dockerfile copies these into the image at build time.
-  const legalCatalog = buildLegalCatalog({ repoRoot: resolve(process.cwd()) });
+  const legalCatalog = buildLegalCatalog({ repoRoot: resolveRepoRoot() });
   const legalService = new LegalService(legalCatalog, legalRepo);
 
   // V-218 — continuous validation harness.
