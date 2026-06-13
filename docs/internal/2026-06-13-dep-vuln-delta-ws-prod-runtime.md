@@ -24,7 +24,8 @@ But `ws` _will_ be exposed at go-live, so fix before launch.
 
 ## Why a clean fix is blocked (the npm-workspaces dedup quirk)
 
-Tried two minimal approaches; **both left the lockfile inconsistent**, so I reverted:
+Tried **three** minimal approaches; **all left the prod-path `ws` unfixed or the lockfile
+inconsistent**, so each was cleanly reverted:
 
 1. Root `"overrides": { "ws": "^8.20.1" }` + `npm install` → only bumped the jsdom-path `ws`
    to 8.21.0; the **server / `@fastify/websocket` deduped `ws` stayed at 8.18.0** (vuln NOT
@@ -32,11 +33,17 @@ Tried two minimal approaches; **both left the lockfile inconsistent**, so I reve
 2. Also bumping the `apps/server` direct devDep range to `^8.20.1` + `npm install` → npm
    left `ws@8.18.0 deduped **invalid**: "^8.20.1"` (declared range unsatisfied by the resolved
    version — a broken lockfile state).
+3. (2026-06-13, 3rd attempt) Canonical single-dep bump `npm install ws@^8.21.0 -w apps/server`
+   → created a SECOND `ws@8.21.0` for the apps/server direct devDep but kept the
+   `@fastify/websocket` transitive at `ws@8.18.0` (it only needs `^8.16.0`, satisfied by 8.18.0,
+   so npm won't move the deduped/hoisted copy). The vuln path was still 8.18.0; advisory still
+   present.
 
-Incremental `npm install` refuses to re-dedupe the already-hoisted `ws@8.18.0`. The reliable
-fix is a **full lockfile regen** (`rm package-lock.json && npm install`), which produces a
-large diff and is unsafe to do mid-autopilot against the shared lockfile with a parallel
-writer on `main`.
+**Incremental fixes are exhausted** — `npm install` will not re-dedupe the already-hoisted
+`ws@8.18.0` that `@fastify/websocket` transitively pins. The ONLY reliable fix is
+override + a **full lockfile regen** (`rm package-lock.json && npm install`), which produces a
+large diff and is unsafe to do mid-autopilot against the shared lockfile. → Go STRAIGHT to
+override+regen in the deliberate dep pass; don't re-try incremental bumps.
 
 ## Recommended fix (deliberate dep-maintenance pass, low-load + sole-writer window)
 
