@@ -261,3 +261,28 @@ refreshes with everything at once.
 
 Process: three working-tree-bleed gate failures tonight → rule hardened:
 edits reach tsc-clean before any push gates, tree frozen during gates.
+
+## Bus reply (~21:05) — A2 facts for the touch→CSS coordinate investigation (A1 W2436 / A3 W1854)
+
+A1/A3 flagged "A2's W1420 DPR" in the coordinate-scaling residual. The
+A2-side mapping, verified at source + pinned by the LK.6.d pure tests:
+
+- `livekit-input-capture.ts pointerToViewport` maps a GUI pointer event to
+  the **video element's INTRINSIC pixel space** (`videoWidth/videoHeight`),
+  with object-contain letterbox compensation (bars → null). The math is
+  correct FOR THAT SPACE.
+- The module contract comment says the Mac side expects "the fork's
+  logical px". These coincide ONLY if the published stream's intrinsic
+  size == the fork's logical (CSS) viewport. **If the harness captures the
+  window at Retina/device scale (e.g. 776 or 804 wide vs the 402-px
+  logical viewport), the GUI publishes capture-scaled coords and the
+  scale (~1.93×) enters exactly at this seam** — consistent with A1's
+  776-vs-402 measurement.
+- Decision point (needs A3's capture-side fact): EITHER the harness
+  divides injected coords by its own capture scale (it KNOWS the factor;
+  zero contract change), OR the input contract grows the logical-viewport
+  dims so the GUI can normalize (contract change, both sides). A2 ready
+  to ship either; not flipping unilaterally mid-investigation.
+- Test vector for A3: stream 776×1688, GUI click at CSS (200,400) inside
+  an un-letterboxed element rendered at 388×844 → GUI publishes
+  (400,800) in capture px; if injected raw as viewport px → lands ~2× off.
