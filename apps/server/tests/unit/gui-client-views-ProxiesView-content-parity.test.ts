@@ -60,13 +60,22 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     );
   });
 
-  it("editor state-machine 3-variant union: { kind: 'idle' } | { kind: 'add' } | { kind: 'edit'; id: string }; busyId nullable for remove operation gating; handleSave dispatches on editor.kind (add → addProxy / edit → updateProxy with editor.id); handleRemove sets busyId for the duration of the remove call", () => {
+  it("editor state-machine 3-variant union: { kind: 'idle' } | { kind: 'add' } | { kind: 'edit'; id: string }; busyId nullable for remove operation gating; handleSave dispatches on editor.kind (add → addProxy / edit → updateProxy with editor.id); on a connection-field change the edit path invalidates the cached probe; handleRemove sets busyId + invalidates the deleted proxy's cached probe", () => {
     expect(body).toMatch(
       /const \[editor, setEditor\] = useState<\s*\n?\s*\{ kind: 'idle' \} \| \{ kind: 'add' \} \| \{ kind: 'edit'; id: string \}\s*\n?\s*>\(\{ kind: 'idle' \}\);/,
     );
+    // dispatch on editor.kind: add → addProxy, edit → updateProxy(editId, …)
     expect(body).toMatch(
-      /if \(editor\.kind === 'add'\) \{\s*\n?\s*await addProxy\(draft\);\s*\n?\s*\} else if \(editor\.kind === 'edit'\) \{\s*\n?\s*await updateProxy\(editor\.id, draft\);\s*\n?\s*\}/,
+      /if \(editor\.kind === 'add'\) \{\s*\n?\s*await addProxy\(draft\);\s*\n?\s*\} else if \(editor\.kind === 'edit'\) \{/,
     );
+    expect(body).toContain('const editId = editor.id;');
+    expect(body).toContain('await updateProxy(editId, draft);');
+    // edit path drops the cached probe when the connection target changed
+    expect(body).toMatch(/const connChanged =/);
+    expect(body).toMatch(/void invalidateProbe\(editId\)\.catch/);
+    // delete path invalidates the removed proxy's cached probe too
+    expect(body).toContain('await removeProxy(id);');
+    expect(body).toMatch(/void invalidateProbe\(id\)\.catch/);
   });
 
   it("CRUD lib delegation: addProxy / listProxies / removeProxy / testProxy / updateProxy / validateDraft + DraftValidation / ProxyConfig / ProxyDraft / ProxyTestResult type imports from '../lib/proxies' — pinned so the CRUD + native-probe layer stays delegated to lib/proxies (view stays presentation-only)", () => {

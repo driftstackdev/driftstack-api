@@ -141,6 +141,11 @@ export function ProxiesView(): JSX.Element {
         if (exit !== null) {
           void saveExitResult(p.id, exit.ip, exit.country).catch(() => undefined);
         }
+      } else {
+        // Proxy is no longer usable (not reachable / auth failed) — drop any
+        // exit-geo from a prior successful probe so the card can't show a
+        // stale "exit IP · country" next to "Auth failed" / "Not reachable".
+        setExitResults((r) => dropKey(r, p.id));
       }
     } catch (err) {
       setTestResults((r) => ({
@@ -153,6 +158,7 @@ export function ProxiesView(): JSX.Element {
           message: err instanceof Error ? err.message : String(err),
         },
       }));
+      setExitResults((r) => dropKey(r, p.id));
     } finally {
       setTestingId(null);
     }
@@ -434,7 +440,7 @@ function ProxyTable({
                               : 'QUIC + WebRTC ✗ — h2 / TURN-over-TCP fallback'}
                           </span>
                         )}
-                        {result.reachable && p.id in exitResults && (
+                        {result.reachable && result.auth_ok && p.id in exitResults && (
                           <span className="rounded-sm bg-surface-inset px-1 py-0.5 text-ink-secondary">
                             {exitResults[p.id] !== null && exitResults[p.id] !== undefined ? (
                               <>
