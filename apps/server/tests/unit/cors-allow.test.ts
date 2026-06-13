@@ -29,8 +29,36 @@ describe('W586 corsOriginMatchers', () => {
     expect(m).toContain('https://admin.driftstack.dev');
   });
 
-  it('omits dashboardOrigin when undefined', () => {
-    expect(corsOriginMatchers({}).every((x) => x instanceof RegExp)).toBe(true);
+  it('always includes the 3 localhost/tauri regexes + the 6 first-party prod origins; omits dashboard/extra when undefined', () => {
+    const m = corsOriginMatchers({});
+    expect(m.filter((x) => x instanceof RegExp)).toHaveLength(3);
+    for (const o of [
+      'https://driftstack.dev',
+      'https://www.driftstack.dev',
+      'https://app.driftstack.dev',
+      'https://admin.driftstack.dev',
+      'https://status.driftstack.dev',
+      'https://docs.driftstack.dev',
+    ]) {
+      expect(m).toContain(o);
+    }
+    expect(m).toHaveLength(9); // 3 regex + 6 prod origins, no dashboard/extra
+  });
+
+  it('resolves the first-party prod origins (admin/status/docs) even with NO env allow-list — de-risks the PERMISSIVE_CORS=false flip', () => {
+    const bare = {}; // no dashboardOrigin, no corsAllowedOrigins
+    expect(resolveCorsOrigin('https://admin.driftstack.dev', bare)).toBe(
+      'https://admin.driftstack.dev',
+    );
+    expect(resolveCorsOrigin('https://status.driftstack.dev', bare)).toBe(
+      'https://status.driftstack.dev',
+    );
+    expect(resolveCorsOrigin('https://docs.driftstack.dev', bare)).toBe(
+      'https://docs.driftstack.dev',
+    );
+    // exact-match only — a look-alike subdomain is still blocked
+    expect(resolveCorsOrigin('https://admin.driftstack.dev.evil.com', bare)).toBeNull();
+    expect(resolveCorsOrigin('https://evil.com', bare)).toBeNull();
   });
 });
 

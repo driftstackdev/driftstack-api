@@ -29,12 +29,31 @@ const LOCALHOST_RE = /^https?:\/\/localhost(:\d+)?$/;
 const TAURI_LOCALHOST_RE = /^tauri:\/\/localhost$/;
 const TAURI_HTTPS_RE = /^https?:\/\/tauri\.localhost$/;
 
+// Canonical Driftstack production web origins that browser-fetch the API
+// cross-origin. Hardcoded here (single source of truth) so flipping
+// PERMISSIVE_CORS=false can't lock out a primary surface even if the
+// CORS_ALLOWED_ORIGINS env list is incomplete — prod had app/driftstack.dev/
+// www/docs but was MISSING admin + status (the permissive flag masked the gap,
+// see project_permissive_cors_in_prod). All of these are first-party domains we
+// control, so allowing them is least-privilege vs the permissive `origin:true`.
+// NOTE: no effect while PERMISSIVE_CORS=true (app.ts uses `origin:true` then,
+// bypassing these matchers); this purely de-risks the eventual security flip.
+const DRIFTSTACK_PROD_ORIGINS: readonly string[] = [
+  'https://driftstack.dev',
+  'https://www.driftstack.dev',
+  'https://app.driftstack.dev',
+  'https://admin.driftstack.dev',
+  'https://status.driftstack.dev',
+  'https://docs.driftstack.dev',
+];
+
 /** The non-permissive allow-list (regex + exact-string matchers), in order. */
 export function corsOriginMatchers(deps: CorsAllowDeps): Array<string | RegExp> {
   return [
     LOCALHOST_RE,
     TAURI_LOCALHOST_RE,
     TAURI_HTTPS_RE,
+    ...DRIFTSTACK_PROD_ORIGINS,
     ...(deps.dashboardOrigin !== undefined ? [deps.dashboardOrigin] : []),
     ...(deps.corsAllowedOrigins ?? []),
   ];
