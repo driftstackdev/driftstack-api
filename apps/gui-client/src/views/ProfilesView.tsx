@@ -1092,7 +1092,9 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                             return (
                               <p className="mono mt-0.5 flex items-center gap-1.5 truncate text-[10px] text-ink-secondary">
                                 <span className="truncate">
-                                  🌍 {px.label} · {px.host}:{px.port}
+                                  {probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}{' '}
+                                  {px.label} · {px.host}:{px.port}
+                                  {probe?.exitIp !== undefined && ` → ${probe.exitIp}`}
                                 </span>
                                 {probe ? (
                                   <span
@@ -2300,6 +2302,12 @@ function deviceLine(archetypeId: string): string {
   const a = ARCHETYPE_REGISTRY.find((x) => x.id === archetypeId);
   if (!a) return archetypeId;
   return `${a.device} · iOS ${a.iosVersion} · Safari ${a.safariVersion}`;
+}
+
+/** ISO-3166 alpha-2 → regional-indicator flag emoji ('NL' → 🇳🇱). */
+function flagEmoji(cc: string): string {
+  if (!/^[A-Z]{2}$/.test(cc)) return '🌍';
+  return String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 }
 
 function friendlyError(err: unknown, baseUrl?: string): string {

@@ -17,6 +17,9 @@ export interface CachedProbe {
   result: ProxyTestResult;
   /** Epoch ms when the probe ran. */
   at: number;
+  /** E-2 exit-geo (optional — absent until the echo probe succeeds). */
+  exitIp?: string;
+  exitCountry?: string | null;
 }
 
 export type ProbeCacheMap = Record<string, CachedProbe>;
@@ -46,7 +49,12 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   ) {
     return null;
   }
+  const exitIp = typeof r.exitIp === 'string' ? r.exitIp : undefined;
+  const exitCountry =
+    typeof r.exitCountry === 'string' || r.exitCountry === null ? r.exitCountry : undefined;
   return {
+    ...(exitIp !== undefined ? { exitIp } : {}),
+    ...(exitCountry !== undefined ? { exitCountry } : {}),
     at: r.at,
     result: {
       reachable: res.reachable,
@@ -81,7 +89,30 @@ export async function saveProbeResult(
   at: number,
 ): Promise<ProbeCacheMap> {
   const all = await loadProbeCache();
-  all[proxyId] = { result, at };
+  // Preserve any prior exit-geo: the capability probe and the exit probe
+  // run separately; a capability re-test must not erase known geo.
+  const prior = all[proxyId];
+  all[proxyId] = {
+    result,
+    at,
+    ...(prior?.exitIp !== undefined ? { exitIp: prior.exitIp } : {}),
+    ...(prior?.exitCountry !== undefined ? { exitCountry: prior.exitCountry } : {}),
+  };
+  await getStore().set(KEY, all);
+  await getStore().save();
+  return all;
+}
+
+/** Persist a successful exit-geo probe onto the proxy's cache entry. */
+export async function saveExitResult(
+  proxyId: string,
+  exitIp: string,
+  exitCountry: string | null,
+): Promise<ProbeCacheMap> {
+  const all = await loadProbeCache();
+  const prior = all[proxyId];
+  if (prior === undefined) return all; // exit probe only runs after a capability probe
+  all[proxyId] = { ...prior, exitIp, exitCountry };
   await getStore().set(KEY, all);
   await getStore().save();
   return all;

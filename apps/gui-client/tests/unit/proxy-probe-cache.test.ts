@@ -81,6 +81,27 @@ describe('proxy-probe-cache', () => {
     expect(cache['bad3']).toBeUndefined();
   });
 
+  it('exit-geo: saveExitResult attaches to an existing entry; capability re-test preserves it; no-entry is a no-op', async () => {
+    const { saveExitResult } = await import('../../src/lib/proxy-probe-cache');
+    // no capability entry yet → no-op
+    let cache = await saveExitResult('ghost', '1.2.3.4', 'NL');
+    expect(cache['ghost']).toBeUndefined();
+    // attach after a capability probe
+    await saveProbeResult('p1', OK, 1);
+    cache = await saveExitResult('p1', '5.6.7.8', 'NL');
+    expect(cache['p1']?.exitIp).toBe('5.6.7.8');
+    expect(cache['p1']?.exitCountry).toBe('NL');
+    // capability RE-test must not erase known geo
+    cache = await saveProbeResult('p1', { ...OK, latency_ms: 80 }, 2);
+    expect(cache['p1']?.result.latency_ms).toBe(80);
+    expect(cache['p1']?.exitIp).toBe('5.6.7.8');
+    // null country round-trips (probed, country unknown)
+    cache = await saveExitResult('p1', '5.6.7.8', null);
+    expect(cache['p1']?.exitCountry).toBeNull();
+    const reloaded = await loadProbeCache();
+    expect(reloaded['p1']?.exitCountry).toBeNull();
+  });
+
   it('whole-store corruption degrades to empty', async () => {
     stores.set('proxy-probe-cache.json', new Map([['probes', 'garbage']]));
     expect(await loadProbeCache()).toEqual({});
