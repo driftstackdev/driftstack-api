@@ -112,6 +112,12 @@ unbounded? Adversarial re-read of the route + the IP limiter says no:
 Verdict: safe to ship as-is at the prod deploy; no key-growth vector beyond
 the proven anonymous-auth-gate baseline.
 
+End-to-end verified on the live stack (2026-06-13, local server on :3000 with
+the real Redis-backed limiter — previously only Fastify-`inject` unit-tested):
+bare GET → `{ip, country:null}`; `cf-ipcountry: NL` → `"NL"`; `XX` → `null`;
+and the IP token bucket returned `429` after exactly 12 tokens from one IP.
+Header parsing, geo logic, and the limiter all behave on the real server.
+
 ## Build order (once F1 decided)
 
 1. `/v1/egress/echo` route + geo (server, ~small; reuses geo infra).
