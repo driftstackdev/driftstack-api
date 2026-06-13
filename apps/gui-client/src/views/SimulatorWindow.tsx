@@ -198,6 +198,40 @@ function DeviceToolbar({
       </div>
       {/* Right — actions. */}
       <div data-tauri-drag-region="false" className="flex items-center gap-1.5 text-ink-muted">
+        {/* Record / Snapshot / Info — real toolbar siblings (were
+            accidentally nested inside the Pin button's <svg>, which made
+            the whole recording + snapshot surface unreachable). */}
+        <button
+          type="button"
+          aria-label={recording ? 'Stop recording' : 'Start recording'}
+          title={recording ? 'Stop and save the recording' : 'Record this session (1fps)'}
+          className={
+            recording
+              ? 'animate-pulse rounded px-1.5 py-0.5 text-[13px] text-red-400 transition hover:bg-white/10'
+              : 'rounded px-1.5 py-0.5 text-[13px] transition hover:bg-white/10 hover:text-ink-primary'
+          }
+          onClick={onToggleRecord}
+        >
+          ●
+        </button>
+        <button
+          type="button"
+          aria-label="Save snapshot"
+          title="Save a PNG of the current frame to Downloads"
+          className="rounded px-1.5 py-0.5 text-[13px] transition hover:bg-white/10 hover:text-ink-primary"
+          onClick={onSnapshot}
+        >
+          ⤓
+        </button>
+        <button
+          type="button"
+          aria-label="Session info"
+          title="Session info"
+          onClick={onToggleInfo}
+          className="rounded px-1.5 py-0.5 text-[13px] transition hover:bg-white/10 hover:text-ink-primary"
+        >
+          ⓘ
+        </button>
         <button
           type="button"
           aria-label={pinned ? 'Unpin (stop floating on top)' : 'Pin on top'}
@@ -216,37 +250,6 @@ function DeviceToolbar({
             strokeLinejoin="round"
           >
             <path d="M12 17v5" />
-            <button
-              type="button"
-              aria-label={recording ? 'Stop recording' : 'Start recording'}
-              title={recording ? 'Stop and save the recording' : 'Record this session (1fps)'}
-              className={
-                recording
-                  ? 'animate-pulse rounded px-1.5 py-0.5 text-[11px] text-red-400 hover:bg-white/10'
-                  : 'rounded px-1.5 py-0.5 text-[11px] text-white/60 hover:bg-white/10 hover:text-white'
-              }
-              onClick={onToggleRecord}
-            >
-              ●
-            </button>
-            <button
-              type="button"
-              aria-label="Save snapshot"
-              title="Save a PNG of the current frame to Downloads"
-              className="rounded px-1.5 py-0.5 text-[11px] text-white/60 hover:bg-white/10 hover:text-white"
-              onClick={onSnapshot}
-            >
-              ⤓
-            </button>
-            <button
-              type="button"
-              aria-label="Session info"
-              title="Session info"
-              onClick={onToggleInfo}
-              className="grid h-4 w-4 place-items-center rounded text-[10px] text-ink-muted transition hover:text-ink-primary"
-            >
-              ⓘ
-            </button>
             <path d="M9 3h6l-1 7 3 3H7l3-3z" />
           </svg>
         </button>
