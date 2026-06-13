@@ -251,6 +251,30 @@ describe('V-667 OAuthService — exchangeCode rejection paths', () => {
     ).rejects.toMatchObject({ code: 'invalid_grant' });
   });
 
+  it('atomic single-use under concurrency: two simultaneous exchanges of the same code → exactly one token, one invalid_grant (no authorization-code reuse / token replay)', async () => {
+    const { svc, reg, code, verifier } = await setup();
+    const exchange = (): Promise<{ access_token: string }> =>
+      svc.exchangeCode({
+        code,
+        code_verifier: verifier,
+        client_id: reg.client_id,
+        client_secret: reg.client_secret,
+        redirect_uri: 'https://app.example/cb',
+      });
+    // Fire both before either resolves — with a blind (non-atomic) consume both
+    // would observe consumed_at===null and both mint a token. The atomic
+    // consumeCodeIfUnconsumed claim serialises them: exactly one wins.
+    const settled = await Promise.allSettled([exchange(), exchange()]);
+    const fulfilled = settled.filter((s) => s.status === 'fulfilled');
+    const rejected = settled.filter((s) => s.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ code: 'invalid_grant' });
+    expect(
+      (fulfilled[0] as PromiseFulfilledResult<{ access_token: string }>).value.access_token,
+    ).toMatch(/^oat_/);
+  });
+
   it('rejects redirect_uri mismatch (binding check)', async () => {
     const { svc, reg, code, verifier } = await setup();
     await expect(

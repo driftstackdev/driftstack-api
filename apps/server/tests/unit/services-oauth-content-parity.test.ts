@@ -31,7 +31,7 @@
 //   • exchangeCode: client_secret_hash timing-safe equality;
 //     consumed_at !== null → invalid_grant; client_id-mismatch
 //     guard; redirect_uri-mismatch guard; verifyS256Challenge call;
-//     markCodeConsumed; token mint with oat_ prefix.
+//     atomic consumeCodeIfUnconsumed claim (single-use gate); token mint with oat_ prefix.
 //   • V-667.E rotateClientSecret: invalid_client on unknown or
 //     revoked; same client_id retained.
 //   • V-667.C revokeToken: RFC 7009 silent (route always 200; no
@@ -125,7 +125,7 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     );
     expect(body).toMatch(/insertCode\(code: AuthorizationCode\): Promise<void>;/);
     expect(body).toMatch(/getCode\(code: string\): Promise<AuthorizationCode \| null>;/);
-    expect(body).toMatch(/markCodeConsumed\(code: string, at: number\): Promise<void>;/);
+    expect(body).toMatch(/consumeCodeIfUnconsumed\(code: string, at: number\): Promise<boolean>;/);
     expect(body).toMatch(/insertToken\(token: AccessToken\): Promise<void>;/);
     expect(body).toMatch(/getToken\(token: string\): Promise<AccessToken \| null>;/);
     expect(body).toMatch(/revokeToken\(token: string\): Promise<void>;/);
@@ -203,7 +203,10 @@ describe('W403.B apps/server/src/services/oauth.ts content parity', () => {
     expect(body).toMatch(
       /if \(!verifyS256Challenge\(\{ verifier: args\.code_verifier, challenge: code\.code_challenge \}\)\) \{\s*\n?\s*throw new OAuthError\('invalid_grant', 'PKCE verification failed'\);/,
     );
-    expect(body).toMatch(/await this\.store\.markCodeConsumed\(args\.code, this\.nowFn\(\)\);/);
+    // Atomic single-use gate: claim-or-reject (no blind unconditional consume).
+    expect(body).toMatch(
+      /if \(!\(await this\.store\.consumeCodeIfUnconsumed\(args\.code, this\.nowFn\(\)\)\)\) \{\s*\n?\s*throw new OAuthError\('invalid_grant', 'code already exchanged'\);/,
+    );
     expect(body).toMatch(/const token = `oat_\$\{randomBytes\(32\)\.toString\('base64url'\)\}`;/);
   });
 

@@ -83,7 +83,16 @@ export interface OAuthStore {
   // Authorization codes
   insertCode(code: AuthorizationCode): Promise<void>;
   getCode(code: string): Promise<AuthorizationCode | null>;
-  markCodeConsumed(code: string, at: number): Promise<void>;
+  /**
+   * Atomically claim an unconsumed code: set consumed_at and return true IFF
+   * this call transitioned it unconsumed → consumed. Returns false when the code
+   * is unknown or was already consumed (incl. by a concurrent exchange). The
+   * persistent impl MUST do this as a single conditional statement (UPDATE …
+   * SET consumed_at = $at WHERE code = $code AND consumed_at IS NULL RETURNING …,
+   * claimed = rowCount === 1) so two concurrent /v1/oauth/token exchanges of the
+   * same code can never both succeed (authorization-code reuse / token replay).
+   */
+  consumeCodeIfUnconsumed(code: string, at: number): Promise<boolean>;
   // Access tokens
   insertToken(token: AccessToken): Promise<void>;
   getToken(token: string): Promise<AccessToken | null>;
@@ -145,9 +154,14 @@ export class InMemoryOAuthStore implements OAuthStore {
     return c;
   }
   // eslint-disable-next-line @typescript-eslint/require-await
-  async markCodeConsumed(code: string, at: number): Promise<void> {
+  async consumeCodeIfUnconsumed(code: string, at: number): Promise<boolean> {
+    // Single-thread check-and-set: no await between the read and the write, so
+    // two interleaved exchanges can't both observe consumed_at === null and both
+    // claim the code.
     const c = this.codes.get(code);
-    if (c) this.codes.set(code, { ...c, consumed_at: at });
+    if (c === undefined || c.consumed_at !== null) return false;
+    this.codes.set(code, { ...c, consumed_at: at });
+    return true;
   }
   // eslint-disable-next-line @typescript-eslint/require-await
   async insertToken(t: AccessToken): Promise<void> {
@@ -396,7 +410,15 @@ export class OAuthService {
     if (!verifyS256Challenge({ verifier: args.code_verifier, challenge: code.code_challenge })) {
       throw new OAuthError('invalid_grant', 'PKCE verification failed');
     }
-    await this.store.markCodeConsumed(args.code, this.nowFn());
+    // Atomic single-use gate: claim the code or lose to a concurrent exchange.
+    // The consumed_at read above is a fast-fail pre-check; THIS is the
+    // authoritative serialization point (validation already passed, so a
+    // failed validation never burns the code — only a real winning exchange
+    // consumes it). Two concurrent exchanges of the same code → exactly one
+    // claims → exactly one token issued (no authorization-code reuse).
+    if (!(await this.store.consumeCodeIfUnconsumed(args.code, this.nowFn()))) {
+      throw new OAuthError('invalid_grant', 'code already exchanged');
+    }
 
     const token = `oat_${randomBytes(32).toString('base64url')}`;
     const now = this.nowFn();
