@@ -121,6 +121,32 @@ api.driftstack.dev wss://*.driftstack.dev:* *.ingest.de.sentry.io; …`) in
    behavior change). Gated on the deployment Anthropic key being set (may be unset pre-launch → not
    yet exploitable). Detail: `project_bundled_llm_softcap_burst_overrun_surfaced`.
 
+9. **Agent run-loop prompt-injection frame — observation-as-`assistant` (LATENT defense-in-depth).**
+   Found by the adversarial run-loop audit workflow (the prompt-injection lens; code-verified by me,
+   adversarial-verification pending the workflow re-run). `agent-decomposer-claude.ts buildMessages()`
+   (line 292) maps every non-`user` transcript entry to the Anthropic `assistant` role. Executor-
+   result summaries are appended with `role: 'agent'` (agent-executor.ts:455) and, in the WIRED
+   `RealAgentExecutor`, embed page-derived attacker-controllable text (e.g. `finalUrl` after a
+   redirect, agent-executor.ts:267). So a malicious page's text would reach the model framed as its
+   OWN prior `assistant` output rather than as clearly-delimited untrusted DATA — a weaker prompt-
+   injection frame than best practice. **Why it is LATENT, not live:** prod wires
+   `StubAgentExecutor` (bootstrap.ts:821/902), whose navigate summary embeds the LLM's _intended_
+   `intent.url` (plan-derived), NOT a real page `finalUrl` — so no attacker-controlled text reaches
+   the transcript today. Two existing mitigations also bound it: (a) the SYSTEM_PROMPT explicitly
+   names "observation / executor result in the conversation history" as UNTRUSTED (decomposer-
+   claude.ts:99-108); (b) the consequential-action gate still halts purchase/payment/account-deletion
+   taps for human confirmation regardless of what a jailbroken plan emits — so the high-risk blast
+   radius is gated; residual exposure (when `RealAgentExecutor` wires) is non-consequential
+   navigate/type/capture (e.g. data exfil to an attacker URL). **Decision: harden before
+   `RealAgentExecutor` wires** — introduce a distinct `'observation'` transcript role (vs `'agent'`
+   plans) so `buildMessages` can frame executor/page output as delimited untrusted data (own
+   user-role block, or an explicit `OBSERVATION (untrusted):` wrapper) instead of `assistant`. NOT
+   auto-flipped: it touches the **locked prompt-construction path** (decomposer-claude.ts:89-92
+   requires a prompt-template parity test + eval-corpus check on any change) and changes the message
+   array the model sees → behavior risk that needs a model eval I can't run in autopilot; and it
+   should land WITH the Agent-1 webkit-driver / RealAgentExecutor wiring it defends. Detail:
+   `project_agent_runloop_prompt_injection_frame_surfaced`.
+
 ## Minor / awaiting a nod
 
 - **`/Applications` has 11 stale `Driftstack.app.prev*` backups** (auto-created by the Tauri
