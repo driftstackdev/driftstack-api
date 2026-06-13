@@ -50,6 +50,19 @@ export class InMemorySessionsRepo implements SessionRepo {
     return Promise.resolve(record);
   }
 
+  // Synchronous twin of the Drizzle atomic insert-if-under-cap: the in-memory
+  // count+insert has no await gap, so it's naturally atomic (the real race the
+  // advisory lock guards lives only in the multi-connection Postgres path,
+  // covered by db-sessions-concurrency-drizzle).
+  insertSessionIfUnderLimit(input: NewSessionInput, limit: number): Promise<SessionRecord | null> {
+    let active = 0;
+    for (const s of this.sessions.values()) {
+      if (s.accountId === input.accountId && s.destroyedAt === null) active += 1;
+    }
+    if (active >= limit) return Promise.resolve(null);
+    return this.insertSession(input);
+  }
+
   findSession(id: string, accountId: string): Promise<SessionRecord | null> {
     const s = this.sessions.get(id);
     if (!s || s.accountId !== accountId) return Promise.resolve(null);

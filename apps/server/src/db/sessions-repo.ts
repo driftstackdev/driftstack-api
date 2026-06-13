@@ -38,6 +38,48 @@ export class DrizzleSessionRepo implements SessionRepo {
     return toSessionRecord(row);
   }
 
+  // Atomic "insert only if under the concurrent-session cap" — closes the
+  // count-then-insert TOCTOU in SessionsService.create (a bare
+  // countActiveSessions + insertSession lets N concurrent creates all pass a
+  // stale count and exceed the tier cap). A per-account advisory lock
+  // (xact-scoped → auto-released on commit/rollback) serialises concurrent
+  // creates for the SAME account so the count + insert are atomic; it wraps
+  // ONLY this fast count+insert, never the slow driver.createSession that runs
+  // before this call, so it adds no create-path latency and no cross-account
+  // contention (different accounts hash to different lock keys). Returns null
+  // when already at/over the limit — the caller tears down the driver session
+  // it just spun + surfaces ConcurrencyLimitError. Mirrors the FOR-UPDATE
+  // atomic-transaction pattern proven for debitTokens/appendTranscript.
+  async insertSessionIfUnderLimit(
+    input: NewSessionInput,
+    limit: number,
+  ): Promise<SessionRecord | null> {
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`session-create:${input.accountId}`}))`,
+      );
+      const [countRow] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(sessions)
+        .where(and(eq(sessions.accountId, input.accountId), isNull(sessions.destroyedAt)));
+      if ((countRow?.count ?? 0) >= limit) return null;
+      const [row] = await tx
+        .insert(sessions)
+        .values({
+          accountId: input.accountId,
+          apiKeyId: input.apiKeyId,
+          driverSessionId: input.driverSessionId,
+          archetype: input.archetype,
+          purpose: input.purpose,
+          label: input.label,
+          metadata: input.metadata,
+        })
+        .returning();
+      if (!row) throw new Error('insertSessionIfUnderLimit returned no row');
+      return toSessionRecord(row);
+    });
+  }
+
   async findSession(id: string, accountId: string): Promise<SessionRecord | null> {
     const [row] = await this.database.db
       .select()

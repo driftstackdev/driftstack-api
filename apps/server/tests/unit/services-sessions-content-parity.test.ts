@@ -106,6 +106,12 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
   it('SessionRepo methods (insert/findSession/findSessionUnscoped/updateSessionStatus/countActiveSessions/listSessions/listAllSessions/listExpiredForAutoDestroy + recordEvent + setEgressCapabilityReport)', () => {
     expect(body).toMatch(/export interface SessionRepo \{/);
     expect(body).toMatch(/insertSession\(input: NewSessionInput\): Promise<SessionRecord>;/);
+    // The atomic insert-if-under-cap (TOCTOU fix) is part of the contract.
+    // Reflow-robust: prettier collapses this signature to one line (no
+    // trailing comma), so match space-or-newline + an optional trailing comma.
+    expect(body).toMatch(
+      /insertSessionIfUnderLimit\(\s*input: NewSessionInput,\s*limit: number,?\s*\): Promise<SessionRecord \| null>;/,
+    );
     expect(body).toMatch(
       /\/\*\* Find a session by id, scoped to the supplied account\. \*\/\s*\n?\s*findSession\(id: string, accountId: string\): Promise<SessionRecord \| null>;/,
     );
@@ -172,6 +178,19 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(
       /if \(active >= limit\) \{\s*\n?\s*throw new ConcurrencyLimitError\(active, limit\);\s*\n?\s*\}/,
     );
+  });
+
+  it('create: the cap is ENFORCED atomically via insertSessionIfUnderLimit (TOCTOU fix) — the countActiveSessions pre-check is fast-fail only; a null result tears down the orphaned driver session + throws ConcurrencyLimitError (NOT a bare racy insertSession)', () => {
+    // Drift back to a bare `repo.insertSession` in create() would reopen the
+    // concurrent-cap bypass (N parallel creates all pass a stale pre-check),
+    // so pin the atomic call + the null→orphan-rollback→limit-error path.
+    expect(body).toMatch(/inserted = await this\.deps\.repo\.insertSessionIfUnderLimit\(/);
+    expect(body).toMatch(/^\s*limit,\s*$/m);
+    expect(body).toMatch(
+      /if \(inserted === null\) \{[\s\S]*?driver\.destroy\(driverResult\.driverSessionId\)[\s\S]*?throw new ConcurrencyLimitError\(limit, limit\);/,
+    );
+    // The racy bare insert must NOT be the create-path enforcement.
+    expect(body).not.toMatch(/record = await this\.deps\.repo\.insertSession\(/);
   });
 
   it('create: archetype = body.archetype ?? LOCKED_ARCHETYPE_ID; purpose = body.purpose ?? DEFAULT_SESSION_PURPOSE; emits session.created audit', () => {

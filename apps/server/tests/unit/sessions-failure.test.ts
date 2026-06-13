@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { SessionsService } from '../../src/services/sessions.js';
+import { ConcurrencyLimitError } from '../../src/lib/errors.js';
 import type {
   SessionRepo,
   SessionRecord,
@@ -61,9 +62,14 @@ function buildCtx(): AccountContext {
 class StubRepo implements SessionRepo {
   private readonly sessions = new Map<string, SessionRecord>();
   readonly events: SessionEventInput[] = [];
-  /** Opt-in (default null): when set, insertSession rejects with it.
+  /** Opt-in (default null): when set, insertSession /
+   *  insertSessionIfUnderLimit reject with it.
    *  Used to exercise the create() driver-session orphan rollback. */
   throwOnInsert: Error | null = null;
+  /** Opt-in (default false): when true, insertSessionIfUnderLimit returns null
+   *  (simulates the atomic cap guard rejecting a concurrent-race loser) —
+   *  exercises the create() over-cap orphan rollback + ConcurrencyLimitError. */
+  overCapOnInsert = false;
 
   insertSession(input: NewSessionInput): Promise<SessionRecord> {
     if (this.throwOnInsert !== null) return Promise.reject(this.throwOnInsert);
@@ -88,6 +94,16 @@ class StubRepo implements SessionRepo {
     };
     this.sessions.set(id, row);
     return Promise.resolve(row);
+  }
+  insertSessionIfUnderLimit(input: NewSessionInput, limit: number): Promise<SessionRecord | null> {
+    if (this.throwOnInsert !== null) return Promise.reject(this.throwOnInsert);
+    if (this.overCapOnInsert) return Promise.resolve(null);
+    let active = 0;
+    for (const s of this.sessions.values()) {
+      if (s.accountId === input.accountId && s.destroyedAt === null) active += 1;
+    }
+    if (active >= limit) return Promise.resolve(null);
+    return this.insertSession(input);
   }
   findSession(id: string, accountId: string): Promise<SessionRecord | null> {
     const r = this.sessions.get(id);
@@ -401,6 +417,26 @@ describe('SessionsService — V-090 driver-failure capture', () => {
     // destroy must never mask it).
     expect(caught).toBe(insertErr);
     // The driver session minted by createSession (mock-1) was torn down.
+    expect(driver.destroyedIds).toEqual(['mock-1']);
+  });
+
+  it('create: the atomic cap guard returning null (concurrent-race loser) rolls back the driver session + throws ConcurrencyLimitError', async () => {
+    // The fast-fail pre-check passes (countActiveSessions=0), but the locked
+    // insertSessionIfUnderLimit returns null — a concurrent create took the
+    // last slot between the pre-check and the locked insert. The driver
+    // session already spun (mock-1) must be torn down (same orphan reasoning
+    // as the insert-failure case) and the cap error surfaced (not a 500).
+    const { service, driver, repo } = buildService();
+    const ctx = buildCtx();
+    repo.overCapOnInsert = true;
+
+    let caught: unknown;
+    try {
+      await service.create(ctx, { archetype: 'iphone16pro_ios18_7_safari26_4' });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ConcurrencyLimitError);
     expect(driver.destroyedIds).toEqual(['mock-1']);
   });
 

@@ -145,6 +145,15 @@ export interface SessionListPage {
 
 export interface SessionRepo {
   insertSession(input: NewSessionInput): Promise<SessionRecord>;
+  /**
+   * Atomic insert-if-under-cap: insert the session only if the account has
+   * fewer than `limit` active (non-destroyed) sessions, else return null —
+   * the count + insert happen under a per-account lock so concurrent creates
+   * can't all pass a stale count and exceed the tier cap (the create-path
+   * TOCTOU). The slow driver.createSession runs BEFORE this call, never under
+   * the lock.
+   */
+  insertSessionIfUnderLimit(input: NewSessionInput, limit: number): Promise<SessionRecord | null>;
   /** Find a session by id, scoped to the supplied account. */
   findSession(id: string, accountId: string): Promise<SessionRecord | null>;
   /** Find a session by id WITHOUT account scoping (admin force-actions only). */
@@ -306,6 +315,13 @@ export class SessionsService {
     const tier = opts.effectiveTier ?? ctx.account.tier;
 
     const limit = concurrentSessionLimitFor(tier);
+    // Fast-fail BEFORE spinning a real browser when already clearly at the cap
+    // (the common case). This is an optimisation, NOT the enforcement — the
+    // count-then-create-then-insert sequence is a TOCTOU (the driver.createSession
+    // below is slow, so N concurrent creates could all pass this check). The
+    // ACTUAL cap is enforced atomically by insertSessionIfUnderLimit (a locked
+    // count+insert) further down; the loser of a concurrent race is rejected
+    // there even if it slips past this pre-check.
     const active = await this.deps.repo.countActiveSessions(accountId);
     if (active >= limit) {
       throw new ConcurrencyLimitError(active, limit);
@@ -324,19 +340,22 @@ export class SessionsService {
       ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
     });
 
-    let record: SessionRecord;
+    let inserted: SessionRecord | null;
     try {
-      record = await this.deps.repo.insertSession({
-        accountId,
-        // apiKey stays the member's — that's the actor; the owner's
-        // audit log shows which member's key created the session.
-        apiKeyId: ctx.apiKey.id,
-        driverSessionId: driverResult.driverSessionId,
-        archetype,
-        purpose,
-        label: body.label ?? null,
-        metadata: body.metadata ?? null,
-      });
+      inserted = await this.deps.repo.insertSessionIfUnderLimit(
+        {
+          accountId,
+          // apiKey stays the member's — that's the actor; the owner's
+          // audit log shows which member's key created the session.
+          apiKeyId: ctx.apiKey.id,
+          driverSessionId: driverResult.driverSessionId,
+          archetype,
+          purpose,
+          label: body.label ?? null,
+          metadata: body.metadata ?? null,
+        },
+        limit,
+      );
     } catch (err) {
       // Orphan guard: the driver session is already live, but the DB
       // insert failed — so nothing tracks it. countActiveSessions and the
@@ -348,6 +367,16 @@ export class SessionsService {
       await this.deps.driver.destroy(driverResult.driverSessionId).catch(() => {});
       throw err;
     }
+    if (inserted === null) {
+      // The atomic cap guard rejected this insert: a concurrent create won the
+      // last slot between our fast-fail pre-check and the locked count+insert.
+      // The driver session we just spun is now orphaned (no DB row) — tear it
+      // down with the same reasoning as the catch above, then surface the cap
+      // error (active == limit at this point).
+      await this.deps.driver.destroy(driverResult.driverSessionId).catch(() => {});
+      throw new ConcurrencyLimitError(limit, limit);
+    }
+    const record: SessionRecord = inserted;
 
     await this.deps.repo.updateSessionStatus(record.id, 'ready');
     await this.deps.repo.recordEvent({

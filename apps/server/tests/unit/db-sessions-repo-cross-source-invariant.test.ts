@@ -64,9 +64,12 @@ describe('W998 db/sessions-repo cross-source invariant', () => {
 
   // ─── 9-method surface ────────────────────────────────────────
 
-  it('CRITICAL 9-method surface — insertSession + findSession + findSessionUnscoped + updateSessionStatus + countActiveSessions + listSessions + recordEvent + listAllSessions + listExpiredForAutoDestroy. The SessionRepo covers CRUD + event-recording + admin lookup + 6.g duration sweep.', () => {
+  it('CRITICAL 10-method surface — insertSession + insertSessionIfUnderLimit + findSession + findSessionUnscoped + updateSessionStatus + countActiveSessions + listSessions + recordEvent + listAllSessions + listExpiredForAutoDestroy. The SessionRepo covers CRUD + atomic cap-enforced create + event-recording + admin lookup + 6.g duration sweep.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/sessions-repo.ts'));
     expect(p).toMatch(/async insertSession\(input: NewSessionInput\): Promise<SessionRecord> \{/);
+    expect(p).toMatch(
+      /async insertSessionIfUnderLimit\(\s*\n?\s*input: NewSessionInput,\s*\n?\s*limit: number,\s*\n?\s*\): Promise<SessionRecord \| null> \{/,
+    );
     expect(p).toMatch(
       /async findSession\(id: string, accountId: string\): Promise<SessionRecord \| null> \{/,
     );

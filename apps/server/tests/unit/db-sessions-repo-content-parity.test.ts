@@ -67,6 +67,20 @@ describe('W447.A apps/server/src/db/sessions-repo.ts content parity', () => {
     );
   });
 
+  it('insertSessionIfUnderLimit: atomic count+insert in a transaction, serialised by a per-account pg_advisory_xact_lock; returns null when count >= limit (the concurrent-cap TOCTOU fix). Drift to dropping the advisory lock or the tx reopens the create-path race.', () => {
+    expect(body).toMatch(
+      /async insertSessionIfUnderLimit\(\s*\n?\s*input: NewSessionInput,\s*\n?\s*limit: number,\s*\n?\s*\): Promise<SessionRecord \| null> \{/,
+    );
+    expect(body).toMatch(/return this\.database\.db\.transaction\(async \(tx\) => \{/);
+    expect(body).toMatch(
+      /SELECT pg_advisory_xact_lock\(hashtext\(\$\{`session-create:\$\{input\.accountId\}`\}\)\)/,
+    );
+    // count under the SAME tx, then conditional insert / null.
+    expect(body).toMatch(
+      /\.where\(and\(eq\(sessions\.accountId, input\.accountId\), isNull\(sessions\.destroyedAt\)\)\);\s*\n?\s*if \(\(countRow\?\.count \?\? 0\) >= limit\) return null;/,
+    );
+  });
+
   it('findSession: account-scoped via and(eq(id), eq(accountId)) + limit 1; findSessionUnscoped: id-only no account scope (admin force-actions path)', () => {
     expect(body).toMatch(
       /async findSession\(id: string, accountId: string\): Promise<SessionRecord \| null> \{\s*\n?\s*const \[row\] = await this\.database\.db\s*\n?\s*\.select\(\)\s*\n?\s*\.from\(sessions\)\s*\n?\s*\.where\(and\(eq\(sessions\.id, id\), eq\(sessions\.accountId, accountId\)\)\)\s*\n?\s*\.limit\(1\);\s*\n?\s*return row \? toSessionRecord\(row\) : null;\s*\n?\s*\}/,
