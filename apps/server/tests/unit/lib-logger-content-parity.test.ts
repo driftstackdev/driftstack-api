@@ -124,11 +124,16 @@ describe('W391.A apps/server/src/lib/logger.ts content parity', () => {
     );
   });
 
-  it('V-494 err serializer: redactErrSerializer scrubs message+stack and is WIRED into serializers.err (free-text token leak in a caught error)', () => {
-    // The function exists + scrubs both free-text fields...
+  it('V-494 err serializer: redactErrSerializer recursively scrubs EVERY string value (message+stack+detail+extensions+nested cause/config) and is WIRED into serializers.err (free-text token leak in a caught error)', () => {
+    // The function exists + recursively redacts all string values (not just
+    // message+stack — ApiError.detail/extensions + a nested upstream error's
+    // cause/config bypassed the old message+stack-only redaction).
     expect(body).toMatch(/export function redactErrSerializer\(/);
-    expect(body).toMatch(/base\.message = redactText\(base\.message\)/);
-    expect(body).toMatch(/base\.stack = redactText\(base\.stack\)/);
+    expect(body).toMatch(/return redactErrValue\(base, 0\)/);
+    // The recursive helper redacts every string + bounds recursion (depth cap
+    // guards cyclic refs; redactText is a no-op on clean strings).
+    expect(body).toMatch(/if \(typeof value === 'string'\) return redactText\(value\)/);
+    expect(body).toMatch(/depth >= MAX_ERR_REDACT_DEPTH/);
     // ...AND is actually wired into the pino serializers (else the leak returns
     // even though the function exists — the behavioral test wouldn't catch an
     // un-wiring since it calls the function directly).

@@ -33,4 +33,24 @@ describe('redactErrSerializer', () => {
     expect(out.message).toBe('ECONNRESET');
     expect(out.type).toBe('Error');
   });
+
+  it('redacts a credential in a NON-message/stack property (e.g. ApiError.detail) — pino copies it but the old message+stack-only redaction missed it', () => {
+    const e = new Error('request failed') as Error & { detail?: string };
+    // ApiError sets `this.detail` (own-enumerable) → pino.stdSerializers.err copies it.
+    e.detail = 'upstream rejected https://api.x/cb?code=AUTH_SECRET&state=ok';
+    const out = redactErrSerializer(e);
+    const detail = out.detail as string;
+    expect(detail).not.toContain('AUTH_SECRET');
+    expect(detail).toContain('code=[redacted]');
+    expect(detail).toContain('state=ok'); // benign context kept
+  });
+
+  it('redacts a credential in a NESTED property (e.g. an upstream error cause carrying a Bearer token)', () => {
+    const e = new Error('dispatch failed') as Error & { cause?: unknown };
+    e.cause = { kind: 'upstream', auth: 'Authorization: Bearer sk-live-NESTED (401)' };
+    const out = redactErrSerializer(e);
+    const cause = out.cause as Record<string, unknown>;
+    expect(cause.auth as string).not.toContain('sk-live-NESTED');
+    expect(cause.auth as string).toContain('Bearer [redacted]');
+  });
 });

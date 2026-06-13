@@ -3,18 +3,34 @@ import type { Config } from './config.js';
 import { redactUrlQueryTokens, redactText } from './redact-url.js';
 
 /**
- * V-494 follow-up — err serializer. Pino's default `err` serializer logs
- * `message` + `stack` VERBATIM, and `redact.paths` (key-based) can't reach a
- * credential embedded inside that free text — so a caught error citing an
- * upstream/SSE `...?ds_token=` / OAuth `?code=` / `Bearer <token>` would land in
- * the logs in plaintext (the log-channel sibling of the lib/sentry.ts exception
- * scrub). Wrap pino's std err serializer + run redactText over message + stack.
+ * V-494 follow-up — err serializer. Pino's std `err` serializer copies the
+ * error's `message`, `stack`, `type`, AND every other own-enumerable property —
+ * ApiError.detail (set on every API error) + extensions, an upstream SDK/HTTP
+ * error's nested cause/config/response (which can carry request headers, an api
+ * key, a token), etc. `redact.paths` (key-based on the LOG object) can't reach a
+ * credential embedded inside that free text. Redacting only message+stack left
+ * detail/extensions/nested-cause UNredacted, so a caught error citing an
+ * upstream/SSE `...?ds_token=` / OAuth `?code=` / `Bearer <token>` / `user:pass@`
+ * URL in any of those props would land in the logs in plaintext (the log-channel
+ * sibling of the lib/sentry.ts exception scrub). So run redactText over EVERY
+ * string value in the serialized error (recursively, depth-capped). redactText
+ * is a byte-identical no-op on credential-free strings, so this never mangles
+ * clean diagnostic text; the depth cap bounds recursion + guards cyclic refs.
  */
+const MAX_ERR_REDACT_DEPTH = 6;
+function redactErrValue(value: unknown, depth: number): unknown {
+  if (typeof value === 'string') return redactText(value);
+  if (value === null || typeof value !== 'object' || depth >= MAX_ERR_REDACT_DEPTH) return value;
+  if (Array.isArray(value)) return value.map((v) => redactErrValue(v, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = redactErrValue(v, depth + 1);
+  }
+  return out;
+}
 export function redactErrSerializer(err: unknown): Record<string, unknown> {
   const base = pino.stdSerializers.err(err as Error) as Record<string, unknown>;
-  if (typeof base.message === 'string') base.message = redactText(base.message);
-  if (typeof base.stack === 'string') base.stack = redactText(base.stack);
-  return base;
+  return redactErrValue(base, 0) as Record<string, unknown>;
 }
 
 // We re-export pino's Logger as our `Logger` type. Fastify's FastifyBaseLogger
