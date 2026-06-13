@@ -1,12 +1,41 @@
 # Cross-SDK retry-policy divergence on 5xx — surfaced 2026-06-13
 
-**Status:** SURFACED (read-only audit wave; high box load → no push). Cross-cutting,
-customer-facing behavior spanning 3 SDK packages + the documented retry contract →
-needs a decision, not an autonomous flip.
+> ## ⚠️ CORRECTION — FALSE POSITIVE (2026-06-13, same day)
+>
+> **The 5xx retry difference is INTENTIONAL, documented, and test-locked. NO code
+> change made; the analysis below is retained only as an investigation trail + a lesson.**
+>
+> A later low-load wave went to implement the fix and FIRST read the two dedicated
+> cross-SDK _retry-policy_ parity tests — which the original audit missed:
+>
+> - **W679** `apps/server/tests/unit/cross-sdk-retry-policy-parity.test.ts:87` pins, as
+>   a CRITICAL invariant: _"sdk-typescript additionally retries 5xx DriftstackError
+>   (status>=500); sdk-go + sdk-python treat 5xx as terminal (only RateLimit +
+>   Transport)."_
+> - **W815** `apps/server/tests/unit/sdk-retry-policy-cross-sdk-parity.test.ts:79` pins
+>   the _"TS-only 'Retry on network errors and 5xx'"_ framing and explicitly warns that
+>   _"drift to ... stop retrying 5xx [would] lose transient resilience."_
+>
+> So the per-SDK 5xx difference is a **deliberate, documented design choice** (TS keeps
+> 5xx retry for resilience; Go/Python deliberately treat 5xx as terminal), not a bug or
+> a "blind spot." Both proposed fixes below (align-down AND method-aware) would have
+> BROKEN these two CRITICAL parity tests and contradicted documented intent.
+>
+> The original audit's error: it checked `cross-sdk-client-defaults-parity` +
+> `cross-sdk-idempotency-key-parity` but did NOT grep for the `*-retry-policy-*-parity`
+> tests that document this exact dimension. **Lesson (reinforces the W2376/W2377
+> false-positive class):** before claiming a cross-SDK divergence, grep for tests named
+> `*<dimension>*parity` FIRST — the intentional differences are encoded there.
+>
+> Residuals after correction: (a) the TS 5xx-retry double-submit on bare non-idempotent
+> POSTs is an inherent, accepted property of the intentional design (idempotency keys
+> exist for the money POSTs); (b) Python's `is_retryable()` helper reporting 5xx as
+> retryable while the built-in is conservative is a defensible documented distinction
+> ("use from your own loop"), not a confirmed bug. Neither warrants a change.
 
-**Severity:** MEDIUM. Customer-visible behavioral inconsistency + a latent double-submit
-exposure on the TS SDK + a misleading public helper in the Python SDK. No data-loss /
-security issue; the idempotency-key path (when used) already protects the money POSTs.
+**Status:** ❌ FALSE POSITIVE — CLOSED (intentional + W679/W815 test-locked; see correction above).
+
+**Severity:** N/A (no real issue). Original (incorrect) framing retained below for the trail.
 
 ## What was found
 

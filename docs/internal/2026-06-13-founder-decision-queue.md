@@ -47,16 +47,15 @@ decision; none is autonomously safe to flip.
    404s (no Prometheus scrape). To enable: wire the registry + set the token + stand up a
    scraper. Or accept inert pre-launch. Not a security/correctness bug.
 
-## Engineering-resolvable (founder input optional)
+## ~~Engineering-resolvable~~ — withdrawn (false positive)
 
-4. **Cross-SDK retry-policy divergence on 5xx — MEDIUM, customer-facing.**
-   The TS SDK's built-in retry re-attempts 5xx; Python + Go do **not** (network + 429 only),
-   despite docstrings claiming they "mirror" TS. Plus Python's public `is_retryable()` helper
-   advertises 5xx as retryable while the built-in client never retries it. Latent: TS retrying
-   5xx on bare non-idempotent POSTs (no Idempotency-Key) = double-submit risk. Resolvable in a
-   low-load wave (no founder gate) — preferred fix = method/idempotency-aware retry aligned
-   across all 3 SDKs; pragmatic = align TS down to Python/Go. Detail + verification:
-   `2026-06-13-cross-sdk-retry-policy-5xx-divergence.md`.
+4. ~~**Cross-SDK retry-policy divergence on 5xx.**~~ **WITHDRAWN 2026-06-13 — FALSE POSITIVE.**
+   The TS-retries-5xx / Go+Python-treat-5xx-as-terminal difference is **intentional and
+   test-locked** (W679 `cross-sdk-retry-policy-parity.test.ts:87` + W815
+   `sdk-retry-policy-cross-sdk-parity.test.ts:79` both pin it as a CRITICAL invariant; W815
+   explicitly warns that dropping TS's 5xx retry would "lose transient resilience"). The
+   original audit missed those two dedicated parity tests. No decision needed, no change.
+   Correction trail: `2026-06-13-cross-sdk-retry-policy-5xx-divergence.md`.
 
 ## Minor / awaiting a nod
 
