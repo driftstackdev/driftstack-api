@@ -1241,7 +1241,18 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                           <button
                             type="button"
                             className="btn-primary flex-1 text-xs"
-                            disabled={busyId === profile.id}
+                            // In a team workspace these are the OWNER's profiles
+                            // (profiles.list honors X-Driftstack-Account). Launch
+                            // goes through agent-sessions create, which is
+                            // self-scoped + ships the profile DEK — server RBAC
+                            // for member-launches-owner-profile is unresolved, so
+                            // it would 404. Gate it honestly: launch from Personal.
+                            disabled={busyId === profile.id || activeWorkspace !== null}
+                            title={
+                              activeWorkspace !== null
+                                ? 'Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own.'
+                                : undefined
+                            }
                             onClick={() => void handleLaunch(profile)}
                           >
                             {busyId === profile.id ? 'Launching…' : 'Launch'}
@@ -1419,8 +1430,15 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                             // atProfileCap meant a free-tier user (profile_cap 1) could
                             // never launch their one allowed profile. The server
                             // enforces the concurrent-session cap and handleLaunch
-                            // surfaces that error.
-                            disabled={busy}
+                            // surfaces that error. ALSO gated in a team workspace —
+                            // these are the owner's profiles + agent-sessions launch is
+                            // self-scoped (would 404); launch from Personal.
+                            disabled={busy || activeWorkspace !== null}
+                            title={
+                              activeWorkspace !== null
+                                ? 'Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own.'
+                                : undefined
+                            }
                           >
                             {busy ? 'Launching…' : 'Launch'}
                           </button>

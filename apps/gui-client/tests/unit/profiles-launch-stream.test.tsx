@@ -58,6 +58,10 @@ vi.mock('../../src/lib/SettingsContext', () => {
     refreshAccountMe: vi.fn(() => Promise.resolve()),
     loading: false,
     update: vi.fn(() => Promise.resolve()),
+    // Default workspace = Personal (mirrors the real context's null default;
+    // Launch is gated when a team workspace is active).
+    activeWorkspace: null,
+    setActiveWorkspace: vi.fn(),
   };
   return { useSettings: () => stable };
 });

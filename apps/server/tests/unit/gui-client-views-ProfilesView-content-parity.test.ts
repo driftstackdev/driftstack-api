@@ -133,6 +133,12 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).not.toMatch(/disabled=\{busy\s*\|\|\s*atProfileCap\}/);
   });
 
+  it("Launch is gated in a team workspace (activeWorkspace !== null): profiles.list honors X-Driftstack-Account so the cards show the OWNER's profiles, but agent-sessions create is self-scoped + ships the profile DEK (member-launches-owner RBAC unresolved → would 404). Gate it honestly with a tooltip rather than present a 404-ing button; launch from Personal.", () => {
+    expect(body).toContain('busyId === profile.id || activeWorkspace !== null');
+    expect(body).toContain('disabled={busy || activeWorkspace !== null}');
+    expect(body).toMatch(/Launching a team-workspace profile isn.t available yet/);
+  });
+
   it("W624 stop-actually-stops: boundSession resolves the profile's session by KIND (agt_ → agent, else live driver session) so an agent-backed profile counts as running AND its Stop closes the right thing — handleStop calls agentSessions.close(agt_) / sessions.destroy(ses_). The founder-hit bug: launch-with-LiveKit bound an agt_ id that the driver-only lookup never matched, so the profile showed idle and Stop no-op'd (the agent session kept running).", () => {
     expect(body).toMatch(
       /function boundSession\(profileId: string\): \{ id: string; kind: 'agent' \| 'driver' \} \| null \{/,
