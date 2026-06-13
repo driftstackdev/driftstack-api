@@ -22,8 +22,8 @@
 //     + startedAt + endedAt nullable + totalCaptured +
 //     frameCount + totalBytes 'lets the list view show size
 //     without loading frames').
-//   • loadIndex: ensureDir + idx-exists check + try/catch JSON
-//     parse → fallback to rebuildIndexFromScan.
+//   • loadIndex: ensureDir + parse + SELF-HEAL scan-union (cross-window
+//     RMW race recovery) + corrupt→rebuildIndexFromScan.
 //   • rebuildIndexFromScan: readDir .ndjson filter + slice(0,-7)
 //     id extract + readHeader + writeIndex + 'Skip malformed file.'
 //   • persistRecording: lines [header, ...frames] + '\n' separator
@@ -86,10 +86,17 @@ describe('W469.A apps/gui-client/src/lib/recordings-store.ts content parity', ()
     );
   });
 
-  it("loadIndex: ensureDir + idxExists check + try JSON.parse(readTextFile) + !Array.isArray → [] + .filter(isRecordingHeader); catch → 'Corrupt index — recover by scanning the dir.' → rebuildIndexFromScan", () => {
-    expect(body).toMatch(
-      /export async function loadIndex\(\): Promise<RecordingHeader\[\]> \{\s*\n?\s*await ensureDir\(\);\s*\n?\s*const idxExists = await exists\(INDEX_FILE, \{ baseDir: BaseDirectory\.AppData \}\);\s*\n?\s*if \(!idxExists\) return \[\];\s*\n?\s*try \{\s*\n?\s*const raw = await readTextFile\(INDEX_FILE, \{ baseDir: BaseDirectory\.AppData \}\);\s*\n?\s*const parsed = JSON\.parse\(raw\) as unknown;\s*\n?\s*if \(!Array\.isArray\(parsed\)\) return \[\];\s*\n?\s*return parsed\.filter\(isRecordingHeader\);\s*\n?\s*\} catch \{\s*\n?\s*\/\/ Corrupt index — recover by scanning the dir\.\s*\n?\s*return await rebuildIndexFromScan\(\);\s*\n?\s*\}/,
-    );
+  it("loadIndex: ensureDir + idxExists→scan + parse + SELF-HEAL scan-union (distance-audit: the raw-fs index RMW can drop a concurrent window's entry — heal on load instead of silently losing recordings); corrupt → rebuildIndexFromScan", () => {
+    expect(body).toContain('if (!idxExists) return await rebuildIndexFromScan();');
+    expect(body).toContain('if (!Array.isArray(parsed)) return await rebuildIndexFromScan();');
+    expect(body).toMatch(/\/\/ Corrupt index — recover by scanning the dir\./);
+    // The healing union: known-id set + dir scan + readHeader recovery +
+    // conditional rewrite only when something healed.
+    expect(body).toContain('const known = new Set(fromIndex.map((h) => h.id));');
+    expect(body).toContain('if (known.has(id)) continue;');
+    expect(body).toContain('const header = await readHeader(id).catch(() => null);');
+    expect(body).toContain('if (healed) {');
+    expect(body).toMatch(/\/\/ Scan failed — the index alone is still a valid view\./);
   });
 
   it("rebuildIndexFromScan: readDir + .ndjson endsWith filter + slice(0, -7) id extract + readHeader + 'Skip malformed file.' inner catch + writeIndex + 'Dir read failed — return empty.' outer catch", () => {

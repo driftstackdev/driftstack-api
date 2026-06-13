@@ -58,16 +58,45 @@ function ndjsonPath(id: string): string {
 export async function loadIndex(): Promise<RecordingHeader[]> {
   await ensureDir();
   const idxExists = await exists(INDEX_FILE, { baseDir: BaseDirectory.AppData });
-  if (!idxExists) return [];
+  if (!idxExists) return await rebuildIndexFromScan();
+  let fromIndex: RecordingHeader[];
   try {
     const raw = await readTextFile(INDEX_FILE, { baseDir: BaseDirectory.AppData });
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isRecordingHeader);
+    if (!Array.isArray(parsed)) return await rebuildIndexFromScan();
+    fromIndex = parsed.filter(isRecordingHeader);
   } catch {
     // Corrupt index — recover by scanning the dir.
     return await rebuildIndexFromScan();
   }
+  // SELF-HEAL (distance-audit, 2026-06-12 night): the index update in
+  // persistRecording is a read-modify-write on a raw file — two windows
+  // persisting near-simultaneously (simulator Record stop + main-window
+  // finalize-on-quit) can drop the loser's entry while its ndjson file
+  // survives. Union the index with a dir scan so any orphaned recording
+  // re-appears on the next load instead of silently vanishing.
+  try {
+    const known = new Set(fromIndex.map((h) => h.id));
+    const entries = await readDir(RECORDINGS_DIR, { baseDir: BaseDirectory.AppData });
+    let healed = false;
+    for (const e of entries) {
+      if (!e.name?.endsWith('.ndjson')) continue;
+      const id = e.name.slice(0, -7);
+      if (known.has(id)) continue;
+      const header = await readHeader(id).catch(() => null);
+      if (header !== null) {
+        fromIndex.push(header);
+        healed = true;
+      }
+    }
+    if (healed) {
+      fromIndex.sort((a, b) => b.startedAt - a.startedAt);
+      await writeIndex(fromIndex);
+    }
+  } catch {
+    // Scan failed — the index alone is still a valid view.
+  }
+  return fromIndex;
 }
 
 async function rebuildIndexFromScan(): Promise<RecordingHeader[]> {
