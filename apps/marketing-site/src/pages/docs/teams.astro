@@ -158,6 +158,26 @@ Authorization: Bearer ds_live_member_…
 GET /v1/sessions
 Authorization: Bearer ds_live_member_…
 X-Driftstack-Account: acc_owner_…`}</code></pre>
+    <h3>SDK shortcut: <code>effectiveAccount</code></h3>
+    <p>
+      The official SDKs send the header for you — construct a client
+      scoped to a workspace and every request carries it. Omit it for
+      your own account.
+    </p>
+    <pre><code>{`// TypeScript
+const client = new Driftstack({ apiKey, effectiveAccount: 'acc_owner_…' });
+
+# Python
+client = Driftstack(api_key, effective_account="acc_owner_…")
+
+// Go
+client := driftstack.New(apiKey, driftstack.WithEffectiveAccount("acc_owner_…"))`}</code></pre>
+    <p>
+      The desktop app exposes the same control as a workspace switcher in
+      the profiles hub. Note: reads resolve against the workspace, but
+      session <em>launch</em> against an owner's profile is an owner-only
+      action today.
+    </p>
     <p>
       Role enforcement: <strong>reads</strong> are allowed for both
       <code>member</code> and <code>admin</code>. <strong>Writes</strong>
