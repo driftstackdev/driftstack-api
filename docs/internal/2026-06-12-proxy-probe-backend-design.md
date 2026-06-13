@@ -88,6 +88,30 @@ proxies would be surprising).
   stunner sidecar on the API box.)
 - **F3 — cadence default.** 6h + launch + manual proposed.
 
+## Security note — unauthenticated abuse surface (verified 2026-06-13, W-audit)
+
+The shipped `/v1/egress/echo` (build-order 1) is unauthenticated, which raises
+the one concern auth'd endpoints don't: can anonymous traffic grow state
+unbounded? Adversarial re-read of the route + the IP limiter says no:
+
+- The route is pure-compute (echo `req.ip` + parse one header) — no DB
+  write, no per-request allocation that outlives the response.
+- The IP token-bucket uses the SAME `ipRateLimit` middleware as the existing
+  unauthenticated `login`/`signup`/`magicLink` gates. In prod (Redis store)
+  every bucket write sets `EXPIRE = ceil(capacity/refill) + 60s` — for the
+  echo limits (capacity 12, refill 0.2/s) that's ~120s, so idle buckets
+  self-evict. Working-set cardinality is bounded by distinct-IPs-per-120s,
+  identical to the already-shipped anonymous auth gates (the memory store
+  has no eviction but is test-only by its own header).
+- Header hardening confirmed: `cf-ipcountry` as `string[]` (duplicate header)
+  → not `string` → null; `T1` (Tor) / `XX` (unknown) / lowercase / 3-letter
+  → fail `/^[A-Z]{2}$/` or the explicit `!== 'XX'` → null. No invented geo.
+- `req.ip` is the echo's whole point and leaks nothing new — the caller
+  already knows it; through a proxy it's the exit IP every visited site sees.
+
+Verdict: safe to ship as-is at the prod deploy; no key-growth vector beyond
+the proven anonymous-auth-gate baseline.
+
 ## Build order (once F1 decided)
 
 1. `/v1/egress/echo` route + geo (server, ~small; reuses geo infra).
