@@ -57,6 +57,16 @@ decision; none is autonomously safe to flip.
    original audit missed those two dedicated parity tests. No decision needed, no change.
    Correction trail: `2026-06-13-cross-sdk-retry-policy-5xx-divergence.md`.
 
+## Engineering-resolvable (deliberate dep-maintenance pass)
+
+5. **`ws` moderate prod-runtime vuln — surfaced 2026-06-13.** `ws@8.18.0` (via
+   `@fastify/websocket`, the fleet-events WS) has GHSA-58qx-3vcg-4xpx (uninitialized memory
+   disclosure; patched 8.20.1+, semver-compatible). LOW active exposure (fleet-events WS is
+   gated/unwired pre-launch) but exposed at go-live → fix before launch. A clean incremental
+   fix is blocked by an npm-workspaces dedup quirk; needs a full lockfile regen in a
+   sole-writer/low-load window (attempted + cleanly reverted this wave). Detail:
+   `2026-06-13-dep-vuln-delta-ws-prod-runtime.md`.
+
 ## Minor / awaiting a nod
 
 - **`/Applications` has 11 stale `Driftstack.app.prev*` backups** (auto-created by the Tauri
