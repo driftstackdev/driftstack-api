@@ -248,7 +248,13 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           if (!seeded.changed) return local;
           void persistProfilesMeta(
             seeded.map,
-            profilesPage.map((p) => p.id),
+            // Prune orphans ONLY in Personal — there the listed profiles are
+            // the authoritative full set. In a team workspace `profilesPage`
+            // is the OWNER's profiles; pruning against it would delete the
+            // member's personal org metadata (data-loss). Orphan entries are
+            // keyed by globally-unique uuids → harmless; they self-clean on
+            // the next Personal refresh.
+            activeWorkspace === null ? profilesPage.map((p) => p.id) : undefined,
           ).catch(() => undefined);
           return seeded.map;
         });
@@ -368,6 +374,22 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       setBusyId(null);
     }
   }
+
+  // Workspace-scoped org metadata for folder ENUMERATION (sidebar / pickers).
+  // profiles-meta.json is a single global store keyed by globally-unique
+  // profile uuid; seed-down adds the active workspace's owner folders to it,
+  // so enumerating the whole map would bleed one workspace's folders into
+  // another's view. Scope folder lists to the currently-listed profiles
+  // (state.profiles = the active workspace's set). Per-profile chip/filter
+  // reads stay keyed by id directly (unambiguous).
+  const scopedMeta = useMemo<ProfilesMetaMap>(() => {
+    const out: ProfilesMetaMap = {};
+    for (const p of state.profiles) {
+      const m = profilesMeta[p.id];
+      if (m) out[p.id] = m;
+    }
+    return out;
+  }, [state.profiles, profilesMeta]);
 
   // 2026-05-21 — derive the filtered/sorted view over state.profiles.
   // Search matches name + description + archetype; status filter treats a
@@ -541,7 +563,9 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           .map((t) => t.trim())
           .filter((t) => t.length > 0),
       },
-      state.profiles.map((p) => p.id),
+      // Personal-only prune (see refresh seed-down): never prune the global
+      // org store against a team workspace's profile list.
+      activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
     );
     setProfilesMeta(next);
     setOrganizeId(null);
@@ -579,7 +603,8 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
       [...selectedIds],
       meta,
       'merge',
-      state.profiles.map((p) => p.id),
+      // Personal-only prune (see refresh seed-down).
+      activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
     );
     setProfilesMeta(next);
     // Phase 2 write-through (same best-effort contract as the single-
@@ -776,7 +801,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             tone="ok"
           />
           <HubStat n={String(proxies.length)} l="Proxies" />
-          <HubStat n={String(folderList(profilesMeta).length)} l="Folders" />
+          <HubStat n={String(folderList(scopedMeta).length)} l="Folders" />
           {/* Team workspace indicator (hub demo, honest v1): memberships
               from /v1/account/me. Workspace SWITCHING (X-Driftstack-Account
               effective-account) is the named follow-up — this surfaces the
@@ -943,7 +968,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             >
               <option value="all">All folders</option>
               <option value="unfiled">Unfiled</option>
-              {folderList(profilesMeta).map((f) => (
+              {folderList(scopedMeta).map((f) => (
                 <option key={f} value={f}>
                   {f}
                 </option>
@@ -988,7 +1013,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           <FolderPicker
             ariaLabel="Bulk folder"
             noneLabel="Move to folder…"
-            folders={folderList(profilesMeta)}
+            folders={folderList(scopedMeta)}
             value={bulkFolder}
             onChange={setBulkFolder}
           />
@@ -1089,7 +1114,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
               active={folderFilter === 'unfiled'}
               onSelect={() => setFolderFilter('unfiled')}
             />
-            {folderList(profilesMeta).map((f) => (
+            {folderList(scopedMeta).map((f) => (
               <FolderItem
                 key={f}
                 label={f}
@@ -1226,7 +1251,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                           <FolderPicker
                             ariaLabel="Folder"
                             noneLabel="Unfiled"
-                            folders={folderList(profilesMeta)}
+                            folders={folderList(scopedMeta)}
                             value={draftFolder}
                             onChange={setDraftFolder}
                           />
@@ -1512,7 +1537,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
 
       {createOpen && (
         <CreateProfileModal
-          existingFolders={folderList(profilesMeta)}
+          existingFolders={folderList(scopedMeta)}
           onClose={() => setCreateOpen(false)}
           onCreated={() => {
             setCreateOpen(false);
