@@ -1,0 +1,56 @@
+# Agent-2 status + founder decision queue — 2026-06-13
+
+Supersedes `2026-06-10-autopilot-arc-briefing-and-decision-queue.md` (state moved).
+
+## State (all verified against live prod this session)
+
+- **Prod is fully current** (`api.driftstack.dev` git_sha `507b690b` = origin HEAD) and
+  **operationally signed off**: `NRestarts=0`, 0 `level:error` / 500 / uncaught in the
+  journal, 0 "column/relation does not exist" (the 5 migrations 0072-0076 applied
+  cleanly + code matches schema). `driver:mock` is the expected pre-launch state.
+- **Code surface exhaustively audited clean** this session: authz (route-scope +
+  resource-ownership + SSE ds_token), crypto (platform-secrets + profile key-hierarchy),
+  URL-credential redaction (query/bearer/userinfo), error info-disclosure, CORS (verified
+  secure in prod), input-bounds, account-scoping, migration DDL/index coverage.
+- **Shipped + live this session**: frontend-perfection punch-list (themes deployed across
+  docs/status/marketing/dashboard), session concurrency-limit TOCTOU fix, userinfo
+  log-redaction, fleet-control node-IP forward-guard, prod brought from 154-commits-behind
+  to current. Real finds: userinfo redaction + session TOCTOU (both fixed + deployed).
+
+**The non-gated substantive work is genuinely exhausted.** Everything below needs a
+decision; none is autonomously safe to flip.
+
+## Decisions needed (priority order)
+
+1. **CF-Connecting-IP origin spoof — HIGH, the one real open prod security gap.**
+   `set_real_ip_from 0.0.0.0/0` + ufw `:443 ALLOW Anywhere` → a direct origin connection
+   with a forged `CF-Connecting-IP` controls `req.ip`, defeating every IP rate-limit gate
+   (login/signup/echo) + forging geo. **Pick a remediation** (detail +
+   verification steps: `2026-06-13-cf-connecting-ip-spoof-origin-exposure.md`):
+   - **B (recommended, low-risk):** pin nginx `set_real_ip_from` to Cloudflare's published
+     CIDRs — a missed range only coarsens rate-limiting, never an outage.
+   - A (strongest): firewall `:443`/`:80` to Cloudflare ranges (also hides the origin;
+     outage-risk if the list is stale — automate the refresh).
+   - C: Cloudflare Authenticated Origin Pulls (mTLS). Best paired with A+B.
+     Ops/infra change — I can prep the exact config on your go.
+
+2. **agent_sessions strict-FK — design call (pre-launch).**
+   `agent_sessions.driftstack_session_id` stores the PREFIXED public id (`ses_<uuid>`), so
+   a uuid FK can't be added (cast fails; orphan-backfill would wipe links — I designed +
+   reverted migration 0069). **Recommended: Option 2** — keep the loose `text` link +
+   app-level validation (the column is usually null; FK value is modest pre-launch). Option
+   1 (deprefix-on-write + raw-uuid + real FK) is more plumbing. Detail in
+   `project_session_concurrency_limit_toctou_race` memory / backlog.
+
+3. **Metrics/observability layer inert — LOW (ops).**
+   Prod `METRICS_SCRAPE_TOKEN` unset + the metrics registry isn't instantiated → `/metrics`
+   404s (no Prometheus scrape). To enable: wire the registry + set the token + stand up a
+   scraper. Or accept inert pre-launch. Not a security/correctness bug.
+
+## Minor / awaiting a nod
+
+- **`/Applications` has 11 stale `Driftstack.app.prev*` backups** (auto-created by the Tauri
+  rebuild flow; ~1GB). Safe to clean (keep the latest for rollback) — say the word.
+- Tauri app is current in `/Applications` (rebuilt 10:05, carries GUI fixes #4/#7/#9/#10).
+- Already-resolved (don't re-surface): profile-count TOCTOU (fixed by `insertWithLimit`
+  V-714); permissive-CORS (prod verified secure: `PERMISSIVE_CORS=false` + complete list).
