@@ -40,21 +40,30 @@ inconsistent**, so each was cleanly reverted:
    present.
 
 **Incremental fixes are exhausted** — `npm install` will not re-dedupe the already-hoisted
-`ws@8.18.0` that `@fastify/websocket` transitively pins. The ONLY reliable fix is
-override + a **full lockfile regen** (`rm package-lock.json && npm install`), which produces a
-large diff and is unsafe to do mid-autopilot against the shared lockfile. → Go STRAIGHT to
-override+regen in the deliberate dep pass; don't re-try incremental bumps.
+`ws@8.18.0` that `@fastify/websocket` transitively pins.
 
-## Recommended fix (deliberate dep-maintenance pass, low-load + sole-writer window)
+**⚠️ 4th attempt (2026-06-13, bounded experiment, cleanly reverted) — `overrides:{ws:^8.20.1}` +
+full regen ALSO FAILS, AND storms.** Ran `overrides:{ws:^8.20.1}` + `rm package-lock.json &&
+npm install`: (a) produced a **101-package version-change storm** (1555/4628 lockfile lines) — far
+too broad to ship autonomously; AND (b) the advisory was **STILL present** — `npm ls ws` still
+showed `ws@8.18.0 deduped` in the `@fastify/websocket` path (only the jsdom path moved to 8.21.0).
+So a top-level `overrides:{ws:...}` does NOT force the deduped transitive even on a clean regen.
+**Conclusion: the ws fix is NOT autopilot-able via override/regen — both ineffective AND storming.**
 
-1. Set the security floor: root `overrides: { "ws": "^8.20.1" }` (canonical transitive pin),
-   optionally also bump `apps/server` devDep `ws` to `^8.20.1` for clarity.
-2. `rm package-lock.json && npm install` (full re-resolve) so the deduped `ws` moves to 8.21.0
-   everywhere; confirm `npm ls ws` shows no `8.18.0` / no `invalid`.
-3. Verify `npm audit --omit=dev --workspace apps/server` no longer flags `ws`.
-4. Full local suite (`npm test`) green, then push as its own commit (large lockfile diff →
-   keep it isolated, fetch immediately before push to avoid a parallel-writer lockfile
-   conflict).
+## Recommended fix (HUMAN-reviewed dep PR — not autopilot)
+
+The cleanest real fix (try first): **bump `@fastify/websocket`** to a release whose own `ws`
+dependency floor is ≥ 8.20.1 (`npm view @fastify/websocket versions` + check its `dependencies.ws`)
+— that moves the transitive naturally without a forced override. If no such release exists, use the
+**nested override** form `overrides: { "@fastify/websocket": { "ws": "^8.21.0" } }` (scopes the
+override to the consumer, which the flat form failed to do), regenerate, and confirm
+`npm ls ws` shows NO `8.18.0`. Either way:
+
+1. `npm audit --omit=dev --workspace apps/server` no longer flags `ws`.
+2. Review the regen/diff (the flat-override regen stormed 101 packages — a scoped fix should be far
+   smaller; review whatever churn remains).
+3. Full local suite (`npm test`) green, push as its own isolated commit (fetch immediately before
+   push to avoid a parallel-writer lockfile conflict). Fold in the build-time `esbuild` HIGH then.
 
 ## Other audit findings (triage — NOT new / not prod-runtime)
 
