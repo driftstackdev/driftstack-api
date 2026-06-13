@@ -22,7 +22,7 @@
 //     + startedAt + endedAt nullable + totalCaptured +
 //     frameCount + totalBytes 'lets the list view show size
 //     without loading frames').
-//   • loadIndex: ensureDir + parse + SELF-HEAL scan-union (cross-window
+//   • loadIndex: ensureDir + parse + SELF-HEAL bidirectional reconcile (cross-window
 //     RMW race recovery) + corrupt→rebuildIndexFromScan.
 //   • rebuildIndexFromScan: readDir .ndjson filter + slice(0,-7)
 //     id extract + readHeader + writeIndex + 'Skip malformed file.'
@@ -86,13 +86,15 @@ describe('W469.A apps/gui-client/src/lib/recordings-store.ts content parity', ()
     );
   });
 
-  it("loadIndex: ensureDir + idxExists→scan + parse + SELF-HEAL scan-union (distance-audit: the raw-fs index RMW can drop a concurrent window's entry — heal on load instead of silently losing recordings); corrupt → rebuildIndexFromScan", () => {
+  it("loadIndex: ensureDir + idxExists→scan + parse + SELF-HEAL bidirectional reconcile vs dir (distance-audit: the raw-fs index RMW races across windows; the dir scan is the source of truth — ADD on-disk recordings missing from the index AND PRUNE entries whose ndjson is gone, so a delete-vs-concurrent-persist can't leave a permanent ghost card); corrupt → rebuildIndexFromScan", () => {
     expect(body).toContain('if (!idxExists) return await rebuildIndexFromScan();');
     expect(body).toContain('if (!Array.isArray(parsed)) return await rebuildIndexFromScan();');
     expect(body).toMatch(/\/\/ Corrupt index — recover by scanning the dir\./);
-    // The healing union: known-id set + dir scan + readHeader recovery +
-    // conditional rewrite only when something healed.
-    expect(body).toContain('const known = new Set(fromIndex.map((h) => h.id));');
+    // Source of truth = the on-disk set.
+    expect(body).toContain('const onDisk = new Set(');
+    // PRUNE direction: drop index entries whose ndjson is gone.
+    expect(body).toContain('const pruned = fromIndex.filter((h) => onDisk.has(h.id));');
+    // ADD direction: recover on-disk recordings missing from the index.
     expect(body).toContain('if (known.has(id)) continue;');
     expect(body).toContain('const header = await readHeader(id).catch(() => null);');
     expect(body).toContain('if (healed) {');

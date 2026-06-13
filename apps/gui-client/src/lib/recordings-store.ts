@@ -69,19 +69,33 @@ export async function loadIndex(): Promise<RecordingHeader[]> {
     // Corrupt index — recover by scanning the dir.
     return await rebuildIndexFromScan();
   }
-  // SELF-HEAL (distance-audit, 2026-06-12 night): the index update in
-  // persistRecording is a read-modify-write on a raw file — two windows
-  // persisting near-simultaneously (simulator Record stop + main-window
-  // finalize-on-quit) can drop the loser's entry while its ndjson file
-  // survives. Union the index with a dir scan so any orphaned recording
-  // re-appears on the next load instead of silently vanishing.
+  // SELF-HEAL (distance-audit): the index update in persistRecording +
+  // deletePersisted is a read-modify-write on a raw file, so two windows
+  // (simulator Record stop + main-window finalize / delete) racing can
+  // leave the index out of sync with disk. Reconcile BOTH directions
+  // against the dir scan, which is the source of truth:
+  //   • ADD on-disk recordings missing from the index (a concurrent write
+  //     dropped the loser's entry while its ndjson survived), and
+  //   • PRUNE index entries whose ndjson is gone (a concurrent persist
+  //     resurrected a just-deleted entry — without this it'd be a
+  //     permanent ghost card whose Open/hydrate fails on the missing file).
+  // exists()===false is the only prune trigger — a transient readHeader
+  // error never drops a still-present recording.
   try {
-    const known = new Set(fromIndex.map((h) => h.id));
     const entries = await readDir(RECORDINGS_DIR, { baseDir: BaseDirectory.AppData });
+    const onDisk = new Set(
+      entries.filter((e) => e.name?.endsWith('.ndjson')).map((e) => e.name.slice(0, -7)),
+    );
+    const known = new Set(fromIndex.map((h) => h.id));
     let healed = false;
-    for (const e of entries) {
-      if (!e.name?.endsWith('.ndjson')) continue;
-      const id = e.name.slice(0, -7);
+    // Prune entries whose backing file is gone.
+    const pruned = fromIndex.filter((h) => onDisk.has(h.id));
+    if (pruned.length !== fromIndex.length) {
+      fromIndex = pruned;
+      healed = true;
+    }
+    // Add on-disk recordings missing from the index.
+    for (const id of onDisk) {
       if (known.has(id)) continue;
       const header = await readHeader(id).catch(() => null);
       if (header !== null) {
