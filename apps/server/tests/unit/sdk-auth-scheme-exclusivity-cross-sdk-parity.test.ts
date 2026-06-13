@@ -117,7 +117,9 @@ describe('W838 cross-SDK auth-scheme exclusivity parity', () => {
     // TS: Bearer header in the HTTP-layer headers builder.
     expect(ts).toMatch(/authorization: `Bearer \$\{this\.config\.apiKey\}`,/);
     // Python: _build_headers(api_key) inserts authorization.
-    expect(py).toMatch(/def _build_headers\(api_key: str, has_body: bool\) -> dict\[str, str\]:/);
+    expect(py).toMatch(
+      /def _build_headers\(\s*\n?\s*api_key: str, has_body: bool, effective_account: str \| None = None\s*\n?\s*\) -> dict\[str, str\]:/,
+    );
     expect(py).toMatch(/"authorization": f"Bearer \{api_key\}"/);
   });
 

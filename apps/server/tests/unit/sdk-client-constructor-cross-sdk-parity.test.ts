@@ -180,7 +180,7 @@ describe('W819 cross-SDK client constructor parity', () => {
   it('CRITICAL Go Client struct fields pinned — apiKey + baseURL + http + retry. Drift to a different internal layout would break the WithXxx options + the package-private impl methods.', () => {
     const p = read(GO);
     expect(p).toMatch(
-      /apiKey +string\s*\n\s+baseURL string\s*\n\s+http +\*http\.Client\s*\n\s+retry +RetryConfig/,
+      /apiKey +string\s*\n\s+baseURL string\s*\n(\s*\/\/[^\n]*\n)*\s+effectiveAccount string\s*\n\s+http +\*http\.Client\s*\n\s+retry +RetryConfig/,
     );
   });
 

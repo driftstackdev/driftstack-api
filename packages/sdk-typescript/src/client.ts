@@ -30,6 +30,13 @@ export interface DriftstackOptions {
   baseUrl?: string;
   /** Per-request retry configuration. */
   retry?: RetryConfig;
+  /**
+   * Team workspace to operate in: the owner's account id
+   * (`acc_<uuid>`). Sends `X-Driftstack-Account` on every request —
+   * reads resolve against that workspace; writes need the admin role
+   * (server-enforced). Omit for your own account.
+   */
+  effectiveAccount?: string;
   /** Per-request timeout in ms. Default 30000. */
   timeoutMs?: number;
   /** Override the global fetch implementation (test seams, polyfills). */
@@ -82,6 +89,7 @@ export class Driftstack {
       ...(opts.retry !== undefined ? { retry: opts.retry } : {}),
       ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
       ...(opts.fetch !== undefined ? { fetch: opts.fetch } : {}),
+      ...(opts.effectiveAccount !== undefined ? { effectiveAccount: opts.effectiveAccount } : {}),
     };
     this.http = new HttpClient(httpConfig);
 

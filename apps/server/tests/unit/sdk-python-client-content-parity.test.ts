@@ -101,11 +101,11 @@ describe('W585.A packages/sdk-python/src/driftstack/client.py content parity', (
     expect(body).toMatch(/client = Driftstack\(api_key="ds_live_…"\)/);
     expect(body).toMatch(/session = client\.sessions\.create\(\)/);
     expect(body).toMatch(
-      /def __init__\(\s*\n\s*self,\s*\n\s*api_key: str,\s*\n\s*\*,\s*\n\s*base_url: str = DEFAULT_BASE_URL,\s*\n\s*timeout_s: float = 30\.0,\s*\n\s*retry: RetryConfig \| None = None,\s*\n\s*http_client: httpx\.Client \| None = None,\s*\n\s*\) -> None:/,
+      /def __init__\(\s*\n\s*self,\s*\n\s*api_key: str,\s*\n\s*\*,\s*\n\s*base_url: str = DEFAULT_BASE_URL,\s*\n\s*timeout_s: float = 30\.0,\s*\n\s*retry: RetryConfig \| None = None,\s*\n\s*http_client: httpx\.Client \| None = None,\s*\n\s*effective_account: str \| None = None,\s*\n\s*\) -> None:/,
     );
     expect(body).toMatch(/_validate_api_key\(api_key\)/);
     expect(body).toMatch(
-      /self\._http = HttpClient\(\s*\n\s*api_key,\s*\n\s*base_url=base_url,\s*\n\s*timeout_s=timeout_s,\s*\n\s*retry=retry,\s*\n\s*client=http_client,\s*\n\s*\)/,
+      /self\._http = HttpClient\(\s*\n\s*api_key,\s*\n\s*base_url=base_url,\s*\n\s*timeout_s=timeout_s,\s*\n\s*retry=retry,\s*\n\s*effective_account=effective_account,\s*\n\s*client=http_client,\s*\n\s*\)/,
     );
     expect(body).toMatch(/self\.sessions = SessionsResource\(self\._http\)/);
     expect(body).toMatch(/self\.api_keys = ApiKeysResource\(self\._http\)/);

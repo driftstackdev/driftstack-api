@@ -82,10 +82,22 @@ describe('W423.C packages/sdk-typescript/src/client.ts content parity', () => {
     expect(body).toMatch(/import type \{ RetryConfig \} from '\.\/retry\.js';/);
   });
 
-  it('DriftstackOptions interface — 5-field shape (apiKey required + baseUrl/retry/timeoutMs/fetch optional). CRITICAL: apiKey JSDoc pins the `ds_live_…` / `ds_test_…` prefix convention — drift to a different prefix scheme would break dashboards that detect test-vs-live from the prefix. timeoutMs default 30000 pinned in JSDoc. fetch override JSDoc rationale ("test seams, polyfills") tells customers WHY the override exists.', () => {
-    expect(body).toMatch(
-      /export interface DriftstackOptions \{\s*\n?\s*\/\*\* Long-lived API key \(`ds_live_…` or `ds_test_…`\)\. \*\/\s*\n?\s*apiKey: string;\s*\n?\s*\/\*\* API base URL\. Defaults to the production URL once it's live\. \*\/\s*\n?\s*baseUrl\?: string;\s*\n?\s*\/\*\* Per-request retry configuration\. \*\/\s*\n?\s*retry\?: RetryConfig;\s*\n?\s*\/\*\* Per-request timeout in ms\. Default 30000\. \*\/\s*\n?\s*timeoutMs\?: number;\s*\n?\s*\/\*\* Override the global fetch implementation \(test seams, polyfills\)\. \*\/\s*\n?\s*fetch\?: typeof fetch;\s*\n?\s*\}/,
+  it('DriftstackOptions interface — 6-field shape (apiKey required + baseUrl/retry/effectiveAccount/timeoutMs/fetch optional). CRITICAL: apiKey JSDoc pins the `ds_live_…` / `ds_test_…` prefix convention; timeoutMs default 30000 pinned; fetch test-seam rationale pinned; effectiveAccount = the V-326c team-workspace header option (admin-for-writes server-enforced).', () => {
+    expect(body).toMatch(/export interface DriftstackOptions \{/);
+    expect(body).toContain('/** Long-lived API key (`ds_live_…` or `ds_test_…`). */');
+    expect(body).toContain('apiKey: string;');
+    expect(body).toContain("/** API base URL. Defaults to the production URL once it's live. */");
+    expect(body).toContain('baseUrl?: string;');
+    expect(body).toContain('/** Per-request retry configuration. */');
+    expect(body).toContain('retry?: RetryConfig;');
+    expect(body).toContain('effectiveAccount?: string;');
+    expect(body).toMatch(/Sends `X-Driftstack-Account` on every request/);
+    expect(body).toContain('/** Per-request timeout in ms. Default 30000. */');
+    expect(body).toContain('timeoutMs?: number;');
+    expect(body).toContain(
+      '/** Override the global fetch implementation (test seams, polyfills). */',
     );
+    expect(body).toContain('fetch?: typeof fetch;');
   });
 
   it('CRITICAL DEFAULT_BASE_URL constant — `https://api.driftstack.dev` (production URL, no trailing slash). Drift to a different domain would silently route production traffic elsewhere; drift to including a trailing slash would interact with the trailing-slash strip regex to double-modify.', () => {

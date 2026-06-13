@@ -38,9 +38,14 @@ DEFAULT_TIMEOUT_S = 30.0
 USER_AGENT = f"driftstack-sdk-python/{__version__}"
 
 
-def _build_headers(api_key: str, has_body: bool) -> dict[str, str]:
+def _build_headers(
+    api_key: str, has_body: bool, effective_account: str | None = None
+) -> dict[str, str]:
     headers = {
         "authorization": f"Bearer {api_key}",
+        # V-326c/V-330 team workspaces — set on every request when the
+        # client was constructed with effective_account (owner account id).
+        **({"x-driftstack-account": effective_account} if effective_account else {}),
         "user-agent": USER_AGENT,
         "accept": "application/json",
     }
@@ -187,8 +192,10 @@ class HttpClient:
         timeout_s: float = DEFAULT_TIMEOUT_S,
         retry: RetryConfig | None = None,
         client: httpx.Client | None = None,
+        effective_account: str | None = None,
     ) -> None:
         self._api_key = api_key
+        self._effective_account = effective_account
         self._base_url = base_url.rstrip("/")
         self._retry = retry
         self._client = client or httpx.Client(timeout=timeout_s)
@@ -215,7 +222,11 @@ class HttpClient:
         extra_headers: dict[str, str] | None = None,
     ) -> Any:
         url = self._base_url + path
-        headers = _build_headers(self._api_key, has_body=json_body is not None)
+        headers = _build_headers(
+            self._api_key,
+            has_body=json_body is not None,
+            effective_account=self._effective_account,
+        )
         if extra_headers:
             headers.update(extra_headers)
 
@@ -254,8 +265,10 @@ class AsyncHttpClient:
         timeout_s: float = DEFAULT_TIMEOUT_S,
         retry: RetryConfig | None = None,
         client: httpx.AsyncClient | None = None,
+        effective_account: str | None = None,
     ) -> None:
         self._api_key = api_key
+        self._effective_account = effective_account
         self._base_url = base_url.rstrip("/")
         self._retry = retry
         self._client = client or httpx.AsyncClient(timeout=timeout_s)
@@ -282,7 +295,11 @@ class AsyncHttpClient:
         extra_headers: dict[str, str] | None = None,
     ) -> Any:
         url = self._base_url + path
-        headers = _build_headers(self._api_key, has_body=json_body is not None)
+        headers = _build_headers(
+            self._api_key,
+            has_body=json_body is not None,
+            effective_account=self._effective_account,
+        )
         if extra_headers:
             headers.update(extra_headers)
 

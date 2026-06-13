@@ -85,6 +85,7 @@ class Driftstack:
         timeout_s: float = 30.0,
         retry: RetryConfig | None = None,
         http_client: httpx.Client | None = None,
+        effective_account: str | None = None,
     ) -> None:
         _validate_api_key(api_key)
         self._http = HttpClient(
@@ -92,6 +93,7 @@ class Driftstack:
             base_url=base_url,
             timeout_s=timeout_s,
             retry=retry,
+            effective_account=effective_account,
             client=http_client,
         )
         self.sessions = SessionsResource(self._http)
@@ -151,6 +153,7 @@ class AsyncDriftstack:
         timeout_s: float = 30.0,
         retry: RetryConfig | None = None,
         http_client: httpx.AsyncClient | None = None,
+        effective_account: str | None = None,
     ) -> None:
         _validate_api_key(api_key)
         self._http = AsyncHttpClient(
@@ -158,6 +161,7 @@ class AsyncDriftstack:
             base_url=base_url,
             timeout_s=timeout_s,
             retry=retry,
+            effective_account=effective_account,
             client=http_client,
         )
         self.sessions = AsyncSessionsResource(self._http)

@@ -15,6 +15,14 @@ export interface HttpClientConfig {
   fetch?: typeof fetch;
   /** Default per-request timeout (ms). */
   timeoutMs?: number;
+  /**
+   * V-326c/V-330 team workspaces — when set, every request carries
+   * `X-Driftstack-Account: <owner account id>` so reads resolve against
+   * that owner's workspace (writes additionally require the admin role,
+   * enforced server-side). Format `acc_<uuid>` or the bare uuid, exactly
+   * as the server's effective-account header parser accepts.
+   */
+  effectiveAccount?: string;
 }
 
 export interface RequestOptions {
@@ -67,6 +75,9 @@ export class HttpClient {
           // version; ~5 SDK tests pin the 0.0.1 freeze on purpose.
           headers: {
             authorization: `Bearer ${this.config.apiKey}`,
+            ...(this.config.effectiveAccount !== undefined
+              ? { 'x-driftstack-account': this.config.effectiveAccount }
+              : {}),
             ...(isBrowserContext ? {} : { 'user-agent': 'driftstack-sdk-typescript/0.0.1' }),
             ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),
             ...opts.headers,

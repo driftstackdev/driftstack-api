@@ -28,8 +28,12 @@ const DefaultTimeout = 30 * time.Second
 type Client struct {
 	apiKey  string
 	baseURL string
-	http    *http.Client
-	retry   RetryConfig
+	// V-326c/V-330 team workspaces — when non-empty, every request carries
+	// X-Driftstack-Account so reads resolve against that owner's workspace
+	// (writes additionally require the admin role, server-enforced).
+	effectiveAccount string
+	http             *http.Client
+	retry            RetryConfig
 
 	// Resource accessors (filled in by New).
 	Sessions         *SessionsResource
@@ -69,6 +73,14 @@ type Option func(*Client)
 // integration tests against a local server).
 func WithBaseURL(baseURL string) Option {
 	return func(c *Client) { c.baseURL = strings.TrimRight(baseURL, "/") }
+}
+
+// WithEffectiveAccount sets the team workspace (the owner's account id,
+// "acc_<uuid>") — sends X-Driftstack-Account on every request. Reads
+// resolve against that workspace; writes need the admin role
+// (server-enforced). Omit for your own account.
+func WithEffectiveAccount(ownerAccountID string) Option {
+	return func(c *Client) { c.effectiveAccount = ownerAccountID }
 }
 
 // WithHTTPClient lets callers supply their own *http.Client (custom
@@ -192,6 +204,9 @@ func (c *Client) doOnce(ctx context.Context, opts requestOptions) error {
 		return transportErrorFromHTTP("failed to build request", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if c.effectiveAccount != "" {
+		req.Header.Set("X-Driftstack-Account", c.effectiveAccount)
+	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.userAgent())
 	if opts.body != nil {

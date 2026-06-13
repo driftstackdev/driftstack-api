@@ -64,10 +64,17 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
     expect(body).toMatch(/import \{ withRetry, type RetryConfig \} from '\.\/retry\.js';/);
   });
 
-  it('HttpClientConfig interface — 5-field shape (apiKey required + baseUrl required + retry/fetch/timeoutMs optional). fetch override JSDoc rationale "e.g. for tests" pinned — drift to dropping would let future maintainers forget the test-seam intent.', () => {
-    expect(body).toMatch(
-      /export interface HttpClientConfig \{\s*\n?\s*apiKey: string;\s*\n?\s*baseUrl: string;\s*\n?\s*retry\?: RetryConfig;\s*\n?\s*\/\*\* Override the global `fetch` \(e\.g\. for tests\)\. \*\/\s*\n?\s*fetch\?: typeof fetch;\s*\n?\s*\/\*\* Default per-request timeout \(ms\)\. \*\/\s*\n?\s*timeoutMs\?: number;\s*\n?\s*\}/,
-    );
+  it('HttpClientConfig interface — 6-field shape (apiKey/baseUrl required + retry/fetch/timeoutMs/effectiveAccount optional). fetch test-seam JSDoc + the V-326c effectiveAccount workspace JSDoc pinned.', () => {
+    expect(body).toMatch(/export interface HttpClientConfig \{/);
+    expect(body).toContain('apiKey: string;');
+    expect(body).toContain('baseUrl: string;');
+    expect(body).toContain('retry?: RetryConfig;');
+    expect(body).toContain('/** Override the global `fetch` (e.g. for tests). */');
+    expect(body).toContain('fetch?: typeof fetch;');
+    expect(body).toContain('/** Default per-request timeout (ms). */');
+    expect(body).toContain('timeoutMs?: number;');
+    expect(body).toContain('effectiveAccount?: string;');
+    expect(body).toMatch(/V-326c\/V-330 team workspaces/);
   });
 
   it('CRITICAL RequestOptions method union — 5-verb closed set (GET/POST/DELETE/PUT/PATCH). Drift to widening (HEAD/OPTIONS/TRACE/CONNECT) would let unintended verbs leak into the SDK surface. Drift to `string` type would lose static-checking on verbs.', () => {
@@ -107,13 +114,17 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
     );
   });
 
-  it('CRITICAL default headers — authorization always set; user-agent ONLY in non-browser contexts (browsers treat user-agent as a forbidden request header and may break CORS preflight when JS tries to set it); content-type when body; opts.headers SPREAD LAST so callers can override non-auth defaults. Drift to setting user-agent unconditionally re-introduces the 2026-05-20 Tauri WKWebView "Load failed" preflight bug.', () => {
-    expect(body).toMatch(
-      /const isBrowserContext = typeof globalThis !== 'undefined' && 'window' in globalThis;/,
+  it('CRITICAL default headers — authorization always set; x-driftstack-account ONLY when effectiveAccount configured; user-agent ONLY in non-browser contexts (forbidden request header in browsers — the 2026-05-20 Tauri WKWebView preflight bug); content-type when body; opts.headers SPREAD LAST so callers can override non-auth defaults.', () => {
+    expect(body).toContain('authorization: `Bearer ${this.config.apiKey}`,');
+    expect(body).toContain('...(this.config.effectiveAccount !== undefined');
+    expect(body).toContain("? { 'x-driftstack-account': this.config.effectiveAccount }");
+    expect(body).toContain(
+      "...(isBrowserContext ? {} : { 'user-agent': 'driftstack-sdk-typescript/0.0.1' }),",
     );
-    expect(body).toMatch(
-      /headers: \{\s*\n?\s*authorization: `Bearer \$\{this\.config\.apiKey\}`,\s*\n?\s*\.\.\.\(isBrowserContext\s*\n?\s*\? \{\}\s*\n?\s*: \{ 'user-agent': 'driftstack-sdk-typescript\/0\.0\.1' \}\),\s*\n?\s*\.\.\.\(opts\.body !== undefined \? \{ 'content-type': 'application\/json' \} : \{\}\),\s*\n?\s*\.\.\.opts\.headers,\s*\n?\s*\},/,
+    expect(body).toContain(
+      "...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),",
     );
+    expect(body).toContain('...opts.headers,');
   });
 
   it("CRITICAL body serialization — `...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {})` conditional spread. Drift to always-include would force every request to carry a body (even GETs which shouldn't); drift to dropping the JSON.stringify would let the body be `[object Object]` literal string.", () => {
