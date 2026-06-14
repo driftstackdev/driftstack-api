@@ -18,7 +18,12 @@ import {
   saveProfilesMetaBulk,
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
-import { loadProbeCache, type ProbeCacheMap } from '../lib/proxy-probe-cache';
+import {
+  loadProbeCache,
+  saveProbeResult,
+  saveExitResult,
+  type ProbeCacheMap,
+} from '../lib/proxy-probe-cache';
 import { loadTemplates, saveTemplate, type ProfileTemplate } from '../lib/profile-templates';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -47,6 +52,7 @@ import {
   addProxy,
   listProxies,
   testProxy,
+  probeProxyExit,
   type ProxyConfig as LocalProxyConfig,
   type ProxyTestResult,
 } from '../lib/proxies';
@@ -174,6 +180,9 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   // tab's Test actions) — cards render the UDP badge from it; absent =
   // honest 'untested'.
   const [probeCache, setProbeCache] = useState<ProbeCacheMap>({});
+  // S3 — per-card proxy "Test" in flight (proxy id), so the card can show
+  // "Testing…" + disable the button while the native SOCKS5 + exit-geo probe runs.
+  const [testingProxyId, setTestingProxyId] = useState<string | null>(null);
   const [folderFilter, setFolderFilter] = useState<string>('all');
   const [organizeId, setOrganizeId] = useState<string | null>(null);
   // Increment 3 — bulk select: client-side organize actions over a selection.
@@ -453,6 +462,39 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   /** Pick the proxy to use on Launch — explicit binding default first,
    *  else the first saved proxy, else null (handled in handleLaunch as
    *  an inline error). */
+  // S3 — test a profile's bound proxy right from the hub card (founder: "not a
+  // proxy check"). Runs the native SOCKS5 capability probe + the exit-geo probe
+  // and persists both to the shared probe cache, so the card immediately shows
+  // exit IP / country / latency / last-checked / UDP. Mirrors the canonical
+  // ProxiesView.handleTest flow. Best-effort: a probe failure keeps prior state.
+  async function handleTestProxy(px: LocalProxyConfig): Promise<void> {
+    setTestingProxyId(px.id);
+    try {
+      const result = await testProxy({
+        host: px.host,
+        port: px.port,
+        username: px.username,
+        password: px.password,
+      });
+      setProbeCache(await saveProbeResult(px.id, result, Date.now()));
+      if (result.reachable && result.auth_ok) {
+        const exit = await probeProxyExit({
+          host: px.host,
+          port: px.port,
+          username: px.username,
+          password: px.password,
+        });
+        if (exit !== null) {
+          setProbeCache(await saveExitResult(px.id, exit.ip, exit.country));
+        }
+      }
+    } catch {
+      /* best-effort — the card keeps its prior probe state on failure */
+    } finally {
+      setTestingProxyId(null);
+    }
+  }
+
   function pickProxy(profileId: string): LocalProxyConfig | null {
     const binding = bindings.find((b) => b.profileId === profileId);
     if (binding?.defaultProxyId !== undefined && binding?.defaultProxyId !== null) {
@@ -1196,7 +1238,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                             if (px === null) return null;
                             const probe = probeCache[px.id];
                             return (
-                              <p className="mono mt-0.5 flex items-center gap-1.5 truncate text-[10px] text-ink-secondary">
+                              <div className="mono mt-0.5 flex items-center gap-1.5 text-[10px] text-ink-secondary">
                                 <span className="truncate">
                                   {probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}{' '}
                                   {px.label} · {px.host}:{px.port}
@@ -1231,12 +1273,24 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                                 ) : (
                                   <span
                                     className="shrink-0 rounded-sm bg-surface-inset px-1 py-px text-ink-muted"
-                                    title="Never probed — run Test on the Proxies tab."
+                                    title="Never probed — click Test to check it."
                                   >
                                     untested
                                   </span>
                                 )}
-                              </p>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleTestProxy(px);
+                                  }}
+                                  disabled={testingProxyId === px.id}
+                                  className="ml-auto shrink-0 rounded-sm border border-surface-divider px-1.5 py-px text-ink-muted transition-colors hover:border-accent hover:text-ink-primary disabled:opacity-50"
+                                  title="Test this proxy — reachability, latency, and exit IP / country"
+                                >
+                                  {testingProxyId === px.id ? 'Testing…' : 'Test'}
+                                </button>
+                              </div>
                             );
                           })()}
                         </div>

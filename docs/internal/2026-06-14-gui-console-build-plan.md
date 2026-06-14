@@ -48,10 +48,14 @@ gradients.
       floating bottom `<p>` (was after the content column, overlap-prone) into the hub `<header>` title
       column as a subtle `text-2xs` line, and removed the floating element. Structurally can't overlap
       now. tsc/eslint/prettier + gui-jsdom 525 + ProfilesView parity (18) green. Verify visual at rebuild.
-- [ ] **S3** Proxy health from the hub: a per-card / per-proxy **Test** affordance + auto-probe of
-      stale proxies on load + a staleness badge ("checked 2d ago — re-test"). Reuse `lib/proxies.ts`
-      (testProxy/probeProxyExit) + `proxy-probe-cache.ts` (already has latency/at/exitIp/exitCountry).
-      Add health pill states (healthy / slow / no-proxy / re-test).
+- [x] **S3** Proxy "Test" from the hub — DONE (the founder's "not a proxy check" core ask). Each
+      profile card's proxy strip gets a **Test** button (`handleTestProxy`) that runs the native SOCKS5
+      capability probe (`testProxy`) + the exit-geo probe (`probeProxyExit`) and persists both to the
+      shared probe cache (`saveProbeResult`/`saveExitResult`) → the card immediately shows exit IP /
+      country / latency / last-checked / UDP. Mirrors the canonical `ProxiesView.handleTest`; best-effort
+      (keeps prior state on failure); `testingProxyId` drives the "Testing…" disabled state. Optional
+      follow-ups deferred: auto-probe-stale-on-load + explicit health pills (healthy/slow/re-test) —
+      fold into S4. tsc/eslint/prettier + gui-jsdom 525 + ProfilesView parity 18 green.
 - [ ] **S4** Console-density restyle of the hub: stat tiles (count-up + sparkline/health-ring, mono
       numerals), denser card grid, tighter spacing rhythm, hairline dividers — match `console.html`.
 - [ ] **MILESTONE → Tauri rebuild #1** (founder sees the new hub).
@@ -115,8 +119,12 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   App/Sidebar union variants) — these had failed the pre-push gate (NOT a flake; I'd mis-diagnosed it).
 - ✅ S5+S6+S7+parity ALL PUSHED + full-suite-verified (origin `c0a55b5f`, 22727 passed/0 failed). The
   whole AI chat is on origin; needs Tauri rebuild #2 to be visible.
-- S2 · (this commit) · refresh-text overlap fix (relocate to header) · gui-jsdom 525 + ProfilesView
-  parity (18) green · VISIBLE after rebuild #2.
+- S2 · `af21978c` · refresh-text overlap fix (relocate to header) · gui-jsdom 525 + ProfilesView
+  parity (18) green · shipped in rebuild #2.
+- ✅ Tauri rebuild #2 INSTALLED 2026-06-14 (origin af21978c): vite+Rust build → /Applications/Driftstack.app
+  - codesign --force --deep -s - + verified valid; backup at .prev. AI chat + S1+S2 now LIVE in the app.
+- S3 · (this commit) · per-card proxy "Test" affordance (testProxy+probeProxyExit→cache) · gui-jsdom 525
+  - ProfilesView parity 18 green · VISIBLE after rebuild #3.
 
 ## Out of scope / gated (surface, don't flip)
 
