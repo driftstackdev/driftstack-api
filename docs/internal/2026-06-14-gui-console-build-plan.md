@@ -171,7 +171,12 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G6b Grid selection for bulk actions · (this commit) · the bulk bar (folder/tag/export) was reachable
+- G6c Bulk delete · (this commit) · destructive bulk delete on the selection bar — gated by the in-app
+  `useConfirm` (native confirm() is flaky in Tauri), best-effort per id (running profiles fail server-side
+  - are skipped), drops bindings, refreshes profiles + accountMe. Destructive-red button. The bulk bar now
+    has folder/tag/export/delete over grid+list selection. tsc/eslint/prettier + gui-jsdom 581 +
+    ProfilesView parity 18 green · VISIBLE after rebuild #11.
+- G6b Grid selection for bulk actions · `4a966925` · the bulk bar (folder/tag/export) was reachable
   only from the list view (selection checkbox list-only); added a selection checkbox overlay to each grid
   card (shown on hover or when selected) + a ring-2 ring-accent selected state, reusing the existing
   `toggleSelected`/`selectedIds`. Bulk actions now work in the DEFAULT grid view. tsc/eslint/prettier +

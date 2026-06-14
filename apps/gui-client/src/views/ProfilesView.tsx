@@ -26,6 +26,7 @@ import {
   type ProbeCacheMap,
 } from '../lib/proxy-probe-cache';
 import { downloadJson, timestampedFilename } from '../lib/download';
+import { useConfirm } from '../components/ConfirmProvider';
 import { loadTemplates, saveTemplate, type ProfileTemplate } from '../lib/profile-templates';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -197,6 +198,8 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   const [bulkFolder, setBulkFolder] = useState('');
   const [bulkTag, setBulkTag] = useState('');
   const [bulkExporting, setBulkExporting] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const confirm = useConfirm();
   // Onboarding checklist dismissal — webview localStorage persists per
   // install. Guarded: some embeddings/test environments stub storage out.
   const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
@@ -743,6 +746,38 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     }
   }
 
+  // Bulk delete — destructive, so it goes through the in-app confirm (native
+  // confirm() is flaky in the Tauri WKWebView). Best-effort per id (a running
+  // profile's delete fails server-side and is skipped, not fatal); bindings are
+  // dropped alongside so stale entries don't linger.
+  async function handleBulkDelete(): Promise<void> {
+    if (!client || selectedIds.size === 0 || bulkDeleting) return;
+    const ids = [...selectedIds];
+    const ok = await confirm(
+      `Delete ${ids.length} profile${ids.length === 1 ? '' : 's'}? This removes ${
+        ids.length === 1 ? 'it' : 'them'
+      } from your account and can't be undone.`,
+      { confirmLabel: 'Delete' },
+    );
+    if (!ok) return;
+    setBulkDeleting(true);
+    try {
+      for (const id of ids) {
+        try {
+          await client.profiles.delete(id);
+          await deleteBinding(id);
+        } catch {
+          /* skip one that failed (e.g. running) — keep deleting the rest */
+        }
+      }
+      setSelectedIds(new Set());
+      await refresh(false);
+      await refreshAccountMe();
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   async function handleStop(profile: Profile): Promise<void> {
     if (!client) return;
     const bound = boundSession(profile.id);
@@ -1213,6 +1248,15 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             title="Download the selected profiles as a portable JSON export"
           >
             {bulkExporting ? 'Exporting…' : 'Export'}
+          </button>
+          <button
+            type="button"
+            className="rounded px-2.5 py-1 text-xs font-medium text-status-error transition-colors hover:bg-status-error/10 disabled:opacity-50"
+            onClick={() => void handleBulkDelete()}
+            disabled={bulkDeleting}
+            title="Delete the selected profiles (asks for confirmation)"
+          >
+            {bulkDeleting ? 'Deleting…' : 'Delete'}
           </button>
           <button
             type="button"
