@@ -57,9 +57,15 @@ const LEVEL_PILL: Record<LogLevel, string> = {
 };
 
 export function LogsView(): JSX.Element {
-  // The buffer mutates in place, so subscribe + force a re-render on change
-  // rather than relying on reference identity (mirrors DevLogPanel).
-  const [, forceRender] = useReducer((n: number) => n + 1, 0);
+  // The buffer mutates IN PLACE (getLogEntries returns the live array, not a
+  // copy), so its reference is stable across renders. We subscribe + force a
+  // re-render on change; `version` bumps on every buffer mutation and is fed
+  // into the derived memos below so they actually recompute — without it, the
+  // referentially-stable `entries` dep would keep `filtered`/`errorCount`
+  // pinned to their first value and new log lines would never appear (the
+  // header's non-memoised `entries.length` would tick up while the list went
+  // stale). Mirrors DevLogPanel, which sidesteps this by filtering inline.
+  const [version, forceRender] = useReducer((n: number) => n + 1, 0);
   const [filter, setFilter] = useState<LevelFilter>('all');
   const [query, setQuery] = useState('');
   const [copied, setCopied] = useState(false);
@@ -74,7 +80,8 @@ export function LogsView(): JSX.Element {
     return entries.filter(
       (e) => matchesFilter(e.level, filter) && (q.length === 0 || e.text.toLowerCase().includes(q)),
     );
-  }, [entries, filter, query]);
+    // `version` busts the memo on in-place buffer growth (see note above).
+  }, [entries, filter, query, version]);
 
   // Auto-scroll to the newest matching entry as the buffer grows.
   useEffect(() => {
@@ -85,7 +92,8 @@ export function LogsView(): JSX.Element {
 
   const errorCount = useMemo(
     () => entries.reduce((n, e) => (e.level === 'error' ? n + 1 : n), 0),
-    [entries],
+    // `version` busts the memo on in-place buffer growth (see note above).
+    [entries, version],
   );
 
   function handleCopy(): void {

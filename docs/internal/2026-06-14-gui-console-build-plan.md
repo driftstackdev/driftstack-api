@@ -175,6 +175,13 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   Settings) + global ⌘⇧D mode toggle · new theme-switcher.test.tsx (5 tests) · tsc/eslint/prettier OK
   - App content-parity 12 + gui-jsdom 536 green · VISIBLE after rebuild #5.
 
+- FIX1 LogsView live-update · (this commit) · **real bug found via fresh-eyes audit** — `getLogEntries()`
+  returns the LIVE buffer array (stable ref, mutated in place), so LogsView's `filtered`/`errorCount`
+  `useMemo`s (keyed only on `entries`) never recomputed on new log lines despite the `subscribeLogs`
+  forceRender → list went stale while the header count ticked up. Fix: feed the `forceRender` version
+  counter into both memo deps. (DevLogPanel was unaffected — it filters inline.) new
+  logs-view-live-update.test.tsx (3 tests, proven to fail without the fix) · gui-jsdom 539 green.
+
 NOTE (ops): the husky **pre-push** hook runs the FULL gate (typecheck+lint+format:check+npm test)
 against the **WORKING TREE**, not just the pushed commits. Editing files while a background `git push`
 is in flight races the hook (QW1's background push failed on a half-edited toasts.tsx). Push in the
