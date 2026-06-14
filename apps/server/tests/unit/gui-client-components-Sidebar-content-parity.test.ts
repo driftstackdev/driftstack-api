@@ -36,9 +36,9 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(body).toMatch(/Connectivity test/);
   });
 
-  it('SidebarViewKind 8-variant union exported: profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to)', () => {
+  it("SidebarViewKind 9-variant union exported: ai / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by the AI-chat S7 slice (the Automate section).", () => {
     expect(body).toMatch(
-      /export type SidebarViewKind =\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'settings';/,
+      /export type SidebarViewKind =\s*\n?\s*\| 'ai'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'settings';/,
     );
   });
 

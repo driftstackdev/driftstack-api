@@ -49,7 +49,9 @@ describe('cross-SDK BYOK Anthropic header invariant', () => {
 
   it('TS exposes the opt as `opts.byokApiKey` (matches the SDK docs + sample-code example)', () => {
     const ts = read(TS);
-    expect(ts).toMatch(/opts\?: \{ byokApiKey\?: string \}/);
+    // message()'s opts gained `approveConsequentialActions` (AI-chat S5), so the
+    // opts object is now multi-line; pin that byokApiKey is still a field on it.
+    expect(ts).toMatch(/opts\?: \{[\s\S]*?byokApiKey\?: string;/);
     expect(ts).toMatch(/opts\?\.byokApiKey/);
   });
 

@@ -48,9 +48,9 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     );
   });
 
-  it("View 10-variant union: sessions / live-session{sessionId} / sessions-history / profiles / recordings / recording-player{recordingId} / proxies / connectivity / fleet / settings — pinned so the kind-tag taxonomy doesn't drift (e.g. a removed variant + a switch fall-through silently routes to the wrong view)", () => {
+  it("View 11-variant union: ai / sessions / live-session{sessionId} / sessions-history / profiles / recordings / recording-player{recordingId} / proxies / connectivity / fleet / settings — pinned so the kind-tag taxonomy doesn't drift (e.g. a removed variant + a switch fall-through silently routes to the wrong view). 'ai' added by the AI-chat S7 slice (AgentChatView).", () => {
     expect(body).toMatch(
-      /type View =\s*\n?\s*\| \{ kind: 'sessions' \}\s*\n?\s*\| \{ kind: 'live-session'; sessionId: string \}\s*\n?\s*\| \{ kind: 'sessions-history' \}\s*\n?\s*\| \{ kind: 'profiles' \}\s*\n?\s*\| \{ kind: 'recordings' \}\s*\n?\s*\| \{ kind: 'recording-player'; recordingId: string \}\s*\n?\s*\| \{ kind: 'proxies' \}\s*\n?\s*\| \{ kind: 'connectivity' \}\s*\n?\s*\| \{ kind: 'fleet' \}\s*\n?\s*\| \{ kind: 'settings' \};/,
+      /type View =\s*\n?\s*\| \{ kind: 'ai' \}\s*\n?\s*\| \{ kind: 'sessions' \}\s*\n?\s*\| \{ kind: 'live-session'; sessionId: string \}\s*\n?\s*\| \{ kind: 'sessions-history' \}\s*\n?\s*\| \{ kind: 'profiles' \}\s*\n?\s*\| \{ kind: 'recordings' \}\s*\n?\s*\| \{ kind: 'recording-player'; recordingId: string \}\s*\n?\s*\| \{ kind: 'proxies' \}\s*\n?\s*\| \{ kind: 'connectivity' \}\s*\n?\s*\| \{ kind: 'fleet' \}\s*\n?\s*\| \{ kind: 'settings' \};/,
     );
   });
 
