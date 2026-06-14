@@ -1354,7 +1354,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                         running
                           ? 'border-status-ready shadow-[0_0_0_1px_rgb(var(--status-ready-rgb))]'
                           : 'border-surface-divider hover:border-ink-muted/60'
-                      }`}
+                      } ${selectedIds.has(profile.id) ? 'ring-2 ring-accent' : ''}`}
                     >
                       {/* THUMBNAIL — a CSS iPhone frame (notch) holding the
                           profile IDENTITY card (monogram + accent wash + device
@@ -1381,6 +1381,25 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                             Idle
                           </span>
                         )}
+                        {/* Selection checkbox — enables the bulk bar from the
+                            default grid (was list-view only). Shown on hover or
+                            when selected so it doesn't clutter idle cards. */}
+                        <label
+                          className={`absolute bottom-2 left-2 z-20 flex cursor-pointer items-center transition-opacity ${
+                            selectedIds.has(profile.id)
+                              ? 'opacity-100'
+                              : 'opacity-0 group-hover:opacity-100'
+                          }`}
+                          title="Select for bulk actions"
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 cursor-pointer accent-accent"
+                            checked={selectedIds.has(profile.id)}
+                            onChange={() => toggleSelected(profile.id)}
+                            aria-label={`Select ${profile.name}`}
+                          />
+                        </label>
                         {/* hover quick-actions — quiet; all delegate to the
                             existing handlers (no new behavior). */}
                         <div className="absolute right-2 top-2 z-20 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
