@@ -156,10 +156,17 @@ Each slice records here when shipped: slice id · commit · gate result · "need
 - S4(full)+S16 · `feb57188` · full Console restyle of the ProfilesView hub (HERO/stat-tiles/sparkline/
   HealthRing/folder-pills/device-frame MiniPage cards/proxy-row/per-card Test) + AI-chat profile picker
   · gui-jsdom + folder-identity green · VISIBLE after rebuild #4 (INSTALLED 2026-06-14).
-- S14 · (this commit) · Console restyle of Proxies/Sessions/Recordings/Settings (workflow wksmejxyz,
+- S14 · `97972adf` · Console restyle of Proxies/Sessions/Recordings/Settings (workflow wksmejxyz,
   +1082/-590, logic preserved) + 5 test files re-pinned to new copy/source (proxies-view-test-button
   behavioral + 4 view content-parity) · tsc OK + gui-jsdom 526 (67 files) + 4 view content-parity 43
   green · VISIBLE after rebuild #5. + greatness backlog saved (2026-06-14-gui-greatness-backlog.md).
+
+### P5 — greatness backlog (Tier-1 quick-wins; see 2026-06-14-gui-greatness-backlog.md)
+
+- QW1 Save-as-recipe · (this commit) · AgentChatView "Save as recipe" button + dialog →
+  `client.recipes.create({agent_session_id,label,description?})` (the SDK call had ZERO GUI callers);
+  success toast; enabled only once a turn actually plan-executed · new agent-chat-save-recipe.test.tsx
+  (3 tests) · tsc/eslint/prettier OK + gui-jsdom 529 (68 files) green · VISIBLE after rebuild #5.
 
 ## Out of scope / gated (surface, don't flip)
 

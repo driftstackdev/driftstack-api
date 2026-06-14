@@ -19,6 +19,7 @@ import type {
   AgentUsage,
 } from '@driftstack/sdk';
 import { useSettings } from '../lib/SettingsContext';
+import { useToasts } from '../lib/toasts';
 import { useAgentChat, type ChatModel, type ChatTurn } from '../lib/use-agent-chat';
 
 const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
@@ -35,12 +36,55 @@ const EXAMPLES: ReadonlyArray<string> = [
 
 export function AgentChatView(): JSX.Element {
   const { client } = useSettings();
+  const toasts = useToasts();
   const [model, setModel] = useState<ChatModel>('claude-opus-4-7');
   const [profileId, setProfileId] = useState<string>('');
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState('');
   const chat = useAgentChat({ model, ...(profileId !== '' ? { profileId } : {}) });
   const started = chat.turns.length > 0;
+
+  // Save-as-recipe — snapshot this chat's executed steps into a replayable
+  // recipe. The SDK recipes.create has had zero GUI callers until now; this
+  // closes the chat → reusable-flow loop. Only meaningful once at least one
+  // turn actually executed a plan (clarify/refuse turns contribute no intents).
+  const canSaveRecipe =
+    chat.session !== null &&
+    chat.turns.some((t) => t.role === 'agent' && t.response?.kind === 'plan-executed');
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [recipeLabel, setRecipeLabel] = useState('');
+  const [recipeDesc, setRecipeDesc] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function saveRecipe(): Promise<void> {
+    if (!client || chat.session === null) return;
+    const label = recipeLabel.trim();
+    if (label.length === 0) {
+      setSaveError('Give the recipe a name.');
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const recipe = await client.recipes.create({
+        agent_session_id: chat.session.id,
+        label,
+        ...(recipeDesc.trim() !== '' ? { description: recipeDesc.trim() } : {}),
+      });
+      setSaveOpen(false);
+      setRecipeLabel('');
+      setRecipeDesc('');
+      toasts.push({
+        title: 'Recipe saved',
+        body: `“${recipe.label}” captured from this chat — replay it from Recipes.`,
+      });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save the recipe.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   // S16 — load the account's profiles for the "where the AI works" picker.
   useEffect(() => {
@@ -127,6 +171,22 @@ export function AgentChatView(): JSX.Element {
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={() => {
+              setSaveError(null);
+              setSaveOpen(true);
+            }}
+            disabled={!canSaveRecipe || chat.sending}
+            className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
+            title={
+              canSaveRecipe
+                ? 'Save this chat as a replayable recipe'
+                : 'Run at least one task first, then save it as a recipe'
+            }
+          >
+            Save as recipe
+          </button>
           <button
             type="button"
             onClick={chat.reset}
@@ -232,6 +292,74 @@ export function AgentChatView(): JSX.Element {
           Enter to send · Shift+Enter for a new line
         </p>
       </div>
+
+      {/* Save-as-recipe dialog */}
+      {saveOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onClick={() => {
+            if (!saving) setSaveOpen(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Save chat as recipe"
+            className="w-full max-w-md rounded-lg border border-surface-divider bg-surface-raised p-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="section-label">Save as recipe</p>
+            <p className="mt-1 text-xs text-ink-muted">
+              Snapshot this chat&apos;s executed steps into a replayable recipe you can run again
+              from Recipes.
+            </p>
+            <label className="mt-3 block text-xs text-ink-secondary">
+              Name
+              <input
+                autoFocus
+                value={recipeLabel}
+                maxLength={120}
+                onChange={(e) => setRecipeLabel(e.target.value)}
+                placeholder="e.g. Add 3 items to cart"
+                className="form-input mt-1 w-full"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveRecipe();
+                }}
+              />
+            </label>
+            <label className="mt-3 block text-xs text-ink-secondary">
+              Description <span className="text-ink-muted">(optional)</span>
+              <textarea
+                value={recipeDesc}
+                maxLength={2000}
+                rows={2}
+                onChange={(e) => setRecipeDesc(e.target.value)}
+                placeholder="What this flow does…"
+                className="form-input mt-1 w-full resize-none"
+              />
+            </label>
+            {saveError !== null && <p className="mt-2 text-xs text-status-error">{saveError}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSaveOpen(false)}
+                disabled={saving}
+                className="btn-secondary px-3 py-1 text-xs disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveRecipe()}
+                disabled={saving || recipeLabel.trim().length === 0}
+                className="btn-primary px-3 py-1 text-xs disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save recipe'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
