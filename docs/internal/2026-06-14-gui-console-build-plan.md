@@ -44,9 +44,10 @@ gradients.
 
 ### P1 — Profiles hub → Console
 
-- [ ] **S2** Fix the "Refreshed HH:MM:SS · auto-refresh 5s" overlap (`ProfilesView.tsx:1532`) —
-      relocate it to the header, right-aligned (as the demo does), out of the bottom-of-column position.
-      Verify via Tauri rebuild.
+- [x] **S2** Fixed the "Refreshed … · auto-refresh 5s" overlap — relocated the timestamp from a
+      floating bottom `<p>` (was after the content column, overlap-prone) into the hub `<header>` title
+      column as a subtle `text-2xs` line, and removed the floating element. Structurally can't overlap
+      now. tsc/eslint/prettier + gui-jsdom 525 + ProfilesView parity (18) green. Verify visual at rebuild.
 - [ ] **S3** Proxy health from the hub: a per-card / per-proxy **Test** affordance + auto-probe of
       stale proxies on load + a staleness badge ("checked 2d ago — re-test"). Reuse `lib/proxies.ts`
       (testProxy/probeProxyExit) + `proxy-probe-cache.ts` (already has latency/at/exitIp/exitCountry).
@@ -108,11 +109,14 @@ Each slice records here when shipped: slice id · commit · gate result · "need
 - S5 · `4453de41` · SDK agent-sessions.ts confirmation_required + usage + approveConsequentialActions
   · sdk unit (17) + content-parity (16) + v2-37 green · non-visual (SDK types; unblocks S6/S7).
 - S6 · `c24b72ba` · useAgentChat hook + extractPendingConfirmation · gui-jsdom +4 tests · non-visual.
-- S7 · (this commit) · AgentChatView + 'ai' nav/route/palette · tsc+eslint+prettier+gui-jsdom 525 green
-  · VISIBLE after Tauri rebuild #2. ⚠️ PUSH BLOCKED: the pre-push FULL suite keeps flaking 1/22781 under
-  the contended multi-agent box (load swinging 13→78); S5/S6 passed a clean LOCAL full-suite + S7 is
-  green on tsc/eslint/prettier/gui-jsdom — so the flake is ENVIRONMENTAL, not a real break. Need a
-  SUSTAINED low window (1-min AND 5-min low) to land the push; retry each wave; do NOT --no-verify.
+- S7 · `d6c30ab3` · AgentChatView + 'ai' nav/route/palette · gui-jsdom 525 green · VISIBLE after Tauri
+  rebuild #2.
+- (parity) · `c0a55b5f` · fixed 3 content-parity pins my S5/S7 changes broke (byok message-sig +
+  App/Sidebar union variants) — these had failed the pre-push gate (NOT a flake; I'd mis-diagnosed it).
+- ✅ S5+S6+S7+parity ALL PUSHED + full-suite-verified (origin `c0a55b5f`, 22727 passed/0 failed). The
+  whole AI chat is on origin; needs Tauri rebuild #2 to be visible.
+- S2 · (this commit) · refresh-text overlap fix (relocate to header) · gui-jsdom 525 + ProfilesView
+  parity (18) green · VISIBLE after rebuild #2.
 
 ## Out of scope / gated (surface, don't flip)
 

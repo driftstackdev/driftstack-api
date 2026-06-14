@@ -899,6 +899,11 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                     : state.profiles.length.toString()}
               </span>
             </h2>
+            {state.refreshedAt !== null && (
+              <span className="text-2xs text-ink-muted">
+                Refreshed {new Date(state.refreshedAt).toLocaleTimeString()} · auto-refresh 5s
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -1538,12 +1543,6 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             )}
           </div>
         </div>
-      )}
-
-      {state.refreshedAt !== null && (
-        <p className="text-xs text-ink-muted">
-          Refreshed {new Date(state.refreshedAt).toLocaleTimeString()} · auto-refresh 5s
-        </p>
       )}
 
       {createOpen && (
