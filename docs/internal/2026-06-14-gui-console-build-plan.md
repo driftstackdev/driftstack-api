@@ -65,9 +65,13 @@ gradients.
       `index.ts`. Mirrors the route shape (`routes/agent-sessions.ts` ~1717-1750, `publicUsage` +
       `results` passthrough). TS-only (no cross-SDK test forces Go/Python equality for this shape —
       Go/Python catch-up is a non-blocking follow-up). Parity test updated + 2 SDK unit tests added.
-- [ ] **S6** `useAgentChat` hook: create-on-first-message (`agentSessions.create`), `message()`,
-      reduce response kinds (plan-executed/clarify/refuse/logged-manual + confirmation), approve/deny =
-      re-send with `approve_consequential_actions`. Unit-tested with a mocked client.
+- [x] **S6** `useAgentChat` hook — DONE (`apps/gui-client/src/lib/use-agent-chat.ts`). Lazy
+      session-create on first send (`agentSessions.create({mode:'ai',model?,token_budget?})`),
+      `message()` per turn, append-only turn list, derived `pendingConfirmation` (from the last
+      plan-executed turn's `confirmation_required` result), `approve()` = re-send the same user message
+      with `approveConsequentialActions`, `deny()` = dismiss the gate (no dispatch), `reset()`. Pure
+      `extractPendingConfirmation` exported + unit-tested (4 tests: detect / success-only / non-plan /
+      first-of-many). Focused gate green (tsc + eslint + prettier + gui-jsdom).
 - [ ] **S7** `AgentChatView` (Console look) + `'ai'` Sidebar nav + `App.tsx` route: transcript
       (user/agent bubbles), **plan cards** (intents as a checklist), **confirmation card with working
       Approve/Deny**, per-turn cost/usage badge, token-budget meter, model-picker chip, composer with
@@ -98,8 +102,12 @@ gradients.
 Each slice records here when shipped: slice id · commit · gate result · "needs Tauri rebuild to see".
 
 - S1 · `8e180c24` · gui-jsdom 521 green + full suite green · visible after rebuild #1.
-- S5 · (this commit) · SDK agent-sessions.ts confirmation_required + usage + approveConsequentialActions
+- S5 · `4453de41` · SDK agent-sessions.ts confirmation_required + usage + approveConsequentialActions
   · sdk unit (17) + content-parity (16) + v2-37 green · non-visual (SDK types; unblocks S6/S7).
+- S6 · (this commit) · useAgentChat hook + extractPendingConfirmation · gui-jsdom +4 tests · non-visual
+  (logic; the chat view S7 consumes it). NOTE: S5+S6 committed local, PUSH PENDING a low-load window —
+  the S5 pre-push gate flaked on 1/22781 (toasts concurrency flake under load ~78; local full-suite of
+  the same code passed clean). Retry `git push` when load <~15.
 
 ## Out of scope / gated (surface, don't flip)
 
