@@ -25,6 +25,7 @@ import {
   saveExitResult,
   type ProbeCacheMap,
 } from '../lib/proxy-probe-cache';
+import { downloadJson, timestampedFilename } from '../lib/download';
 import { loadTemplates, saveTemplate, type ProfileTemplate } from '../lib/profile-templates';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -195,6 +196,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkFolder, setBulkFolder] = useState('');
   const [bulkTag, setBulkTag] = useState('');
+  const [bulkExporting, setBulkExporting] = useState(false);
   // Onboarding checklist dismissal — webview localStorage persists per
   // install. Guarded: some embeddings/test environments stub storage out.
   const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
@@ -716,6 +718,31 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     setBulkTag('');
   }
 
+  // Bulk export — snapshot each selected profile via profiles.export (the v1
+  // portability envelope; had zero GUI callers) and download them as one JSON
+  // file. Best-effort per id; a failed export is skipped, not fatal.
+  async function handleBulkExport(): Promise<void> {
+    if (!client || selectedIds.size === 0 || bulkExporting) return;
+    setBulkExporting(true);
+    try {
+      const envelopes = [];
+      for (const id of selectedIds) {
+        try {
+          envelopes.push(await client.profiles.export(id));
+        } catch {
+          /* skip a profile that failed to export; keep the rest */
+        }
+      }
+      if (envelopes.length > 0) {
+        downloadJson(timestampedFilename('driftstack-profiles', 'json', new Date()), envelopes);
+      } else {
+        setState((s) => ({ ...s, error: 'Could not export the selected profiles.' }));
+      }
+    } finally {
+      setBulkExporting(false);
+    }
+  }
+
   async function handleStop(profile: Profile): Promise<void> {
     if (!client) return;
     const bound = boundSession(profile.id);
@@ -1177,6 +1204,15 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             disabled={bulkFolder.trim().length === 0 && bulkTag.trim().length === 0}
           >
             Apply
+          </button>
+          <button
+            type="button"
+            className="btn-secondary px-2.5 py-1 text-xs disabled:opacity-50"
+            onClick={() => void handleBulkExport()}
+            disabled={bulkExporting}
+            title="Download the selected profiles as a portable JSON export"
+          >
+            {bulkExporting ? 'Exporting…' : 'Export'}
           </button>
           <button
             type="button"

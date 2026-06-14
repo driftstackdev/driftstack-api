@@ -171,7 +171,13 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G8c ProxiesView empty-state → shared EmptyState · (this commit) · consistency pass — migrated the
+- G6a Bulk profile export · (this commit) · wired `profiles.export` (zero GUI callers, backlog Tier-2)
+  into the existing bulk bar: select profiles → "Export" → per-id `profiles.export` envelopes bundled +
+  downloaded as one `driftstack-profiles-YYYY-MM-DD.json`. New reusable `lib/download.ts`
+  (`downloadJson` blob→anchor→revoke, reused from the admin-CSV pattern; `timestampedFilename`);
+  best-effort per id; `bulkExporting` disables the button. new download.test.tsx (3). gui-jsdom 581 +
+  ProfilesView parity 18 green · VISIBLE after rebuild #10.
+- G8c ProxiesView empty-state → shared EmptyState · `8f0c4b35` · consistency pass — migrated the
   bespoke "No proxies configured" dashed block to the shared `EmptyState` with an actionable "Add a
   proxy" CTA (opens the add form) in place of the old "Click New proxy above" footnote. Updated
   ProxiesView content-parity pin + empty-states.test.tsx. gui-jsdom 578 green.
