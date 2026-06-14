@@ -1,0 +1,2893 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Driftstack — Command</title>
+    <style>
+      /* ============================================================
+     DRIFTSTACK — "COMMAND"  (cockpit / mission-control)
+     Single-file demo. No external requests. file:// safe.
+     ============================================================ */
+
+      :root {
+        --bg: #07090c;
+        --bg-2: #0a0d12;
+        --panel: #0c1015;
+        --panel-2: #0e131a;
+        --panel-3: #11161e;
+        --line: #1b232e;
+        --line-soft: #151c25;
+        --line-bright: #26313f;
+        --ink: #e7eef6;
+        --ink-2: #aab6c4;
+        --ink-3: #6b7886;
+        --ink-4: #48535f;
+        --accent: #00e5a0; /* electric green */
+        --accent-2: #22d3ee; /* cyan */
+        --accent-dim: #0b7a5c;
+        --amber: #f5b942;
+        --orange: #ff8a3d;
+        --red: #ff5a6a;
+        --grey: #5a6675;
+        --glow: 0 0 0 1px rgba(0, 229, 160, 0);
+        --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Menlo', 'Consolas', monospace;
+        --sans: -apple-system, 'SF Pro Display', 'Inter', system-ui, 'Segoe UI', sans-serif;
+        --r-lg: 14px;
+        --r-md: 10px;
+        --r-sm: 7px;
+        --shadow: 0 18px 50px -20px rgba(0, 0, 0, 0.85), 0 2px 8px -2px rgba(0, 0, 0, 0.6);
+      }
+
+      html[data-theme='light'] {
+        --bg: #eef1f5;
+        --bg-2: #e7ebf1;
+        --panel: #ffffff;
+        --panel-2: #f6f8fb;
+        --panel-3: #eef2f7;
+        --line: #d8dee7;
+        --line-soft: #e4e9f0;
+        --line-bright: #c6cfdb;
+        --ink: #0c121a;
+        --ink-2: #3d4856;
+        --ink-3: #697585;
+        --ink-4: #9aa6b4;
+        --accent: #00a878;
+        --accent-2: #0891b2;
+        --accent-dim: #9fe6d0;
+        --shadow: 0 18px 50px -22px rgba(40, 60, 90, 0.3), 0 2px 8px -3px rgba(40, 60, 90, 0.22);
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        background:
+          radial-gradient(1200px 600px at 80% -10%, rgba(34, 211, 238, 0.05), transparent 60%),
+          radial-gradient(900px 500px at -5% 110%, rgba(0, 229, 160, 0.05), transparent 55%),
+          var(--bg);
+        color: var(--ink);
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+        font-size: 13px;
+        line-height: 1.45;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        overflow: auto;
+      }
+
+      /* ----- App window ----- */
+      .window {
+        width: 1320px;
+        height: 860px;
+        background: var(--bg-2);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        isolation: isolate;
+      }
+      /* subtle grid texture over the whole window */
+      .window::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(120, 150, 180, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(120, 150, 180, 0.03) 1px, transparent 1px);
+        background-size: 34px 34px;
+        pointer-events: none;
+        z-index: 0;
+        mask-image: radial-gradient(120% 120% at 50% 0%, #000 50%, transparent 100%);
+      }
+      html[data-theme='light'] .window::before {
+        background-image:
+          linear-gradient(rgba(40, 60, 90, 0.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(40, 60, 90, 0.04) 1px, transparent 1px);
+      }
+      .window > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      /* ===== 1. TITLE BAR ===== */
+      .titlebar {
+        height: 46px;
+        flex: 0 0 46px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 14px 0 16px;
+        background: linear-gradient(180deg, var(--panel-2), var(--panel));
+        border-bottom: 1px solid var(--line);
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      .traffic {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+      }
+      .dot.r {
+        background: #ff5f57;
+        box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+      }
+      .dot.y {
+        background: #febc2e;
+        box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+      }
+      .dot.g {
+        background: #28c840;
+        box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+      }
+
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-left: 6px;
+      }
+      .logo {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        display: grid;
+        place-items: center;
+        box-shadow: 0 0 14px -2px rgba(0, 229, 160, 0.55);
+      }
+      .logo svg {
+        width: 13px;
+        height: 13px;
+        display: block;
+      }
+      .wordmark .name {
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        font-size: 13.5px;
+      }
+      .wordmark .name .k {
+        color: var(--accent);
+      }
+
+      .tb-spacer {
+        flex: 1;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        height: 26px;
+        padding: 0 11px;
+        border-radius: 999px;
+        border: 1px solid var(--line-bright);
+        background: var(--panel-3);
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ink-2);
+        letter-spacing: 0.2px;
+      }
+      .pill .led {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 0 0 rgba(0, 229, 160, 0.6);
+        animation: pulse 2.2s infinite;
+      }
+      .pill.tier {
+        color: var(--accent-2);
+        text-transform: uppercase;
+        font-weight: 600;
+        border-color: rgba(34, 211, 238, 0.32);
+        background: rgba(34, 211, 238, 0.07);
+      }
+      .pill .grip {
+        color: var(--ink-4);
+      }
+
+      .iconbtn {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: var(--panel-3);
+        color: var(--ink-2);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition: 0.16s;
+      }
+      .iconbtn:hover {
+        color: var(--ink);
+        border-color: var(--line-bright);
+        background: var(--panel-2);
+        box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.07);
+      }
+      .iconbtn svg {
+        width: 15px;
+        height: 15px;
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(0, 229, 160, 0.55);
+        }
+        70% {
+          box-shadow: 0 0 0 6px rgba(0, 229, 160, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(0, 229, 160, 0);
+        }
+      }
+
+      /* ===== BODY LAYOUT ===== */
+      .shell {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+      }
+
+      /* ===== 2. SIDEBAR ===== */
+      .sidebar {
+        width: 212px;
+        flex: 0 0 212px;
+        background: linear-gradient(180deg, var(--panel), var(--bg-2));
+        border-right: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        padding: 14px 12px 12px;
+      }
+      .nav-label {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 1.6px;
+        color: var(--ink-4);
+        text-transform: uppercase;
+        padding: 4px 10px 8px;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        height: 36px;
+        padding: 0 11px;
+        border-radius: 9px;
+        color: var(--ink-2);
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 12.5px;
+        transition: 0.14s;
+        position: relative;
+      }
+      .nav-item svg {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 16px;
+        opacity: 0.85;
+      }
+      .nav-item:hover {
+        background: var(--panel-3);
+        color: var(--ink);
+      }
+      .nav-item.active {
+        background: linear-gradient(90deg, rgba(0, 229, 160, 0.12), rgba(0, 229, 160, 0.02));
+        color: var(--ink);
+        box-shadow: inset 0 0 0 1px rgba(0, 229, 160, 0.18);
+      }
+      .nav-item.active::before {
+        content: '';
+        position: absolute;
+        left: -12px;
+        top: 9px;
+        bottom: 9px;
+        width: 3px;
+        border-radius: 0 3px 3px 0;
+        background: var(--accent);
+        box-shadow: 0 0 10px 0 rgba(0, 229, 160, 0.7);
+      }
+      .nav-item.active svg {
+        opacity: 1;
+        color: var(--accent);
+      }
+      .nav-item .badge {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--accent);
+        background: rgba(0, 229, 160, 0.1);
+        padding: 1px 6px;
+        border-radius: 6px;
+        border: 1px solid rgba(0, 229, 160, 0.22);
+      }
+      .nav-item .badge.new {
+        color: var(--accent-2);
+        background: rgba(34, 211, 238, 0.1);
+        border-color: rgba(34, 211, 238, 0.28);
+      }
+
+      .side-foot {
+        margin-top: auto;
+        padding-top: 12px;
+        border-top: 1px solid var(--line-soft);
+      }
+      .acct {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 10px;
+        border-radius: 10px;
+        background: var(--panel-3);
+        border: 1px solid var(--line-soft);
+      }
+      .avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        flex: 0 0 30px;
+        background: linear-gradient(135deg, #1d2733, #11171f);
+        display: grid;
+        place-items: center;
+        font-family: var(--mono);
+        color: var(--accent-2);
+        font-size: 12px;
+        font-weight: 700;
+        border: 1px solid var(--line-bright);
+      }
+      .acct .meta {
+        min-width: 0;
+      }
+      .acct .meta .t {
+        font-size: 11.5px;
+        font-weight: 600;
+        text-transform: capitalize;
+      }
+      .acct .meta .s {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--ink-3);
+      }
+      .sess-bar {
+        height: 4px;
+        border-radius: 3px;
+        background: var(--line);
+        margin-top: 7px;
+        overflow: hidden;
+      }
+      .sess-bar > i {
+        display: block;
+        height: 100%;
+        width: 50%;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        border-radius: 3px;
+      }
+      .sess-cap {
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--ink-3);
+        margin-top: 5px;
+        letter-spacing: 0.3px;
+      }
+
+      /* ===== MAIN COLUMN ===== */
+      .main {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: radial-gradient(
+          700px 300px at 50% -40px,
+          rgba(34, 211, 238, 0.04),
+          transparent 70%
+        );
+      }
+      .scroll {
+        flex: 1;
+        overflow-y: auto;
+        padding: 18px 20px 22px;
+      }
+      .scroll::-webkit-scrollbar {
+        width: 9px;
+      }
+      .scroll::-webkit-scrollbar-thumb {
+        background: var(--line-bright);
+        border-radius: 9px;
+        border: 2px solid var(--bg-2);
+      }
+      .scroll::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      /* ===== 3. HERO ===== */
+      .hero {
+        display: flex;
+        align-items: flex-start;
+        gap: 18px;
+        padding: 16px 18px;
+        border-radius: var(--r-lg);
+        background: linear-gradient(120deg, var(--panel-2), var(--panel));
+        border: 1px solid var(--line);
+        position: relative;
+        overflow: hidden;
+      }
+      .hero::after {
+        content: '';
+        position: absolute;
+        right: -40px;
+        top: -60px;
+        width: 280px;
+        height: 280px;
+        background: radial-gradient(circle, rgba(0, 229, 160, 0.1), transparent 65%);
+        pointer-events: none;
+      }
+      .hero .greet {
+        flex: 1;
+        min-width: 0;
+      }
+      .hero h1 {
+        font-size: 21px;
+        font-weight: 700;
+        letter-spacing: -0.3px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .hero h1 .sun {
+        font-size: 18px;
+      }
+      .hero .health {
+        margin-top: 7px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        color: var(--ink-2);
+        font-size: 12.5px;
+      }
+      .hero .health .ok {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--accent);
+        font-family: var(--mono);
+        font-size: 11.5px;
+      }
+      .hero .health .live-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 8px rgba(0, 229, 160, 0.8);
+        animation: pulse 2s infinite;
+      }
+      .hero .sep {
+        color: var(--ink-4);
+      }
+      .hero-right {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 10px;
+      }
+      .refreshed {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        color: var(--ink-3);
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        letter-spacing: 0.2px;
+        border: 1px solid var(--line-soft);
+        background: var(--panel-3);
+        padding: 4px 9px;
+        border-radius: 7px;
+        white-space: nowrap;
+      }
+      .refreshed .spin {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        border: 1.5px solid var(--accent);
+        border-top-color: transparent;
+        animation: spin 1.4s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .btn-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        height: 36px;
+        padding: 0 16px;
+        border-radius: 9px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 12.5px;
+        color: #04130d;
+        background: linear-gradient(135deg, var(--accent), #34e6b1);
+        border: 1px solid rgba(0, 229, 160, 0.5);
+        box-shadow:
+          0 6px 20px -8px rgba(0, 229, 160, 0.7),
+          inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        transition: 0.16s;
+      }
+      .btn-cta:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 26px -8px rgba(0, 229, 160, 0.85);
+      }
+      .btn-cta svg {
+        width: 15px;
+        height: 15px;
+      }
+
+      .section-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 20px 2px 11px;
+      }
+      .section-row h2 {
+        font-size: 11px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        font-family: var(--mono);
+        font-weight: 600;
+      }
+      .section-row .rule {
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(90deg, var(--line), transparent);
+      }
+      .section-row .tag {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--ink-4);
+      }
+
+      /* ===== 4. STAT TILES ===== */
+      .tiles {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+      }
+      .tile {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        padding: 13px 14px;
+        position: relative;
+        overflow: hidden;
+        transition: 0.16s;
+      }
+      .tile:hover {
+        border-color: var(--line-bright);
+        transform: translateY(-1px);
+      }
+      .tile::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: linear-gradient(180deg, var(--accent), transparent);
+        opacity: 0.7;
+      }
+      .tile .lab {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+        color: var(--ink-3);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .tile .lab svg {
+        width: 12px;
+        height: 12px;
+        color: var(--ink-4);
+      }
+      .tile .num {
+        font-family: var(--mono);
+        font-size: 30px;
+        font-weight: 600;
+        letter-spacing: -1px;
+        margin-top: 6px;
+        line-height: 1;
+        color: var(--ink);
+      }
+      .tile .num .u {
+        font-size: 13px;
+        color: var(--ink-3);
+        font-weight: 500;
+        margin-left: 3px;
+      }
+      .tile .sub {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--ink-3);
+        margin-top: 7px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .tile .up {
+        color: var(--accent);
+      }
+      .spark {
+        width: 100%;
+        height: 26px;
+        margin-top: 9px;
+        display: block;
+      }
+      .tile .num.live {
+        color: var(--accent);
+      }
+      /* health ring */
+      .ring-wrap {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 6px;
+      }
+      .ring {
+        width: 52px;
+        height: 52px;
+        flex: 0 0 52px;
+      }
+      .ring .num {
+        font-size: 24px;
+      }
+      .ring-side .num {
+        font-size: 24px;
+        margin-top: 0;
+      }
+      .ring-side .sub {
+        margin-top: 4px;
+      }
+
+      /* ===== 5. FOLDER SHELF ===== */
+      .folders {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .folder {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        height: 42px;
+        padding: 0 14px 0 11px;
+        border-radius: 11px;
+        cursor: pointer;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        transition: 0.15s;
+        position: relative;
+        overflow: hidden;
+      }
+      .folder:hover {
+        transform: translateY(-1px);
+        border-color: var(--line-bright);
+      }
+      .folder.on {
+        border-color: rgba(0, 229, 160, 0.4);
+        box-shadow: 0 0 0 1px rgba(0, 229, 160, 0.2);
+      }
+      .folder .fi {
+        width: 26px;
+        height: 26px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        font-size: 14px;
+        background: var(--fc, #1a222c);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+      }
+      .folder .ft {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .folder .fc-count {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--ink-3);
+        background: var(--panel-3);
+        padding: 1px 7px;
+        border-radius: 6px;
+        border: 1px solid var(--line-soft);
+      }
+      .folder.all .fi {
+        background: linear-gradient(135deg, rgba(0, 229, 160, 0.25), rgba(34, 211, 238, 0.2));
+        color: var(--accent);
+      }
+      .folder.all .fi svg {
+        width: 14px;
+        height: 14px;
+      }
+
+      /* ===== CENTERPIECE LAYOUT: cards + ai rail ===== */
+      .center {
+        display: grid;
+        grid-template-columns: 1fr 372px;
+        gap: 16px;
+        align-items: start;
+        margin-top: 11px;
+      }
+
+      /* ===== 6. PROFILE CARDS ===== */
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 13px;
+      }
+      .card {
+        background: linear-gradient(180deg, var(--panel-2), var(--panel));
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        padding: 12px;
+        position: relative;
+        overflow: hidden;
+        transition: 0.18s;
+      }
+      .card:hover {
+        border-color: var(--line-bright);
+        transform: translateY(-2px);
+        box-shadow: 0 16px 38px -22px rgba(0, 0, 0, 0.9);
+      }
+      .card.live {
+        border-color: rgba(0, 229, 160, 0.32);
+      }
+      .card.live::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: var(--r-md);
+        pointer-events: none;
+        box-shadow:
+          inset 0 0 0 1px rgba(0, 229, 160, 0.22),
+          inset 0 0 22px -6px rgba(0, 229, 160, 0.3);
+        animation: liveglow 2.6s ease-in-out infinite;
+      }
+      @keyframes liveglow {
+        0%,
+        100% {
+          opacity: 0.55;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+
+      .card-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 11px;
+      }
+      /* phone thumb */
+      .phone {
+        width: 58px;
+        height: 104px;
+        flex: 0 0 58px;
+        border-radius: 11px;
+        background: #05070a;
+        border: 2px solid #161d27;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.8);
+      }
+      .card.live .phone {
+        border-color: rgba(0, 229, 160, 0.5);
+        box-shadow:
+          0 0 0 1px rgba(0, 229, 160, 0.5),
+          0 0 18px -4px rgba(0, 229, 160, 0.55);
+      }
+      .phone .notch {
+        position: absolute;
+        top: 3px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 22px;
+        height: 4px;
+        border-radius: 3px;
+        background: #0b0e13;
+        z-index: 3;
+      }
+      .phone .scr {
+        position: absolute;
+        inset: 3px;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #fff;
+      }
+      /* mini page: shopify */
+      .mp {
+        position: absolute;
+        inset: 0;
+        font-family: var(--sans);
+      }
+      .mp-shop {
+        background: #fff;
+      }
+      .mp-shop .top {
+        height: 11px;
+        background: #5e8e3e;
+        display: flex;
+        align-items: center;
+        padding: 0 4px;
+        gap: 2px;
+      }
+      .mp-shop .top i {
+        width: 3px;
+        height: 3px;
+        border-radius: 1px;
+        background: rgba(255, 255, 255, 0.85);
+      }
+      .mp-shop .img {
+        height: 40px;
+        margin: 5px;
+        border-radius: 5px;
+        background: linear-gradient(135deg, #cfe3bd, #9fc77f);
+        position: relative;
+      }
+      .mp-shop .img::after {
+        content: '👟';
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 16px;
+      }
+      .mp-shop .ln {
+        height: 4px;
+        border-radius: 2px;
+        background: #e3e7ec;
+        margin: 3px 6px;
+      }
+      .mp-shop .ln.sh {
+        width: 60%;
+      }
+      .mp-shop .price {
+        height: 5px;
+        width: 34%;
+        border-radius: 2px;
+        background: #5e8e3e;
+        margin: 4px 6px;
+      }
+      .mp-shop .cta {
+        height: 11px;
+        margin: 5px 6px 0;
+        border-radius: 4px;
+        background: #1a1a1a;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 5px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+      }
+      /* mini page: amazon */
+      .mp-amz {
+        background: #fff;
+      }
+      .mp-amz .top {
+        height: 12px;
+        background: #131a22;
+        display: flex;
+        align-items: center;
+        padding: 0 4px;
+      }
+      .mp-amz .top .s {
+        flex: 1;
+        height: 5px;
+        border-radius: 3px;
+        background: #fff;
+        margin-left: 3px;
+      }
+      .mp-amz .top .c {
+        color: #ff9900;
+        font-size: 6px;
+        font-weight: 800;
+      }
+      .mp-amz .img {
+        height: 38px;
+        margin: 5px;
+        border-radius: 5px;
+        background: #f1f1f1;
+        position: relative;
+      }
+      .mp-amz .img::after {
+        content: '📦';
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 15px;
+      }
+      .mp-amz .ln {
+        height: 4px;
+        border-radius: 2px;
+        background: #e3e7ec;
+        margin: 3px 6px;
+      }
+      .mp-amz .price {
+        color: #b12704;
+        font-size: 8px;
+        font-weight: 800;
+        margin: 3px 6px;
+        font-family: var(--mono);
+      }
+      .mp-amz .cta {
+        height: 10px;
+        margin: 4px 6px 0;
+        border-radius: 5px;
+        background: #ffd814;
+        display: grid;
+        place-items: center;
+        color: #111;
+        font-size: 5px;
+        font-weight: 700;
+      }
+      /* mini page: bank login */
+      .mp-bank {
+        background: linear-gradient(180deg, #0f2a45, #0a1f33);
+      }
+      .mp-bank .logo {
+        margin: 12px auto 8px;
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        background: linear-gradient(135deg, #3b82f6, #1e40af);
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 9px;
+      }
+      .mp-bank .ln {
+        height: 9px;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.92);
+        margin: 4px 7px;
+      }
+      .mp-bank .ln.lbl {
+        height: 3px;
+        width: 40%;
+        background: rgba(255, 255, 255, 0.4);
+        margin-bottom: 1px;
+      }
+      .mp-bank .btn {
+        height: 10px;
+        margin: 6px 7px 0;
+        border-radius: 4px;
+        background: #3b82f6;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 5px;
+        font-weight: 700;
+      }
+      /* mini page: meta ads */
+      .mp-meta {
+        background: #f0f2f5;
+      }
+      .mp-meta .top {
+        height: 12px;
+        background: #1877f2;
+        display: flex;
+        align-items: center;
+        padding: 0 4px;
+        color: #fff;
+        font-size: 7px;
+        font-weight: 800;
+      }
+      .mp-meta .card2 {
+        margin: 5px;
+        background: #fff;
+        border-radius: 4px;
+        padding: 3px;
+      }
+      .mp-meta .bar {
+        height: 4px;
+        border-radius: 2px;
+        background: #e4e6eb;
+        margin: 2px 0;
+      }
+      .mp-meta .chart {
+        height: 22px;
+        margin: 3px;
+        background: #fff;
+        border-radius: 4px;
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        padding: 3px;
+      }
+      .mp-meta .chart i {
+        flex: 1;
+        background: #1877f2;
+        border-radius: 1px;
+      }
+      /* mini page: instagram (no proxy / dim) */
+      .mp-insta {
+        background: #fff;
+        position: relative;
+      }
+      .mp-insta .top {
+        height: 11px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        align-items: center;
+        padding: 0 4px;
+        font-size: 7px;
+        font-weight: 700;
+      }
+      .mp-insta .img {
+        height: 46px;
+        margin: 0;
+        background: linear-gradient(135deg, #feda75, #d62976, #4f5bd5);
+        position: relative;
+      }
+      .mp-insta .img::after {
+        content: '📷';
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 16px;
+      }
+      .mp-insta .row {
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+        font-size: 8px;
+      }
+      /* test/generic */
+      .mp-test {
+        background: #11151b;
+        display: grid;
+        place-items: center;
+      }
+      .mp-test::after {
+        content: '</>';
+        color: #3a4654;
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      /* offline/idle overlay */
+      .phone.dim .scr {
+        filter: grayscale(0.6) brightness(0.85);
+      }
+      .phone .pause {
+        position: absolute;
+        inset: 0;
+        display: none;
+        place-items: center;
+        background: rgba(5, 7, 10, 0.45);
+        z-index: 4;
+        color: var(--ink-2);
+      }
+      .phone.idle .pause {
+        display: grid;
+      }
+      .phone .pause svg {
+        width: 18px;
+        height: 18px;
+        opacity: 0.8;
+      }
+
+      .card-id {
+        flex: 1;
+        min-width: 0;
+      }
+      .card-id .name-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .card-id .nm {
+        font-size: 13.5px;
+        font-weight: 700;
+        letter-spacing: -0.2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex: 0 0 8px;
+      }
+      .status-dot.live {
+        background: var(--accent);
+        box-shadow: 0 0 8px rgba(0, 229, 160, 0.9);
+        animation: pulse 1.8s infinite;
+      }
+      .status-dot.idle {
+        background: var(--ink-4);
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 6px;
+      }
+      .chip {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 0.2px;
+        padding: 2px 7px;
+        border-radius: 6px;
+        border: 1px solid var(--line-bright);
+        background: var(--panel-3);
+        color: var(--ink-2);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .chip.dev {
+        color: var(--ink);
+        border-color: var(--line-bright);
+      }
+      .chip.live-c {
+        color: var(--accent);
+        border-color: rgba(0, 229, 160, 0.35);
+        background: rgba(0, 229, 160, 0.08);
+      }
+      .chip.idle-c {
+        color: var(--ink-3);
+      }
+      .last {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--ink-4);
+        align-self: flex-start;
+        white-space: nowrap;
+      }
+
+      /* proxy row */
+      .proxy {
+        margin-top: 11px;
+        border-top: 1px solid var(--line-soft);
+        padding-top: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: var(--mono);
+        font-size: 10.5px;
+      }
+      .proxy .flag {
+        font-size: 13px;
+        line-height: 1;
+      }
+      .proxy .ip {
+        color: var(--ink);
+        letter-spacing: 0.2px;
+      }
+      .proxy .cc {
+        color: var(--ink-3);
+      }
+      .proxy .lat {
+        margin-left: auto;
+        color: var(--ink-2);
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .lat .meter {
+        width: 34px;
+        height: 6px;
+        border-radius: 3px;
+        background: var(--line);
+        overflow: hidden;
+        display: inline-block;
+      }
+      .lat .meter > i {
+        display: block;
+        height: 100%;
+        border-radius: 3px;
+      }
+      .hpill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 7px;
+        border-radius: 6px;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+      }
+      .hpill .hd {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+      }
+      .hpill.green {
+        color: var(--accent);
+        background: rgba(0, 229, 160, 0.1);
+        border: 1px solid rgba(0, 229, 160, 0.3);
+      }
+      .hpill.green .hd {
+        background: var(--accent);
+        box-shadow: 0 0 6px rgba(0, 229, 160, 0.8);
+      }
+      .hpill.amber {
+        color: var(--amber);
+        background: rgba(245, 185, 66, 0.1);
+        border: 1px solid rgba(245, 185, 66, 0.32);
+      }
+      .hpill.amber .hd {
+        background: var(--amber);
+      }
+      .hpill.orange {
+        color: var(--orange);
+        background: rgba(255, 138, 61, 0.1);
+        border: 1px solid rgba(255, 138, 61, 0.32);
+      }
+      .hpill.orange .hd {
+        background: var(--orange);
+      }
+      .hpill.grey {
+        color: var(--grey);
+        background: rgba(90, 102, 117, 0.12);
+        border: 1px solid var(--line-bright);
+      }
+      .hpill.grey .hd {
+        background: var(--grey);
+      }
+
+      .proxy.none {
+        color: var(--ink-4);
+      }
+      .proxy.none .flag {
+        filter: grayscale(1);
+        opacity: 0.5;
+      }
+
+      /* hover quick actions */
+      .qa {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        display: flex;
+        gap: 5px;
+        opacity: 0;
+        transform: translateY(-4px);
+        transition: 0.18s;
+        z-index: 5;
+      }
+      .card:hover .qa {
+        opacity: 1;
+        transform: none;
+      }
+      .qa button {
+        width: 26px;
+        height: 26px;
+        border-radius: 7px;
+        border: 1px solid var(--line-bright);
+        background: rgba(8, 11, 16, 0.85);
+        backdrop-filter: blur(6px);
+        color: var(--ink-2);
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        transition: 0.14s;
+        font-size: 11px;
+      }
+      .qa button:hover {
+        color: var(--ink);
+        border-color: var(--accent);
+        background: rgba(0, 229, 160, 0.12);
+      }
+      .qa button.play:hover {
+        color: var(--accent);
+      }
+      .qa button svg {
+        width: 12px;
+        height: 12px;
+      }
+
+      /* ===== 7. AI CHAT RAIL ===== */
+      .ai {
+        position: sticky;
+        top: 0;
+        background: linear-gradient(180deg, var(--panel-2), var(--panel));
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.06);
+        max-height: 760px;
+      }
+      .ai-head {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 11px 13px;
+        border-bottom: 1px solid var(--line);
+        background: linear-gradient(90deg, rgba(34, 211, 238, 0.06), transparent);
+      }
+      .ai-head .orb {
+        width: 24px;
+        height: 24px;
+        border-radius: 7px;
+        flex: 0 0 24px;
+        background: linear-gradient(135deg, var(--accent-2), var(--accent));
+        display: grid;
+        place-items: center;
+        box-shadow: 0 0 14px -2px rgba(34, 211, 238, 0.6);
+      }
+      .ai-head .orb svg {
+        width: 14px;
+        height: 14px;
+      }
+      .ai-head .ttl {
+        font-weight: 700;
+        font-size: 12.5px;
+        letter-spacing: -0.1px;
+      }
+      .ai-head .ttl small {
+        display: block;
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--ink-3);
+        letter-spacing: 0.5px;
+        font-weight: 400;
+      }
+      .model-chip {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--ink-2);
+        border: 1px solid var(--line-bright);
+        background: var(--panel-3);
+        padding: 3px 8px;
+        border-radius: 7px;
+        cursor: pointer;
+        transition: 0.14s;
+      }
+      .model-chip:hover {
+        border-color: var(--accent-2);
+        color: var(--ink);
+      }
+      .model-chip .d {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent-2);
+        box-shadow: 0 0 6px var(--accent-2);
+      }
+      .model-chip svg {
+        width: 9px;
+        height: 9px;
+        opacity: 0.6;
+      }
+
+      .ai-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 14px 13px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .ai-body::-webkit-scrollbar {
+        width: 7px;
+      }
+      .ai-body::-webkit-scrollbar-thumb {
+        background: var(--line-bright);
+        border-radius: 7px;
+      }
+
+      .msg {
+        max-width: 92%;
+      }
+      .msg.user {
+        align-self: flex-end;
+      }
+      .msg.user .bubble {
+        background: linear-gradient(135deg, rgba(34, 211, 238, 0.14), rgba(34, 211, 238, 0.06));
+        border: 1px solid rgba(34, 211, 238, 0.28);
+        color: var(--ink);
+        border-radius: 11px 11px 3px 11px;
+        padding: 9px 12px;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .msg.user .who {
+        text-align: right;
+      }
+      .who {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--ink-4);
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        margin-bottom: 5px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .msg.bot {
+        align-self: flex-start;
+        width: 100%;
+      }
+
+      /* plan card */
+      .plan {
+        background: var(--panel);
+        border: 1px solid var(--line-bright);
+        border-radius: 11px;
+        overflow: hidden;
+      }
+      .plan-top {
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--line-soft);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11.5px;
+        color: var(--ink-2);
+      }
+      .plan-top .lp {
+        font-family: var(--mono);
+        font-size: 9px;
+        color: var(--accent-2);
+        border: 1px solid rgba(34, 211, 238, 0.3);
+        padding: 1px 6px;
+        border-radius: 5px;
+        letter-spacing: 0.5px;
+      }
+      .steps {
+        padding: 6px 6px;
+      }
+      .step {
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+        padding: 7px 8px;
+        border-radius: 8px;
+        font-size: 11.5px;
+        color: var(--ink-2);
+        position: relative;
+      }
+      .step .ic {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 16px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 10px;
+        margin-top: 1px;
+      }
+      .step.done .ic {
+        background: rgba(0, 229, 160, 0.15);
+        color: var(--accent);
+        border: 1px solid rgba(0, 229, 160, 0.4);
+      }
+      .step.done .tx {
+        color: var(--ink);
+      }
+      .step .tx {
+        flex: 1;
+      }
+      .step .tx .code {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--ink-3);
+      }
+      .step .tx .ok {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--accent);
+        margin-left: 4px;
+      }
+      .step .tx .mul {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--accent-2);
+        margin-left: 4px;
+      }
+      /* connector line */
+      .step:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        left: 15px;
+        top: 25px;
+        bottom: -3px;
+        width: 1px;
+        background: var(--line-bright);
+      }
+
+      /* the safety gate */
+      .gate {
+        margin: 4px 6px 8px;
+        border-radius: 10px;
+        overflow: hidden;
+        background: linear-gradient(180deg, rgba(245, 185, 66, 0.1), rgba(245, 185, 66, 0.03));
+        border: 1px solid rgba(245, 185, 66, 0.4);
+        box-shadow:
+          0 0 0 1px rgba(245, 185, 66, 0.08),
+          0 8px 24px -14px rgba(245, 185, 66, 0.5);
+        animation: gateglow 3s ease-in-out infinite;
+      }
+      @keyframes gateglow {
+        0%,
+        100% {
+          box-shadow:
+            0 0 0 1px rgba(245, 185, 66, 0.08),
+            0 8px 24px -16px rgba(245, 185, 66, 0.4);
+        }
+        50% {
+          box-shadow:
+            0 0 0 1px rgba(245, 185, 66, 0.22),
+            0 8px 28px -12px rgba(245, 185, 66, 0.6);
+        }
+      }
+      .gate .gt {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px 8px;
+        font-size: 11.5px;
+        color: var(--amber);
+        font-weight: 600;
+      }
+      .gate .gt .pause-ic {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: rgba(245, 185, 66, 0.18);
+        border: 1px solid rgba(245, 185, 66, 0.5);
+        display: grid;
+        place-items: center;
+        font-size: 10px;
+      }
+      .gate .desc {
+        padding: 0 12px 10px;
+        font-size: 11.5px;
+        color: var(--ink-2);
+      }
+      .gate .desc b {
+        color: var(--ink);
+        font-weight: 700;
+      }
+      .gate .desc .act {
+        font-family: var(--mono);
+        color: var(--amber);
+        background: rgba(245, 185, 66, 0.12);
+        padding: 1px 6px;
+        border-radius: 5px;
+        border: 1px solid rgba(245, 185, 66, 0.3);
+      }
+      .gate-btns {
+        display: flex;
+        gap: 8px;
+        padding: 0 12px 12px;
+      }
+      .gbtn {
+        flex: 1;
+        height: 32px;
+        border-radius: 8px;
+        font-weight: 700;
+        font-size: 11.5px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: 0.15s;
+      }
+      .gbtn svg {
+        width: 13px;
+        height: 13px;
+      }
+      .gbtn.approve {
+        color: #04130d;
+        background: linear-gradient(135deg, var(--accent), #34e6b1);
+        border: 1px solid rgba(0, 229, 160, 0.5);
+        box-shadow: 0 4px 14px -6px rgba(0, 229, 160, 0.7);
+      }
+      .gbtn.approve:hover {
+        transform: translateY(-1px);
+      }
+      .gbtn.deny {
+        color: var(--red);
+        background: rgba(255, 90, 106, 0.08);
+        border: 1px solid rgba(255, 90, 106, 0.4);
+      }
+      .gbtn.deny:hover {
+        background: rgba(255, 90, 106, 0.16);
+      }
+
+      /* cost badge under bot turn */
+      .cost {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 9px;
+        flex-wrap: wrap;
+      }
+      .cost .cb {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--ink-3);
+        border: 1px solid var(--line-soft);
+        background: var(--panel-3);
+        padding: 2px 8px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .cost .cb b {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .cost .cb .m {
+        color: var(--accent-2);
+      }
+
+      /* token budget meter */
+      .budget {
+        padding: 9px 13px;
+        border-top: 1px solid var(--line-soft);
+        background: var(--panel);
+      }
+      .budget .br {
+        display: flex;
+        justify-content: space-between;
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--ink-3);
+        margin-bottom: 5px;
+        letter-spacing: 0.3px;
+      }
+      .budget .br b {
+        color: var(--ink-2);
+      }
+      .budget .track {
+        height: 5px;
+        border-radius: 3px;
+        background: var(--line);
+        overflow: hidden;
+      }
+      .budget .track > i {
+        display: block;
+        height: 100%;
+        width: 34%;
+        border-radius: 3px;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      }
+
+      /* chat input */
+      .ai-input {
+        padding: 10px 11px 11px;
+        border-top: 1px solid var(--line);
+      }
+      .slash {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .slash .sc {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--ink-3);
+        cursor: pointer;
+        border: 1px dashed var(--line-bright);
+        padding: 2px 7px;
+        border-radius: 6px;
+        transition: 0.14s;
+      }
+      .slash .sc:hover {
+        color: var(--accent-2);
+        border-color: var(--accent-2);
+      }
+      .input-box {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--bg);
+        border: 1px solid var(--line-bright);
+        border-radius: 10px;
+        padding: 7px 8px 7px 12px;
+        transition: 0.15s;
+      }
+      .input-box:focus-within {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(0, 229, 160, 0.1);
+      }
+      .input-box input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        outline: none;
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 12px;
+      }
+      .input-box input::placeholder {
+        color: var(--ink-4);
+      }
+      .send {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        flex: 0 0 30px;
+        cursor: pointer;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        border: none;
+        display: grid;
+        place-items: center;
+        color: #04130d;
+        transition: 0.15s;
+      }
+      .send:hover {
+        transform: scale(1.05);
+        box-shadow: 0 0 14px -2px rgba(0, 229, 160, 0.6);
+      }
+      .send svg {
+        width: 15px;
+        height: 15px;
+      }
+
+      /* typing indicator */
+      .typing {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 8px 11px;
+        background: var(--panel);
+        border: 1px solid var(--line-bright);
+        border-radius: 11px 11px 11px 3px;
+        width: fit-content;
+      }
+      .typing i {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--accent-2);
+        animation: blink 1.2s infinite;
+      }
+      .typing i:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      .typing i:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+      @keyframes blink {
+        0%,
+        60%,
+        100% {
+          opacity: 0.25;
+          transform: translateY(0);
+        }
+        30% {
+          opacity: 1;
+          transform: translateY(-2px);
+        }
+      }
+
+      .reveal {
+        animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+      }
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="window">
+      <!-- ===== 1. TITLE BAR ===== -->
+      <div class="titlebar">
+        <div class="traffic">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+        </div>
+        <div class="wordmark">
+          <span class="logo">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M4 7l8-4 8 4-8 4-8-4z" fill="#04130d" />
+              <path
+                d="M4 12l8 4 8-4M4 17l8 4 8-4"
+                stroke="#04130d"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </span>
+          <span class="name">DRIFT<span class="k">STACK</span></span>
+        </div>
+
+        <div class="tb-spacer"></div>
+
+        <span class="pill"><span class="led"></span>CONNECTED · gw-eu-2</span>
+        <span class="pill tier">starter</span>
+        <button class="iconbtn" id="themeToggle" title="Toggle theme">
+          <svg
+            id="themeIcon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="shell">
+        <!-- ===== 2. SIDEBAR ===== -->
+        <aside class="sidebar">
+          <div class="nav-label">Cockpit</div>
+          <div class="nav-item active">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="4" y="3" width="16" height="18" rx="3" />
+              <line x1="9" y1="18" x2="15" y2="18" />
+            </svg>
+            Profiles <span class="badge">7</span>
+          </div>
+          <div class="nav-item">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+            Sessions <span class="badge">2</span>
+          </div>
+          <div class="nav-item">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3l1.8 4.6L18 9l-3.6 2.4L15 16l-3-2.5L9 16l.6-4.6L6 9l4.2-1.4L12 3z" />
+            </svg>
+            AI <span class="badge new">NEW</span>
+          </div>
+          <div class="nav-item">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            Recordings
+          </div>
+          <div class="nav-item">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+            </svg>
+            Proxies <span class="badge">2</span>
+          </div>
+          <div class="nav-item">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="4" width="7" height="7" rx="1.5" />
+              <rect x="14" y="4" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+            </svg>
+            Fleet
+          </div>
+          <div class="nav-item">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19 12a7 7 0 0 0-.1-1.3l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2.2-1.3L14 2h-4l-.3 2.4a7 7 0 0 0-2.2 1.3l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.3l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2.2 1.3L10 22h4l.3-2.4a7 7 0 0 0 2.2-1.3l2.4 1 2-3.4-2-1.6c.07-.43.1-.86.1-1.3z"
+              />
+            </svg>
+            Settings
+          </div>
+
+          <div class="side-foot">
+            <div class="acct">
+              <div class="avatar">DS</div>
+              <div class="meta">
+                <div class="t">starter · cloud</div>
+                <div class="s">ds_live_a91f…3e7c</div>
+                <div class="sess-bar"><i></i></div>
+                <div class="sess-cap"><span>SESSIONS</span><span>2 / 4</span></div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- ===== MAIN ===== -->
+        <main class="main">
+          <div class="scroll">
+            <!-- ===== 3. HERO ===== -->
+            <section class="hero">
+              <div class="greet">
+                <h1><span class="sun">🛰️</span> Good morning, Operator</h1>
+                <div class="health">
+                  <span class="ok"><span class="live-dot"></span>2 sessions live</span>
+                  <span class="sep">·</span>
+                  <span class="ok">all proxies healthy</span>
+                  <span class="sep">·</span>
+                  <span style="font-family: var(--mono); font-size: 11.5px; color: var(--ink-3)"
+                    >fleet nominal</span
+                  >
+                </div>
+              </div>
+              <div class="hero-right">
+                <span class="refreshed"
+                  ><span class="spin"></span>Refreshed <b id="refTime">5:43:07&nbsp;AM</b> ·
+                  auto-refresh 5s</span
+                >
+                <button class="btn-cta">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.4"
+                    stroke-linecap="round"
+                  >
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  New profile
+                </button>
+              </div>
+            </section>
+
+            <!-- ===== 4. STAT TILES ===== -->
+            <div class="section-row">
+              <h2>Telemetry</h2>
+              <div class="rule"></div>
+              <span class="tag">live · 5s</span>
+            </div>
+            <div class="tiles">
+              <div class="tile">
+                <div class="lab">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="5" y="3" width="14" height="18" rx="3" /></svg
+                  >Profiles
+                </div>
+                <div class="num" data-count="7">0</div>
+                <svg
+                  class="spark"
+                  data-spark="6,7,7,8,9,11,10,12,14,13,15"
+                  data-acc="#22d3ee"
+                  viewBox="0 0 200 26"
+                  preserveAspectRatio="none"
+                ></svg>
+              </div>
+              <div class="tile">
+                <div class="lab">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="9" />
+                    <circle cx="12" cy="12" r="3" fill="currentColor" /></svg
+                  >Live now
+                </div>
+                <div class="num live" data-count="2">0</div>
+                <div class="sub"><span class="up">▲ active</span> · 2 sessions in flight</div>
+                <svg
+                  class="spark"
+                  data-spark="0,1,1,2,1,2,3,2,2,2,2"
+                  data-acc="#00e5a0"
+                  viewBox="0 0 200 26"
+                  preserveAspectRatio="none"
+                ></svg>
+              </div>
+              <div class="tile">
+                <div class="lab">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg
+                  >Proxies
+                </div>
+                <div class="num" data-count="2">0</div>
+                <div class="sub">avg <b style="color: var(--ink-2)">70ms</b> · 2 regions</div>
+                <svg
+                  class="spark"
+                  data-spark="80,72,68,75,70,66,71,64,69,67,70"
+                  data-acc="#22d3ee"
+                  viewBox="0 0 200 26"
+                  preserveAspectRatio="none"
+                ></svg>
+              </div>
+              <div class="tile">
+                <div class="lab">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path
+                      d="M12 21s-7-4.3-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.7-7 10-7 10z"
+                    /></svg
+                  >Proxy health
+                </div>
+                <div class="ring-wrap">
+                  <svg class="ring" viewBox="0 0 52 52">
+                    <circle
+                      cx="26"
+                      cy="26"
+                      r="22"
+                      fill="none"
+                      stroke="var(--line)"
+                      stroke-width="5"
+                    />
+                    <circle
+                      id="healthRing"
+                      cx="26"
+                      cy="26"
+                      r="22"
+                      fill="none"
+                      stroke="var(--accent)"
+                      stroke-width="5"
+                      stroke-linecap="round"
+                      stroke-dasharray="138.2"
+                      stroke-dashoffset="138.2"
+                      transform="rotate(-90 26 26)"
+                    />
+                  </svg>
+                  <div class="ring-side">
+                    <div class="num" data-count="99.4" data-dec="1">0<span class="u">%</span></div>
+                    <div class="sub"><span class="up">▲ 0.3</span> · last 24h</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===== 5. FOLDER SHELF ===== -->
+            <div class="section-row">
+              <h2>Folders</h2>
+              <div class="rule"></div>
+              <span class="tag">7 profiles</span>
+            </div>
+            <div class="folders">
+              <div class="folder all on">
+                <span class="fi"
+                  ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <rect x="3" y="4" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="4" width="7" height="7" rx="1.5" />
+                    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="14" width="7" height="7" rx="1.5" /></svg
+                ></span>
+                <span class="ft">All</span><span class="fc-count">7</span>
+              </div>
+              <div class="folder" style="--fc: rgba(0, 229, 160, 0.16)">
+                <span class="fi">🛒</span><span class="ft">Shopping</span
+                ><span class="fc-count">3</span>
+              </div>
+              <div class="folder" style="--fc: rgba(34, 211, 238, 0.16)">
+                <span class="fi">🏦</span><span class="ft">Banking</span
+                ><span class="fc-count">2</span>
+              </div>
+              <div class="folder" style="--fc: rgba(245, 185, 66, 0.16)">
+                <span class="fi">📣</span><span class="ft">Ad accounts</span
+                ><span class="fc-count">1</span>
+              </div>
+              <div class="folder" style="--fc: rgba(120, 140, 160, 0.16)">
+                <span class="fi">📥</span><span class="ft">Unfiled</span
+                ><span class="fc-count">1</span>
+              </div>
+            </div>
+
+            <!-- ===== CENTERPIECE ===== -->
+            <div class="center">
+              <!-- ===== 6. PROFILE CARDS ===== -->
+              <div>
+                <div class="section-row" style="margin-top: 0">
+                  <h2>Profiles</h2>
+                  <div class="rule"></div>
+                  <span class="tag">grid · 6 of 7</span>
+                </div>
+                <div class="cards">
+                  <!-- Shopify LIVE -->
+                  <div class="card live">
+                    <div class="qa">
+                      <button class="play" title="Launch">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </button>
+                      <button title="Chat">💬</button>
+                      <button title="More">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="5" cy="12" r="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <circle cx="19" cy="12" r="2" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="card-head">
+                      <div class="phone">
+                        <div class="notch"></div>
+                        <div class="scr">
+                          <div class="mp mp-shop">
+                            <div class="top"><i></i><i></i><i></i></div>
+                            <div class="img"></div>
+                            <div class="ln"></div>
+                            <div class="ln sh"></div>
+                            <div class="price"></div>
+                            <div class="cta">ADD TO CART</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="card-id">
+                        <div class="name-row">
+                          <span class="status-dot live"></span><span class="nm">Shopify-US-01</span
+                          ><span class="last">now</span>
+                        </div>
+                        <div class="chips">
+                          <span class="chip dev">iPhone 17</span>
+                          <span class="chip live-c">● LIVE</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="proxy">
+                      <span class="flag">🇺🇸</span><span class="ip">192.0.2.41</span
+                      ><span class="cc">US</span>
+                      <span class="lat"
+                        ><span class="meter"
+                          ><i style="width: 30%; background: var(--accent)"></i></span
+                        >42ms</span
+                      >
+                      <span class="hpill green"><span class="hd"></span>HEALTHY</span>
+                    </div>
+                  </div>
+
+                  <!-- Amazon LIVE -->
+                  <div class="card live">
+                    <div class="qa">
+                      <button class="play" title="Launch">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </button>
+                      <button title="Chat">💬</button>
+                      <button title="More">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="5" cy="12" r="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <circle cx="19" cy="12" r="2" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="card-head">
+                      <div class="phone">
+                        <div class="notch"></div>
+                        <div class="scr">
+                          <div class="mp mp-amz">
+                            <div class="top"><span class="c">a</span><span class="s"></span></div>
+                            <div class="img"></div>
+                            <div class="ln"></div>
+                            <div class="price">€129<span style="font-size: 5px">99</span></div>
+                            <div class="cta">Buy Now</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="card-id">
+                        <div class="name-row">
+                          <span class="status-dot live"></span><span class="nm">Amazon-DE-02</span
+                          ><span class="last">2m ago</span>
+                        </div>
+                        <div class="chips">
+                          <span class="chip dev">iPhone 17</span>
+                          <span class="chip live-c">● LIVE</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="proxy">
+                      <span class="flag">🇩🇪</span><span class="ip">203.0.113.9</span
+                      ><span class="cc">DE</span>
+                      <span class="lat"
+                        ><span class="meter"
+                          ><i style="width: 55%; background: var(--accent)"></i></span
+                        >88ms</span
+                      >
+                      <span class="hpill green"><span class="hd"></span>HEALTHY</span>
+                    </div>
+                  </div>
+
+                  <!-- Bank IDLE -->
+                  <div class="card">
+                    <div class="qa">
+                      <button class="play" title="Launch">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </button>
+                      <button title="Chat">💬</button>
+                      <button title="More">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="5" cy="12" r="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <circle cx="19" cy="12" r="2" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="card-head">
+                      <div class="phone idle dim">
+                        <div class="notch"></div>
+                        <div class="pause">
+                          <svg viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="5" width="4" height="14" rx="1" />
+                            <rect x="14" y="5" width="4" height="14" rx="1" />
+                          </svg>
+                        </div>
+                        <div class="scr">
+                          <div class="mp mp-bank">
+                            <div class="logo">🏦</div>
+                            <div class="ln lbl"></div>
+                            <div class="ln"></div>
+                            <div class="ln lbl"></div>
+                            <div class="ln"></div>
+                            <div class="btn">Sign in</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="card-id">
+                        <div class="name-row">
+                          <span class="status-dot idle"></span><span class="nm">Bank-UK-03</span
+                          ><span class="last">1h ago</span>
+                        </div>
+                        <div class="chips">
+                          <span class="chip dev">iPhone 17</span>
+                          <span class="chip idle-c">○ idle</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="proxy">
+                      <span class="flag">🇬🇧</span><span class="ip">198.51.100.7</span
+                      ><span class="cc">UK</span>
+                      <span class="lat"
+                        ><span class="meter"
+                          ><i style="width: 34%; background: var(--accent)"></i></span
+                        >51ms</span
+                      >
+                      <span class="hpill green"><span class="hd"></span>HEALTHY</span>
+                    </div>
+                  </div>
+
+                  <!-- Meta Ads IDLE / slow -->
+                  <div class="card">
+                    <div class="qa">
+                      <button class="play" title="Launch">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </button>
+                      <button title="Chat">💬</button>
+                      <button title="More">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="5" cy="12" r="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <circle cx="19" cy="12" r="2" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="card-head">
+                      <div class="phone idle dim">
+                        <div class="notch"></div>
+                        <div class="pause">
+                          <svg viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="5" width="4" height="14" rx="1" />
+                            <rect x="14" y="5" width="4" height="14" rx="1" />
+                          </svg>
+                        </div>
+                        <div class="scr">
+                          <div class="mp mp-meta">
+                            <div class="top">Ads Manager</div>
+                            <div class="card2">
+                              <div class="bar" style="width: 70%"></div>
+                              <div class="bar" style="width: 45%"></div>
+                            </div>
+                            <div class="chart">
+                              <i style="height: 40%"></i><i style="height: 70%"></i
+                              ><i style="height: 55%"></i><i style="height: 90%"></i
+                              ><i style="height: 65%"></i>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="card-id">
+                        <div class="name-row">
+                          <span class="status-dot idle"></span><span class="nm">Meta-Ads-04</span
+                          ><span class="last">3h ago</span>
+                        </div>
+                        <div class="chips">
+                          <span class="chip dev">iPhone 17</span>
+                          <span class="chip idle-c">○ idle</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="proxy">
+                      <span class="flag">🇺🇸</span><span class="ip">192.0.2.55</span
+                      ><span class="cc">US</span>
+                      <span class="lat"
+                        ><span class="meter"
+                          ><i style="width: 78%; background: var(--amber)"></i></span
+                        >120ms</span
+                      >
+                      <span class="hpill amber"><span class="hd"></span>SLOW</span>
+                    </div>
+                  </div>
+
+                  <!-- Insta NO PROXY -->
+                  <div class="card">
+                    <div class="qa">
+                      <button class="play" title="Launch">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </button>
+                      <button title="Chat">💬</button>
+                      <button title="More">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="5" cy="12" r="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <circle cx="19" cy="12" r="2" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="card-head">
+                      <div class="phone idle dim">
+                        <div class="notch"></div>
+                        <div class="pause">
+                          <svg viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="5" width="4" height="14" rx="1" />
+                            <rect x="14" y="5" width="4" height="14" rx="1" />
+                          </svg>
+                        </div>
+                        <div class="scr">
+                          <div class="mp mp-insta">
+                            <div class="top">insta</div>
+                            <div class="img"></div>
+                            <div class="row">❤️ 💬 ✈️</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="card-id">
+                        <div class="name-row">
+                          <span class="status-dot idle"></span><span class="nm">Insta-BR-05</span
+                          ><span class="last">yesterday</span>
+                        </div>
+                        <div class="chips">
+                          <span class="chip dev">iPhone 17</span>
+                          <span class="chip idle-c">○ idle</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="proxy none">
+                      <span class="flag">🏳️</span><span class="ip">no proxy bound</span>
+                      <span class="lat">—</span>
+                      <span class="hpill grey"><span class="hd"></span>NO PROXY</span>
+                    </div>
+                  </div>
+
+                  <!-- Test re-test -->
+                  <div class="card">
+                    <div class="qa">
+                      <button class="play" title="Launch">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </button>
+                      <button title="Chat">💬</button>
+                      <button title="More">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="5" cy="12" r="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <circle cx="19" cy="12" r="2" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="card-head">
+                      <div class="phone idle dim">
+                        <div class="notch"></div>
+                        <div class="pause">
+                          <svg viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="5" width="4" height="14" rx="1" />
+                            <rect x="14" y="5" width="4" height="14" rx="1" />
+                          </svg>
+                        </div>
+                        <div class="scr"><div class="mp mp-test"></div></div>
+                      </div>
+                      <div class="card-id">
+                        <div class="name-row">
+                          <span class="status-dot idle"></span><span class="nm">Test-06</span
+                          ><span class="last">2d ago</span>
+                        </div>
+                        <div class="chips">
+                          <span class="chip dev">iPhone 17</span>
+                          <span class="chip idle-c">○ idle</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="proxy">
+                      <span class="flag">🇳🇱</span><span class="ip">203.0.113.77</span
+                      ><span class="cc">NL</span>
+                      <span class="lat" style="color: var(--ink-4)">stale · 2d</span>
+                      <span class="hpill orange"><span class="hd"></span>RE-TEST</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ===== 7. AI CHAT RAIL ===== -->
+              <div class="ai">
+                <div class="ai-head">
+                  <span class="orb"
+                    ><svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#04130d"
+                      stroke-width="2.2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path
+                        d="M12 3l1.8 4.6L18 9l-3.6 2.4L15 16l-3-2.5L9 16l.6-4.6L6 9l4.2-1.4L12 3z"
+                      /></svg
+                  ></span>
+                  <div class="ttl">AI Operator<small>Shopify-US-01 · session #4117</small></div>
+                  <span class="model-chip"
+                    ><span class="d"></span>Opus 4.8
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <path d="M6 9l6 6 6-6" /></svg
+                  ></span>
+                </div>
+
+                <div class="ai-body" id="aiBody">
+                  <div class="msg user">
+                    <div class="who">you</div>
+                    <div class="bubble">
+                      open shopify, add 3 items to cart, go to checkout, stop before paying
+                    </div>
+                  </div>
+
+                  <!-- typing placeholder, swapped to plan on load -->
+                  <div class="msg bot" id="typingSlot">
+                    <div class="who">
+                      <span
+                        class="d"
+                        style="
+                          width: 6px;
+                          height: 6px;
+                          border-radius: 50%;
+                          background: var(--accent-2);
+                          display: inline-block;
+                        "
+                      ></span
+                      >ai operator
+                    </div>
+                    <div class="typing"><i></i><i></i><i></i></div>
+                  </div>
+
+                  <!-- plan, revealed via JS -->
+                  <div class="msg bot" id="planSlot" style="display: none">
+                    <div class="who">
+                      <span
+                        style="
+                          width: 6px;
+                          height: 6px;
+                          border-radius: 50%;
+                          background: var(--accent-2);
+                          display: inline-block;
+                        "
+                      ></span
+                      >ai operator
+                    </div>
+                    <div class="plan">
+                      <div class="plan-top">
+                        <span class="lp">PLAN</span> Execution trace · 4 steps
+                      </div>
+                      <div class="steps">
+                        <div class="step done">
+                          <span class="ic">✓</span>
+                          <span class="tx"
+                            >navigated to <span class="code">shopify.com</span
+                            ><span class="ok">200</span></span
+                          >
+                        </div>
+                        <div class="step done">
+                          <span class="ic">✓</span>
+                          <span class="tx"
+                            >tapped <b style="color: var(--ink); font-weight: 600">"Add to cart"</b
+                            ><span class="mul">×3</span></span
+                          >
+                        </div>
+                        <div class="step done">
+                          <span class="ic">✓</span>
+                          <span class="tx"
+                            >navigated to <span class="code">/checkout</span
+                            ><span class="ok">200</span></span
+                          >
+                        </div>
+                        <div class="step">
+                          <span
+                            class="ic"
+                            style="
+                              background: rgba(245, 185, 66, 0.18);
+                              color: var(--amber);
+                              border: 1px solid rgba(245, 185, 66, 0.5);
+                            "
+                            >⏸</span
+                          >
+                          <span class="tx" style="color: var(--amber)">confirmation required</span>
+                        </div>
+                      </div>
+
+                      <!-- SAFETY GATE -->
+                      <div class="gate">
+                        <div class="gt">
+                          <span class="pause-ic">⏸</span>Consequential action — approval needed
+                        </div>
+                        <div class="desc">
+                          The agent is about to perform <b>"Place Order"</b>
+                          <span class="act">consequential</span>. Execution is paused at the safety
+                          gate until you approve.
+                        </div>
+                        <div class="gate-btns">
+                          <button class="gbtn approve">
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="3"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                            >
+                              <path d="M20 6L9 17l-5-5" /></svg
+                            >Approve
+                          </button>
+                          <button class="gbtn deny">
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="3"
+                              stroke-linecap="round"
+                            >
+                              <line x1="18" y1="6" x2="6" y2="18" />
+                              <line x1="6" y1="6" x2="18" y2="18" /></svg
+                            >Deny
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="cost">
+                      <span class="cb"><b>$0.0023</b></span>
+                      <span class="cb">145 tok</span>
+                      <span class="cb"><span class="m">Opus 4.8</span></span>
+                      <span class="cb">1.8s</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- token budget meter -->
+                <div class="budget">
+                  <div class="br">
+                    <span>SESSION BUDGET</span><span><b>$0.34</b> / $1.00</span>
+                  </div>
+                  <div class="track"><i></i></div>
+                </div>
+
+                <!-- chat input -->
+                <div class="ai-input">
+                  <div class="slash">
+                    <span class="sc">/navigate</span>
+                    <span class="sc">/screenshot</span>
+                    <span class="sc">/extract</span>
+                  </div>
+                  <div class="input-box">
+                    <input type="text" placeholder="Message the operator…  try /navigate" />
+                    <button class="send">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="#04130d"
+                        stroke-width="2.4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        /* ---- theme toggle ---- */
+        var root = document.documentElement;
+        var tBtn = document.getElementById('themeToggle');
+        var tIcon = document.getElementById('themeIcon');
+        var sun =
+          '<circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="4.5" y1="4.5" x2="6.5" y2="6.5"/><line x1="17.5" y1="17.5" x2="19.5" y2="19.5"/><line x1="4.5" y1="19.5" x2="6.5" y2="17.5"/><line x1="17.5" y1="6.5" x2="19.5" y2="4.5"/>';
+        var moon = '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>';
+        tBtn.addEventListener('click', function () {
+          var light = root.getAttribute('data-theme') === 'light';
+          root.setAttribute('data-theme', light ? 'dark' : 'light');
+          tIcon.innerHTML = light ? moon : sun;
+        });
+
+        /* ---- animated count-up ---- */
+        function easeOut(t) {
+          return 1 - Math.pow(1 - t, 3);
+        }
+        document.querySelectorAll('[data-count]').forEach(function (el) {
+          var target = parseFloat(el.getAttribute('data-count'));
+          var dec = parseInt(el.getAttribute('data-dec') || '0', 10);
+          var unit = el.querySelector('.u');
+          var unitHTML = unit ? unit.outerHTML : '';
+          var dur = 1100,
+            start = null;
+          function step(ts) {
+            if (!start) start = ts;
+            var p = Math.min((ts - start) / dur, 1);
+            var v = target * easeOut(p);
+            el.firstChild.nodeValue = dec ? v.toFixed(dec) : Math.round(v).toString();
+            if (unit) {
+              /* keep unit appended */
+            }
+            if (p < 1) requestAnimationFrame(step);
+            else
+              el.firstChild.nodeValue = dec ? target.toFixed(dec) : Math.round(target).toString();
+          }
+          requestAnimationFrame(step);
+        });
+
+        /* ---- health ring ---- */
+        var ring = document.getElementById('healthRing');
+        if (ring) {
+          var circ = 2 * Math.PI * 22; // ~138.2
+          ring.setAttribute('stroke-dasharray', circ.toFixed(1));
+          setTimeout(function () {
+            ring.style.transition = 'stroke-dashoffset 1.3s cubic-bezier(.2,.7,.2,1)';
+            ring.setAttribute('stroke-dashoffset', (circ * (1 - 0.994)).toFixed(2));
+          }, 120);
+        }
+
+        /* ---- sparklines ---- */
+        document.querySelectorAll('.spark').forEach(function (svg) {
+          var pts = svg.getAttribute('data-spark').split(',').map(Number);
+          var acc = svg.getAttribute('data-acc') || '#22d3ee';
+          var W = 200,
+            H = 26,
+            pad = 2;
+          var min = Math.min.apply(null, pts),
+            max = Math.max.apply(null, pts);
+          var rng = max - min || 1;
+          var coords = pts.map(function (v, i) {
+            var x = pad + (i / (pts.length - 1)) * (W - 2 * pad);
+            var y = pad + (1 - (v - min) / rng) * (H - 2 * pad);
+            return [x, y];
+          });
+          var d = coords
+            .map(function (c, i) {
+              return (i ? 'L' : 'M') + c[0].toFixed(1) + ' ' + c[1].toFixed(1);
+            })
+            .join(' ');
+          var area = d + ' L' + (W - pad) + ' ' + (H - pad) + ' L' + pad + ' ' + (H - pad) + ' Z';
+          var gid = 'g' + Math.random().toString(36).slice(2, 7);
+          svg.innerHTML =
+            '<defs><linearGradient id="' +
+            gid +
+            '" x1="0" y1="0" x2="0" y2="1">' +
+            '<stop offset="0" stop-color="' +
+            acc +
+            '" stop-opacity="0.28"/>' +
+            '<stop offset="1" stop-color="' +
+            acc +
+            '" stop-opacity="0"/></linearGradient></defs>' +
+            '<path d="' +
+            area +
+            '" fill="url(#' +
+            gid +
+            ')"/>' +
+            '<path d="' +
+            d +
+            '" fill="none" stroke="' +
+            acc +
+            '" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>' +
+            '<circle cx="' +
+            coords[coords.length - 1][0].toFixed(1) +
+            '" cy="' +
+            coords[coords.length - 1][1].toFixed(1) +
+            '" r="2.1" fill="' +
+            acc +
+            '"/>';
+        });
+
+        /* ---- AI: typing then reveal plan ---- */
+        setTimeout(function () {
+          var typing = document.getElementById('typingSlot');
+          var plan = document.getElementById('planSlot');
+          if (typing && plan) {
+            typing.style.display = 'none';
+            plan.style.display = 'block';
+            plan.classList.add('reveal');
+            var body = document.getElementById('aiBody');
+            if (body) body.scrollTop = body.scrollHeight;
+          }
+        }, 1900);
+
+        /* ---- live ticking clock for "Refreshed" ---- */
+        var refEl = document.getElementById('refTime');
+        function tick() {
+          var d = new Date();
+          var h = d.getHours(),
+            m = d.getMinutes(),
+            s = d.getSeconds();
+          var ap = h >= 12 ? 'PM' : 'AM';
+          h = h % 12;
+          if (h === 0) h = 12;
+          function p(n) {
+            return (n < 10 ? '0' : '') + n;
+          }
+          refEl.innerHTML = h + ':' + p(m) + ':' + p(s) + '&nbsp;' + ap;
+        }
+        /* keep the spec timestamp briefly, then go live */
+        setTimeout(function () {
+          tick();
+          setInterval(tick, 1000);
+        }, 2600);
+
+        /* ---- gate buttons (demo feedback) ---- */
+        document.querySelectorAll('.gbtn').forEach(function (b) {
+          b.addEventListener('click', function () {
+            var gate = b.closest('.gate');
+            var approved = b.classList.contains('approve');
+            gate.innerHTML =
+              '<div class="gt" style="color:' +
+              (approved ? 'var(--accent)' : 'var(--red)') +
+              '">' +
+              '<span class="pause-ic" style="background:' +
+              (approved ? 'rgba(0,229,160,.18)' : 'rgba(255,90,106,.18)') +
+              ';border-color:' +
+              (approved ? 'rgba(0,229,160,.5)' : 'rgba(255,90,106,.5)') +
+              '">' +
+              (approved ? '✓' : '✕') +
+              '</span>' +
+              (approved ? 'Approved — placing order…' : 'Denied — execution stopped') +
+              '</div>';
+            gate.style.animation = 'none';
+            gate.style.borderColor = approved ? 'rgba(0,229,160,.4)' : 'rgba(255,90,106,.4)';
+          });
+        });
+
+        /* ---- folder selection ---- */
+        document.querySelectorAll('.folder').forEach(function (f) {
+          f.addEventListener('click', function () {
+            document.querySelectorAll('.folder').forEach(function (x) {
+              x.classList.remove('on');
+            });
+            f.classList.add('on');
+          });
+        });
+
+        /* ---- nav selection ---- */
+        document.querySelectorAll('.nav-item').forEach(function (n) {
+          n.addEventListener('click', function () {
+            document.querySelectorAll('.nav-item').forEach(function (x) {
+              x.classList.remove('active');
+            });
+            n.classList.add('active');
+          });
+        });
+
+        /* ---- slash command insert ---- */
+        document.querySelectorAll('.slash .sc').forEach(function (sc) {
+          sc.addEventListener('click', function () {
+            var inp = document.querySelector('.input-box input');
+            inp.value = sc.textContent + ' ';
+            inp.focus();
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>
