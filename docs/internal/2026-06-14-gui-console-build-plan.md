@@ -56,8 +56,11 @@ gradients.
       (keeps prior state on failure); `testingProxyId` drives the "Testing…" disabled state. Optional
       follow-ups deferred: auto-probe-stale-on-load + explicit health pills (healthy/slow/re-test) —
       fold into S4. tsc/eslint/prettier + gui-jsdom 525 + ProfilesView parity 18 green.
-- [ ] **S4** Console-density restyle of the hub: stat tiles (count-up + sparkline/health-ring, mono
-      numerals), denser card grid, tighter spacing rhythm, hairline dividers — match `console.html`.
+- [~] **S4** Console-density restyle of the hub — IN PROGRESS. ✅ Stat tiles: HubStat now uses mono
+  tabular-nums tracking-tight numerals + the app `section-label` caption (the console.html "metric"
+  feel). ⏳ REMAINING: denser card grid + tighter spacing rhythm + optional sparkline/health-ring +
+  count-up animation. (Doing the full hub re-layout blind is risky — incrementing in safe bounded
+  pieces, verified at rebuild #3.)
 - [ ] **MILESTONE → Tauri rebuild #1** (founder sees the new hub).
 
 ### P2 — AI chat (headline)

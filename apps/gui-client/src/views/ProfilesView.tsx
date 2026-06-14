@@ -2410,14 +2410,16 @@ function FolderPicker({
 }
 
 function HubStat({ n, l, tone }: { n: string; l: string; tone?: 'ok' }): JSX.Element {
+  // S4 — Console-density stat tile: mono tabular numerals (the "metric" feel
+  // from console.html) + the app's section-label for the caption.
   return (
     <div className="rounded-md border border-surface-divider bg-surface-raised px-3 py-2">
       <p
-        className={`text-lg font-semibold ${tone === 'ok' ? 'text-status-ready' : 'text-ink-primary'}`}
+        className={`mono text-xl font-semibold tabular-nums tracking-tight ${tone === 'ok' ? 'text-status-ready' : 'text-ink-primary'}`}
       >
         {n}
       </p>
-      <p className="text-2xs text-ink-muted">{l}</p>
+      <p className="section-label mt-0.5">{l}</p>
     </div>
   );
 }
