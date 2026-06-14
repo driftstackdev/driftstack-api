@@ -6,10 +6,12 @@
 // The Console restyle (2026-06-14) replaced the inline result row's
 // prose headlines with a structured card: a HEALTH PILL verdict
 // (healthy / slow / auth fail / unreachable / untested), a latency
-// meter ("<n>ms"), a UDP badge, and a test-detail block deriving the
-// QUIC + WebRTC capability line. These tests assert the SAME states
-// the old copy did — in particular that a reachable-but-auth-rejected
-// probe reads "auth fail", never the misleading "unreachable".
+// meter ("<n>ms"), and — since the G1 "professional UDP" pass — a
+// protocol-capability chip row (WebRTC / QUIC / HTTP-2, each ✓ or
+// fell-back via data-ok) in place of the bare "UDP" badge + prose
+// QUIC/WebRTC line. These tests assert the SAME states the old copy
+// did — in particular that a reachable-but-auth-rejected probe reads
+// "auth fail", never the misleading "unreachable".
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -51,7 +53,7 @@ describe('ProxiesView "Test" button result card', () => {
     testProxy.mockReset();
   });
 
-  it('reachable + auth ok + UDP + fast → "healthy" pill + "<ms>" latency + a UDP badge', async () => {
+  it('reachable + auth ok + UDP + fast → "healthy" pill + "<ms>" latency + protocol chips', async () => {
     testProxy.mockResolvedValue({
       reachable: true,
       auth_ok: true,
@@ -66,9 +68,11 @@ describe('ProxiesView "Test" button result card', () => {
     expect(await screen.findByText('healthy')).toBeTruthy();
     // Latency meter value (mono "<n>ms").
     expect(screen.getByText('42ms')).toBeTruthy();
-    // UDP badge present on a UDP-capable exit (the proxy-row badge is the
-    // literal "UDP"; the QUIC line is a separate, longer text node).
-    expect(screen.getByText('UDP')).toBeTruthy();
+    // Professional protocol-capability chips on a UDP-capable exit
+    // (replaced the bare "UDP" badge): WebRTC + QUIC + HTTP/2.
+    expect(screen.getByText('WebRTC')).toBeTruthy();
+    expect(screen.getByText('QUIC')).toBeTruthy();
+    expect(screen.getByText('HTTP/2')).toBeTruthy();
   });
 
   it('reachable + auth ok + UDP but slow (>100ms) → "slow" pill (not "healthy")', async () => {
@@ -102,7 +106,7 @@ describe('ProxiesView "Test" button result card', () => {
     expect(screen.queryByText('unreachable')).toBeNull();
   });
 
-  it('unreachable → "unreachable" pill with no UDP badge', async () => {
+  it('unreachable → "unreachable" pill, no protocol chips, "no egress" note', async () => {
     testProxy.mockResolvedValue({
       reachable: false,
       auth_ok: false,
@@ -114,10 +118,10 @@ describe('ProxiesView "Test" button result card', () => {
     await clickTestAndSettle();
 
     expect(await screen.findByText('unreachable')).toBeTruthy();
-    // No UDP capability badge when the exit isn't even reachable — the
-    // badge slot reads "no relay" instead, and there is no "UDP" node.
-    expect(screen.queryByText('UDP')).toBeNull();
-    expect(screen.getByText('no relay')).toBeTruthy();
+    // No protocol-capability chips when the exit isn't even reachable — the
+    // slot reads "no egress" instead, and there is no WebRTC chip.
+    expect(screen.queryByText('WebRTC')).toBeNull();
+    expect(screen.getByText('no egress')).toBeTruthy();
   });
 });
 
@@ -126,7 +130,7 @@ describe('capability board (approved proxy-health port)', () => {
     testProxy.mockReset();
   });
 
-  it('UDP-capable result renders the derived "QUIC + WebRTC ride UDP" line + pool stats appear after a test', async () => {
+  it('UDP-capable result renders the protocol chips (all ok) + pool stats appear after a test', async () => {
     testProxy.mockResolvedValue({
       reachable: true,
       auth_ok: true,
@@ -134,16 +138,19 @@ describe('capability board (approved proxy-health port)', () => {
       latency_ms: 42,
       message: 'ok',
     });
-    render(<ProxiesView />);
+    const { container } = render(<ProxiesView />);
     await clickTestAndSettle();
-    expect(await screen.findByText('QUIC + WebRTC ride UDP')).toBeInTheDocument();
+    // The capability chips render with every protocol ok (data-ok="true").
+    expect(await screen.findByText('WebRTC')).toBeInTheDocument();
+    expect(container.querySelector('[data-capability="webrtc"][data-ok="true"]')).not.toBeNull();
+    expect(container.querySelector('[data-capability="quic"][data-ok="true"]')).not.toBeNull();
     // Pool stats are derived over TESTED proxies only.
     expect(screen.getByText('Tested')).toBeInTheDocument();
     expect(screen.getByText('1 / 1')).toBeInTheDocument();
-    expect(screen.getByText('Full-stack (UDP)')).toBeInTheDocument();
+    expect(screen.getByText('WebRTC + QUIC')).toBeInTheDocument();
   });
 
-  it('no-UDP result renders the honest fallback line (h2 / TURN)', async () => {
+  it('no-UDP result shows WebRTC + QUIC as fell-back (data-ok="false"), HTTP/2 ok', async () => {
     testProxy.mockResolvedValue({
       reachable: true,
       auth_ok: true,
@@ -151,9 +158,12 @@ describe('capability board (approved proxy-health port)', () => {
       latency_ms: 42,
       message: 'no udp',
     });
-    render(<ProxiesView />);
+    const { container } = render(<ProxiesView />);
     await clickTestAndSettle();
-    expect(await screen.findByText('QUIC + WebRTC fall back to h2 / TURN')).toBeInTheDocument();
+    await screen.findByText('WebRTC');
+    expect(container.querySelector('[data-capability="webrtc"][data-ok="false"]')).not.toBeNull();
+    expect(container.querySelector('[data-capability="quic"][data-ok="false"]')).not.toBeNull();
+    expect(container.querySelector('[data-capability="http2"][data-ok="true"]')).not.toBeNull();
   });
 
   it('Test all probes every saved proxy and disables while running', async () => {
@@ -183,7 +193,7 @@ describe('capability board (approved proxy-health port)', () => {
       latency_ms: 10,
       message: 'ok',
     });
-    expect(await screen.findByText('QUIC + WebRTC ride UDP')).toBeInTheDocument();
+    expect(await screen.findByText('WebRTC')).toBeInTheDocument();
     await waitFor(() => {
       expect(testProxy).toHaveBeenCalledTimes(1); // one saved proxy in the mock store
     });

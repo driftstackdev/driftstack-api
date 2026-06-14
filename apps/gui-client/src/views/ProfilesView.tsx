@@ -33,6 +33,7 @@ import {
   type ProfileStatusFilter,
 } from '../components/ProfilesActionBar';
 import { ProxyChip } from '../components/ProxyChip';
+import { ProxyCapabilityChips } from '../components/ProxyCapabilities';
 import { RelativeTime } from '../components/RelativeTime';
 import { ARCHETYPE_REGISTRY, type ArchetypeStatus, type LiveKitInfo } from '@driftstack/sdk';
 import { openSimulatorWindow } from '../lib/open-simulator';
@@ -1450,29 +1451,6 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                               <span className="mono truncate text-[10px] text-ink-muted">
                                 {px.label} · {px.host}:{px.port}
                               </span>
-                              {probe ? (
-                                <span
-                                  className={`shrink-0 rounded-sm px-1 py-px text-[9px] ${
-                                    probe.result.udp_associate
-                                      ? 'bg-status-ready/15 text-status-ready'
-                                      : 'bg-surface-inset text-ink-muted line-through'
-                                  }`}
-                                  title={
-                                    probe.result.udp_associate
-                                      ? 'UDP relay verified — QUIC + WebRTC tunnel through this exit.'
-                                      : 'No UDP relay on last test — sessions fall back to h2 / TURN-over-TCP.'
-                                  }
-                                >
-                                  UDP
-                                </span>
-                              ) : (
-                                <span
-                                  className="shrink-0 rounded-sm bg-surface-inset px-1 py-px text-[9px] text-ink-muted"
-                                  title="Never probed — click Test to check it."
-                                >
-                                  untested
-                                </span>
-                              )}
                               {probe?.at !== undefined ? (
                                 <span
                                   className={`shrink-0 rounded-[5px] px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${
@@ -1497,6 +1475,18 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                                 {testingProxyId === px.id ? 'Testing…' : 'Test'}
                               </button>
                             </div>
+                            {/* Protocol capabilities — Has WebRTC / QUIC / HTTP-2,
+                              derived from the probe (founder ask: pro UDP). */}
+                            {probe ? (
+                              <ProxyCapabilityChips result={probe.result} size="xs" />
+                            ) : (
+                              <span
+                                className="w-fit rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
+                                title="Never probed — click Test to check egress protocols."
+                              >
+                                untested
+                              </span>
+                            )}
                             {probe?.at !== undefined && (
                               <span className="text-[9.5px] text-ink-muted">
                                 checked{' '}
@@ -2349,15 +2339,7 @@ function CreateProfileModal({
                               : 'Not reachable'}
                           </span>
                           {testResult.reachable && (
-                            <span
-                              className={`rounded-sm px-1 py-0.5 ${
-                                testResult.udp_associate
-                                  ? 'bg-status-success/20'
-                                  : 'bg-surface-divider text-ink-muted'
-                              }`}
-                            >
-                              {testResult.udp_associate ? 'UDP ✓' : 'UDP ✗'}
-                            </span>
+                            <ProxyCapabilityChips result={testResult} size="sm" />
                           )}
                         </div>
                         <span className="text-ink-secondary">{testResult.message}</span>

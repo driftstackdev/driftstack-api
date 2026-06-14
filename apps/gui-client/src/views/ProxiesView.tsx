@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { RelativeTime } from '../components/RelativeTime';
 import { SkeletonRows } from '../components/Skeleton';
+import { ProxyCapabilityChips } from '../components/ProxyCapabilities';
 import {
   addProxy,
   listProxies,
@@ -265,7 +266,7 @@ export function ProxiesView(): JSX.Element {
         >
           <PoolStat k="Tested" v={`${String(tested.length)} / ${String(state.proxies.length)}`} />
           <PoolStat k="Healthy" v={String(healthy.length)} tone="ok" />
-          <PoolStat k="Full-stack (UDP)" v={String(udpCapable.length)} tone="ok" />
+          <PoolStat k="WebRTC + QUIC" v={String(udpCapable.length)} tone="ok" />
         </div>
       )}
 
@@ -481,56 +482,32 @@ function ProxyCard({
           <span className="mono truncate text-[10px] text-ink-muted">
             {p.host}:{p.port}
           </span>
-          {result !== undefined && reachable ? (
-            <span
-              className={`shrink-0 rounded-sm px-1 py-px text-[9px] ${
-                result.udp_associate
-                  ? 'bg-status-ready/15 text-status-ready'
-                  : 'bg-surface-inset text-ink-muted line-through'
-              }`}
-              title={
-                result.udp_associate
-                  ? 'UDP relay verified — QUIC + WebRTC tunnel through this exit.'
-                  : 'No UDP relay on last test — sessions fall back to h2 / TURN-over-TCP.'
-              }
-            >
-              UDP
-            </span>
-          ) : (
-            <span
-              className="shrink-0 rounded-sm bg-surface-inset px-1 py-px text-[9px] text-ink-muted"
-              title="Never probed — click Test to check it."
-            >
-              {result !== undefined ? 'no relay' : 'untested'}
-            </span>
-          )}
           <span className="ml-auto shrink-0 text-[9.5px] text-ink-muted">
             <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
           </span>
         </div>
+        {/* Protocol capabilities — honest "Has WebRTC / QUIC / HTTP-2"
+            breakdown derived from the probe (replaces the bare UDP badge). */}
+        {result !== undefined && reachable ? (
+          <ProxyCapabilityChips result={result} size="xs" />
+        ) : (
+          <span
+            className="w-fit rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
+            title={
+              result !== undefined
+                ? 'Exit down on last test — no protocols verified.'
+                : 'Never probed — click Test to check egress protocols.'
+            }
+          >
+            {result !== undefined ? 'no egress' : 'untested'}
+          </span>
+        )}
       </div>
 
       {/* TEST DETAIL — shown only once probed. Exit-geo line + QUIC/WebRTC
           derivation + the raw probe message, all from the real result. */}
       {result !== undefined && (
         <div role="status" className="flex flex-col gap-1 text-[10px]">
-          {reachable && (
-            <span
-              className={`flex items-center gap-1.5 ${
-                result.udp_associate ? 'text-status-ready' : 'text-ink-muted'
-              }`}
-              title={
-                result.udp_associate
-                  ? 'UDP ASSOCIATE works — sessions can speak h3 and gather WebRTC candidates through this exit.'
-                  : 'No UDP relay — sessions fall back to h2 and TURN-over-TCP through this exit.'
-              }
-            >
-              <span aria-hidden="true">{result.udp_associate ? '✓' : '○'}</span>
-              {result.udp_associate
-                ? 'QUIC + WebRTC ride UDP'
-                : 'QUIC + WebRTC fall back to h2 / TURN'}
-            </span>
-          )}
           {healthy && exit !== undefined && (
             <span className="text-ink-secondary">
               {exit !== null ? (

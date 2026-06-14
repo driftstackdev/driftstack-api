@@ -161,6 +161,17 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   behavioral + 4 view content-parity) · tsc OK + gui-jsdom 526 (67 files) + 4 view content-parity 43
   green · VISIBLE after rebuild #5. + greatness backlog saved (2026-06-14-gui-greatness-backlog.md).
 
+### P6 — founder 5→10 directive (round 2; see 2026-06-14-gui-5to10-plan.md)
+
+- G1 Professional proxy protocol capabilities · (this commit) · founder ask "UDP can be made more
+  professional — Has WebRTC, Has QUIC, etc." → new shared `components/ProxyCapabilities` (pure
+  `proxyCapabilities()` deriving WebRTC/QUIC/HTTP-2 from the SOCKS5 probe + a `ProxyCapabilityChips`
+  component); replaced the bare "UDP" badge + prose QUIC/WebRTC line in BOTH ProxiesView (card row +
+  pool stat "WebRTC + QUIC") and ProfilesView (hub card proxy row + create/test modal). new
+  proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
+  prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
+  Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
+
 ### P5 — greatness backlog (Tier-1 quick-wins; see 2026-06-14-gui-greatness-backlog.md)
 
 - QW1 Save-as-recipe · `7cccb488` · AgentChatView "Save as recipe" button + dialog →
@@ -175,7 +186,10 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   Settings) + global ⌘⇧D mode toggle · new theme-switcher.test.tsx (5 tests) · tsc/eslint/prettier OK
   - App content-parity 12 + gui-jsdom 536 green · VISIBLE after rebuild #5.
 
-- FIX2 AI-chat approve double-bubble · (this commit) · **real UX bug found via fresh-eyes audit** —
+- ✅✅ **Tauri rebuild #5 INSTALLED + RE-SIGNED + VERIFIED** 2026-06-14 (build task `bzdq2h4uy`, exit 0).
+  Carried S14+QW1+QW2+QW3+FIX1+FIX2 into /Applications/Driftstack.app; re-sealed via `codesign --force
+--deep -s -` → valid on disk + satisfies DR. .prev (rebuild #4) backup left intact.
+- FIX2 AI-chat approve double-bubble · `1cd06a9c` · **real UX bug found via fresh-eyes audit** —
   `useAgentChat.approve()` re-sent `lastUserMessage` through `post()`, which unconditionally appended a
   user bubble → clicking Approve echoed the user's original message as a fresh request (misleading; the
   user clicked a button). Fix: `post` takes `{appendUserTurn?}`; approve passes `false` so the approval
