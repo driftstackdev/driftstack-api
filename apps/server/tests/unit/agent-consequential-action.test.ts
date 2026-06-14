@@ -114,4 +114,43 @@ describe('W443 classifyConsequentialAction', () => {
       s.replace(/[!-~]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0xfee0)).replace(/ /g, ' ');
     expect(classifyConsequentialAction(tap(fullwidth('Buy Now'))).category).toBe('purchase');
   });
+
+  it('defeats invisible-char evasion via the full Default_Ignorable class (chars the original hand-rolled set MISSED)', () => {
+    // Each of these survives NFKC AND the original EVASION_CHARS set, and breaks
+    // the \b word boundary in the keyword regex — i.e. each WAS a real bypass of
+    // this safety gate (a crafted page label "Buy<invisible> Now" tapped without a
+    // confirmation prompt) until EVASION_CHARS was widened to \p{Default_Ignorable}.
+    const missed: Record<string, string> = {
+      'U+00AD soft hyphen': '­',
+      'U+034F combining grapheme joiner': '͏',
+      'U+2061 function application': '⁡',
+      'U+2062 invisible times': '⁢',
+      'U+115F hangul choseong filler': 'ᅟ',
+      'U+180E mongolian vowel separator': '᠎',
+      'U+FE00 variation selector-1': '︀',
+      'U+E0061 tag latin small a': '\u{E0061}',
+    };
+    for (const [name, ch] of Object.entries(missed)) {
+      // splice the invisible char both INSIDE a word and at the word boundary
+      expect(classifyConsequentialAction(tap(`Buy${ch} Now`)).category, `${name} (purchase)`).toBe(
+        'purchase',
+      );
+      expect(
+        classifyConsequentialAction(tap(`delete${ch} account`)).category,
+        `${name} (account_deletion)`,
+      ).toBe('account_deletion');
+    }
+  });
+
+  it('does NOT strip ordinary combining accents — visible text is preserved (no false negatives on accented benign labels)', () => {
+    // Default_Ignorable excludes normal combining marks (U+0301 etc.), so an
+    // accented benign label is unaffected (stays unflagged) and an accented form
+    // of a keyword still normalizes correctly rather than being mangled.
+    const acute = '́'; // combining acute accent (NOT default-ignorable)
+    // "café"-style benign label remains benign (no spurious confirmation)
+    expect(classifyConsequentialAction(tap(`cafe${acute} menu`)).requiresConfirmation).toBe(false);
+    // a plain "Buy Now" with a stray accent on an unrelated word still matches the
+    // keyword (the accent is preserved on the other word, the keyword is intact)
+    expect(classifyConsequentialAction(tap(`Buy Now (nai${acute}ve)`)).category).toBe('purchase');
+  });
 });

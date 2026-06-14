@@ -55,14 +55,24 @@ const NO_CONFIRMATION: ConsequentialActionVerdict = { requiresConfirmation: fals
 // compatibility-form evasion can't slip a consequential action past the guard:
 //   - NFKC folds fullwidth + compatibility forms ("Ｄｅｌｅｔｅ" → "Delete") and
 //     no-break / exotic spaces → regular spaces.
-//   - then strip zero-width + bidi controls (U+200B-200D ZW space/non-joiner/
-//     joiner, U+2060 word-joiner, U+FEFF ZWNBSP, U+202A-202E bidi embed/
-//     override, U+2066-2069 bidi isolates) so "Delete" / RLO-wrapped text
-//     collapses to the bare keyword.
+//   - then strip the full Unicode Default_Ignorable_Code_Point class so ANY
+//     invisible / non-rendering char spliced into a keyword collapses out. This
+//     SUBSUMES the original zero-width + bidi set (U+200B-200D, U+2060 word-
+//     joiner, U+FEFF ZWNBSP, U+202A-202E bidi embed/override, U+2066-2069 bidi
+//     isolates — kept explicit in the class for documentation) PLUS the chars the
+//     hand-rolled set MISSED: U+00AD soft hyphen, U+034F combining grapheme
+//     joiner, U+115F/U+1160/U+3164 Hangul fillers, U+180B-180E Mongolian
+//     selectors, U+2061-2064 invisible math operators, U+FE00-FE0F variation
+//     selectors, U+E0000-E0FFF tags/supplementary VS, etc. Those survive NFKC and
+//     break the \b word boundary in the keyword regexes (e.g. "Buy<U+2062> Now" →
+//     no match) — an invisible-char bypass of this guard (empirically verified).
+//     Default_Ignorable EXCLUDES ordinary combining accents (U+0301 etc.), so
+//     visible text like "café"/"naïve" is preserved unchanged.
 // RESIDUAL: cross-script homoglyph substitution (Cyrillic "е" for Latin "e") is
 // NOT folded by NFKC — caught by the v1.1 LLM-semantic classifier, out of scope
 // for this conservative v1.0 keyword matcher.
-const EVASION_CHARS = /[\u200B-\u200D\u2060\uFEFF\u202A-\u202E\u2066-\u2069]/g;
+const EVASION_CHARS =
+  /[\u200B-\u200D\u2060\uFEFF\u202A-\u202E\u2066-\u2069\p{Default_Ignorable_Code_Point}]/gu;
 
 function normalizeForMatch(text: string): string {
   return text.normalize('NFKC').replace(EVASION_CHARS, '');

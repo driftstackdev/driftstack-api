@@ -122,8 +122,10 @@ api.driftstack.dev wss://*.driftstack.dev:* *.ingest.de.sentry.io; …`) in
    yet exploitable). Detail: `project_bundled_llm_softcap_burst_overrun_surfaced`.
 
 9. **Agent run-loop prompt-injection frame — observation-as-`assistant` (LATENT defense-in-depth).**
-   Found by the adversarial run-loop audit workflow (the prompt-injection lens; code-verified by me,
-   adversarial-verification pending the workflow re-run). `agent-decomposer-claude.ts buildMessages()`
+   Found by the adversarial run-loop audit workflow (prompt-injection lens; code-verified by me).
+   **The workflow's own 3 adversarial verifiers later REFUTED it 2/3 as not a live exploit** —
+   corroborating the LATENT assessment below (keep it as a defense-in-depth item, NOT a confirmed
+   live bug). `agent-decomposer-claude.ts buildMessages()`
    (line 292) maps every non-`user` transcript entry to the Anthropic `assistant` role. Executor-
    result summaries are appended with `role: 'agent'` (agent-executor.ts:455) and, in the WIRED
    `RealAgentExecutor`, embed page-derived attacker-controllable text (e.g. `finalUrl` after a
@@ -146,6 +148,34 @@ api.driftstack.dev wss://*.driftstack.dev:* *.ingest.de.sentry.io; …`) in
    array the model sees → behavior risk that needs a model eval I can't run in autopilot; and it
    should land WITH the Agent-1 webkit-driver / RealAgentExecutor wiring it defends. Detail:
    `project_agent_runloop_prompt_injection_frame_surfaced`.
+
+10. **Consequential-action approval — server-side pre-validation (HARD gate vs advisory?).** Found +
+    3/3-confirmed by the 4th adversarial run-loop audit; code-verified. `POST
+/v1/agent-sessions/:id/message` (agent-sessions.ts:1648-1655) builds the approved-actions set
+    directly from the client-supplied `approve_consequential_actions` array with **no server-side
+    check that each `{category, matched_text}` was actually shown to the customer in a prior
+    `confirmation_required` result** (no pending-confirmation store, no transcript cross-reference).
+    So a client can pre-approve a common phrase ("buy now", "delete account") on turn 1 and the
+    executor dispatches a matching consequential action **without ever showing a confirmation prompt**
+    — the W443/W445 human-in-the-loop gate is client-cooperative/advisory, not a server-enforced
+    guarantee. **Threat-model nuance** (why surfaced, not auto-flipped): the customer OWNS the session,
+    so pre-approving their own agent's actions is arguably their choice, and a compromised session
+    token could complete the normal confirmation loop anyway — so this only matters if the gate must
+    be a HARD guarantee (e.g. liability: "we ALWAYS require confirmation for purchases"). **Decision:
+    keep it advisory, or harden** to require an approval to reference a real prior confirmation
+    (server-side pending-confirmation tracking — a protocol change). Detail:
+    `project_agent_runloop_adversarial_audit_findings`.
+
+11. **Token-budget concurrent-turn overspend — same class as #8 (accept vs make atomic).** Found +
+    3/3-confirmed by the 4th adversarial audit; code-verified. Two concurrent `runTurn` on the SAME
+    agent-session both read `tokenBudgetRemaining`, both pass the decompose estimate pre-check
+    (decomposer-claude.ts:185), both call the real LLM, both debit → the per-session token budget is
+    overspent (debitTokens floors at 0, so no negative — but the customer gets >1 turn's work for a
+    1-turn budget). This is the **same non-atomic check-then-act class as the bundled soft-cap burst
+    race (#8)**; bounded by the `agent_sessions:message` rate limiter. The atomic fix (conditional
+    `UPDATE ... WHERE remaining >= tokens RETURNING`, or an advisory lock) adds per-turn latency. Best
+    decided TOGETHER with #8 (accept the bounded overrun on both, or harden both). Detail:
+    `project_agent_runloop_adversarial_audit_findings`.
 
 ## Minor / awaiting a nod
 
