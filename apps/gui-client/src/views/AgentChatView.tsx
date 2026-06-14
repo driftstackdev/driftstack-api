@@ -78,6 +78,7 @@ export function AgentChatView(): JSX.Element {
       toasts.push({
         title: 'Recipe saved',
         body: `“${recipe.label}” captured from this chat — replay it from Recipes.`,
+        tone: 'success',
       });
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Could not save the recipe.');

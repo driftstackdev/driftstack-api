@@ -48,6 +48,26 @@ describe('ToastProvider', () => {
     expect(screen.queryByText('Crash')).toBeNull();
   });
 
+  it('tones the toast: success → status role + ready border/dot, error → alert + error border', () => {
+    const { push } = setup();
+    push({ title: 'Recipe saved', tone: 'success' });
+    const ok = screen.getByRole('status');
+    expect(ok.className).toContain('border-status-ready');
+    expect(ok.querySelector('.bg-status-ready')).not.toBeNull();
+
+    push({ title: 'Save failed', tone: 'error' });
+    const bad = screen.getByRole('alert');
+    expect(bad.className).toContain('border-status-error');
+    expect(bad.querySelector('.bg-status-error')).not.toBeNull();
+  });
+
+  it('defaults an untoned toast to info (status role, divider border)', () => {
+    const { push } = setup();
+    push({ title: 'plain' });
+    const info = screen.getByRole('status');
+    expect(info.className).toContain('border-surface-divider');
+  });
+
   it('caps the visible stack at 3 (oldest dropped)', () => {
     const { push } = setup();
     for (const n of ['one', 'two', 'three', 'four']) push({ title: n });

@@ -18,9 +18,22 @@ export interface Toast {
   body?: string;
   /** Optional action; clicking it dismisses the toast after running. */
   action?: { label: string; run: () => void };
-  /** Visual emphasis: 'info' (default) | 'warn'. */
-  tone?: 'info' | 'warn';
+  /** Visual emphasis: 'info' (default) | 'success' | 'warn' | 'error'. */
+  tone?: 'info' | 'success' | 'warn' | 'error';
 }
+
+/** Per-tone styling: border + a leading status dot + the a11y live-region role
+ *  ('alert' for warn/error so screen readers announce assertively). 'warn'
+ *  keeps the historical accent border. */
+const TONE_STYLE: Record<
+  NonNullable<Toast['tone']>,
+  { border: string; dot: string; role: 'alert' | 'status' }
+> = {
+  info: { border: 'border-surface-divider', dot: 'bg-ink-muted', role: 'status' },
+  success: { border: 'border-status-ready/50', dot: 'bg-status-ready', role: 'status' },
+  warn: { border: 'border-accent', dot: 'bg-status-busy', role: 'alert' },
+  error: { border: 'border-status-error/60', dot: 'bg-status-error', role: 'alert' },
+};
 
 interface ToastContextValue {
   push: (toast: Omit<Toast, 'id'>) => void;
@@ -81,41 +94,46 @@ export function ToastProvider({ children }: { children: ReactNode }): JSX.Elemen
           aria-relevant="additions"
           className="fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2"
         >
-          {toasts.map((t) => (
-            <div
-              key={t.id}
-              role={t.tone === 'warn' ? 'alert' : 'status'}
-              className={`rounded-lg border bg-surface-raised p-3.5 shadow-xl ${
-                t.tone === 'warn' ? 'border-accent' : 'border-surface-divider'
-              }`}
-            >
-              <div className="flex items-start gap-2">
-                <p className="flex-1 text-sm font-semibold text-ink-primary">{t.title}</p>
-                <button
-                  type="button"
-                  aria-label="Dismiss"
-                  className="text-xs text-ink-muted hover:text-ink-primary"
-                  onClick={() => dismiss(t.id)}
-                >
-                  ✕
-                </button>
+          {toasts.map((t) => {
+            const ts = TONE_STYLE[t.tone ?? 'info'];
+            return (
+              <div
+                key={t.id}
+                role={ts.role}
+                className={`rounded-lg border bg-surface-raised p-3.5 shadow-xl ${ts.border}`}
+              >
+                <div className="flex items-start gap-2">
+                  <span
+                    className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${ts.dot}`}
+                    aria-hidden="true"
+                  />
+                  <p className="flex-1 text-sm font-semibold text-ink-primary">{t.title}</p>
+                  <button
+                    type="button"
+                    aria-label="Dismiss"
+                    className="text-xs text-ink-muted hover:text-ink-primary"
+                    onClick={() => dismiss(t.id)}
+                  >
+                    ✕
+                  </button>
+                </div>
+                {t.body ? <p className="mt-1 text-xs text-ink-secondary">{t.body}</p> : null}
+                {t.action ? (
+                  <button
+                    type="button"
+                    className="btn-primary mt-2.5 px-2.5 py-1 text-xs"
+                    onClick={() => {
+                      const { run } = t.action!;
+                      dismiss(t.id);
+                      run();
+                    }}
+                  >
+                    {t.action.label}
+                  </button>
+                ) : null}
               </div>
-              {t.body ? <p className="mt-1 text-xs text-ink-secondary">{t.body}</p> : null}
-              {t.action ? (
-                <button
-                  type="button"
-                  className="btn-primary mt-2.5 px-2.5 py-1 text-xs"
-                  onClick={() => {
-                    const { run } = t.action!;
-                    dismiss(t.id);
-                    run();
-                  }}
-                >
-                  {t.action.label}
-                </button>
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </ToastContext.Provider>

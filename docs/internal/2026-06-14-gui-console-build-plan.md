@@ -163,10 +163,13 @@ Each slice records here when shipped: slice id · commit · gate result · "need
 
 ### P5 — greatness backlog (Tier-1 quick-wins; see 2026-06-14-gui-greatness-backlog.md)
 
-- QW1 Save-as-recipe · (this commit) · AgentChatView "Save as recipe" button + dialog →
+- QW1 Save-as-recipe · `7cccb488` · AgentChatView "Save as recipe" button + dialog →
   `client.recipes.create({agent_session_id,label,description?})` (the SDK call had ZERO GUI callers);
   success toast; enabled only once a turn actually plan-executed · new agent-chat-save-recipe.test.tsx
   (3 tests) · tsc/eslint/prettier OK + gui-jsdom 529 (68 files) green · VISIBLE after rebuild #5.
+- QW2 Richer toasts · (this commit) · add `success`/`error` tones to lib/toasts (per-tone border +
+  leading status dot + assertive `alert` role for warn/error); Save-as-recipe toast now `success` ·
+  +2 toasts.test.tsx tone tests · tsc/eslint/prettier OK + gui-jsdom 531 green · VISIBLE after #5.
 
 ## Out of scope / gated (surface, don't flip)
 
