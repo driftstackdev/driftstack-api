@@ -11,13 +11,14 @@
 // this deployment until the live webkit driver is enabled (driver:mock). The
 // banner says so — no pretending.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   AgentIntent,
   AgentIntentResult,
   AgentMessageResponse,
   AgentUsage,
 } from '@driftstack/sdk';
+import { useSettings } from '../lib/SettingsContext';
 import { useAgentChat, type ChatModel, type ChatTurn } from '../lib/use-agent-chat';
 
 const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
@@ -33,10 +34,34 @@ const EXAMPLES: ReadonlyArray<string> = [
 ];
 
 export function AgentChatView(): JSX.Element {
+  const { client } = useSettings();
   const [model, setModel] = useState<ChatModel>('claude-opus-4-7');
+  const [profileId, setProfileId] = useState<string>('');
+  const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState('');
-  const chat = useAgentChat({ model });
+  const chat = useAgentChat({ model, ...(profileId !== '' ? { profileId } : {}) });
   const started = chat.turns.length > 0;
+
+  // S16 — load the account's profiles for the "where the AI works" picker.
+  useEffect(() => {
+    if (!client) return undefined;
+    let cancelled = false;
+    void (async () => {
+      const acc: Array<{ id: string; name: string }> = [];
+      try {
+        for await (const p of client.profiles.iterate({ limit: 100 })) {
+          acc.push({ id: p.id, name: p.name });
+          if (acc.length >= 100) break;
+        }
+      } catch {
+        /* leave what we have; the picker still offers "No profile" */
+      }
+      if (!cancelled) setProfiles(acc);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   function submit(): void {
     const text = draft.trim();
@@ -65,6 +90,25 @@ export function AgentChatView(): JSX.Element {
               total={chat.session.token_budget_total}
             />
           )}
+          <select
+            aria-label="Profile"
+            value={profileId}
+            disabled={started}
+            onChange={(e) => setProfileId(e.target.value)}
+            className="max-w-[10rem] truncate rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary disabled:opacity-60"
+            title={
+              started
+                ? 'Profile is locked for this chat — start a new chat to change it'
+                : 'Which profile the agent works on (the saved identity it runs in)'
+            }
+          >
+            <option value="">No profile (stateless)</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
           <select
             aria-label="Model"
             value={model}

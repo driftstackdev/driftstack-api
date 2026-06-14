@@ -62,6 +62,9 @@ export function extractPendingConfirmation(
 export interface UseAgentChatOpts {
   model?: ChatModel;
   tokenBudget?: number;
+  /** S16 — attach the agent session to a saved profile (the identity the AI
+   *  works on). Omit for a stateless session. */
+  profileId?: string;
 }
 
 export interface UseAgentChatResult {
@@ -116,6 +119,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
             mode: 'ai',
             ...(opts.model !== undefined ? { model: opts.model } : {}),
             ...(opts.tokenBudget !== undefined ? { token_budget: opts.tokenBudget } : {}),
+            ...(opts.profileId !== undefined ? { profile_id: opts.profileId } : {}),
           });
           setSession(created);
           sid = created.id;
@@ -133,7 +137,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         setSending(false);
       }
     },
-    [client, session, opts.model, opts.tokenBudget, nextId],
+    [client, session, opts.model, opts.tokenBudget, opts.profileId, nextId],
   );
 
   const send = useCallback((userMessage: string): Promise<void> => post(userMessage), [post]);

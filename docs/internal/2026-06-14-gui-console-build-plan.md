@@ -89,6 +89,13 @@ gradients.
       driver is enabled" banner. tsc + eslint + prettier clean; gui-jsdom 525 green.
 - [ ] **S8** (polish) live transcript streaming via the SSE event bus
       (`/v1/agent-sessions/:id/events`) instead of request/response only.
+- [x] **S16** ⭐ AI-chat **profile selection** — DONE (founder ask: "where the AI must work on").
+      AgentChatView header now has a Profile picker ("No profile (stateless)" + each owned profile,
+      loaded via `client.profiles.iterate({limit:100})`), threaded through `useAgentChat({profileId})` →
+      `agentSessions.create({ mode:'ai', model, profile_id })`; locked once a chat starts (like the
+      model picker). tsc/eslint/prettier + gui-jsdom 525 green. DEFERRED (own slice, S17): the AI/Pair/
+      Manual **mode** chip — Pair needs the takeover state-machine + a live driver, so Manual/Pair aren't
+      fully meaningful in the GUI until Agent-1's driver lands; surface, don't force.
 - [ ] **MILESTONE → Tauri rebuild #2** (founder sees the AI chat).
 
 ### P3 — planned-but-missing feature surfaces (file 128)
