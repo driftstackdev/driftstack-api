@@ -171,7 +171,17 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G8b Profile-grid empty state + clear-filters fix · (this commit) · contained low-risk polish under
+- G4 Command Center landing · (this commit) · the headline 5→10 item, built in the first sustained calm
+  window (load 4–5). New `CommandCenterView` (kind `'home'`): an Automate-leading hero (Ask AI → 'ai' /
+  Browse recipes → 'recipes') + an account KPI strip (Plan/Sessions/Profiles from `accountMe`, degrades
+  to "—" when null) + quick links (Profiles/Proxies/Sessions). Wired into App (View union 13→14, a
+  `case 'home'`, a ⌘K "Go to Home") + Sidebar (a top "Home" section above Automate, SidebarViewKind
+  11→12). Parity pins updated IN-COMMIT: App View-union 14-variant, Sidebar SidebarViewKind 12-variant +
+  the section-taxonomy pin (now guards Home + Automate). Shipped NON-DEFAULT (landing stays Profiles) —
+  the default flip is a 1-line follow-up after founder review at rebuild #7. new command-center-view.test
+  .tsx (4) · tsc/eslint/prettier + gui-jsdom 566 + App parity 12 + Sidebar parity 7 green · VISIBLE after
+  rebuild #7.
+- G8b Profile-grid empty state + clear-filters fix · `c1b119d1` · contained low-risk polish under
   high load (G4 still deferred). Replaced the two bare "No profiles match the current filter" lines
   (grid + list) with the shared `EmptyState` via a new exported `ProfilesEmpty` (filter headline + a
   one-click **Clear filters**, or a welcome headline when the account is genuinely empty). FIXES a real

@@ -26,7 +26,9 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("4-section taxonomy pinned: 'Browse' (Profiles + Proxies) + 'History' (Session log + Recordings) + 'Diagnostics' (Raw sessions + Connectivity test) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional) — the IA grouping stays profile-first per Driftstack's operator-tool framing; do not collapse / rename sections without updating the GUI snapshot tests + this pin", () => {
+  it("section taxonomy pinned: 'Home' (Command Center) + 'Automate' (AI chat + Recipes) lead, then 'Browse' (Profiles + Proxies) + 'History' (Session log + Recordings) + 'Diagnostics' (Raw sessions + Connectivity test) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional) — the IA grouping leads with automation per the founder's 5→10 direction; do not collapse / rename sections without updating the GUI snapshot tests + this pin. 'Home' added by the G4 Command Center slice.", () => {
+    expect(body).toMatch(/<SidebarSection label="Home">/);
+    expect(body).toMatch(/<SidebarSection label="Automate">/);
     expect(body).toMatch(/<SidebarSection label="Browse">/);
     expect(body).toMatch(/<SidebarSection label="History">/);
     expect(body).toMatch(/<SidebarSection label="Diagnostics">/);
@@ -36,9 +38,9 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(body).toMatch(/Connectivity test/);
   });
 
-  it("SidebarViewKind 11-variant union exported: ai / recipes / logs / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice.", () => {
+  it("SidebarViewKind 12-variant union exported: home / ai / recipes / logs / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice.", () => {
     expect(body).toMatch(
-      /export type SidebarViewKind =\s*\n?\s*\| 'ai'\s*\n?\s*\| 'recipes'\s*\n?\s*\| 'logs'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'settings';/,
+      /export type SidebarViewKind =\s*\n?\s*\| 'home'\s*\n?\s*\| 'ai'\s*\n?\s*\| 'recipes'\s*\n?\s*\| 'logs'\s*\n?\s*\| 'profiles'\s*\n?\s*\| 'proxies'\s*\n?\s*\| 'sessions-history'\s*\n?\s*\| 'recordings'\s*\n?\s*\| 'sessions'\s*\n?\s*\| 'connectivity'\s*\n?\s*\| 'fleet'\s*\n?\s*\| 'settings';/,
     );
   });
 

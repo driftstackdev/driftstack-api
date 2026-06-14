@@ -22,6 +22,7 @@ import { LiveSessionView } from './views/LiveSessionView';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { ToastProvider } from './lib/toasts';
 import { AgentChatView } from './views/AgentChatView';
+import { CommandCenterView } from './views/CommandCenterView';
 import { LogsView } from './views/LogsView';
 import { RecipesView } from './views/RecipesView';
 import { ProfilesView } from './views/ProfilesView';
@@ -36,6 +37,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { checkForUpdate, type AvailableUpdate } from './lib/updater';
 
 type View =
+  | { kind: 'home' }
   | { kind: 'ai' }
   | { kind: 'recipes' }
   | { kind: 'logs' }
@@ -99,6 +101,14 @@ function Shell(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   const paletteActions: PaletteAction[] = [
+    {
+      id: 'nav-home',
+      label: 'Go to Home',
+      kind: 'view',
+      glyph: '◳',
+      keywords: ['nav', 'home', 'command center', 'overview', 'dashboard'],
+      run: () => setView({ kind: 'home' }),
+    },
     {
       id: 'nav-ai',
       label: 'Go to AI chat',
@@ -303,6 +313,8 @@ function CurrentView({
   onNavigate: (v: View) => void;
 }): JSX.Element {
   switch (view.kind) {
+    case 'home':
+      return <CommandCenterView onNavigate={(kind) => onNavigate({ kind })} />;
     case 'ai':
       return <AgentChatView />;
     case 'recipes':
