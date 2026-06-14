@@ -171,7 +171,10 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G6c Bulk delete · (this commit) · destructive bulk delete on the selection bar — gated by the in-app
+- G8d View-switch transition · (this commit) · a quick fade+rise (`ds-view-in` keyframe, 150ms, respects
+  the reduced-motion baseline) when `<main>` swaps views — keyed by view.kind, same element + classes so
+  no layout-chain change. Navigation feels alive vs instant-cut. App content-parity 12 green.
+- G6c Bulk delete · `7f7ecf86` · destructive bulk delete on the selection bar — gated by the in-app
   `useConfirm` (native confirm() is flaky in Tauri), best-effort per id (running profiles fail server-side
   - are skipped), drops bindings, refreshes profiles + accountMe. Destructive-red button. The bulk bar now
     has folder/tag/export/delete over grid+list selection. tsc/eslint/prettier + gui-jsdom 581 +

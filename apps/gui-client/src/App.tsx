@@ -290,7 +290,9 @@ function Shell(): JSX.Element {
             onNavigate={(kind) => setView({ kind })}
             onSignOut={() => void handleSignOut()}
           />
-          <main className="flex-1 overflow-auto bg-surface-base">
+          {/* key by view.kind so switching views replays the fade-in (5→10
+              G8 polish); same element + classes, so no layout-chain change. */}
+          <main key={view.kind} className="flex-1 overflow-auto bg-surface-base animate-view-in">
             <CurrentView view={view} onNavigate={setView} />
           </main>
         </div>

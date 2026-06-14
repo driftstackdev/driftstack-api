@@ -115,6 +115,23 @@
   }
 }
 
+/* View-switch transition (5→10 G8 polish) — a quick fade+rise when the main
+   content area swaps views, so navigation feels alive rather than instant-cut.
+   Respects the reduced-motion baseline above (which clamps the duration). */
+@keyframes ds-view-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-view-in {
+  animation: ds-view-in 150ms ease-out;
+}
+
 /* ─── Fleet design-system token layer (2026-06-12 rework) ─────────────
    Contract: docs/internal/2026-06-12-design-system-spec.md. Two axes on
    <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal).
