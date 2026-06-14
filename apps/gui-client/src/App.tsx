@@ -20,6 +20,8 @@ import { LiveSessionView } from './views/LiveSessionView';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { ToastProvider } from './lib/toasts';
 import { AgentChatView } from './views/AgentChatView';
+import { LogsView } from './views/LogsView';
+import { RecipesView } from './views/RecipesView';
 import { ProfilesView } from './views/ProfilesView';
 import { ProxiesView } from './views/ProxiesView';
 import { RecordingPlayerView } from './views/RecordingPlayerView';
@@ -33,6 +35,8 @@ import { checkForUpdate, type AvailableUpdate } from './lib/updater';
 
 type View =
   | { kind: 'ai' }
+  | { kind: 'recipes' }
+  | { kind: 'logs' }
   | { kind: 'sessions' }
   | { kind: 'live-session'; sessionId: string }
   | { kind: 'sessions-history' }
@@ -79,6 +83,22 @@ function Shell(): JSX.Element {
       glyph: '✦',
       keywords: ['nav', 'ai', 'chat', 'agent', 'automate'],
       run: () => setView({ kind: 'ai' }),
+    },
+    {
+      id: 'nav-recipes',
+      label: 'Go to Recipes',
+      kind: 'view',
+      glyph: '❡',
+      keywords: ['nav', 'recipes', 'automation', 'flows'],
+      run: () => setView({ kind: 'recipes' }),
+    },
+    {
+      id: 'nav-logs',
+      label: 'Go to Logs',
+      kind: 'view',
+      glyph: '≣',
+      keywords: ['nav', 'logs', 'debug', 'diagnostics'],
+      run: () => setView({ kind: 'logs' }),
     },
     {
       id: 'nav-profiles',
@@ -251,6 +271,10 @@ function CurrentView({
   switch (view.kind) {
     case 'ai':
       return <AgentChatView />;
+    case 'recipes':
+      return <RecipesView />;
+    case 'logs':
+      return <LogsView />;
     case 'sessions':
       return (
         <SessionsView

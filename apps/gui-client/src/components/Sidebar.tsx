@@ -22,6 +22,8 @@ import { listProxies } from '../lib/proxies';
 
 export type SidebarViewKind =
   | 'ai'
+  | 'recipes'
+  | 'logs'
   | 'profiles'
   | 'proxies'
   | 'sessions-history'
@@ -81,6 +83,13 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
         >
           AI chat
         </SidebarItem>
+        <SidebarItem
+          icon={<IconBook />}
+          active={current === 'recipes'}
+          onClick={() => onNavigate('recipes')}
+        >
+          Recipes
+        </SidebarItem>
       </SidebarSection>
 
       <SidebarSection label="Browse">
@@ -135,6 +144,13 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
           onClick={() => onNavigate('connectivity')}
         >
           Connectivity test
+        </SidebarItem>
+        <SidebarItem
+          icon={<IconTerminal />}
+          active={current === 'logs'}
+          onClick={() => onNavigate('logs')}
+        >
+          Logs
         </SidebarItem>
       </SidebarSection>
 
@@ -294,6 +310,24 @@ function IconSparkle(): JSX.Element {
     <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
       <path d="M8 1.75 9.4 5.6 13.25 7 9.4 8.4 8 12.25 6.6 8.4 2.75 7 6.6 5.6Z" />
       <path d="M12.75 11.25v2.5M11.5 12.5h2.5" />
+    </svg>
+  );
+}
+
+function IconBook(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <path d="M2.75 3.25A1.25 1.25 0 0 1 4 2h8.25v10.5H4a1.25 1.25 0 0 0-1.25 1.25Z" />
+      <path d="M2.75 12.75A1.25 1.25 0 0 1 4 14h8.25" />
+    </svg>
+  );
+}
+
+function IconTerminal(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <rect x="2.25" y="3" width="11.5" height="10" rx="1.25" />
+      <path d="M4.75 6.25 7 8.5l-2.25 2.25M8.5 10.75h2.75" />
     </svg>
   );
 }

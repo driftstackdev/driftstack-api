@@ -93,9 +93,18 @@ gradients.
 
 ### P3 — planned-but-missing feature surfaces (file 128)
 
-- [ ] **S9** Recipes browser (browse/search/view vendor recipes; file 56/128 §3.2).
-- [ ] **S10** Validate view — "Run validation suite" surface (file 78/126/128).
-- [ ] **S11** Logs viewer — ring buffer + level filter + sanitized export (file 128 §3.2).
+- [x] **S9** Recipes browser — DONE (`RecipesView.tsx`, built by the P3 workflow). Master-detail over
+      `client.recipes.list()`/`get(id)`: searchable list + detail panel with the replayable intent_log
+      (type-safe AgentIntent summaries). Read-only. Wired (nav/route/⌘K). gate-green.
+- [~] **S10** Validate view — **GATED** (correctly not built). No cloud data source: no SDK validation
+  resource, no `/validate` route, no Tauri local-harness command (the file-128 validation suite is a
+  self-hosted-daemon feature; the file-07 harness↔Tauri IPC channel isn't built). Un-gate needs
+  EITHER a server `POST /v1/sessions/:id/validate` + SDK wrapper returning a structured pass/fail
+  report, OR the file-07 IPC + a Tauri `run_validation` command. SURFACED, not faked.
+- [x] **S11** Logs viewer — DONE (`LogsView.tsx`, built by the P3 workflow). Over `lib/log-buffer`
+      (getLogEntries/subscribeLogs/clearLogEntries/formatLogEntries): scrollable entries (ts + level
+      pill + msg), level filter (All/Info/Warn/Error — log+debug grouped under Info so nothing is
+      hidden), search, Clear, Copy-export. Wired (nav/route/⌘K). gate-green.
 - [ ] **S12** Settings sub-tabs build-out — License / Updates / Telemetry / Archetypes (file 128 §4).
 - [ ] **S13** Menu-bar app + "pause new sessions" kill-switch (file 128 §5) — Tauri/Rust shell;
       assess gating before building.
@@ -126,8 +135,12 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   parity (18) green · shipped in rebuild #2.
 - ✅ Tauri rebuild #2 INSTALLED 2026-06-14 (origin af21978c): vite+Rust build → /Applications/Driftstack.app
   - codesign --force --deep -s - + verified valid; backup at .prev. AI chat + S1+S2 now LIVE in the app.
-- S3 · (this commit) · per-card proxy "Test" affordance (testProxy+probeProxyExit→cache) · gui-jsdom 525
-  - ProfilesView parity 18 green · VISIBLE after rebuild #3.
+- S3 · `07513339` · per-card proxy "Test" affordance (testProxy+probeProxyExit→cache) · VISIBLE after #3.
+- S4 · `2ba3f668` · console-density stat tiles (HubStat mono tabular-nums + section-label) · S4 partial.
+- S9+S11+wiring · (this commit) · RecipesView + LogsView (P3 workflow wli6j2jl0) wired into
+  App/Sidebar/⌘K + App parity (13-variant) + Sidebar parity (11-variant) updated in-commit + S3
+  concurrent-test race fix (disable all Test buttons while one runs) · tsc/eslint/prettier + gui-jsdom
+  525 + App/Sidebar parity 19 green · S10 Validate GATED (no cloud source) · VISIBLE after rebuild #3.
 
 ## Out of scope / gated (surface, don't flip)
 

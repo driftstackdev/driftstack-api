@@ -1284,7 +1284,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                                     e.stopPropagation();
                                     void handleTestProxy(px);
                                   }}
-                                  disabled={testingProxyId === px.id}
+                                  disabled={testingProxyId !== null}
                                   className="ml-auto shrink-0 rounded-sm border border-surface-divider px-1.5 py-px text-ink-muted transition-colors hover:border-accent hover:text-ink-primary disabled:opacity-50"
                                   title="Test this proxy — reachability, latency, and exit IP / country"
                                 >
