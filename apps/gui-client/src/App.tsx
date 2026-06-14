@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { ConnectionPill } from './components/ConnectionPill';
 import { Sidebar, type SidebarViewKind } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
+import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { NotificationToastStack } from './components/NotificationToastStack';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
@@ -229,6 +230,8 @@ function Shell(): JSX.Element {
           subtitle={mode}
           right={
             <>
+              <ThemeSwitcher />
+              <span className="text-surface-divider">|</span>
               <LiveConnectionPill
                 baseUrl={settings.baseUrl}
                 onClick={() => setView({ kind: 'settings' })}

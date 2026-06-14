@@ -167,9 +167,18 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   `client.recipes.create({agent_session_id,label,description?})` (the SDK call had ZERO GUI callers);
   success toast; enabled only once a turn actually plan-executed · new agent-chat-save-recipe.test.tsx
   (3 tests) · tsc/eslint/prettier OK + gui-jsdom 529 (68 files) green · VISIBLE after rebuild #5.
-- QW2 Richer toasts · (this commit) · add `success`/`error` tones to lib/toasts (per-tone border +
+- QW2 Richer toasts · `172e67eb` · add `success`/`error` tones to lib/toasts (per-tone border +
   leading status dot + assertive `alert` role for warn/error); Save-as-recipe toast now `success` ·
   +2 toasts.test.tsx tone tests · tsc/eslint/prettier OK + gui-jsdom 531 green · VISIBLE after #5.
+- QW3 Theme/accent switcher · (this commit) · new ThemeSwitcher in the TitleBar — 3 accent swatches
+  (violet/oxblood/teal) + a light/dark toggle over settings.themeMode/themeAccent (was buried in
+  Settings) + global ⌘⇧D mode toggle · new theme-switcher.test.tsx (5 tests) · tsc/eslint/prettier OK
+  - App content-parity 12 + gui-jsdom 536 green · VISIBLE after rebuild #5.
+
+NOTE (ops): the husky **pre-push** hook runs the FULL gate (typecheck+lint+format:check+npm test)
+against the **WORKING TREE**, not just the pushed commits. Editing files while a background `git push`
+is in flight races the hook (QW1's background push failed on a half-edited toasts.tsx). Push in the
+FOREGROUND with a clean tree, or don't edit until the background push reports done.
 
 ## Out of scope / gated (surface, don't flip)
 
