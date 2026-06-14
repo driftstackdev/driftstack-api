@@ -21,6 +21,7 @@ import { isCloudBaseUrl } from '../lib/telemetry';
 import { listProxies } from '../lib/proxies';
 
 export type SidebarViewKind =
+  | 'ai'
   | 'profiles'
   | 'proxies'
   | 'sessions-history'
@@ -72,6 +73,16 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
       className="flex w-56 flex-col border-r border-surface-divider
                  bg-surface-raised/95 backdrop-blur-sm"
     >
+      <SidebarSection label="Automate">
+        <SidebarItem
+          icon={<IconSparkle />}
+          active={current === 'ai'}
+          onClick={() => onNavigate('ai')}
+        >
+          AI chat
+        </SidebarItem>
+      </SidebarSection>
+
       <SidebarSection label="Browse">
         <SidebarItem
           icon={<IconLayers />}
@@ -277,6 +288,15 @@ const stroke = {
   strokeLinecap: 'round' as const,
   strokeLinejoin: 'round' as const,
 };
+
+function IconSparkle(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" {...stroke}>
+      <path d="M8 1.75 9.4 5.6 13.25 7 9.4 8.4 8 12.25 6.6 8.4 2.75 7 6.6 5.6Z" />
+      <path d="M12.75 11.25v2.5M11.5 12.5h2.5" />
+    </svg>
+  );
+}
 
 function IconLayers(): JSX.Element {
   return (

@@ -19,6 +19,7 @@ import { FirstRunWizard } from './views/FirstRunWizard';
 import { LiveSessionView } from './views/LiveSessionView';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { ToastProvider } from './lib/toasts';
+import { AgentChatView } from './views/AgentChatView';
 import { ProfilesView } from './views/ProfilesView';
 import { ProxiesView } from './views/ProxiesView';
 import { RecordingPlayerView } from './views/RecordingPlayerView';
@@ -31,6 +32,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { checkForUpdate, type AvailableUpdate } from './lib/updater';
 
 type View =
+  | { kind: 'ai' }
   | { kind: 'sessions' }
   | { kind: 'live-session'; sessionId: string }
   | { kind: 'sessions-history' }
@@ -70,6 +72,14 @@ function Shell(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   const paletteActions: PaletteAction[] = [
+    {
+      id: 'nav-ai',
+      label: 'Go to AI chat',
+      kind: 'view',
+      glyph: '✦',
+      keywords: ['nav', 'ai', 'chat', 'agent', 'automate'],
+      run: () => setView({ kind: 'ai' }),
+    },
     {
       id: 'nav-profiles',
       label: 'Go to Profiles',
@@ -239,6 +249,8 @@ function CurrentView({
   onNavigate: (v: View) => void;
 }): JSX.Element {
   switch (view.kind) {
+    case 'ai':
+      return <AgentChatView />;
     case 'sessions':
       return (
         <SessionsView

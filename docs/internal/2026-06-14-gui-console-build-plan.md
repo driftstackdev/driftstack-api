@@ -72,10 +72,13 @@ gradients.
       with `approveConsequentialActions`, `deny()` = dismiss the gate (no dispatch), `reset()`. Pure
       `extractPendingConfirmation` exported + unit-tested (4 tests: detect / success-only / non-plan /
       first-of-many). Focused gate green (tsc + eslint + prettier + gui-jsdom).
-- [ ] **S7** `AgentChatView` (Console look) + `'ai'` Sidebar nav + `App.tsx` route: transcript
-      (user/agent bubbles), **plan cards** (intents as a checklist), **confirmation card with working
-      Approve/Deny**, per-turn cost/usage badge, token-budget meter, model-picker chip, composer with
-      slash-command hints. Honest "actions simulated until live driver" affordance.
+- [x] **S7** `AgentChatView` (Console look) + `'ai'` Sidebar nav ("Automate" section) + `App.tsx`
+      route + ⌘K palette entry — DONE (`apps/gui-client/src/views/AgentChatView.tsx`). Transcript
+      (user bubbles / agent plan-cards rendering results as ✓/✗/⏸ steps; clarify/refuse/logged-manual),
+      inline **Approve/Deny** confirmation gate (status-busy banner), per-turn **usage badge**
+      ($/tok/model), **token-budget meter**, model picker (locked once a chat starts), composer
+      (Enter-to-send), example-prompt empty state, and an honest "actions simulated until the live
+      driver is enabled" banner. tsc + eslint + prettier clean; gui-jsdom 525 green.
 - [ ] **S8** (polish) live transcript streaming via the SSE event bus
       (`/v1/agent-sessions/:id/events`) instead of request/response only.
 - [ ] **MILESTONE → Tauri rebuild #2** (founder sees the AI chat).
@@ -104,10 +107,12 @@ Each slice records here when shipped: slice id · commit · gate result · "need
 - S1 · `8e180c24` · gui-jsdom 521 green + full suite green · visible after rebuild #1.
 - S5 · `4453de41` · SDK agent-sessions.ts confirmation_required + usage + approveConsequentialActions
   · sdk unit (17) + content-parity (16) + v2-37 green · non-visual (SDK types; unblocks S6/S7).
-- S6 · (this commit) · useAgentChat hook + extractPendingConfirmation · gui-jsdom +4 tests · non-visual
-  (logic; the chat view S7 consumes it). NOTE: S5+S6 committed local, PUSH PENDING a low-load window —
-  the S5 pre-push gate flaked on 1/22781 (toasts concurrency flake under load ~78; local full-suite of
-  the same code passed clean). Retry `git push` when load <~15.
+- S6 · `c24b72ba` · useAgentChat hook + extractPendingConfirmation · gui-jsdom +4 tests · non-visual.
+- S7 · (this commit) · AgentChatView + 'ai' nav/route/palette · tsc+eslint+prettier+gui-jsdom 525 green
+  · VISIBLE after Tauri rebuild #2. ⚠️ PUSH BLOCKED: the pre-push FULL suite keeps flaking 1/22781 under
+  the contended multi-agent box (load swinging 13→78); S5/S6 passed a clean LOCAL full-suite + S7 is
+  green on tsc/eslint/prettier/gui-jsdom — so the flake is ENVIRONMENTAL, not a real break. Need a
+  SUSTAINED low window (1-min AND 5-min low) to land the push; retry each wave; do NOT --no-verify.
 
 ## Out of scope / gated (surface, don't flip)
 
