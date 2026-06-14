@@ -171,7 +171,12 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G4c Command Center recent-activity feed · (this commit) · added a recent-activity feed from the audit
+- G4d Command Center cap alerts · (this commit) · proactive quota/cap alerts (backlog Tier-1) at the top
+  of the Command Center: pure `computeCapAlerts(accountMe)` warns at ≥80% / errors at-or-over the session
+  - profile caps (profile_cap null = unlimited → no alert), each a tone-styled card with a "Manage" →
+    onNavigate(sessions/profiles). Composed from accountMe (no fetch); only renders when there's something
+    to warn about. +4 tests. tsc/eslint/prettier + gui-jsdom 578 green · VISIBLE after rebuild #9.
+- G4c Command Center recent-activity feed · `3dd0dbab` · added a recent-activity feed from the audit
   log (`client.auditLog.list({limit:6})` → humanised via pure `formatAuditAction` + per-actor dot +
   RelativeTime), same independent-load + graceful-degradation contract as the health strip (idle/loading/
   error/empty). Command Center now = Automate hero + KPI strip + session-health + activity + quick links.

@@ -36,6 +36,68 @@ interface ActivityEntry {
   timestamp: string;
 }
 
+// Proactive cap alerts from accountMe — warn at ≥80% of a cap, error at/over it,
+// so the operator sees a launch will be blocked BEFORE they try. Pure +
+// exported for unit tests. profile_cap null = unlimited (enterprise) → no alert.
+export interface CapAlert {
+  id: string;
+  tone: 'warn' | 'error';
+  title: string;
+  detail: string;
+  target: HomeNavTarget;
+}
+
+interface CapAccount {
+  concurrent_session_active: number;
+  concurrent_session_cap: number;
+  profile_count: number;
+  profile_cap: number | null;
+}
+
+export function computeCapAlerts(account: CapAccount | null): CapAlert[] {
+  if (account === null) return [];
+  const alerts: CapAlert[] = [];
+  const { concurrent_session_active: sa, concurrent_session_cap: sc } = account;
+  if (sc > 0) {
+    if (sa >= sc)
+      alerts.push({
+        id: 'sessions-at',
+        tone: 'error',
+        title: 'At your session limit',
+        detail: `${sa} / ${sc} concurrent sessions in use — stop one to launch another.`,
+        target: 'sessions',
+      });
+    else if (sa / sc >= 0.8)
+      alerts.push({
+        id: 'sessions-near',
+        tone: 'warn',
+        title: 'Near your session limit',
+        detail: `${sa} / ${sc} concurrent sessions in use.`,
+        target: 'sessions',
+      });
+  }
+  const { profile_count: pc, profile_cap: pcap } = account;
+  if (pcap !== null && pcap > 0) {
+    if (pc >= pcap)
+      alerts.push({
+        id: 'profiles-at',
+        tone: 'error',
+        title: 'At your profile limit',
+        detail: `${pc} / ${pcap} profiles created.`,
+        target: 'profiles',
+      });
+    else if (pc / pcap >= 0.8)
+      alerts.push({
+        id: 'profiles-near',
+        tone: 'warn',
+        title: 'Near your profile limit',
+        detail: `${pc} / ${pcap} profiles created.`,
+        target: 'profiles',
+      });
+  }
+  return alerts;
+}
+
 // Session status taxonomy (api-types SessionStatusSchema). Grouped for the
 // health strip: ready/busy = running, creating = spinning up, errored = needs
 // attention, destroyed = done. Pure + exported so the rollup is unit-tested.
@@ -83,6 +145,7 @@ export function CommandCenterView({
   const profileCount = accountMe?.profile_count ?? null;
   const profileCap = accountMe?.profile_cap ?? null;
   const tier = accountMe?.tier ?? null;
+  const capAlerts = computeCapAlerts(accountMe ?? null);
 
   // Live session-health rollup — loads independently of (and after) the hero +
   // KPI so a slow/failed fetch never blocks or breaks the landing; it just
@@ -140,6 +203,35 @@ export function CommandCenterView({
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
+      {/* Cap alerts — proactive, only when near/over a limit. */}
+      {capAlerts.length > 0 && (
+        <div className="flex flex-col gap-2" data-component="cap-alerts">
+          {capAlerts.map((a) => (
+            <div
+              key={a.id}
+              role={a.tone === 'error' ? 'alert' : 'status'}
+              className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 ${
+                a.tone === 'error'
+                  ? 'border-status-error/50 bg-status-error/10'
+                  : 'border-status-busy/50 bg-status-busy/10'
+              }`}
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink-primary">{a.title}</p>
+                <p className="truncate text-xs text-ink-secondary">{a.detail}</p>
+              </div>
+              <button
+                type="button"
+                className="btn-secondary shrink-0 px-3 py-1 text-xs"
+                onClick={() => onNavigate(a.target)}
+              >
+                Manage
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Hero — leads with Automate (the primary surface). */}
       <section className="flex flex-col gap-3 rounded-xl border border-surface-divider bg-surface-raised p-5">
         <div className="flex flex-col gap-1">

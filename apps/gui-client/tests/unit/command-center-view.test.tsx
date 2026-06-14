@@ -15,8 +15,15 @@ vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => ({ accountMe, client }),
 }));
 
-const { CommandCenterView, summarizeSessions, formatAuditAction } =
+const { CommandCenterView, summarizeSessions, formatAuditAction, computeCapAlerts } =
   await import('../../src/views/CommandCenterView');
+
+const ACC = {
+  concurrent_session_active: 0,
+  concurrent_session_cap: 10,
+  profile_count: 0,
+  profile_cap: 10,
+};
 
 function nav() {
   return vi.fn<(k: HomeNavTarget) => void>();
@@ -76,6 +83,27 @@ describe('formatAuditAction', () => {
   });
 });
 
+describe('computeCapAlerts', () => {
+  it('no alerts when null or well under caps', () => {
+    expect(computeCapAlerts(null)).toEqual([]);
+    expect(computeCapAlerts({ ...ACC, concurrent_session_active: 1, profile_count: 1 })).toEqual(
+      [],
+    );
+  });
+  it('warns at ≥80% and errors at/over a cap (sessions)', () => {
+    const near = computeCapAlerts({ ...ACC, concurrent_session_active: 8 });
+    expect(near).toHaveLength(1);
+    expect(near[0]?.tone).toBe('warn');
+    const at = computeCapAlerts({ ...ACC, concurrent_session_active: 10 });
+    expect(at[0]?.tone).toBe('error');
+    expect(at[0]?.target).toBe('sessions');
+  });
+  it('warns/errors on the profile cap; null profile_cap (unlimited) → no alert', () => {
+    expect(computeCapAlerts({ ...ACC, profile_count: 10 })[0]?.tone).toBe('error');
+    expect(computeCapAlerts({ ...ACC, profile_count: 999, profile_cap: null })).toEqual([]);
+  });
+});
+
 describe('CommandCenterView', () => {
   beforeEach(() => {
     cleanup();
@@ -104,6 +132,21 @@ describe('CommandCenterView', () => {
     expect(screen.getByText('Builder')).toBeTruthy();
     expect(screen.getByText('2 / 4')).toBeTruthy();
     expect(screen.getByText('7 / 25')).toBeTruthy();
+  });
+
+  it('shows a cap alert when at the session limit, and Manage navigates', () => {
+    accountMe = {
+      tier: 'starter',
+      concurrent_session_active: 4,
+      concurrent_session_cap: 4,
+      profile_count: 1,
+      profile_cap: 25,
+    };
+    const onNavigate = nav();
+    render(<CommandCenterView onNavigate={onNavigate} />);
+    expect(screen.getByText('At your session limit')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Manage' }));
+    expect(onNavigate).toHaveBeenCalledWith('sessions');
   });
 
   it('degrades gracefully to "—" when accountMe is null (loading/unauth)', () => {
