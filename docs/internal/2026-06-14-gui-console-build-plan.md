@@ -123,8 +123,8 @@ gradients.
 
 ### P4 — cross-cutting polish ("wow")
 
-- [ ] **S14** Roll Console aesthetic across remaining views (Sessions, Recordings, Fleet, Proxies,
-      Settings) for visual consistency.
+- [x] **S14** Roll Console aesthetic across remaining views (Sessions, Recordings, Fleet, Proxies,
+      Settings) for visual consistency. ✅ DONE (workflow wksmejxyz).
 - [ ] **S15** Empty-states with personality, onboarding tour, micro-interactions, transitions,
       keyboard-first affordances.
 - [ ] **MILESTONE → Tauri rebuild #3** (full pass) + morning summary.
@@ -153,6 +153,13 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   App/Sidebar/⌘K + App parity (13-variant) + Sidebar parity (11-variant) updated in-commit + S3
   concurrent-test race fix (disable all Test buttons while one runs) · tsc/eslint/prettier + gui-jsdom
   525 + App/Sidebar parity 19 green · S10 Validate GATED (no cloud source) · VISIBLE after rebuild #3.
+- S4(full)+S16 · `feb57188` · full Console restyle of the ProfilesView hub (HERO/stat-tiles/sparkline/
+  HealthRing/folder-pills/device-frame MiniPage cards/proxy-row/per-card Test) + AI-chat profile picker
+  · gui-jsdom + folder-identity green · VISIBLE after rebuild #4 (INSTALLED 2026-06-14).
+- S14 · (this commit) · Console restyle of Proxies/Sessions/Recordings/Settings (workflow wksmejxyz,
+  +1082/-590, logic preserved) + 5 test files re-pinned to new copy/source (proxies-view-test-button
+  behavioral + 4 view content-parity) · tsc OK + gui-jsdom 526 (67 files) + 4 view content-parity 43
+  green · VISIBLE after rebuild #5. + greatness backlog saved (2026-06-14-gui-greatness-backlog.md).
 
 ## Out of scope / gated (surface, don't flip)
 

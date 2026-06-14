@@ -95,13 +95,13 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
       /const cloudBaseUrl = isCloudBaseUrl\(draftUrl\);\s*\n?\s*const platformDefaultLabel = cloudBaseUrl \? 'on \(cloud default\)' : 'off \(self-hosted default\)';\s*\n?\s*const effectiveTelemetry =\s*\n?\s*draftTelemetry === null \? \(cloudBaseUrl \? 'on' : 'off'\) : draftTelemetry \? 'on' : 'off';/,
     );
     expect(body).toMatch(
-      /<input\s*\n?\s*type="radio"\s*\n?\s*name="telemetry"\s*\n?\s*checked=\{draftTelemetry === null\}\s*\n?\s*onChange=\{\(\) => setDraftTelemetry\(null\)\}/,
+      /<input\s*\n?\s*type="radio"\s*\n?\s*name="telemetry"\s*\n?\s*className="accent-accent"\s*\n?\s*checked=\{draftTelemetry === null\}\s*\n?\s*onChange=\{\(\) => setDraftTelemetry\(null\)\}/,
     );
     expect(body).toMatch(
-      /<input\s*\n?\s*type="radio"\s*\n?\s*name="telemetry"\s*\n?\s*checked=\{draftTelemetry === true\}\s*\n?\s*onChange=\{\(\) => setDraftTelemetry\(true\)\}/,
+      /<input\s*\n?\s*type="radio"\s*\n?\s*name="telemetry"\s*\n?\s*className="accent-accent"\s*\n?\s*checked=\{draftTelemetry === true\}\s*\n?\s*onChange=\{\(\) => setDraftTelemetry\(true\)\}/,
     );
     expect(body).toMatch(
-      /<input\s*\n?\s*type="radio"\s*\n?\s*name="telemetry"\s*\n?\s*checked=\{draftTelemetry === false\}\s*\n?\s*onChange=\{\(\) => setDraftTelemetry\(false\)\}/,
+      /<input\s*\n?\s*type="radio"\s*\n?\s*name="telemetry"\s*\n?\s*className="accent-accent"\s*\n?\s*checked=\{draftTelemetry === false\}\s*\n?\s*onChange=\{\(\) => setDraftTelemetry\(false\)\}/,
     );
   });
 
@@ -152,7 +152,7 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
 
   it("Crash-reports framing pinned: 'Crash-only: error messages, stack traces, app version, OS. Never API keys, profile data, or any session contents.' — pinned so customer knows exactly what telemetry covers + currently-effective state surfaced as <mono>{effectiveTelemetry}</mono>", () => {
     expect(body).toMatch(
-      /Crash-only: error messages, stack traces, app version, OS\. Never API keys, profile data,\s*\n?\s*or any session contents\. Currently: <span className="mono">\{effectiveTelemetry\}<\/span>\./,
+      /Crash-only: error messages, stack traces, app version, OS\. Never API keys, profile\s*\n?\s*data, or any session contents\. Currently:\{' '\}\s*\n?\s*<span className="mono">\{effectiveTelemetry\}<\/span>\./,
     );
   });
 

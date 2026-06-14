@@ -118,16 +118,23 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     expect(body).toMatch(/\{mode === 'add' \? 'Add proxy' : 'Save changes'\}/);
   });
 
-  it("ProxyTable: 5-col (Label / Endpoint / Auth / Created / actions) + per-row host:port formatting + username || '—' fallback + createdAt rendered via <RelativeTime iso=p.createdAt tooltipPrefix=\"Added\"> + Edit + Remove buttons (Remove disabled when busyId===p.id with 'Removing…' label); password never displayed in any column — pinned so credentials don't leak into the UI", () => {
+  it("ProxyCard (Console restyle of the old 5-col ProxyTable): per-card host:port endpoint + username shown only when set (no leak when blank) + createdAt via <RelativeTime iso=p.createdAt tooltipPrefix=\"Added\"> + Edit + Remove buttons (Remove disabled while that card is busy with a 'Removing…' label, gated through the card's `busy` prop = busyId===p.id at the call site); password never rendered anywhere — pinned so credentials don't leak into the UI", () => {
+    // Endpoint host:port still formatted per card.
     expect(body).toMatch(/\{p\.host\}:\{p\.port\}/);
-    expect(body).toMatch(
-      /\{p\.username !== null && p\.username\.length > 0 \? p\.username : '—'\}/,
-    );
+    // Auth: the username is surfaced only when present (the em-dash table
+    // fallback is gone — a card with no auth simply omits the username),
+    // so credentials are never invented and the password is never shown.
+    expect(body).toMatch(/p\.username !== null && p\.username\.length > 0 &&/);
+    expect(body).toMatch(/<span className="mono truncate">\{p\.username\}<\/span>/);
     expect(body).toMatch(/<RelativeTime iso=\{p\.createdAt\} tooltipPrefix="Added" \/>/);
+    // Remove gating moved onto the card's `busy` prop (busy === busyId===p.id
+    // at the ProxyList call site).
+    expect(body).toMatch(/busy=\{busyId === p\.id\}/);
     expect(body).toMatch(
-      /disabled=\{busyId === p\.id\}\s*\n?\s*>\s*\n?\s*\{busyId === p\.id \? 'Removing…' : 'Remove'\}/,
+      /onClick=\{onRemove\}\s*\n?\s*disabled=\{busy\}\s*\n?\s*>\s*\n?\s*\{busy \? 'Removing…' : 'Remove'\}/,
     );
-    expect(body).not.toMatch(/<td[^>]*>\s*\n?\s*[^<]*\{p\.password\}/);
+    // The password must never be rendered into the card markup.
+    expect(body).not.toMatch(/\{p\.password\}/);
   });
 
   it("friendlyError: Error instanceof → .message / fallback 'unknown error' — pinned so non-Error throws don't render as '[object Object]'; Field subcomponent: label + optional error + children — consistent form-field convention", () => {

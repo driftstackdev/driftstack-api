@@ -5,7 +5,7 @@
 // integration coordination). Until then this view lets the founder
 // curate the proxy list so it's ready when the contract lands.
 
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { RelativeTime } from '../components/RelativeTime';
 import { SkeletonRows } from '../components/Skeleton';
@@ -195,19 +195,38 @@ export function ProxiesView(): JSX.Element {
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <header className="flex items-center justify-between">
-        <div className="flex flex-col gap-0.5">
+      {/* HERO strip (console.html) — section-label + title with at-a-glance
+          context on the left; quiet Test-all + primary New-proxy on the
+          right. Mirrors the Profiles hub hero rhythm. */}
+      <div
+        data-component="proxies-hero"
+        className="flex flex-wrap items-start gap-4 border-b border-surface-divider pb-3"
+      >
+        <div className="min-w-0">
           <span className="section-label">Network</span>
-          <h2 className="text-lg font-medium text-ink-primary">
+          <h2 className="mt-0.5 text-[19px] font-semibold tracking-tight text-ink-primary">
             SOCKS5 proxies
-            <span className="ml-2 mono text-ink-muted">{state.proxies.length}</span>
+            <span className="mono ml-2 text-base font-normal text-ink-muted">
+              {state.proxies.length}
+            </span>
           </h2>
-          <p className="text-2xs text-ink-muted">
-            Stored locally. Wiring to session creation lands when the API contract grows a{' '}
-            <span className="mono">proxy</span> field.
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
+            {tested.length > 0 ? (
+              <>
+                <b className="font-semibold text-status-ready">{healthy.length}</b> healthy
+                <span className="text-surface-divider">·</span>
+                <b className="font-semibold text-ink-primary">{udpCapable.length}</b> full-stack
+                <span className="text-surface-divider">·</span>
+                <span className="text-ink-muted">stored locally — never uploaded</span>
+              </>
+            ) : (
+              <span className="text-ink-muted">
+                Stored locally on this device — never uploaded to the control plane.
+              </span>
+            )}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="ml-auto flex items-center gap-2">
           {state.proxies.length > 0 && (
             <button
               type="button"
@@ -218,16 +237,32 @@ export function ProxiesView(): JSX.Element {
               {testingAll ? 'Testing all…' : 'Test all'}
             </button>
           )}
-          <button type="button" className="btn-primary" onClick={() => setEditor({ kind: 'add' })}>
-            New proxy
+          <button
+            type="button"
+            className="btn-primary flex items-center gap-1.5"
+            onClick={() => setEditor({ kind: 'add' })}
+          >
+            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+              <path
+                d="M8 3v10M3 8h10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
+            <span>New proxy</span>
           </button>
         </div>
-      </header>
+      </div>
 
       {/* Pool summary — capability-board port. Counts are over TESTED
           proxies only (no fabricated health for never-probed entries). */}
       {tested.length > 0 && (
-        <div data-component="proxy-pool-stats" className="grid grid-cols-3 gap-3">
+        <div
+          data-component="proxy-pool-stats"
+          className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-surface-divider bg-surface-divider"
+        >
           <PoolStat k="Tested" v={`${String(tested.length)} / ${String(state.proxies.length)}`} />
           <PoolStat k="Healthy" v={String(healthy.length)} tone="ok" />
           <PoolStat k="Full-stack (UDP)" v={String(udpCapable.length)} tone="ok" />
@@ -244,7 +279,7 @@ export function ProxiesView(): JSX.Element {
       {state.proxies.length === 0 ? (
         <Empty loading={state.loading} />
       ) : (
-        <ProxyTable
+        <ProxyList
           proxies={state.proxies}
           busyId={busyId}
           testingId={testingId}
@@ -275,7 +310,7 @@ function Empty({ loading }: { loading: boolean }): JSX.Element {
     return <SkeletonRows rows={4} label="Loading proxies" />;
   }
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded border border-dashed border-surface-divider px-8 py-16 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-surface-divider px-8 py-16 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent-subtle text-accent">
         <svg
           width="24"
@@ -306,7 +341,7 @@ function Empty({ loading }: { loading: boolean }): JSX.Element {
   );
 }
 
-function ProxyTable({
+function ProxyList({
   proxies,
   busyId,
   testingId,
@@ -326,144 +361,263 @@ function ProxyTable({
   onTest: (p: ProxyConfig) => void;
 }): JSX.Element {
   return (
-    <div className="overflow-auto rounded border border-surface-divider">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-surface-divider bg-surface-elevated text-left">
-            <Th>Label</Th>
-            <Th>Endpoint</Th>
-            <Th>Auth</Th>
-            <Th>Created</Th>
-            <Th>{''}</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {proxies.map((p) => {
-            const result = testResults[p.id];
-            const testing = testingId === p.id;
-            return (
-              <Fragment key={p.id}>
-                <tr
-                  className={`hover:bg-surface-elevated/40 ${
-                    result === undefined ? 'border-b border-surface-divider last:border-0' : ''
-                  }`}
-                >
-                  <Td>
-                    <span className="text-ink-primary">{p.label}</span>
-                  </Td>
-                  <Td>
-                    <span className="mono text-ink-secondary">
-                      {p.host}:{p.port}
-                    </span>
-                  </Td>
-                  <Td>
-                    <span className="text-ink-secondary">
-                      {p.username !== null && p.username.length > 0 ? p.username : '—'}
-                    </span>
-                  </Td>
-                  <Td>
-                    <span className="text-ink-muted">
-                      <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
-                    </span>
-                  </Td>
-                  <Td>
-                    <div className="flex justify-end gap-2">
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => onTest(p)}
-                        disabled={testing}
-                      >
-                        {testing ? 'Testing…' : 'Test'}
-                      </button>
-                      <button type="button" className="btn-secondary" onClick={() => onEdit(p.id)}>
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-danger"
-                        onClick={() => onRemove(p.id)}
-                        disabled={busyId === p.id}
-                      >
-                        {busyId === p.id ? 'Removing…' : 'Remove'}
-                      </button>
-                    </div>
-                  </Td>
-                </tr>
-                {result !== undefined && (
-                  <tr className="border-b border-surface-divider last:border-0">
-                    <td colSpan={5} className="px-3 pb-2">
-                      <div
-                        role="status"
-                        className={`flex flex-wrap items-center gap-2 text-2xs ${
-                          result.reachable && result.auth_ok
-                            ? 'text-status-success'
-                            : 'text-status-error'
-                        }`}
-                      >
-                        <span className="font-medium">
-                          {result.reachable
-                            ? result.auth_ok
-                              ? `Reachable · ${result.latency_ms} ms`
-                              : 'Auth failed'
-                            : 'Not reachable'}
-                        </span>
-                        {result.reachable && (
-                          <span
-                            className={`rounded-sm px-1 py-0.5 ${
-                              result.udp_associate
-                                ? 'bg-status-success/20'
-                                : 'bg-surface-divider text-ink-muted'
-                            }`}
-                          >
-                            {result.udp_associate ? 'UDP ✓' : 'UDP ✗'}
-                          </span>
-                        )}
-                        {result.reachable && (
-                          // QUIC + WebRTC ride the UDP relay — derived from
-                          // the probed UDP ASSOCIATE result, not separately
-                          // probed (honest label, no fake independent check).
-                          <span
-                            className={`rounded-sm px-1 py-0.5 ${
-                              result.udp_associate
-                                ? 'bg-status-success/20'
-                                : 'bg-surface-divider text-ink-muted'
-                            }`}
-                            title={
-                              result.udp_associate
-                                ? 'UDP ASSOCIATE works — sessions can speak h3 and gather WebRTC candidates through this exit.'
-                                : 'No UDP relay — sessions fall back to h2 and TURN-over-TCP through this exit.'
-                            }
-                          >
-                            {result.udp_associate
-                              ? 'QUIC + WebRTC ✓ (rides UDP)'
-                              : 'QUIC + WebRTC ✗ — h2 / TURN-over-TCP fallback'}
-                          </span>
-                        )}
-                        {result.reachable && result.auth_ok && p.id in exitResults && (
-                          <span className="rounded-sm bg-surface-inset px-1 py-0.5 text-ink-secondary">
-                            {exitResults[p.id] !== null && exitResults[p.id] !== undefined ? (
-                              <>
-                                exit {exitResults[p.id]?.ip}
-                                {exitResults[p.id]?.country !== null &&
-                                  ` · ${exitResults[p.id]?.country ?? ''}`}
-                              </>
-                            ) : (
-                              'exit geo unavailable (server update pending)'
-                            )}
-                          </span>
-                        )}
-                        <span className="text-ink-secondary">{result.message}</span>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            );
-          })}
-        </tbody>
-      </table>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {proxies.map((p) => (
+        <ProxyCard
+          key={p.id}
+          proxy={p}
+          busy={busyId === p.id}
+          testing={testingId === p.id}
+          result={testResults[p.id]}
+          exit={p.id in exitResults ? exitResults[p.id] : undefined}
+          onEdit={() => onEdit(p.id)}
+          onRemove={() => onRemove(p.id)}
+          onTest={() => onTest(p)}
+        />
+      ))}
     </div>
+  );
+}
+
+// Console proxy card — mirrors the Profiles hub proxy-row treatment:
+// country flag + exit IP (mono) + latency + inline meter + health pill +
+// UDP badge + last-checked, with Test / Edit / Remove as quiet actions.
+// All facts come from the REAL probe result (no fabricated health).
+function ProxyCard({
+  proxy: p,
+  busy,
+  testing,
+  result,
+  exit,
+  onEdit,
+  onRemove,
+  onTest,
+}: {
+  proxy: ProxyConfig;
+  busy: boolean;
+  testing: boolean;
+  result: ProxyTestResult | undefined;
+  // undefined = exit-geo never recorded for this proxy; null = probed but
+  // unavailable (server endpoint / native command not live yet).
+  exit: ProxyExitProbeResult | null | undefined;
+  onEdit: () => void;
+  onRemove: () => void;
+  onTest: () => void;
+}): JSX.Element {
+  const reachable = result?.reachable ?? false;
+  const authOk = result?.auth_ok ?? false;
+  const healthy = reachable && authOk;
+  const lat = result?.latency_ms;
+  // latency meter fill: 0–250ms mapped to 0–100% (clamped). Mirrors the
+  // hub card's latFill mapping.
+  const latFill = lat !== undefined && lat > 0 ? Math.max(6, Math.min(100, (lat / 250) * 100)) : 0;
+  const latGood = lat !== undefined && lat <= 100;
+  const exitIp = exit?.ip;
+  const exitCountry = exit?.country ?? null;
+
+  return (
+    <article
+      className={`group flex flex-col gap-2.5 rounded-lg border bg-surface-raised p-3 transition-all hover:-translate-y-px hover:shadow-md ${
+        result === undefined
+          ? 'border-surface-divider hover:border-ink-muted/60'
+          : healthy
+            ? 'border-status-ready/50 hover:border-status-ready'
+            : 'border-status-error/40 hover:border-status-error/60'
+      }`}
+    >
+      {/* HEADER — label + health pill on the right. */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-semibold tracking-tight text-ink-primary">
+            {p.label}
+          </p>
+          <p className="mt-0.5 flex items-center gap-1 text-[10.5px] text-ink-muted">
+            <span aria-hidden="true">🔒</span>
+            SOCKS5
+            {p.username !== null && p.username.length > 0 && (
+              <>
+                <span className="text-surface-divider">·</span>
+                <span className="mono truncate">{p.username}</span>
+              </>
+            )}
+          </p>
+        </div>
+        <HealthPill result={result} healthy={healthy} latGood={latGood} />
+      </div>
+
+      {/* PROXY row — flag + exit IP (mono) + latency + inline meter, on a
+          surface-inset panel, exactly like the hub card. Honest 'untested'
+          when never probed. */}
+      <div className="flex flex-col gap-1 rounded-lg bg-surface-inset px-2 py-1.5">
+        <div className="flex items-center gap-2">
+          <span aria-hidden="true" className="text-[13px] leading-none">
+            {exitCountry !== null ? flagEmoji(exitCountry) : '🌍'}
+          </span>
+          <span className="mono min-w-0 truncate text-[10.5px] text-ink-secondary">
+            {exitIp ?? `${p.host}:${p.port}`}
+          </span>
+          <span className="ml-auto flex items-center gap-1.5 text-[10px] text-ink-muted">
+            {lat !== undefined && reachable ? (
+              <>
+                <span className="mono">{lat}ms</span>
+                <span className="inline-block h-1 w-[34px] overflow-hidden rounded-[2px] bg-surface-divider">
+                  <span
+                    className="block h-full rounded-[2px]"
+                    style={{
+                      width: `${latFill.toFixed(0)}%`,
+                      background: latGood
+                        ? 'rgb(var(--status-ready-rgb))'
+                        : 'rgb(var(--status-busy-rgb))',
+                    }}
+                  />
+                </span>
+              </>
+            ) : (
+              <span className="mono opacity-60">{result !== undefined ? 'down' : '—'}</span>
+            )}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="mono truncate text-[10px] text-ink-muted">
+            {p.host}:{p.port}
+          </span>
+          {result !== undefined && reachable ? (
+            <span
+              className={`shrink-0 rounded-sm px-1 py-px text-[9px] ${
+                result.udp_associate
+                  ? 'bg-status-ready/15 text-status-ready'
+                  : 'bg-surface-inset text-ink-muted line-through'
+              }`}
+              title={
+                result.udp_associate
+                  ? 'UDP relay verified — QUIC + WebRTC tunnel through this exit.'
+                  : 'No UDP relay on last test — sessions fall back to h2 / TURN-over-TCP.'
+              }
+            >
+              UDP
+            </span>
+          ) : (
+            <span
+              className="shrink-0 rounded-sm bg-surface-inset px-1 py-px text-[9px] text-ink-muted"
+              title="Never probed — click Test to check it."
+            >
+              {result !== undefined ? 'no relay' : 'untested'}
+            </span>
+          )}
+          <span className="ml-auto shrink-0 text-[9.5px] text-ink-muted">
+            <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
+          </span>
+        </div>
+      </div>
+
+      {/* TEST DETAIL — shown only once probed. Exit-geo line + QUIC/WebRTC
+          derivation + the raw probe message, all from the real result. */}
+      {result !== undefined && (
+        <div role="status" className="flex flex-col gap-1 text-[10px]">
+          {reachable && (
+            <span
+              className={`flex items-center gap-1.5 ${
+                result.udp_associate ? 'text-status-ready' : 'text-ink-muted'
+              }`}
+              title={
+                result.udp_associate
+                  ? 'UDP ASSOCIATE works — sessions can speak h3 and gather WebRTC candidates through this exit.'
+                  : 'No UDP relay — sessions fall back to h2 and TURN-over-TCP through this exit.'
+              }
+            >
+              <span aria-hidden="true">{result.udp_associate ? '✓' : '○'}</span>
+              {result.udp_associate
+                ? 'QUIC + WebRTC ride UDP'
+                : 'QUIC + WebRTC fall back to h2 / TURN'}
+            </span>
+          )}
+          {healthy && exit !== undefined && (
+            <span className="text-ink-secondary">
+              {exit !== null ? (
+                <>
+                  exit <span className="mono">{exit.ip}</span>
+                  {exit.country !== null && ` · ${exit.country}`}
+                </>
+              ) : (
+                'exit geo unavailable (server update pending)'
+              )}
+            </span>
+          )}
+          {result.message.length > 0 && (
+            <span
+              className={`truncate ${healthy ? 'text-ink-muted' : 'text-status-error'}`}
+              title={result.message}
+            >
+              {result.message}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ACTIONS — Test is the primary affordance; Edit / Remove are quiet. */}
+      <div className="mt-auto flex items-center gap-2 pt-1">
+        <button
+          type="button"
+          className="btn-primary flex-1 text-xs"
+          onClick={onTest}
+          disabled={testing}
+        >
+          {testing ? 'Testing…' : result !== undefined ? 'Re-test' : 'Test'}
+        </button>
+        <button
+          type="button"
+          className="text-xs text-ink-muted transition-colors hover:text-ink-primary"
+          onClick={onEdit}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          className="text-xs text-ink-muted transition-colors hover:text-status-error disabled:opacity-60"
+          onClick={onRemove}
+          disabled={busy}
+        >
+          {busy ? 'Removing…' : 'Remove'}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+// Health pill — the single at-a-glance verdict for a proxy card. Quiet
+// 'untested' before the first probe; ready/error tone after.
+function HealthPill({
+  result,
+  healthy,
+  latGood,
+}: {
+  result: ProxyTestResult | undefined;
+  healthy: boolean;
+  latGood: boolean;
+}): JSX.Element {
+  if (result === undefined) {
+    return (
+      <span className="shrink-0 rounded-[5px] bg-surface-inset px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-muted">
+        untested
+      </span>
+    );
+  }
+  if (!healthy) {
+    const label = result.reachable ? 'auth fail' : 'unreachable';
+    return (
+      <span className="shrink-0 rounded-[5px] bg-status-error/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-status-error">
+        {label}
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`shrink-0 rounded-[5px] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+        latGood ? 'bg-status-ready/12 text-status-ready' : 'bg-status-busy/14 text-status-busy'
+      }`}
+    >
+      {latGood ? 'healthy' : 'slow'}
+    </span>
   );
 }
 
@@ -496,10 +650,11 @@ function ProxyForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-3 rounded border border-surface-divider bg-surface-raised p-4"
+      className="flex flex-col gap-3 rounded-lg border border-surface-divider bg-surface-raised p-4 shadow-sm"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between border-b border-surface-divider pb-2">
         <span className="section-label">{mode === 'add' ? 'Add proxy' : 'Edit proxy'}</span>
+        <span className="mono text-2xs text-ink-muted">SOCKS5</span>
       </div>
       <Field label="Label" error={validation.errors.label}>
         <input
@@ -589,11 +744,11 @@ function Field({
 
 function PoolStat({ k, v, tone }: { k: string; v: string; tone?: 'ok' }): JSX.Element {
   return (
-    <div className="rounded border border-surface-divider bg-surface-raised px-3 py-2">
+    <div className="bg-surface-raised px-3 py-2.5">
       <p className="section-label">{k}</p>
       <p
-        className={`mono text-lg font-semibold ${
-          tone === 'ok' ? 'text-status-success' : 'text-ink-primary'
+        className={`mono mt-0.5 text-lg font-semibold tracking-tight ${
+          tone === 'ok' ? 'text-status-ready' : 'text-ink-primary'
         }`}
       >
         {v}
@@ -602,15 +757,14 @@ function PoolStat({ k, v, tone }: { k: string; v: string; tone?: 'ok' }): JSX.El
   );
 }
 
-function Th({ children }: { children: React.ReactNode }): JSX.Element {
-  return <th className="px-3 py-2 section-label">{children}</th>;
-}
-
-function Td({ children }: { children: React.ReactNode }): JSX.Element {
-  return <td className="px-3 py-2 align-middle text-sm">{children}</td>;
-}
-
 // ─── helpers ──────────────────────────────────────────────────────
+
+/** Map an ISO-3166 alpha-2 country code to its flag emoji (mirrors the
+ *  Profiles hub helper). Returns a globe for an unrecognised code. */
+function flagEmoji(cc: string): string {
+  if (!/^[A-Z]{2}$/.test(cc)) return '🌍';
+  return String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
 
 function toDraft(p: ProxyConfig): ProxyDraft {
   return {

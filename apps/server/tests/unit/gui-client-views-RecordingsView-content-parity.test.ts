@@ -64,13 +64,11 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     );
   });
 
-  it("Persistence copy pinned to REALITY (the disk-persistence phase shipped — recordings-store.ts ndjson + loadIndex): header 'persist on this machine (app data); frames load on demand' + empty-state 'survive an app restart'. The original 'lands in a follow-up phase' copy became false and was corrected in the gallery port.", () => {
+  it("Persistence copy pinned to REALITY (the disk-persistence phase shipped — recordings-store.ts ndjson + loadIndex): header 'persist on this machine (app data); frames load on demand' + empty-state '...they persist on this machine and survive an app restart'. The original 'lands in a follow-up phase' copy became false and was corrected in the gallery port; the Console restyle folded the empty-state persistence note into the EmptyState description sentence (same 'survive an app restart' promise).", () => {
     expect(body).toMatch(
       /Recordings persist on this machine \(app data\); frames load on demand when you open\s*\n?\s*one\./,
     );
-    expect(body).toMatch(
-      /Recordings persist on this machine \(app data\) and survive an app restart\./,
-    );
+    expect(body).toMatch(/they persist on this machine and survive an app restart\./);
     expect(body).not.toMatch(/Persistence to disk lands in a\s*\n?\s*follow-up\s*\n?\s*phase/);
   });
 
@@ -101,18 +99,24 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     expect(body).toContain('<img src={first.dataUrl} alt=""');
     expect(body).toContain("{r.hydrated ? 'frames on disk' : 'no frames'}");
     expect(body).toContain('{formatDuration(recordingDurationMs(r))}');
+    // Console restyle: the openable predicate was hoisted to a `playable`
+    // const (frames in memory OR persisted on disk), and the card's
+    // double-click only opens when playable — same gating, named helper.
     expect(body).toContain(
-      'r.frames.length > 0 || (r.hydrated && r.frameCount > 0) ? onOpen : undefined',
+      'const playable = r.frames.length > 0 || (r.hydrated && r.frameCount > 0);',
     );
+    expect(body).toContain('onDoubleClick={playable ? onOpen : undefined}');
   });
 
-  it("Empty subcomponent: loading branch → <SkeletonRows> (W466) vs no-recordings branch with inline 24×24 svg + 'No recordings yet' h3 + 'Open a live session, click <Record>, and frames stream into memory while the session runs.' helper + persistence-coming-soon footer", () => {
-    expect(body).toMatch(/import \{ SkeletonRows \} from '\.\.\/components\/Skeleton';/);
+  it("Empty subcomponent (Console restyle): loading branch → a gallery-shaped skeleton (Skeleton-based GallerySkeleton, replacing the old SkeletonRows) vs no-recordings branch via the shared <EmptyState> — FilmGlyph icon + 'No recordings yet' title + 'Recordings capture every frame of a live session for replay + audit. Open a live session, hit Record, and frames stream into memory while the session runs — they persist on this machine and survive an app restart.' description (capture helper + persistence reality, same intent as the old h3/p markup)", () => {
+    expect(body).toMatch(/import \{ Skeleton \} from '\.\.\/components\/Skeleton';/);
+    expect(body).toMatch(/import \{ EmptyState \} from '\.\.\/components\/EmptyState';/);
     expect(body).toMatch(
-      /function Empty\(\{ loading \}: \{ loading: boolean \}\): JSX\.Element \{\s*\n?\s*if \(loading\) \{\s*\n?\s*return <SkeletonRows rows=\{4\} label="Loading recordings" \/>;/,
+      /function Empty\(\{ loading \}: \{ loading: boolean \}\): JSX\.Element \{\s*\n?\s*if \(loading\) \{\s*\n?\s*return <GallerySkeleton \/>;/,
     );
+    expect(body).toMatch(/title="No recordings yet"/);
     expect(body).toMatch(
-      /<h3 className="text-base font-medium text-ink-primary">No recordings yet<\/h3>\s*\n?\s*<p className="max-w-md text-sm text-ink-secondary">\s*\n?\s*Recordings capture every frame of a live session for replay \+ audit\. Open a live session,\s*\n?\s*click <span className="mono">Record<\/span>, and frames stream into memory while the\s*\n?\s*session runs\.\s*\n?\s*<\/p>/,
+      /Recordings capture every frame of a live session for replay \+ audit\. Open a live session,\s*\n?\s*hit Record, and frames stream into memory while the session runs — they persist on this\s*\n?\s*machine and survive an app restart\./,
     );
   });
 

@@ -101,8 +101,16 @@ export function SettingsView(): JSX.Element {
 
   if (loading) {
     return (
-      <div className="p-6 text-ink-muted">
-        <span className="section-label">Loading settings…</span>
+      <div className="flex h-full flex-col gap-6 p-6">
+        <header className="flex flex-col gap-1 border-b border-surface-divider pb-4">
+          <span className="section-label">Settings</span>
+          <div className="h-6 w-44 animate-pulse rounded bg-surface-inset" />
+          <div className="mt-1 h-4 w-80 animate-pulse rounded bg-surface-inset" />
+        </header>
+        <div className="flex max-w-xl flex-col gap-4">
+          <div className="h-28 animate-pulse rounded-lg border border-surface-divider bg-surface-raised" />
+          <div className="h-40 animate-pulse rounded-lg border border-surface-divider bg-surface-raised" />
+        </div>
       </div>
     );
   }
@@ -192,19 +200,58 @@ export function SettingsView(): JSX.Element {
     draftTelemetry === null ? (cloudBaseUrl ? 'on' : 'off') : draftTelemetry ? 'on' : 'off';
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
-      <header className="flex flex-col gap-1">
-        <span className="section-label">Settings</span>
-        <h2 className="text-lg font-medium tracking-tight text-ink-primary">API connection</h2>
-        <p className="text-sm text-ink-secondary">
-          Point the GUI at your Driftstack API server and authenticate with an API key.
-        </p>
+    <div className="flex h-full flex-col gap-6 overflow-y-auto p-6">
+      {/* Console hero: section-label + title + at-a-glance connection status
+          on the left; the primary Save action anchored on the right. */}
+      <header className="flex flex-wrap items-start gap-4 border-b border-surface-divider pb-4">
+        <div className="min-w-0">
+          <span className="section-label">Settings</span>
+          <h2 className="mt-1 text-[19px] font-semibold tracking-tight text-ink-primary">
+            API connection
+          </h2>
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
+            {isFirstRun ? (
+              <span className="text-ink-muted">not connected · add a key to begin</span>
+            ) : (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-1.5 w-1.5 rounded-full bg-status-ready"
+                />
+                <span className="font-semibold text-status-ready">Connected</span>
+                <span className="text-surface-divider">·</span>
+                <span className="mono text-ink-secondary">{settings.baseUrl}</span>
+              </>
+            )}
+          </p>
+        </div>
+        <div className="ml-auto flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => void handleSave()}
+              disabled={saving || !dirty}
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          {savedAt !== null && !dirty && keyCheck.kind === 'idle' && (
+            <span className="text-2xs text-ink-muted">Saved.</span>
+          )}
+          {keyCheck.kind === 'checking' && (
+            <span className="text-2xs text-ink-muted">Saved. Validating key…</span>
+          )}
+          {keyCheck.kind === 'ok' && (
+            <span className="text-2xs text-status-ready">Saved. Key authenticated ✓</span>
+          )}
+        </div>
       </header>
 
       {isFirstRun && (
-        <div className="max-w-xl rounded border border-accent/30 bg-accent-subtle/40 px-4 py-3">
-          <span className="section-label text-accent">No API key yet</span>
-          <p className="mt-1 text-sm text-ink-secondary">
+        <Panel className="border-accent/40 bg-accent-subtle">
+          <span className="section-label text-accent dark:text-ink-primary">No API key yet</span>
+          <p className="mt-1.5 text-sm text-ink-secondary">
             {draftMode === 'cloud' ? (
               <>
                 Sign in with your browser to mint a fresh API key bound to your account, or paste an
@@ -261,17 +308,17 @@ export function SettingsView(): JSX.Element {
               </button>
             </div>
           )}
-        </div>
+        </Panel>
       )}
 
       {/* Appearance — Fleet two-axis theme (2026-06-12 rework). Mode +
           accent persist in settings.json and apply instantly via the
           SettingsProvider effect (document.documentElement data attrs). */}
-      <div className="max-w-xl rounded border border-surface-divider bg-surface-raised px-4 py-3">
+      <Panel>
         <span className="section-label">Appearance</span>
         <div className="mt-4 flex items-center gap-3">
           <span className="w-24 text-sm text-ink-secondary">Mode</span>
-          <div className="flex overflow-hidden rounded border border-surface-divider">
+          <div className="flex overflow-hidden rounded-lg border border-surface-divider">
             {(['light', 'dark'] as const).map((m) => (
               <button
                 key={m}
@@ -279,8 +326,8 @@ export function SettingsView(): JSX.Element {
                 onClick={() => void update({ themeMode: m })}
                 className={
                   settings.themeMode === m
-                    ? 'bg-accent px-3 py-1 text-xs font-medium text-ink-inverted'
-                    : 'bg-surface-inset px-3 py-1 text-xs text-ink-secondary hover:text-ink-primary'
+                    ? 'bg-accent px-3 py-1.5 text-xs font-semibold text-ink-inverted'
+                    : 'bg-surface-inset px-3 py-1.5 text-xs text-ink-secondary transition-colors hover:text-ink-primary'
                 }
               >
                 {m === 'light' ? 'Light' : 'Dark'}
@@ -290,7 +337,7 @@ export function SettingsView(): JSX.Element {
         </div>
         <div className="mt-3 flex items-center gap-3">
           <span className="w-24 text-sm text-ink-secondary">Accent</span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {(
               [
                 ['violet', '#6d5efc'],
@@ -305,26 +352,37 @@ export function SettingsView(): JSX.Element {
                 onClick={() => void update({ themeAccent: a })}
                 className={
                   settings.themeAccent === a
-                    ? 'h-5 w-5 rounded-full ring-2 ring-ink-primary ring-offset-2 ring-offset-surface-raised'
-                    : 'h-5 w-5 rounded-full opacity-70 hover:opacity-100'
+                    ? 'h-5 w-5 rounded-full ring-2 ring-ink-primary ring-offset-2 ring-offset-surface-raised transition-transform'
+                    : 'h-5 w-5 rounded-full opacity-70 transition-all hover:scale-110 hover:opacity-100'
                 }
                 style={{ background: hex }}
               />
             ))}
           </div>
         </div>
-      </div>
+      </Panel>
 
       {!isFirstRun && (
-        <div className="max-w-xl rounded border border-surface-divider bg-surface-raised px-4 py-3">
-          <span className="section-label">Connected</span>
-          <p className="mt-1 text-sm text-ink-secondary">
-            Pointing at <span className="mono">{settings.baseUrl}</span> with key{' '}
-            <span className="mono">
-              {settings.apiKey?.slice(0, 12) ?? ''}…{settings.apiKey?.slice(-4) ?? ''}
+        <Panel>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <span className="section-label">Connected</span>
+              <p className="mt-1.5 text-sm text-ink-secondary">
+                Pointing at <span className="mono">{settings.baseUrl}</span> with key{' '}
+                <span className="mono">
+                  {settings.apiKey?.slice(0, 12) ?? ''}…{settings.apiKey?.slice(-4) ?? ''}
+                </span>
+                .
+              </p>
+            </div>
+            <span
+              aria-hidden="true"
+              className="mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-status-ready/30 bg-status-ready/10 px-2.5 py-1 text-2xs font-semibold uppercase tracking-wider text-status-ready"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-status-ready" />
+              Live
             </span>
-            .
-          </p>
+          </div>
           <button
             type="button"
             className="btn-secondary mt-3"
@@ -348,211 +406,217 @@ export function SettingsView(): JSX.Element {
           >
             Sign out
           </button>
-        </div>
+        </Panel>
       )}
 
-      <div className="flex flex-col gap-4 max-w-xl">
-        <Field label="API key">
-          <div className="flex gap-2">
+      <Panel>
+        <span className="section-label">Authentication</span>
+        <div className="mt-4 flex flex-col gap-5">
+          <Field label="API key">
+            <div className="flex gap-2">
+              <input
+                type={reveal ? 'text' : 'password'}
+                value={draftKey}
+                onChange={(e) => setDraftKey(e.target.value)}
+                placeholder="ds_live_…"
+                className="form-input mono flex-1"
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <button type="button" className="btn-secondary" onClick={() => setReveal((r) => !r)}>
+                {reveal ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            <span className="mt-1.5 block text-2xs text-ink-muted">
+              Stored in your OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret
+              Service); never sent anywhere except your configured API server.
+            </span>
+          </Field>
+
+          <Field label="Deployment">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => switchMode('cloud')}
+                className={`flex-1 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                  draftMode === 'cloud'
+                    ? 'border-accent bg-accent-subtle text-ink-primary'
+                    : 'border-surface-divider bg-surface-base text-ink-secondary hover:border-ink-muted/50 hover:text-ink-primary'
+                }`}
+              >
+                <div className="font-semibold">Cloud</div>
+                <div className="mt-0.5 text-2xs text-ink-muted">
+                  api.driftstack.dev · managed fleet
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode('self-hosted')}
+                className={`flex-1 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                  draftMode === 'self-hosted'
+                    ? 'border-accent bg-accent-subtle text-ink-primary'
+                    : 'border-surface-divider bg-surface-base text-ink-secondary hover:border-ink-muted/50 hover:text-ink-primary'
+                }`}
+              >
+                <div className="font-semibold">Self-hosted</div>
+                <div className="mt-0.5 text-2xs text-ink-muted">Your own server</div>
+              </button>
+            </div>
             <input
-              type={reveal ? 'text' : 'password'}
-              value={draftKey}
-              onChange={(e) => setDraftKey(e.target.value)}
-              placeholder="ds_live_…"
-              className="mono flex-1 rounded bg-surface-inset px-2.5 py-1.5
-                         text-ink-primary
-                         placeholder:text-ink-muted
-                         border border-surface-divider
-                         focus-visible:border-accent
-                         focus-visible:ring-1 focus-visible:ring-accent-ring"
+              type="url"
+              value={draftUrl}
+              onChange={(e) => setDraftUrl(e.target.value)}
+              placeholder="http://localhost:3000"
+              disabled={draftMode === 'cloud'}
+              className="form-input mono mt-3 disabled:cursor-not-allowed disabled:opacity-60"
               spellCheck={false}
               autoComplete="off"
             />
-            <button type="button" className="btn-secondary" onClick={() => setReveal((r) => !r)}>
-              {reveal ? 'Hide' : 'Show'}
-            </button>
-          </div>
-          <span className="mt-1 block text-2xs text-ink-muted">
-            Stored in your OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret
-            Service); never sent anywhere except your configured API server.
-          </span>
-        </Field>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void runConnectionTest()}
+                disabled={testState.kind === 'testing'}
+                className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {testState.kind === 'testing' ? 'Testing…' : 'Test connection'}
+              </button>
+              {testState.kind === 'ok' && (
+                <span className="text-2xs text-status-ready">
+                  ✓ Reachable · <span className="mono">{testState.version.slice(0, 7)}</span>
+                </span>
+              )}
+              {testState.kind === 'fail' && (
+                <span className="whitespace-pre-line text-2xs text-status-error">
+                  ✗ {testState.message}
+                </span>
+              )}
+            </div>
+            {draftMode === 'self-hosted' && (
+              <span className="mt-2 block text-2xs text-ink-muted">
+                The GUI is a control panel — it does NOT run the API server. Self-hosted means you
+                run apps/server yourself (clone driftstackdev/driftstack-api +{' '}
+                <span className="mono">npm install && cd apps/server && npm run dev</span>). The URL
+                above tells the GUI where to find it.
+              </span>
+            )}
+          </Field>
+        </div>
+      </Panel>
 
-        <Field label="Deployment">
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => switchMode('cloud')}
-              className={`flex-1 rounded border px-3 py-2 text-left text-sm transition ${
-                draftMode === 'cloud'
-                  ? 'border-glow-red bg-glow-red/10 text-ink-primary'
-                  : 'border-surface-divider bg-surface-base text-ink-secondary hover:border-glow-red/40 hover:text-ink-primary'
-              }`}
-            >
-              <div className="font-medium">Cloud</div>
-              <div className="mt-0.5 text-2xs text-ink-muted">
-                api.driftstack.dev · managed fleet
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => switchMode('self-hosted')}
-              className={`flex-1 rounded border px-3 py-2 text-left text-sm transition ${
-                draftMode === 'self-hosted'
-                  ? 'border-glow-red bg-glow-red/10 text-ink-primary'
-                  : 'border-surface-divider bg-surface-base text-ink-secondary hover:border-glow-red/40 hover:text-ink-primary'
-              }`}
-            >
-              <div className="font-medium">Self-hosted</div>
-              <div className="mt-0.5 text-2xs text-ink-muted">Your own server</div>
-            </button>
-          </div>
-          <input
-            type="url"
-            value={draftUrl}
-            onChange={(e) => setDraftUrl(e.target.value)}
-            placeholder="http://localhost:3000"
-            disabled={draftMode === 'cloud'}
-            className="mono mt-3 w-full rounded bg-surface-inset px-2.5 py-1.5
-                       text-ink-primary
-                       placeholder:text-ink-muted
-                       border border-surface-divider
-                       focus-visible:border-accent
-                       focus-visible:ring-1 focus-visible:ring-accent-ring
-                       disabled:cursor-not-allowed disabled:opacity-60"
-            spellCheck={false}
-            autoComplete="off"
-          />
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void runConnectionTest()}
-              disabled={testState.kind === 'testing'}
-              className="btn-secondary text-xs disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {testState.kind === 'testing' ? 'Testing…' : 'Test connection'}
-            </button>
-            {testState.kind === 'ok' && (
-              <span className="text-2xs text-emerald-400">
-                ✓ Reachable · {testState.version.slice(0, 7)}
-              </span>
-            )}
-            {testState.kind === 'fail' && (
-              <span className="whitespace-pre-line text-2xs text-status-error">
-                ✗ {testState.message}
-              </span>
-            )}
-          </div>
-          {draftMode === 'self-hosted' && (
-            <span className="mt-2 block text-2xs text-ink-muted">
-              The GUI is a control panel — it does NOT run the API server. Self-hosted means you run
-              apps/server yourself (clone driftstackdev/driftstack-api +{' '}
-              <span className="mono">npm install && cd apps/server && npm run dev</span>). The URL
-              above tells the GUI where to find it.
+      <Panel>
+        <span className="section-label">Privacy</span>
+        <div className="mt-4">
+          <Field label="Crash reports">
+            <div className="flex flex-col gap-2.5">
+              <label className="flex items-center gap-2 text-sm text-ink-secondary">
+                <input
+                  type="radio"
+                  name="telemetry"
+                  className="accent-accent"
+                  checked={draftTelemetry === null}
+                  onChange={() => setDraftTelemetry(null)}
+                />
+                <span>
+                  Use platform default <span className="mono">({platformDefaultLabel})</span>
+                </span>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-ink-secondary">
+                <input
+                  type="radio"
+                  name="telemetry"
+                  className="accent-accent"
+                  checked={draftTelemetry === true}
+                  onChange={() => setDraftTelemetry(true)}
+                />
+                <span>Share crash reports with Driftstack</span>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-ink-secondary">
+                <input
+                  type="radio"
+                  name="telemetry"
+                  className="accent-accent"
+                  checked={draftTelemetry === false}
+                  onChange={() => setDraftTelemetry(false)}
+                />
+                <span>Don't share crash reports</span>
+              </label>
+            </div>
+            <span className="mt-2.5 block text-2xs text-ink-muted">
+              Crash-only: error messages, stack traces, app version, OS. Never API keys, profile
+              data, or any session contents. Currently:{' '}
+              <span className="mono">{effectiveTelemetry}</span>.
             </span>
-          )}
-        </Field>
-
-        <Field label="Crash reports">
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 text-sm text-ink-secondary">
-              <input
-                type="radio"
-                name="telemetry"
-                checked={draftTelemetry === null}
-                onChange={() => setDraftTelemetry(null)}
-              />
-              <span>
-                Use platform default <span className="mono">({platformDefaultLabel})</span>
-              </span>
-            </label>
-            <label className="flex items-center gap-2 text-sm text-ink-secondary">
-              <input
-                type="radio"
-                name="telemetry"
-                checked={draftTelemetry === true}
-                onChange={() => setDraftTelemetry(true)}
-              />
-              <span>Share crash reports with Driftstack</span>
-            </label>
-            <label className="flex items-center gap-2 text-sm text-ink-secondary">
-              <input
-                type="radio"
-                name="telemetry"
-                checked={draftTelemetry === false}
-                onChange={() => setDraftTelemetry(false)}
-              />
-              <span>Don't share crash reports</span>
-            </label>
-          </div>
-          <span className="mt-2 block text-2xs text-ink-muted">
-            Crash-only: error messages, stack traces, app version, OS. Never API keys, profile data,
-            or any session contents. Currently: <span className="mono">{effectiveTelemetry}</span>.
-          </span>
-        </Field>
-
-        <div className="flex items-center gap-3 pt-2">
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => void handleSave()}
-            disabled={saving || !dirty}
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-          {savedAt !== null && !dirty && keyCheck.kind === 'idle' && (
-            <span className="text-2xs text-ink-muted">Saved.</span>
-          )}
-          {keyCheck.kind === 'checking' && (
-            <span className="text-2xs text-ink-muted">Saved. Validating key…</span>
-          )}
-          {keyCheck.kind === 'ok' && (
-            <span className="text-2xs text-status-ready">Saved. Key authenticated ✓</span>
-          )}
+          </Field>
         </div>
-        {keyCheck.kind === 'fail' && (
-          <p className="mt-2 max-w-xl text-xs text-status-error" role="alert">
-            {keyCheck.message}
-          </p>
-        )}
+      </Panel>
 
-        {/* V-324 — help links so customers don't have to dig through
-            the marketing site to find status / docs / support contact
-            from inside the app. */}
-        <div className="mt-8 max-w-xl border-t border-surface-divider pt-4">
-          <span className="section-label">Need help?</span>
-          <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-ink-secondary">
-            <li>
-              <a
-                href="https://status.driftstack.dev"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent hover:underline"
-              >
-                Status
-              </a>
-              <span className="ml-1 text-2xs text-ink-muted">— uptime + incidents</span>
-            </li>
-            <li>
-              <a
-                href="https://docs.driftstack.dev"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-accent hover:underline"
-              >
-                Docs
-              </a>
-              <span className="ml-1 text-2xs text-ink-muted">— quickstart + reference</span>
-            </li>
-            <li>
-              <a href="mailto:support@driftstack.dev" className="text-accent hover:underline">
-                support@driftstack.dev
-              </a>
-            </li>
-          </ul>
+      {keyCheck.kind === 'fail' && (
+        <div
+          className="max-w-xl rounded-lg border border-status-error/30 bg-status-error/10 px-4 py-3 text-xs text-status-error"
+          role="alert"
+        >
+          {keyCheck.message}
         </div>
+      )}
+
+      {/* V-324 — help links so customers don't have to dig through
+          the marketing site to find status / docs / support contact
+          from inside the app. */}
+      <div className="max-w-xl border-t border-surface-divider pt-4">
+        <span className="section-label">Need help?</span>
+        <ul className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-ink-secondary">
+          <li>
+            <a
+              href="https://status.driftstack.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent hover:underline"
+            >
+              Status
+            </a>
+            <span className="ml-1 text-2xs text-ink-muted">— uptime + incidents</span>
+          </li>
+          <li>
+            <a
+              href="https://docs.driftstack.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent hover:underline"
+            >
+              Docs
+            </a>
+            <span className="ml-1 text-2xs text-ink-muted">— quickstart + reference</span>
+          </li>
+          <li>
+            <a href="mailto:support@driftstack.dev" className="text-accent hover:underline">
+              support@driftstack.dev
+            </a>
+          </li>
+        </ul>
       </div>
     </div>
+  );
+}
+
+// Console-style sectioned panel: a rounded, hairline-bordered raised card
+// with tasteful elevation. The shared container for every settings group so
+// the whole view reads with one consistent rhythm + density.
+function Panel({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}): JSX.Element {
+  return (
+    <section
+      className={`max-w-xl rounded-lg border border-surface-divider bg-surface-raised px-5 py-4 shadow-sm ${
+        className ?? ''
+      }`}
+    >
+      {children}
+    </section>
   );
 }
 

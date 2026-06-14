@@ -96,21 +96,25 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     expect(body).toMatch(/or press <span className="mono">⌘ ,<\/span>/);
   });
 
-  it("EmptyList no-sessions branch framing pinned: 'A session is one running iPhone Safari instance. Click <New session> above to spin one up — sessions show up here with a live status while they run.' + 'Each session uses one of your account's concurrent slots until you destroy it or it idle-times-out.' — pinned so customer understands what they're spawning + how it interacts with the cap", () => {
+  it("EmptyList no-sessions branch framing pinned: 'A session is one running iPhone Safari instance. Click New session above to spin one up — sessions show up here with a live status while they run.' + 'Each one uses a concurrent slot until you destroy it or it idle-times-out.' — pinned so customer understands what they're spawning + how it interacts with the cap (Console restyle: the bespoke <h3>/<p> markup became a shared <EmptyState title/description> — same copy + intent, surfaced via the title prop + description prop)", () => {
+    expect(body).toMatch(/title="No active sessions yet"/);
     expect(body).toMatch(
-      /<h3 className="text-base font-medium text-ink-primary">No active sessions yet<\/h3>\s*\n?\s*<p className="max-w-md text-sm text-ink-secondary">\s*\n?\s*A session is one running iPhone Safari instance\. Click <strong>New session<\/strong> above\s*\n?\s*to spin one up — sessions show up here with a live status while they run\./,
+      /A session is one running iPhone Safari instance\. Click New session above to spin one up — sessions show up here with a live status while they run\./,
     );
     expect(body).toMatch(
-      /Each session uses one of your account's concurrent slots until you destroy it or it\s*\n?\s*idle-times-out\./,
+      /Each one uses a concurrent slot until you destroy it or it idle-times-out\./,
     );
   });
 
-  it('StatusPill 4-tone: ready → status-ready / busy → status-busy / errored → status-error / else status-idle fallback (creating/destroyed map to idle dot) — pinned so the live-status colour vocabulary stays consistent across the table; SessionsTable 6-col (ID/Status/Archetype/Label/Created/actions) with View + Destroy buttons (Destroy disabled when busyId===s.id)', () => {
+  it("StatusPill 4-tone: ready → status-ready / busy → status-busy / errored → status-error / else status-idle fallback (creating/destroyed map to idle dot) — pinned so the live-status colour vocabulary stays consistent across the cards; SessionCard has View + Stop buttons (Stop disabled while that card is busy with a 'Stopping…' label) — Console restyle renamed the row 'Destroy' action to a card 'Stop' button driven by the SessionCard `busy` prop (same per-session destroy gating, new copy)", () => {
     expect(body).toMatch(
       /const dotColor =\s*\n?\s*status === 'ready'\s*\n?\s*\? 'bg-status-ready'\s*\n?\s*: status === 'busy'\s*\n?\s*\? 'bg-status-busy'\s*\n?\s*: status === 'errored'\s*\n?\s*\? 'bg-status-error'\s*\n?\s*: 'bg-status-idle';/,
     );
+    // SessionCard wires per-session destroy gating through its `busy` prop
+    // (busy === busyId === s.id at the call site).
+    expect(body).toMatch(/busy=\{busyId === s\.id\}/);
     expect(body).toMatch(
-      /disabled=\{busyId === s\.id\}\s*\n?\s*>\s*\n?\s*\{busyId === s\.id \? 'Destroying…' : 'Destroy'\}/,
+      /onClick=\{onDestroy\}\s*\n?\s*disabled=\{busy\}\s*\n?\s*>\s*\n?\s*\{busy \? 'Stopping…' : 'Stop'\}/,
     );
   });
 
@@ -121,13 +125,16 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     expect(body).toMatch(/return 'unknown error';/);
   });
 
-  it("Header session count: concurrentCap !== null && concurrentActive !== null → `${active} / ${cap}` cap-display else state.sessions.length (no cap data yet); footer 'Last refreshed <mono>{formatTime(refreshedAt)}</mono> · auto-refresh every {REFRESH_MS/1000}s' template literal — pinned so refresh cadence stays in sync with REFRESH_MS constant", () => {
+  it("Header session count: concurrentCap !== null && concurrentActive !== null → `${active} / ${cap}` cap-display else state.sessions.length (no cap data yet); the live-refresh footer 'Refreshed <mono>{formatTime(refreshedAt)}</mono> · auto-refresh {REFRESH_MS/1000}s' (with an auto-refresh-only fallback before the first refresh) — pinned so the displayed cadence stays in sync with the REFRESH_MS constant (Console restyle: 'Last refreshed' → 'Refreshed' + the live ping pill, 'auto-refresh every Ns' → 'auto-refresh Ns')", () => {
     expect(body).toMatch(
       /\{concurrentCap !== null && concurrentActive !== null\s*\n?\s*\? `\$\{concurrentActive\.toString\(\)\} \/ \$\{concurrentCap\.toString\(\)\}`\s*\n?\s*: state\.sessions\.length\.toString\(\)\}/,
     );
     expect(body).toMatch(
-      /Last refreshed <span className="mono">\{formatTime\(state\.refreshedAt\)\}<\/span> ·\s*\n?\s*auto-refresh every \{REFRESH_MS \/ 1000\}s/,
+      /Refreshed <span className="mono">\{formatTime\(state\.refreshedAt\)\}<\/span> ·\s*\n?\s*auto-refresh \{REFRESH_MS \/ 1000\}s/,
     );
+    // Cadence must still be driven by the constant, never a hard-coded
+    // literal — the pre-first-refresh fallback also derives from REFRESH_MS.
+    expect(body).toMatch(/<>auto-refresh \{REFRESH_MS \/ 1000\}s<\/>/);
   });
 
   it('file exists at canonical path', () => {
