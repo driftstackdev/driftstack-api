@@ -168,9 +168,41 @@ export type AgentIntent =
   | { kind: 'scroll'; direction: 'up' | 'down'; amount_px?: number }
   | { kind: 'behavioral_pause'; duration_ms?: number; reading_word_count?: number };
 
+/**
+ * Consequential-action category for the human-confirmation safety gate
+ * (W443/W445). A `confirmation_required` intent result echoes the matched
+ * category + phrase back so the caller can approve the action by re-sending the
+ * turn via `message(id, msg, { approveConsequentialActions: [...] })`.
+ */
+export type ConsequentialActionCategory = 'purchase' | 'payment' | 'account_deletion';
+
+/**
+ * Per-turn usage/cost block. Attached by the server on every Claude-backed
+ * message response (`decomposer_kind: 'claude'`); deterministic turns set
+ * `decomposer_kind: 'deterministic'` with token/cost fields absent. Surface it
+ * as a "$0.0023 · 145 tok · <model>" badge; render '—' when undefined.
+ */
+export interface AgentUsage {
+  decomposer_kind: 'claude' | 'deterministic';
+  anthropic_input_tokens?: number;
+  anthropic_output_tokens?: number;
+  cost_usd_cents?: number;
+  model?: string;
+}
+
 export type AgentIntentResult =
   | { kind: 'success'; intent: AgentIntent; summary: string; captureId?: string }
-  | { kind: 'failure'; intent: AgentIntent; reason: string };
+  | { kind: 'failure'; intent: AgentIntent; reason: string }
+  // The executor halted BEFORE dispatching a consequential action (purchase /
+  // payment / account-deletion) that needs human confirmation. The plan is
+  // paused; approve by re-sending the turn with this {category, matchedText}
+  // in `message(id, msg, { approveConsequentialActions: [...] })`.
+  | {
+      kind: 'confirmation_required';
+      intent: AgentIntent;
+      category: ConsequentialActionCategory;
+      matchedText: string;
+    };
 
 export type AgentMessageResponse =
   | {
@@ -178,17 +210,22 @@ export type AgentMessageResponse =
       session: AgentSession;
       intents: ReadonlyArray<AgentIntent>;
       results: ReadonlyArray<AgentIntentResult>;
+      /** True iff every intent succeeded. False if any failed OR the plan
+       *  halted on a `confirmation_required` result (check `results`). */
       ok: boolean;
+      usage?: AgentUsage;
     }
   | {
       kind: 'clarify';
       session: AgentSession;
       clarifying_question: string;
+      usage?: AgentUsage;
     }
   | {
       kind: 'refuse';
       session: AgentSession;
       refuse_reason: string;
+      usage?: AgentUsage;
     }
   | {
       /**
@@ -243,18 +280,45 @@ export class AgentSessionsResource {
    * to construct it by hand. NEVER logged by the SDK; the key
    * arrives over TLS to the control plane.
    *
+   * `approveConsequentialActions` (optional) approves consequential actions
+   * the executor previously halted on (W443/W445). When a prior turn returned a
+   * `confirmation_required` intent result, echo its {category, matchedText} back
+   * here so the re-planned action dispatches instead of halting again. The SDK
+   * maps each entry to the wire's snake_case `{category, matched_text}`.
+   *
    * A closed session returns a 409 ConflictError; the chat UI
    * should prompt the customer to start a new agent session.
    */
   message(
     id: string,
     userMessage: string,
-    opts?: { byokApiKey?: string },
+    opts?: {
+      byokApiKey?: string;
+      approveConsequentialActions?: ReadonlyArray<{
+        category: ConsequentialActionCategory;
+        matchedText: string;
+      }>;
+    },
   ): Promise<AgentMessageResponse> {
+    const approvals = opts?.approveConsequentialActions;
     return this.http.request<AgentMessageResponse>({
       method: 'POST',
       path: `/v1/agent-sessions/${encodeURIComponent(id)}/message`,
-      body: { user_message: userMessage },
+      body: {
+        user_message: userMessage,
+        // W443/W445 — re-send approved consequential actions in the wire's
+        // snake_case shape so the executor skips the confirmation halt. Omit
+        // the field entirely when there are none (matches the route's optional
+        // schema; avoids sending an empty array).
+        ...(approvals !== undefined && approvals.length > 0
+          ? {
+              approve_consequential_actions: approvals.map((a) => ({
+                category: a.category,
+                matched_text: a.matchedText,
+              })),
+            }
+          : {}),
+      },
       // Skip the header when byokApiKey is undefined OR empty string.
       // Empty would send `x-byok-anthropic-api-key:` on the wire — the
       // server normalises that to absent (slice 105 fix), but skipping

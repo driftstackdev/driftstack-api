@@ -171,6 +171,25 @@ describe('AgentSessionsResource', () => {
     expect(calls[0]?.headers).toBeUndefined();
   });
 
+  it('message with opts.approveConsequentialActions maps each approval to the wire snake_case approve_consequential_actions (W443/W445 Approve/Deny round-trip: the consumer passes back the {category, matchedText} a prior confirmation_required result echoed)', async () => {
+    const { http, calls } = makeFakeHttp({});
+    const res = new AgentSessionsResource(http);
+    await res.message('agt_1', 'place the order', {
+      approveConsequentialActions: [{ category: 'purchase', matchedText: 'buy now' }],
+    });
+    expect(calls[0]?.body).toEqual({
+      user_message: 'place the order',
+      approve_consequential_actions: [{ category: 'purchase', matched_text: 'buy now' }],
+    });
+  });
+
+  it('message with an empty approveConsequentialActions array omits the field entirely (matches the route optional schema — no empty array on the wire)', async () => {
+    const { http, calls } = makeFakeHttp({});
+    const res = new AgentSessionsResource(http);
+    await res.message('agt_1', 'hi', { approveConsequentialActions: [] });
+    expect(calls[0]?.body).toEqual({ user_message: 'hi' });
+  });
+
   it('close DELETEs /v1/agent-sessions/{id} (URL-encoded)', async () => {
     const { http, calls } = makeFakeHttp(undefined as unknown as void);
     const res = new AgentSessionsResource(http);

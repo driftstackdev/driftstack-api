@@ -94,12 +94,30 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/kind: 'logged-manual';/);
   });
 
+  it("AI-chat confirmation + usage surface pinned: ConsequentialActionCategory + AgentUsage types, the confirmation_required AgentIntentResult variant ({category, matchedText} echoed for approval), usage? on plan-executed/clarify/refuse, and message()'s approveConsequentialActions opt mapped to the wire snake_case approve_consequential_actions. Drift would break the AI-chat Approve/Deny safety-gate round-trip + the per-turn cost badge", () => {
+    expect(body).toMatch(
+      /export type ConsequentialActionCategory = 'purchase' \| 'payment' \| 'account_deletion';/,
+    );
+    expect(body).toMatch(/export interface AgentUsage \{/);
+    expect(body).toMatch(/decomposer_kind: 'claude' \| 'deterministic';/);
+    // confirmation_required intent-result variant carries the echo-back fields.
+    expect(body).toMatch(/kind: 'confirmation_required';/);
+    expect(body).toMatch(/category: ConsequentialActionCategory;/);
+    expect(body).toMatch(/matchedText: string;/);
+    // usage? attached to the three substantive response variants.
+    expect(body).toMatch(/usage\?: AgentUsage;/);
+    // message() accepts approvals + maps them to the wire snake_case shape.
+    expect(body).toMatch(/approveConsequentialActions\?: ReadonlyArray</);
+    expect(body).toMatch(/approve_consequential_actions: approvals\.map/);
+    expect(body).toMatch(/matched_text: a\.matchedText,/);
+  });
+
   it('AgentSessionsResource 10-method surface: create + get + message + close + setMode + sendInputEvent + takeover + handback + livekitToken + resume (W474). Drift to dropping a method would break dashboard + e2e tests that compile against it; drift to changing signature would silently break the wire contract', () => {
     expect(body).toMatch(/export class AgentSessionsResource \{/);
     expect(body).toMatch(/create\(\s*\n?\s*body: CreateAgentSessionRequest = \{\},/);
     expect(body).toMatch(/get\(id: string\): Promise<AgentSession>/);
     expect(body).toMatch(
-      /message\(\s*\n?\s*id: string,\s*\n?\s*userMessage: string,\s*\n?\s*opts\?: \{ byokApiKey\?: string \},\s*\n?\s*\): Promise<AgentMessageResponse>/,
+      /message\(\s*\n?\s*id: string,\s*\n?\s*userMessage: string,\s*\n?\s*opts\?: \{[\s\S]*?byokApiKey\?: string;[\s\S]*?approveConsequentialActions\?:[\s\S]*?\},\s*\n?\s*\): Promise<AgentMessageResponse>/,
     );
     expect(body).toMatch(/close\(id: string\): Promise<void>/);
     expect(body).toMatch(

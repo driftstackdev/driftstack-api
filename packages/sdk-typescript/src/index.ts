@@ -44,6 +44,8 @@ export type {
   CreateAgentSessionRequest,
   AgentIntent,
   AgentIntentResult,
+  ConsequentialActionCategory,
+  AgentUsage,
   AgentMessageResponse,
   LiveKitInfo,
 } from './resources/agent-sessions.js';

@@ -57,11 +57,14 @@ gradients.
 
 ### P2 — AI chat (headline)
 
-- [ ] **S5** SDK types catch-up (`packages/sdk-typescript/src/resources/agent-sessions.ts`) to match
-      the REAL API: add `confirmation_required` to `AgentIntentResult` (`{kind, intent, category,
-matchedText}`), add `awaitingConfirmation?` + `usage?` to the message responses, and add
-      `approve_consequential_actions?` to `message()`. Pure type/SDK slice — fully verifiable (tsc + SDK
-      tests). Mirror the route shape (`routes/agent-sessions.ts` ~1645-1750, `publicUsage`).
+- [x] **S5** SDK types catch-up (`packages/sdk-typescript/src/resources/agent-sessions.ts`) — DONE.
+      Added `ConsequentialActionCategory` + `AgentUsage` types, the `confirmation_required`
+      `AgentIntentResult` variant (`{kind, intent, category, matchedText}` echoed for approval),
+      `usage?` on plan-executed/clarify/refuse, and `message()`'s `approveConsequentialActions` opt →
+      mapped to the wire snake_case `approve_consequential_actions`. Re-exported the new types from
+      `index.ts`. Mirrors the route shape (`routes/agent-sessions.ts` ~1717-1750, `publicUsage` +
+      `results` passthrough). TS-only (no cross-SDK test forces Go/Python equality for this shape —
+      Go/Python catch-up is a non-blocking follow-up). Parity test updated + 2 SDK unit tests added.
 - [ ] **S6** `useAgentChat` hook: create-on-first-message (`agentSessions.create`), `message()`,
       reduce response kinds (plan-executed/clarify/refuse/logged-manual + confirmation), approve/deny =
       re-send with `approve_consequential_actions`. Unit-tested with a mocked client.
@@ -95,6 +98,8 @@ matchedText}`), add `awaitingConfirmation?` + `usage?` to the message responses,
 Each slice records here when shipped: slice id · commit · gate result · "needs Tauri rebuild to see".
 
 - S1 · `8e180c24` · gui-jsdom 521 green + full suite green · visible after rebuild #1.
+- S5 · (this commit) · SDK agent-sessions.ts confirmation_required + usage + approveConsequentialActions
+  · sdk unit (17) + content-parity (16) + v2-37 green · non-visual (SDK types; unblocks S6/S7).
 
 ## Out of scope / gated (surface, don't flip)
 
