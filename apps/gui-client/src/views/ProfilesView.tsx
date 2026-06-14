@@ -1196,7 +1196,18 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                                   {probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}{' '}
                                   {px.label} · {px.host}:{px.port}
                                   {probe?.exitIp !== undefined && ` → ${probe.exitIp}`}
+                                  {probe?.result.latency_ms !== undefined &&
+                                    ` · ${probe.result.latency_ms}ms`}
                                 </span>
+                                {probe?.at !== undefined && (
+                                  <span className="shrink-0 text-ink-muted">
+                                    checked{' '}
+                                    <RelativeTime
+                                      iso={new Date(probe.at).toISOString()}
+                                      tooltipPrefix="Proxy checked"
+                                    />
+                                  </span>
+                                )}
                                 {probe ? (
                                   <span
                                     className={`shrink-0 rounded-sm px-1 py-px ${
@@ -2358,6 +2369,22 @@ function HubStat({ n, l, tone }: { n: string; l: string; tone?: 'ok' }): JSX.Ele
   );
 }
 
+// Folder visual identity (founder: folders "look boring without any images").
+// All/Unfiled get fixed glyphs; named folders get a 📁 plus a deterministic
+// color dot hashed from the name so each folder is visually distinguishable
+// at a glance without requiring per-folder icon metadata.
+export function folderGlyph(label: string): string {
+  if (label === 'All profiles') return '🗂️';
+  if (label === 'Unfiled') return '📥';
+  return '📁';
+}
+
+export function folderColor(label: string): string {
+  let h = 0;
+  for (let i = 0; i < label.length; i += 1) h = (h * 31 + label.charCodeAt(i)) % 360;
+  return `hsl(${h} 55% 55%)`;
+}
+
 function FolderItem({
   label,
   count,
@@ -2369,6 +2396,7 @@ function FolderItem({
   active: boolean;
   onSelect: () => void;
 }): JSX.Element {
+  const namedFolder = label !== 'All profiles' && label !== 'Unfiled';
   return (
     <button
       type="button"
@@ -2380,7 +2408,19 @@ function FolderItem({
           : 'text-ink-secondary hover:bg-surface-inset'
       }`}
     >
-      <span className="truncate">{label}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        <span aria-hidden="true" className="shrink-0 text-[11px] leading-none">
+          {folderGlyph(label)}
+        </span>
+        {namedFolder && (
+          <span
+            aria-hidden="true"
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: folderColor(label) }}
+          />
+        )}
+        <span className="truncate">{label}</span>
+      </span>
       <span className="mono text-2xs text-ink-muted">{count}</span>
     </button>
   );
