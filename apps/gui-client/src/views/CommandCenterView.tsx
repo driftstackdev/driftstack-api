@@ -16,8 +16,25 @@
 
 import { useEffect, useState, type JSX } from 'react';
 import { useSettings } from '../lib/SettingsContext';
+import { RelativeTime } from '../components/RelativeTime';
 
 export type HomeNavTarget = 'ai' | 'recipes' | 'profiles' | 'proxies' | 'sessions';
+
+// Humanise an audit action key for the activity feed: 'profile.created' →
+// 'Profile created', 'api_key.rotated' → 'Api key rotated'. Pure + exported so
+// the formatting is unit-tested independently of the fetch.
+export function formatAuditAction(action: string): string {
+  const words = action.replace(/[._-]+/g, ' ').trim();
+  if (words.length === 0) return 'Activity';
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+interface ActivityEntry {
+  id: string;
+  action: string;
+  actorType: string;
+  timestamp: string;
+}
 
 // Session status taxonomy (api-types SessionStatusSchema). Grouped for the
 // health strip: ready/busy = running, creating = spinning up, errored = needs
@@ -47,6 +64,12 @@ type HealthState =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'ready'; health: SessionHealth }
+  | { kind: 'error' };
+
+type ActivityState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; entries: ActivityEntry[] }
   | { kind: 'error' };
 
 export function CommandCenterView({
@@ -79,6 +102,36 @@ export function CommandCenterView({
       })
       .catch(() => {
         if (!cancelled) setHealth({ kind: 'error' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  // Recent activity from the audit log — same independent-load + graceful-
+  // degradation contract as the health strip (never blocks the landing).
+  const [activity, setActivity] = useState<ActivityState>({ kind: 'idle' });
+  useEffect(() => {
+    if (!client) {
+      setActivity({ kind: 'idle' });
+      return;
+    }
+    let cancelled = false;
+    setActivity({ kind: 'loading' });
+    client.auditLog
+      .list({ limit: 6 })
+      .then((page) => {
+        if (cancelled) return;
+        const entries: ActivityEntry[] = page.data.map((e) => ({
+          id: e.id,
+          action: e.action,
+          actorType: e.actor_type,
+          timestamp: e.timestamp,
+        }));
+        setActivity({ kind: 'ready', entries });
+      })
+      .catch(() => {
+        if (!cancelled) setActivity({ kind: 'error' });
       });
     return () => {
       cancelled = true;
@@ -140,6 +193,12 @@ export function CommandCenterView({
           </button>
         </div>
         <SessionHealthStrip state={health} />
+      </section>
+
+      {/* Recent activity from the audit log — loads independently. */}
+      <section className="flex flex-col gap-2">
+        <span className="section-label">Recent activity</span>
+        <ActivityFeed state={activity} />
       </section>
 
       {/* Quick links into the rest of the app. */}
@@ -227,6 +286,59 @@ function HealthTile({
       <span className="section-label">{label}</span>
       <span className={`mono text-xl font-semibold tabular-nums ${valueCls}`}>{value}</span>
     </div>
+  );
+}
+
+function ActivityFeed({ state }: { state: ActivityState }): JSX.Element {
+  if (state.kind === 'idle') {
+    return (
+      <div className="rounded-lg border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
+        Connect your API key to see recent account activity.
+      </div>
+    );
+  }
+  if (state.kind === 'loading') {
+    return (
+      <div className="h-[120px] animate-pulse rounded-lg border border-surface-divider bg-surface-inset" />
+    );
+  }
+  if (state.kind === 'error') {
+    return (
+      <div className="rounded-lg border border-surface-divider px-4 py-3 text-xs text-ink-muted">
+        Couldn&rsquo;t load recent activity right now.
+      </div>
+    );
+  }
+  if (state.entries.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
+        No activity yet — actions you take show up here.
+      </div>
+    );
+  }
+  return (
+    <ul className="divide-y divide-surface-divider overflow-hidden rounded-lg border border-surface-divider bg-surface-raised">
+      {state.entries.map((e) => (
+        <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <span
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                e.actorType === 'system'
+                  ? 'bg-status-busy'
+                  : e.actorType === 'staff'
+                    ? 'bg-accent'
+                    : 'bg-status-ready'
+              }`}
+              aria-hidden="true"
+            />
+            <span className="truncate text-sm text-ink-primary">{formatAuditAction(e.action)}</span>
+          </div>
+          <span className="shrink-0 text-2xs text-ink-muted">
+            <RelativeTime iso={e.timestamp} tooltipPrefix="At" />
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

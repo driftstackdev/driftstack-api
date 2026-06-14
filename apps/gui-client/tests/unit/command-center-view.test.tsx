@@ -1,8 +1,9 @@
-// Command Center home (G4) — the overview that leads with Automate. Asserts the
-// Automate hero CTAs route to ai / recipes, the KPI strip renders from a mocked
-// accountMe (and degrades to "—" when null), the quick links navigate, the pure
-// session-health rollup, and that the live session-health strip loads + degrades
-// gracefully. Controllable useSettings mock so it runs without the Tauri/SDK chain.
+// Command Center home (G4/G4b) — the Automate-led overview + live session-health
+// + recent-activity. Asserts the hero CTAs route to ai/recipes, the KPI strip
+// (from accountMe, "—" when null), the quick links, the pure summarizeSessions /
+// formatAuditAction helpers, and that both async strips (health + activity) load
+// and degrade gracefully. Controllable useSettings mock so it runs without the
+// Tauri/SDK chain.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
@@ -14,10 +15,29 @@ vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => ({ accountMe, client }),
 }));
 
-const { CommandCenterView, summarizeSessions } = await import('../../src/views/CommandCenterView');
+const { CommandCenterView, summarizeSessions, formatAuditAction } =
+  await import('../../src/views/CommandCenterView');
 
 function nav() {
   return vi.fn<(k: HomeNavTarget) => void>();
+}
+
+// A client whose two strips resolve to empty unless overridden — so a test
+// exercising one strip doesn't crash on the other's effect.
+function makeClient(over?: {
+  sessions?: () => Promise<unknown>;
+  auditLog?: () => Promise<unknown>;
+}) {
+  return {
+    sessions: {
+      list:
+        over?.sessions ?? (() => Promise.resolve({ data: [], has_more: false, next_cursor: null })),
+    },
+    auditLog: {
+      list:
+        over?.auditLog ?? (() => Promise.resolve({ data: [], has_more: false, next_cursor: null })),
+    },
+  };
 }
 
 describe('summarizeSessions', () => {
@@ -42,6 +62,17 @@ describe('summarizeSessions', () => {
       errored: 0,
       destroyed: 0,
     });
+  });
+});
+
+describe('formatAuditAction', () => {
+  it('humanises dotted/underscored action keys', () => {
+    expect(formatAuditAction('profile.created')).toBe('Profile created');
+    expect(formatAuditAction('api_key.rotated')).toBe('Api key rotated');
+    expect(formatAuditAction('session.errored')).toBe('Session errored');
+  });
+  it('degrades to "Activity" for an empty key', () => {
+    expect(formatAuditAction('')).toBe('Activity');
   });
 });
 
@@ -92,35 +123,63 @@ describe('CommandCenterView', () => {
     expect(onNavigate).toHaveBeenCalledWith('sessions');
   });
 
-  it('without a client, the health strip prompts to connect', () => {
+  it('without a client, both strips prompt to connect', () => {
     client = null;
     render(<CommandCenterView onNavigate={nav()} />);
     expect(screen.getByText(/Connect your API key to see live session health/)).toBeTruthy();
+    expect(screen.getByText(/Connect your API key to see recent account activity/)).toBeTruthy();
   });
 
   it('loads + renders the session-health rollup from client.sessions.list', async () => {
-    client = {
-      sessions: {
-        list: vi.fn(() =>
-          Promise.resolve({
-            data: [{ status: 'ready' }, { status: 'busy' }, { status: 'errored' }],
-            has_more: false,
-            next_cursor: null,
-          }),
-        ),
-      },
-    };
+    client = makeClient({
+      sessions: () =>
+        Promise.resolve({
+          data: [{ status: 'ready' }, { status: 'busy' }, { status: 'errored' }],
+          has_more: false,
+          next_cursor: null,
+        }),
+    });
     render(<CommandCenterView onNavigate={nav()} />);
-    // Running = ready + busy = 2; Errored = 1.
     await waitFor(() => expect(screen.getByText('Running')).toBeTruthy());
     expect(screen.getByText('2')).toBeTruthy(); // running
     const errored = screen.getByText('Errored').parentElement;
     expect(errored?.textContent).toContain('1');
   });
 
-  it('degrades to a quiet message when the sessions fetch fails', async () => {
-    client = { sessions: { list: vi.fn(() => Promise.reject(new Error('boom'))) } };
+  it('loads + renders the recent-activity feed from client.auditLog.list', async () => {
+    client = makeClient({
+      auditLog: () =>
+        Promise.resolve({
+          data: [
+            {
+              id: 'a1',
+              action: 'profile.created',
+              actor_type: 'customer',
+              timestamp: '2026-06-14T00:00:00Z',
+            },
+            {
+              id: 'a2',
+              action: 'api_key.rotated',
+              actor_type: 'system',
+              timestamp: '2026-06-14T00:01:00Z',
+            },
+          ],
+          has_more: false,
+          next_cursor: null,
+        }),
+    });
+    render(<CommandCenterView onNavigate={nav()} />);
+    await waitFor(() => expect(screen.getByText('Profile created')).toBeTruthy());
+    expect(screen.getByText('Api key rotated')).toBeTruthy();
+  });
+
+  it('degrades to quiet messages when the fetches fail', async () => {
+    client = makeClient({
+      sessions: () => Promise.reject(new Error('boom')),
+      auditLog: () => Promise.reject(new Error('boom')),
+    });
     render(<CommandCenterView onNavigate={nav()} />);
     await waitFor(() => expect(screen.getByText(/Couldn.t load sessions/)).toBeTruthy());
+    expect(screen.getByText(/Couldn.t load recent activity/)).toBeTruthy();
   });
 });

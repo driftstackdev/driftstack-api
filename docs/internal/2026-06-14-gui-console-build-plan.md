@@ -171,7 +171,13 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G4b Command Center → DEFAULT + session-health · (this commit) · founder "continue on it all" after
+- G4c Command Center recent-activity feed · (this commit) · added a recent-activity feed from the audit
+  log (`client.auditLog.list({limit:6})` → humanised via pure `formatAuditAction` + per-actor dot +
+  RelativeTime), same independent-load + graceful-degradation contract as the health strip (idle/loading/
+  error/empty). Command Center now = Automate hero + KPI strip + session-health + activity + quick links.
+  +3 command-center-view tests (formatAuditAction + feed load/error). tsc/eslint/prettier + gui-jsdom 574
+  green · VISIBLE after rebuild #9.
+- G4b Command Center → DEFAULT + session-health · `6fc80155` · founder "continue on it all" after
   reviewing rebuild #7. Flipped the default landing `useState<View>` from `'profiles'` to `'home'` (no
   parity pin gates the default) so the app opens on the Automate-led overview. Enriched the Command
   Center with a live **session-health strip** (pure `summarizeSessions` rollup → Running/Creating/
