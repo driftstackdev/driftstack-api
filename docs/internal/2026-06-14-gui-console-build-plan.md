@@ -171,7 +171,13 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G3 Tag filter + inline folder create · (this commit) · founder "missing tags / folder creation on the
+- G8a Keyboard-shortcuts cheatsheet · (this commit) · contained low-risk polish shipped under high load
+  (G4 Command Center deferred to a calm wave — it's a high-blast-radius new default landing). New
+  `ShortcutsCheatsheet` overlay (`?` or ⌘/, + ⌘K "Keyboard shortcuts" entry) documenting the REAL
+  shortcuts (⌘K / ⌘⇧D / ⌘, / ⌘⇧L / Enter+⇧Enter); `?` suppressed while typing in a field. new
+  shortcuts-cheatsheet.test.tsx (4) · tsc/eslint/prettier + gui-jsdom 560 + App content-parity 12 green
+  · VISIBLE after rebuild #7.
+- G3 Tag filter + inline folder create · `4be7e13f` · founder "missing tags / folder creation on the
   grid". Found inline folder-CREATE already works (FolderPicker "＋ New folder…" in the per-card Organize
   popover + create modal), so the real gap was tag FILTERING: new pure `aggregateTags()` in profiles-meta
   - a `tagFilter` state + filter logic (composes AND with folder/status/search) + an exported

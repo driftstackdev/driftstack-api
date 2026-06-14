@@ -11,6 +11,7 @@ import { ConnectionPill } from './components/ConnectionPill';
 import { Sidebar, type SidebarViewKind } from './components/Sidebar';
 import { TitleBar } from './components/TitleBar';
 import { ThemeSwitcher } from './components/ThemeSwitcher';
+import { ShortcutsCheatsheet } from './components/ShortcutsCheatsheet';
 import { NotificationToastStack } from './components/NotificationToastStack';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
@@ -66,11 +67,32 @@ function Shell(): JSX.Element {
   const [view, setView] = useState<View>({ kind: 'profiles' });
   // ⌘K command palette (demo-concepts arc) — global hotkey, view navigation.
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Keyboard-shortcuts cheatsheet (5→10 polish) — `?` or ⌘/. `?` is suppressed
+  // while typing in a field so it doesn't hijack a literal question mark.
+  const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((v) => !v);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === '/') {
+        e.preventDefault();
+        setCheatsheetOpen((v) => !v);
+        return;
+      }
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const t = e.target as HTMLElement | null;
+        const typing =
+          t !== null &&
+          (t.tagName === 'INPUT' ||
+            t.tagName === 'TEXTAREA' ||
+            t.tagName === 'SELECT' ||
+            t.isContentEditable);
+        if (typing) return;
+        e.preventDefault();
+        setCheatsheetOpen((v) => !v);
       }
     }
     window.addEventListener('keydown', onKey);
@@ -140,6 +162,14 @@ function Shell(): JSX.Element {
       glyph: '⚙',
       keywords: ['nav', 'appearance', 'theme'],
       run: () => setView({ kind: 'settings' }),
+    },
+    {
+      id: 'show-shortcuts',
+      label: 'Keyboard shortcuts',
+      kind: 'help',
+      glyph: '⌨',
+      keywords: ['keyboard', 'shortcuts', 'keys', 'cheatsheet', 'help'],
+      run: () => setCheatsheetOpen(true),
     },
   ];
   // V-244 — track wizard state. Customer with no apiKey on boot
@@ -259,6 +289,7 @@ function Shell(): JSX.Element {
           actions={paletteActions}
           onClose={() => setPaletteOpen(false)}
         />
+        <ShortcutsCheatsheet open={cheatsheetOpen} onClose={() => setCheatsheetOpen(false)} />
       </div>
     </ToastProvider>
   );
