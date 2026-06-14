@@ -171,6 +171,12 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
+- G2 Kill the fake grid thumbnails · (this commit) · founder "the grid has random images of a browser"
+  → replaced the `MiniPage` faux-webpage placeholder with a clean `ProfileIdentity` card (deterministic
+  monogram on a per-profile accent-hued gradient wash + device label; future-proofed to swap in a real
+  last-session screenshot once the driver captures one). Exported pure `profileMonogram`/`identityHue` +
+  new profile-identity.test.tsx (6) · tsc/eslint/prettier + gui-jsdom 552 + ProfilesView parity 18 green
+  · VISIBLE after rebuild #6.
 
 ### P5 — greatness backlog (Tier-1 quick-wins; see 2026-06-14-gui-greatness-backlog.md)
 

@@ -1288,12 +1288,13 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                           : 'border-surface-divider hover:border-ink-muted/60'
                       }`}
                     >
-                      {/* THUMBNAIL — a CSS iPhone frame (notch) holding a
-                          stylized mini mobile page, themed per profile. LIVE
-                          cards carry the status-ready glow (on the card) + a
-                          LIVE chip; hover reveals quiet quick-action buttons.
-                          No real screenshot exists (mock driver) — this is a
-                          tasteful placeholder; all facts live in the meta. */}
+                      {/* THUMBNAIL — a CSS iPhone frame (notch) holding the
+                          profile IDENTITY card (monogram + accent wash + device
+                          label), NOT a faux webpage (founder G2: the old
+                          mini-page read as "random browser images"). LIVE cards
+                          carry the status-ready glow + a LIVE chip; hover
+                          reveals quiet quick-actions. Swaps to a real
+                          last-session screenshot once the driver captures one. */}
                       <div className="relative grid h-32 place-items-center overflow-hidden border-b border-surface-divider bg-surface-inset">
                         {running ? (
                           <span className="absolute left-2 top-2 z-10 inline-flex h-[18px] items-center gap-1 rounded-full border border-status-ready/30 bg-status-ready/15 px-1.5 text-[9px] font-bold uppercase tracking-wider text-status-ready">
@@ -1380,7 +1381,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                           className="relative mt-[18px] h-[118px] w-24 overflow-hidden rounded-t-[13px] bg-surface-raised shadow-md ring-[3px] ring-[#1a1a1f] dark:ring-[#2a2f3a]"
                         >
                           <span className="absolute left-1/2 top-0 z-30 h-2 w-[34px] -translate-x-1/2 rounded-b-[7px] bg-[#1a1a1f] dark:bg-[#2a2f3a]" />
-                          <MiniPage name={profile.name} />
+                          <ProfileIdentity name={profile.name} archetype={profile.archetype} />
                         </div>
                       </div>
                       {/* META — name + device chip + last-active; proxy row;
@@ -2705,59 +2706,60 @@ function HealthRing({ pct }: { pct: number }): JSX.Element {
   );
 }
 
-// S5 (GUI-rework 2026-06-14) — per-card stylized mini-page theme. We have NO
-// real screenshots (the driver is mock), so the card "thumbnail" is a tasteful
-// stylized placeholder: a colored browser bar + image/content blocks themed
-// per profile. The bar color is a deterministic, muted hue hashed from the
-// profile name (so each card reads distinctly) and the label is the profile's
-// first word — decorative only; all facts live in the text meta below.
-const MINI_PALETTE = [
-  '#5e8e3e',
-  '#232f3e',
-  '#0a3d62',
-  '#1877f2',
-  '#c13584',
-  '#3a3f4b',
-  '#722f37',
-  '#0c7d69',
-];
-function miniTheme(name: string): { bar: string; label: string } {
-  let h = 0;
-  for (let i = 0; i < name.length; i += 1) h = (h * 31 + name.charCodeAt(i)) % MINI_PALETTE.length;
-  const bar = MINI_PALETTE[h] ?? MINI_PALETTE[0] ?? '#3a3f4b';
-  const first = name.trim().split(/[\s_-]+/)[0] ?? name;
-  return { bar, label: first.slice(0, 7) || 'Page' };
+// G2 (5→10, 2026-06-14) — profile IDENTITY card for the grid thumbnail.
+// Replaces the old `MiniPage` faux-webpage placeholder, which the founder read
+// as "random images of a browser". We have no real screenshots yet (driver is
+// mock), so instead of inventing a fake page we render a clean, deterministic
+// IDENTITY: a monogram on a per-profile accent-hued wash + the device label.
+// Future-proof: pass `screenshotUrl` once the driver captures a real last-frame
+// and it takes over from the identity fallback.
+export function profileMonogram(name: string): string {
+  const words = name
+    .trim()
+    .split(/[\s_-]+/)
+    .filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return (words[0] ?? '').slice(0, 2).toUpperCase() || '?';
+  return ((words[0]?.[0] ?? '') + (words[1]?.[0] ?? '')).toUpperCase();
 }
 
-// S5 — the stylized mini mobile page that fills the card's CSS iPhone frame
-// (console.html's .vp / .mp-*): a colored browser bar + image block + content
-// lines + a button + a chip row. Decorative placeholder themed per card.
-function MiniPage({ name }: { name: string }): JSX.Element {
-  const { bar, label } = miniTheme(name);
+// Deterministic 0..359 hue from the name so each card reads distinctly and
+// stably (no flicker across renders).
+export function identityHue(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i += 1) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
+}
+
+function ProfileIdentity({
+  name,
+  archetype,
+  screenshotUrl,
+}: {
+  name: string;
+  archetype: string;
+  screenshotUrl?: string;
+}): JSX.Element {
+  if (screenshotUrl !== undefined && screenshotUrl.length > 0) {
+    return (
+      <img src={screenshotUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+    );
+  }
+  const hue = identityHue(name);
+  const mono = profileMonogram(name);
   return (
-    <div className="absolute inset-0 overflow-hidden pt-[9px] text-[5px]">
-      <div
-        className="flex h-2.5 items-center px-1 text-[4px] font-bold text-white"
-        style={{ background: bar }}
-      >
-        {label}
-      </div>
-      <div
-        className="mx-1 mt-[3px] h-[34px] rounded-[3px] opacity-30"
-        style={{ background: bar }}
-      />
-      <div className="mx-1 my-[2px] h-[3px] w-[70%] rounded-[2px] bg-surface-divider" />
-      <div className="mx-1 my-[2px] h-[3px] w-[45%] rounded-[2px] bg-surface-divider" />
-      <div
-        className="mx-1 my-[3px] grid h-[11px] place-items-center rounded-[3px] text-[4px] font-bold text-white"
-        style={{ background: bar }}
-      >
-        Open
-      </div>
-      <div className="mx-1 my-[3px] flex gap-[3px]">
-        <div className="h-[9px] flex-1 rounded-[2px] bg-surface-inset" />
-        <div className="h-[9px] flex-1 rounded-[2px] bg-surface-inset" />
-      </div>
+    <div
+      className="absolute inset-0 flex flex-col items-center justify-center gap-2 pt-[9px]"
+      style={{
+        background: `linear-gradient(155deg, hsl(${hue} 44% 24%), hsl(${(hue + 38) % 360} 42% 14%))`,
+      }}
+    >
+      <span className="grid h-9 w-9 place-items-center rounded-full bg-white/12 text-[13px] font-bold tracking-wide text-white/95 ring-1 ring-white/20">
+        {mono}
+      </span>
+      <span className="rounded-full bg-black/30 px-1.5 py-px text-[6px] font-semibold uppercase tracking-wide text-white/85">
+        {formatDeviceName(archetype)}
+      </span>
     </div>
   );
 }
