@@ -11,6 +11,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   folderList,
+  aggregateTags,
   loadProfilesMeta,
   persistProfilesMeta,
   saveProfileMeta,
@@ -185,6 +186,9 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
   // "Testing…" + disable the button while the native SOCKS5 + exit-geo probe runs.
   const [testingProxyId, setTestingProxyId] = useState<string | null>(null);
   const [folderFilter, setFolderFilter] = useState<string>('all');
+  // G3 — filter the grid by a single tag (null = all). Composes (AND) with the
+  // folder + status + search filters.
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [organizeId, setOrganizeId] = useState<string | null>(null);
   // Increment 3 — bulk select: client-side organize actions over a selection.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -424,6 +428,9 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
           : profilesMeta[p.id]?.folder === folderFilter,
       );
     }
+    if (tagFilter !== null) {
+      list = list.filter((p) => (profilesMeta[p.id]?.tags ?? []).includes(tagFilter));
+    }
     if (statusFilter !== 'all') {
       list = list.filter((p) => {
         // W624 — agent-backed (agt_) sessions count as running too, not just
@@ -451,6 +458,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     return ordered;
   }, [
     folderFilter,
+    tagFilter,
     profilesMeta,
     state.profiles,
     searchQuery,
@@ -1258,6 +1266,14 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
               />
             </div>
           </nav>
+          {/* G3 — TAG filter rail (founder: "missing tags"). Filter the grid by
+              a tag; composes (AND) with the folder filter. Only shown when the
+              account actually has tags, so it never clutters an empty setup. */}
+          <TagFilterRail
+            tags={aggregateTags(scopedMeta)}
+            active={tagFilter}
+            onSelect={setTagFilter}
+          />
           <div className="min-w-0 flex-1">
             {viewMode === 'grid' ? (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -2871,6 +2887,71 @@ function FolderItem({
         {count}
       </span>
     </button>
+  );
+}
+
+// G3 — tag filter rail. A row of "#tag · count" pills below the folder shelf;
+// clicking one filters the grid to that tag (clicking the active one, or
+// "clear", resets). Renders nothing when there are no tags so it never adds
+// empty chrome. Tag color is the deterministic folderColor hash so a tag reads
+// consistently wherever it appears.
+export function TagFilterRail({
+  tags,
+  active,
+  onSelect,
+}: {
+  tags: Array<{ tag: string; count: number }>;
+  active: string | null;
+  onSelect: (tag: string | null) => void;
+}): JSX.Element | null {
+  if (tags.length === 0) return null;
+  return (
+    <nav aria-label="Tags" className="flex flex-col gap-2 border-b border-surface-divider pb-3">
+      <div className="flex items-center justify-between">
+        <span className="section-label">Tags</span>
+        {active !== null && (
+          <button
+            type="button"
+            onClick={() => onSelect(null)}
+            className="section-label text-accent hover:underline"
+          >
+            clear
+          </button>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {tags.map(({ tag, count }) => {
+          const on = active === tag;
+          return (
+            <button
+              key={tag}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onSelect(on ? null : tag)}
+              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+                on
+                  ? 'border-accent bg-accent-subtle font-medium text-ink-primary'
+                  : 'border-surface-divider text-ink-secondary hover:border-accent/50 hover:text-ink-primary'
+              }`}
+            >
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 shrink-0 rounded-full"
+                style={{ backgroundColor: folderColor(tag) }}
+              />
+              {tag}
+              <span
+                className={`mono rounded-[5px] px-1 text-2xs ${
+                  on ? 'bg-accent/15 text-ink-primary' : 'bg-surface-inset text-ink-muted'
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
   );
 }
 

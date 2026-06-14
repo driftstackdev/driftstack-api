@@ -171,7 +171,14 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G2 Kill the fake grid thumbnails · (this commit) · founder "the grid has random images of a browser"
+- G3 Tag filter + inline folder create · (this commit) · founder "missing tags / folder creation on the
+  grid". Found inline folder-CREATE already works (FolderPicker "＋ New folder…" in the per-card Organize
+  popover + create modal), so the real gap was tag FILTERING: new pure `aggregateTags()` in profiles-meta
+  - a `tagFilter` state + filter logic (composes AND with folder/status/search) + an exported
+    `TagFilterRail` (#tag·count pills below the folder shelf; toggle/clear; hidden when no tags). new
+    tag-filter-rail.test.tsx (4) + aggregateTags tests (profiles-meta +2) · tsc/eslint/prettier + gui-jsdom
+    556 + ProfilesView parity 18 green · VISIBLE after rebuild #7.
+- G2 Kill the fake grid thumbnails · `8f01e86a` · founder "the grid has random images of a browser"
   → replaced the `MiniPage` faux-webpage placeholder with a clean `ProfileIdentity` card (deterministic
   monogram on a per-profile accent-hued gradient wash + device label; future-proofed to swap in a real
   last-session screenshot once the driver captures one). Exported pure `profileMonogram`/`identityHue` +

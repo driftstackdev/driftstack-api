@@ -167,4 +167,26 @@ describe('profiles-meta store', () => {
       }),
     ).toEqual(['Alpha', 'Zeta']);
   });
+
+  it('aggregateTags: per-tag counts, ordered by count desc then name', async () => {
+    const { aggregateTags } = await import('../../src/lib/profiles-meta');
+    expect(
+      aggregateTags({
+        a: { folder: '', tags: ['shop', 'eu'], note: '' },
+        b: { folder: '', tags: ['shop', 'us'], note: '' },
+        c: { folder: '', tags: ['shop'], note: '' },
+        d: { folder: '', tags: ['eu', ''], note: '' }, // empty tag skipped
+        e: { folder: '', tags: [], note: '' },
+      }),
+    ).toEqual([
+      { tag: 'shop', count: 3 },
+      { tag: 'eu', count: 2 },
+      { tag: 'us', count: 1 },
+    ]);
+  });
+
+  it('aggregateTags: empty map → empty list', async () => {
+    const { aggregateTags } = await import('../../src/lib/profiles-meta');
+    expect(aggregateTags({})).toEqual([]);
+  });
 });
