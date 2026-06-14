@@ -171,7 +171,17 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G8d View-switch transition · (this commit) · a quick fade+rise (`ds-view-in` keyframe, 150ms, respects
+- ✅✅ **Tauri rebuilds #9/#10/#11 INSTALLED** 2026-06-14 — #9 carried G4c+G4d+G8c; #10 carried G6a
+  (bulk export)+G6b (grid selection); #11 carried G6c (bulk delete)+G8d (view transition). All
+  re-signed + verified valid on disk. The Command Center (Automate hero + KPI + session-health +
+  activity + cap-alerts), the full bulk-action bar (folder/tag/export/delete over grid+list selection),
+  and the view-switch fade are LIVE in /Applications.
+- NOTE: founder 2026-06-14 clarified F1–F6 (see 2026-06-14-future-initiatives-plan.md) are the NEXT
+  PHASE — start them once this 5→10 todo is 100% done. Current-arc remaining: G5 (guided create —
+  create modal already has proxy-test; enhance, don't risk a blind stepper rewrite), G7 (live SSE
+  transcript streaming — GATED on Agent-1's RealExecutor, prod is mock), G8 (further polish), then the
+  A–Z beauty sweep (F3 marketing etc.) which dovetails into the F-phase.
+- G8d View-switch transition · `65e431fb` · a quick fade+rise (`ds-view-in` keyframe, 150ms, respects
   the reduced-motion baseline) when `<main>` swaps views — keyed by view.kind, same element + classes so
   no layout-chain change. Navigation feels alive vs instant-cut. App content-parity 12 green.
 - G6c Bulk delete · `7f7ecf86` · destructive bulk delete on the selection bar — gated by the in-app

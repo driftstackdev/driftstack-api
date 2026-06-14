@@ -1,9 +1,10 @@
-# Future initiatives — founder directives 2026-06-14 (PLAN ONLY, build later)
+# Next-phase initiatives — founder directives 2026-06-14 (queued, build after current todo is 100% done)
 
-Founder (2026-06-14, "full autopilot all night"): finish the current GUI 5→10 arc **100%** first,
-then take these on — "just plan it for now for very later." Captured here so nothing is lost; do NOT
-start building these until the 5→10 arc + A–Z beauty sweep are done (or the founder greenlights one
-sooner). "Do everything thorough and in the best way, make it beautiful; if you find even better ideas,
+Founder (2026-06-14, "full autopilot all night"): finish the current GUI 5→10 todo list **100%,
+perfectly** first — then these are the **NEXT phase** (clarified: "not for very later, but after you
+finish all of the other tasks on the todo list perfectly first"). So: complete the current arc + A–Z
+beauty sweep, then work straight through F1–F6 below in order (no long pause — they become the active
+todo). "Do everything thorough and in the best way, make it beautiful; if you find even better ideas,
 do them."
 
 ## F1 — Per-profile AI assistant with templates (right sidebar)
