@@ -181,6 +181,11 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   create modal already has proxy-test; enhance, don't risk a blind stepper rewrite), G7 (live SSE
   transcript streaming — GATED on Agent-1's RealExecutor, prod is mock), G8 (further polish), then the
   A–Z beauty sweep (F3 marketing etc.) which dovetails into the F-phase.
+- FIX3 Proxy row showed loopback not exit IP · (this commit) · **founder-reported bug** — the proxy
+  exit-IP slot (ProfilesView grid card + ProxiesView card) fell back to the LOCAL SOCKS5 forward
+  (`${host}:${port}` = e.g. `127.0.0.1:24000`) when untested, which is meaningless to the operator.
+  Now shows the real exit IP from the geo probe, else an italic "run Test for exit IP" prompt — never
+  the loopback. gui-jsdom 581 + proxy parity 28 + proxies-view behavioral 7 green.
 - G8d View-switch transition · `65e431fb` · a quick fade+rise (`ds-view-in` keyframe, 150ms, respects
   the reduced-motion baseline) when `<main>` swaps views — keyed by view.kind, same element + classes so
   no layout-chain change. Navigation feels alive vs instant-cut. App content-parity 12 green.

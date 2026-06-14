@@ -451,8 +451,13 @@ function ProxyCard({
           <span aria-hidden="true" className="text-[13px] leading-none">
             {exitCountry !== null ? flagEmoji(exitCountry) : '🌍'}
           </span>
-          <span className="mono min-w-0 truncate text-[10.5px] text-ink-secondary">
-            {exitIp ?? `${p.host}:${p.port}`}
+          <span
+            className={`min-w-0 truncate text-[10.5px] ${
+              exitIp !== undefined ? 'mono text-ink-secondary' : 'italic text-ink-muted'
+            }`}
+          >
+            {/* Real EXIT IP from the geo probe, not the local SOCKS5 forward. */}
+            {exitIp ?? 'run Test for exit IP'}
           </span>
           <span className="ml-auto flex items-center gap-1.5 text-[10px] text-ink-muted">
             {lat !== undefined && reachable ? (

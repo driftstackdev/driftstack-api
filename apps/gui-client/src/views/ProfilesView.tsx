@@ -1555,8 +1555,17 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                               <span aria-hidden="true" className="text-[13px] leading-none">
                                 {probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
                               </span>
-                              <span className="mono min-w-0 truncate text-[10.5px] text-ink-secondary">
-                                {probe?.exitIp ?? `${px.host}:${px.port}`}
+                              <span
+                                className={`min-w-0 truncate text-[10.5px] ${
+                                  probe?.exitIp !== undefined
+                                    ? 'mono text-ink-secondary'
+                                    : 'italic text-ink-muted'
+                                }`}
+                              >
+                                {/* Show the real EXIT IP (from the geo probe), never the
+                                    local SOCKS5 forward (e.g. 127.0.0.1:24000) — that's
+                                    meaningless to the operator. Untested → prompt to Test. */}
+                                {probe?.exitIp ?? 'run Test for exit IP'}
                               </span>
                               <span className="ml-auto flex items-center gap-1.5 text-[10px] text-ink-muted">
                                 {lat !== undefined ? (
