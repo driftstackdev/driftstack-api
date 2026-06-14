@@ -171,7 +171,14 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G8a Keyboard-shortcuts cheatsheet · (this commit) · contained low-risk polish shipped under high load
+- G8b Profile-grid empty state + clear-filters fix · (this commit) · contained low-risk polish under
+  high load (G4 still deferred). Replaced the two bare "No profiles match the current filter" lines
+  (grid + list) with the shared `EmptyState` via a new exported `ProfilesEmpty` (filter headline + a
+  one-click **Clear filters**, or a welcome headline when the account is genuinely empty). FIXES a real
+  bug: the old list-only "Clear" reset just search+status, NOT folder/tag — so a tag/folder filter (G3)
+  to zero was unrecoverable; clearFilters now resets all four. new profiles-empty.test.tsx (2) ·
+  tsc/eslint/prettier + gui-jsdom 562 + ProfilesView parity 18 green · VISIBLE after rebuild #7.
+- G8a Keyboard-shortcuts cheatsheet · `5bfa6536` · contained low-risk polish shipped under high load
   (G4 Command Center deferred to a calm wave — it's a high-blast-radius new default landing). New
   `ShortcutsCheatsheet` overlay (`?` or ⌘/, + ⌘K "Keyboard shortcuts" entry) documenting the REAL
   shortcuts (⌘K / ⌘⇧D / ⌘, / ⌘⇧L / Enter+⇧Enter); `?` suppressed while typing in a field. new

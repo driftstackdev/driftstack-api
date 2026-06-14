@@ -28,6 +28,7 @@ import {
 import { loadTemplates, saveTemplate, type ProfileTemplate } from '../lib/profile-templates';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { EmptyState } from '../components/EmptyState';
 import {
   ProfilesActionBar,
   type ProfileSortBy,
@@ -467,6 +468,21 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
     activeSessions,
     bindings,
   ]);
+
+  // Are any of the composing filters narrowing the grid? Drives the "clear
+  // filters" affordance on the empty state (folder + tag + search + status all
+  // AND together, so it's easy to filter to zero and not see why).
+  const hasActiveFilters =
+    folderFilter !== 'all' ||
+    tagFilter !== null ||
+    searchQuery.trim() !== '' ||
+    statusFilter !== 'all';
+  const clearFilters = useCallback(() => {
+    setFolderFilter('all');
+    setTagFilter(null);
+    setSearchQuery('');
+    setStatusFilter('all');
+  }, []);
 
   // S5 (GUI-rework 2026-06-14) — hero/stat derived metrics. Live count =
   // profiles bound to a live session. Proxy health = share of saved proxies
@@ -1278,9 +1294,9 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             {viewMode === 'grid' ? (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredProfiles.length === 0 ? (
-                  <p className="col-span-full px-4 py-8 text-center text-sm text-ink-muted">
-                    No profiles match the current filter.
-                  </p>
+                  <div className="col-span-full">
+                    <ProfilesEmpty hasActiveFilters={hasActiveFilters} onClear={clearFilters} />
+                  </div>
                 ) : null}
                 {filteredProfiles.map((profile) => {
                   const bound = boundSession(profile.id);
@@ -1607,18 +1623,8 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
             ) : (
               <ul className="flex flex-col divide-y divide-surface-divider rounded-md border border-surface-divider bg-surface-raised">
                 {filteredProfiles.length === 0 ? (
-                  <li className="px-4 py-8 text-center text-sm text-ink-muted">
-                    No profiles match the current filter.{' '}
-                    <button
-                      type="button"
-                      className="text-accent underline-offset-2 hover:underline"
-                      onClick={() => {
-                        setSearchQuery('');
-                        setStatusFilter('all');
-                      }}
-                    >
-                      Clear
-                    </button>
+                  <li className="p-2">
+                    <ProfilesEmpty hasActiveFilters={hasActiveFilters} onClear={clearFilters} />
                   </li>
                 ) : null}
                 {filteredProfiles.map((profile) => {
@@ -2952,6 +2958,53 @@ export function TagFilterRail({
         })}
       </div>
     </nav>
+  );
+}
+
+// Empty state for the profile grid/list (5→10 polish). Distinguishes the two
+// "nothing shows" reasons: an active filter narrowed everything out (offer a
+// one-click "Clear filters" that resets folder + tag + search + status — the
+// old list-only "Clear" forgot folder + tag, so a tag/folder filter to zero was
+// unrecoverable) vs a genuinely empty account. Uses the shared EmptyState so it
+// reads deliberate, not like a bare gray line.
+export function ProfilesEmpty({
+  hasActiveFilters,
+  onClear,
+}: {
+  hasActiveFilters: boolean;
+  onClear: () => void;
+}): JSX.Element {
+  return (
+    <EmptyState
+      icon={
+        <svg
+          viewBox="0 0 16 16"
+          width="18"
+          height="18"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.4}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5Z" />
+        </svg>
+      }
+      title={hasActiveFilters ? 'No profiles match these filters' : 'No profiles here yet'}
+      description={
+        hasActiveFilters
+          ? 'Nothing matches the folder, tag, search and status filters together. Clear them to see everything.'
+          : 'Profiles you create show up here, ready to launch or hand to the AI.'
+      }
+      action={
+        hasActiveFilters ? (
+          <button type="button" className="btn-secondary px-3 py-1 text-xs" onClick={onClear}>
+            Clear filters
+          </button>
+        ) : undefined
+      }
+    />
   );
 }
 
