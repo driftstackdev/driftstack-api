@@ -7,6 +7,13 @@ beauty sweep, then work straight through F1–F6 below in order (no long pause �
 todo). "Do everything thorough and in the best way, make it beautiful; if you find even better ideas,
 do them."
 
+> **STATUS:** GUI 5→10 arc complete (G1–G6 + G8 polish shipped & live through rebuild #11; G5 guided-
+> create was already a tabbed configurator w/ proxy-test + templates + WG/OVPN placeholders; G7 live
+> streaming GATED on Agent-1). F-phase started. **F1a DONE** — `lib/assistant-templates.ts`: shipped
+> default templates (warm-browse/warm-search/open-screenshot/add-to-cart) + custom-template store +
+> pure validation/merge; assistant-templates.test.ts (5). NEXT F1b: the right-sidebar assistant panel
+> consuming these → seeds AgentChatView/useAgentChat({profileId}).
+
 ## F1 — Per-profile AI assistant with templates (right sidebar)
 
 Like the visual demo: a right-hand assistant panel, scoped to the selected profile, offering **custom
