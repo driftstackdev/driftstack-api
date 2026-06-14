@@ -7,11 +7,13 @@ import { describe, it, expect } from 'vitest';
 import { folderGlyph, folderColor } from '../../src/views/ProfilesView';
 
 describe('folderGlyph', () => {
-  it('gives the special folders fixed glyphs and named folders the file glyph', () => {
-    expect(folderGlyph('All profiles')).toBe('🗂️');
+  it('gives All/Unfiled fixed glyphs, keyword folders a themed emoji, and the rest the file glyph', () => {
+    expect(folderGlyph('All profiles')).toBe('▦');
     expect(folderGlyph('Unfiled')).toBe('📥');
-    expect(folderGlyph('Shopping')).toBe('📁');
-    expect(folderGlyph('Banking')).toBe('📁');
+    expect(folderGlyph('Shopping')).toBe('🛒');
+    expect(folderGlyph('Banking')).toBe('🏦');
+    expect(folderGlyph('Ad accounts')).toBe('📣');
+    expect(folderGlyph('Misc clients')).toBe('📁');
   });
 });
 

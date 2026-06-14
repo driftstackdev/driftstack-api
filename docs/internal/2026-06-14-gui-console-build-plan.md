@@ -56,11 +56,16 @@ gradients.
       (keeps prior state on failure); `testingProxyId` drives the "Testing…" disabled state. Optional
       follow-ups deferred: auto-probe-stale-on-load + explicit health pills (healthy/slow/re-test) —
       fold into S4. tsc/eslint/prettier + gui-jsdom 525 + ProfilesView parity 18 green.
-- [~] **S4** Console-density restyle of the hub — IN PROGRESS. ✅ Stat tiles: HubStat now uses mono
-  tabular-nums tracking-tight numerals + the app `section-label` caption (the console.html "metric"
-  feel). ⏳ REMAINING: denser card grid + tighter spacing rhythm + optional sparkline/health-ring +
-  count-up animation. (Doing the full hub re-layout blind is risky — incrementing in safe bounded
-  pieces, verified at rebuild #3.)
+- [x] **S4** Console-density restyle of the hub — **DONE** (the real visual overhaul, after founder
+      "the demo looked far better"). Ported console.html into ProfilesView (+719/-318): **HERO** (greeting
+  - health line + New-profile/Quick-session + Refreshed live pill), **STAT TILES** (count-up numerals +
+    sub-line + a Sparkline on Live-now + an SVG HealthRing on Proxy-health), **FOLDER SHELF** (horizontal
+    emoji-icon pills, replacing the text nav), and the centerpiece **PROFILE CARDS** (device-frame
+    thumbnail with a per-card stylized `MiniPage` mini-page + LIVE glow/chip + hover quick-actions + the
+    polished meta: name/device chip/proxy row w/ flag+IP+latency-meter+health-pill — all from the real
+    probeCache, S1/S3 Test preserved). Logic 100% preserved. All semantic tokens (light+dark). tsc/eslint/
+    prettier + gui-jsdom 525 + ProfilesView parity 18 green (folder-identity glyph test updated to the
+    demo emoji). Built by restyle workflow wbhydq6uk + verified.
 - [ ] **MILESTONE → Tauri rebuild #1** (founder sees the new hub).
 
 ### P2 — AI chat (headline)
