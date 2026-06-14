@@ -84,13 +84,11 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     );
   });
 
-  it("Empty no-proxies framing pinned: 'Add a SOCKS5 endpoint to route session traffic through your own egress IP. Proxies are stored locally on this device only — never uploaded to the Driftstack control plane.' + 'Click <New proxy> above to add one. Wiring to session creation lands when the API contract grows a <proxy> field.' — pinned so customer knows the proxy list never roundtrips to the server", () => {
+  it("Empty no-proxies framing pinned: 'Add a SOCKS5 endpoint to route session traffic through your own egress IP. Proxies are stored locally on this device only — never uploaded to the Driftstack control plane.' + an 'Add a proxy' CTA (the empty state migrated to the shared EmptyState component, 5→10 consistency pass) — pinned so customer knows the proxy list never roundtrips to the server", () => {
     expect(body).toMatch(
       /Add a SOCKS5 endpoint to route session traffic through your own egress IP\. Proxies are\s*\n?\s*stored locally on this device only — never uploaded to the Driftstack control plane\./,
     );
-    expect(body).toMatch(
-      /Click <span className="mono">New proxy<\/span> above to add one\. Wiring to session creation\s*\n?\s*lands when the API contract grows a <span className="mono">proxy<\/span> field\./,
-    );
+    expect(body).toMatch(/>\s*Add a proxy\s*<\/button>/);
   });
 
   it("ProxyForm submit: handleSubmit preventDefault + validateDraft + setValidation + return early if !v.ok else onSave(draft); port input type='number' min=1 max=65535; username/password onChange normalizes empty → null (so EMPTY_DRAFT's nulls stay null instead of empty-string false-truthy)", () => {

@@ -126,7 +126,7 @@ describe('V-276 RecordingsView empty state', () => {
 });
 
 describe('V-277 ProxiesView empty state', () => {
-  it('renders oxblood-tinted network-spoke icon + heading + body + footnote', async () => {
+  it('renders the shared EmptyState: heading + SOCKS5 body + an "Add a proxy" CTA', async () => {
     render(<ProxiesView />);
 
     const heading = await screen.findByRole('heading', { name: /no proxies configured/i });
@@ -137,8 +137,8 @@ describe('V-277 ProxiesView empty state', () => {
     expect(screen.getAllByText(/SOCKS5/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/never uploaded to the Driftstack control plane/i)).toBeInTheDocument();
 
-    // Footnote about API contract dependency — appears in header +
-    // empty-state footnote.
-    expect(screen.getAllByText(/Wiring to session creation lands when/i).length).toBeGreaterThan(0);
+    // 5→10 consistency pass: migrated to the shared EmptyState with an
+    // actionable CTA in place of the old "Click New proxy above" footnote.
+    expect(screen.getByRole('button', { name: 'Add a proxy' })).toBeInTheDocument();
   });
 });

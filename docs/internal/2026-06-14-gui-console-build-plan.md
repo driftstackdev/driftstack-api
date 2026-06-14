@@ -171,7 +171,11 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G4d Command Center cap alerts · (this commit) · proactive quota/cap alerts (backlog Tier-1) at the top
+- G8c ProxiesView empty-state → shared EmptyState · (this commit) · consistency pass — migrated the
+  bespoke "No proxies configured" dashed block to the shared `EmptyState` with an actionable "Add a
+  proxy" CTA (opens the add form) in place of the old "Click New proxy above" footnote. Updated
+  ProxiesView content-parity pin + empty-states.test.tsx. gui-jsdom 578 green.
+- G4d Command Center cap alerts · `1af34872` · proactive quota/cap alerts (backlog Tier-1) at the top
   of the Command Center: pure `computeCapAlerts(accountMe)` warns at ≥80% / errors at-or-over the session
   - profile caps (profile_cap null = unlimited → no alert), each a tone-styled card with a "Manage" →
     onNavigate(sessions/profiles). Composed from accountMe (no fetch); only renders when there's something

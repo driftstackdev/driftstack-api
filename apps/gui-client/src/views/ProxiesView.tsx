@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { EmptyState } from '../components/EmptyState';
 import { RelativeTime } from '../components/RelativeTime';
 import { SkeletonRows } from '../components/Skeleton';
 import { ProxyCapabilityChips } from '../components/ProxyCapabilities';
@@ -278,7 +279,7 @@ export function ProxiesView(): JSX.Element {
       )}
 
       {state.proxies.length === 0 ? (
-        <Empty loading={state.loading} />
+        <Empty loading={state.loading} onAdd={() => setEditor({ kind: 'add' })} />
       ) : (
         <ProxyList
           proxies={state.proxies}
@@ -306,16 +307,16 @@ export function ProxiesView(): JSX.Element {
 
 // ─── subcomponents ────────────────────────────────────────────────
 
-function Empty({ loading }: { loading: boolean }): JSX.Element {
+function Empty({ loading, onAdd }: { loading: boolean; onAdd: () => void }): JSX.Element {
   if (loading) {
     return <SkeletonRows rows={4} label="Loading proxies" />;
   }
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-surface-divider px-8 py-16 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent-subtle text-accent">
+    <EmptyState
+      icon={
         <svg
-          width="24"
-          height="24"
+          width="20"
+          height="20"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -326,19 +327,15 @@ function Empty({ loading }: { loading: boolean }): JSX.Element {
         >
           <path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66l4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66l4.24-4.24" />
         </svg>
-      </div>
-      <div className="flex flex-col gap-1">
-        <h3 className="text-base font-medium text-ink-primary">No proxies configured</h3>
-        <p className="max-w-md text-sm text-ink-secondary">
-          Add a SOCKS5 endpoint to route session traffic through your own egress IP. Proxies are
-          stored locally on this device only — never uploaded to the Driftstack control plane.
-        </p>
-      </div>
-      <p className="text-xs text-ink-muted">
-        Click <span className="mono">New proxy</span> above to add one. Wiring to session creation
-        lands when the API contract grows a <span className="mono">proxy</span> field.
-      </p>
-    </div>
+      }
+      title="No proxies configured"
+      description="Add a SOCKS5 endpoint to route session traffic through your own egress IP. Proxies are stored locally on this device only — never uploaded to the Driftstack control plane."
+      action={
+        <button type="button" className="btn-primary px-4 py-2 text-sm" onClick={onAdd}>
+          Add a proxy
+        </button>
+      }
+    />
   );
 }
 
