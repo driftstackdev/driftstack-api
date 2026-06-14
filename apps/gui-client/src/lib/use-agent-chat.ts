@@ -101,16 +101,26 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   const post = useCallback(
     async (
       userMessage: string,
-      approvals?: ReadonlyArray<{ category: ConsequentialActionCategory; matchedText: string }>,
+      options?: {
+        approvals?: ReadonlyArray<{ category: ConsequentialActionCategory; matchedText: string }>;
+        /** Append a user bubble for this send. Default true; pass false for an
+         *  approval re-send — clicking Approve CONTINUES the same logical turn
+         *  (the user didn't retype the message), so echoing it as a fresh user
+         *  bubble would misleadingly look like a second request. */
+        appendUserTurn?: boolean;
+      },
     ): Promise<void> => {
       if (!client) {
         setError('Not connected — set your API key in Settings.');
         return;
       }
+      const approvals = options?.approvals;
       setSending(true);
       setError(null);
-      // Append the user turn immediately for responsiveness.
-      setTurns((t) => [...t, { id: nextId(), role: 'user', text: userMessage }]);
+      if (options?.appendUserTurn !== false) {
+        // Append the user turn immediately for responsiveness.
+        setTurns((t) => [...t, { id: nextId(), role: 'user', text: userMessage }]);
+      }
       setLastUserMessage(userMessage);
       try {
         let sid = session?.id ?? null;
@@ -160,9 +170,12 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   const approve = useCallback(async (): Promise<void> => {
     if (pendingConfirmation === null || lastUserMessage === null) return;
     setResolvedTurnId(pendingConfirmation.turnId);
-    await post(lastUserMessage, [
-      { category: pendingConfirmation.category, matchedText: pendingConfirmation.matchedText },
-    ]);
+    await post(lastUserMessage, {
+      approvals: [
+        { category: pendingConfirmation.category, matchedText: pendingConfirmation.matchedText },
+      ],
+      appendUserTurn: false,
+    });
   }, [pendingConfirmation, lastUserMessage, post]);
 
   const deny = useCallback((): void => {

@@ -175,7 +175,14 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   Settings) + global ⌘⇧D mode toggle · new theme-switcher.test.tsx (5 tests) · tsc/eslint/prettier OK
   - App content-parity 12 + gui-jsdom 536 green · VISIBLE after rebuild #5.
 
-- FIX1 LogsView live-update · (this commit) · **real bug found via fresh-eyes audit** — `getLogEntries()`
+- FIX2 AI-chat approve double-bubble · (this commit) · **real UX bug found via fresh-eyes audit** —
+  `useAgentChat.approve()` re-sent `lastUserMessage` through `post()`, which unconditionally appended a
+  user bubble → clicking Approve echoed the user's original message as a fresh request (misleading; the
+  user clicked a button). Fix: `post` takes `{appendUserTurn?}`; approve passes `false` so the approval
+  re-send continues the SAME logical turn (halt turn + approved-execution turn, no duplicate). approval
+  echo + gate-clear unchanged. new use-agent-chat-approve.test.tsx (2 tests, proven to fail without the
+  fix) · gui-jsdom 541 green.
+- FIX1 LogsView live-update · `89e1d421` · **real bug found via fresh-eyes audit** — `getLogEntries()`
   returns the LIVE buffer array (stable ref, mutated in place), so LogsView's `filtered`/`errorCount`
   `useMemo`s (keyed only on `entries`) never recomputed on new log lines despite the `subscribeLogs`
   forceRender → list went stale while the header count ticked up. Fix: feed the `forceRender` version
