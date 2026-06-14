@@ -64,9 +64,10 @@ export function App(): JSX.Element {
 
 function Shell(): JSX.Element {
   const { settings, loading } = useSettings();
-  // 2026-05-20 — Profiles is the new default landing view (antidetect-
-  // browser-style); Sessions/etc are diagnostics-tier.
-  const [view, setView] = useState<View>({ kind: 'profiles' });
+  // 2026-06-14 — Command Center ('home') is the default landing (5→10 G4):
+  // it leads with Automate (Ask AI / recipes) + an account/session overview,
+  // making automation the primary surface; Profiles/Sessions are one click away.
+  const [view, setView] = useState<View>({ kind: 'home' });
   // ⌘K command palette (demo-concepts arc) — global hotkey, view navigation.
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Keyboard-shortcuts cheatsheet (5→10 polish) — `?` or ⌘/. `?` is suppressed

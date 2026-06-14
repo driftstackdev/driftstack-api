@@ -171,7 +171,15 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   proxy-capabilities.test.tsx (6) + re-pinned proxies-view-test-button (chips, data-ok) · tsc/eslint/
   prettier + gui-jsdom 546 + ProxiesView/ProfilesView content-parity 28 green · VISIBLE after rebuild #6.
   Also noted: Sidebar ALREADY orders Automate above Browse (founder ask satisfied in rebuild #5).
-- G4 Command Center landing · (this commit) · the headline 5→10 item, built in the first sustained calm
+- G4b Command Center → DEFAULT + session-health · (this commit) · founder "continue on it all" after
+  reviewing rebuild #7. Flipped the default landing `useState<View>` from `'profiles'` to `'home'` (no
+  parity pin gates the default) so the app opens on the Automate-led overview. Enriched the Command
+  Center with a live **session-health strip** (pure `summarizeSessions` rollup → Running/Creating/
+  Errored/Total tiles from `client.sessions.list()`) that loads INDEPENDENTLY of the hero/KPI and
+  degrades gracefully (idle "connect key" / loading skeleton / "couldn't load" / "no sessions yet") so a
+  slow/failed fetch can never break the new default landing. +5 command-center-view tests (summarize
+  rollup + load/error/empty strip). tsc/eslint/prettier + gui-jsdom 571 green · VISIBLE after rebuild #8.
+- G4 Command Center landing · `198eda7f` · the headline 5→10 item, built in the first sustained calm
   window (load 4–5). New `CommandCenterView` (kind `'home'`): an Automate-leading hero (Ask AI → 'ai' /
   Browse recipes → 'recipes') + an account KPI strip (Plan/Sessions/Profiles from `accountMe`, degrades
   to "—" when null) + quick links (Profiles/Proxies/Sessions). Wired into App (View union 13→14, a

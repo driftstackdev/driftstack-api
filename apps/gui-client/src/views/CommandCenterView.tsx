@@ -14,22 +14,76 @@
 // Granular onNavigate (a nav-kind string, not the App View type) keeps this off
 // the App↔view import cycle, matching the other views' callback shape.
 
-import type { JSX } from 'react';
+import { useEffect, useState, type JSX } from 'react';
 import { useSettings } from '../lib/SettingsContext';
 
 export type HomeNavTarget = 'ai' | 'recipes' | 'profiles' | 'proxies' | 'sessions';
+
+// Session status taxonomy (api-types SessionStatusSchema). Grouped for the
+// health strip: ready/busy = running, creating = spinning up, errored = needs
+// attention, destroyed = done. Pure + exported so the rollup is unit-tested.
+export type SessionLike = { status: string };
+export interface SessionHealth {
+  total: number;
+  running: number; // ready + busy
+  creating: number;
+  errored: number;
+  destroyed: number;
+}
+
+export function summarizeSessions(sessions: ReadonlyArray<SessionLike>): SessionHealth {
+  const h: SessionHealth = { total: 0, running: 0, creating: 0, errored: 0, destroyed: 0 };
+  for (const s of sessions) {
+    h.total += 1;
+    if (s.status === 'ready' || s.status === 'busy') h.running += 1;
+    else if (s.status === 'creating') h.creating += 1;
+    else if (s.status === 'errored') h.errored += 1;
+    else if (s.status === 'destroyed') h.destroyed += 1;
+  }
+  return h;
+}
+
+type HealthState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; health: SessionHealth }
+  | { kind: 'error' };
 
 export function CommandCenterView({
   onNavigate,
 }: {
   onNavigate: (kind: HomeNavTarget) => void;
 }): JSX.Element {
-  const { accountMe } = useSettings();
+  const { accountMe, client } = useSettings();
   const sessionsActive = accountMe?.concurrent_session_active ?? null;
   const sessionsCap = accountMe?.concurrent_session_cap ?? null;
   const profileCount = accountMe?.profile_count ?? null;
   const profileCap = accountMe?.profile_cap ?? null;
   const tier = accountMe?.tier ?? null;
+
+  // Live session-health rollup — loads independently of (and after) the hero +
+  // KPI so a slow/failed fetch never blocks or breaks the landing; it just
+  // shows a skeleton then a value or a quiet "couldn't load".
+  const [health, setHealth] = useState<HealthState>({ kind: 'idle' });
+  useEffect(() => {
+    if (!client) {
+      setHealth({ kind: 'idle' });
+      return;
+    }
+    let cancelled = false;
+    setHealth({ kind: 'loading' });
+    client.sessions
+      .list()
+      .then((page) => {
+        if (!cancelled) setHealth({ kind: 'ready', health: summarizeSessions(page.data) });
+      })
+      .catch(() => {
+        if (!cancelled) setHealth({ kind: 'error' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
@@ -73,6 +127,21 @@ export function CommandCenterView({
         </div>
       </section>
 
+      {/* Live session health — loads independently; degrades gracefully. */}
+      <section className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          <span className="section-label">Session health</span>
+          <button
+            type="button"
+            className="section-label text-accent hover:underline"
+            onClick={() => onNavigate('sessions')}
+          >
+            view all
+          </button>
+        </div>
+        <SessionHealthStrip state={health} />
+      </section>
+
       {/* Quick links into the rest of the app. */}
       <section className="flex flex-col gap-2">
         <span className="section-label">Jump to</span>
@@ -94,6 +163,69 @@ export function CommandCenterView({
           />
         </div>
       </section>
+    </div>
+  );
+}
+
+function SessionHealthStrip({ state }: { state: HealthState }): JSX.Element {
+  if (state.kind === 'idle') {
+    return (
+      <div className="rounded-lg border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
+        Connect your API key to see live session health.
+      </div>
+    );
+  }
+  if (state.kind === 'loading') {
+    return (
+      <div className="h-[58px] animate-pulse rounded-lg border border-surface-divider bg-surface-inset" />
+    );
+  }
+  if (state.kind === 'error') {
+    return (
+      <div className="rounded-lg border border-surface-divider px-4 py-3 text-xs text-ink-muted">
+        Couldn&rsquo;t load sessions right now.
+      </div>
+    );
+  }
+  const h = state.health;
+  if (h.total === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
+        No sessions yet — launch a profile or ask the AI to start one.
+      </div>
+    );
+  }
+  return (
+    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-surface-divider bg-surface-divider sm:grid-cols-4">
+      <HealthTile label="Running" value={h.running} tone="ready" />
+      <HealthTile label="Creating" value={h.creating} tone="busy" />
+      <HealthTile label="Errored" value={h.errored} tone={h.errored > 0 ? 'error' : 'muted'} />
+      <HealthTile label="Total" value={h.total} tone="muted" />
+    </div>
+  );
+}
+
+function HealthTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: 'ready' | 'busy' | 'error' | 'muted';
+}): JSX.Element {
+  const valueCls =
+    tone === 'ready'
+      ? 'text-status-ready'
+      : tone === 'busy'
+        ? 'text-status-busy'
+        : tone === 'error'
+          ? 'text-status-error'
+          : 'text-ink-primary';
+  return (
+    <div className="flex flex-col gap-0.5 bg-surface-base px-4 py-2.5">
+      <span className="section-label">{label}</span>
+      <span className={`mono text-xl font-semibold tabular-nums ${valueCls}`}>{value}</span>
     </div>
   );
 }
