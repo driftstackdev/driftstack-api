@@ -107,6 +107,19 @@ describe('chat-history store', () => {
     expect(again.map((c) => c.id)).toEqual(['b']);
   });
 
+  it('serializes writes: a concurrent upsert does not resurrect a deleted chat', async () => {
+    await upsertChat(chat({ id: 'x', title: 'X' }), 100);
+    await upsertChat(chat({ id: 'y', title: 'Y' }), 200);
+    // Fire delete(x) and upsert(y) WITHOUT awaiting between them — the write
+    // lock must run them sequentially so delete(x) isn't clobbered.
+    const pDel = deleteChat('x');
+    const pUp = upsertChat(chat({ id: 'y', title: 'Y2' }), 300);
+    await Promise.all([pDel, pUp]);
+    const all = await loadChats();
+    expect(all.map((c) => c.id)).toEqual(['y']); // x stays deleted, not resurrected
+    expect(all[0]?.title).toBe('Y2');
+  });
+
   it('corrupt root degrades to empty; corrupt entries are dropped', async () => {
     seed('not-an-array');
     expect(await loadChats()).toEqual([]);

@@ -34,6 +34,19 @@ function getStore(): LazyStore {
   return store;
 }
 
+// Serialize all read-modify-write store mutations so a delete can't interleave
+// with the active chat's persist-on-turn and resurrect a just-deleted chat
+// (each loadChats→modify→save runs to completion before the next starts).
+let writeLock: Promise<unknown> = Promise.resolve();
+function serialize<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeLock.then(fn, fn);
+  writeLock = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 /** First user message → a short title; 'New chat' when there's nothing yet. */
 export function deriveChatTitle(turns: ReadonlyArray<ChatTurn>): string {
   for (const t of turns) {
@@ -89,35 +102,39 @@ export async function loadChats(): Promise<StoredChat[]> {
 
 /** Insert or update a chat (matched by id), then persist. Returns the new list
  *  (sorted, pruned to MAX_CHATS). `at` is injected so the fn stays testable. */
-export async function upsertChat(chat: StoredChat, at: number): Promise<StoredChat[]> {
-  const all = await loadChats();
-  const idx = all.findIndex((c) => c.id === chat.id);
-  const merged: StoredChat = { ...chat, updatedAt: at };
-  if (idx >= 0) all[idx] = merged;
-  else all.push(merged);
-  all.sort((a, b) => b.updatedAt - a.updatedAt);
-  const pruned = all.slice(0, MAX_CHATS);
-  // Best-effort persistence — a store/IO failure must not crash the chat view;
-  // the returned list still drives the UI in-memory.
-  try {
-    await getStore().set(KEY, pruned);
-    await getStore().save();
-  } catch {
-    /* ignore — persistence is a convenience layer */
-  }
-  return pruned;
+export function upsertChat(chat: StoredChat, at: number): Promise<StoredChat[]> {
+  return serialize(async () => {
+    const all = await loadChats();
+    const idx = all.findIndex((c) => c.id === chat.id);
+    const merged: StoredChat = { ...chat, updatedAt: at };
+    if (idx >= 0) all[idx] = merged;
+    else all.push(merged);
+    all.sort((a, b) => b.updatedAt - a.updatedAt);
+    const pruned = all.slice(0, MAX_CHATS);
+    // Best-effort persistence — a store/IO failure must not crash the chat view;
+    // the returned list still drives the UI in-memory.
+    try {
+      await getStore().set(KEY, pruned);
+      await getStore().save();
+    } catch {
+      /* ignore — persistence is a convenience layer */
+    }
+    return pruned;
+  });
 }
 
 /** Remove a chat by id; returns the new list. Idempotent. */
-export async function deleteChat(id: string): Promise<StoredChat[]> {
-  const all = await loadChats();
-  const next = all.filter((c) => c.id !== id);
-  if (next.length === all.length) return all;
-  try {
-    await getStore().set(KEY, next);
-    await getStore().save();
-  } catch {
-    /* ignore — best-effort */
-  }
-  return next;
+export function deleteChat(id: string): Promise<StoredChat[]> {
+  return serialize(async () => {
+    const all = await loadChats();
+    const next = all.filter((c) => c.id !== id);
+    if (next.length === all.length) return all;
+    try {
+      await getStore().set(KEY, next);
+      await getStore().save();
+    } catch {
+      /* ignore — best-effort */
+    }
+    return next;
+  });
 }
