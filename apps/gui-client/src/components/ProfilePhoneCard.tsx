@@ -70,6 +70,11 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             background: `linear-gradient(160deg, hsl(${p.hue} 44% 30%), hsl(${(p.hue + 38) % 360} 42% 16%))`,
           }}
         />
+        {/* subtle screen gloss — a faint top reflection for a premium device feel */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-1/3 bg-gradient-to-b from-white/[0.07] to-transparent"
+        />
         {/* dynamic island */}
         <span
           aria-hidden="true"

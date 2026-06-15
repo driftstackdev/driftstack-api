@@ -42,8 +42,12 @@ export interface DriftstackSettings {
 export const DEFAULT_SETTINGS: DriftstackSettings = {
   apiKey: null,
   baseUrl: 'http://localhost:3000',
-  themeMode: 'light',
-  themeAccent: 'violet',
+  // 2026-06-15 — founder: the GUI's standard look is Dark + Red (oxblood),
+  // matching the marketing "Fleet Mission Control" brand. New installs land on
+  // it; existing users keep their saved theme. Switch via the title-bar
+  // ThemeSwitcher / ⌘⇧D.
+  themeMode: 'dark',
+  themeAccent: 'oxblood',
   telemetryOptIn: null,
 };
 

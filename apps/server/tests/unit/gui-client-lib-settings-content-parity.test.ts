@@ -83,10 +83,13 @@ describe('W467.C apps/gui-client/src/lib/settings.ts content parity', () => {
     expect(body).toMatch(/telemetryOptIn: boolean \| null;\s*\n?\s*\}/);
   });
 
-  it("DEFAULT_SETTINGS pinned: apiKey null + baseUrl 'http://localhost:3000' (SDK default port) + light/violet theme defaults (founder-locked) + telemetryOptIn null", () => {
-    expect(body).toMatch(
-      /export const DEFAULT_SETTINGS: DriftstackSettings = \{\s*\n?\s*apiKey: null,\s*\n?\s*baseUrl: 'http:\/\/localhost:3000',\s*\n?\s*themeMode: 'light',\s*\n?\s*themeAccent: 'violet',\s*\n?\s*telemetryOptIn: null,\s*\n?\s*\};/,
-    );
+  it("DEFAULT_SETTINGS pinned: apiKey null + baseUrl 'http://localhost:3000' (SDK default port) + dark/oxblood theme defaults (founder 2026-06-15: GUI standard = Dark + Red, matching the marketing brand) + telemetryOptIn null", () => {
+    expect(body).toMatch(/export const DEFAULT_SETTINGS: DriftstackSettings = \{/);
+    expect(body).toMatch(/apiKey: null,/);
+    expect(body).toMatch(/baseUrl: 'http:\/\/localhost:3000',/);
+    expect(body).toMatch(/themeMode: 'dark',/);
+    expect(body).toMatch(/themeAccent: 'oxblood',/);
+    expect(body).toMatch(/telemetryOptIn: null,/);
   });
 
   it("Constants: STORE_FILE 'settings.json' + SETTINGS_KEY 'driftstack' + LEGACY_KEYCHAIN_NAME 'api_key' (legacy single-name, kept for first-load migration) + keychainNameFor(baseUrl) factory returning 'api_key:<host>' (2026-05-20 scoping fix b876a576 — switching cloud↔self-hosted reuses correct per-env entry)", () => {
