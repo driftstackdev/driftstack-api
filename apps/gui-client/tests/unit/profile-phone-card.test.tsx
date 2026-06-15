@@ -40,12 +40,9 @@ function props(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardProps
     testing: false,
     testDisabled: false,
     launchDisabled: false,
-    organizeOpen: false,
-    organizeSlot: <div data-testid="org-slot" />,
     onToggleSelect: vi.fn(),
     onPrimary: vi.fn(),
     onWatch: vi.fn(),
-    onOrganizeToggle: vi.fn(),
     onTest: vi.fn(),
     ...over,
   };
@@ -102,13 +99,11 @@ describe('ProfilePhoneCard', () => {
     cleanup();
   });
 
-  it('clicking the card toggles selection; Launch + Test do NOT select (stopPropagation); organizeSlot shows when open', () => {
+  it('clicking the card toggles selection; Launch + Test do NOT select (stopPropagation)', () => {
     const onToggleSelect = vi.fn();
     const onTest = vi.fn();
     const onPrimary = vi.fn();
-    render(
-      <ProfilePhoneCard {...props({ onToggleSelect, onTest, onPrimary, organizeOpen: true })} />,
-    );
+    render(<ProfilePhoneCard {...props({ onToggleSelect, onTest, onPrimary })} />);
     // whole-card click selects (no more tiny checkbox)
     fireEvent.click(screen.getByLabelText(/Select amsterdam shopper/));
     expect(onToggleSelect).toHaveBeenCalledTimes(1);
@@ -118,7 +113,6 @@ describe('ProfilePhoneCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Launch' }));
     expect(onPrimary).toHaveBeenCalledTimes(1);
     expect(onToggleSelect).toHaveBeenCalledTimes(1); // still 1 — buttons don't select
-    expect(screen.getByTestId('org-slot')).toBeTruthy();
     cleanup();
   });
 });

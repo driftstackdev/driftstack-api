@@ -43,12 +43,9 @@ function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
     testing: false,
     testDisabled: false,
     launchDisabled: false,
-    organizeOpen: false,
-    organizeSlot: null,
     onToggleSelect: noop,
     onPrimary: noop,
     onWatch: noop,
-    onOrganizeToggle: noop,
     onTest: noop,
     onAssist: noop,
     ...over,
@@ -166,10 +163,7 @@ export function Gallery(): JSX.Element {
         onWatch={noop}
         onStop={noop}
         onTest={noop}
-        onOrganize={noop}
         onDelete={noop}
-        organizeId={null}
-        organizeSlot={null}
       />
     </div>
   );

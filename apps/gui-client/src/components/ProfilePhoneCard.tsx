@@ -42,12 +42,9 @@ export interface ProfilePhoneCardProps {
   testDisabled: boolean;
   launchDisabled: boolean;
   launchDisabledReason?: string;
-  organizeOpen: boolean;
-  organizeSlot: ReactNode;
   onToggleSelect: () => void;
   onPrimary: () => void; // Launch (idle) / Open session (running)
   onWatch: () => void;
-  onOrganizeToggle: () => void;
   onTest: () => void;
   onAssist?: () => void;
 }
@@ -273,8 +270,6 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             </div>
           )}
 
-          {p.organizeOpen ? <div>{p.organizeSlot}</div> : null}
-
           <span className="mt-auto text-center text-[9.5px] text-ink-muted">
             {p.lastUsedIso !== null ? (
               <RelativeTime iso={p.lastUsedIso} tooltipPrefix="Last used" />
@@ -314,12 +309,6 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 disabled={p.testDisabled}
               />
             ) : null}
-            <ActionBtn
-              glyph="⋯"
-              caption="Organize"
-              label="Organize — folder + tags"
-              onClick={p.onOrganizeToggle}
-            />
           </div>
 
           {/* dock — Launch/Open ONLY, full width, always visible + prominent */}

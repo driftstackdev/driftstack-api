@@ -10,7 +10,7 @@
 // horizontal scrollbar cutting it off. The Exit IP cell shows the IP with its
 // location beneath and, on hover, the bound proxy address + location.
 
-import type { JSX, ReactNode } from 'react';
+import type { JSX } from 'react';
 import { RelativeTime } from './RelativeTime';
 
 export type ProfilesTableSortKey = 'name' | 'status' | 'country' | 'latency' | 'lastUsed';
@@ -49,10 +49,7 @@ export interface ProfilesTableProps {
   onWatch: (id: string) => void;
   onStop: (id: string) => void;
   onTest: (id: string) => void;
-  onOrganize: (id: string) => void;
   onDelete: (id: string) => void;
-  organizeId: string | null;
-  organizeSlot: ReactNode;
 }
 
 interface Col {
@@ -273,14 +270,6 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             )}
             <button
               type="button"
-              className="text-[11px] text-ink-muted hover:text-ink-primary"
-              onClick={stop(() => p.onOrganize(r.id))}
-              title="Organize — folder + tags"
-            >
-              Organize
-            </button>
-            <button
-              type="button"
               className="text-[11px] text-ink-muted hover:text-status-error disabled:opacity-50"
               onClick={stop(() => p.onDelete(r.id))}
               disabled={r.busy || r.running}
@@ -291,13 +280,6 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           </div>
         </td>
       </tr>
-      {p.organizeId === r.id && (
-        <tr className="bg-surface-inset">
-          <td colSpan={COLS.length} className="px-3 py-2">
-            {p.organizeSlot}
-          </td>
-        </tr>
-      )}
     </>
   );
 }

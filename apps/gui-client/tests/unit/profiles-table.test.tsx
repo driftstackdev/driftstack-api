@@ -48,10 +48,7 @@ function props(over: Partial<ProfilesTableProps> = {}): ProfilesTableProps {
     onWatch: vi.fn(),
     onStop: vi.fn(),
     onTest: vi.fn(),
-    onOrganize: vi.fn(),
     onDelete: vi.fn(),
-    organizeId: null,
-    organizeSlot: <div data-testid="org-slot" />,
     ...over,
   };
 }
@@ -107,12 +104,6 @@ describe('ProfilesTable', () => {
     expect(screen.getByRole('button', { name: 'Live view' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Launch' })).toBeNull();
-    cleanup();
-  });
-
-  it('organize row renders the slot under the matching profile', () => {
-    render(<ProfilesTable {...props({ organizeId: 'p1' })} />);
-    expect(screen.getByTestId('org-slot')).toBeTruthy();
     cleanup();
   });
 

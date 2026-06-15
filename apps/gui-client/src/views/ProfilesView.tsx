@@ -205,7 +205,6 @@ export function ProfilesView({
   // G3 — filter the grid by a single tag (null = all). Composes (AND) with the
   // folder + status + search filters.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
-  const [organizeId, setOrganizeId] = useState<string | null>(null);
   // Increment 3 — bulk select: client-side organize actions over a selection.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkFolder, setBulkFolder] = useState('');
@@ -232,8 +231,6 @@ export function ProfilesView({
       return false;
     }
   });
-  const [draftFolder, setDraftFolder] = useState('');
-  const [draftTags, setDraftTags] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProfileStatusFilter>('all');
   const [sortBy, setSortBy] = useState<ProfileSortBy>('last-used');
 
@@ -647,37 +644,6 @@ export function ProfilesView({
     }
   }
 
-  async function handleOrganizeSave(profileId: string): Promise<void> {
-    const next = await saveProfileMeta(
-      profileId,
-      {
-        folder: draftFolder.trim(),
-        tags: draftTags
-          .split(',')
-          .map((t) => t.trim())
-          .filter((t) => t.length > 0),
-      },
-      // Personal-only prune (see refresh seed-down): never prune the global
-      // org store against a team workspace's profile list.
-      activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
-    );
-    setProfilesMeta(next);
-    setOrganizeId(null);
-    // Phase 2 write-through: persist organization server-side too
-    // (migration 0076 columns). Best-effort — offline or a pre-0076
-    // server (which strips the fields) must never break the local save
-    // the user just watched succeed. Local store remains the UI source.
-    const saved = next[profileId];
-    if (client && saved) {
-      void client.profiles
-        .update(profileId, {
-          folder: saved.folder.length > 0 ? saved.folder : null,
-          tags: saved.tags,
-        })
-        .catch(() => undefined);
-    }
-  }
-
   function toggleSelected(id: string): void {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -943,42 +909,9 @@ export function ProfilesView({
           </button>
         </div>
       )}
-      {state.profiles.length > 0 && (
-        <div
-          data-component="hub-stats"
-          className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-surface-divider bg-surface-divider sm:grid-cols-4"
-        >
-          <HubStat
-            l="Profiles"
-            target={state.profiles.length}
-            sub={`across ${folderList(scopedMeta).length.toString()} folder${
-              folderList(scopedMeta).length === 1 ? '' : 's'
-            }`}
-          />
-          <HubStat
-            l="Live now"
-            target={liveCount}
-            accent
-            sub={`${(state.profiles.length - liveCount).toString()} idle`}
-          >
-            <Sparkline count={liveCount} />
-          </HubStat>
-          <HubStat
-            l="Proxies"
-            target={proxies.length}
-            sub={`${proxies.length.toString()} active · 0 down`}
-          />
-          <HubStat
-            l="Proxy health"
-            target={proxyHealthPct ?? 0}
-            decimals={1}
-            unit="%"
-            sub={proxyHealthPct !== null ? 'last reachable share' : 'untested'}
-          >
-            <HealthRing pct={proxyHealthPct ?? 0} />
-          </HubStat>
-        </div>
-      )}
+      {/* (Profiles hub-stats strip removed 2026-06-15 — the fleet KPIs live on
+          the Command Center only, per founder; Profiles stays focused on the
+          grid/list.) */}
       {/* Team workspace indicator (hub demo, honest v1): memberships
           from /v1/account/me. Workspace SWITCHING (X-Driftstack-Account
           effective-account) is the named follow-up — this surfaces the
@@ -1419,39 +1352,6 @@ export function ProfilesView({
                       testDisabled={testingProxyId !== null}
                       launchDisabled={activeWorkspace !== null}
                       launchDisabledReason="Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own."
-                      organizeOpen={organizeId === profile.id}
-                      organizeSlot={
-                        <div className="flex flex-wrap items-center gap-1.5 rounded border border-surface-divider bg-surface-inset p-1.5">
-                          <FolderPicker
-                            ariaLabel="Folder"
-                            noneLabel="Unfiled"
-                            folders={folderList(scopedMeta)}
-                            value={draftFolder}
-                            onChange={setDraftFolder}
-                          />
-                          <input
-                            aria-label="Tags (comma-separated)"
-                            placeholder="tags, comma"
-                            className="w-full rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
-                            value={draftTags}
-                            onChange={(e) => setDraftTags(e.target.value)}
-                          />
-                          <button
-                            type="button"
-                            className="btn-primary px-2 py-1 text-xs"
-                            onClick={() => void handleOrganizeSave(profile.id)}
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            className="text-xs text-ink-muted hover:text-ink-primary"
-                            onClick={() => setOrganizeId(null)}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      }
                       onToggleSelect={() => toggleSelected(profile.id)}
                       onPrimary={() => {
                         if (running && bound !== null) onOpenSession(bound.id);
@@ -1462,15 +1362,6 @@ export function ProfilesView({
                           if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
                           else onOpenSession(bound.id);
                         } else void handleLaunch(profile);
-                      }}
-                      onOrganizeToggle={() => {
-                        if (organizeId === profile.id) {
-                          setOrganizeId(null);
-                          return;
-                        }
-                        setDraftFolder(profilesMeta[profile.id]?.folder ?? '');
-                        setDraftTags((profilesMeta[profile.id]?.tags ?? []).join(', '));
-                        setOrganizeId(profile.id);
                       }}
                       onTest={() => {
                         if (px !== null) void handleTestProxy(px);
@@ -1580,49 +1471,7 @@ export function ProfilesView({
                       const px = pickProxy(id);
                       if (px !== null) void handleTestProxy(px);
                     }}
-                    onOrganize={(id) => {
-                      if (organizeId === id) {
-                        setOrganizeId(null);
-                        return;
-                      }
-                      setDraftFolder(profilesMeta[id]?.folder ?? '');
-                      setDraftTags((profilesMeta[id]?.tags ?? []).join(', '));
-                      setOrganizeId(id);
-                    }}
                     onDelete={(id) => void handleDelete(id)}
-                    organizeId={organizeId}
-                    organizeSlot={
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <FolderPicker
-                          ariaLabel="Folder"
-                          noneLabel="Unfiled"
-                          folders={folderList(scopedMeta)}
-                          value={draftFolder}
-                          onChange={setDraftFolder}
-                        />
-                        <input
-                          aria-label="Tags (comma-separated)"
-                          placeholder="tags, comma"
-                          className="rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
-                          value={draftTags}
-                          onChange={(e) => setDraftTags(e.target.value)}
-                        />
-                        <button
-                          type="button"
-                          className="btn-primary px-2 py-1 text-xs"
-                          onClick={() => void handleOrganizeSave(organizeId ?? '')}
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs text-ink-muted hover:text-ink-primary"
-                          onClick={() => setOrganizeId(null)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    }
                   />
                 );
               })()
@@ -2433,106 +2282,6 @@ function FolderPicker({
   );
 }
 
-// S5 (GUI-rework 2026-06-14) — dependency-free count-up for the stat
-// numerals (console.html's animated metrics). Eases a number from 0 to the
-// target over ~700ms via requestAnimationFrame; honors prefers-reduced-
-// motion by snapping straight to the target. Returns the value formatted
-// with the requested decimals so the mono numeral reads cleanly.
-function useCountUp(target: number, decimals = 0): string {
-  const [value, setValue] = useState(0);
-  useEffect(() => {
-    const reduce =
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce || target === 0) {
-      setValue(target);
-      return;
-    }
-    const start = performance.now();
-    const duration = 700;
-    let raf = 0;
-    const tick = (now: number): void => {
-      const t = Math.min(1, (now - start) / duration);
-      // ease-out cubic
-      const eased = 1 - Math.pow(1 - t, 3);
-      setValue(target * eased);
-      if (t < 1) raf = window.requestAnimationFrame(tick);
-    };
-    raf = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(raf);
-  }, [target]);
-  return value.toFixed(decimals);
-}
-
-// S5 — a tiny inline sparkline (console.html's "Live now" tile). Renders a
-// deterministic, gently-rising trend line scaled to the live count so the
-// tile reads as a metric, not a static number. Pure decoration over a real
-// value; no data dependency beyond the count it's handed.
-function Sparkline({ count }: { count: number }): JSX.Element {
-  // Deterministic 8-point series that trends toward the current value — keeps
-  // the sparkline stable across renders (no flicker) while reflecting scale.
-  const peak = Math.max(1, count);
-  const pts = [0.35, 0.5, 0.42, 0.62, 0.55, 0.74, 0.68, 0.92].map((f, i) => {
-    const x = (i / 7) * 60 + 1;
-    const y = 22 - f * 18;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  void peak;
-  return (
-    <svg
-      className="absolute right-3.5 top-3.5 h-6 w-[62px]"
-      viewBox="0 0 62 24"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <polyline
-        points={pts.join(' ')}
-        fill="none"
-        stroke="rgb(var(--status-ready-rgb))"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-// S5 — SVG progress ring for the "Proxy health" tile (console.html). The
-// dash-offset is driven by the real health percentage so the ring fills to
-// match the numeral. r=15 → circumference ≈ 94.2.
-function HealthRing({ pct }: { pct: number }): JSX.Element {
-  const C = 94.2;
-  const clamped = Math.max(0, Math.min(100, pct));
-  const offset = C * (1 - clamped / 100);
-  return (
-    <div className="absolute right-3 top-2.5">
-      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
-        <circle
-          cx="20"
-          cy="20"
-          r="15"
-          fill="none"
-          stroke="rgb(var(--surface-divider-rgb))"
-          strokeWidth="3.2"
-        />
-        <circle
-          cx="20"
-          cy="20"
-          r="15"
-          fill="none"
-          stroke="rgb(var(--status-ready-rgb))"
-          strokeWidth="3.2"
-          strokeLinecap="round"
-          strokeDasharray={C}
-          strokeDashoffset={offset}
-          transform="rotate(-90 20 20)"
-          style={{ transition: 'stroke-dashoffset 0.7s ease' }}
-        />
-      </svg>
-    </div>
-  );
-}
-
 // G2 (5→10, 2026-06-14) — profile IDENTITY card for the grid thumbnail.
 // Replaces the old `MiniPage` faux-webpage placeholder, which the founder read
 // as "random images of a browser". We have no real screenshots yet (driver is
@@ -2561,45 +2310,6 @@ export function identityHue(name: string): number {
 // (ProfileIdentity removed — GX replaced the device-frame thumbnail with the
 // full ProfilePhoneCard; profileMonogram/identityHue/formatDeviceName are now
 // consumed by that component via props computed in the grid map.)
-
-// S5 — Console-density stat tile (console.html's .stat): small uppercase
-// label + a BIG mono numeral (count-up) + a sub-line, with optional decorative
-// sparkline / health-ring slot. `accent` tints the numeral (the "Live now"
-// metric). Tabular-nums keeps the count-up from jittering width.
-function HubStat({
-  l,
-  target,
-  decimals = 0,
-  unit,
-  sub,
-  accent,
-  children,
-}: {
-  l: string;
-  target: number;
-  decimals?: number;
-  unit?: string;
-  sub: string;
-  accent?: boolean;
-  children?: React.ReactNode;
-}): JSX.Element {
-  const shown = useCountUp(target, decimals);
-  return (
-    <div className="relative flex flex-col gap-0.5 bg-surface-base px-4 py-3">
-      <span className="section-label">{l}</span>
-      <span className="flex items-baseline gap-1.5 text-[26px] font-semibold leading-none tracking-tight">
-        <span
-          className={`mono tabular-nums ${accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'}`}
-        >
-          {shown}
-        </span>
-        {unit !== undefined && <span className="text-xs font-medium text-ink-muted">{unit}</span>}
-      </span>
-      <span className="text-[10.5px] text-ink-muted">{sub}</span>
-      {children}
-    </div>
-  );
-}
 
 // Folder visual identity (founder: folders "look boring without any images").
 // All/Unfiled get fixed glyphs; named folders get a per-name emoji (matched on
