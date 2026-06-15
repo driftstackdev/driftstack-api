@@ -24,7 +24,7 @@ interface ServerVersion {
   playwright_browser?: 'webkit' | 'chromium' | 'firefox';
 }
 
-export function ConnectivityView(): JSX.Element {
+export function ConnectivityView({ embedded = false }: { embedded?: boolean } = {}): JSX.Element {
   const { client, settings } = useSettings();
   const [result, setResult] = useState<CheckResult | null>(null);
   const [running, setRunning] = useState(false);
@@ -73,11 +73,13 @@ export function ConnectivityView(): JSX.Element {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
+    <div className={embedded ? 'flex flex-col gap-4' : 'flex h-full flex-col gap-4 p-6'}>
       <header className="flex flex-col gap-1">
-        <span className="section-label">Network</span>
-        <h2 className="text-lg font-medium tracking-tight text-ink-primary">Connectivity test</h2>
-        <p className="text-sm text-ink-secondary max-w-2xl">
+        {!embedded && <span className="section-label">Network</span>}
+        {!embedded && (
+          <h2 className="text-lg font-medium tracking-tight text-ink-primary">Connectivity test</h2>
+        )}
+        <p className="max-w-2xl text-sm text-ink-secondary">
           Authenticates against the configured server and times the round-trip. Use this when a
           session call starts failing — it isolates whether the issue is the API key, the URL, the
           server, or your network.

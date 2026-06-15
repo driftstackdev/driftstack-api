@@ -127,14 +127,11 @@ describe('Sidebar — count badges + section gates', () => {
     expect(screen.getByText('7')).toBeInTheDocument();
   });
 
-  it('renders Raw sessions ratio from accountMe.concurrent_session_*', () => {
-    mockAccountMe = buildAccountMe({
-      concurrent_session_active: 3,
-      concurrent_session_cap: 4,
-    });
+  it('no longer shows the Raw sessions nav item (removed 2026-06-15)', () => {
+    mockAccountMe = buildAccountMe();
     render(<Sidebar current="profiles" onNavigate={() => {}} onSignOut={() => {}} />);
-    expect(screen.getByText('Raw sessions')).toBeInTheDocument();
-    expect(screen.getByText('3/4')).toBeInTheDocument();
+    expect(screen.queryByText('Raw sessions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Connectivity test')).not.toBeInTheDocument();
   });
 
   it('hides Team item when accountMe.teams is empty', () => {

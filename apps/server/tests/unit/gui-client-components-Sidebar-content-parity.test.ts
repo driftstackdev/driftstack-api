@@ -26,7 +26,7 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("section taxonomy pinned: 'Home' (Command Center) + 'Browse' (Profiles + Proxies) lead, then 'Automate' (AI chat + Recipes) + 'History' (Session log + Recordings) + 'Diagnostics' (Raw sessions + Connectivity test) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional) — 2026-06-15 the founder reversed the earlier automation-first call: Profiles is the core surface, so Browse sits directly under Home, Automate below it. Do not collapse / rename sections without updating the GUI snapshot tests + this pin. 'Home' added by the G4 Command Center slice.", () => {
+  it("section taxonomy pinned: 'Home' (Command Center) + 'Browse' (Profiles + Proxies) lead, then 'Automate' (AI chat + Recipes) + 'History' (Session log + Recordings) + 'Diagnostics' (Logs) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional). 2026-06-15: Raw sessions removed (redundant with the profile View/Open) + Connectivity test moved into Settings, so Diagnostics keeps only Logs. Do not collapse / rename sections without updating the GUI snapshot tests + this pin.", () => {
     expect(body).toMatch(/<SidebarSection label="Home">/);
     expect(body).toMatch(/<SidebarSection label="Automate">/);
     expect(body).toMatch(/<SidebarSection label="Browse">/);
@@ -35,7 +35,9 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(body).toMatch(/<SidebarSection label="Cluster">/);
     expect(body).toMatch(/<SidebarSection label="Account">/);
     expect(body).toMatch(/Mac mini fleet/);
-    expect(body).toMatch(/Connectivity test/);
+    // Connectivity test now lives in Settings, not the sidebar.
+    expect(body).not.toMatch(/Connectivity test/);
+    expect(body).not.toMatch(/Raw sessions/);
   });
 
   it("SidebarViewKind 12-variant union exported: home / ai / recipes / logs / profiles / proxies / sessions-history / recordings / sessions / connectivity / fleet / settings — pinned so App.tsx + future callers stay tied to the canonical nav-key taxonomy (live-session + recording-player are not in this union — they are routed-to, not navigated-to). 'ai' added by S7; 'recipes'/'logs' by the P3 feature-views slice; 'home' (Command Center) by the 5→10 G4 slice.", () => {
@@ -44,11 +46,9 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     );
   });
 
-  it('Count-badge data sources pinned: Profiles X/Y via accountMe.profile_count / .profile_cap, Sessions X/Y via accountMe.concurrent_session_active / .cap, Team N via accountMe.teams.length, Recordings N via RecordingsContext map size — pin so a casual refactor cannot drop a counter without showing up in the diff', () => {
+  it('Count-badge data sources pinned: Profiles X/Y via accountMe.profile_count / .profile_cap, Team N via accountMe.teams.length, Recordings N via RecordingsContext map size — pin so a casual refactor cannot drop a counter without showing up in the diff. (Sessions badge dropped 2026-06-15 with the Raw sessions nav item.)', () => {
     expect(body).toMatch(/accountMe\?\.profile_count \?\? null/);
     expect(body).toMatch(/accountMe\?\.profile_cap \?\? null/);
-    expect(body).toMatch(/accountMe\?\.concurrent_session_active \?\? null/);
-    expect(body).toMatch(/accountMe\?\.concurrent_session_cap \?\? null/);
     expect(body).toMatch(/accountMe\?\.teams\.length \?\? 0/);
     expect(body).toMatch(/recordings\.size/);
   });

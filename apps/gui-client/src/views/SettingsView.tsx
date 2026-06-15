@@ -13,6 +13,7 @@
 // stale "npm run admin:create-key" instruction.
 
 import { useState } from 'react';
+import { ConnectivityView } from './ConnectivityView';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { useSettings } from '../lib/SettingsContext';
@@ -501,6 +502,13 @@ export function SettingsView(): JSX.Element {
               </span>
             )}
           </Field>
+        </div>
+      </Panel>
+
+      <Panel>
+        <span className="section-label">Connection test</span>
+        <div className="mt-4">
+          <ConnectivityView embedded />
         </div>
       </Panel>
 
