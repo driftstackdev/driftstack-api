@@ -1129,20 +1129,6 @@ export function ProfilesView({
         )}
         {state.profiles.length > 0 && (
           <div className="flex items-center justify-end gap-2">
-            <select
-              aria-label="Filter by folder"
-              className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary"
-              value={folderFilter}
-              onChange={(e) => setFolderFilter(e.target.value)}
-            >
-              <option value="all">All folders</option>
-              <option value="unfiled">Unfiled</option>
-              {folderList(scopedMeta).map((f) => (
-                <option key={f} value={f}>
-                  {f}
-                </option>
-              ))}
-            </select>
             <button
               type="button"
               aria-pressed={viewMode === 'list'}
@@ -1299,246 +1285,240 @@ export function ProfilesView({
           </p>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
-          {/* S5 (GUI-rework 2026-06-14) — FOLDER SHELF (console.html): a
-              HORIZONTAL row of emoji-icon pills (▦ All · 🛒 Shopping · …)
-              replacing the old vertical w-40 nav. Counts derive from the same
-              organization map the filter reads; selection drives folderFilter
-              unchanged. */}
-          <nav
+        <div className="flex min-h-0 flex-1 gap-4">
+          {/* S3 (GUI-rework 2026-06-15, founder) — FOLDERS as a permanent left
+              NAV rail (vertical, full-width rows) instead of the old horizontal
+              shelf + the redundant filter dropdown. Counts derive from the same
+              organization map; selection drives folderFilter unchanged. */}
+          <aside
             aria-label="Folders"
-            className="flex flex-col gap-2 border-b border-surface-divider pb-3"
+            className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-surface-divider pr-3"
           >
-            <div className="flex items-center justify-between">
-              <span className="section-label">Folders</span>
-              <span className="section-label text-ink-muted">
-                {state.profiles.length} profile{state.profiles.length === 1 ? '' : 's'}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
+            <span className="section-label px-2.5 pb-1">Folders</span>
+            <FolderItem
+              variant="rail"
+              label="All profiles"
+              count={state.profiles.length}
+              active={folderFilter === 'all'}
+              onSelect={() => setFolderFilter('all')}
+            />
+            {folderList(scopedMeta).map((f) => (
               <FolderItem
-                label="All profiles"
-                count={state.profiles.length}
-                active={folderFilter === 'all'}
-                onSelect={() => setFolderFilter('all')}
+                key={f}
+                variant="rail"
+                label={f}
+                count={state.profiles.filter((p) => profilesMeta[p.id]?.folder === f).length}
+                active={folderFilter === f}
+                onSelect={() => setFolderFilter(f)}
               />
-              {folderList(scopedMeta).map((f) => (
-                <FolderItem
-                  key={f}
-                  label={f}
-                  count={state.profiles.filter((p) => profilesMeta[p.id]?.folder === f).length}
-                  active={folderFilter === f}
-                  onSelect={() => setFolderFilter(f)}
-                />
-              ))}
-              <FolderItem
-                label="Unfiled"
-                count={
-                  state.profiles.filter((p) => (profilesMeta[p.id]?.folder ?? '') === '').length
-                }
-                active={folderFilter === 'unfiled'}
-                onSelect={() => setFolderFilter('unfiled')}
-              />
-            </div>
-          </nav>
-          {/* G3 — TAG filter rail (founder: "missing tags"). Filter the grid by
-              a tag; composes (AND) with the folder filter. Only shown when the
-              account actually has tags, so it never clutters an empty setup. */}
-          <TagFilterRail
-            tags={aggregateTags(scopedMeta)}
-            active={tagFilter}
-            onSelect={setTagFilter}
-          />
-          <div className="min-w-0 flex-1">
-            {viewMode === 'grid' ? (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(178px,1fr))] gap-3">
-                {filteredProfiles.length === 0 ? (
-                  <div className="col-span-full">
-                    <ProfilesEmpty hasActiveFilters={hasActiveFilters} onClear={clearFilters} />
-                  </div>
-                ) : null}
-                {filteredProfiles.map((profile) => {
-                  const bound = boundSession(profile.id);
-                  const running = bound !== null;
-                  // S5 (GUI-rework 2026-06-14) — card-level derived display
-                  // values from the REAL probe cache (no invented data). The
-                  // proxy row + latency meter + health pill all read these.
-                  const px = pickProxy(profile.id);
-                  const probe = px !== null ? probeCache[px.id] : undefined;
-                  const lat = probe?.result.latency_ms;
-                  // latency meter fill: 0–250ms mapped to 0–100% (clamped).
-                  const latFill =
-                    lat !== undefined ? Math.max(6, Math.min(100, (lat / 250) * 100)) : 0;
-                  const latGood = lat !== undefined && lat <= 100;
-                  return (
-                    <ProfilePhoneCard
-                      key={profile.id}
-                      name={profile.name}
-                      monogram={profileMonogram(profile.name)}
-                      icon={profilesMeta[profile.id]?.icon ?? ''}
-                      hue={identityHue(profile.name)}
-                      deviceLabel={formatDeviceName(profile.archetype)}
-                      running={running}
-                      selected={selectedIds.has(profile.id)}
-                      lastUsedIso={profile.last_used_at}
-                      folder={profilesMeta[profile.id]?.folder ?? ''}
-                      tags={profilesMeta[profile.id]?.tags ?? []}
-                      hasProxy={px !== null}
-                      flag={probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
-                      countryCode={probe?.exitCountry ?? null}
-                      exitIp={probe?.exitIp ?? null}
-                      latencyMs={lat ?? null}
-                      latencyFillPct={latFill}
-                      latencyGood={latGood}
-                      probed={probe !== undefined}
-                      capabilities={probe?.result ?? null}
-                      checkedAtIso={
-                        probe?.at !== undefined ? new Date(probe.at).toISOString() : null
+            ))}
+            <FolderItem
+              variant="rail"
+              label="Unfiled"
+              count={state.profiles.filter((p) => (profilesMeta[p.id]?.folder ?? '') === '').length}
+              active={folderFilter === 'unfiled'}
+              onSelect={() => setFolderFilter('unfiled')}
+            />
+          </aside>
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            {/* G3 — TAG filter rail (founder: "missing tags"). Composes (AND)
+                with the folder rail. Hidden when the account has no tags. */}
+            <TagFilterRail
+              tags={aggregateTags(scopedMeta)}
+              active={tagFilter}
+              onSelect={setTagFilter}
+            />
+            <div className="min-w-0 flex-1">
+              {viewMode === 'grid' ? (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(178px,1fr))] gap-3">
+                  {filteredProfiles.length === 0 ? (
+                    <div className="col-span-full">
+                      <ProfilesEmpty hasActiveFilters={hasActiveFilters} onClear={clearFilters} />
+                    </div>
+                  ) : null}
+                  {filteredProfiles.map((profile) => {
+                    const bound = boundSession(profile.id);
+                    const running = bound !== null;
+                    // S5 (GUI-rework 2026-06-14) — card-level derived display
+                    // values from the REAL probe cache (no invented data). The
+                    // proxy row + latency meter + health pill all read these.
+                    const px = pickProxy(profile.id);
+                    const probe = px !== null ? probeCache[px.id] : undefined;
+                    const lat = probe?.result.latency_ms;
+                    // latency meter fill: 0–250ms mapped to 0–100% (clamped).
+                    const latFill =
+                      lat !== undefined ? Math.max(6, Math.min(100, (lat / 250) * 100)) : 0;
+                    const latGood = lat !== undefined && lat <= 100;
+                    return (
+                      <ProfilePhoneCard
+                        key={profile.id}
+                        name={profile.name}
+                        monogram={profileMonogram(profile.name)}
+                        icon={profilesMeta[profile.id]?.icon ?? ''}
+                        hue={identityHue(profile.name)}
+                        deviceLabel={formatDeviceName(profile.archetype)}
+                        running={running}
+                        selected={selectedIds.has(profile.id)}
+                        lastUsedIso={profile.last_used_at}
+                        folder={profilesMeta[profile.id]?.folder ?? ''}
+                        tags={profilesMeta[profile.id]?.tags ?? []}
+                        hasProxy={px !== null}
+                        flag={probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
+                        countryCode={probe?.exitCountry ?? null}
+                        exitIp={probe?.exitIp ?? null}
+                        latencyMs={lat ?? null}
+                        latencyFillPct={latFill}
+                        latencyGood={latGood}
+                        probed={probe !== undefined}
+                        capabilities={probe?.result ?? null}
+                        checkedAtIso={
+                          probe?.at !== undefined ? new Date(probe.at).toISOString() : null
+                        }
+                        busy={busyId === profile.id}
+                        testing={px !== null && testingProxyId === px.id}
+                        testDisabled={testingProxyId !== null}
+                        launchDisabled={activeWorkspace !== null}
+                        launchDisabledReason="Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own."
+                        onToggleSelect={() => toggleSelected(profile.id)}
+                        onPrimary={() => {
+                          if (running && bound !== null) onOpenSession(bound.id);
+                          else void handleLaunch(profile);
+                        }}
+                        onWatch={() => {
+                          if (running && bound !== null) {
+                            if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
+                            else onOpenSession(bound.id);
+                          } else void handleLaunch(profile);
+                        }}
+                        onTest={() => {
+                          if (px !== null) void handleTestProxy(px);
+                        }}
+                        onAssist={onAssist ? () => onAssist(profile.id) : undefined}
+                      />
+                    );
+                  })}
+                </div>
+              ) : filteredProfiles.length === 0 ? (
+                <ProfilesEmpty hasActiveFilters={hasActiveFilters} onClear={clearFilters} />
+              ) : (
+                (() => {
+                  const byId = new Map(filteredProfiles.map((pr) => [pr.id, pr]));
+                  const rows: ProfileTableRow[] = filteredProfiles.map((profile) => {
+                    const bound = boundSession(profile.id);
+                    const px = pickProxy(profile.id);
+                    const probe = px !== null ? probeCache[px.id] : undefined;
+                    const caps = probe !== undefined ? proxyCapabilities(probe.result) : null;
+                    const udp: 'ok' | 'fail' | 'unknown' =
+                      caps === null
+                        ? 'unknown'
+                        : (caps.find((c) => c.key === 'webrtc')?.ok ?? false)
+                          ? 'ok'
+                          : 'fail';
+                    return {
+                      id: profile.id,
+                      name: profile.name,
+                      icon: profilesMeta[profile.id]?.icon ?? '',
+                      deviceLabel: formatDeviceName(profile.archetype),
+                      running: bound !== null,
+                      hasProxy: px !== null,
+                      flag: probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍',
+                      countryCode: probe?.exitCountry ?? null,
+                      exitIp: probe?.exitIp ?? null,
+                      proxyAddress: px !== null ? `${px.host}:${px.port}` : null,
+                      locationLabel: probe?.exitCountry ? regionName(probe.exitCountry) : null,
+                      probed: probe !== undefined,
+                      udp,
+                      latencyMs: probe?.result.latency_ms ?? null,
+                      folder: profilesMeta[profile.id]?.folder ?? '',
+                      tags: profilesMeta[profile.id]?.tags ?? [],
+                      note: profilesMeta[profile.id]?.note ?? '',
+                      createdAtIso: profile.created_at,
+                      lastUsedIso: profile.last_used_at,
+                      selected: selectedIds.has(profile.id),
+                      busy: busyId === profile.id,
+                      testing: px !== null && testingProxyId === px.id,
+                      testDisabled: testingProxyId !== null,
+                      // Launch gates on team-workspace only — NOT atProfileCap: the
+                      // cap limits CREATING profiles, launching consumes a session
+                      // slot (free-tier fix 0ccff415; the table Launch is busy-only).
+                      launchDisabled: activeWorkspace !== null,
+                      launchDisabledReason:
+                        'Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own.',
+                    };
+                  });
+                  const dir = sortDir === 'asc' ? 1 : -1;
+                  rows.sort((a, b) => {
+                    switch (sortKey) {
+                      case 'name':
+                        return dir * a.name.localeCompare(b.name);
+                      case 'status':
+                        return dir * (Number(a.running) - Number(b.running));
+                      case 'country':
+                        return dir * (a.countryCode ?? 'zz').localeCompare(b.countryCode ?? 'zz');
+                      case 'created': {
+                        const at = a.createdAtIso !== null ? new Date(a.createdAtIso).getTime() : 0;
+                        const bt = b.createdAtIso !== null ? new Date(b.createdAtIso).getTime() : 0;
+                        return dir * (at - bt);
                       }
-                      busy={busyId === profile.id}
-                      testing={px !== null && testingProxyId === px.id}
-                      testDisabled={testingProxyId !== null}
-                      launchDisabled={activeWorkspace !== null}
-                      launchDisabledReason="Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own."
-                      onToggleSelect={() => toggleSelected(profile.id)}
-                      onPrimary={() => {
-                        if (running && bound !== null) onOpenSession(bound.id);
+                      case 'lastUsed': {
+                        const at = a.lastUsedIso !== null ? new Date(a.lastUsedIso).getTime() : 0;
+                        const bt = b.lastUsedIso !== null ? new Date(b.lastUsedIso).getTime() : 0;
+                        return dir * (at - bt);
+                      }
+                    }
+                  });
+                  const resolve = (id: string) => byId.get(id) ?? null;
+                  return (
+                    <ProfilesTable
+                      rows={rows}
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={(k) => {
+                        if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+                        else {
+                          setSortKey(k);
+                          setSortDir('asc');
+                        }
+                      }}
+                      allSelected={rows.length > 0 && rows.every((row) => selectedIds.has(row.id))}
+                      onToggleSelectAll={() => {
+                        setSelectedIds((prev) => {
+                          const allOn = rows.length > 0 && rows.every((row) => prev.has(row.id));
+                          if (allOn) return new Set();
+                          return new Set(rows.map((row) => row.id));
+                        });
+                      }}
+                      onToggleSelect={(id) => toggleSelected(id)}
+                      onPrimary={(id) => {
+                        const profile = resolve(id);
+                        if (profile === null) return;
+                        const bound = boundSession(id);
+                        if (bound !== null) onOpenSession(bound.id);
                         else void handleLaunch(profile);
                       }}
-                      onWatch={() => {
-                        if (running && bound !== null) {
-                          if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
+                      onWatch={(id) => {
+                        const profile = resolve(id);
+                        if (profile === null) return;
+                        const bound = boundSession(id);
+                        if (bound !== null) {
+                          if (bound.kind === 'agent') void reopenStream(bound.id, id);
                           else onOpenSession(bound.id);
                         } else void handleLaunch(profile);
                       }}
-                      onTest={() => {
+                      onStop={(id) => {
+                        const profile = resolve(id);
+                        if (profile !== null) void handleStop(profile);
+                      }}
+                      onTest={(id) => {
+                        const px = pickProxy(id);
                         if (px !== null) void handleTestProxy(px);
                       }}
-                      onAssist={onAssist ? () => onAssist(profile.id) : undefined}
+                      onDelete={(id) => void handleDelete(id)}
                     />
                   );
-                })}
-              </div>
-            ) : filteredProfiles.length === 0 ? (
-              <ProfilesEmpty hasActiveFilters={hasActiveFilters} onClear={clearFilters} />
-            ) : (
-              (() => {
-                const byId = new Map(filteredProfiles.map((pr) => [pr.id, pr]));
-                const rows: ProfileTableRow[] = filteredProfiles.map((profile) => {
-                  const bound = boundSession(profile.id);
-                  const px = pickProxy(profile.id);
-                  const probe = px !== null ? probeCache[px.id] : undefined;
-                  const caps = probe !== undefined ? proxyCapabilities(probe.result) : null;
-                  const udp: 'ok' | 'fail' | 'unknown' =
-                    caps === null
-                      ? 'unknown'
-                      : (caps.find((c) => c.key === 'webrtc')?.ok ?? false)
-                        ? 'ok'
-                        : 'fail';
-                  return {
-                    id: profile.id,
-                    name: profile.name,
-                    icon: profilesMeta[profile.id]?.icon ?? '',
-                    deviceLabel: formatDeviceName(profile.archetype),
-                    running: bound !== null,
-                    hasProxy: px !== null,
-                    flag: probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍',
-                    countryCode: probe?.exitCountry ?? null,
-                    exitIp: probe?.exitIp ?? null,
-                    proxyAddress: px !== null ? `${px.host}:${px.port}` : null,
-                    locationLabel: probe?.exitCountry ? regionName(probe.exitCountry) : null,
-                    probed: probe !== undefined,
-                    udp,
-                    latencyMs: probe?.result.latency_ms ?? null,
-                    folder: profilesMeta[profile.id]?.folder ?? '',
-                    tags: profilesMeta[profile.id]?.tags ?? [],
-                    note: profilesMeta[profile.id]?.note ?? '',
-                    createdAtIso: profile.created_at,
-                    lastUsedIso: profile.last_used_at,
-                    selected: selectedIds.has(profile.id),
-                    busy: busyId === profile.id,
-                    testing: px !== null && testingProxyId === px.id,
-                    testDisabled: testingProxyId !== null,
-                    // Launch gates on team-workspace only — NOT atProfileCap: the
-                    // cap limits CREATING profiles, launching consumes a session
-                    // slot (free-tier fix 0ccff415; the table Launch is busy-only).
-                    launchDisabled: activeWorkspace !== null,
-                    launchDisabledReason:
-                      'Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own.',
-                  };
-                });
-                const dir = sortDir === 'asc' ? 1 : -1;
-                rows.sort((a, b) => {
-                  switch (sortKey) {
-                    case 'name':
-                      return dir * a.name.localeCompare(b.name);
-                    case 'status':
-                      return dir * (Number(a.running) - Number(b.running));
-                    case 'country':
-                      return dir * (a.countryCode ?? 'zz').localeCompare(b.countryCode ?? 'zz');
-                    case 'created': {
-                      const at = a.createdAtIso !== null ? new Date(a.createdAtIso).getTime() : 0;
-                      const bt = b.createdAtIso !== null ? new Date(b.createdAtIso).getTime() : 0;
-                      return dir * (at - bt);
-                    }
-                    case 'lastUsed': {
-                      const at = a.lastUsedIso !== null ? new Date(a.lastUsedIso).getTime() : 0;
-                      const bt = b.lastUsedIso !== null ? new Date(b.lastUsedIso).getTime() : 0;
-                      return dir * (at - bt);
-                    }
-                  }
-                });
-                const resolve = (id: string) => byId.get(id) ?? null;
-                return (
-                  <ProfilesTable
-                    rows={rows}
-                    sortKey={sortKey}
-                    sortDir={sortDir}
-                    onSort={(k) => {
-                      if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-                      else {
-                        setSortKey(k);
-                        setSortDir('asc');
-                      }
-                    }}
-                    allSelected={rows.length > 0 && rows.every((row) => selectedIds.has(row.id))}
-                    onToggleSelectAll={() => {
-                      setSelectedIds((prev) => {
-                        const allOn = rows.length > 0 && rows.every((row) => prev.has(row.id));
-                        if (allOn) return new Set();
-                        return new Set(rows.map((row) => row.id));
-                      });
-                    }}
-                    onToggleSelect={(id) => toggleSelected(id)}
-                    onPrimary={(id) => {
-                      const profile = resolve(id);
-                      if (profile === null) return;
-                      const bound = boundSession(id);
-                      if (bound !== null) onOpenSession(bound.id);
-                      else void handleLaunch(profile);
-                    }}
-                    onWatch={(id) => {
-                      const profile = resolve(id);
-                      if (profile === null) return;
-                      const bound = boundSession(id);
-                      if (bound !== null) {
-                        if (bound.kind === 'agent') void reopenStream(bound.id, id);
-                        else onOpenSession(bound.id);
-                      } else void handleLaunch(profile);
-                    }}
-                    onStop={(id) => {
-                      const profile = resolve(id);
-                      if (profile !== null) void handleStop(profile);
-                    }}
-                    onTest={(id) => {
-                      const px = pickProxy(id);
-                      if (px !== null) void handleTestProxy(px);
-                    }}
-                    onDelete={(id) => void handleDelete(id)}
-                  />
-                );
-              })()
-            )}
+                })()
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -2409,26 +2389,37 @@ function FolderItem({
   count,
   active,
   onSelect,
+  variant = 'pill',
 }: {
   label: string;
   count: number;
   active: boolean;
   onSelect: () => void;
+  // 'pill' = the original inline emoji shelf chip; 'rail' = a full-width row
+  // for the S3 (2026-06-15) left folder rail (icon + name on the left, count
+  // pushed right). Same folderFilter selection behavior either way.
+  variant?: 'pill' | 'rail';
 }): JSX.Element {
-  // S5 (GUI-rework 2026-06-14) — horizontal emoji-icon pill (console.html's
-  // .folder shelf): icon + name + count, active = accent-subtle. Replaces the
-  // old vertical w-40 text nav; same folderFilter selection behavior.
   const namedFolder = label !== 'All profiles' && label !== 'Unfiled';
+  const rail = variant === 'rail';
   return (
     <button
       type="button"
       aria-pressed={active}
       onClick={onSelect}
-      className={`inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors ${
-        active
-          ? 'border-transparent bg-accent-subtle font-semibold text-ink-primary'
-          : 'border-surface-divider bg-surface-raised text-ink-secondary hover:border-ink-muted/50 hover:text-ink-primary'
-      }`}
+      className={
+        rail
+          ? `flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              active
+                ? 'border-transparent bg-accent-subtle font-semibold text-ink-primary'
+                : 'border-transparent text-ink-secondary hover:bg-surface-raised hover:text-ink-primary'
+            }`
+          : `inline-flex h-[30px] shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors ${
+              active
+                ? 'border-transparent bg-accent-subtle font-semibold text-ink-primary'
+                : 'border-surface-divider bg-surface-raised text-ink-secondary hover:border-ink-muted/50 hover:text-ink-primary'
+            }`
+      }
     >
       <span aria-hidden="true" className="text-[13px] leading-none">
         {folderGlyph(label)}
@@ -2440,7 +2431,7 @@ function FolderItem({
           style={{ backgroundColor: folderColor(label) }}
         />
       )}
-      <span className="max-w-[10rem] truncate">{label}</span>
+      <span className={rail ? 'flex-1 truncate text-left' : 'max-w-[10rem] truncate'}>{label}</span>
       <span
         className={`mono rounded-[5px] px-1.5 py-px text-2xs font-semibold ${
           active ? 'bg-accent/15 text-ink-primary' : 'bg-surface-inset text-ink-muted'
