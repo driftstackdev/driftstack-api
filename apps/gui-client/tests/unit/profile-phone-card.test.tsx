@@ -75,9 +75,9 @@ describe('ProfilePhoneCard', () => {
     cleanup();
   });
 
-  it('no exit IP → "run Test for exit IP"; no proxy → "no proxy bound"', () => {
+  it('no exit IP → "run Test" prompt; no proxy → "no proxy bound"', () => {
     render(<ProfilePhoneCard {...props({ exitIp: null })} />);
-    expect(screen.getByText('run Test for exit IP')).toBeTruthy();
+    expect(screen.getByText('run Test')).toBeTruthy();
     cleanup();
     render(<ProfilePhoneCard {...props({ hasProxy: false })} />);
     expect(screen.getByText('no proxy bound')).toBeTruthy();

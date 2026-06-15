@@ -1,10 +1,13 @@
-// GX (2026-06-15) — phone-framed profile card v2. Founder feedback round:
-// Launch must always be visible (the dock's flex Launch was being squeezed to
-// nothing by 3 icon buttons at small widths) → dock is now Launch-only; the
-// secondary actions (watch / test / organize / assist) moved to hover icons.
-// One "UDP" badge (✓/✗) replaces the 3 capability chips; hover shows WebRTC +
-// QUIC. Exit IP + country code are readable. Pure presentational; ProfilesView
-// passes data/display strings + handlers + an organize slot.
+// GX (2026-06-15) — phone-framed profile card v3. Founder feedback round 2:
+// - taller screen (height only) so everything renders with room to breathe;
+// - secondary controls are now a LABELLED hover strip (icon + caption) instead
+//   of bare emoji you couldn't read;
+// - UDP badge is explicitly red (no relay) / green (relay verified);
+// - the device label is a readable chip, no longer colliding with the select
+//   checkbox or washing out over the identity gradient.
+// Pure presentational; ProfilesView passes data/display strings + handlers + an
+// organize slot. flag covers every ISO country via flagEmoji (regional-indicator
+// transform — no hardcoded list).
 
 import type { JSX, ReactNode } from 'react';
 import { proxyCapabilities } from './ProxyCapabilities';
@@ -74,8 +77,8 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       }`}
       style={{ background: 'linear-gradient(160deg,#161b24,#0a0e14)' }}
     >
-      {/* SCREEN */}
-      <div className="relative flex aspect-[9/16] flex-col overflow-hidden rounded-[17px] bg-surface-raised">
+      {/* SCREEN — taller (height-only bump) so the body has room. */}
+      <div className="relative flex aspect-[9/18.5] flex-col overflow-hidden rounded-[17px] bg-surface-raised">
         <div
           aria-hidden="true"
           className="absolute inset-0 opacity-[0.16]"
@@ -92,113 +95,86 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           className="absolute left-1/2 top-2 z-30 h-[12px] w-[42px] -translate-x-1/2 rounded-[8px] bg-[#05070b]"
         />
 
-        {/* status bar */}
-        <div className="relative z-10 flex items-center justify-between px-3 pb-1 pt-2.5 text-[9.5px] font-semibold">
-          <span className="text-ink-secondary">{p.deviceLabel}</span>
+        {/* status bar — select (reserved space, fades in) + readable device
+            chip on the left, Live/Idle on the right. */}
+        <div className="relative z-20 flex items-center justify-between px-2.5 pb-1 pt-2.5">
+          <span className="flex items-center gap-1.5">
+            <label
+              className={`grid h-3.5 w-3.5 cursor-pointer place-items-center transition-opacity ${
+                p.selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              title="Select for bulk actions"
+            >
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5 cursor-pointer accent-accent"
+                checked={p.selected}
+                onChange={p.onToggleSelect}
+                aria-label={`Select ${p.name}`}
+              />
+            </label>
+            <span className="rounded bg-black/35 px-1.5 py-0.5 text-[9.5px] font-semibold tracking-tight text-ink-primary">
+              {p.deviceLabel}
+            </span>
+          </span>
           {p.running ? (
-            <span className="inline-flex items-center gap-1 uppercase tracking-wider text-status-ready">
+            <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wider text-status-ready">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready shadow-[0_0_6px_rgb(var(--status-ready-rgb))]" />
               Live
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 uppercase tracking-wider text-ink-muted">
+            <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wider text-ink-muted">
               <span className="h-1.5 w-1.5 rounded-full border border-ink-muted" />
               Idle
             </span>
           )}
         </div>
 
-        {/* selection checkbox — top-left (hover/selected). Reserved space + an
-            opacity toggle only (never reflows the card). */}
-        <label
-          className={`absolute left-2.5 top-2 z-30 cursor-pointer transition-opacity ${
-            p.selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          }`}
-          title="Select for bulk actions"
-        >
-          <input
-            type="checkbox"
-            className="h-3.5 w-3.5 cursor-pointer accent-accent"
-            checked={p.selected}
-            onChange={p.onToggleSelect}
-            aria-label={`Select ${p.name}`}
-          />
-        </label>
-
-        {/* hover quick-actions — top-right; keep the dock free for a full-width
-            Launch. assist / watch / test / organize. */}
-        <div className="absolute right-2 top-1.5 z-30 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-          {p.onAssist ? (
-            <QuickIcon label={`Ask the AI assistant about ${p.name}`} onClick={p.onAssist}>
-              ✦
-            </QuickIcon>
-          ) : null}
-          <QuickIcon
-            label={p.running ? 'Live view' : 'Launch and watch'}
-            onClick={p.onWatch}
-            disabled={p.busy || (!p.running && p.launchDisabled)}
-          >
-            💬
-          </QuickIcon>
-          {p.hasProxy ? (
-            <QuickIcon
-              label="Test proxy — reachability, latency, exit IP"
-              onClick={p.onTest}
-              disabled={p.testDisabled}
-            >
-              {p.testing ? '…' : '⟳'}
-            </QuickIcon>
-          ) : null}
-          <QuickIcon label="Organize (folder + tags)" onClick={p.onOrganizeToggle}>
-            ⋯
-          </QuickIcon>
-        </div>
-
         {/* body */}
-        <div className="relative z-10 flex flex-1 flex-col gap-1.5 px-2.5 pb-2 pt-1">
+        <div className="relative z-10 flex flex-1 flex-col gap-1.5 px-2.5 pb-2 pt-1.5">
           {/* identity */}
-          <div className="flex flex-col items-center gap-1 pt-0.5">
+          <div className="flex flex-col items-center gap-1 pt-1">
             <span
-              className="grid h-9 w-9 place-items-center rounded-full text-[13px] font-bold text-white/95 ring-1 ring-white/15"
+              className="grid h-10 w-10 place-items-center rounded-full text-[14px] font-bold text-white/95 ring-1 ring-white/15"
               style={{ background: 'rgba(255,255,255,0.1)' }}
             >
               {p.monogram}
             </span>
-            <p className="line-clamp-1 text-center text-[12px] font-semibold leading-tight text-ink-primary">
+            <p className="line-clamp-1 text-center text-[12.5px] font-semibold leading-tight text-ink-primary">
               {p.name}
             </p>
           </div>
 
           {/* egress widget */}
-          <div className="flex flex-col gap-1 rounded-[12px] border border-surface-divider bg-surface-inset px-2 py-1.5">
+          <div className="flex flex-col gap-1.5 rounded-[12px] border border-surface-divider bg-surface-inset px-2 py-2">
             {p.hasProxy ? (
               <>
                 {/* country + exit IP */}
                 <div className="flex items-center gap-1.5">
-                  <span aria-hidden="true" className="text-[13px] leading-none">
+                  <span aria-hidden="true" className="text-[15px] leading-none">
                     {p.flag}
                   </span>
                   {p.countryCode !== null && (
-                    <span className="rounded bg-surface-divider/70 px-1 text-[8.5px] font-semibold uppercase tracking-wide text-ink-secondary">
+                    <span className="rounded bg-surface-divider/70 px-1 text-[9px] font-semibold uppercase tracking-wide text-ink-secondary">
                       {p.countryCode}
                     </span>
                   )}
                   <span
-                    className={`min-w-0 flex-1 truncate text-[11px] ${
+                    className={`min-w-0 flex-1 truncate text-right text-[11.5px] ${
                       p.exitIp !== null ? 'mono text-ink-primary' : 'italic text-ink-muted'
                     }`}
                     title={p.exitIp ?? undefined}
                   >
-                    {p.exitIp ?? 'run Test for exit IP'}
+                    {p.exitIp ?? 'run Test'}
                   </span>
                 </div>
-                {/* latency + UDP badge */}
+                {/* latency + UDP badge (red/green) */}
                 <div className="flex items-center gap-1.5">
-                  <span className="flex items-center gap-1 text-[9px] text-ink-muted">
+                  <span className="flex items-center gap-1 text-[9.5px] text-ink-muted">
                     {p.latencyMs !== null ? (
                       <>
                         <span className="mono">{p.latencyMs}ms</span>
-                        <span className="inline-block h-1 w-[24px] overflow-hidden rounded-[2px] bg-surface-divider">
+                        <span className="inline-block h-1 w-[26px] overflow-hidden rounded-[2px] bg-surface-divider">
                           <span
                             className="block h-full rounded-[2px]"
                             style={{
@@ -217,27 +193,27 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   <span
                     title={udpTitle}
                     data-udp={udpOk ? 'true' : 'false'}
-                    className={`ml-auto inline-flex cursor-help items-center gap-0.5 rounded px-1 py-px text-[9px] font-semibold ${
+                    className={`ml-auto inline-flex cursor-help items-center gap-0.5 rounded px-1.5 py-px text-[9.5px] font-bold ${
                       caps === null
                         ? 'bg-surface-divider/60 text-ink-muted'
                         : udpOk
-                          ? 'bg-status-ready/15 text-status-ready'
-                          : 'bg-surface-divider/60 text-ink-muted line-through'
+                          ? 'bg-status-ready/20 text-status-ready'
+                          : 'bg-status-error/20 text-status-error'
                     }`}
                   >
                     UDP {caps === null ? '?' : udpOk ? '✓' : '✗'}
                   </span>
                 </div>
-                {/* WebRTC/QUIC detail — only on hover (founder: hover shows them) */}
+                {/* WebRTC/QUIC detail — on hover (founder: hover shows them) */}
                 {caps !== null && (
                   <div className="hidden gap-1 group-hover:flex">
                     <span
-                      className={`rounded px-1 text-[8px] ${webrtc ? 'bg-status-ready/15 text-status-ready' : 'bg-surface-divider/50 text-ink-muted'}`}
+                      className={`rounded px-1 text-[8.5px] ${webrtc ? 'bg-status-ready/15 text-status-ready' : 'bg-status-error/15 text-status-error'}`}
                     >
                       WebRTC {webrtc ? '✓' : '✗'}
                     </span>
                     <span
-                      className={`rounded px-1 text-[8px] ${quic ? 'bg-status-ready/15 text-status-ready' : 'bg-surface-divider/50 text-ink-muted'}`}
+                      className={`rounded px-1 text-[8.5px] ${quic ? 'bg-status-ready/15 text-status-ready' : 'bg-status-error/15 text-status-error'}`}
                     >
                       QUIC {quic ? '✓' : '✗'}
                     </span>
@@ -246,10 +222,10 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               </>
             ) : (
               <div className="flex items-center gap-1.5">
-                <span aria-hidden="true" className="text-[12px]">
+                <span aria-hidden="true" className="text-[13px]">
                   🚫
                 </span>
-                <span className="text-[10px] text-ink-muted">no proxy bound</span>
+                <span className="text-[10.5px] text-ink-muted">no proxy bound</span>
               </div>
             )}
           </div>
@@ -257,14 +233,14 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           {(p.folder !== '' || p.tags.length > 0) && (
             <div className="flex flex-wrap justify-center gap-1">
               {p.folder !== '' && (
-                <span className="rounded-full border border-surface-divider bg-surface-inset px-1.5 py-0.5 text-[8.5px] text-ink-secondary">
+                <span className="rounded-full border border-surface-divider bg-surface-inset px-1.5 py-0.5 text-[9px] text-ink-secondary">
                   📁 {p.folder}
                 </span>
               )}
               {p.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full border border-surface-divider px-1.5 py-0.5 text-[8.5px] text-ink-muted"
+                  className="rounded-full border border-surface-divider px-1.5 py-0.5 text-[9px] text-ink-muted"
                 >
                   {tag}
                 </span>
@@ -274,7 +250,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
 
           {p.organizeOpen ? <div>{p.organizeSlot}</div> : null}
 
-          <span className="mt-auto text-center text-[9px] text-ink-muted">
+          <span className="mt-auto text-center text-[9.5px] text-ink-muted">
             {p.lastUsedIso !== null ? (
               <RelativeTime iso={p.lastUsedIso} tooltipPrefix="Last used" />
             ) : (
@@ -283,11 +259,46 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           </span>
         </div>
 
+        {/* hover action strip — LABELLED (icon + caption) so each control reads
+            clearly; sits above the dock, dark backdrop for legibility. */}
+        <div className="absolute inset-x-1.5 bottom-[42px] z-20 flex justify-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          {p.onAssist ? (
+            <ActionBtn
+              glyph="✦"
+              caption="Assist"
+              label={`Ask the AI assistant about ${p.name}`}
+              onClick={p.onAssist}
+            />
+          ) : null}
+          <ActionBtn
+            glyph={p.running ? '◉' : '▶'}
+            caption={p.running ? 'View' : 'Watch'}
+            label={p.running ? 'Open the live view' : 'Launch and watch live'}
+            onClick={p.onWatch}
+            disabled={p.busy || (!p.running && p.launchDisabled)}
+          />
+          {p.hasProxy ? (
+            <ActionBtn
+              glyph={p.testing ? '…' : '⟳'}
+              caption="Test"
+              label="Test proxy — reachability, latency, exit IP"
+              onClick={p.onTest}
+              disabled={p.testDisabled}
+            />
+          ) : null}
+          <ActionBtn
+            glyph="⋯"
+            caption="Organize"
+            label="Organize — folder + tags"
+            onClick={p.onOrganizeToggle}
+          />
+        </div>
+
         {/* dock — Launch/Open ONLY, full width, always visible + prominent */}
         <div className="relative z-10 border-t border-surface-divider bg-white/[0.03] px-2.5 py-2">
           <button
             type="button"
-            className={`w-full rounded-[10px] py-1.5 text-[11px] font-semibold disabled:opacity-50 ${
+            className={`w-full rounded-[10px] py-1.5 text-[11.5px] font-semibold disabled:opacity-50 ${
               p.running
                 ? 'border border-surface-divider bg-surface-elevated text-ink-primary'
                 : 'bg-accent text-white'
@@ -307,13 +318,15 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   );
 }
 
-function QuickIcon({
-  children,
+function ActionBtn({
+  glyph,
+  caption,
   label,
   onClick,
   disabled,
 }: {
-  children: ReactNode;
+  glyph: ReactNode;
+  caption: string;
   label: string;
   onClick: () => void;
   disabled?: boolean;
@@ -328,9 +341,12 @@ function QuickIcon({
         e.stopPropagation();
         onClick();
       }}
-      className="grid h-5 w-5 place-items-center rounded-full bg-black/35 text-[10px] text-white/85 transition-colors hover:text-white disabled:opacity-40"
+      className="flex min-w-[34px] flex-col items-center gap-0.5 rounded-lg bg-black/70 px-1.5 py-1 text-white/90 backdrop-blur-sm transition-colors hover:bg-black/85 hover:text-white disabled:opacity-40"
     >
-      {children}
+      <span className="text-[12px] leading-none" aria-hidden="true">
+        {glyph}
+      </span>
+      <span className="text-[8px] font-medium leading-none">{caption}</span>
     </button>
   );
 }
