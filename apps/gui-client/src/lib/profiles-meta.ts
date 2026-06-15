@@ -13,6 +13,7 @@
 // edited or corrupt file degrades to empty meta, never a crash.
 
 import { LazyStore } from '@tauri-apps/plugin-store';
+import { makeWriteLock } from './store-write-lock';
 
 export interface ProfileMeta {
   /** Folder name (single — the demo's model); empty string = unfiled. */
@@ -36,6 +37,10 @@ const MAX_NOTE_CHARS = 280;
 const MAX_ICON_CHARS = 8; // a single emoji (may be multi-codepoint)
 
 let store: LazyStore | null = null;
+
+// Serialize read-modify-write mutations (bulk folder/tag/icon ops can fire
+// concurrently from the bulk bar) so they don't clobber each other.
+const writeLock = makeWriteLock();
 
 function getStore(): LazyStore {
   if (store === null) {
@@ -82,24 +87,26 @@ export async function loadProfilesMeta(): Promise<ProfilesMetaMap> {
   }
 }
 
-export async function saveProfileMeta(
+export function saveProfileMeta(
   profileId: string,
   meta: Partial<ProfileMeta>,
   /** When provided, entries for ids NOT in this list are pruned. */
   liveProfileIds?: string[],
 ): Promise<ProfilesMetaMap> {
-  const all = await loadProfilesMeta();
-  const merged = cleanEntry({ ...all[profileId], ...meta });
-  all[profileId] = merged;
-  if (liveProfileIds) {
-    const live = new Set(liveProfileIds);
-    for (const id of Object.keys(all)) {
-      if (!live.has(id)) delete all[id];
+  return writeLock(async () => {
+    const all = await loadProfilesMeta();
+    const merged = cleanEntry({ ...all[profileId], ...meta });
+    all[profileId] = merged;
+    if (liveProfileIds) {
+      const live = new Set(liveProfileIds);
+      for (const id of Object.keys(all)) {
+        if (!live.has(id)) delete all[id];
+      }
     }
-  }
-  await getStore().set(META_KEY, all);
-  await getStore().save();
-  return all;
+    await getStore().set(META_KEY, all);
+    await getStore().save();
+    return all;
+  });
 }
 
 /** Bulk variant: apply the same partial to MANY profiles in one load/save
@@ -107,33 +114,37 @@ export async function saveProfileMeta(
  *  `mode` controls tag semantics: 'merge' unions tags into each profile's
  *  existing set; 'replace' overwrites fields verbatim (folder always
  *  overwrites — a profile lives in one folder). */
-export async function saveProfilesMetaBulk(
+export function saveProfilesMetaBulk(
   profileIds: string[],
   meta: Partial<ProfileMeta>,
   mode: 'merge' | 'replace' = 'merge',
   liveProfileIds?: string[],
 ): Promise<ProfilesMetaMap> {
-  const all = await loadProfilesMeta();
-  for (const id of profileIds) {
-    if (id.length === 0) continue;
-    const current = all[id] ?? { folder: '', tags: [], note: '', icon: '' };
-    const nextTags =
-      mode === 'merge' && meta.tags ? [...current.tags, ...meta.tags] : (meta.tags ?? current.tags);
-    all[id] = cleanEntry({
-      ...current,
-      ...meta,
-      tags: nextTags,
-    });
-  }
-  if (liveProfileIds) {
-    const live = new Set(liveProfileIds);
-    for (const id of Object.keys(all)) {
-      if (!live.has(id)) delete all[id];
+  return writeLock(async () => {
+    const all = await loadProfilesMeta();
+    for (const id of profileIds) {
+      if (id.length === 0) continue;
+      const current = all[id] ?? { folder: '', tags: [], note: '', icon: '' };
+      const nextTags =
+        mode === 'merge' && meta.tags
+          ? [...current.tags, ...meta.tags]
+          : (meta.tags ?? current.tags);
+      all[id] = cleanEntry({
+        ...current,
+        ...meta,
+        tags: nextTags,
+      });
     }
-  }
-  await getStore().set(META_KEY, all);
-  await getStore().save();
-  return all;
+    if (liveProfileIds) {
+      const live = new Set(liveProfileIds);
+      for (const id of Object.keys(all)) {
+        if (!live.has(id)) delete all[id];
+      }
+    }
+    await getStore().set(META_KEY, all);
+    await getStore().save();
+    return all;
+  });
 }
 
 // ── Server sync (organization metadata Phase 2, 2026-06-12) ────────────────
@@ -182,19 +193,21 @@ export function seedMetaFromServer(
 
 /** Persist a full map (the seed path). Same prune-by-live-ids semantics
  *  as the save helpers. */
-export async function persistProfilesMeta(
+export function persistProfilesMeta(
   map: ProfilesMetaMap,
   liveProfileIds?: string[],
 ): Promise<void> {
-  const all = { ...map };
-  if (liveProfileIds) {
-    const live = new Set(liveProfileIds);
-    for (const id of Object.keys(all)) {
-      if (!live.has(id)) delete all[id];
+  return writeLock(async () => {
+    const all = { ...map };
+    if (liveProfileIds) {
+      const live = new Set(liveProfileIds);
+      for (const id of Object.keys(all)) {
+        if (!live.has(id)) delete all[id];
+      }
     }
-  }
-  await getStore().set(META_KEY, all);
-  await getStore().save();
+    await getStore().set(META_KEY, all);
+    await getStore().save();
+  });
 }
 
 /** Distinct folder names across the map, sorted, excluding unfiled. */

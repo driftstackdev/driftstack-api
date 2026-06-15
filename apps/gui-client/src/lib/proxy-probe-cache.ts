@@ -11,6 +11,7 @@
 // blast radius. Corrupt/missing entries degrade to "untested".
 
 import { LazyStore } from '@tauri-apps/plugin-store';
+import { makeWriteLock } from './store-write-lock';
 import type { ProxyTestResult } from './proxies';
 
 export interface CachedProbe {
@@ -34,6 +35,11 @@ function getStore(): LazyStore {
   }
   return store;
 }
+
+// Serialize read-modify-write mutations so concurrent probes/invalidations
+// can't clobber each other (defense-in-depth; the UI also gates one test at a
+// time).
+const writeLock = makeWriteLock();
 
 function cleanEntry(raw: unknown): CachedProbe | null {
   if (typeof raw !== 'object' || raw === null) return null;
@@ -83,39 +89,43 @@ export async function loadProbeCache(): Promise<ProbeCacheMap> {
 
 /** Record a probe result. `at` injected by the caller (Date.now()) so the
  *  function stays trivially testable. */
-export async function saveProbeResult(
+export function saveProbeResult(
   proxyId: string,
   result: ProxyTestResult,
   at: number,
 ): Promise<ProbeCacheMap> {
-  const all = await loadProbeCache();
-  // Preserve any prior exit-geo: the capability probe and the exit probe
-  // run separately; a capability re-test must not erase known geo.
-  const prior = all[proxyId];
-  all[proxyId] = {
-    result,
-    at,
-    ...(prior?.exitIp !== undefined ? { exitIp: prior.exitIp } : {}),
-    ...(prior?.exitCountry !== undefined ? { exitCountry: prior.exitCountry } : {}),
-  };
-  await getStore().set(KEY, all);
-  await getStore().save();
-  return all;
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    // Preserve any prior exit-geo: the capability probe and the exit probe
+    // run separately; a capability re-test must not erase known geo.
+    const prior = all[proxyId];
+    all[proxyId] = {
+      result,
+      at,
+      ...(prior?.exitIp !== undefined ? { exitIp: prior.exitIp } : {}),
+      ...(prior?.exitCountry !== undefined ? { exitCountry: prior.exitCountry } : {}),
+    };
+    await getStore().set(KEY, all);
+    await getStore().save();
+    return all;
+  });
 }
 
 /** Persist a successful exit-geo probe onto the proxy's cache entry. */
-export async function saveExitResult(
+export function saveExitResult(
   proxyId: string,
   exitIp: string,
   exitCountry: string | null,
 ): Promise<ProbeCacheMap> {
-  const all = await loadProbeCache();
-  const prior = all[proxyId];
-  if (prior === undefined) return all; // exit probe only runs after a capability probe
-  all[proxyId] = { ...prior, exitIp, exitCountry };
-  await getStore().set(KEY, all);
-  await getStore().save();
-  return all;
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    const prior = all[proxyId];
+    if (prior === undefined) return all; // exit probe only runs after a capability probe
+    all[proxyId] = { ...prior, exitIp, exitCountry };
+    await getStore().set(KEY, all);
+    await getStore().save();
+    return all;
+  });
 }
 
 /** Drop a proxy's cached probe (capability + exit-geo). Called when the
@@ -124,11 +134,13 @@ export async function saveExitResult(
  *  would be dishonest — and when a proxy is deleted, so its entry can't
  *  linger (and a future re-minted id can't inherit stale geo). Idempotent:
  *  a no-op (no store write) when the proxy has no cached probe. */
-export async function invalidateProbe(proxyId: string): Promise<ProbeCacheMap> {
-  const all = await loadProbeCache();
-  if (all[proxyId] === undefined) return all;
-  delete all[proxyId];
-  await getStore().set(KEY, all);
-  await getStore().save();
-  return all;
+export function invalidateProbe(proxyId: string): Promise<ProbeCacheMap> {
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    if (all[proxyId] === undefined) return all;
+    delete all[proxyId];
+    await getStore().set(KEY, all);
+    await getStore().save();
+    return all;
+  });
 }

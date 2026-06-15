@@ -8,6 +8,7 @@
 // (ChatTurn) so validation is shallow — enough to survive a corrupt root.
 
 import { LazyStore } from '@tauri-apps/plugin-store';
+import { makeWriteLock } from './store-write-lock';
 import type { ChatModel, ChatTurn } from './use-agent-chat';
 
 export interface StoredChat {
@@ -34,18 +35,9 @@ function getStore(): LazyStore {
   return store;
 }
 
-// Serialize all read-modify-write store mutations so a delete can't interleave
-// with the active chat's persist-on-turn and resurrect a just-deleted chat
-// (each loadChats→modify→save runs to completion before the next starts).
-let writeLock: Promise<unknown> = Promise.resolve();
-function serialize<T>(fn: () => Promise<T>): Promise<T> {
-  const run = writeLock.then(fn, fn);
-  writeLock = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
-}
+// Serialize read-modify-write mutations so a delete can't interleave with the
+// active chat's persist-on-turn and resurrect a just-deleted chat.
+const serialize = makeWriteLock();
 
 /** First user message → a short title; 'New chat' when there's nothing yet. */
 export function deriveChatTitle(turns: ReadonlyArray<ChatTurn>): string {
