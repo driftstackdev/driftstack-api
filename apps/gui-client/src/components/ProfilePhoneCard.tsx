@@ -72,7 +72,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         p.selected
           ? 'border-accent shadow-[0_0_0_2px_rgb(var(--accent-rgb)),0_10px_26px_rgba(0,0,0,0.5)]'
           : p.running
-            ? 'border-[#0a0d12] shadow-[0_0_0_1.5px_rgb(var(--accent-rgb)/0.45),0_10px_26px_rgba(0,0,0,0.45)]'
+            ? 'border-[#0a0d12] shadow-[0_0_0_1.5px_rgb(var(--accent-rgb)/0.5),0_0_18px_rgb(var(--accent-rgb)/0.3),0_10px_26px_rgba(0,0,0,0.45)]'
             : 'border-[#0a0d12] shadow-[0_8px_20px_rgba(0,0,0,0.38)]'
       }`}
       style={{ background: 'linear-gradient(160deg,#161b24,#0a0e14)' }}
@@ -86,9 +86,23 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             background: `linear-gradient(160deg, hsl(${p.hue} 44% 32%), hsl(${(p.hue + 38) % 360} 42% 18%))`,
           }}
         />
+        {/* soft identity-hue wallpaper glow behind the avatar */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-[58px] z-[3] h-28 w-28 -translate-x-1/2 rounded-full opacity-50 blur-2xl"
+          style={{
+            background: `radial-gradient(circle, hsl(${p.hue} 70% 55% / 0.55), transparent 70%)`,
+          }}
+        />
+        {/* top gloss */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-1/3 bg-gradient-to-b from-white/[0.07] to-transparent"
+        />
+        {/* inner vignette — reads the screen as glass */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-[6] rounded-[17px] shadow-[inset_0_0_28px_rgba(0,0,0,0.32)]"
         />
         <span
           aria-hidden="true"
@@ -136,8 +150,10 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           {/* identity */}
           <div className="flex flex-col items-center gap-1 pt-1">
             <span
-              className="grid h-10 w-10 place-items-center rounded-full text-[14px] font-bold text-white ring-1 ring-white/20"
-              style={{ background: `hsl(${p.hue} 48% 44%)` }}
+              className="grid h-11 w-11 place-items-center rounded-full text-[15px] font-bold text-white shadow-[0_4px_12px_rgba(0,0,0,0.35)] ring-1 ring-white/25"
+              style={{
+                background: `linear-gradient(145deg, hsl(${p.hue} 58% 54%), hsl(${(p.hue + 34) % 360} 52% 38%))`,
+              }}
             >
               {p.monogram}
             </span>
@@ -299,10 +315,10 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         <div className="relative z-10 border-t border-surface-divider bg-white/[0.03] px-2.5 py-2">
           <button
             type="button"
-            className={`w-full rounded-[10px] py-1.5 text-[11.5px] font-semibold disabled:opacity-50 ${
+            className={`w-full rounded-[10px] py-1.5 text-[11.5px] font-semibold transition-colors disabled:opacity-50 ${
               p.running
-                ? 'border border-surface-divider bg-surface-elevated text-ink-primary'
-                : 'bg-accent text-white'
+                ? 'border border-surface-divider bg-surface-elevated text-ink-primary hover:bg-surface-divider'
+                : 'bg-accent text-white shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-accent-hover'
             }`}
             disabled={p.busy || (!p.running && p.launchDisabled)}
             title={!p.running && p.launchDisabled ? p.launchDisabledReason : undefined}

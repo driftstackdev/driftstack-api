@@ -1379,7 +1379,7 @@ export function ProfilesView({
           />
           <div className="min-w-0 flex-1">
             {viewMode === 'grid' ? (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(156px,1fr))] gap-3">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(178px,1fr))] gap-3">
                 {filteredProfiles.length === 0 ? (
                   <div className="col-span-full">
                     <ProfilesEmpty hasActiveFilters={hasActiveFilters} onClear={clearFilters} />

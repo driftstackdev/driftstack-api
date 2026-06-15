@@ -143,7 +143,7 @@ export function Gallery(): JSX.Element {
         Automated render for self-review (scripts/visual-check.mjs). Hover states are forced on via
         the harness so the action strip + WebRTC/QUIC detail are visible in the static shot.
       </p>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(156px,1fr))] gap-3">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(178px,1fr))] gap-3">
         {STATES.map((s) => (
           <div key={s.label} className="flex flex-col gap-1">
             <span className="text-2xs uppercase tracking-wide text-ink-muted">{s.label}</span>
