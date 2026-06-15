@@ -102,13 +102,17 @@ export function SettingsView(): JSX.Element {
 
   if (loading) {
     return (
-      <div className="flex h-full flex-col gap-6 p-6">
-        <header className="flex flex-col gap-1 border-b border-surface-divider pb-4">
+      <div role="status" aria-label="Loading settings" className="flex h-full flex-col gap-6 p-6">
+        <span className="sr-only">Loading settings</span>
+        <header
+          className="flex flex-col gap-1 border-b border-surface-divider pb-4"
+          aria-hidden="true"
+        >
           <span className="section-label">Settings</span>
           <div className="h-6 w-44 animate-pulse rounded bg-surface-inset" />
           <div className="mt-1 h-4 w-80 animate-pulse rounded bg-surface-inset" />
         </header>
-        <div className="flex max-w-xl flex-col gap-4">
+        <div className="flex max-w-xl flex-col gap-4" aria-hidden="true">
           <div className="h-28 animate-pulse rounded-lg border border-surface-divider bg-surface-raised" />
           <div className="h-40 animate-pulse rounded-lg border border-surface-divider bg-surface-raised" />
         </div>
