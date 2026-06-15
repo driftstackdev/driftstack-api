@@ -25,6 +25,7 @@ import {
 } from '../lib/proxies';
 import { invalidateProbe, saveExitResult, saveProbeResult } from '../lib/proxy-probe-cache';
 import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
+import { parseProxyString } from '../lib/parse-proxy';
 
 interface ListState {
   proxies: ProxyConfig[];
@@ -613,9 +614,38 @@ function ProxyForm({
 }): JSX.Element {
   const [draft, setDraft] = useState<ProxyDraft>(initial);
   const [validation, setValidation] = useState<DraftValidation>({ ok: true, errors: {} });
+  const [pasteVal, setPasteVal] = useState('');
+  const [pasteHint, setPasteHint] = useState<string | null>(null);
 
   function setField<K extends keyof ProxyDraft>(key: K, value: ProxyDraft[K]): void {
     setDraft((d) => ({ ...d, [key]: value }));
+  }
+
+  // Quick-paste: accept a proxy in any common format and auto-fill the four
+  // fields. Clears itself on a successful parse so a pasted password doesn't
+  // linger in a visible field.
+  function handlePaste(value: string): void {
+    setPasteVal(value);
+    if (value.trim() === '') {
+      setPasteHint(null);
+      return;
+    }
+    const parsed = parseProxyString(value);
+    if (parsed === null) {
+      setPasteHint('Could not parse — fill the fields below manually.');
+      return;
+    }
+    setDraft((d) => ({
+      ...d,
+      host: parsed.host,
+      port: parsed.port,
+      username: parsed.username,
+      password: parsed.password,
+    }));
+    setPasteVal('');
+    setPasteHint(
+      `Filled ${parsed.host}:${parsed.port}${parsed.username !== null ? ' (with auth)' : ''}.`,
+    );
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
@@ -635,6 +665,18 @@ function ProxyForm({
         <span className="section-label">{mode === 'add' ? 'Add proxy' : 'Edit proxy'}</span>
         <span className="mono text-2xs text-ink-muted">SOCKS5</span>
       </div>
+      <Field label="Quick paste — host:port:user:pass or user:pass@host:port">
+        <input
+          type="text"
+          className="form-input mono"
+          value={pasteVal}
+          onChange={(e) => handlePaste(e.target.value)}
+          placeholder="paste a proxy line to auto-fill the fields below"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {pasteHint !== null && <span className="mt-1 text-2xs text-ink-muted">{pasteHint}</span>}
+      </Field>
       <Field label="Label" error={validation.errors.label}>
         <input
           type="text"
