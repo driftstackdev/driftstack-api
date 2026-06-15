@@ -136,7 +136,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         {/* status bar — readable device chip (left) + Live/Idle (right). Sits
             BELOW the dynamic island (pt clears it) so neither overlaps the label. */}
         <div className="relative z-20 flex items-center justify-between gap-1 px-2.5 pb-1 pt-[26px]">
-          <span className="truncate rounded bg-black/35 px-1.5 py-0.5 text-[10px] font-semibold tracking-tight text-ink-primary">
+          <span className="truncate rounded bg-black/35 px-1.5 py-0.5 text-[11px] font-semibold tracking-tight text-ink-primary">
             {p.deviceLabel}
           </span>
           {p.running ? (
@@ -166,7 +166,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             >
               {p.icon ? p.icon : p.monogram}
             </span>
-            <p className="line-clamp-1 text-center text-[12.5px] font-semibold leading-tight text-ink-primary">
+            <p className="line-clamp-1 text-center text-sm font-semibold leading-tight text-ink-primary">
               {p.name}
             </p>
           </div>
