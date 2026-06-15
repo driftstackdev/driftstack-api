@@ -24,7 +24,7 @@ const client = {
 };
 
 vi.mock('../../src/lib/SettingsContext', () => ({
-  useSettings: () => ({ client }),
+  useSettings: () => ({ client, settings: { apiKey: 'sk-test' } }),
 }));
 vi.mock('../../src/lib/toasts', () => ({
   useToasts: () => ({ push: pushToast }),
@@ -99,7 +99,7 @@ describe('AgentChatView Save-as-recipe', () => {
       turns: [{ id: 1, role: 'user', text: 'do a thing' }, clarifyTurn],
     });
     render(<AgentChatView />);
-    const btn = screen.getByRole('button', { name: 'Save as recipe' });
+    const btn = screen.getByRole('button', { name: 'Save as task' });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -111,13 +111,13 @@ describe('AgentChatView Save-as-recipe', () => {
     });
     render(<AgentChatView />);
 
-    const open = screen.getByRole('button', { name: 'Save as recipe' });
+    const open = screen.getByRole('button', { name: 'Save as task' });
     expect((open as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(open);
 
     const name = await screen.findByPlaceholderText('e.g. Add 3 items to cart');
     fireEvent.change(name, { target: { value: '  Open example  ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save recipe' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save task' }));
 
     await waitFor(() => expect(createRecipe).toHaveBeenCalledTimes(1));
     expect(createRecipe).toHaveBeenCalledWith({
@@ -125,7 +125,7 @@ describe('AgentChatView Save-as-recipe', () => {
       label: 'Open example',
     });
     await waitFor(() =>
-      expect(pushToast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Recipe saved' })),
+      expect(pushToast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Task saved' })),
     );
   });
 
@@ -135,11 +135,11 @@ describe('AgentChatView Save-as-recipe', () => {
     chatState = baseChat({ session: SESSION, turns: [planTurn] });
     render(<AgentChatView />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save as recipe' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save as task' }));
     fireEvent.change(await screen.findByPlaceholderText('e.g. Add 3 items to cart'), {
       target: { value: 'Flow' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Save recipe' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save task' }));
 
     expect(await screen.findByText('quota exceeded')).toBeTruthy();
     expect(pushToast).not.toHaveBeenCalled();

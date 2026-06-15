@@ -36,8 +36,12 @@ export function AgentChatView({
    *  profile card's "Assist"). Locks once a chat starts, like the picker. */
   initialProfileId?: string;
 } = {}): JSX.Element {
-  const { client } = useSettings();
+  const { client, settings } = useSettings();
   const toasts = useToasts();
+  // AI-ready status surfaced before you send: the agent needs a connected API
+  // key. (The server-side LLM config can't be probed from here; an API key is
+  // the necessary + honest precondition the GUI can assert.)
+  const aiReady = settings.apiKey !== null;
   const [model, setModel] = useState<ChatModel>('claude-opus-4-7');
   const [profileId, setProfileId] = useState<string>(initialProfileId ?? '');
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
@@ -62,7 +66,7 @@ export function AgentChatView({
     if (!client || chat.session === null) return;
     const label = recipeLabel.trim();
     if (label.length === 0) {
-      setSaveError('Give the recipe a name.');
+      setSaveError('Give the task a name.');
       return;
     }
     setSaving(true);
@@ -77,12 +81,12 @@ export function AgentChatView({
       setRecipeLabel('');
       setRecipeDesc('');
       toasts.push({
-        title: 'Recipe saved',
-        body: `“${recipe.label}” captured from this chat — replay it from Recipes.`,
+        title: 'Task saved',
+        body: `“${recipe.label}” captured from this chat — replay it from Saved tasks.`,
         tone: 'success',
       });
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Could not save the recipe.');
+      setSaveError(err instanceof Error ? err.message : 'Could not save the task.');
     } finally {
       setSaving(false);
     }
@@ -128,6 +132,23 @@ export function AgentChatView({
             <span className="text-sm font-medium text-ink-primary">Driftstack AI</span>
             <span className="text-2xs text-ink-muted">natural-language automation</span>
           </div>
+          <span
+            className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${
+              aiReady
+                ? 'bg-status-ready/15 text-status-ready'
+                : 'bg-status-error/15 text-status-error'
+            }`}
+            title={
+              aiReady
+                ? 'Connected — the assistant is ready.'
+                : 'No API key — connect one in Settings before sending.'
+            }
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${aiReady ? 'bg-status-ready' : 'bg-status-error'}`}
+            />
+            {aiReady ? 'AI ready' : 'Not connected'}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           {chat.session !== null && (
@@ -145,10 +166,10 @@ export function AgentChatView({
             title={
               started
                 ? 'Profile is locked for this chat — start a new chat to change it'
-                : 'Which profile the agent works on (the saved identity it runs in)'
+                : 'Which profile the agent works on. Temporary = a throwaway session that saves nothing.'
             }
           >
-            <option value="">No profile (stateless)</option>
+            <option value="">Temporary profile (saves nothing)</option>
             {profiles.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -183,11 +204,11 @@ export function AgentChatView({
             className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
             title={
               canSaveRecipe
-                ? 'Save this chat as a replayable recipe'
-                : 'Run at least one task first, then save it as a recipe'
+                ? 'Save this chat as a replayable task you can re-run later'
+                : 'Run at least one task first, then save it to replay later'
             }
           >
-            Save as recipe
+            Save as task
           </button>
           <button
             type="button"
@@ -306,14 +327,14 @@ export function AgentChatView({
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Save chat as recipe"
+            aria-label="Save chat as task"
             className="w-full max-w-md rounded-lg border border-surface-divider bg-surface-raised p-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="section-label">Save as recipe</p>
+            <p className="section-label">Save as task</p>
             <p className="mt-1 text-xs text-ink-muted">
-              Snapshot this chat&apos;s executed steps into a replayable recipe you can run again
-              from Recipes.
+              Snapshot this chat&apos;s executed steps into a replayable task you can run again from
+              Saved tasks.
             </p>
             <label className="mt-3 block text-xs text-ink-secondary">
               Name
@@ -356,7 +377,7 @@ export function AgentChatView({
                 disabled={saving || recipeLabel.trim().length === 0}
                 className="btn-primary px-3 py-1 text-xs disabled:opacity-50"
               >
-                {saving ? 'Saving…' : 'Save recipe'}
+                {saving ? 'Saving…' : 'Save task'}
               </button>
             </div>
           </div>

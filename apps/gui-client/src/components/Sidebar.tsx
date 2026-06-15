@@ -119,7 +119,7 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
           active={current === 'recipes'}
           onClick={() => onNavigate('recipes')}
         >
-          Recipes
+          Saved tasks
         </SidebarItem>
       </SidebarSection>
 

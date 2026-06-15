@@ -26,7 +26,7 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("section taxonomy pinned: 'Home' (Command Center) + 'Browse' (Profiles + Proxies) lead, then 'Automate' (AI chat + Recipes) + 'History' (Session log + Recordings) + 'Diagnostics' (Logs) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional). 2026-06-15: Raw sessions removed (redundant with the profile View/Open) + Connectivity test moved into Settings, so Diagnostics keeps only Logs. Do not collapse / rename sections without updating the GUI snapshot tests + this pin.", () => {
+  it("section taxonomy pinned: 'Home' (Command Center) + 'Browse' (Profiles + Proxies) lead, then 'Automate' (AI chat + Saved tasks) + 'History' (Session log + Recordings) + 'Diagnostics' (Logs) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional). 2026-06-15: Raw sessions removed (redundant with the profile View/Open) + Connectivity test moved into Settings, so Diagnostics keeps only Logs. Do not collapse / rename sections without updating the GUI snapshot tests + this pin.", () => {
     expect(body).toMatch(/<SidebarSection label="Home">/);
     expect(body).toMatch(/<SidebarSection label="Automate">/);
     expect(body).toMatch(/<SidebarSection label="Browse">/);

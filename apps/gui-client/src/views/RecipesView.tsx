@@ -145,12 +145,12 @@ export function RecipesView(): JSX.Element {
         <div>
           <span className="section-label">Library</span>
           <h2 className="mt-1 text-lg font-medium tracking-tight text-ink-primary">
-            Recipes
+            Saved tasks
             <span className="ml-2 mono text-ink-muted">{list.recipes.length}</span>
           </h2>
           <p className="mt-1 text-xs text-ink-muted">
-            Saved agent flows — each snapshots a finished session&rsquo;s intent log so it can be
-            replayed without re-running the decomposition.
+            Tasks you saved from a finished AI chat — each replays the steps without re-running the
+            planning, so you can repeat a job in one click.
           </p>
         </div>
         <button
