@@ -101,7 +101,7 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
   });
 
   it('R13 html lang="en" + light+violet header (surface-divider border, not the old invisible white/10) + min-h-screen body — the Fleet light theme is applied via the data-mode/data-accent attributes and the page markup uses the adaptive surface/ink tokens', () => {
-    expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="violet">/);
+    expect(body).toMatch(/<html lang="en" data-mode="light" data-accent="oxblood">/);
     expect(body).toMatch(/<header class="border-b border-surface-divider bg-surface-raised">/);
     expect(body).toMatch(/<body class="min-h-screen">/);
   });
