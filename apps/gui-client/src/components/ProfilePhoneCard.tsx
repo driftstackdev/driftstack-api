@@ -61,7 +61,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       style={{ background: 'linear-gradient(160deg,#11151c,#05070b)' }}
     >
       {/* SCREEN */}
-      <div className="relative flex aspect-[9/18.5] flex-col overflow-hidden rounded-[20px] bg-surface-raised">
+      <div className="relative flex aspect-[9/16] flex-col overflow-hidden rounded-[18px] bg-surface-raised">
         {/* per-profile identity wash */}
         <div
           aria-hidden="true"
@@ -125,16 +125,16 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         </label>
 
         {/* body */}
-        <div className="relative z-10 flex flex-1 flex-col gap-2 px-3 pb-2 pt-1">
+        <div className="relative z-10 flex flex-1 flex-col gap-1.5 px-2.5 pb-2 pt-1">
           {/* identity */}
-          <div className="flex flex-col items-center gap-1.5 pt-1">
+          <div className="flex flex-col items-center gap-1 pt-0.5">
             <span
-              className="grid h-11 w-11 place-items-center rounded-full text-[15px] font-bold text-white/95 ring-1 ring-white/15"
+              className="grid h-8 w-8 place-items-center rounded-full text-[12px] font-bold text-white/95 ring-1 ring-white/15"
               style={{ background: 'rgba(255,255,255,0.1)' }}
             >
               {p.monogram}
             </span>
-            <p className="line-clamp-2 text-center text-[12.5px] font-semibold leading-tight text-ink-primary">
+            <p className="line-clamp-1 text-center text-[11.5px] font-semibold leading-tight text-ink-primary">
               {p.name}
             </p>
           </div>
