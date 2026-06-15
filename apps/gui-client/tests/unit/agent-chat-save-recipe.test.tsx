@@ -103,6 +103,19 @@ describe('AgentChatView Save-as-recipe', () => {
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('Escape closes the save dialog (a11y)', () => {
+    const planTurn: ChatTurn = { id: 2, role: 'agent', response: PLAN_EXECUTED };
+    chatState = baseChat({
+      session: SESSION,
+      turns: [{ id: 1, role: 'user', text: 'open example.com' }, planTurn],
+    });
+    render(<AgentChatView />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save as task' }));
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   it('saves the chat as a recipe with the session id + trimmed label, then toasts', async () => {
     const planTurn: ChatTurn = { id: 2, role: 'agent', response: PLAN_EXECUTED };
     chatState = baseChat({
