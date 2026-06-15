@@ -1,0 +1,481 @@
+<!doctype html>
+<!--
+  GX profile-grid redesign demo (2026-06-14) — "phone-framed card".
+  Founder: grid too large/generic; we're a mobile product → make the CARD a
+  stylised phone with ALL data inside the screen, unique + beautiful, narrower
+  so more fit per row. Real Console dark tokens + violet accent. Static mock for
+  founder sign-off before restyling the live ProfilesView grid (list view stays
+  as the safe fallback). Open in a browser to review.
+-->
+<html lang="en" data-mode="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Driftstack — phone-card grid (demo)</title>
+    <style>
+      :root {
+        --surface-base: rgb(11 15 20);
+        --surface-raised: rgb(17 23 34);
+        --surface-elevated: rgb(26 34 48);
+        --surface-inset: rgb(7 10 14);
+        --divider: rgb(31 41 55);
+        --ink-1: rgb(229 231 235);
+        --ink-2: rgb(156 163 175);
+        --ink-3: rgb(107 114 128);
+        --ready: rgb(52 211 153);
+        --busy: rgb(251 191 36);
+        --error: rgb(248 113 113);
+        --accent: #6d5efc;
+        --accent-rgb: 109 94 252;
+        --bezel: #05070b;
+      }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--surface-base);
+        color: var(--ink-1);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        padding: 28px;
+        -webkit-font-smoothing: antialiased;
+      }
+      .mono {
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      }
+      .head {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .head h1 {
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+      .head .sub {
+        font-size: 12px;
+        color: var(--ink-3);
+      }
+      .section-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--ink-3);
+        font-weight: 600;
+      }
+
+      /* wall of phones — narrow, so 5–6 per wide row */
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+        gap: 18px;
+      }
+
+      /* the phone IS the card */
+      .phone {
+        position: relative;
+        border-radius: 30px;
+        padding: 7px;
+        background: linear-gradient(160deg, #11151c, var(--bezel));
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.04) inset,
+          0 10px 24px rgba(0, 0, 0, 0.45);
+        border: 1px solid #0a0d12;
+        transition:
+          transform 0.15s ease,
+          box-shadow 0.15s ease;
+        cursor: pointer;
+      }
+      .phone:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 16px 34px rgba(0, 0, 0, 0.55);
+      }
+      .phone.live {
+        box-shadow:
+          0 0 0 1.5px rgba(var(--accent-rgb), 0.5),
+          0 14px 30px rgba(0, 0, 0, 0.5);
+      }
+
+      /* the screen */
+      .screen {
+        position: relative;
+        border-radius: 24px;
+        overflow: hidden;
+        background: var(--surface-raised);
+        aspect-ratio: 9 / 18.5;
+        display: flex;
+        flex-direction: column;
+      }
+      .screen .wash {
+        position: absolute;
+        inset: 0;
+        opacity: 0.16;
+      }
+
+      /* dynamic island */
+      .island {
+        position: absolute;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 46px;
+        height: 13px;
+        border-radius: 9px;
+        background: #05070b;
+        z-index: 4;
+      }
+
+      /* faux status bar */
+      .statusbar {
+        position: relative;
+        z-index: 3;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 9px 12px 4px;
+        font-size: 9.5px;
+        color: var(--ink-2);
+        font-weight: 600;
+      }
+      .statusbar .dev {
+        letter-spacing: 0.02em;
+      }
+      .live-dot {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--ready);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .live-dot i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--ready);
+        box-shadow: 0 0 6px var(--ready);
+      }
+      .idle-dot {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        color: var(--ink-3);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .idle-dot i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        border: 1px solid var(--ink-3);
+      }
+
+      .body {
+        position: relative;
+        z-index: 3;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+        padding: 6px 12px 12px;
+      }
+
+      /* identity */
+      .ident {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 7px;
+        padding-top: 6px;
+      }
+      .avatar {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 16px;
+        font-weight: 700;
+        color: #fff;
+        background: rgba(255, 255, 255, 0.1);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+      }
+      .name {
+        font-size: 13.5px;
+        font-weight: 650;
+        text-align: center;
+        line-height: 1.15;
+      }
+      .device {
+        font-size: 10px;
+        color: var(--ink-3);
+      }
+
+      /* egress widget — iOS home-screen card style */
+      .widget {
+        background: var(--surface-inset);
+        border: 1px solid var(--divider);
+        border-radius: 13px;
+        padding: 8px 9px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .exit {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .exit .ip {
+        font-size: 11px;
+        color: var(--ink-1);
+      }
+      .exit .ip.untested {
+        font-style: italic;
+        color: var(--ink-3);
+        font-family: inherit;
+      }
+      .exit .lat {
+        margin-left: auto;
+        font-size: 9.5px;
+        color: var(--ink-3);
+      }
+      .meter {
+        width: 30px;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--divider);
+        overflow: hidden;
+        display: inline-block;
+        vertical-align: middle;
+        margin-left: 4px;
+      }
+      .meter > i {
+        display: block;
+        height: 100%;
+        background: var(--ready);
+      }
+      .caps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .cap {
+        font-size: 8.5px;
+        padding: 1px 5px;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .cap.ok {
+        background: rgba(52, 211, 153, 0.15);
+        color: var(--ready);
+      }
+      .cap.off {
+        background: var(--surface-inset);
+        color: var(--ink-3);
+      }
+
+      /* org pills */
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      .pill {
+        font-size: 9px;
+        padding: 1px 7px;
+        border-radius: 999px;
+        border: 1px solid var(--divider);
+        color: var(--ink-2);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .pill .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+      }
+      .lastact {
+        font-size: 9px;
+        color: var(--ink-3);
+        text-align: center;
+        margin-top: auto;
+      }
+
+      /* faux dock */
+      .dock {
+        display: flex;
+        gap: 6px;
+        padding: 8px 10px;
+        background: rgba(255, 255, 255, 0.04);
+        border-top: 1px solid var(--divider);
+        z-index: 3;
+      }
+      .dock .go {
+        flex: 1;
+        border: none;
+        border-radius: 10px;
+        background: var(--accent);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 7px 0;
+        cursor: pointer;
+      }
+      .dock .go.open {
+        background: var(--surface-elevated);
+        color: var(--ink-1);
+        border: 1px solid var(--divider);
+      }
+      .dock .more {
+        width: 34px;
+        border-radius: 10px;
+        background: var(--surface-elevated);
+        border: 1px solid var(--divider);
+        color: var(--ink-2);
+        font-size: 13px;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="head">
+      <h1>Profiles</h1>
+      <span class="sub">phone-framed card — every profile is a device, all data on its screen</span>
+    </div>
+    <div class="grid" id="grid"></div>
+
+    <script>
+      // Deterministic hue from name (mirrors identityHue).
+      function hue(s) {
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+        return h;
+      }
+      function mono(s) {
+        const w = s
+          .trim()
+          .split(/[\s_-]+/)
+          .filter(Boolean);
+        return (w.length > 1 ? w[0][0] + w[1][0] : w[0].slice(0, 2)).toUpperCase();
+      }
+      const profiles = [
+        {
+          name: 'amsterdam shopper',
+          dev: 'iPhone 17',
+          live: true,
+          flag: '🇳🇱',
+          ip: '82.14.220.9',
+          lat: 38,
+          udp: true,
+          folder: 'Shopping',
+          tag: 'aged',
+        },
+        {
+          name: 'acme bank eu',
+          dev: 'iPhone 17 Pro',
+          live: false,
+          flag: '🇩🇪',
+          ip: '195.3.120.44',
+          lat: 122,
+          udp: false,
+          folder: 'Banking',
+          tag: 'kyc',
+        },
+        {
+          name: 'ads meta us',
+          dev: 'iPhone 16',
+          live: true,
+          flag: '🇺🇸',
+          ip: '52.9.18.201',
+          lat: 61,
+          udp: true,
+          folder: 'Ad accounts',
+          tag: '',
+        },
+        {
+          name: 'tokyo social',
+          dev: 'iPhone 17',
+          live: false,
+          flag: '',
+          ip: '',
+          lat: null,
+          udp: false,
+          folder: '',
+          tag: 'social',
+        },
+        {
+          name: 'london retail',
+          dev: 'iPhone 15',
+          live: false,
+          flag: '🇬🇧',
+          ip: '141.98.6.7',
+          lat: 54,
+          udp: true,
+          folder: 'Shopping',
+          tag: 'aged',
+        },
+      ];
+      const grid = document.getElementById('grid');
+      for (const p of profiles) {
+        const h = hue(p.name);
+        const caps = p.ip
+          ? `
+          <div class="caps">
+            <span class="cap ${p.udp ? 'ok' : 'off'}">${p.udp ? '✓' : '⤵'}WebRTC</span>
+            <span class="cap ${p.udp ? 'ok' : 'off'}">${p.udp ? '✓' : '⤵'}QUIC</span>
+            <span class="cap ok">✓HTTP/2</span>
+          </div>`
+          : '';
+        const exit = p.ip
+          ? `
+          <div class="exit"><span>${p.flag}</span><span class="ip mono">${p.ip}</span>
+            <span class="lat mono">${p.lat}ms<span class="meter"><i style="width:${Math.min(100, Math.max(8, (p.lat / 250) * 100))}%;background:${p.lat <= 100 ? 'var(--ready)' : 'var(--busy)'}"></i></span></span></div>`
+          : `<div class="exit"><span>🌍</span><span class="ip untested">run Test for exit IP</span></div>`;
+        const pills =
+          p.folder || p.tag
+            ? `<div class="pills">
+            ${p.folder ? `<span class="pill"><span class="dot" style="background:hsl(${hue(p.folder)} 55% 55%)"></span>📁 ${p.folder}</span>` : ''}
+            ${p.tag ? `<span class="pill"><span class="dot" style="background:hsl(${hue(p.tag)} 55% 55%)"></span>${p.tag}</span>` : ''}
+          </div>`
+            : '';
+        grid.insertAdjacentHTML(
+          'beforeend',
+          `
+          <div class="phone ${p.live ? 'live' : ''}">
+            <div class="screen">
+              <div class="wash" style="background:linear-gradient(160deg, hsl(${h} 44% 30%), hsl(${(h + 38) % 360} 42% 16%))"></div>
+              <div class="island"></div>
+              <div class="statusbar">
+                <span class="dev">${p.dev}</span>
+                ${p.live ? '<span class="live-dot"><i></i>Live</span>' : '<span class="idle-dot"><i></i>Idle</span>'}
+              </div>
+              <div class="body">
+                <div class="ident">
+                  <div class="avatar">${mono(p.name)}</div>
+                  <div class="name">${p.name.replace(/\b\w/g, (c) => c.toUpperCase())}</div>
+                </div>
+                <div class="widget">
+                  ${exit}
+                  ${caps}
+                </div>
+                ${pills}
+                <div class="lastact">${p.live ? 'active now' : 'last used 3h ago'}</div>
+              </div>
+              <div class="dock">
+                <button class="go ${p.live ? 'open' : ''}">${p.live ? 'Open' : 'Launch'}</button>
+                <button class="more">⋯</button>
+              </div>
+            </div>
+          </div>`,
+        );
+      }
+    </script>
+  </body>
+</html>
