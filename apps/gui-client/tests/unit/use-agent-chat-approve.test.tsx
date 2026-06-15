@@ -112,3 +112,35 @@ describe('useAgentChat approve()', () => {
     expect(message.mock.calls[0]?.[2]).toEqual({});
   });
 });
+
+describe('useAgentChat restore()', () => {
+  beforeEach(() => {
+    create.mockReset();
+    message.mockReset();
+    create.mockResolvedValue(SESSION);
+  });
+
+  it('loads a saved transcript, drops the live session, keeps new ids above the restored max', async () => {
+    message.mockResolvedValueOnce(DONE);
+    const { result } = renderHook(() => useAgentChat());
+    const saved = [
+      { id: 5, role: 'user' as const, text: 'earlier task' },
+      { id: 6, role: 'agent' as const, response: DONE },
+    ];
+    act(() => {
+      result.current.restore(saved);
+    });
+    expect(result.current.turns).toHaveLength(2);
+    expect(result.current.turns[0]?.text).toBe('earlier task');
+    expect(result.current.session).toBeNull();
+
+    // Continuing a restored chat starts a fresh session + assigns ids above 6.
+    await act(async () => {
+      await result.current.send('next step');
+    });
+    const newUser = result.current.turns.find((t) => t.role === 'user' && t.text === 'next step');
+    expect(newUser).toBeDefined();
+    expect((newUser as { id: number }).id).toBeGreaterThan(6);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+});
