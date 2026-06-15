@@ -362,6 +362,58 @@ fn proxy_test(
 struct ProxyExitProbeResult {
     ip: String,
     country: Option<String>,
+    // Geo enrichment (2026-06-15): the platform echo only carries the
+    // country (cf-ipcountry). For city/region we make a best-effort second
+    // hop THROUGH THE SAME PROXY to lumtest.com/myip.json — it reports geo
+    // for the CALLER's IP, so through the proxy that's the EXIT's location
+    // (exactly what a site would infer). Any failure leaves these None; the
+    // ip/country from the echo stay the reliable baseline so the probe never
+    // regresses when lumtest is slow/blocked.
+    city: Option<String>,
+    region: Option<String>,
+    timezone: Option<String>,
+    asn_org: Option<String>,
+}
+
+/// Best-effort exit-geo enrichment via lumtest.com/myip.json over the same
+/// SOCKS5 agent. Returns (city, region, timezone, asn_org); all None on any
+/// failure so the caller degrades to the echo's country only.
+fn lumtest_geo(
+    agent: &ureq::Agent,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
+    let none = (None, None, None, None);
+    let resp = match agent.get("https://lumtest.com/myip.json").call() {
+        Ok(r) => r,
+        Err(_) => return none,
+    };
+    let body: serde_json::Value = match resp.into_json() {
+        Ok(b) => b,
+        Err(_) => return none,
+    };
+    let str_at = |v: &serde_json::Value, k: &str| {
+        v.get(k)
+            .and_then(|x| x.as_str())
+            .map(|s| s.to_string())
+            .filter(|s| !s.is_empty())
+    };
+    let geo = body.get("geo").cloned().unwrap_or(serde_json::Value::Null);
+    let city = str_at(&geo, "city");
+    // Prefer the human-readable region name ("South Holland"), fall back to
+    // the short code ("ZH") when the name is absent.
+    let region = str_at(&geo, "region_name").or_else(|| str_at(&geo, "region"));
+    let timezone = str_at(&geo, "tz");
+    let asn_org = body
+        .get("asn")
+        .and_then(|a| a.get("org_name"))
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty());
+    (city, region, timezone, asn_org)
 }
 
 #[tauri::command]
@@ -380,7 +432,7 @@ fn proxy_exit_probe(
     let proxy = ureq::Proxy::new(&proxy_url).map_err(|e| e.to_string())?;
     let agent = ureq::AgentBuilder::new()
         .proxy(proxy)
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(8))
         .build();
     let resp = agent
         .get("https://api.driftstack.dev/v1/egress/echo")
@@ -396,7 +448,15 @@ fn proxy_exit_probe(
         .get("country")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
-    Ok(ProxyExitProbeResult { ip, country })
+    let (city, region, timezone, asn_org) = lumtest_geo(&agent);
+    Ok(ProxyExitProbeResult {
+        ip,
+        country,
+        city,
+        region,
+        timezone,
+        asn_org,
+    })
 }
 
 #[cfg(test)]

@@ -535,7 +535,14 @@ export function ProfilesView({
           password: px.password,
         });
         if (exit !== null) {
-          setProbeCache(await saveExitResult(px.id, exit.ip, exit.country));
+          setProbeCache(
+            await saveExitResult(px.id, exit.ip, exit.country, {
+              city: exit.city ?? null,
+              region: exit.region ?? null,
+              timezone: exit.timezone ?? null,
+              asnOrg: exit.asn_org ?? null,
+            }),
+          );
         }
       }
     } catch {
@@ -1425,7 +1432,17 @@ export function ProfilesView({
                       countryCode: probe?.exitCountry ?? null,
                       exitIp: probe?.exitIp ?? null,
                       proxyAddress: px !== null ? `${px.host}:${px.port}` : null,
-                      locationLabel: probe?.exitCountry ? regionName(probe.exitCountry) : null,
+                      // Prefer the granular lumtest geo (city, region) when the
+                      // exit probe captured it; the flag already conveys the
+                      // country, so fall back to the country name otherwise.
+                      locationLabel:
+                        probe?.exitCity != null && probe.exitCity.length > 0
+                          ? [probe.exitCity, probe.exitRegion]
+                              .filter((s): s is string => typeof s === 'string' && s.length > 0)
+                              .join(', ')
+                          : probe?.exitCountry
+                            ? regionName(probe.exitCountry)
+                            : null,
                       probed: probe !== undefined,
                       udp,
                       latencyMs: probe?.result.latency_ms ?? null,

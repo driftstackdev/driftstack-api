@@ -102,6 +102,30 @@ describe('proxy-probe-cache', () => {
     expect(reloaded['p1']?.exitCountry).toBeNull();
   });
 
+  it('exit-geo: lumtest enrichment (city/region/timezone/asn) persists, round-trips, and a capability re-test preserves it', async () => {
+    const { saveExitResult } = await import('../../src/lib/proxy-probe-cache');
+    await saveProbeResult('p1', OK, 1);
+    let cache = await saveExitResult('p1', '5.6.7.8', 'NL', {
+      city: 'Strijen',
+      region: 'South Holland',
+      timezone: 'Europe/Amsterdam',
+      asnOrg: 'Odido Netherlands B.V.',
+    });
+    expect(cache['p1']?.exitCity).toBe('Strijen');
+    expect(cache['p1']?.exitRegion).toBe('South Holland');
+    expect(cache['p1']?.exitTimezone).toBe('Europe/Amsterdam');
+    expect(cache['p1']?.exitAsnOrg).toBe('Odido Netherlands B.V.');
+    // a capability re-test must not erase the enriched geo
+    cache = await saveProbeResult('p1', { ...OK, latency_ms: 90 }, 2);
+    expect(cache['p1']?.exitCity).toBe('Strijen');
+    // round-trips through the store deserializer
+    const reloaded = await loadProbeCache();
+    expect(reloaded['p1']?.exitRegion).toBe('South Holland');
+    // best-effort: omitting geo (lumtest unreachable) records null, not stale
+    cache = await saveExitResult('p1', '5.6.7.8', 'NL');
+    expect(cache['p1']?.exitCity).toBeNull();
+  });
+
   it('invalidateProbe drops a proxy entry (capability + exit-geo), persists, is idempotent, and leaves other proxies untouched', async () => {
     const { invalidateProbe, saveExitResult } = await import('../../src/lib/proxy-probe-cache');
     await saveProbeResult('p1', OK, 1);

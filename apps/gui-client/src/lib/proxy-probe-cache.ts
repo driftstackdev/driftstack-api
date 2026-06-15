@@ -21,6 +21,12 @@ export interface CachedProbe {
   /** E-2 exit-geo (optional — absent until the echo probe succeeds). */
   exitIp?: string;
   exitCountry?: string | null;
+  /** Geo enrichment (2026-06-15) from lumtest through the proxy — best-effort,
+   *  absent when lumtest was unreachable. exitCountry stays the baseline. */
+  exitCity?: string | null;
+  exitRegion?: string | null;
+  exitTimezone?: string | null;
+  exitAsnOrg?: string | null;
 }
 
 export type ProbeCacheMap = Record<string, CachedProbe>;
@@ -58,9 +64,19 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   const exitIp = typeof r.exitIp === 'string' ? r.exitIp : undefined;
   const exitCountry =
     typeof r.exitCountry === 'string' || r.exitCountry === null ? r.exitCountry : undefined;
+  const optStr = (v: unknown): string | null | undefined =>
+    typeof v === 'string' || v === null ? v : undefined;
+  const exitCity = optStr(r.exitCity);
+  const exitRegion = optStr(r.exitRegion);
+  const exitTimezone = optStr(r.exitTimezone);
+  const exitAsnOrg = optStr(r.exitAsnOrg);
   return {
     ...(exitIp !== undefined ? { exitIp } : {}),
     ...(exitCountry !== undefined ? { exitCountry } : {}),
+    ...(exitCity !== undefined ? { exitCity } : {}),
+    ...(exitRegion !== undefined ? { exitRegion } : {}),
+    ...(exitTimezone !== undefined ? { exitTimezone } : {}),
+    ...(exitAsnOrg !== undefined ? { exitAsnOrg } : {}),
     at: r.at,
     result: {
       reachable: res.reachable,
@@ -104,6 +120,10 @@ export function saveProbeResult(
       at,
       ...(prior?.exitIp !== undefined ? { exitIp: prior.exitIp } : {}),
       ...(prior?.exitCountry !== undefined ? { exitCountry: prior.exitCountry } : {}),
+      ...(prior?.exitCity !== undefined ? { exitCity: prior.exitCity } : {}),
+      ...(prior?.exitRegion !== undefined ? { exitRegion: prior.exitRegion } : {}),
+      ...(prior?.exitTimezone !== undefined ? { exitTimezone: prior.exitTimezone } : {}),
+      ...(prior?.exitAsnOrg !== undefined ? { exitAsnOrg: prior.exitAsnOrg } : {}),
     };
     await getStore().set(KEY, all);
     await getStore().save();
@@ -111,17 +131,33 @@ export function saveProbeResult(
   });
 }
 
-/** Persist a successful exit-geo probe onto the proxy's cache entry. */
+/** Persist a successful exit-geo probe onto the proxy's cache entry. The geo
+ *  enrichment (city/region/timezone/asnOrg) is best-effort — pass null when
+ *  lumtest was unreachable; the ip/country baseline still records. */
 export function saveExitResult(
   proxyId: string,
   exitIp: string,
   exitCountry: string | null,
+  geo: {
+    city?: string | null;
+    region?: string | null;
+    timezone?: string | null;
+    asnOrg?: string | null;
+  } = {},
 ): Promise<ProbeCacheMap> {
   return writeLock(async () => {
     const all = await loadProbeCache();
     const prior = all[proxyId];
     if (prior === undefined) return all; // exit probe only runs after a capability probe
-    all[proxyId] = { ...prior, exitIp, exitCountry };
+    all[proxyId] = {
+      ...prior,
+      exitIp,
+      exitCountry,
+      exitCity: geo.city ?? null,
+      exitRegion: geo.region ?? null,
+      exitTimezone: geo.timezone ?? null,
+      exitAsnOrg: geo.asnOrg ?? null,
+    };
     await getStore().set(KEY, all);
     await getStore().save();
     return all;

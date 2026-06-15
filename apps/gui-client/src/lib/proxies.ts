@@ -167,6 +167,14 @@ export interface ProxyTestResult {
 export interface ProxyExitProbeResult {
   ip: string;
   country: string | null;
+  // Geo enrichment (2026-06-15): best-effort city/region/timezone/ASN org
+  // from lumtest.com/myip.json fetched THROUGH the proxy (the exit's geo as a
+  // site would infer it). All null when lumtest is unreachable/blocked — the
+  // ip/country baseline is unaffected.
+  city?: string | null;
+  region?: string | null;
+  timezone?: string | null;
+  asn_org?: string | null;
 }
 
 /** Exit-geo probe: native Rust fetches /v1/egress/echo THROUGH the proxy
