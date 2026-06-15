@@ -26,6 +26,7 @@ export interface ProfileTableRow {
   exitIp: string | null;
   proxyAddress: string | null; // host:port of the bound proxy (hover detail)
   locationLabel: string | null; // resolved country name for the exit IP
+  probed: boolean; // a probe has run (even if it returned no exit IP)
   udp: 'ok' | 'fail' | 'unknown';
   latencyMs: number | null;
   folder: string;
@@ -177,7 +178,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
                 )}
               </div>
             ) : (
-              <span className="text-ink-muted">untested</span>
+              <span className="text-ink-muted">{r.probed ? 'no exit IP' : 'untested'}</span>
             )
           ) : (
             <span className="text-ink-muted">no proxy</span>

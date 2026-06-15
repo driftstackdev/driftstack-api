@@ -187,7 +187,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     }`}
                     title={p.exitIp ?? undefined}
                   >
-                    {p.exitIp ?? 'run Test'}
+                    {p.exitIp ?? (p.probed ? 'no exit IP' : 'run Test')}
                   </span>
                 </div>
                 {/* latency + UDP badge (red/green) */}

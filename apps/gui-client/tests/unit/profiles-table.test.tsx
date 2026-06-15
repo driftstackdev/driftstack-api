@@ -23,6 +23,7 @@ function row(over: Partial<ProfileTableRow> = {}): ProfileTableRow {
     exitIp: '82.14.220.9',
     proxyAddress: '127.0.0.1:24000',
     locationLabel: 'Netherlands',
+    probed: true,
     udp: 'ok',
     latencyMs: 42,
     folder: 'Shopping',
@@ -107,7 +108,7 @@ describe('ProfilesTable', () => {
     cleanup();
   });
 
-  it('no proxy → "no proxy" location; untested → "untested" exit IP', () => {
+  it('no proxy → "no proxy"; never-probed → "untested"; probed-but-no-IP → "no exit IP"', () => {
     render(
       <ProfilesTable
         {...props({ rows: [row({ hasProxy: false, countryCode: null, exitIp: null })] })}
@@ -115,9 +116,12 @@ describe('ProfilesTable', () => {
     );
     expect(screen.getByText('no proxy')).toBeTruthy();
     cleanup();
-    render(<ProfilesTable {...props({ rows: [row({ exitIp: null })] })} />);
-    const table = screen.getByRole('table');
-    expect(within(table).getByText('untested')).toBeTruthy();
+    render(<ProfilesTable {...props({ rows: [row({ exitIp: null, probed: false })] })} />);
+    expect(within(screen.getByRole('table')).getByText('untested')).toBeTruthy();
+    cleanup();
+    // probed but the echo endpoint returned no IP — don't re-prompt a test.
+    render(<ProfilesTable {...props({ rows: [row({ exitIp: null, probed: true })] })} />);
+    expect(within(screen.getByRole('table')).getByText('no exit IP')).toBeTruthy();
     cleanup();
   });
 });

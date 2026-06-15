@@ -1398,6 +1398,7 @@ export function ProfilesView({
                     exitIp: probe?.exitIp ?? null,
                     proxyAddress: px !== null ? `${px.host}:${px.port}` : null,
                     locationLabel: probe?.exitCountry ? regionName(probe.exitCountry) : null,
+                    probed: probe !== undefined,
                     udp,
                     latencyMs: probe?.result.latency_ms ?? null,
                     folder: profilesMeta[profile.id]?.folder ?? '',
