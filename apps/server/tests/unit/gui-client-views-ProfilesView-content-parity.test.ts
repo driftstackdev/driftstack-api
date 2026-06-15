@@ -123,12 +123,10 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     );
   });
 
-  it('Launch gates on `busy` ONLY, not atProfileCap (free-tier fix 0ccff415): the profile cap limits CREATING profiles, not launching an existing one (launch consumes a session slot). A regression to `disabled={busy || atProfileCap}` re-greys Launch on a free-tier account (profile_cap 1) so the one allowed profile can never launch — the exact bug a self-hosted user hit. GRID + LIST(table) both route Launch through handleLaunch with launchDisabled gated on activeWorkspace only; Duplicate (which CREATES) IS cap-gated.', () => {
+  it('Launch gates on `busy` ONLY, not atProfileCap (free-tier fix 0ccff415): the profile cap limits CREATING profiles, not launching an existing one (launch consumes a session slot). A regression to `disabled={busy || atProfileCap}` re-greys Launch on a free-tier account (profile_cap 1) so the one allowed profile can never launch — the exact bug a self-hosted user hit. GRID + LIST(table) both route Launch through handleLaunch with launchDisabled gated on activeWorkspace only. (Duplicate removed per founder 2026-06-15.)', () => {
     expect(body).toMatch(/void handleLaunch\(profile\)/);
     // The fix's rationale comment must stay (explains why Launch is busy-only).
     expect(body).toMatch(/NOT atProfileCap: the/);
-    // Only Duplicate gates on the cap, never Launch.
-    expect(body).toContain('canDuplicate: !atProfileCap');
     // The specific regression guard: the Launch button must never re-gate on the
     // profile cap. (`state.loading || atProfileCap` on the New-profile button is
     // correct + separately pinned above; this targets the `busy || atProfileCap` form.)

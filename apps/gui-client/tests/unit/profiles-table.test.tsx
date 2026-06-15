@@ -21,6 +21,8 @@ function row(over: Partial<ProfileTableRow> = {}): ProfileTableRow {
     flag: '🇳🇱',
     countryCode: 'NL',
     exitIp: '82.14.220.9',
+    proxyAddress: '127.0.0.1:24000',
+    locationLabel: 'Netherlands',
     udp: 'ok',
     latencyMs: 42,
     folder: 'Shopping',
@@ -31,7 +33,6 @@ function row(over: Partial<ProfileTableRow> = {}): ProfileTableRow {
     testing: false,
     testDisabled: false,
     launchDisabled: false,
-    canDuplicate: true,
     ...over,
   };
 }
@@ -48,7 +49,6 @@ function props(over: Partial<ProfilesTableProps> = {}): ProfilesTableProps {
     onStop: vi.fn(),
     onTest: vi.fn(),
     onOrganize: vi.fn(),
-    onDuplicate: vi.fn(),
     onDelete: vi.fn(),
     organizeId: null,
     organizeSlot: <div data-testid="org-slot" />,
@@ -57,11 +57,11 @@ function props(over: Partial<ProfilesTableProps> = {}): ProfilesTableProps {
 }
 
 describe('ProfilesTable', () => {
-  it('renders the egress columns the old list lacked: country, exit IP, UDP, latency', () => {
+  it('renders the egress columns the old list lacked: location, exit IP, UDP, latency', () => {
     render(<ProfilesTable {...props()} />);
     expect(screen.getByText('amsterdam shopper')).toBeTruthy();
-    expect(screen.getByText('iPhone 17')).toBeTruthy();
-    expect(screen.getByText('NL')).toBeTruthy();
+    expect(screen.getByText('iPhone 17')).toBeTruthy(); // device subtitle
+    expect(screen.getByText('Netherlands')).toBeTruthy(); // location under exit IP
     expect(screen.getByText('82.14.220.9')).toBeTruthy();
     expect(screen.getByText('42ms')).toBeTruthy();
     expect(screen.getByText('Idle')).toBeTruthy();

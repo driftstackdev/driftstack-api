@@ -284,64 +284,68 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           </span>
         </div>
 
-        {/* hover action strip — LABELLED (icon + caption) so each control reads
-            clearly; sits above the dock, dark backdrop for legibility. */}
-        <div className="absolute inset-x-1.5 bottom-[42px] z-20 flex justify-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-          {p.onAssist ? (
+        {/* footer: the Launch dock + a hover action strip that floats ABOVE it
+            (bottom-full) so the secondary actions never overlap Launch. */}
+        <div className="relative z-10">
+          {/* hover action strip — LABELLED (icon + caption); floats just above
+              the dock, so it can't collide with Launch/Open. */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-full z-20 mb-1.5 flex justify-center gap-1 px-1.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100">
+            {p.onAssist ? (
+              <ActionBtn
+                glyph="✦"
+                caption="Assist"
+                label={`Ask the AI assistant about ${p.name}`}
+                onClick={p.onAssist}
+              />
+            ) : null}
             <ActionBtn
-              glyph="✦"
-              caption="Assist"
-              label={`Ask the AI assistant about ${p.name}`}
-              onClick={p.onAssist}
+              glyph={p.running ? '◉' : '▶'}
+              caption={p.running ? 'View' : 'Watch'}
+              label={p.running ? 'Open the live view' : 'Launch and watch live'}
+              onClick={p.onWatch}
+              disabled={p.busy || (!p.running && p.launchDisabled)}
             />
-          ) : null}
-          <ActionBtn
-            glyph={p.running ? '◉' : '▶'}
-            caption={p.running ? 'View' : 'Watch'}
-            label={p.running ? 'Open the live view' : 'Launch and watch live'}
-            onClick={p.onWatch}
-            disabled={p.busy || (!p.running && p.launchDisabled)}
-          />
-          {p.hasProxy ? (
+            {p.hasProxy ? (
+              <ActionBtn
+                glyph={p.testing ? '…' : '⟳'}
+                caption="Test"
+                label="Test proxy — reachability, latency, exit IP"
+                onClick={p.onTest}
+                disabled={p.testDisabled}
+              />
+            ) : null}
             <ActionBtn
-              glyph={p.testing ? '…' : '⟳'}
-              caption="Test"
-              label="Test proxy — reachability, latency, exit IP"
-              onClick={p.onTest}
-              disabled={p.testDisabled}
+              glyph="⋯"
+              caption="Organize"
+              label="Organize — folder + tags"
+              onClick={p.onOrganizeToggle}
             />
-          ) : null}
-          <ActionBtn
-            glyph="⋯"
-            caption="Organize"
-            label="Organize — folder + tags"
-            onClick={p.onOrganizeToggle}
-          />
-        </div>
+          </div>
 
-        {/* dock — Launch/Open ONLY, full width, always visible + prominent */}
-        <div className="relative z-10 border-t border-surface-divider bg-white/[0.03] px-2.5 py-2">
-          <button
-            type="button"
-            className={`w-full rounded-[10px] py-1.5 text-[11.5px] font-semibold transition-colors disabled:opacity-50 ${
-              p.running
-                ? 'border border-surface-divider bg-surface-elevated text-ink-primary hover:bg-surface-divider'
-                : 'bg-accent text-white shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-accent-hover'
-            }`}
-            disabled={p.busy || (!p.running && p.launchDisabled)}
-            title={!p.running && p.launchDisabled ? p.launchDisabledReason : undefined}
-            onClick={(e) => {
-              e.stopPropagation();
-              p.onPrimary();
-            }}
-          >
-            {p.running ? 'Open session' : p.busy ? 'Launching…' : 'Launch'}
-          </button>
-          {/* iOS home indicator — sells the phone metaphor */}
-          <span
-            aria-hidden="true"
-            className="mx-auto mt-2 block h-1 w-10 rounded-full bg-ink-muted/40"
-          />
+          {/* dock — Launch/Open ONLY, full width, always visible + prominent */}
+          <div className="border-t border-surface-divider bg-white/[0.03] px-2.5 py-2">
+            <button
+              type="button"
+              className={`w-full rounded-[10px] py-1.5 text-[11.5px] font-semibold transition-colors disabled:opacity-50 ${
+                p.running
+                  ? 'border border-surface-divider bg-surface-elevated text-ink-primary hover:bg-surface-divider'
+                  : 'bg-accent text-white shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-accent-hover'
+              }`}
+              disabled={p.busy || (!p.running && p.launchDisabled)}
+              title={!p.running && p.launchDisabled ? p.launchDisabledReason : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                p.onPrimary();
+              }}
+            >
+              {p.running ? 'Open session' : p.busy ? 'Launching…' : 'Launch'}
+            </button>
+            {/* iOS home indicator — sells the phone metaphor */}
+            <span
+              aria-hidden="true"
+              className="mx-auto mt-2 block h-1 w-10 rounded-full bg-ink-muted/40"
+            />
+          </div>
         </div>
       </div>
     </article>

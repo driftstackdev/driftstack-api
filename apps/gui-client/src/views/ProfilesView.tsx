@@ -308,20 +308,6 @@ export function ProfilesView({
     return () => window.clearInterval(id);
   }, [refresh]);
 
-  async function handleDuplicate(profile: Profile): Promise<void> {
-    if (!client || busyId !== null) return;
-    setBusyId(profile.id);
-    try {
-      // Backend clone: server-side copy of the profile's sealed state +
-      // archetype under a fresh identity (POST /v1/profiles/:id/clone).
-      await client.profiles.clone(profile.id);
-      await refresh(false);
-      await refreshAccountMe();
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function handleDelete(id: string): Promise<void> {
     if (!client) return;
     setBusyId(id);
@@ -1519,6 +1505,8 @@ export function ProfilesView({
                     flag: probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍',
                     countryCode: probe?.exitCountry ?? null,
                     exitIp: probe?.exitIp ?? null,
+                    proxyAddress: px !== null ? `${px.host}:${px.port}` : null,
+                    locationLabel: probe?.exitCountry ? regionName(probe.exitCountry) : null,
                     udp,
                     latencyMs: probe?.result.latency_ms ?? null,
                     folder: profilesMeta[profile.id]?.folder ?? '',
@@ -1534,8 +1522,6 @@ export function ProfilesView({
                     launchDisabled: activeWorkspace !== null,
                     launchDisabledReason:
                       'Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own.',
-                    // Duplicate CREATES a profile, so it IS cap-gated.
-                    canDuplicate: !atProfileCap,
                   };
                 });
                 const dir = sortDir === 'asc' ? 1 : -1;
@@ -1543,8 +1529,6 @@ export function ProfilesView({
                   switch (sortKey) {
                     case 'name':
                       return dir * a.name.localeCompare(b.name);
-                    case 'device':
-                      return dir * a.deviceLabel.localeCompare(b.deviceLabel);
                     case 'status':
                       return dir * (Number(a.running) - Number(b.running));
                     case 'country':
@@ -1604,10 +1588,6 @@ export function ProfilesView({
                       setDraftFolder(profilesMeta[id]?.folder ?? '');
                       setDraftTags((profilesMeta[id]?.tags ?? []).join(', '));
                       setOrganizeId(id);
-                    }}
-                    onDuplicate={(id) => {
-                      const profile = resolve(id);
-                      if (profile !== null) void handleDuplicate(profile);
                     }}
                     onDelete={(id) => void handleDelete(id)}
                     organizeId={organizeId}
@@ -2837,6 +2817,18 @@ function EmptyConnect({
 function flagEmoji(cc: string): string {
   if (!/^[A-Z]{2}$/.test(cc)) return '🌍';
   return String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
+// Country name for an ISO-3166 alpha-2 code via the platform's Intl region
+// names (WebKit ships the full set) — no hand-maintained map. Falls back to the
+// raw code for non-country values (Tor 'T1', 'XX').
+function regionName(cc: string): string {
+  if (!/^[A-Z]{2}$/.test(cc)) return cc;
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'region' }).of(cc) ?? cc;
+  } catch {
+    return cc;
+  }
 }
 
 function friendlyError(err: unknown, baseUrl?: string): string {

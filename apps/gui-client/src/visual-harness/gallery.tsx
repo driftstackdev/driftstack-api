@@ -167,7 +167,6 @@ export function Gallery(): JSX.Element {
         onStop={noop}
         onTest={noop}
         onOrganize={noop}
-        onDuplicate={noop}
         onDelete={noop}
         organizeId={null}
         organizeSlot={null}
@@ -186,6 +185,8 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     flag: '🇳🇱',
     countryCode: 'NL',
     exitIp: '82.14.220.9',
+    proxyAddress: '127.0.0.1:24000',
+    locationLabel: 'Netherlands',
     udp: 'ok',
     latencyMs: 42,
     folder: 'Shopping',
@@ -196,7 +197,6 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testing: false,
     testDisabled: false,
     launchDisabled: false,
-    canDuplicate: true,
   },
   {
     id: '2',
@@ -207,6 +207,8 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     flag: '🇯🇵',
     countryCode: 'JP',
     exitIp: '133.18.7.40',
+    proxyAddress: 'gate.nodemaven.com:1080',
+    locationLabel: 'Japan',
     udp: 'ok',
     latencyMs: 88,
     folder: '',
@@ -217,7 +219,6 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testing: false,
     testDisabled: false,
     launchDisabled: false,
-    canDuplicate: true,
   },
   {
     id: '3',
@@ -228,6 +229,8 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     flag: '🇩🇪',
     countryCode: 'DE',
     exitIp: '91.64.12.200',
+    proxyAddress: '10.0.0.5:1080',
+    locationLabel: 'Germany',
     udp: 'fail',
     latencyMs: 210,
     folder: 'Reviews',
@@ -238,7 +241,6 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testing: false,
     testDisabled: false,
     launchDisabled: false,
-    canDuplicate: true,
   },
   {
     id: '4',
@@ -249,6 +251,8 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     flag: '🇧🇷',
     countryCode: 'BR',
     exitIp: null,
+    proxyAddress: '127.0.0.1:24010',
+    locationLabel: null,
     udp: 'unknown',
     latencyMs: null,
     folder: '',
@@ -259,7 +263,6 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testing: false,
     testDisabled: false,
     launchDisabled: false,
-    canDuplicate: true,
   },
   {
     id: '5',
@@ -270,6 +273,8 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     flag: '🌍',
     countryCode: null,
     exitIp: null,
+    proxyAddress: null,
+    locationLabel: null,
     udp: 'unknown',
     latencyMs: null,
     folder: '',
@@ -280,6 +285,5 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testing: false,
     testDisabled: false,
     launchDisabled: false,
-    canDuplicate: true,
   },
 ];

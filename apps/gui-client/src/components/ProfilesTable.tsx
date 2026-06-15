@@ -1,21 +1,19 @@
-// ProfilesTable (2026-06-15) — the list view, rebuilt as a clean, sortable,
-// professional table. The old list showed the raw archetype + proxy label and
-// no resolved egress info; this surfaces the SAME probe-derived data the grid
-// card uses (country, exit IP, UDP status, latency) so grid + list are
-// consistent. Pure presentational: ProfilesView computes the row view-models +
-// passes handlers. Row click toggles selection (matches the grid card); action
-// buttons stopPropagation so they act without selecting.
+// ProfilesTable (2026-06-15) — the list view as a clean, sortable, professional
+// table. Surfaces the SAME probe-derived data the grid card uses (country, exit
+// IP, UDP, latency) so grid + list are consistent. Pure presentational:
+// ProfilesView computes the row view-models + passes handlers. Row click toggles
+// selection (matches the grid card); action buttons stopPropagation.
+//
+// Responsive: the core columns (Profile / Status / Exit IP / UDP / Latency /
+// Actions) always show; Device folds into the Profile cell and Last-used hides
+// below md, so the table stays fully visible on smaller windows without a
+// horizontal scrollbar cutting it off. The Exit IP cell shows the IP with its
+// location beneath and, on hover, the bound proxy address + location.
 
 import type { JSX, ReactNode } from 'react';
 import { RelativeTime } from './RelativeTime';
 
-export type ProfilesTableSortKey =
-  | 'name'
-  | 'device'
-  | 'status'
-  | 'country'
-  | 'latency'
-  | 'lastUsed';
+export type ProfilesTableSortKey = 'name' | 'status' | 'country' | 'latency' | 'lastUsed';
 
 export interface ProfileTableRow {
   id: string;
@@ -26,6 +24,8 @@ export interface ProfileTableRow {
   flag: string;
   countryCode: string | null;
   exitIp: string | null;
+  proxyAddress: string | null; // host:port of the bound proxy (hover detail)
+  locationLabel: string | null; // resolved country name for the exit IP
   udp: 'ok' | 'fail' | 'unknown';
   latencyMs: number | null;
   folder: string;
@@ -37,7 +37,6 @@ export interface ProfileTableRow {
   testDisabled: boolean;
   launchDisabled: boolean;
   launchDisabledReason?: string;
-  canDuplicate: boolean;
 }
 
 export interface ProfilesTableProps {
@@ -51,35 +50,41 @@ export interface ProfilesTableProps {
   onStop: (id: string) => void;
   onTest: (id: string) => void;
   onOrganize: (id: string) => void;
-  onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   organizeId: string | null;
   organizeSlot: ReactNode;
 }
 
-const COLS: ReadonlyArray<{ key: ProfilesTableSortKey | null; label: string; align?: 'right' }> = [
+interface Col {
+  key: ProfilesTableSortKey | null;
+  label: string;
+  align?: 'right';
+  hideSmall?: boolean;
+}
+
+const COLS: ReadonlyArray<Col> = [
   { key: 'name', label: 'Profile' },
-  { key: 'device', label: 'Device' },
   { key: 'status', label: 'Status' },
-  { key: 'country', label: 'Location' },
-  { key: null, label: 'Exit IP' },
+  { key: 'country', label: 'Exit IP' },
   { key: null, label: 'UDP' },
   { key: 'latency', label: 'Latency', align: 'right' },
-  { key: 'lastUsed', label: 'Last used' },
+  { key: 'lastUsed', label: 'Last used', hideSmall: true },
   { key: null, label: 'Actions', align: 'right' },
 ];
 
+const HIDE_SMALL = 'hidden md:table-cell';
+
 export function ProfilesTable(p: ProfilesTableProps): JSX.Element {
   return (
-    <div className="overflow-x-auto rounded-lg border border-surface-divider bg-surface-raised">
-      <table className="w-full border-collapse text-left text-xs">
+    <div className="rounded-lg border border-surface-divider bg-surface-raised">
+      <table className="w-full table-fixed border-collapse text-left text-xs">
         <thead>
           <tr className="border-b border-surface-divider text-ink-muted">
             {COLS.map((c) => (
               <th
                 key={c.label}
                 scope="col"
-                className={`whitespace-nowrap px-3 py-2 font-medium ${c.align === 'right' ? 'text-right' : ''}`}
+                className={`px-3 py-2 font-medium ${c.align === 'right' ? 'text-right' : ''} ${c.hideSmall ? HIDE_SMALL : ''}`}
               >
                 {c.key !== null ? (
                   <button
@@ -112,23 +117,25 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
     e.stopPropagation();
     fn();
   };
+  const exitHover = [r.proxyAddress, r.locationLabel].filter((x) => x !== null).join(' · ');
   return (
     <>
       <tr
         onClick={() => p.onToggleSelect(r.id)}
-        className={`cursor-pointer border-b border-surface-divider/60 transition-colors last:border-0 ${
+        className={`cursor-pointer border-b border-surface-divider/60 align-top transition-colors last:border-0 ${
           r.selected ? 'bg-accent-subtle' : 'hover:bg-surface-elevated'
         }`}
       >
-        {/* Profile: status dot + name + folder/tags */}
+        {/* Profile: status dot + name + device subtitle + folder/tags */}
         <td className="px-3 py-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-start gap-2">
             <span
               aria-hidden="true"
-              className={`h-1.5 w-1.5 shrink-0 rounded-full ${r.running ? 'bg-status-ready' : 'bg-ink-muted/40'}`}
+              className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${r.running ? 'bg-status-ready' : 'bg-ink-muted/40'}`}
             />
             <div className="min-w-0">
               <p className="truncate font-medium text-ink-primary">{r.name}</p>
+              <p className="truncate text-[10px] text-ink-muted">{r.deviceLabel}</p>
               {(r.folder !== '' || r.tags.length > 0) && (
                 <div className="mt-0.5 flex flex-wrap items-center gap-1">
                   {r.folder !== '' && (
@@ -149,8 +156,6 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             </div>
           </div>
         </td>
-        {/* Device */}
-        <td className="whitespace-nowrap px-3 py-2 text-ink-secondary">{r.deviceLabel}</td>
         {/* Status */}
         <td className="px-3 py-2">
           <span
@@ -161,23 +166,24 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             {r.running ? 'Live' : 'Idle'}
           </span>
         </td>
-        {/* Location */}
-        <td className="whitespace-nowrap px-3 py-2">
+        {/* Exit IP + location (hover: proxy address · location) */}
+        <td className="px-3 py-2">
           {r.hasProxy ? (
-            <span className="inline-flex items-center gap-1.5">
-              <span aria-hidden="true">{r.flag}</span>
-              <span className="text-ink-secondary">{r.countryCode ?? '—'}</span>
-            </span>
+            r.exitIp !== null ? (
+              <div title={exitHover.length > 0 ? exitHover : undefined}>
+                <div className="flex items-center gap-1.5">
+                  <span aria-hidden="true">{r.flag}</span>
+                  <span className="mono truncate text-ink-primary">{r.exitIp}</span>
+                </div>
+                {r.locationLabel !== null && (
+                  <p className="truncate text-[10px] text-ink-muted">{r.locationLabel}</p>
+                )}
+              </div>
+            ) : (
+              <span className="text-ink-muted">untested</span>
+            )
           ) : (
             <span className="text-ink-muted">no proxy</span>
-          )}
-        </td>
-        {/* Exit IP */}
-        <td className="whitespace-nowrap px-3 py-2">
-          {r.exitIp !== null ? (
-            <span className="mono text-ink-primary">{r.exitIp}</span>
-          ) : (
-            <span className="text-ink-muted">{r.hasProxy ? 'untested' : '—'}</span>
           )}
         </td>
         {/* UDP */}
@@ -202,7 +208,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           )}
         </td>
         {/* Latency */}
-        <td className="whitespace-nowrap px-3 py-2 text-right">
+        <td className="px-3 py-2 text-right">
           {r.latencyMs !== null ? (
             <span
               className={`mono ${r.latencyMs <= 100 ? 'text-ink-secondary' : 'text-status-busy'}`}
@@ -213,8 +219,8 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             <span className="text-ink-muted">—</span>
           )}
         </td>
-        {/* Last used */}
-        <td className="whitespace-nowrap px-3 py-2 text-ink-muted">
+        {/* Last used (hidden on small screens) */}
+        <td className={`px-3 py-2 text-ink-muted ${HIDE_SMALL}`}>
           {r.lastUsedIso !== null ? (
             <RelativeTime iso={r.lastUsedIso} tooltipPrefix="Last used" />
           ) : (
@@ -222,7 +228,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           )}
         </td>
         {/* Actions */}
-        <td className="whitespace-nowrap px-3 py-2 text-right">
+        <td className="px-3 py-2 text-right">
           <div className="inline-flex items-center gap-1.5">
             {r.running ? (
               <>
@@ -275,19 +281,6 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             </button>
             <button
               type="button"
-              className="text-[11px] text-ink-muted hover:text-ink-primary disabled:opacity-50"
-              onClick={stop(() => p.onDuplicate(r.id))}
-              disabled={!r.canDuplicate || r.busy}
-              title={
-                r.canDuplicate
-                  ? 'Server-side copy: same archetype + state, fresh identity'
-                  : 'Profile cap reached — delete a profile or upgrade'
-              }
-            >
-              Duplicate
-            </button>
-            <button
-              type="button"
               className="text-[11px] text-ink-muted hover:text-status-error disabled:opacity-50"
               onClick={stop(() => p.onDelete(r.id))}
               disabled={r.busy || r.running}
@@ -300,7 +293,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
       </tr>
       {p.organizeId === r.id && (
         <tr className="bg-surface-inset">
-          <td colSpan={9} className="px-3 py-2">
+          <td colSpan={COLS.length} className="px-3 py-2">
             {p.organizeSlot}
           </td>
         </tr>
