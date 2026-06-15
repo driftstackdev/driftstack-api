@@ -117,6 +117,17 @@ export function AgentChatView({
     if (id === activeChatId) handleNewChat();
   }
 
+  // a11y: Escape closes the save dialog (matches ConfirmProvider / the create
+  // modal). The backdrop already closes on click; keyboard users need a key path.
+  useEffect(() => {
+    if (!saveOpen) return undefined;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && !saving) setSaveOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [saveOpen, saving]);
+
   async function saveRecipe(): Promise<void> {
     if (!client || chat.session === null) return;
     const label = recipeLabel.trim();
