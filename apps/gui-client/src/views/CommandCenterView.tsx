@@ -366,7 +366,11 @@ function SessionHealthStrip({ state }: { state: HealthState }): JSX.Element {
   }
   if (state.kind === 'loading') {
     return (
-      <div className="h-[64px] animate-pulse rounded-xl border border-surface-divider bg-surface-inset" />
+      <div
+        role="status"
+        aria-label="Loading session health"
+        className="h-[64px] animate-pulse rounded-xl border border-surface-divider bg-surface-inset"
+      />
     );
   }
   if (state.kind === 'error') {
@@ -429,7 +433,11 @@ function ActivityFeed({ state }: { state: ActivityState }): JSX.Element {
   }
   if (state.kind === 'loading') {
     return (
-      <div className="h-[120px] animate-pulse rounded-xl border border-surface-divider bg-surface-inset" />
+      <div
+        role="status"
+        aria-label="Loading recent activity"
+        className="h-[120px] animate-pulse rounded-xl border border-surface-divider bg-surface-inset"
+      />
     );
   }
   if (state.kind === 'error') {
