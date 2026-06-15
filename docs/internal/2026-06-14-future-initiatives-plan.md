@@ -11,8 +11,11 @@ do them."
 > create was already a tabbed configurator w/ proxy-test + templates + WG/OVPN placeholders; G7 live
 > streaming GATED on Agent-1). F-phase started. **F1a DONE** — `lib/assistant-templates.ts`: shipped
 > default templates (warm-browse/warm-search/open-screenshot/add-to-cart) + custom-template store +
-> pure validation/merge; assistant-templates.test.ts (5). NEXT F1b: the right-sidebar assistant panel
-> consuming these → seeds AgentChatView/useAgentChat({profileId}).
+> pure validation/merge; assistant-templates.test.ts (5). **F1b DONE** — the AI-chat (AgentChatView)
+> empty state now surfaces the default templates as named preset cards (label + description → seeds the
+> composer), replacing the hardcoded examples. **NEXT F1c:** the right-sidebar assistant panel scoped to
+> a profile (drawer in the grid → opens AI chat with that profile + template); needs App routing
+> (`{kind:'ai', profileId?, prompt?}`) + the drawer. GX phone-card demo awaits founder sign-off.
 
 ## F1 — Per-profile AI assistant with templates (right sidebar)
 

@@ -21,17 +21,12 @@ import type {
 import { useSettings } from '../lib/SettingsContext';
 import { useToasts } from '../lib/toasts';
 import { useAgentChat, type ChatModel, type ChatTurn } from '../lib/use-agent-chat';
+import { DEFAULT_ASSISTANT_TEMPLATES } from '../lib/assistant-templates';
 
 const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
   { id: 'claude-opus-4-7', label: 'Opus 4.7' },
   { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
   { id: 'claude-haiku-4-5', label: 'Haiku 4.5' },
-];
-
-const EXAMPLES: ReadonlyArray<string> = [
-  'Open example.com and take a screenshot',
-  'Go to a product page, add 3 items to the cart, stop before paying',
-  'Search for "wireless headphones" and capture the first results page',
 ];
 
 export function AgentChatView(): JSX.Element {
@@ -497,21 +492,25 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }): JSX.Element
         <IconSparkle />
       </span>
       <div className="flex flex-col gap-1">
-        <p className="text-base font-medium text-ink-primary">Ask Driftstack to automate a task</p>
+        <p className="text-base font-medium text-ink-primary">
+          Start from a template or describe a task
+        </p>
         <p className="text-sm text-ink-muted">
-          Describe what you want in plain language. Driftstack plans the steps and runs them on a
-          session — pausing for your approval before anything consequential.
+          Pick a template below, or describe what you want in plain language. Driftstack plans the
+          steps and runs them on a session — pausing for your approval before anything
+          consequential.
         </p>
       </div>
-      <div className="flex flex-col gap-1.5">
-        {EXAMPLES.map((ex) => (
+      <div className="flex w-full flex-col gap-1.5">
+        {DEFAULT_ASSISTANT_TEMPLATES.map((t) => (
           <button
-            key={ex}
+            key={t.id}
             type="button"
-            onClick={() => onPick(ex)}
-            className="rounded-md border border-surface-divider bg-surface-raised px-3 py-1.5 text-left text-xs text-ink-secondary transition-colors hover:border-accent/50 hover:text-ink-primary"
+            onClick={() => onPick(t.prompt)}
+            className="flex flex-col gap-0.5 rounded-md border border-surface-divider bg-surface-raised px-3 py-2 text-left transition-colors hover:border-accent/50"
           >
-            {ex}
+            <span className="text-xs font-medium text-ink-primary">{t.label}</span>
+            <span className="text-2xs text-ink-muted">{t.description}</span>
           </button>
         ))}
       </div>
