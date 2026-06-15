@@ -88,11 +88,13 @@ const structuredData = {
 
 <!-- Fleet token axes (2026-06-12 rework): data-mode/data-accent drive the
      tk-* token classes + token-aware components (styles/base.css).
-     light+violet = the founder-locked default. dark: variants now key off [data-mode="dark"] (tailwind darkMode selector).
+     dark+oxblood = the founder-locked default (2026-06-15: "Fleet Mission
+     Control" brand — Dark + Red, matching the GUI standard). dark: variants
+     key off [data-mode="dark"] (tailwind darkMode selector).
      NOTE: nothing may sit between doctype and <html> — a JSX comment there
      makes the Astro compiler DROP the <html> element (and the axes). -->
 <!doctype html>
-<html lang="en" data-mode="light" data-accent="violet">
+<html lang="en" data-mode="dark" data-accent="oxblood">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

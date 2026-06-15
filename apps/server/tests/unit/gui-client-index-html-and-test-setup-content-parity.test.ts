@@ -29,7 +29,7 @@ describe('W791 gui-client index.html + tests/setup.ts content parity', () => {
   it('CRITICAL <html data-mode/data-accent> Fleet token axes pinned (light+violet default, founder-locked 2026-06-12). dark: variants + the semantic palette key off [data-mode=dark].', () => {
     const p = read(INDEX_HTML);
 
-    expect(p).toMatch(/<html lang="en" data-mode="light" data-accent="violet">/);
+    expect(p).toMatch(/<html lang="en" data-mode="dark" data-accent="oxblood">/);
   });
 
   it('CRITICAL color-scheme meta pinned: "light dark" — the actual scheme is set per data-mode in styles/index.css (light default).', () => {
