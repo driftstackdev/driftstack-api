@@ -78,6 +78,10 @@ export interface UseAgentChatResult {
   approve: () => Promise<void>;
   deny: () => void;
   reset: () => void;
+  /** Load a saved transcript into the view (reopening a past chat). The live
+   *  server session is dropped — continuing the chat starts a fresh session,
+   *  while the restored transcript stays visible as the chat's memory. */
+  restore: (turns: ReadonlyArray<ChatTurn>) => void;
 }
 
 export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
@@ -193,5 +197,27 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     setLastUserMessage(null);
   }, []);
 
-  return { turns, session, sending, error, pendingConfirmation, send, approve, deny, reset };
+  const restore = useCallback((restoredTurns: ReadonlyArray<ChatTurn>): void => {
+    setTurns([...restoredTurns]);
+    setSession(null);
+    setError(null);
+    setResolvedTurnId(null);
+    setLastUserMessage(null);
+    // Keep new turn ids monotonic above the restored max so React keys + the
+    // confirmation lookup stay correct when the customer continues the chat.
+    idRef.current = restoredTurns.reduce((m, t) => Math.max(m, t.id), 0);
+  }, []);
+
+  return {
+    turns,
+    session,
+    sending,
+    error,
+    pendingConfirmation,
+    send,
+    approve,
+    deny,
+    reset,
+    restore,
+  };
 }

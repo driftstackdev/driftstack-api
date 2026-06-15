@@ -11,7 +11,7 @@
 // this deployment until the live webkit driver is enabled (driver:mock). The
 // banner says so — no pretending.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   AgentIntent,
   AgentIntentResult,
@@ -22,6 +22,14 @@ import { useSettings } from '../lib/SettingsContext';
 import { useToasts } from '../lib/toasts';
 import { useAgentChat, type ChatModel, type ChatTurn } from '../lib/use-agent-chat';
 import { DEFAULT_ASSISTANT_TEMPLATES } from '../lib/assistant-templates';
+import {
+  loadChats,
+  upsertChat,
+  deleteChat,
+  deriveChatTitle,
+  type StoredChat,
+} from '../lib/chat-history';
+import { RelativeTime } from '../components/RelativeTime';
 
 const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
   { id: 'claude-opus-4-7', label: 'Opus 4.7' },
@@ -61,6 +69,53 @@ export function AgentChatView({
   const [recipeDesc, setRecipeDesc] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Multi-chat history (memory): each chat is persisted as its own transcript
+  // so the customer can keep several conversations and reopen past ones.
+  const [chats, setChats] = useState<ReadonlyArray<StoredChat>>([]);
+  const [activeChatId, setActiveChatId] = useState<string>(() => crypto.randomUUID());
+  const createdAtRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    void loadChats().then(setChats);
+  }, []);
+  // Persist the active chat whenever its transcript changes (skip the empty
+  // pre-first-message state). createdAt is sticky per chat id.
+  useEffect(() => {
+    if (chat.turns.length === 0) return;
+    const now = Date.now();
+    const createdAt = createdAtRef.current[activeChatId] ?? now;
+    createdAtRef.current[activeChatId] = createdAt;
+    void upsertChat(
+      {
+        id: activeChatId,
+        title: deriveChatTitle(chat.turns),
+        profileId,
+        model,
+        turns: [...chat.turns],
+        createdAt,
+        updatedAt: now,
+      },
+      now,
+    ).then(setChats);
+  }, [chat.turns, activeChatId, profileId, model]);
+
+  function handleNewChat(): void {
+    chat.reset();
+    setActiveChatId(crypto.randomUUID());
+    setProfileId(initialProfileId ?? '');
+  }
+  function handleSelectChat(c: StoredChat): void {
+    if (c.id === activeChatId) return;
+    createdAtRef.current[c.id] = c.createdAt;
+    setActiveChatId(c.id);
+    setProfileId(c.profileId);
+    setModel(c.model);
+    chat.restore(c.turns);
+  }
+  function handleDeleteChat(id: string): void {
+    void deleteChat(id).then(setChats);
+    if (id === activeChatId) handleNewChat();
+  }
 
   async function saveRecipe(): Promise<void> {
     if (!client || chat.session === null) return;
@@ -121,200 +176,210 @@ export function AgentChatView({
   }
 
   return (
-    <div className="flex h-full flex-col bg-surface-base">
-      {/* Header */}
-      <header className="flex items-center justify-between gap-3 border-b border-surface-divider px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded bg-accent-subtle text-accent">
-            <IconSparkle />
-          </span>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-ink-primary">Driftstack AI</span>
-            <span className="text-2xs text-ink-muted">natural-language automation</span>
-          </div>
-          <span
-            className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${
-              aiReady
-                ? 'bg-status-ready/15 text-status-ready'
-                : 'bg-status-error/15 text-status-error'
-            }`}
-            title={
-              aiReady
-                ? 'Connected — the assistant is ready.'
-                : 'No API key — connect one in Settings before sending.'
-            }
-          >
+    <div className="flex h-full bg-surface-base">
+      <ChatRail
+        chats={chats}
+        activeId={activeChatId}
+        onNew={handleNewChat}
+        onSelect={handleSelectChat}
+        onDelete={handleDeleteChat}
+      />
+      <div className="flex h-full min-w-0 flex-1 flex-col">
+        {/* Header */}
+        <header className="flex items-center justify-between gap-3 border-b border-surface-divider px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <span className="flex h-6 w-6 items-center justify-center rounded bg-accent-subtle text-accent">
+              <IconSparkle />
+            </span>
+            <div className="flex flex-col">
+              <span className="text-sm font-medium text-ink-primary">Driftstack AI</span>
+              <span className="text-2xs text-ink-muted">natural-language automation</span>
+            </div>
             <span
-              className={`h-1.5 w-1.5 rounded-full ${aiReady ? 'bg-status-ready' : 'bg-status-error'}`}
-            />
-            {aiReady ? 'AI ready' : 'Not connected'}
+              className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${
+                aiReady
+                  ? 'bg-status-ready/15 text-status-ready'
+                  : 'bg-status-error/15 text-status-error'
+              }`}
+              title={
+                aiReady
+                  ? 'Connected — the assistant is ready.'
+                  : 'No API key — connect one in Settings before sending.'
+              }
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${aiReady ? 'bg-status-ready' : 'bg-status-error'}`}
+              />
+              {aiReady ? 'AI ready' : 'Not connected'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {chat.session !== null && (
+              <BudgetMeter
+                remaining={chat.session.token_budget_remaining}
+                total={chat.session.token_budget_total}
+              />
+            )}
+            <select
+              aria-label="Profile"
+              value={profileId}
+              disabled={started}
+              onChange={(e) => setProfileId(e.target.value)}
+              className="max-w-[10rem] truncate rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary disabled:opacity-60"
+              title={
+                started
+                  ? 'Profile is locked for this chat — start a new chat to change it'
+                  : 'Which profile the agent works on. Temporary = a throwaway session that saves nothing.'
+              }
+            >
+              <option value="">Temporary profile (saves nothing)</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="Model"
+              value={model}
+              disabled={started}
+              onChange={(e) => setModel(e.target.value as ChatModel)}
+              className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary disabled:opacity-60"
+              title={
+                started
+                  ? 'Model is locked for the current chat — start a new chat to change it'
+                  : 'Model'
+              }
+            >
+              {MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                setSaveError(null);
+                setSaveOpen(true);
+              }}
+              disabled={!canSaveRecipe || chat.sending}
+              className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
+              title={
+                canSaveRecipe
+                  ? 'Save this chat as a replayable task you can re-run later'
+                  : 'Run at least one task first, then save it to replay later'
+              }
+            >
+              Save as task
+            </button>
+            <button
+              type="button"
+              onClick={handleNewChat}
+              disabled={!started || chat.sending}
+              className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
+            >
+              New chat
+            </button>
+          </div>
+        </header>
+
+        {/* Honest execution-mode banner */}
+        <div className="border-b border-surface-divider bg-surface-inset px-4 py-1.5">
+          <span className="text-2xs text-ink-muted">
+            Plans are generated by Claude in real time. Browser actions are simulated in this
+            deployment until the live device driver is enabled.
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          {chat.session !== null && (
-            <BudgetMeter
-              remaining={chat.session.token_budget_remaining}
-              total={chat.session.token_budget_total}
-            />
+
+        {/* Transcript */}
+        <div className="flex-1 overflow-auto px-4 py-4">
+          {!started ? (
+            <EmptyState onPick={(t) => setDraft(t)} />
+          ) : (
+            <ol className="mx-auto flex max-w-3xl flex-col gap-3">
+              {chat.turns.map((turn) => (
+                <TurnRow key={turn.id} turn={turn} />
+              ))}
+              {chat.sending && <TypingRow />}
+            </ol>
           )}
-          <select
-            aria-label="Profile"
-            value={profileId}
-            disabled={started}
-            onChange={(e) => setProfileId(e.target.value)}
-            className="max-w-[10rem] truncate rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary disabled:opacity-60"
-            title={
-              started
-                ? 'Profile is locked for this chat — start a new chat to change it'
-                : 'Which profile the agent works on. Temporary = a throwaway session that saves nothing.'
-            }
-          >
-            <option value="">Temporary profile (saves nothing)</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Model"
-            value={model}
-            disabled={started}
-            onChange={(e) => setModel(e.target.value as ChatModel)}
-            className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary disabled:opacity-60"
-            title={
-              started
-                ? 'Model is locked for the current chat — start a new chat to change it'
-                : 'Model'
-            }
-          >
-            {MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => {
-              setSaveError(null);
-              setSaveOpen(true);
-            }}
-            disabled={!canSaveRecipe || chat.sending}
-            className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
-            title={
-              canSaveRecipe
-                ? 'Save this chat as a replayable task you can re-run later'
-                : 'Run at least one task first, then save it to replay later'
-            }
-          >
-            Save as task
-          </button>
-          <button
-            type="button"
-            onClick={chat.reset}
-            disabled={!started || chat.sending}
-            className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
-          >
-            New chat
-          </button>
         </div>
-      </header>
 
-      {/* Honest execution-mode banner */}
-      <div className="border-b border-surface-divider bg-surface-inset px-4 py-1.5">
-        <span className="text-2xs text-ink-muted">
-          Plans are generated by Claude in real time. Browser actions are simulated in this
-          deployment until the live device driver is enabled.
-        </span>
-      </div>
-
-      {/* Transcript */}
-      <div className="flex-1 overflow-auto px-4 py-4">
-        {!started ? (
-          <EmptyState onPick={(t) => setDraft(t)} />
-        ) : (
-          <ol className="mx-auto flex max-w-3xl flex-col gap-3">
-            {chat.turns.map((turn) => (
-              <TurnRow key={turn.id} turn={turn} />
-            ))}
-            {chat.sending && <TypingRow />}
-          </ol>
-        )}
-      </div>
-
-      {/* Consequential-action confirmation gate */}
-      {chat.pendingConfirmation !== null && (
-        <div className="border-t border-status-busy/40 bg-status-busy/10 px-4 py-3">
-          <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-ink-primary">Confirm before continuing</p>
-              <p className="truncate text-xs text-ink-secondary">
-                The agent wants to perform a {categoryLabel(chat.pendingConfirmation.category)}:{' '}
-                <span className="font-medium text-ink-primary">
-                  “{chat.pendingConfirmation.matchedText}”
-                </span>
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                onClick={chat.deny}
-                disabled={chat.sending}
-                className="btn-secondary px-3 py-1 text-xs disabled:opacity-50"
-              >
-                Deny
-              </button>
-              <button
-                type="button"
-                onClick={() => void chat.approve()}
-                disabled={chat.sending}
-                className="btn-primary px-3 py-1 text-xs disabled:opacity-50"
-              >
-                Approve
-              </button>
+        {/* Consequential-action confirmation gate */}
+        {chat.pendingConfirmation !== null && (
+          <div className="border-t border-status-busy/40 bg-status-busy/10 px-4 py-3">
+            <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-ink-primary">Confirm before continuing</p>
+                <p className="truncate text-xs text-ink-secondary">
+                  The agent wants to perform a {categoryLabel(chat.pendingConfirmation.category)}:{' '}
+                  <span className="font-medium text-ink-primary">
+                    “{chat.pendingConfirmation.matchedText}”
+                  </span>
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={chat.deny}
+                  disabled={chat.sending}
+                  className="btn-secondary px-3 py-1 text-xs disabled:opacity-50"
+                >
+                  Deny
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void chat.approve()}
+                  disabled={chat.sending}
+                  className="btn-primary px-3 py-1 text-xs disabled:opacity-50"
+                >
+                  Approve
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Error */}
-      {chat.error !== null && (
-        <div className="border-t border-status-error/40 bg-status-error/10 px-4 py-2">
-          <p className="mx-auto max-w-3xl text-xs text-status-error">{chat.error}</p>
-        </div>
-      )}
+        {/* Error */}
+        {chat.error !== null && (
+          <div className="border-t border-status-error/40 bg-status-error/10 px-4 py-2">
+            <p className="mx-auto max-w-3xl text-xs text-status-error">{chat.error}</p>
+          </div>
+        )}
 
-      {/* Composer */}
-      <div className="border-t border-surface-divider px-4 py-3">
-        <div className="mx-auto flex max-w-3xl items-end gap-2">
-          <textarea
-            aria-label="Message Driftstack AI"
-            rows={1}
-            value={draft}
-            placeholder="Describe a task — e.g. “open example.com and take a screenshot”"
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-            className="form-input max-h-40 min-h-[2.25rem] flex-1 resize-none"
-          />
-          <button
-            type="button"
-            onClick={submit}
-            disabled={draft.trim().length === 0 || chat.sending}
-            className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
-          >
-            {chat.sending ? 'Sending…' : 'Send'}
-          </button>
+        {/* Composer */}
+        <div className="border-t border-surface-divider px-4 py-3">
+          <div className="mx-auto flex max-w-3xl items-end gap-2">
+            <textarea
+              aria-label="Message Driftstack AI"
+              rows={1}
+              value={draft}
+              placeholder="Describe a task — e.g. “open example.com and take a screenshot”"
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+              className="form-input max-h-40 min-h-[2.25rem] flex-1 resize-none"
+            />
+            <button
+              type="button"
+              onClick={submit}
+              disabled={draft.trim().length === 0 || chat.sending}
+              className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
+            >
+              {chat.sending ? 'Sending…' : 'Send'}
+            </button>
+          </div>
+          <p className="mx-auto mt-1 max-w-3xl text-2xs text-ink-muted">
+            Enter to send · Shift+Enter for a new line
+          </p>
         </div>
-        <p className="mx-auto mt-1 max-w-3xl text-2xs text-ink-muted">
-          Enter to send · Shift+Enter for a new line
-        </p>
       </div>
+      {/* end main column */}
 
       {/* Save-as-recipe dialog */}
       {saveOpen && (
@@ -384,6 +449,78 @@ export function AgentChatView({
         </div>
       )}
     </div>
+  );
+}
+
+// ─── chat history rail ────────────────────────────────────────────
+
+function ChatRail({
+  chats,
+  activeId,
+  onNew,
+  onSelect,
+  onDelete,
+}: {
+  chats: ReadonlyArray<StoredChat>;
+  activeId: string;
+  onNew: () => void;
+  onSelect: (c: StoredChat) => void;
+  onDelete: (id: string) => void;
+}): JSX.Element {
+  return (
+    <aside className="flex w-52 shrink-0 flex-col border-r border-surface-divider bg-surface-raised/60">
+      <div className="border-b border-surface-divider p-2">
+        <button
+          type="button"
+          onClick={onNew}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-hover"
+        >
+          + New chat
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-1.5">
+        {chats.length === 0 ? (
+          <p className="px-2 py-3 text-2xs text-ink-muted">
+            Your chats are saved here so you can pick one back up later.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-0.5">
+            {chats.map((c) => (
+              <li key={c.id}>
+                <div
+                  className={`group flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors ${
+                    c.id === activeId ? 'bg-accent-subtle' : 'hover:bg-surface-elevated'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onSelect(c)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <span className="block truncate text-xs text-ink-primary">{c.title}</span>
+                    <span className="block text-2xs text-ink-muted">
+                      <RelativeTime
+                        iso={new Date(c.updatedAt).toISOString()}
+                        tooltipPrefix="Updated"
+                      />
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete chat ${c.title}`}
+                    title="Delete chat"
+                    onClick={() => onDelete(c.id)}
+                    className="shrink-0 px-1 text-ink-muted opacity-0 transition-opacity hover:text-status-error group-hover:opacity-100"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </aside>
   );
 }
 
