@@ -95,35 +95,36 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           className="absolute left-1/2 top-2 z-30 h-[12px] w-[42px] -translate-x-1/2 rounded-[8px] bg-[#05070b]"
         />
 
-        {/* status bar — select (reserved space, fades in) + readable device
-            chip on the left, Live/Idle on the right. */}
-        <div className="relative z-20 flex items-center justify-between px-2.5 pb-1 pt-2.5">
-          <span className="flex items-center gap-1.5">
-            <label
-              className={`grid h-3.5 w-3.5 cursor-pointer place-items-center transition-opacity ${
-                p.selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-              }`}
-              title="Select for bulk actions"
-            >
-              <input
-                type="checkbox"
-                className="h-3.5 w-3.5 cursor-pointer accent-accent"
-                checked={p.selected}
-                onChange={p.onToggleSelect}
-                aria-label={`Select ${p.name}`}
-              />
-            </label>
-            <span className="rounded bg-black/35 px-1.5 py-0.5 text-[9.5px] font-semibold tracking-tight text-ink-primary">
-              {p.deviceLabel}
-            </span>
+        {/* select checkbox — absolutely placed so it never steals width from the
+            device label (the old inline layout truncated "iPhone 17"). */}
+        <label
+          className={`absolute left-1.5 top-[9px] z-30 grid h-3.5 w-3.5 cursor-pointer place-items-center transition-opacity ${
+            p.selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+          title="Select for bulk actions"
+        >
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 cursor-pointer accent-accent"
+            checked={p.selected}
+            onChange={p.onToggleSelect}
+            aria-label={`Select ${p.name}`}
+          />
+        </label>
+
+        {/* status bar — readable device chip (left) + Live/Idle (right). Sits
+            BELOW the dynamic island (pt clears it) so neither overlaps the label. */}
+        <div className="relative z-20 flex items-center justify-between gap-1 px-2.5 pb-1 pt-[26px]">
+          <span className="truncate rounded bg-black/35 px-1.5 py-0.5 text-[10px] font-semibold tracking-tight text-ink-primary">
+            {p.deviceLabel}
           </span>
           {p.running ? (
-            <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wider text-status-ready">
+            <span className="inline-flex shrink-0 items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wider text-status-ready">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready shadow-[0_0_6px_rgb(var(--status-ready-rgb))]" />
               Live
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wider text-ink-muted">
+            <span className="inline-flex shrink-0 items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wider text-ink-muted">
               <span className="h-1.5 w-1.5 rounded-full border border-ink-muted" />
               Idle
             </span>
@@ -135,8 +136,8 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           {/* identity */}
           <div className="flex flex-col items-center gap-1 pt-1">
             <span
-              className="grid h-10 w-10 place-items-center rounded-full text-[14px] font-bold text-white/95 ring-1 ring-white/15"
-              style={{ background: 'rgba(255,255,255,0.1)' }}
+              className="grid h-10 w-10 place-items-center rounded-full text-[14px] font-bold text-white ring-1 ring-white/20"
+              style={{ background: `hsl(${p.hue} 48% 44%)` }}
             >
               {p.monogram}
             </span>
