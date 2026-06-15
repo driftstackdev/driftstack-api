@@ -46,6 +46,8 @@ export interface ProfilePhoneCardProps {
   onWatch: () => void; // 💬 live view / launch & watch
   onOrganizeToggle: () => void;
   onTest: () => void;
+  /** F1c — open the AI assistant scoped to this profile. Omitted = hidden. */
+  onAssist?: () => void;
 }
 
 export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
@@ -89,6 +91,22 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             </span>
           )}
         </div>
+
+        {/* F1c — "Assist with AI" — top-right, hover-reveal so it stays clean. */}
+        {p.onAssist ? (
+          <button
+            type="button"
+            aria-label={`Ask the AI assistant about ${p.name}`}
+            title="Ask Driftstack AI to work on this profile"
+            onClick={(e) => {
+              e.stopPropagation();
+              p.onAssist?.();
+            }}
+            className="absolute right-2.5 top-1.5 z-30 grid h-5 w-5 place-items-center rounded-full bg-black/30 text-[11px] text-white/85 opacity-0 transition-opacity hover:text-white group-hover:opacity-100"
+          >
+            ✦
+          </button>
+        ) : null}
 
         {/* selection checkbox — top-left on hover/selected */}
         <label

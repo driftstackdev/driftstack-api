@@ -127,9 +127,15 @@ export interface ProfilesViewProps {
   onGoToSettings: () => void;
   /** Open the live-session view for a specific session id. */
   onOpenSession: (sessionId: string) => void;
+  /** F1c — open the AI assistant scoped to a profile (from a card's "Assist"). */
+  onAssist?: (profileId: string) => void;
 }
 
-export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProps): JSX.Element {
+export function ProfilesView({
+  onGoToSettings,
+  onOpenSession,
+  onAssist,
+}: ProfilesViewProps): JSX.Element {
   const { client, settings, accountMe, refreshAccountMe, activeWorkspace, setActiveWorkspace } =
     useSettings();
   // W625 — surface the connected server's session driver so we can warn up
@@ -1476,6 +1482,7 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                       onTest={() => {
                         if (px !== null) void handleTestProxy(px);
                       }}
+                      onAssist={onAssist ? () => onAssist(profile.id) : undefined}
                     />
                   );
                 })}

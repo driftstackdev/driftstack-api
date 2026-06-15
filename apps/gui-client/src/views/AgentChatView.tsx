@@ -29,11 +29,17 @@ const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
   { id: 'claude-haiku-4-5', label: 'Haiku 4.5' },
 ];
 
-export function AgentChatView(): JSX.Element {
+export function AgentChatView({
+  initialProfileId,
+}: {
+  /** F1c — preselect the profile the assistant works on (deep-linked from a
+   *  profile card's "Assist"). Locks once a chat starts, like the picker. */
+  initialProfileId?: string;
+} = {}): JSX.Element {
   const { client } = useSettings();
   const toasts = useToasts();
   const [model, setModel] = useState<ChatModel>('claude-opus-4-7');
-  const [profileId, setProfileId] = useState<string>('');
+  const [profileId, setProfileId] = useState<string>(initialProfileId ?? '');
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState('');
   const chat = useAgentChat({ model, ...(profileId !== '' ? { profileId } : {}) });

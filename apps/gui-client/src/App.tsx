@@ -38,7 +38,7 @@ import { checkForUpdate, type AvailableUpdate } from './lib/updater';
 
 type View =
   | { kind: 'home' }
-  | { kind: 'ai' }
+  | { kind: 'ai'; profileId?: string }
   | { kind: 'recipes' }
   | { kind: 'logs' }
   | { kind: 'sessions' }
@@ -319,7 +319,7 @@ function CurrentView({
     case 'home':
       return <CommandCenterView onNavigate={(kind) => onNavigate({ kind })} />;
     case 'ai':
-      return <AgentChatView />;
+      return <AgentChatView initialProfileId={view.profileId} />;
     case 'recipes':
       return <RecipesView />;
     case 'logs':
@@ -367,6 +367,7 @@ function CurrentView({
         <ProfilesView
           onGoToSettings={() => onNavigate({ kind: 'settings' })}
           onOpenSession={(sessionId) => onNavigate({ kind: 'live-session', sessionId })}
+          onAssist={(profileId) => onNavigate({ kind: 'ai', profileId })}
         />
       );
     case 'sessions-history':

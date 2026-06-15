@@ -13,7 +13,7 @@ do them."
 > default templates (warm-browse/warm-search/open-screenshot/add-to-cart) + custom-template store +
 > pure validation/merge; assistant-templates.test.ts (5). **F1b DONE** — the AI-chat (AgentChatView)
 > empty state now surfaces the default templates as named preset cards (label + description → seeds the
-> composer), replacing the hardcoded examples. **NEXT F1c:** the right-sidebar assistant panel scoped to
+> composer), replacing the hardcoded examples. **F1c DONE** (card "✦ Assist" → AI chat scoped to the profile via {kind:'ai',profileId}). NEXT F1d (optional): a persistent right-rail panel. Was: right-sidebar assistant panel scoped to
 > a profile (drawer in the grid → opens AI chat with that profile + template); needs App routing
 > (`{kind:'ai', profileId?, prompt?}`) + the drawer. GX phone-card demo awaits founder sign-off.
 

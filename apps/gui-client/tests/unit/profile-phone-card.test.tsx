@@ -81,6 +81,17 @@ describe('ProfilePhoneCard', () => {
     cleanup();
   });
 
+  it('F1c: the Assist button fires onAssist when provided, absent otherwise', () => {
+    const onAssist = vi.fn();
+    render(<ProfilePhoneCard {...props({ onAssist })} />);
+    fireEvent.click(screen.getByLabelText(/Ask the AI assistant about/));
+    expect(onAssist).toHaveBeenCalledTimes(1);
+    cleanup();
+    render(<ProfilePhoneCard {...props({ onAssist: undefined })} />);
+    expect(screen.queryByLabelText(/Ask the AI assistant about/)).toBeNull();
+    cleanup();
+  });
+
   it('renders folder + tag pills', () => {
     render(<ProfilePhoneCard {...props({ folder: 'Shopping', tags: ['aged'] })} />);
     expect(screen.getByText('📁 Shopping')).toBeTruthy();
