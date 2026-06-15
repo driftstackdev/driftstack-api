@@ -68,7 +68,18 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
 
   return (
     <article
-      className={`group relative rounded-[24px] border p-1.5 transition-all hover:-translate-y-0.5 hover:shadow-xl ${
+      role="button"
+      tabIndex={0}
+      aria-pressed={p.selected}
+      aria-label={`Select ${p.name}`}
+      onClick={p.onToggleSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          p.onToggleSelect();
+        }
+      }}
+      className={`group relative cursor-pointer rounded-[24px] border p-1.5 transition-all hover:-translate-y-0.5 hover:shadow-xl ${
         p.selected
           ? 'border-accent shadow-[0_0_0_2px_rgb(var(--accent-rgb)),0_10px_26px_rgba(0,0,0,0.5)]'
           : p.running
@@ -109,22 +120,19 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           className="absolute left-1/2 top-2 z-30 h-[12px] w-[42px] -translate-x-1/2 rounded-[8px] bg-[#05070b]"
         />
 
-        {/* select checkbox — absolutely placed so it never steals width from the
-            device label (the old inline layout truncated "iPhone 17"). */}
-        <label
-          className={`absolute left-1.5 top-[9px] z-30 grid h-3.5 w-3.5 cursor-pointer place-items-center transition-opacity ${
-            p.selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        {/* selection marker — the whole card toggles selection on click, so this
+            is just a non-interactive indicator: accent check when selected, a
+            faint hint ring on hover. */}
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute left-1.5 top-[7px] z-30 grid h-4 w-4 place-items-center rounded-full text-[9px] font-bold transition-all ${
+            p.selected
+              ? 'bg-accent text-white opacity-100'
+              : 'border border-white/45 text-transparent opacity-0 group-hover:opacity-100'
           }`}
-          title="Select for bulk actions"
         >
-          <input
-            type="checkbox"
-            className="h-3.5 w-3.5 cursor-pointer accent-accent"
-            checked={p.selected}
-            onChange={p.onToggleSelect}
-            aria-label={`Select ${p.name}`}
-          />
-        </label>
+          ✓
+        </span>
 
         {/* status bar — readable device chip (left) + Live/Idle (right). Sits
             BELOW the dynamic island (pt clears it) so neither overlaps the label. */}
@@ -329,6 +337,11 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           >
             {p.running ? 'Open session' : p.busy ? 'Launching…' : 'Launch'}
           </button>
+          {/* iOS home indicator — sells the phone metaphor */}
+          <span
+            aria-hidden="true"
+            className="mx-auto mt-2 block h-1 w-10 rounded-full bg-ink-muted/40"
+          />
         </div>
       </div>
     </article>

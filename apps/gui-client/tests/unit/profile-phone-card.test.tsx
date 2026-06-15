@@ -102,14 +102,22 @@ describe('ProfilePhoneCard', () => {
     cleanup();
   });
 
-  it('selection + test fire their handlers; organizeSlot shows when open', () => {
+  it('clicking the card toggles selection; Launch + Test do NOT select (stopPropagation); organizeSlot shows when open', () => {
     const onToggleSelect = vi.fn();
     const onTest = vi.fn();
-    render(<ProfilePhoneCard {...props({ onToggleSelect, onTest, organizeOpen: true })} />);
+    const onPrimary = vi.fn();
+    render(
+      <ProfilePhoneCard {...props({ onToggleSelect, onTest, onPrimary, organizeOpen: true })} />,
+    );
+    // whole-card click selects (no more tiny checkbox)
     fireEvent.click(screen.getByLabelText(/Select amsterdam shopper/));
     expect(onToggleSelect).toHaveBeenCalledTimes(1);
+    // action buttons act without bubbling to a select toggle
     fireEvent.click(screen.getByTitle(/Test proxy/));
     expect(onTest).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Launch' }));
+    expect(onPrimary).toHaveBeenCalledTimes(1);
+    expect(onToggleSelect).toHaveBeenCalledTimes(1); // still 1 — buttons don't select
     expect(screen.getByTestId('org-slot')).toBeTruthy();
     cleanup();
   });
