@@ -136,6 +136,8 @@ describe('W361.B customer-dashboard /profiles page content parity', () => {
 
   it('"custom" tier limit displays as "Custom" (enterprise)', () => {
     expect(body).toMatch(/profileLimit === 'custom' \? 'Custom' : profileLimit\.toString\(\)/);
-    expect(body).toMatch(/value === 'custom' \? 'custom' : `\$\{value\.toString\(\)\} profiles`/);
+    // The value line is the bare count (or "custom"); the card's own
+    // "profiles" sub-label supplies the unit, so fmtLimit must NOT re-append it.
+    expect(body).toMatch(/value === 'custom' \? 'custom' : value\.toString\(\)/);
   });
 });

@@ -58,8 +58,11 @@ const TIER_DISPLAY_ORDER: ReadonlyArray<{ id: AccountTier; label: string }> = [
   { id: 'enterprise', label: 'Enterprise' },
 ];
 
+// The per-tier ceiling card already prints a "profiles" unit sub-label, so
+// the value line is just the count (or "custom") — otherwise the unit doubles
+// up ("500 profiles" over "profiles").
 function fmtLimit(value: number | 'custom'): string {
-  return value === 'custom' ? 'custom' : `${value.toString()} profiles`;
+  return value === 'custom' ? 'custom' : value.toString();
 }
 
 import { resolveApiBaseUrl } from '../lib/api-base-url';
