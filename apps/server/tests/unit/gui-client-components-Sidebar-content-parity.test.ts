@@ -26,7 +26,7 @@ describe('W486.S apps/gui-client/src/components/Sidebar.tsx content parity', () 
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("section taxonomy pinned: 'Home' (Command Center) + 'Automate' (AI chat + Recipes) lead, then 'Browse' (Profiles + Proxies) + 'History' (Session log + Recordings) + 'Diagnostics' (Raw sessions + Connectivity test) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional) — the IA grouping leads with automation per the founder's 5→10 direction; do not collapse / rename sections without updating the GUI snapshot tests + this pin. 'Home' added by the G4 Command Center slice.", () => {
+  it("section taxonomy pinned: 'Home' (Command Center) + 'Browse' (Profiles + Proxies) lead, then 'Automate' (AI chat + Recipes) + 'History' (Session log + Recordings) + 'Diagnostics' (Raw sessions + Connectivity test) + 'Cluster' (Mac mini fleet, cloud-customer-gated via isCloudBaseUrl) + 'Account' (Settings, Team conditional) — 2026-06-15 the founder reversed the earlier automation-first call: Profiles is the core surface, so Browse sits directly under Home, Automate below it. Do not collapse / rename sections without updating the GUI snapshot tests + this pin. 'Home' added by the G4 Command Center slice.", () => {
     expect(body).toMatch(/<SidebarSection label="Home">/);
     expect(body).toMatch(/<SidebarSection label="Automate">/);
     expect(body).toMatch(/<SidebarSection label="Browse">/);

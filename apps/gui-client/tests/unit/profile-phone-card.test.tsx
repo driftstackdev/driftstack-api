@@ -22,6 +22,7 @@ function props(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardProps
     tags: [],
     hasProxy: true,
     flag: '🇳🇱',
+    countryCode: 'NL',
     exitIp: '82.14.220.9',
     latencyMs: 42,
     latencyFillPct: 30,
@@ -51,24 +52,26 @@ function props(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardProps
 }
 
 describe('ProfilePhoneCard', () => {
-  it('shows identity + device + real exit IP + capability chips; Launch fires onPrimary', () => {
+  it('shows identity + device + country + real exit IP + UDP badge; Launch fires onPrimary', () => {
     const onPrimary = vi.fn();
     render(<ProfilePhoneCard {...props({ onPrimary })} />);
     expect(screen.getByText('amsterdam shopper')).toBeTruthy();
     expect(screen.getByText('AS')).toBeTruthy();
     expect(screen.getByText('iPhone 17')).toBeTruthy();
     expect(screen.getByText('82.14.220.9')).toBeTruthy();
-    expect(screen.getByText('WebRTC')).toBeTruthy(); // capability chip
+    expect(screen.getByText('NL')).toBeTruthy(); // country code badge
+    expect(screen.getByText(/UDP/)).toBeTruthy(); // single UDP badge (hover → WebRTC/QUIC)
+    expect(screen.getByText(/WebRTC/)).toBeTruthy(); // hover detail (in DOM)
     expect(screen.getByText('Idle')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Launch' }));
     expect(onPrimary).toHaveBeenCalledTimes(1);
     cleanup();
   });
 
-  it('running → Live status + an "Open" primary action', () => {
+  it('running → Live status + an "Open session" primary action', () => {
     render(<ProfilePhoneCard {...props({ running: true })} />);
     expect(screen.getByText('Live')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open session' })).toBeTruthy();
     cleanup();
   });
 

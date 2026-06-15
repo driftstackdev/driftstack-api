@@ -1220,7 +1220,7 @@ export function ProfilesView({
       {selectedIds.size > 0 && (
         <div
           data-component="bulk-bar"
-          className="flex flex-wrap items-center gap-2 rounded-md border border-surface-divider bg-surface-raised px-3 py-2"
+          className="animate-view-in fixed bottom-5 left-1/2 z-40 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-wrap items-center gap-2 rounded-full border border-surface-divider bg-surface-elevated px-4 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.4)]"
         >
           <span className="text-xs font-medium text-ink-primary">
             {selectedIds.size.toString()} selected
@@ -1379,7 +1379,7 @@ export function ProfilesView({
           />
           <div className="min-w-0 flex-1">
             {viewMode === 'grid' ? (
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2.5">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(156px,1fr))] gap-3">
                 {filteredProfiles.length === 0 ? (
                   <div className="col-span-full">
                     <ProfilesEmpty hasActiveFilters={hasActiveFilters} onClear={clearFilters} />
@@ -1412,6 +1412,7 @@ export function ProfilesView({
                       tags={profilesMeta[profile.id]?.tags ?? []}
                       hasProxy={px !== null}
                       flag={probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
+                      countryCode={probe?.exitCountry ?? null}
                       exitIp={probe?.exitIp ?? null}
                       latencyMs={lat ?? null}
                       latencyFillPct={latFill}

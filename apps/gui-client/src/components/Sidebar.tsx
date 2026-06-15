@@ -86,23 +86,9 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
         </SidebarItem>
       </SidebarSection>
 
-      <SidebarSection label="Automate">
-        <SidebarItem
-          icon={<IconSparkle />}
-          active={current === 'ai'}
-          onClick={() => onNavigate('ai')}
-        >
-          AI chat
-        </SidebarItem>
-        <SidebarItem
-          icon={<IconBook />}
-          active={current === 'recipes'}
-          onClick={() => onNavigate('recipes')}
-        >
-          Recipes
-        </SidebarItem>
-      </SidebarSection>
-
+      {/* 2026-06-15 — founder reversed the earlier "Automate above Browse"
+          call: Profiles is the core surface, so Browse sits directly under
+          Home and Automate moves below it. */}
       <SidebarSection label="Browse">
         <SidebarItem
           icon={<IconLayers />}
@@ -119,6 +105,23 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
           badge={proxyCount === null ? null : String(proxyCount)}
         >
           Proxies
+        </SidebarItem>
+      </SidebarSection>
+
+      <SidebarSection label="Automate">
+        <SidebarItem
+          icon={<IconSparkle />}
+          active={current === 'ai'}
+          onClick={() => onNavigate('ai')}
+        >
+          AI chat
+        </SidebarItem>
+        <SidebarItem
+          icon={<IconBook />}
+          active={current === 'recipes'}
+          onClick={() => onNavigate('recipes')}
+        >
+          Recipes
         </SidebarItem>
       </SidebarSection>
 
