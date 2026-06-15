@@ -4,7 +4,7 @@
 // derivation (initials, casing, edge cases) + the hue determinism (a
 // non-deterministic hue would flicker the grid between renders).
 import { describe, it, expect } from 'vitest';
-import { profileMonogram, identityHue } from '../../src/views/ProfilesView';
+import { profileMonogram, identityHue, formatDeviceName } from '../../src/views/ProfilesView';
 
 describe('profileMonogram', () => {
   it('takes the first two initials for a multi-word name, uppercased', () => {
@@ -42,5 +42,19 @@ describe('identityHue', () => {
   it('distinguishes common names (different hues)', () => {
     const hues = new Set(['shop-eu', 'bank-us', 'ads-meta'].map(identityHue));
     expect(hues.size).toBe(3);
+  });
+});
+
+describe('formatDeviceName', () => {
+  it('renders the model from the archetype id (takes the first _ segment)', () => {
+    expect(formatDeviceName('iphone17_ios18_7_safari26_4')).toBe('iPhone 17');
+    expect(formatDeviceName('iphone16pro_ios18_7_safari26_4')).toBe('iPhone 16 Pro');
+    expect(formatDeviceName('iphone16promax')).toBe('iPhone 16 Pro Max');
+    expect(formatDeviceName('iphone16e')).toBe('iPhone 16e');
+  });
+
+  it('degrades gracefully for an unrecognized archetype', () => {
+    expect(formatDeviceName('pixel8_android14')).toBe('pixel8');
+    expect(formatDeviceName('')).toBe('iPhone');
   });
 });
