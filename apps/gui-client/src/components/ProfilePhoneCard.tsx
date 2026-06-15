@@ -17,6 +17,8 @@ import type { ProxyTestResult } from '../lib/proxies';
 export interface ProfilePhoneCardProps {
   name: string;
   monogram: string;
+  /** Optional chosen emoji icon; when set, shown instead of the monogram. */
+  icon?: string;
   /** 0–359 identity hue (screen wash). */
   hue: number;
   deviceLabel: string;
@@ -155,12 +157,14 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           {/* identity */}
           <div className="flex flex-col items-center gap-1 pt-1">
             <span
-              className="grid h-11 w-11 place-items-center rounded-full text-[15px] font-bold text-white shadow-[0_4px_12px_rgba(0,0,0,0.35)] ring-1 ring-white/25"
+              className={`grid h-11 w-11 place-items-center rounded-full font-bold text-white shadow-[0_4px_12px_rgba(0,0,0,0.35)] ring-1 ring-white/25 ${
+                p.icon ? 'text-[22px]' : 'text-[15px]'
+              }`}
               style={{
                 background: `linear-gradient(145deg, hsl(${p.hue} 58% 54%), hsl(${(p.hue + 34) % 360} 52% 38%))`,
               }}
             >
-              {p.monogram}
+              {p.icon ? p.icon : p.monogram}
             </span>
             <p className="line-clamp-1 text-center text-[12.5px] font-semibold leading-tight text-ink-primary">
               {p.name}

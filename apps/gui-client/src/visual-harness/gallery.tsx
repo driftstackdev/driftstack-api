@@ -60,6 +60,7 @@ const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps }> = [
     props: base({
       name: 'tokyo sneakers',
       monogram: 'TS',
+      icon: '👟',
       hue: 320,
       running: true,
       flag: '🇯🇵',
@@ -173,6 +174,7 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
   {
     id: '1',
     name: 'amsterdam shopper',
+    icon: '🛒',
     deviceLabel: 'iPhone 17',
     running: false,
     hasProxy: true,

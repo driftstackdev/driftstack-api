@@ -28,6 +28,7 @@ import {
 import { downloadJson, timestampedFilename } from '../lib/download';
 import { useConfirm } from '../components/ConfirmProvider';
 import { loadTemplates, saveTemplate, type ProfileTemplate } from '../lib/profile-templates';
+import { PROFILE_ICONS } from '../lib/profile-icons';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
@@ -686,6 +687,20 @@ export function ProfilesView({
     setBulkTag('');
   }
 
+  // Set (or clear, with '') a chosen icon on every selected profile — applied
+  // immediately on pick. Icon is a local-only convenience (no server column),
+  // so no write-through.
+  async function handleBulkIcon(icon: string): Promise<void> {
+    if (selectedIds.size === 0) return;
+    const next = await saveProfilesMetaBulk(
+      [...selectedIds],
+      { icon },
+      'merge',
+      activeWorkspace === null ? state.profiles.map((p) => p.id) : undefined,
+    );
+    setProfilesMeta(next);
+  }
+
   // Bulk export — snapshot each selected profile via profiles.export (the v1
   // portability envelope; had zero GUI callers) and download them as one JSON
   // file. Best-effort per id; a failed export is skipped, not fatal.
@@ -1164,6 +1179,24 @@ export function ProfilesView({
             value={bulkTag}
             onChange={(e) => setBulkTag(e.target.value)}
           />
+          <select
+            aria-label="Set icon"
+            className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-primary"
+            value="__noop"
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === '__noop') return;
+              void handleBulkIcon(v === '__none' ? '' : v);
+            }}
+          >
+            <option value="__noop">Set icon…</option>
+            <option value="__none">✕ None</option>
+            {PROFILE_ICONS.map((i) => (
+              <option key={i.emoji} value={i.emoji}>
+                {i.emoji} {i.label}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             className="btn-primary px-2.5 py-1 text-xs"
@@ -1328,6 +1361,7 @@ export function ProfilesView({
                       key={profile.id}
                       name={profile.name}
                       monogram={profileMonogram(profile.name)}
+                      icon={profilesMeta[profile.id]?.icon ?? ''}
                       hue={identityHue(profile.name)}
                       deviceLabel={formatDeviceName(profile.archetype)}
                       running={running}
@@ -1390,6 +1424,7 @@ export function ProfilesView({
                   return {
                     id: profile.id,
                     name: profile.name,
+                    icon: profilesMeta[profile.id]?.icon ?? '',
                     deviceLabel: formatDeviceName(profile.archetype),
                     running: bound !== null,
                     hasProxy: px !== null,

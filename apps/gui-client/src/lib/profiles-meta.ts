@@ -21,6 +21,8 @@ export interface ProfileMeta {
   tags: string[];
   /** Optional free-text note shown in the hub. */
   note: string;
+  /** Optional chosen icon (a short emoji); empty string = use the monogram. */
+  icon: string;
 }
 
 export type ProfilesMetaMap = Record<string, ProfileMeta>;
@@ -31,6 +33,7 @@ const MAX_TAGS = 12;
 const MAX_TAG_CHARS = 24;
 const MAX_FOLDER_CHARS = 32;
 const MAX_NOTE_CHARS = 280;
+const MAX_ICON_CHARS = 8; // a single emoji (may be multi-codepoint)
 
 let store: LazyStore | null = null;
 
@@ -43,7 +46,7 @@ function getStore(): LazyStore {
 
 /** Validate one persisted entry; anything malformed degrades to defaults. */
 function cleanEntry(raw: unknown): ProfileMeta {
-  const out: ProfileMeta = { folder: '', tags: [], note: '' };
+  const out: ProfileMeta = { folder: '', tags: [], note: '', icon: '' };
   if (typeof raw !== 'object' || raw === null) return out;
   const r = raw as Record<string, unknown>;
   if (typeof r.folder === 'string') out.folder = r.folder.slice(0, MAX_FOLDER_CHARS);
@@ -59,6 +62,7 @@ function cleanEntry(raw: unknown): ProfileMeta {
     out.tags = [...seen];
   }
   if (typeof r.note === 'string') out.note = r.note.slice(0, MAX_NOTE_CHARS);
+  if (typeof r.icon === 'string') out.icon = r.icon.slice(0, MAX_ICON_CHARS);
   return out;
 }
 
@@ -112,7 +116,7 @@ export async function saveProfilesMetaBulk(
   const all = await loadProfilesMeta();
   for (const id of profileIds) {
     if (id.length === 0) continue;
-    const current = all[id] ?? { folder: '', tags: [], note: '' };
+    const current = all[id] ?? { folder: '', tags: [], note: '', icon: '' };
     const nextTags =
       mode === 'merge' && meta.tags ? [...current.tags, ...meta.tags] : (meta.tags ?? current.tags);
     all[id] = cleanEntry({

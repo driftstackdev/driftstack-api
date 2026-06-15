@@ -18,6 +18,7 @@ export type ProfilesTableSortKey = 'name' | 'status' | 'country' | 'latency' | '
 export interface ProfileTableRow {
   id: string;
   name: string;
+  icon?: string; // optional chosen emoji icon
   deviceLabel: string;
   running: boolean;
   hasProxy: boolean;
@@ -132,7 +133,14 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${r.running ? 'bg-status-ready' : 'bg-ink-muted/40'}`}
             />
             <div className="min-w-0">
-              <p className="truncate font-medium text-ink-primary">{r.name}</p>
+              <p className="flex items-center gap-1.5 truncate font-medium text-ink-primary">
+                {r.icon ? (
+                  <span aria-hidden="true" className="text-[13px] leading-none">
+                    {r.icon}
+                  </span>
+                ) : null}
+                <span className="truncate">{r.name}</span>
+              </p>
               <p className="truncate text-[10px] text-ink-muted">{r.deviceLabel}</p>
               {(r.folder !== '' || r.tags.length > 0) && (
                 <div className="mt-0.5 flex flex-wrap items-center gap-1">

@@ -60,6 +60,7 @@ describe('profiles-meta store', () => {
       folder: 'E-commerce',
       tags: ['checkout'],
       note: 'priority account',
+      icon: '',
     });
   });
 
@@ -87,8 +88,8 @@ describe('profiles-meta store', () => {
   it('corrupt entries degrade to defaults; corrupt root degrades to empty', async () => {
     seed({ ok: { folder: 'F', tags: ['t'], note: 'n' }, bad: 42, worse: null });
     const all = await loadProfilesMeta();
-    expect(all['ok']).toEqual({ folder: 'F', tags: ['t'], note: 'n' });
-    expect(all['bad']).toEqual({ folder: '', tags: [], note: '' });
+    expect(all['ok']).toEqual({ folder: 'F', tags: ['t'], note: 'n', icon: '' });
+    expect(all['bad']).toEqual({ folder: '', tags: [], note: '', icon: '' });
     seed('not-an-object');
     expect(await loadProfilesMeta()).toEqual({});
   });
@@ -98,8 +99,8 @@ describe('profiles-meta store', () => {
     await saveProfileMeta('a', { tags: ['x'], folder: 'Old' });
     await saveProfilesMetaBulk(['a', 'b'], { folder: 'New', tags: ['y'] }, 'merge');
     let all = await loadProfilesMeta();
-    expect(all['a']).toEqual({ folder: 'New', tags: ['x', 'y'], note: '' });
-    expect(all['b']).toEqual({ folder: 'New', tags: ['y'], note: '' });
+    expect(all['a']).toEqual({ folder: 'New', tags: ['x', 'y'], note: '', icon: '' });
+    expect(all['b']).toEqual({ folder: 'New', tags: ['y'], note: '', icon: '' });
     await saveProfilesMetaBulk(['a'], { tags: ['z'] }, 'replace');
     all = await loadProfilesMeta();
     expect(all['a']!.tags).toEqual(['z']);
@@ -121,7 +122,7 @@ describe('profiles-meta store', () => {
     ]);
     expect(changed).toBe(true);
     expect(map['kept']).toEqual({ folder: 'Local', tags: ['mine'], note: 'n' });
-    expect(map['new']).toEqual({ folder: 'Synced', tags: ['remote'], note: '' });
+    expect(map['new']).toEqual({ folder: 'Synced', tags: ['remote'], note: '', icon: '' });
     expect(map['plain']).toBeUndefined();
     expect(map['old-server']).toBeUndefined();
     // Nothing to seed → changed=false and the SAME map reference (caller
@@ -153,7 +154,7 @@ describe('profiles-meta store', () => {
       ['live'],
     );
     const all = await loadProfilesMeta();
-    expect(all['live']).toEqual({ folder: 'A', tags: [], note: '' });
+    expect(all['live']).toEqual({ folder: 'A', tags: [], note: '', icon: '' });
     expect(all['gone']).toBeUndefined();
   });
 
