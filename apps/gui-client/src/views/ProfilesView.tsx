@@ -567,6 +567,20 @@ export function ProfilesView({
         }));
         return;
       }
+      // Test-before-open (#4): if the bound proxy's LAST probe showed it down,
+      // warn before launching (override-able) rather than opening a session
+      // that'll fail on a dead exit. Uses the CACHED result only — never blocks
+      // a launch on a fresh probe, so an untested/healthy proxy launches
+      // straight through.
+      const lastProbe = probeCache[proxy.id];
+      if (lastProbe && (!lastProbe.result.reachable || !lastProbe.result.auth_ok)) {
+        const reason = !lastProbe.result.reachable ? 'was unreachable' : 'rejected its credentials';
+        const proceed = await confirm(
+          `The proxy "${proxy.label}" ${reason} on its last test, so this session may fail to reach the internet. Launch anyway?`,
+          { confirmLabel: 'Launch anyway' },
+        );
+        if (!proceed) return; // finally resets busyId
+      }
       // Create a STREAMING agent-session: this dispatches the session to the
       // fleet harness (which spawns the browser + captures + publishes) and
       // returns a `livekit` block we subscribe to immediately — no timing lag.
@@ -1526,6 +1540,13 @@ export function ProfilesView({
             // V-239 — refresh the cap counter so the gate flips to
             // disabled if we just hit cap.
             void refreshAccountMe();
+            // #3 auto-test on create: a new profile launches through the first
+            // available proxy — probe it now (if not already cached) so its
+            // card shows egress without a manual Test. Best-effort, background.
+            const firstProxy = proxies[0];
+            if (firstProxy !== undefined && probeCache[firstProxy.id] === undefined) {
+              void handleTestProxy(firstProxy);
+            }
           }}
         />
       )}
