@@ -656,6 +656,37 @@ function ProxyForm({
     onSave(draft);
   }
 
+  // In-form connection test — validate before you save, so a bad host/port or
+  // wrong creds surfaces here instead of failing on first launch.
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<ProxyTestResult | null>(null);
+  async function handleTestConnection(): Promise<void> {
+    const v = validateDraft(draft);
+    setValidation(v);
+    if (!v.ok) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testProxy({
+        host: draft.host,
+        port: draft.port,
+        username: draft.username,
+        password: draft.password,
+      });
+      setTestResult(result);
+    } catch (err) {
+      setTestResult({
+        reachable: false,
+        auth_ok: false,
+        udp_associate: false,
+        latency_ms: 0,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setTesting(false);
+    }
+  }
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -733,13 +764,47 @@ function ProxyForm({
           />
         </Field>
       </div>
-      <div className="flex justify-end gap-2 pt-2">
-        <button type="button" className="btn-secondary" onClick={onCancel}>
-          Cancel
+      {testResult !== null && (
+        <div
+          data-component="form-test-result"
+          className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-xs ${
+            testResult.reachable && testResult.auth_ok
+              ? 'border-status-ready/40 bg-status-ready/10 text-status-ready'
+              : 'border-status-error/40 bg-status-error/10 text-status-error'
+          }`}
+        >
+          <span className="font-semibold">
+            {testResult.reachable && testResult.auth_ok ? '✓ Connected' : '✗ Failed'}
+          </span>
+          {testResult.reachable && (
+            <span className="text-ink-secondary">
+              {testResult.auth_ok ? 'auth ok' : 'auth failed'} · {testResult.latency_ms}ms · UDP{' '}
+              {testResult.udp_associate ? '✓' : '✗'}
+            </span>
+          )}
+          {!testResult.reachable && (
+            <span className="text-ink-secondary">{testResult.message}</span>
+          )}
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-2 pt-2">
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => void handleTestConnection()}
+          disabled={testing}
+          title="Probe this proxy — reachability, auth, latency, UDP — before saving"
+        >
+          {testing ? 'Testing…' : 'Test connection'}
         </button>
-        <button type="submit" className="btn-primary">
-          {mode === 'add' ? 'Add proxy' : 'Save changes'}
-        </button>
+        <div className="flex gap-2">
+          <button type="button" className="btn-secondary" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" className="btn-primary">
+            {mode === 'add' ? 'Add proxy' : 'Save changes'}
+          </button>
+        </div>
       </div>
     </form>
   );

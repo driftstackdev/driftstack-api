@@ -125,6 +125,49 @@ describe('ProxiesView "Test" button result card', () => {
   });
 });
 
+describe('ProxiesView add-form "Test connection" button', () => {
+  beforeEach(() => {
+    testProxy.mockReset();
+  });
+
+  async function openAddForm(): Promise<void> {
+    const newBtn = await screen.findByRole('button', { name: 'New proxy' });
+    fireEvent.click(newBtn);
+    await screen.findByRole('button', { name: 'Test connection' });
+  }
+
+  it('tests the draft before saving and shows a Connected verdict with latency + UDP', async () => {
+    testProxy.mockResolvedValue({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      latency_ms: 42,
+      message: 'ok',
+    });
+    render(<ProxiesView />);
+    await openAddForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText('✓ Connected')).toBeTruthy();
+    expect(screen.getByText(/42ms/)).toBeTruthy();
+    await waitFor(() => expect(testProxy).toHaveBeenCalledTimes(1));
+  });
+
+  it('shows a Failed verdict with the error message when the proxy is unreachable', async () => {
+    testProxy.mockResolvedValue({
+      reachable: false,
+      auth_ok: false,
+      udp_associate: false,
+      latency_ms: 0,
+      message: 'TCP connect failed: timed out',
+    });
+    render(<ProxiesView />);
+    await openAddForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText('✗ Failed')).toBeTruthy();
+    expect(screen.getByText('TCP connect failed: timed out')).toBeTruthy();
+  });
+});
+
 describe('capability board (approved proxy-health port)', () => {
   beforeEach(() => {
     testProxy.mockReset();
