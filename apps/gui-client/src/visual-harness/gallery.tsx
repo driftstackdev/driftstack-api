@@ -156,9 +156,11 @@ export function Gallery(): JSX.Element {
       </h1>
       <ProfilesTable
         rows={TABLE_ROWS}
-        sortKey="latency"
+        sortKey="name"
         sortDir="asc"
         onSort={noop}
+        allSelected={false}
+        onToggleSelectAll={noop}
         onToggleSelect={noop}
         onPrimary={noop}
         onWatch={noop}
@@ -194,6 +196,8 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testing: false,
     testDisabled: false,
     launchDisabled: false,
+    note: '',
+    createdAtIso: '2026-06-01T00:00:00.000Z',
   },
   {
     id: '2',
@@ -217,6 +221,8 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testing: false,
     testDisabled: false,
     launchDisabled: false,
+    note: '',
+    createdAtIso: '2026-06-01T00:00:00.000Z',
   },
   {
     id: '3',
@@ -240,6 +246,8 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testing: false,
     testDisabled: false,
     launchDisabled: false,
+    note: '',
+    createdAtIso: '2026-06-01T00:00:00.000Z',
   },
   {
     id: '4',
@@ -263,6 +271,8 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testing: false,
     testDisabled: false,
     launchDisabled: false,
+    note: '',
+    createdAtIso: '2026-06-01T00:00:00.000Z',
   },
   {
     id: '5',
@@ -286,5 +296,7 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     testing: false,
     testDisabled: false,
     launchDisabled: false,
+    note: '',
+    createdAtIso: '2026-06-01T00:00:00.000Z',
   },
 ];

@@ -1452,6 +1452,8 @@ export function ProfilesView({
                     latencyMs: probe?.result.latency_ms ?? null,
                     folder: profilesMeta[profile.id]?.folder ?? '',
                     tags: profilesMeta[profile.id]?.tags ?? [],
+                    note: profilesMeta[profile.id]?.note ?? '',
+                    createdAtIso: profile.created_at,
                     lastUsedIso: profile.last_used_at,
                     selected: selectedIds.has(profile.id),
                     busy: busyId === profile.id,
@@ -1474,8 +1476,11 @@ export function ProfilesView({
                       return dir * (Number(a.running) - Number(b.running));
                     case 'country':
                       return dir * (a.countryCode ?? 'zz').localeCompare(b.countryCode ?? 'zz');
-                    case 'latency':
-                      return dir * ((a.latencyMs ?? Infinity) - (b.latencyMs ?? Infinity));
+                    case 'created': {
+                      const at = a.createdAtIso !== null ? new Date(a.createdAtIso).getTime() : 0;
+                      const bt = b.createdAtIso !== null ? new Date(b.createdAtIso).getTime() : 0;
+                      return dir * (at - bt);
+                    }
                     case 'lastUsed': {
                       const at = a.lastUsedIso !== null ? new Date(a.lastUsedIso).getTime() : 0;
                       const bt = b.lastUsedIso !== null ? new Date(b.lastUsedIso).getTime() : 0;
@@ -1495,6 +1500,14 @@ export function ProfilesView({
                         setSortKey(k);
                         setSortDir('asc');
                       }
+                    }}
+                    allSelected={rows.length > 0 && rows.every((row) => selectedIds.has(row.id))}
+                    onToggleSelectAll={() => {
+                      setSelectedIds((prev) => {
+                        const allOn = rows.length > 0 && rows.every((row) => prev.has(row.id));
+                        if (allOn) return new Set();
+                        return new Set(rows.map((row) => row.id));
+                      });
                     }}
                     onToggleSelect={(id) => toggleSelected(id)}
                     onPrimary={(id) => {

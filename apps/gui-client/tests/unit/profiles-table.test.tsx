@@ -28,6 +28,8 @@ function row(over: Partial<ProfileTableRow> = {}): ProfileTableRow {
     latencyMs: 42,
     folder: 'Shopping',
     tags: ['aged'],
+    note: '',
+    createdAtIso: '2026-06-01T00:00:00.000Z',
     lastUsedIso: null,
     selected: false,
     busy: false,
@@ -44,6 +46,8 @@ function props(over: Partial<ProfilesTableProps> = {}): ProfilesTableProps {
     sortKey: 'name',
     sortDir: 'asc',
     onSort: vi.fn(),
+    allSelected: false,
+    onToggleSelectAll: vi.fn(),
     onToggleSelect: vi.fn(),
     onPrimary: vi.fn(),
     onWatch: vi.fn(),
@@ -58,12 +62,13 @@ describe('ProfilesTable', () => {
   it('renders the egress columns the old list lacked: location, exit IP, UDP, latency', () => {
     render(<ProfilesTable {...props()} />);
     expect(screen.getByText('amsterdam shopper')).toBeTruthy();
-    expect(screen.getByText('iPhone 17')).toBeTruthy(); // device subtitle
-    expect(screen.getByText('Netherlands')).toBeTruthy(); // location under exit IP
+    expect(screen.getByText(/iPhone 17/)).toBeTruthy(); // device subtitle (incl. folder)
+    expect(screen.getByText(/📁 Shopping/)).toBeTruthy(); // folder folded into subtitle
+    expect(screen.getByText('Netherlands')).toBeTruthy(); // location in exit IP cell
     expect(screen.getByText('82.14.220.9')).toBeTruthy();
-    expect(screen.getByText('42ms')).toBeTruthy();
+    expect(screen.getByText('42ms')).toBeTruthy(); // latency now in the exit IP cell
+    expect(screen.getByText('aged')).toBeTruthy(); // tags column
     expect(screen.getByText('Idle')).toBeTruthy();
-    expect(screen.getByText('📁 Shopping')).toBeTruthy();
     cleanup();
   });
 
@@ -80,8 +85,19 @@ describe('ProfilesTable', () => {
   it('clicking a sortable header fires onSort with its key', () => {
     const onSort = vi.fn();
     render(<ProfilesTable {...props({ onSort })} />);
-    fireEvent.click(screen.getByRole('button', { name: /Latency/i }));
-    expect(onSort).toHaveBeenCalledWith('latency');
+    fireEvent.click(screen.getByRole('button', { name: /Created/i }));
+    expect(onSort).toHaveBeenCalledWith('created');
+    cleanup();
+  });
+
+  it('checkbox column: row checkbox + header select-all are keyboard-accessible and fire handlers', () => {
+    const onToggleSelect = vi.fn();
+    const onToggleSelectAll = vi.fn();
+    render(<ProfilesTable {...props({ onToggleSelect, onToggleSelectAll })} />);
+    fireEvent.click(screen.getByLabelText('Select amsterdam shopper'));
+    expect(onToggleSelect).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByLabelText('Select all profiles'));
+    expect(onToggleSelectAll).toHaveBeenCalledTimes(1);
     cleanup();
   });
 
