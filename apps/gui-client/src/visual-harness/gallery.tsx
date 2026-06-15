@@ -8,6 +8,7 @@
 
 import type { JSX } from 'react';
 import { ProfilePhoneCard, type ProfilePhoneCardProps } from '../components/ProfilePhoneCard';
+import { ProfilesTable, type ProfileTableRow } from '../components/ProfilesTable';
 
 const noop = (): void => undefined;
 
@@ -151,6 +152,134 @@ export function Gallery(): JSX.Element {
           </div>
         ))}
       </div>
+
+      <h1 className="mb-3 mt-10 text-lg font-semibold text-ink-primary">
+        ProfilesTable — list view
+      </h1>
+      <ProfilesTable
+        rows={TABLE_ROWS}
+        sortKey="latency"
+        sortDir="asc"
+        onSort={noop}
+        onToggleSelect={noop}
+        onPrimary={noop}
+        onWatch={noop}
+        onStop={noop}
+        onTest={noop}
+        onOrganize={noop}
+        onDuplicate={noop}
+        onDelete={noop}
+        organizeId={null}
+        organizeSlot={null}
+      />
     </div>
   );
 }
+
+const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
+  {
+    id: '1',
+    name: 'amsterdam shopper',
+    deviceLabel: 'iPhone 17',
+    running: false,
+    hasProxy: true,
+    flag: '🇳🇱',
+    countryCode: 'NL',
+    exitIp: '82.14.220.9',
+    udp: 'ok',
+    latencyMs: 42,
+    folder: 'Shopping',
+    tags: ['aged'],
+    lastUsedIso: '2026-06-15T06:30:00.000Z',
+    selected: false,
+    busy: false,
+    testing: false,
+    testDisabled: false,
+    launchDisabled: false,
+    canDuplicate: true,
+  },
+  {
+    id: '2',
+    name: 'tokyo sneakers',
+    deviceLabel: 'iPhone 17',
+    running: true,
+    hasProxy: true,
+    flag: '🇯🇵',
+    countryCode: 'JP',
+    exitIp: '133.18.7.40',
+    udp: 'ok',
+    latencyMs: 88,
+    folder: '',
+    tags: [],
+    lastUsedIso: '2026-06-14T20:00:00.000Z',
+    selected: true,
+    busy: false,
+    testing: false,
+    testDisabled: false,
+    launchDisabled: false,
+    canDuplicate: true,
+  },
+  {
+    id: '3',
+    name: 'berlin reviews',
+    deviceLabel: 'iPhone 17',
+    running: false,
+    hasProxy: true,
+    flag: '🇩🇪',
+    countryCode: 'DE',
+    exitIp: '91.64.12.200',
+    udp: 'fail',
+    latencyMs: 210,
+    folder: 'Reviews',
+    tags: ['warm'],
+    lastUsedIso: null,
+    selected: false,
+    busy: false,
+    testing: false,
+    testDisabled: false,
+    launchDisabled: false,
+    canDuplicate: true,
+  },
+  {
+    id: '4',
+    name: 'sao paulo deals',
+    deviceLabel: 'iPhone 17',
+    running: false,
+    hasProxy: true,
+    flag: '🇧🇷',
+    countryCode: 'BR',
+    exitIp: null,
+    udp: 'unknown',
+    latencyMs: null,
+    folder: '',
+    tags: [],
+    lastUsedIso: '2026-06-10T12:00:00.000Z',
+    selected: false,
+    busy: false,
+    testing: false,
+    testDisabled: false,
+    launchDisabled: false,
+    canDuplicate: true,
+  },
+  {
+    id: '5',
+    name: 'local sandbox',
+    deviceLabel: 'iPhone 17',
+    running: false,
+    hasProxy: false,
+    flag: '🌍',
+    countryCode: null,
+    exitIp: null,
+    udp: 'unknown',
+    latencyMs: null,
+    folder: '',
+    tags: [],
+    lastUsedIso: null,
+    selected: false,
+    busy: false,
+    testing: false,
+    testDisabled: false,
+    launchDisabled: false,
+    canDuplicate: true,
+  },
+];

@@ -36,10 +36,13 @@ import {
   type ProfileSortBy,
   type ProfileStatusFilter,
 } from '../components/ProfilesActionBar';
-import { ProxyChip } from '../components/ProxyChip';
-import { ProxyCapabilityChips } from '../components/ProxyCapabilities';
+import { ProxyCapabilityChips, proxyCapabilities } from '../components/ProxyCapabilities';
 import { ProfilePhoneCard } from '../components/ProfilePhoneCard';
-import { RelativeTime } from '../components/RelativeTime';
+import {
+  ProfilesTable,
+  type ProfileTableRow,
+  type ProfilesTableSortKey,
+} from '../components/ProfilesTable';
 import { ARCHETYPE_REGISTRY, type ArchetypeStatus, type LiveKitInfo } from '@driftstack/sdk';
 import { openSimulatorWindow } from '../lib/open-simulator';
 import { useSettings } from '../lib/SettingsContext';
@@ -185,6 +188,9 @@ export function ProfilesView({
   // Grid is the DEFAULT (founder directive 2026-06-12 night arc) — the
   // visual workspace is the product; list remains a toggle for dense ops.
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
+  // List-view (table) sort — default by name asc. Header clicks toggle dir.
+  const [sortKey, setSortKey] = useState<ProfilesTableSortKey>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [quickBusy, setQuickBusy] = useState(false);
   // Increment 2 — client-persisted organization (folders/tags/notes).
   const [profilesMeta, setProfilesMeta] = useState<ProfilesMetaMap>({});
@@ -1488,207 +1494,158 @@ export function ProfilesView({
                   );
                 })}
               </div>
+            ) : filteredProfiles.length === 0 ? (
+              <ProfilesEmpty hasActiveFilters={hasActiveFilters} onClear={clearFilters} />
             ) : (
-              <ul className="flex flex-col divide-y divide-surface-divider rounded-md border border-surface-divider bg-surface-raised">
-                {filteredProfiles.length === 0 ? (
-                  <li className="p-2">
-                    <ProfilesEmpty hasActiveFilters={hasActiveFilters} onClear={clearFilters} />
-                  </li>
-                ) : null}
-                {filteredProfiles.map((profile) => {
+              (() => {
+                const byId = new Map(filteredProfiles.map((pr) => [pr.id, pr]));
+                const rows: ProfileTableRow[] = filteredProfiles.map((profile) => {
                   const bound = boundSession(profile.id);
-                  const running = bound !== null;
-                  const binding = bindings.find((b) => b.profileId === profile.id) ?? null;
-                  const selectedProxy = pickProxy(profile.id);
-                  const busy = busyId === profile.id;
-                  return (
-                    <li
-                      key={profile.id}
-                      className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-block h-2 w-2 rounded-full ${
-                              running ? 'bg-emerald-500' : 'bg-ink-muted/40'
-                            }`}
-                            aria-label={running ? 'Running' : 'Idle'}
-                          />
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${profile.name}`}
-                            className="h-3.5 w-3.5 accent-[var(--accent)]"
-                            checked={selectedIds.has(profile.id)}
-                            onChange={() => toggleSelected(profile.id)}
-                          />
-                          <p className="text-sm font-medium text-ink-primary">{profile.name}</p>
-                          {(profilesMeta[profile.id]?.folder ?? '') !== '' && (
-                            <span className="rounded-sm bg-accent-subtle px-1.5 py-0.5 text-[10px] text-ink-secondary">
-                              📁 {profilesMeta[profile.id]?.folder}
-                            </span>
-                          )}
-                          {(profilesMeta[profile.id]?.tags ?? []).map((tag) => (
-                            <span
-                              key={tag}
-                              className="rounded-sm border border-surface-divider px-1.5 py-0.5 text-[10px] text-ink-muted"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                          <button
-                            type="button"
-                            className="text-[10px] text-ink-muted underline-offset-2 hover:text-ink-primary hover:underline"
-                            onClick={() => {
-                              if (organizeId === profile.id) {
-                                setOrganizeId(null);
-                                return;
-                              }
-                              setDraftFolder(profilesMeta[profile.id]?.folder ?? '');
-                              setDraftTags((profilesMeta[profile.id]?.tags ?? []).join(', '));
-                              setOrganizeId(profile.id);
-                            }}
-                          >
-                            Organize
-                          </button>
-                          <span
-                            className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
-                              running
-                                ? 'bg-emerald-500/15 text-emerald-300'
-                                : 'bg-surface-base text-ink-muted'
-                            }`}
-                          >
-                            {running ? 'Running' : 'Idle'}
-                          </span>
-                        </div>
-                        {profile.description !== null && (
-                          <p className="mt-1 text-xs text-ink-secondary">{profile.description}</p>
-                        )}
-                        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
-                          <span className="mono rounded-sm bg-surface-base px-1.5 py-0.5 text-[11px]">
-                            {profile.archetype}
-                          </span>
-                          <ProxyChip
-                            proxy={selectedProxy}
-                            defaulted={
-                              binding?.defaultProxyId === null ||
-                              binding?.defaultProxyId === undefined
-                            }
-                          />
-                          <select
-                            aria-label={`Change proxy binding for ${profile.name}`}
-                            className="mono rounded-sm bg-surface-base px-1 py-0.5 text-[11px] text-ink-secondary"
-                            value={binding?.defaultProxyId ?? ''}
-                            onChange={(e) => {
-                              const next = e.target.value === '' ? null : e.target.value;
-                              void setDefaultProxy(profile.id, next).then(
-                                () => void refresh(false),
-                              );
-                            }}
-                            disabled={busy || running}
-                            title={
-                              running ? 'Stop the profile to change proxy' : 'Change proxy binding'
-                            }
-                          >
-                            <option value="">— (first available)</option>
-                            {proxies.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.label} ({p.host}:{p.port})
-                              </option>
-                            ))}
-                          </select>
-                          {profile.last_used_at !== null && (
-                            <span>
-                              last used{' '}
-                              <RelativeTime iso={profile.last_used_at} tooltipPrefix="Last used" />
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {running ? (
-                          <>
-                            <button
-                              type="button"
-                              className="btn-secondary text-xs"
-                              onClick={() => {
-                                // W624 — agent session → re-open the WebRTC stream;
-                                // driver session → the polling viewer.
-                                if (bound === null) return;
-                                if (bound.kind === 'agent') {
-                                  void reopenStream(bound.id, profile.id);
-                                } else {
-                                  onOpenSession(bound.id);
-                                }
-                              }}
-                              disabled={busy}
-                            >
-                              Live view
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded border border-status-error/40 bg-status-error/10 px-3 py-1 text-xs font-medium text-status-error hover:bg-status-error/20 disabled:cursor-not-allowed disabled:opacity-60"
-                              onClick={() => void handleStop(profile)}
-                              disabled={busy}
-                            >
-                              {busy ? 'Stopping…' : 'Stop'}
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            className="btn-primary text-xs"
-                            onClick={() => void handleLaunch(profile)}
-                            // Launch gates on `busy` only. NOT atProfileCap: the
-                            // profile cap limits how many profiles you can CREATE, not
-                            // whether you can launch an existing one (launching consumes
-                            // a session slot, not a profile slot). Gating Launch on
-                            // atProfileCap meant a free-tier user (profile_cap 1) could
-                            // never launch their one allowed profile. The server
-                            // enforces the concurrent-session cap and handleLaunch
-                            // surfaces that error. ALSO gated in a team workspace —
-                            // these are the owner's profiles + agent-sessions launch is
-                            // self-scoped (would 404); launch from Personal.
-                            disabled={busy || activeWorkspace !== null}
-                            title={
-                              activeWorkspace !== null
-                                ? 'Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own.'
-                                : undefined
-                            }
-                          >
-                            {busy ? 'Launching…' : 'Launch'}
-                          </button>
-                        )}
-                        {/* cap-first operand order ON PURPOSE: duplicate CREATES a
-                      profile so cap-gating is correct here — but the pinned
-                      free-tier regression guard bans the `busy || atProfileCap`
-                      form (the Launch bug pattern); keep this order. */}
+                  const px = pickProxy(profile.id);
+                  const probe = px !== null ? probeCache[px.id] : undefined;
+                  const caps = probe !== undefined ? proxyCapabilities(probe.result) : null;
+                  const udp: 'ok' | 'fail' | 'unknown' =
+                    caps === null
+                      ? 'unknown'
+                      : (caps.find((c) => c.key === 'webrtc')?.ok ?? false)
+                        ? 'ok'
+                        : 'fail';
+                  return {
+                    id: profile.id,
+                    name: profile.name,
+                    deviceLabel: formatDeviceName(profile.archetype),
+                    running: bound !== null,
+                    hasProxy: px !== null,
+                    flag: probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍',
+                    countryCode: probe?.exitCountry ?? null,
+                    exitIp: probe?.exitIp ?? null,
+                    udp,
+                    latencyMs: probe?.result.latency_ms ?? null,
+                    folder: profilesMeta[profile.id]?.folder ?? '',
+                    tags: profilesMeta[profile.id]?.tags ?? [],
+                    lastUsedIso: profile.last_used_at,
+                    selected: selectedIds.has(profile.id),
+                    busy: busyId === profile.id,
+                    testing: px !== null && testingProxyId === px.id,
+                    testDisabled: testingProxyId !== null,
+                    // Launch gates on team-workspace only — NOT atProfileCap: the
+                    // cap limits CREATING profiles, launching consumes a session
+                    // slot (free-tier fix 0ccff415; the table Launch is busy-only).
+                    launchDisabled: activeWorkspace !== null,
+                    launchDisabledReason:
+                      'Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own.',
+                    // Duplicate CREATES a profile, so it IS cap-gated.
+                    canDuplicate: !atProfileCap,
+                  };
+                });
+                const dir = sortDir === 'asc' ? 1 : -1;
+                rows.sort((a, b) => {
+                  switch (sortKey) {
+                    case 'name':
+                      return dir * a.name.localeCompare(b.name);
+                    case 'device':
+                      return dir * a.deviceLabel.localeCompare(b.deviceLabel);
+                    case 'status':
+                      return dir * (Number(a.running) - Number(b.running));
+                    case 'country':
+                      return dir * (a.countryCode ?? 'zz').localeCompare(b.countryCode ?? 'zz');
+                    case 'latency':
+                      return dir * ((a.latencyMs ?? Infinity) - (b.latencyMs ?? Infinity));
+                    case 'lastUsed': {
+                      const at = a.lastUsedIso !== null ? new Date(a.lastUsedIso).getTime() : 0;
+                      const bt = b.lastUsedIso !== null ? new Date(b.lastUsedIso).getTime() : 0;
+                      return dir * (at - bt);
+                    }
+                  }
+                });
+                const resolve = (id: string) => byId.get(id) ?? null;
+                return (
+                  <ProfilesTable
+                    rows={rows}
+                    sortKey={sortKey}
+                    sortDir={sortDir}
+                    onSort={(k) => {
+                      if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+                      else {
+                        setSortKey(k);
+                        setSortDir('asc');
+                      }
+                    }}
+                    onToggleSelect={(id) => toggleSelected(id)}
+                    onPrimary={(id) => {
+                      const profile = resolve(id);
+                      if (profile === null) return;
+                      const bound = boundSession(id);
+                      if (bound !== null) onOpenSession(bound.id);
+                      else void handleLaunch(profile);
+                    }}
+                    onWatch={(id) => {
+                      const profile = resolve(id);
+                      if (profile === null) return;
+                      const bound = boundSession(id);
+                      if (bound !== null) {
+                        if (bound.kind === 'agent') void reopenStream(bound.id, id);
+                        else onOpenSession(bound.id);
+                      } else void handleLaunch(profile);
+                    }}
+                    onStop={(id) => {
+                      const profile = resolve(id);
+                      if (profile !== null) void handleStop(profile);
+                    }}
+                    onTest={(id) => {
+                      const px = pickProxy(id);
+                      if (px !== null) void handleTestProxy(px);
+                    }}
+                    onOrganize={(id) => {
+                      if (organizeId === id) {
+                        setOrganizeId(null);
+                        return;
+                      }
+                      setDraftFolder(profilesMeta[id]?.folder ?? '');
+                      setDraftTags((profilesMeta[id]?.tags ?? []).join(', '));
+                      setOrganizeId(id);
+                    }}
+                    onDuplicate={(id) => {
+                      const profile = resolve(id);
+                      if (profile !== null) void handleDuplicate(profile);
+                    }}
+                    onDelete={(id) => void handleDelete(id)}
+                    organizeId={organizeId}
+                    organizeSlot={
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <FolderPicker
+                          ariaLabel="Folder"
+                          noneLabel="Unfiled"
+                          folders={folderList(scopedMeta)}
+                          value={draftFolder}
+                          onChange={setDraftFolder}
+                        />
+                        <input
+                          aria-label="Tags (comma-separated)"
+                          placeholder="tags, comma"
+                          className="rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
+                          value={draftTags}
+                          onChange={(e) => setDraftTags(e.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="btn-primary px-2 py-1 text-xs"
+                          onClick={() => void handleOrganizeSave(organizeId ?? '')}
+                        >
+                          Save
+                        </button>
                         <button
                           type="button"
                           className="text-xs text-ink-muted hover:text-ink-primary"
-                          onClick={() => void handleDuplicate(profile)}
-                          disabled={atProfileCap || busy}
-                          title={
-                            atProfileCap
-                              ? 'Profile cap reached — delete a profile or upgrade to duplicate'
-                              : 'Server-side copy: same archetype + state, fresh identity'
-                          }
+                          onClick={() => setOrganizeId(null)}
                         >
-                          Duplicate
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs text-ink-muted hover:text-status-error"
-                          onClick={() => void handleDelete(profile.id)}
-                          disabled={busy || running}
-                          title={running ? 'Stop the profile before deleting' : undefined}
-                        >
-                          Delete
+                          Cancel
                         </button>
                       </div>
-                    </li>
-                  );
-                })}
-              </ul>
+                    }
+                  />
+                );
+              })()
             )}
           </div>
         </div>

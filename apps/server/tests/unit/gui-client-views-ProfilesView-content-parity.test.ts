@@ -123,19 +123,21 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     );
   });
 
-  it('Launch button gates on `busy` ONLY, not atProfileCap (free-tier fix 0ccff415): the profile cap limits CREATING profiles, not launching an existing one (launch consumes a session slot). A regression to `disabled={busy || atProfileCap}` re-greys Launch on a free-tier account (profile_cap 1) so the one allowed profile can never launch — the exact bug a self-hosted user hit', () => {
-    expect(body).toMatch(/onClick=\{\(\) => void handleLaunch\(profile\)\}/);
+  it('Launch gates on `busy` ONLY, not atProfileCap (free-tier fix 0ccff415): the profile cap limits CREATING profiles, not launching an existing one (launch consumes a session slot). A regression to `disabled={busy || atProfileCap}` re-greys Launch on a free-tier account (profile_cap 1) so the one allowed profile can never launch — the exact bug a self-hosted user hit. GRID + LIST(table) both route Launch through handleLaunch with launchDisabled gated on activeWorkspace only; Duplicate (which CREATES) IS cap-gated.', () => {
+    expect(body).toMatch(/void handleLaunch\(profile\)/);
     // The fix's rationale comment must stay (explains why Launch is busy-only).
     expect(body).toMatch(/NOT atProfileCap: the/);
+    // Only Duplicate gates on the cap, never Launch.
+    expect(body).toContain('canDuplicate: !atProfileCap');
     // The specific regression guard: the Launch button must never re-gate on the
     // profile cap. (`state.loading || atProfileCap` on the New-profile button is
     // correct + separately pinned above; this targets the `busy || atProfileCap` form.)
     expect(body).not.toMatch(/disabled=\{busy\s*\|\|\s*atProfileCap\}/);
   });
 
-  it("Launch is gated in a team workspace (activeWorkspace !== null): profiles.list honors X-Driftstack-Account so the cards show the OWNER's profiles, but agent-sessions create is self-scoped + ships the profile DEK (member-launches-owner RBAC unresolved → would 404). Gate it honestly with a tooltip rather than present a 404-ing button; launch from Personal. GRID gates via the GX ProfilePhoneCard's launchDisabled prop; the LIST view keeps the inline disabled form.", () => {
-    expect(body).toContain('launchDisabled={activeWorkspace !== null}');
-    expect(body).toContain('disabled={busy || activeWorkspace !== null}');
+  it("Launch is gated in a team workspace (activeWorkspace !== null): profiles.list honors X-Driftstack-Account so the cards show the OWNER's profiles, but agent-sessions create is self-scoped + ships the profile DEK (member-launches-owner RBAC unresolved → would 404). Gate it honestly with a tooltip rather than present a 404-ing button; launch from Personal. GRID gates via the GX ProfilePhoneCard's launchDisabled prop; the LIST view (ProfilesTable) gates via the row-model launchDisabled field.", () => {
+    expect(body).toContain('launchDisabled={activeWorkspace !== null}'); // grid card prop
+    expect(body).toContain('launchDisabled: activeWorkspace !== null'); // table row model
     expect(body).toMatch(/Launching a team-workspace profile isn.t available yet/);
   });
 
