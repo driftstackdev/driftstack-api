@@ -19,6 +19,7 @@ import {
   saveProfilesMetaBulk,
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
+import { loadFolders, addFolder } from '../lib/folders-store';
 import {
   loadProbeCache,
   saveProbeResult,
@@ -203,6 +204,13 @@ export function ProfilesView({
   // "Testing…" + disable the button while the native SOCKS5 + exit-geo probe runs.
   const [testingProxyId, setTestingProxyId] = useState<string | null>(null);
   const [folderFilter, setFolderFilter] = useState<string>('all');
+  // 2026-06-15 (founder) — user-created folder names persisted independently of
+  // profiles, so an empty folder made from the rail's "New folder" affordance
+  // survives. The rail/pickers show the UNION of these + folders derived from
+  // profile metadata. `newFolderName` drives the inline create input.
+  const [customFolders, setCustomFolders] = useState<string[]>([]);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
   // G3 — filter the grid by a single tag (null = all). Composes (AND) with the
   // folder + status + search filters.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -238,6 +246,7 @@ export function ProfilesView({
   useEffect(() => {
     void loadProfilesMeta().then(setProfilesMeta);
     void loadProbeCache().then(setProbeCache);
+    void loadFolders().then(setCustomFolders);
   }, []);
 
   const refresh = useCallback(
@@ -407,6 +416,25 @@ export function ProfilesView({
     }
     return out;
   }, [state.profiles, profilesMeta]);
+
+  // Effective folder list = folders derived from profile metadata UNION the
+  // user-created (possibly empty) folders. Used by the rail + both folder
+  // pickers so a freshly-created empty folder is immediately pickable.
+  const allFolders = useMemo<string[]>(() => {
+    const set = new Set<string>([...folderList(scopedMeta), ...customFolders]);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [scopedMeta, customFolders]);
+
+  // Create a folder from the rail's inline input: persist the name, refresh the
+  // list, jump the filter to the new folder, and close the input.
+  const handleCreateFolder = useCallback(async () => {
+    const next = await addFolder(newFolderName);
+    setCustomFolders(next);
+    const created = newFolderName.trim();
+    if (created.length > 0 && next.includes(created)) setFolderFilter(created);
+    setNewFolderName('');
+    setCreatingFolder(false);
+  }, [newFolderName]);
 
   // 2026-05-21 — derive the filtered/sorted view over state.profiles.
   // Search matches name + description + archetype; status filter treats a
@@ -1175,7 +1203,7 @@ export function ProfilesView({
           <FolderPicker
             ariaLabel="Bulk folder"
             noneLabel="Move to folder…"
-            folders={folderList(scopedMeta)}
+            folders={allFolders}
             value={bulkFolder}
             onChange={setBulkFolder}
           />
@@ -1309,7 +1337,7 @@ export function ProfilesView({
               active={folderFilter === 'all'}
               onSelect={() => setFolderFilter('all')}
             />
-            {folderList(scopedMeta).map((f) => (
+            {allFolders.map((f) => (
               <FolderItem
                 key={f}
                 variant="rail"
@@ -1326,6 +1354,43 @@ export function ProfilesView({
               active={folderFilter === 'unfiled'}
               onSelect={() => setFolderFilter('unfiled')}
             />
+            {/* 2026-06-15 (founder) — create a new (possibly empty) folder right
+                from the rail. Toggles an inline input; Enter/blur commits via
+                handleCreateFolder, Escape cancels. Move profiles in afterward
+                via the bulk bar's folder picker. */}
+            {creatingFolder ? (
+              <input
+                autoFocus
+                aria-label="New folder name"
+                placeholder="Folder name…"
+                value={newFolderName}
+                maxLength={60}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleCreateFolder();
+                  else if (e.key === 'Escape') {
+                    setNewFolderName('');
+                    setCreatingFolder(false);
+                  }
+                }}
+                onBlur={() => {
+                  if (newFolderName.trim().length > 0) void handleCreateFolder();
+                  else setCreatingFolder(false);
+                }}
+                className="mt-0.5 w-full rounded-lg border border-surface-divider bg-surface-inset px-2.5 py-1.5 text-xs text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none"
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCreatingFolder(true)}
+                className="mt-0.5 flex w-full items-center gap-1.5 rounded-lg border border-dashed border-surface-divider px-2.5 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:border-ink-muted/60 hover:text-ink-primary"
+              >
+                <span aria-hidden="true" className="text-sm leading-none">
+                  +
+                </span>
+                New folder
+              </button>
+            )}
           </aside>
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             {/* G3 — TAG filter rail (founder: "missing tags"). Composes (AND)
@@ -1542,7 +1607,7 @@ export function ProfilesView({
 
       {createOpen && (
         <CreateProfileModal
-          existingFolders={folderList(scopedMeta)}
+          existingFolders={allFolders}
           onClose={() => setCreateOpen(false)}
           onCreated={() => {
             setCreateOpen(false);

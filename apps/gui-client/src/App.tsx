@@ -409,7 +409,7 @@ function StatusFooter(): JSX.Element {
   // alongside sessions so the customer sees both caps at-a-glance
   // (matches the Sidebar's per-item count badges; the footer is the
   // always-visible mirror that survives across every view).
-  const { settings, client, accountMe, activeWorkspace } = useSettings();
+  const { client, accountMe, activeWorkspace } = useSettings();
   const connected = client !== null;
   const atCap =
     accountMe !== null && accountMe.concurrent_session_active >= accountMe.concurrent_session_cap;
@@ -458,21 +458,8 @@ function StatusFooter(): JSX.Element {
           </>
         )}
       </div>
-      <div className="flex items-center gap-2">
-        {settings.apiKey !== null && (
-          <span className="mono" title="API key (truncated for screen-share safety)">
-            {settings.apiKey.slice(0, 8)}…{settings.apiKey.slice(-4)}
-          </span>
-        )}
-        <span className="text-ink-muted">·</span>
-        <span className="mono">{redactBaseUrl(settings.baseUrl)}</span>
-      </div>
     </footer>
   );
-}
-
-function redactBaseUrl(url: string): string {
-  return url.replace(/^https?:\/\//, '');
 }
 
 /**

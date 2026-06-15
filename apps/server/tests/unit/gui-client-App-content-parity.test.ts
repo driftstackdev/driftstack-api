@@ -105,11 +105,9 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     );
   });
 
-  it('API-key masking in footer: slice(0,8) + … + slice(-4) — pinned so the full secret never lands in the chrome (visible while screen-sharing / screenshotting); redactBaseUrl strips https?:// prefix so the URL bar shows host+path only', () => {
-    expect(body).toMatch(/\{settings\.apiKey\.slice\(0, 8\)\}…\{settings\.apiKey\.slice\(-4\)\}/);
-    expect(body).toMatch(
-      /function redactBaseUrl\(url: string\): string \{\s*\n?\s*return url\.replace\(\/\^https\?:\\\/\\\/\/, ''\);\s*\n?\s*\}/,
-    );
+  it('footer no longer shows the masked API key + base URL (founder 2026-06-15: redundant — the TitleBar already shows the deployment mode + the connection pill carries the host). The full secret never belongs in the always-visible chrome, and the host duplicated the title bar — both removed', () => {
+    expect(body).not.toMatch(/settings\.apiKey\.slice\(0, 8\)/);
+    expect(body).not.toMatch(/redactBaseUrl/);
   });
 
   it('Sidebar mount pinned: imports { Sidebar, type SidebarViewKind } and renders <Sidebar current=… /> in the shell — the 4-section taxonomy itself moved to apps/gui-client/src/components/Sidebar.tsx (covered by W486.S parity), so App.tsx now only proves the mount wires up correctly + the kind cast bridges the View discriminated union', () => {
