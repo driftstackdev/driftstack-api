@@ -38,6 +38,7 @@ import {
 } from '../components/ProfilesActionBar';
 import { ProxyChip } from '../components/ProxyChip';
 import { ProxyCapabilityChips } from '../components/ProxyCapabilities';
+import { ProfilePhoneCard } from '../components/ProfilePhoneCard';
 import { RelativeTime } from '../components/RelativeTime';
 import { ARCHETYPE_REGISTRY, type ArchetypeStatus, type LiveKitInfo } from '@driftstack/sdk';
 import { openSimulatorWindow } from '../lib/open-simulator';
@@ -1392,339 +1393,90 @@ export function ProfilesView({ onGoToSettings, onOpenSession }: ProfilesViewProp
                     lat !== undefined ? Math.max(6, Math.min(100, (lat / 250) * 100)) : 0;
                   const latGood = lat !== undefined && lat <= 100;
                   return (
-                    <article
+                    <ProfilePhoneCard
                       key={profile.id}
-                      className={`group relative flex flex-col overflow-hidden rounded-lg border bg-surface-raised transition-all hover:-translate-y-px hover:shadow-md ${
-                        running
-                          ? 'border-status-ready shadow-[0_0_0_1px_rgb(var(--status-ready-rgb))]'
-                          : 'border-surface-divider hover:border-ink-muted/60'
-                      } ${selectedIds.has(profile.id) ? 'ring-2 ring-accent' : ''}`}
-                    >
-                      {/* THUMBNAIL — a CSS iPhone frame (notch) holding the
-                          profile IDENTITY card (monogram + accent wash + device
-                          label), NOT a faux webpage (founder G2: the old
-                          mini-page read as "random browser images"). LIVE cards
-                          carry the status-ready glow + a LIVE chip; hover
-                          reveals quiet quick-actions. Swaps to a real
-                          last-session screenshot once the driver captures one. */}
-                      <div className="relative grid h-32 place-items-center overflow-hidden border-b border-surface-divider bg-surface-inset">
-                        {running ? (
-                          <span className="absolute left-2 top-2 z-10 inline-flex h-[18px] items-center gap-1 rounded-full border border-status-ready/30 bg-status-ready/15 px-1.5 text-[9px] font-bold uppercase tracking-wider text-status-ready">
-                            <span
-                              aria-hidden="true"
-                              className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready"
-                            />
-                            Live
-                          </span>
-                        ) : (
-                          <span className="absolute left-2 top-2 z-10 inline-flex h-[18px] items-center gap-1 rounded-full border border-surface-divider bg-surface-inset px-1.5 text-[9px] font-bold uppercase tracking-wider text-ink-muted">
-                            <span
-                              aria-hidden="true"
-                              className="h-[5px] w-[5px] rounded-full border border-ink-muted"
-                            />
-                            Idle
-                          </span>
-                        )}
-                        {/* Selection checkbox — enables the bulk bar from the
-                            default grid (was list-view only). Shown on hover or
-                            when selected so it doesn't clutter idle cards. */}
-                        <label
-                          className={`absolute bottom-2 left-2 z-20 flex cursor-pointer items-center transition-opacity ${
-                            selectedIds.has(profile.id)
-                              ? 'opacity-100'
-                              : 'opacity-0 group-hover:opacity-100'
-                          }`}
-                          title="Select for bulk actions"
-                        >
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 cursor-pointer accent-accent"
-                            checked={selectedIds.has(profile.id)}
-                            onChange={() => toggleSelected(profile.id)}
-                            aria-label={`Select ${profile.name}`}
+                      name={profile.name}
+                      monogram={profileMonogram(profile.name)}
+                      hue={identityHue(profile.name)}
+                      deviceLabel={formatDeviceName(profile.archetype)}
+                      running={running}
+                      selected={selectedIds.has(profile.id)}
+                      lastUsedIso={profile.last_used_at}
+                      folder={profilesMeta[profile.id]?.folder ?? ''}
+                      tags={profilesMeta[profile.id]?.tags ?? []}
+                      hasProxy={px !== null}
+                      flag={probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
+                      exitIp={probe?.exitIp ?? null}
+                      latencyMs={lat ?? null}
+                      latencyFillPct={latFill}
+                      latencyGood={latGood}
+                      probed={probe !== undefined}
+                      capabilities={probe?.result ?? null}
+                      checkedAtIso={
+                        probe?.at !== undefined ? new Date(probe.at).toISOString() : null
+                      }
+                      busy={busyId === profile.id}
+                      testing={px !== null && testingProxyId === px.id}
+                      testDisabled={testingProxyId !== null}
+                      launchDisabled={activeWorkspace !== null}
+                      launchDisabledReason="Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own."
+                      organizeOpen={organizeId === profile.id}
+                      organizeSlot={
+                        <div className="flex flex-wrap items-center gap-1.5 rounded border border-surface-divider bg-surface-inset p-1.5">
+                          <FolderPicker
+                            ariaLabel="Folder"
+                            noneLabel="Unfiled"
+                            folders={folderList(scopedMeta)}
+                            value={draftFolder}
+                            onChange={setDraftFolder}
                           />
-                        </label>
-                        {/* hover quick-actions — quiet; all delegate to the
-                            existing handlers (no new behavior). */}
-                        <div className="absolute right-2 top-2 z-20 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                          <input
+                            aria-label="Tags (comma-separated)"
+                            placeholder="tags, comma"
+                            className="w-full rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
+                            value={draftTags}
+                            onChange={(e) => setDraftTags(e.target.value)}
+                          />
                           <button
                             type="button"
-                            title={running ? 'Open session' : 'Launch'}
-                            // Distinct accessible name from the canonical
-                            // Launch / Open-session button below (a duplicate
-                            // "Launch"/"Open session" name would make those
-                            // ambiguous to screen readers + role queries).
-                            aria-label={running ? 'Quick open session' : 'Quick launch'}
-                            disabled={
-                              busyId === profile.id || (!running && activeWorkspace !== null)
-                            }
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (running) onOpenSession(bound.id);
-                              else void handleLaunch(profile);
-                            }}
-                            className="grid h-6 w-6 place-items-center rounded-md border border-surface-divider bg-surface-raised text-[11px] text-ink-secondary shadow-sm transition-colors hover:border-accent hover:bg-accent hover:text-ink-inverted disabled:opacity-50"
+                            className="btn-primary px-2 py-1 text-xs"
+                            onClick={() => void handleOrganizeSave(profile.id)}
                           >
-                            ▶
+                            Save
                           </button>
                           <button
                             type="button"
-                            title={running ? 'Live view' : 'Launch & watch'}
-                            aria-label={running ? 'Quick live view' : 'Quick launch and watch'}
-                            disabled={
-                              busyId === profile.id || (!running && activeWorkspace !== null)
-                            }
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (running) {
-                                if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
-                                else onOpenSession(bound.id);
-                              } else {
-                                void handleLaunch(profile);
-                              }
-                            }}
-                            className="grid h-6 w-6 place-items-center rounded-md border border-surface-divider bg-surface-raised text-[11px] text-ink-secondary shadow-sm transition-colors hover:border-accent hover:text-accent disabled:opacity-50"
+                            className="text-xs text-ink-muted hover:text-ink-primary"
+                            onClick={() => setOrganizeId(null)}
                           >
-                            💬
-                          </button>
-                          <button
-                            type="button"
-                            title="Organize"
-                            aria-label="Organize"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (organizeId === profile.id) {
-                                setOrganizeId(null);
-                                return;
-                              }
-                              setDraftFolder(profilesMeta[profile.id]?.folder ?? '');
-                              setDraftTags((profilesMeta[profile.id]?.tags ?? []).join(', '));
-                              setOrganizeId(profile.id);
-                            }}
-                            className="grid h-6 w-6 place-items-center rounded-md border border-surface-divider bg-surface-raised text-[11px] text-ink-secondary shadow-sm transition-colors hover:border-accent hover:text-accent"
-                          >
-                            ⋯
+                            Cancel
                           </button>
                         </div>
-                        {/* CSS iPhone frame */}
-                        <div
-                          aria-hidden="true"
-                          className="relative mt-[18px] h-[118px] w-24 overflow-hidden rounded-t-[13px] bg-surface-raised shadow-md ring-[3px] ring-[#1a1a1f] dark:ring-[#2a2f3a]"
-                        >
-                          <span className="absolute left-1/2 top-0 z-30 h-2 w-[34px] -translate-x-1/2 rounded-b-[7px] bg-[#1a1a1f] dark:bg-[#2a2f3a]" />
-                          <ProfileIdentity name={profile.name} archetype={profile.archetype} />
-                        </div>
-                      </div>
-                      {/* META — name + device chip + last-active; proxy row;
-                          org chips. */}
-                      <div className="flex flex-col gap-2 p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-[13px] font-semibold tracking-tight text-ink-primary">
-                              {profile.name}
-                            </p>
-                            <p className="mt-0.5 flex items-center gap-1 text-[10.5px] text-ink-muted">
-                              <span aria-hidden="true">📱</span>
-                              {formatDeviceName(profile.archetype)}
-                            </p>
-                          </div>
-                          <span className="shrink-0 whitespace-nowrap text-[10px] text-ink-muted">
-                            {profile.last_used_at !== null ? (
-                              <RelativeTime iso={profile.last_used_at} tooltipPrefix="Last used" />
-                            ) : (
-                              'never'
-                            )}
-                          </span>
-                        </div>
-                        {/* PROXY row: bound proxy + exit flag/IP + latency +
-                            meter + health pill, all from the REAL probeCache.
-                            Honest 'no proxy' / 'untested' when absent. */}
-                        {px === null ? (
-                          <div className="flex items-center gap-2 rounded-lg bg-surface-inset px-2 py-1.5">
-                            <span aria-hidden="true" className="text-[13px]">
-                              🚫
-                            </span>
-                            <span className="text-[10.5px] text-ink-muted">no proxy bound</span>
-                            <span className="ml-auto rounded-[5px] bg-surface-inset px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-muted">
-                              no proxy
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-1 rounded-lg bg-surface-inset px-2 py-1.5">
-                            <div className="flex items-center gap-2">
-                              <span aria-hidden="true" className="text-[13px] leading-none">
-                                {probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
-                              </span>
-                              <span
-                                className={`min-w-0 truncate text-[10.5px] ${
-                                  probe?.exitIp !== undefined
-                                    ? 'mono text-ink-secondary'
-                                    : 'italic text-ink-muted'
-                                }`}
-                              >
-                                {/* Show the real EXIT IP (from the geo probe), never the
-                                    local SOCKS5 forward (e.g. 127.0.0.1:24000) — that's
-                                    meaningless to the operator. Untested → prompt to Test. */}
-                                {probe?.exitIp ?? 'run Test for exit IP'}
-                              </span>
-                              <span className="ml-auto flex items-center gap-1.5 text-[10px] text-ink-muted">
-                                {lat !== undefined ? (
-                                  <>
-                                    <span className="mono">{lat}ms</span>
-                                    <span className="inline-block h-1 w-[34px] overflow-hidden rounded-[2px] bg-surface-divider">
-                                      <span
-                                        className="block h-full rounded-[2px]"
-                                        style={{
-                                          width: `${latFill.toFixed(0)}%`,
-                                          background: latGood
-                                            ? 'rgb(var(--status-ready-rgb))'
-                                            : 'rgb(var(--status-busy-rgb))',
-                                        }}
-                                      />
-                                    </span>
-                                  </>
-                                ) : (
-                                  <span className="mono opacity-60">{probe ? 'stale' : '—'}</span>
-                                )}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className="mono truncate text-[10px] text-ink-muted">
-                                {px.label} · {px.host}:{px.port}
-                              </span>
-                              {probe?.at !== undefined ? (
-                                <span
-                                  className={`shrink-0 rounded-[5px] px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${
-                                    latGood
-                                      ? 'bg-status-ready/12 text-status-ready'
-                                      : 'bg-status-busy/14 text-status-busy'
-                                  }`}
-                                >
-                                  {latGood ? 'healthy' : 'slow'}
-                                </span>
-                              ) : null}
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void handleTestProxy(px);
-                                }}
-                                disabled={testingProxyId !== null}
-                                className="ml-auto shrink-0 rounded-sm border border-surface-divider px-1.5 py-px text-[10px] text-ink-muted transition-colors hover:border-accent hover:text-ink-primary disabled:opacity-50"
-                                title="Test this proxy — reachability, latency, and exit IP / country"
-                              >
-                                {testingProxyId === px.id ? 'Testing…' : 'Test'}
-                              </button>
-                            </div>
-                            {/* Protocol capabilities — Has WebRTC / QUIC / HTTP-2,
-                              derived from the probe (founder ask: pro UDP). */}
-                            {probe ? (
-                              <ProxyCapabilityChips result={probe.result} size="xs" />
-                            ) : (
-                              <span
-                                className="w-fit rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
-                                title="Never probed — click Test to check egress protocols."
-                              >
-                                untested
-                              </span>
-                            )}
-                            {probe?.at !== undefined && (
-                              <span className="text-[9.5px] text-ink-muted">
-                                checked{' '}
-                                <RelativeTime
-                                  iso={new Date(probe.at).toISOString()}
-                                  tooltipPrefix="Proxy checked"
-                                />
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {/* Organization chips — folder + tags VISIBLE on the
-                          default grid view (founder: 'missing folders,
-                          tags'); same data as the list rows. */}
-                        {((profilesMeta[profile.id]?.folder ?? '') !== '' ||
-                          (profilesMeta[profile.id]?.tags ?? []).length > 0) && (
-                          <div className="flex flex-wrap items-center gap-1">
-                            {(profilesMeta[profile.id]?.folder ?? '') !== '' && (
-                              <span className="rounded-full border border-surface-divider bg-surface-inset px-2 py-0.5 text-[10px] text-ink-secondary">
-                                📁 {profilesMeta[profile.id]?.folder}
-                              </span>
-                            )}
-                            {(profilesMeta[profile.id]?.tags ?? []).map((tag) => (
-                              <span
-                                key={tag}
-                                className="rounded-full border border-surface-divider px-2 py-0.5 text-[10px] text-ink-muted"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {organizeId === profile.id && (
-                          <div className="mt-1 flex flex-wrap items-center gap-2 rounded border border-surface-divider bg-surface-inset p-2">
-                            <FolderPicker
-                              ariaLabel="Folder"
-                              noneLabel="Unfiled"
-                              folders={folderList(scopedMeta)}
-                              value={draftFolder}
-                              onChange={setDraftFolder}
-                            />
-                            <input
-                              aria-label="Tags (comma-separated)"
-                              placeholder="tags, comma, separated"
-                              className="w-48 rounded border border-surface-divider bg-surface-raised px-2 py-1 text-xs text-ink-primary"
-                              value={draftTags}
-                              onChange={(e) => setDraftTags(e.target.value)}
-                            />
-                            <button
-                              type="button"
-                              className="btn-primary px-2 py-1 text-xs"
-                              onClick={() => void handleOrganizeSave(profile.id)}
-                            >
-                              Save
-                            </button>
-                            <button
-                              type="button"
-                              className="text-xs text-ink-muted hover:text-ink-primary"
-                              onClick={() => setOrganizeId(null)}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        )}
-                        <div className="mt-auto flex gap-2 pt-1">
-                          {running ? (
-                            <button
-                              type="button"
-                              className="btn-secondary flex-1 text-xs"
-                              onClick={() => onOpenSession(bound.id)}
-                            >
-                              Open session
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="btn-primary flex-1 text-xs"
-                              // In a team workspace these are the OWNER's profiles
-                              // (profiles.list honors X-Driftstack-Account). Launch
-                              // goes through agent-sessions create, which is
-                              // self-scoped + ships the profile DEK — server RBAC
-                              // for member-launches-owner-profile is unresolved, so
-                              // it would 404. Gate it honestly: launch from Personal.
-                              disabled={busyId === profile.id || activeWorkspace !== null}
-                              title={
-                                activeWorkspace !== null
-                                  ? 'Launching a team-workspace profile isn’t available yet — switch to Personal to launch your own.'
-                                  : undefined
-                              }
-                              onClick={() => void handleLaunch(profile)}
-                            >
-                              {busyId === profile.id ? 'Launching…' : 'Launch'}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </article>
+                      }
+                      onToggleSelect={() => toggleSelected(profile.id)}
+                      onPrimary={() => {
+                        if (running && bound !== null) onOpenSession(bound.id);
+                        else void handleLaunch(profile);
+                      }}
+                      onWatch={() => {
+                        if (running && bound !== null) {
+                          if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
+                          else onOpenSession(bound.id);
+                        } else void handleLaunch(profile);
+                      }}
+                      onOrganizeToggle={() => {
+                        if (organizeId === profile.id) {
+                          setOrganizeId(null);
+                          return;
+                        }
+                        setDraftFolder(profilesMeta[profile.id]?.folder ?? '');
+                        setDraftTags((profilesMeta[profile.id]?.tags ?? []).join(', '));
+                        setOrganizeId(profile.id);
+                      }}
+                      onTest={() => {
+                        if (px !== null) void handleTestProxy(px);
+                      }}
+                    />
                   );
                 })}
               </div>
@@ -2861,38 +2613,9 @@ export function identityHue(name: string): number {
   return h;
 }
 
-function ProfileIdentity({
-  name,
-  archetype,
-  screenshotUrl,
-}: {
-  name: string;
-  archetype: string;
-  screenshotUrl?: string;
-}): JSX.Element {
-  if (screenshotUrl !== undefined && screenshotUrl.length > 0) {
-    return (
-      <img src={screenshotUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-    );
-  }
-  const hue = identityHue(name);
-  const mono = profileMonogram(name);
-  return (
-    <div
-      className="absolute inset-0 flex flex-col items-center justify-center gap-2 pt-[9px]"
-      style={{
-        background: `linear-gradient(155deg, hsl(${hue} 44% 24%), hsl(${(hue + 38) % 360} 42% 14%))`,
-      }}
-    >
-      <span className="grid h-9 w-9 place-items-center rounded-full bg-white/12 text-[13px] font-bold tracking-wide text-white/95 ring-1 ring-white/20">
-        {mono}
-      </span>
-      <span className="rounded-full bg-black/30 px-1.5 py-px text-[6px] font-semibold uppercase tracking-wide text-white/85">
-        {formatDeviceName(archetype)}
-      </span>
-    </div>
-  );
-}
+// (ProfileIdentity removed — GX replaced the device-frame thumbnail with the
+// full ProfilePhoneCard; profileMonogram/identityHue/formatDeviceName are now
+// consumed by that component via props computed in the grid map.)
 
 // S5 — Console-density stat tile (console.html's .stat): small uppercase
 // label + a BIG mono numeral (count-up) + a sub-line, with optional decorative

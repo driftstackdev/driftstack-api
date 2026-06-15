@@ -133,8 +133,8 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).not.toMatch(/disabled=\{busy\s*\|\|\s*atProfileCap\}/);
   });
 
-  it("Launch is gated in a team workspace (activeWorkspace !== null): profiles.list honors X-Driftstack-Account so the cards show the OWNER's profiles, but agent-sessions create is self-scoped + ships the profile DEK (member-launches-owner RBAC unresolved → would 404). Gate it honestly with a tooltip rather than present a 404-ing button; launch from Personal.", () => {
-    expect(body).toContain('busyId === profile.id || activeWorkspace !== null');
+  it("Launch is gated in a team workspace (activeWorkspace !== null): profiles.list honors X-Driftstack-Account so the cards show the OWNER's profiles, but agent-sessions create is self-scoped + ships the profile DEK (member-launches-owner RBAC unresolved → would 404). Gate it honestly with a tooltip rather than present a 404-ing button; launch from Personal. GRID gates via the GX ProfilePhoneCard's launchDisabled prop; the LIST view keeps the inline disabled form.", () => {
+    expect(body).toContain('launchDisabled={activeWorkspace !== null}');
     expect(body).toContain('disabled={busy || activeWorkspace !== null}');
     expect(body).toMatch(/Launching a team-workspace profile isn.t available yet/);
   });

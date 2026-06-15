@@ -181,7 +181,17 @@ Each slice records here when shipped: slice id · commit · gate result · "need
   create modal already has proxy-test; enhance, don't risk a blind stepper rewrite), G7 (live SSE
   transcript streaming — GATED on Agent-1's RealExecutor, prod is mock), G8 (further polish), then the
   A–Z beauty sweep (F3 marketing etc.) which dovetails into the F-phase.
-- FIX3 Proxy row showed loopback not exit IP · (this commit) · **founder-reported bug** — the proxy
+- GX Phone-framed profile card · (this commit) · founder "grid too large/generic; make the card a
+  phone, all data inside the screen, unique". New `components/ProfilePhoneCard` (matches the approved
+  profile-phone-card.html demo): device frame + dynamic island + faux status bar (device + Live/Idle),
+  centered monogram + name, an egress widget (flag + real exit IP + WebRTC/QUIC chips + latency, or "run
+  Test"), folder/tag pills, faux dock (Launch/Open + 💬 + ⟳ Test + ⋯). Narrow `aspect-[9/18.5]` cards →
+  many per row (addresses "too large"). Swapped into the GRID only (replaced the 330-line inline card +
+  removed the dead ProfileIdentity); LIST view untouched as the fallback. Pure component (display strings
+  - handlers + an organizeSlot passed in, avoiding the FolderPicker/flagEmoji circular import). new
+    profile-phone-card.test.tsx (5) + ProfilesView parity pin updated (grid gates via launchDisabled prop)
+    · tsc/eslint/prettier + gui-jsdom 586 + ProfilesView parity 18 green · VISIBLE after rebuild #13.
+- FIX3 Proxy row showed loopback not exit IP · `fb873e22` · **founder-reported bug** — the proxy
   exit-IP slot (ProfilesView grid card + ProxiesView card) fell back to the LOCAL SOCKS5 forward
   (`${host}:${port}` = e.g. `127.0.0.1:24000`) when untested, which is meaningless to the operator.
   Now shows the real exit IP from the geo probe, else an italic "run Test for exit IP" prompt — never
