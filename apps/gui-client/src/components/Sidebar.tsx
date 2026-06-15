@@ -66,7 +66,13 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
 
   const profileCount = accountMe?.profile_count ?? null;
   const profileCap = accountMe?.profile_cap ?? null;
+  const sessionsActive = accountMe?.concurrent_session_active ?? null;
+  const sessionsCap = accountMe?.concurrent_session_cap ?? null;
   const teamCount = accountMe?.teams.length ?? 0;
+  const planLabel =
+    accountMe?.tier != null
+      ? accountMe.tier.charAt(0).toUpperCase() + accountMe.tier.slice(1)
+      : null;
   const recordingsCount = recordings.size;
 
   return (
@@ -182,18 +188,21 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
       </SidebarSection>
 
       {signedIn && (
-        <div className="mt-auto flex flex-col gap-1 border-t border-surface-divider px-3 py-3">
-          <div className="flex items-center gap-2 px-2 py-0.5">
+        <div className="mt-auto flex flex-col gap-2 border-t border-surface-divider px-3 py-3">
+          {/* Account: email + plan (no raw API key / base URL — kept friendly). */}
+          <div className="flex items-center gap-2 px-1">
             <TierDot tier={accountMe?.tier ?? null} />
             <div className="flex min-w-0 flex-col">
               <span className="truncate text-xs text-ink-secondary">{accountMe?.email ?? '—'}</span>
-              <span
-                className="block truncate font-mono text-2xs text-ink-muted"
-                title={settings.apiKey ?? undefined}
-              >
-                {settings.apiKey?.slice(0, 9) ?? ''}…{settings.apiKey?.slice(-6) ?? ''}
-              </span>
+              {planLabel !== null && (
+                <span className="text-2xs text-ink-muted">{planLabel} plan</span>
+              )}
             </div>
+          </div>
+          {/* Usage at a glance — what's left, not jargon. */}
+          <div className="flex flex-col gap-1 rounded-md bg-surface-inset px-2 py-1.5">
+            <UsageRow label="Profiles" value={profileCount} cap={profileCap} />
+            <UsageRow label="Active sessions" value={sessionsActive} cap={sessionsCap} />
           </div>
           <button
             type="button"
@@ -203,7 +212,7 @@ export function Sidebar({ current, onNavigate, onSignOut }: SidebarProps): JSX.E
                        font-medium text-status-error transition
                        hover:bg-status-error/20"
           >
-            <span>Sign out (forget key)</span>
+            <span>Sign out</span>
             <span className="text-2xs opacity-70">⌘⇧L</span>
           </button>
         </div>
@@ -279,6 +288,25 @@ function fmtRatio(value: number | null, cap: number | null): string | null {
   if (value === null) return null;
   if (cap === null) return String(value);
   return `${value}/${cap}`;
+}
+
+function UsageRow({
+  label,
+  value,
+  cap,
+}: {
+  label: string;
+  value: number | null;
+  cap: number | null;
+}): JSX.Element {
+  // null cap = no fixed limit (enterprise) → show the count + "unlimited".
+  const text = value === null ? '—' : cap === null ? `${value} · unlimited` : `${value} / ${cap}`;
+  return (
+    <div className="flex items-center justify-between text-2xs">
+      <span className="text-ink-muted">{label}</span>
+      <span className="mono text-ink-secondary">{text}</span>
+    </div>
+  );
 }
 
 function TierDot({ tier }: { tier: string | null }): JSX.Element {

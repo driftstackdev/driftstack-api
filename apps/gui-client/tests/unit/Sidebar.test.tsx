@@ -117,8 +117,9 @@ describe('Sidebar — count badges + section gates', () => {
   it('renders Profiles X/Y from accountMe.profile_count + profile_cap', () => {
     mockAccountMe = buildAccountMe({ profile_count: 12, profile_cap: 50 });
     render(<Sidebar current="profiles" onNavigate={() => {}} onSignOut={() => {}} />);
-    expect(screen.getByText('Profiles')).toBeInTheDocument();
-    expect(screen.getByText('12/50')).toBeInTheDocument();
+    // "Profiles" now appears twice (nav item + the account-footer usage row).
+    expect(screen.getAllByText('Profiles').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('12/50')).toBeInTheDocument(); // the nav badge (footer uses "12 / 50")
   });
 
   it('renders Profiles X (no cap) when profile_cap is null (enterprise)', () => {
