@@ -1,22 +1,19 @@
-// G4 (5→10, 2026-06-14) — Command Center home. The overview the app never had,
-// and the surface that makes Automate PRIMARY (founder: "Automate should be
-// above Browse / be primary"): it leads with an "Ask Driftstack AI / Browse
-// recipes" hero, then a glanceable account KPI strip, then quick links into the
-// rest of the app.
+// Command Center home — the overview the app leads with. Redesigned 2026-06-15
+// (founder: the old version "looks cheap/ugly"): a gradient hero with an
+// identity glow, a richer icon-led KPI strip (now the home for the fleet stats
+// that used to sit on Profiles), and cleaner session-health / activity /
+// quick-link sections.
 //
-// v1 composes ONLY from the already-loaded accountMe (SettingsContext, V-239
-// pre-fetch) — no new fetches — so it's robust + low blind-visual risk; it
-// degrades to "—" while accountMe is null (loading / unauthenticated). Live
-// session-health + an activity feed are a follow-up once v1 is proven. Shipped
-// as a NON-default view first (reachable via the Home nav + ⌘K); flipping the
-// default landing to it is a 1-line follow-up after founder review at rebuild #7.
-//
-// Granular onNavigate (a nav-kind string, not the App View type) keeps this off
-// the App↔view import cycle, matching the other views' callback shape.
+// Composes from the already-loaded accountMe (SettingsContext, no extra fetch)
+// plus three independent, gracefully-degrading loads (session health, recent
+// activity, proxy count) — a slow/failed load never blocks or breaks the
+// landing. Pure helpers (computeCapAlerts / summarizeSessions / formatAuditAction)
+// are exported + unit-tested independently of the fetches.
 
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { useSettings } from '../lib/SettingsContext';
 import { RelativeTime } from '../components/RelativeTime';
+import { listProxies } from '../lib/proxies';
 
 export type HomeNavTarget = 'ai' | 'recipes' | 'profiles' | 'proxies' | 'sessions';
 
@@ -134,22 +131,26 @@ type ActivityState =
   | { kind: 'ready'; entries: ActivityEntry[] }
   | { kind: 'error' };
 
+function greeting(hour: number): string {
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
 export function CommandCenterView({
   onNavigate,
 }: {
   onNavigate: (kind: HomeNavTarget) => void;
 }): JSX.Element {
   const { accountMe, client } = useSettings();
-  const sessionsActive = accountMe?.concurrent_session_active ?? null;
-  const sessionsCap = accountMe?.concurrent_session_cap ?? null;
   const profileCount = accountMe?.profile_count ?? null;
   const profileCap = accountMe?.profile_cap ?? null;
   const tier = accountMe?.tier ?? null;
   const capAlerts = computeCapAlerts(accountMe ?? null);
+  const hello = greeting(new Date().getHours());
 
   // Live session-health rollup — loads independently of (and after) the hero +
-  // KPI so a slow/failed fetch never blocks or breaks the landing; it just
-  // shows a skeleton then a value or a quiet "couldn't load".
+  // KPI so a slow/failed fetch never blocks or breaks the landing.
   const [health, setHealth] = useState<HealthState>({ kind: 'idle' });
   useEffect(() => {
     if (!client) {
@@ -171,8 +172,7 @@ export function CommandCenterView({
     };
   }, [client]);
 
-  // Recent activity from the audit log — same independent-load + graceful-
-  // degradation contract as the health strip (never blocks the landing).
+  // Recent activity from the audit log — same independent-load contract.
   const [activity, setActivity] = useState<ActivityState>({ kind: 'idle' });
   useEffect(() => {
     if (!client) {
@@ -201,6 +201,25 @@ export function CommandCenterView({
     };
   }, [client]);
 
+  // Local proxy count (Tauri store) — for the fleet KPI moved here from
+  // Profiles. Best-effort; absent → '—'.
+  const [proxyCount, setProxyCount] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void listProxies()
+      .then((list) => {
+        if (!cancelled) setProxyCount(list.length);
+      })
+      .catch(() => {
+        if (!cancelled) setProxyCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const liveNow = health.kind === 'ready' ? health.health.running : null;
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
       {/* Cap alerts — proactive, only when near/over a limit. */}
@@ -210,7 +229,7 @@ export function CommandCenterView({
             <div
               key={a.id}
               role={a.tone === 'error' ? 'alert' : 'status'}
-              className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5 ${
+              className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-2.5 ${
                 a.tone === 'error'
                   ? 'border-status-error/50 bg-status-error/10'
                   : 'border-status-busy/50 bg-status-busy/10'
@@ -232,44 +251,60 @@ export function CommandCenterView({
         </div>
       )}
 
-      {/* Hero — leads with Automate (the primary surface). */}
-      <section className="flex flex-col gap-3 rounded-xl border border-surface-divider bg-surface-raised p-5">
-        <div className="flex flex-col gap-1">
-          <span className="section-label">Command center</span>
-          <h1 className="text-xl font-semibold tracking-tight text-ink-primary">
-            What do you want to automate?
-          </h1>
-          <p className="max-w-xl text-sm text-ink-secondary">
-            Describe a task in plain language and Driftstack plans &amp; runs it on a profile — or
-            replay a saved recipe.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="btn-primary px-4 py-2 text-sm"
-            onClick={() => onNavigate('ai')}
-          >
-            Ask Driftstack AI
-          </button>
-          <button
-            type="button"
-            className="btn-secondary px-4 py-2 text-sm"
-            onClick={() => onNavigate('recipes')}
-          >
-            Browse recipes
-          </button>
+      {/* Hero — gradient + identity glow; leads with Automate. */}
+      <section className="relative overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised p-6">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full opacity-40 blur-3xl"
+          style={{
+            background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.55), transparent 70%)',
+          }}
+        />
+        <div className="relative flex flex-col gap-4">
+          <div className="flex flex-col gap-1">
+            <span className="section-label text-accent">{hello}</span>
+            <h1 className="text-2xl font-semibold tracking-tight text-ink-primary">
+              What do you want to automate?
+            </h1>
+            <p className="max-w-xl text-sm text-ink-secondary">
+              Describe a task in plain language and Driftstack plans &amp; runs it on a real iPhone
+              profile — or replay one you saved.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2.5">
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white shadow-[0_3px_10px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.18)] transition-colors hover:bg-accent-hover"
+              onClick={() => onNavigate('ai')}
+            >
+              <IconSparkle /> Ask Driftstack AI
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-lg border border-surface-divider bg-surface-elevated px-4 py-2 text-sm font-medium text-ink-primary transition-colors hover:bg-surface-divider"
+              onClick={() => onNavigate('recipes')}
+            >
+              <IconBook /> Saved tasks
+            </button>
+          </div>
         </div>
       </section>
 
-      {/* Account KPI strip — from accountMe (no fetch). */}
-      <section className="flex flex-col gap-2">
-        <span className="section-label">Account</span>
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-surface-divider bg-surface-divider sm:grid-cols-3">
-          <Kpi label="Plan" value={tier !== null ? titleCase(tier) : '—'} />
-          <Kpi label="Sessions" value={ratio(sessionsActive, sessionsCap)} sub="active / cap" />
-          <Kpi label="Profiles" value={ratio(profileCount, profileCap)} sub="created / cap" />
-        </div>
+      {/* Fleet KPI strip — icon-led cards (moved here from Profiles). */}
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Kpi icon={<IconLayers />} label="Profiles" value={ratio(profileCount, profileCap)} />
+        <Kpi
+          icon={<IconBolt />}
+          label="Live now"
+          value={liveNow !== null ? String(liveNow) : '—'}
+          accent
+        />
+        <Kpi
+          icon={<IconGlobe />}
+          label="Proxies"
+          value={proxyCount !== null ? String(proxyCount) : '—'}
+        />
+        <Kpi icon={<IconBadge />} label="Plan" value={tier !== null ? titleCase(tier) : '—'} />
       </section>
 
       {/* Live session health — loads independently; degrades gracefully. */}
@@ -296,18 +331,21 @@ export function CommandCenterView({
       {/* Quick links into the rest of the app. */}
       <section className="flex flex-col gap-2">
         <span className="section-label">Jump to</span>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           <QuickLink
+            icon={<IconLayers />}
             label="Profiles"
             desc="Browse &amp; launch identities"
             onClick={() => onNavigate('profiles')}
           />
           <QuickLink
+            icon={<IconGlobe />}
             label="Proxies"
             desc="SOCKS5 exits &amp; health"
             onClick={() => onNavigate('proxies')}
           />
           <QuickLink
+            icon={<IconActivity />}
             label="Sessions"
             desc="Live &amp; recent runs"
             onClick={() => onNavigate('sessions')}
@@ -321,19 +359,19 @@ export function CommandCenterView({
 function SessionHealthStrip({ state }: { state: HealthState }): JSX.Element {
   if (state.kind === 'idle') {
     return (
-      <div className="rounded-lg border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
+      <div className="rounded-xl border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
         Connect your API key to see live session health.
       </div>
     );
   }
   if (state.kind === 'loading') {
     return (
-      <div className="h-[58px] animate-pulse rounded-lg border border-surface-divider bg-surface-inset" />
+      <div className="h-[64px] animate-pulse rounded-xl border border-surface-divider bg-surface-inset" />
     );
   }
   if (state.kind === 'error') {
     return (
-      <div className="rounded-lg border border-surface-divider px-4 py-3 text-xs text-ink-muted">
+      <div className="rounded-xl border border-surface-divider px-4 py-3 text-xs text-ink-muted">
         Couldn&rsquo;t load sessions right now.
       </div>
     );
@@ -341,13 +379,13 @@ function SessionHealthStrip({ state }: { state: HealthState }): JSX.Element {
   const h = state.health;
   if (h.total === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
+      <div className="rounded-xl border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
         No sessions yet — launch a profile or ask the AI to start one.
       </div>
     );
   }
   return (
-    <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-surface-divider bg-surface-divider sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
       <HealthTile label="Running" value={h.running} tone="ready" />
       <HealthTile label="Creating" value={h.creating} tone="busy" />
       <HealthTile label="Errored" value={h.errored} tone={h.errored > 0 ? 'error' : 'muted'} />
@@ -374,7 +412,7 @@ function HealthTile({
           ? 'text-status-error'
           : 'text-ink-primary';
   return (
-    <div className="flex flex-col gap-0.5 bg-surface-base px-4 py-2.5">
+    <div className="flex flex-col gap-0.5 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3">
       <span className="section-label">{label}</span>
       <span className={`mono text-xl font-semibold tabular-nums ${valueCls}`}>{value}</span>
     </div>
@@ -384,32 +422,32 @@ function HealthTile({
 function ActivityFeed({ state }: { state: ActivityState }): JSX.Element {
   if (state.kind === 'idle') {
     return (
-      <div className="rounded-lg border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
+      <div className="rounded-xl border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
         Connect your API key to see recent account activity.
       </div>
     );
   }
   if (state.kind === 'loading') {
     return (
-      <div className="h-[120px] animate-pulse rounded-lg border border-surface-divider bg-surface-inset" />
+      <div className="h-[120px] animate-pulse rounded-xl border border-surface-divider bg-surface-inset" />
     );
   }
   if (state.kind === 'error') {
     return (
-      <div className="rounded-lg border border-surface-divider px-4 py-3 text-xs text-ink-muted">
+      <div className="rounded-xl border border-surface-divider px-4 py-3 text-xs text-ink-muted">
         Couldn&rsquo;t load recent activity right now.
       </div>
     );
   }
   if (state.entries.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
+      <div className="rounded-xl border border-dashed border-surface-divider px-4 py-3 text-xs text-ink-muted">
         No activity yet — actions you take show up here.
       </div>
     );
   }
   return (
-    <ul className="divide-y divide-surface-divider overflow-hidden rounded-lg border border-surface-divider bg-surface-raised">
+    <ul className="divide-y divide-surface-divider overflow-hidden rounded-xl border border-surface-divider bg-surface-raised">
       {state.entries.map((e) => (
         <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
@@ -434,21 +472,44 @@ function ActivityFeed({ state }: { state: ActivityState }): JSX.Element {
   );
 }
 
-function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }): JSX.Element {
+function Kpi({
+  icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  accent?: boolean;
+}): JSX.Element {
   return (
-    <div className="flex flex-col gap-0.5 bg-surface-base px-4 py-3">
-      <span className="section-label">{label}</span>
-      <span className="mono text-2xl font-semibold tabular-nums text-ink-primary">{value}</span>
-      {sub !== undefined && <span className="text-2xs text-ink-muted">{sub}</span>}
+    <div className="flex items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3">
+      <span
+        className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${accent ? 'bg-accent/15 text-accent' : 'bg-surface-inset text-ink-secondary'}`}
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      <div className="flex min-w-0 flex-col">
+        <span className="section-label">{label}</span>
+        <span
+          className={`mono text-xl font-semibold tabular-nums ${accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'}`}
+        >
+          {value}
+        </span>
+      </div>
     </div>
   );
 }
 
 function QuickLink({
+  icon,
   label,
   desc,
   onClick,
 }: {
+  icon: ReactNode;
   label: string;
   desc: string;
   onClick: () => void;
@@ -457,10 +518,18 @@ function QuickLink({
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col items-start gap-0.5 rounded-lg border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
+      className="group flex items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
     >
-      <span className="text-sm font-medium text-ink-primary">{label}</span>
-      <span className="text-xs text-ink-muted">{desc}</span>
+      <span
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-inset text-ink-secondary transition-colors group-hover:text-accent"
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      <span className="flex min-w-0 flex-col">
+        <span className="text-sm font-medium text-ink-primary">{label}</span>
+        <span className="truncate text-xs text-ink-muted">{desc}</span>
+      </span>
     </button>
   );
 }
@@ -473,4 +542,67 @@ function ratio(value: number | null, cap: number | null): string {
 
 function titleCase(s: string): string {
   return s.length === 0 ? s : (s[0] ?? '').toUpperCase() + s.slice(1);
+}
+
+// ─── icons (Lucide-shape, inline, no dependency) ──────────────────
+const stroke = {
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+};
+function IconSparkle(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <path d="M8 1.75 9.4 5.6 13.25 7 9.4 8.4 8 12.25 6.6 8.4 2.75 7 6.6 5.6Z" />
+    </svg>
+  );
+}
+function IconBook(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <path d="M2.75 3.25A1.25 1.25 0 0 1 4 2h8.25v10.5H4a1.25 1.25 0 0 0-1.25 1.25Z" />
+      <path d="M2.75 12.75A1.25 1.25 0 0 1 4 14h8.25" />
+    </svg>
+  );
+}
+function IconLayers(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <path d="M8 2 1.5 5.25 8 8.5l6.5-3.25Z" />
+      <path d="M1.5 8 8 11.25 14.5 8" />
+      <path d="M1.5 10.75 8 14l6.5-3.25" />
+    </svg>
+  );
+}
+function IconGlobe(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <circle cx="8" cy="8" r="5.75" />
+      <path d="M2.25 8h11.5" />
+      <path d="M8 2.25c1.7 2 2.5 4 2.5 5.75S9.7 12 8 13.75C6.3 11.75 5.5 9.75 5.5 8s.8-3.75 2.5-5.75Z" />
+    </svg>
+  );
+}
+function IconActivity(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <path d="M1.5 8h2.75l1.5-4.5 3 9 1.5-4.5h4.25" />
+    </svg>
+  );
+}
+function IconBolt(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <path d="M8.5 1.5 3.5 9h3.5l-.5 5.5L12 7H8.5Z" />
+    </svg>
+  );
+}
+function IconBadge(): JSX.Element {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
+      <path d="M8 1.5 10 3l2.5-.25L12.25 5.5 14 7.5l-1.75 2 .25 2.75L9.75 12 8 13.5 6.25 12l-2.75.25.25-2.75L2 7.5l1.75-2L3.5 2.75 6 3Z" />
+    </svg>
+  );
 }

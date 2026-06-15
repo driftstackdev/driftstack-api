@@ -114,13 +114,13 @@ describe('CommandCenterView', () => {
   it('leads with Automate: the hero CTAs route to ai and recipes', () => {
     const onNavigate = nav();
     render(<CommandCenterView onNavigate={onNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Ask Driftstack AI' }));
+    fireEvent.click(screen.getByRole('button', { name: /Ask Driftstack AI/ }));
     expect(onNavigate).toHaveBeenCalledWith('ai');
-    fireEvent.click(screen.getByRole('button', { name: 'Browse recipes' }));
+    fireEvent.click(screen.getByRole('button', { name: /Saved tasks/ }));
     expect(onNavigate).toHaveBeenCalledWith('recipes');
   });
 
-  it('renders the KPI strip from accountMe', () => {
+  it('renders the KPI strip from accountMe (Plan + Profiles ratio)', () => {
     accountMe = {
       tier: 'builder',
       concurrent_session_active: 2,
@@ -130,8 +130,7 @@ describe('CommandCenterView', () => {
     };
     render(<CommandCenterView onNavigate={nav()} />);
     expect(screen.getByText('Builder')).toBeTruthy();
-    expect(screen.getByText('2 / 4')).toBeTruthy();
-    expect(screen.getByText('7 / 25')).toBeTruthy();
+    expect(screen.getByText('7 / 25')).toBeTruthy(); // Profiles KPI
   });
 
   it('shows a cap alert when at the session limit, and Manage navigates', () => {
@@ -184,7 +183,9 @@ describe('CommandCenterView', () => {
     });
     render(<CommandCenterView onNavigate={nav()} />);
     await waitFor(() => expect(screen.getByText('Running')).toBeTruthy());
-    expect(screen.getByText('2')).toBeTruthy(); // running
+    // running=2 (scope to the tile — "Live now" KPI also shows 2 once health loads)
+    const running = screen.getByText('Running').parentElement;
+    expect(running?.textContent).toContain('2');
     const errored = screen.getByText('Errored').parentElement;
     expect(errored?.textContent).toContain('1');
   });
